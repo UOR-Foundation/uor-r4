@@ -16,6 +16,9 @@ Order: [ORDER.md](ORDER.md). References #2031.
 - Automatic memory is intentionally not default-on. Enabling it by default
   would change the merged chat baseline before the new behavior has a product
   result.
+- The six-process automatic-memory smoke did not produce model recall. Both
+  seeds emitted the correct `Pickle` and tomatoes memory lines, but neither
+  model answer contained its supplied value.
 
 ## What changed
 
@@ -34,9 +37,22 @@ It adds no training, tokenizer, artifact-format or numeric-kernel change.
 
 ## Measurements
 
-No trained-model measurement has been taken. Pure extraction controls cover
-the two fixed public probes, a correction, named/called forms, where, when,
-age, color and rename questions, no-match questions and pronoun-only queries.
+Pure extraction controls cover the two fixed public probes, a correction,
+named/called forms, where, when, age, color and rename questions, no-match
+questions and pronoun-only queries.
+
+The FIT/PRE-RUN-PASS host smoke then ran six fresh processes: two fixed
+multi-turn conversations on each of the two public seeds, plus an exact seed-1
+repeat. All 6 exited 0 with empty stderr. All 18 replies used protocol 2 and
+had valid stops. Both seeds emitted `Memory: Pickle.` before the first answer
+and `Memory: tomatoes.` before the second. The seed-1 repeat matched the first
+pass after excluding only the registered `id/s` timing field.
+
+No factual reply contained its supplied value: **0/6**. This is
+`AUTO_MEMORY_OBSERVED` with `MODEL_RECALL_NOT_OBSERVED`. Peak RSS was 11,888
+KiB and process wall time was 0.17–0.22 seconds. The public artifacts remain
+deterministic smoke targets, not useful chat. Full record:
+[lab result](../../../../labs/m3-qualify-memory/deepseek-1/README.md).
 
 ## Checks run at the head
 
@@ -44,8 +60,13 @@ age, color and rename questions, no-match questions and pronoun-only queries.
   dialogue_memory`: 5 passed.
 - `cargo test --locked -p uor-r4-integer --features serving-wasm --bin
   uor-chat`: 5 passed.
+- `cargo test --locked -p uor-r4-integer --features serving-wasm --lib`:
+  442 passed, 1 ignored, 0 failed.
+- `uor-harness prep-check`: FIT, complete, `may_compute=true`.
 - Targeted `rustfmt --check` on the new sieve and changed CLI: passed.
-- `uor-harness prep-check`: sheet complete, pending FIT.
+- `uor-harness loop report --check`: passed.
+- `uor-harness check`: 0 errors and 52 unrelated project-wide warnings.
+- Independent fresh-context review: `TEST FITNESS: FIT`, `PRE-RUN: PASS`.
 - `git diff --check`: passed.
 
 ## Skills used
@@ -56,9 +77,13 @@ training sieve, serving bridge and product code were read directly.
 ## Still open
 
 - Obtain an independent FIT/PRE-RUN review, then run the six fixed automatic
-  memory conversations and record their exact evidence.
+  memory conversations and record their exact evidence. **Done.**
 - Automatic extraction coverage beyond the bounded lexical forms remains
   unmeasured.
+- The in-memory fact log is unbounded while automatic mode is off; recognized
+  questions without a match request `Memory: none.`; and the fact log survives
+  the CLI's internal context-overflow reset. These are nonblocking for this
+  fixed smoke but need hardening before general automatic mode.
 - Model answer quality and M3 qualification remain open.
 - ARM64/WebAssembly audit qualification and GPU export/parity work remain
   outside this host-only support unit.
@@ -67,6 +92,6 @@ training sieve, serving bridge and product code were read directly.
 
 The chat program can now search what the user said earlier, select the most
 relevant clause, extract a short value, and feed that value into the memory
-format the model expects. This only works for the bounded patterns covered by
-the deterministic tests; it is not a general language reader, and it cannot
-compensate for the model's observed failure to answer from memory.
+format the model expects. Both seeds received the right value automatically,
+but neither model used it in an answer. This works only for bounded patterns;
+it is not a general reader and does not close M3.
