@@ -25,12 +25,11 @@ use std::time::Instant;
 use candle_core::{DType, Device, Tensor};
 use serde::{Deserialize, Serialize};
 use uor_r4_integer::fbs_snapshot::{
-    check_decision_trace, offset_step, parse_deciles, read_decision_trace, replay_step,
-    sha256_hex, snapshot_embed_table, CodeRole, DecisionDeciles, DecisionForce,
-    DecisionForceWindow, DecisionHead, DecisionLayer, DecisionMemory, DecisionNearest,
-    DecisionRead, DecisionStep, DecisionTrace, DecisionWindow, GradeSide, HammingTraceRead,
-    HammingTraceWindow, NearestTable, ReplayTally, DECISION_FORCE_SCHEMA, DECISION_REPLAY_SCHEMA,
-    DECISION_TRACE_SCHEMA,
+    check_decision_trace, offset_step, parse_deciles, read_decision_trace, replay_step, sha256_hex,
+    snapshot_embed_table, CodeRole, DecisionDeciles, DecisionForce, DecisionForceWindow,
+    DecisionHead, DecisionLayer, DecisionMemory, DecisionNearest, DecisionRead, DecisionStep,
+    DecisionTrace, DecisionWindow, GradeSide, HammingTraceRead, HammingTraceWindow, NearestTable,
+    ReplayTally, DECISION_FORCE_SCHEMA, DECISION_REPLAY_SCHEMA, DECISION_TRACE_SCHEMA,
 };
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
@@ -6349,7 +6348,7 @@ pub struct ReplayInputs {
     pub table: Vec<f32>,
     pub table_width: usize,
     pub g10: i64,
-    /// Each replay, in the reference's window order.
+    /// Each replay: without `--at`, in the reference's window order; with it, in `--at`'s.
     pub chosen: Vec<ReplayAt>,
     /// Without `--at`, the offsets compared: every reply step at which both windows hold a nearest.
     pub compared: Option<usize>,
@@ -6380,12 +6379,16 @@ fn check_replay_sides(
             )));
         }
     }
-    let read_from = deciles.trace.as_ref().map(|t| t.sha256.as_str());
-    if deciles.side != "F" || read_from != Some(reference_sha) {
+    if deciles.side != "F" {
         return Err(invalid(format!(
-            "the deciles are side {}'s, read from another trace than the reference",
+            "the deciles are side {}'s, and the structure step reads F's",
             deciles.side
         )));
+    }
+    if deciles.trace.as_ref().map(|t| t.sha256.as_str()) != Some(reference_sha) {
+        return Err(invalid(
+            "the deciles were read from another trace than the reference",
+        ));
     }
     Ok(())
 }
@@ -6428,7 +6431,8 @@ fn replay_offsets(
                 p.position
             ))
         })?;
-        if p.ids != q.ids || p.reply_start != q.reply_start || nearest_steps(p) != nearest_steps(q) {
+        if p.ids != q.ids || p.reply_start != q.reply_start || nearest_steps(p) != nearest_steps(q)
+        {
             return Err(invalid(format!(
                 "position {}: the windows read other ids, start their replies at other steps, or hold a nearest at other steps (I-Align)",
                 p.position
@@ -6454,15 +6458,21 @@ fn replay_offsets(
     let mut named = at.to_vec();
     named.sort_unstable();
     if let Some(p) = named.windows(2).find(|p| p[0] == p[1]) {
-        return Err(invalid(format!("--at {}:{} is named twice", p[0].0, p[0].1)));
+        return Err(invalid(format!(
+            "--at {}:{} is named twice",
+            p[0].0, p[0].1
+        )));
     }
     let mut chosen = Vec::with_capacity(at.len());
     for &(position, offset) in at {
-        let (p, _) = pairs.iter().find(|(p, _)| p.position == position).ok_or_else(|| {
-            invalid(format!(
-                "--at {position}:{offset}: the traces hold no window at that position"
-            ))
-        })?;
+        let (p, _) = pairs
+            .iter()
+            .find(|(p, _)| p.position == position)
+            .ok_or_else(|| {
+                invalid(format!(
+                    "--at {position}:{offset}: the traces hold no window at that position"
+                ))
+            })?;
         let step = offset_step(p, offset).map_err(invalid)?;
         if p.steps[step].nearest.is_none() {
             return Err(invalid(format!(
@@ -6497,8 +6507,14 @@ pub fn read_replay_inputs(
     check_replay_sides(&reference_trace, &reference_sha, &other_trace, &parsed)?;
     let table_bytes = fs::read(table).map_err(|e| invalid(format!("{table}: {e}")))?;
     let (embed, width) = snapshot_embed_table(table, &table_bytes).map_err(invalid)?;
-    check_decision_trace(&reference_trace, NearestTable::F32 { table: &embed, width })
-        .map_err(|e| invalid(format!("{table} is not the reference's table: {e}")))?;
+    check_decision_trace(
+        &reference_trace,
+        NearestTable::F32 {
+            table: &embed,
+            width,
+        },
+    )
+    .map_err(|e| invalid(format!("{table} is not the reference's table: {e}")))?;
     let (chosen, compared) = replay_offsets(&reference_trace, &other_trace, at)?;
     let sources = serde_json::json!({
         "reference": { "path": reference, "sha256": reference_sha, "side": reference_trace.side },
@@ -6525,13 +6541,22 @@ pub fn read_replay_inputs(
 }
 
 /// What [`replay_windows`] ran (claude-257): the tally, how many replays' pass 0 reproduced Q's
-/// sealed window (I-Rerun), Q's table's rows and width, and the replays' wall time.
+/// sealed window (I-Rerun), Q's table's rows and width, and the replays' wall time, in all and
+/// each replay's in the tally's order.
 #[derive(Debug)]
 pub struct ReplayRun {
     pub tally: ReplayTally,
     pub rerun: usize,
     pub table: (usize, usize),
     pub replay_ms: u64,
+    pub replay_ms_each: Vec<u64>,
+}
+
+/// The eval batch a whole run scores the `i`th of `len` windows in (claude-257): [`row_picks`]
+/// takes its windows [`hs::SHEET_EVAL_BATCH`] at a time from the first, the last batch shorter.
+fn replay_batch(i: usize, len: usize) -> std::ops::Range<usize> {
+    let first = i / hs::SHEET_EVAL_BATCH * hs::SHEET_EVAL_BATCH;
+    first..(first + hs::SHEET_EVAL_BATCH).min(len)
 }
 
 /// I-Rerun (claude-257): pass 0 of a replay, Φ empty, traces Q's sealed `window` byte for byte,
@@ -6548,12 +6573,25 @@ fn rerun_matches(
             pass.windows.len()
         ));
     };
-    let head = |t: &DecisionTrace| (t.schema.clone(), t.side.clone(), t.layers, t.lanes, t.heads, t.kept);
+    let head = |t: &DecisionTrace| {
+        (
+            t.schema.clone(),
+            t.side.clone(),
+            t.layers,
+            t.lanes,
+            t.heads,
+            t.kept,
+        )
+    };
     let bytes = |w: &DecisionWindow| serde_json::to_vec(w).map_err(|e| e.to_string());
     if head(pass) == head(sealed) && bytes(ran)? == bytes(window)? {
         return Ok(());
     }
-    let first = ran.steps.iter().zip(&window.steps).position(|(a, b)| a != b);
+    let first = ran
+        .steps
+        .iter()
+        .zip(&window.steps)
+        .position(|(a, b)| a != b);
     Err(format!(
         "position {}: pass 0 is not T's sealed window, {} (I-Rerun)",
         window.position,
@@ -6565,13 +6603,13 @@ fn rerun_matches(
 }
 
 /// claude-257: each replay `inputs` chose, with `model` as Q (T, on an evaluation copy rounded as
-/// exported), over its split's `windows` and `mask`, each recorded in `tally` as it ends. Each pass
-/// runs [`row_picks`] on the replayed window's own eval batch, the [`hs::SHEET_EVAL_BATCH`] windows
-/// a whole run batches it with, with only that window traced, under Φ; pass 0 must reproduce Q's
-/// sealed window ([`rerun_matches`]), or the replay is refused. Refused before any forward: a
-/// sealed trace whose nearests' scores Q's own table does not give, a replayed position that
-/// names no window of the split, and a sealed window that does not read its split window's ids
-/// (I-Align).
+/// exported), over its split's `windows` and `mask`, each recorded as it ends, and appended to
+/// the line file at `lines` when one is named. Each pass runs [`row_picks`] on the replayed
+/// window's own eval batch ([`replay_batch`]), with only that window traced, under Φ; pass 0 must
+/// reproduce Q's sealed window ([`rerun_matches`]), or the replay is refused. Refused before the
+/// line file is created and before any forward: a sealed trace whose nearests' scores Q's own
+/// table does not give, a replayed position that names no window of the split, and a sealed
+/// window that does not read its split window's ids (I-Align).
 fn replay_windows(
     model: &StackModel,
     windows: &[CausalWindow],
@@ -6579,24 +6617,36 @@ fn replay_windows(
     seed: u64,
     train_step: usize,
     inputs: &ReplayInputs,
-    mut tally: ReplayTally,
+    lines: Option<&Path>,
 ) -> Result<ReplayRun> {
     let q = table(model)?;
     let (rows, width) = q.dims2()?;
     let q_table = q.flatten_all()?.to_vec1::<f32>()?;
-    let other_table = NearestTable::F32 { table: &q_table, width };
-    check_decision_trace(&inputs.other, other_table)
-        .map_err(|e| invalid(format!("the checkpoint's table is not the other trace's: {e}")))?;
+    let other_table = NearestTable::F32 {
+        table: &q_table,
+        width,
+    };
+    check_decision_trace(&inputs.other, other_table).map_err(|e| {
+        invalid(format!(
+            "the checkpoint's table is not the other trace's: {e}"
+        ))
+    })?;
     let index: BTreeMap<usize, usize> = windows
         .iter()
         .enumerate()
         .filter_map(|(i, w)| w.scored_corpus_positions.first().map(|&p| (p, i)))
         .collect();
-    let sealed: BTreeMap<usize, &DecisionWindow> =
-        inputs.other.windows.iter().map(|w| (w.position, w)).collect();
+    let sealed: BTreeMap<usize, &DecisionWindow> = inputs
+        .other
+        .windows
+        .iter()
+        .map(|w| (w.position, w))
+        .collect();
     for &(position, _, _) in &inputs.chosen {
         let (Some(&i), Some(window)) = (index.get(&position), sealed.get(&position)) else {
-            return Err(invalid(format!("position {position} names no window of the split")));
+            return Err(invalid(format!(
+                "position {position} names no window of the split"
+            )));
         };
         if windows[i].input_ids.get(..window.ids.len()) != Some(&window.ids[..]) {
             return Err(invalid(format!(
@@ -6608,31 +6658,61 @@ fn replay_windows(
     let reads = traced_reads(model);
     let reference = GradeSide {
         trace: &inputs.reference,
-        table: NearestTable::F32 { table: &inputs.table, width: inputs.table_width },
+        table: NearestTable::F32 {
+            table: &inputs.table,
+            width: inputs.table_width,
+        },
+    };
+    let mut tally = match lines {
+        Some(path) => ReplayTally::with_lines(path).map_err(|e| {
+            invalid(format!(
+                "{}: {e}; a line file is never replaced",
+                path.display()
+            ))
+        })?,
+        None => ReplayTally::default(),
     };
     let mut rerun = 0;
+    let mut replay_ms_each = Vec::with_capacity(inputs.chosen.len());
     let started = Instant::now();
     for &(position, offset, step) in &inputs.chosen {
-        let first = index[&position] / hs::SHEET_EVAL_BATCH * hs::SHEET_EVAL_BATCH;
-        let batch = &windows[first..(first + hs::SHEET_EVAL_BATCH).min(windows.len())];
-        let done = replay_step(reference, other_table, &inputs.deciles, position, step, inputs.g10, |phi| {
-            let force = DecisionForce {
-                schema: DECISION_FORCE_SCHEMA.to_owned(),
-                windows: vec![phi.clone()],
-            };
-            let mut trace = FTrace::new(&[position])
-                .and_then(|t| t.on_side("T"))
-                .and_then(|t| t.with_force(force, layers, lanes, &reads))
+        let batch = &windows[replay_batch(index[&position], windows.len())];
+        let this = Instant::now();
+        let done = replay_step(
+            reference,
+            other_table,
+            &inputs.deciles,
+            position,
+            step,
+            inputs.g10,
+            |phi| {
+                let force = DecisionForce {
+                    schema: DECISION_FORCE_SCHEMA.to_owned(),
+                    windows: vec![phi.clone()],
+                };
+                let mut trace = FTrace::new(&[position])
+                    .and_then(|t| t.on_side("T"))
+                    .and_then(|t| t.with_force(force, layers, lanes, &reads))
+                    .map_err(|e| e.to_string())?;
+                row_picks(
+                    model,
+                    batch,
+                    mask,
+                    seed,
+                    train_step,
+                    Some(&mut trace),
+                    |_, _| Ok(()),
+                )
                 .map_err(|e| e.to_string())?;
-            row_picks(model, batch, mask, seed, train_step, Some(&mut trace), |_, _| Ok(()))
-                .map_err(|e| e.to_string())?;
-            let trace = trace.finish().map_err(|e| e.to_string())?;
-            if phi.buckets.is_empty() && phi.codes.is_empty() {
-                rerun_matches(&trace, &inputs.other, sealed[&position])?;
-                rerun += 1;
-            }
-            Ok(trace)
-        });
+                let trace = trace.finish().map_err(|e| e.to_string())?;
+                if phi.buckets.is_empty() && phi.codes.is_empty() {
+                    rerun_matches(&trace, &inputs.other, sealed[&position])?;
+                    rerun += 1;
+                }
+                Ok(trace)
+            },
+        );
+        replay_ms_each.push(this.elapsed().as_millis() as u64);
         tally.record(position, offset, done.map(|replay| (step, replay)))?;
     }
     Ok(ReplayRun {
@@ -6640,6 +6720,7 @@ fn replay_windows(
         rerun,
         table: (rows, width),
         replay_ms: started.elapsed().as_millis() as u64,
+        replay_ms_each,
     })
 }
 
@@ -6652,7 +6733,8 @@ fn replay_windows(
 /// as `out/replay-{split}.json`, both created new. It prints one JSON line, and returns it. A
 /// refused replay is recorded with its refusal, the rest still run, and the command then fails.
 /// Refused before the model loads: a checkpoint that is not a copy or not its run's arm, a split
-/// that is not DEV or a named panel, an output that exists, and a read R does not serve.
+/// that is not DEV or a named panel, and an output that exists; once its reads load and before
+/// any forward, a read R does not serve. The record names the settings the replays ran under.
 #[allow(clippy::too_many_arguments)]
 pub fn decision_replay(
     data_root: &Path,
@@ -6690,14 +6772,18 @@ pub fn decision_replay(
             .map(|(_, dir)| dir)
             .ok_or_else(|| invalid(format!("--replay-split {split}: not dev or a --panel")))?;
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
-        let windows = hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0;
+        let windows =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0;
         (windows, mask, Some(sha))
     };
     fs::create_dir_all(out)?;
     let lines = out.join(format!("replay-{split}.lines.jsonl"));
     let record_path = out.join(format!("replay-{split}.json"));
     if let Some(found) = [&lines, &record_path].into_iter().find(|p| p.exists()) {
-        return Err(invalid(format!("{}: a replay record is never replaced", found.display())));
+        return Err(invalid(format!(
+            "{}: a replay record is never replaced",
+            found.display()
+        )));
     }
     arms::set_fbs_arm(Some(arm));
     crate::geometric_stack::set_retention_rates(retain_rates);
@@ -6716,11 +6802,27 @@ pub fn decision_replay(
     let trained = run_trained_cut(checkpoint)?;
     set_trained_cut(trained);
     // The turn memory stays as loaded: the sealed trace is the memory pass's.
-    let run = replay_windows(&model, &windows, &mask, seed, train_step, inputs, ReplayTally::with_lines(&lines)?)?;
+    let run = replay_windows(
+        &model,
+        &windows,
+        &mask,
+        seed,
+        train_step,
+        inputs,
+        Some(&lines),
+    )?;
     let (replayed, counts) = (&run.tally.replayed, &run.tally.counts);
     let record = serde_json::json!({
         "schema": DECISION_REPLAY_SCHEMA,
         "checkpoint": { "path": checkpoint, "step": train_step, "side": "T" },
+        "settings": {
+            "seed": seed,
+            "arm": arm,
+            "retain_rates": retain_rates,
+            "fold_scores": fold_scores,
+            "reflect_floor": reflect_floor,
+            "trained_cut": trained,
+        },
         "split": { "name": split, "windows": windows.len(), "panel_sha256": panel_sha },
         "reference": inputs.sources["reference"],
         "other": inputs.sources["other"],
@@ -6734,6 +6836,7 @@ pub fn decision_replay(
         "counts": counts,
         "rerun": run.rerun,
         "replay_ms": run.replay_ms,
+        "replay_ms_each": run.replay_ms_each,
         "replayed": replayed,
     });
     let text = serde_json::to_vec_pretty(&record)?;
@@ -6750,7 +6853,9 @@ pub fn decision_replay(
         "sha256": sha256_hex(&text),
     });
     println!("{summary}");
-    run.tally.refusals(&record_path.display().to_string()).map_err(invalid)?;
+    run.tally
+        .refusals(&record_path.display().to_string())
+        .map_err(invalid)?;
     Ok(summary)
 }
 
@@ -12744,7 +12849,12 @@ mod tests {
     }
 
     /// A replay test's window (claude-257): `picks` gives each step's nearest pick, or none.
-    fn replay_window(position: usize, ids: Vec<u32>, reply_start: usize, picks: &[Option<u32>]) -> DecisionWindow {
+    fn replay_window(
+        position: usize,
+        ids: Vec<u32>,
+        reply_start: usize,
+        picks: &[Option<u32>],
+    ) -> DecisionWindow {
         let step = |pick: Option<u32>| DecisionStep {
             layers: Vec::new(),
             readout: None,
@@ -12760,7 +12870,12 @@ mod tests {
                 query_f32: Vec::new(),
             }),
         };
-        DecisionWindow { position, ids, reply_start, steps: picks.iter().map(|&p| step(p)).collect() }
+        DecisionWindow {
+            position,
+            ids,
+            reply_start,
+            steps: picks.iter().map(|&p| step(p)).collect(),
+        }
     }
 
     fn replay_trace(side: &str, windows: Vec<DecisionWindow>) -> DecisionTrace {
@@ -12781,11 +12896,17 @@ mod tests {
     fn the_structure_step_replay_takes_f_as_reference_and_t_as_other() {
         use uor_r4_integer::fbs_snapshot::{DecisionSource, DECISION_DECILES_SCHEMA};
         let window = |position| replay_window(position, vec![1, 2], 1, &[None, Some(3)]);
-        let (f, t) = (replay_trace("F", vec![window(7)]), replay_trace("T", vec![window(7)]));
+        let (f, t) = (
+            replay_trace("F", vec![window(7)]),
+            replay_trace("T", vec![window(7)]),
+        );
         let deciles = |side: &str, sha: &str| DecisionDeciles {
             schema: DECISION_DECILES_SCHEMA.to_owned(),
             side: side.to_owned(),
-            trace: Some(DecisionSource { path: "f.json".to_owned(), sha256: sha.to_owned() }),
+            trace: Some(DecisionSource {
+                path: "f.json".to_owned(),
+                sha256: sha.to_owned(),
+            }),
             families: Vec::new(),
         };
         let refusal = |p: &DecisionTrace, q: &DecisionTrace, d: &DecisionDeciles| {
@@ -12798,7 +12919,7 @@ mod tests {
         assert!(refusal(&f, &twice, &deciles("F", "aa")).contains("two windows at position 7"));
         let twice = replay_trace("F", vec![window(7), window(7)]);
         assert!(refusal(&twice, &t, &deciles("F", "aa")).contains("two windows at position 7"));
-        assert!(refusal(&f, &t, &deciles("T", "aa")).contains("another trace"));
+        assert!(refusal(&f, &t, &deciles("T", "aa")).contains("reads F's"));
         assert!(refusal(&f, &t, &deciles("F", "bb")).contains("another trace"));
         let mut unnamed = deciles("F", "aa");
         unnamed.trace = None;
@@ -12814,16 +12935,48 @@ mod tests {
         let picks = |x: &[u32]| [None, Some(x[0]), None, Some(x[1]), Some(4)];
         let p = replay_trace(
             "F",
-            vec![replay_window(7, ids.clone(), 1, &picks(&a)), replay_window(3, ids.clone(), 1, &picks(&a))],
+            vec![
+                replay_window(7, ids.clone(), 1, &picks(&a)),
+                replay_window(3, ids.clone(), 1, &picks(&a)),
+            ],
         );
         let q = replay_trace(
             "T",
-            vec![replay_window(3, ids.clone(), 1, &picks(&a)), replay_window(7, ids.clone(), 1, &picks(&b))],
+            vec![
+                replay_window(3, ids.clone(), 1, &picks(&a)),
+                replay_window(7, ids.clone(), 1, &picks(&b)),
+            ],
         );
         // Three nearests a window; position 7 differs at step 3, offset 2.
-        assert_eq!(replay_offsets(&p, &q, &[]).unwrap(), (vec![(7, 2, 3)], Some(6)));
-        assert_eq!(replay_offsets(&p, &q, &[(3, 3), (7, 0)]).unwrap(), (vec![(3, 3, 4), (7, 0, 1)], None));
-        let refusal = |q: &DecisionTrace, at: &[(usize, usize)]| replay_offsets(&p, q, at).unwrap_err().to_string();
+        assert_eq!(
+            replay_offsets(&p, &q, &[]).unwrap(),
+            (vec![(7, 2, 3)], Some(6))
+        );
+        // A pick that differs before the reply starts is neither replayed nor compared.
+        let early = |x: u32| {
+            replay_trace(
+                "F",
+                vec![replay_window(
+                    7,
+                    ids.clone(),
+                    2,
+                    &[None, Some(x), None, Some(8), Some(4)],
+                )],
+            )
+        };
+        let (p_early, mut q_early) = (early(9), early(5));
+        q_early.side = "T".to_owned();
+        assert_eq!(
+            replay_offsets(&p_early, &q_early, &[]).unwrap(),
+            (vec![], Some(2))
+        );
+        assert_eq!(
+            replay_offsets(&p, &q, &[(3, 3), (7, 0)]).unwrap(),
+            (vec![(3, 3, 4), (7, 0, 1)], None)
+        );
+        let refusal = |q: &DecisionTrace, at: &[(usize, usize)]| {
+            replay_offsets(&p, q, at).unwrap_err().to_string()
+        };
         assert!(refusal(&q, &[(7, 0), (7, 0)]).contains("named twice"));
         assert!(refusal(&q, &[(5, 0)]).contains("no window at that position"));
         assert!(refusal(&q, &[(7, 4)]).contains("past the window"));
@@ -12835,7 +12988,12 @@ mod tests {
         for odd in [
             replay_window(7, other_ids, 1, &picks(&b)),
             replay_window(7, ids.clone(), 0, &picks(&b)),
-            replay_window(7, ids.clone(), 1, &[None, Some(9), Some(1), Some(7), Some(4)]),
+            replay_window(
+                7,
+                ids.clone(),
+                1,
+                &[None, Some(9), Some(1), Some(7), Some(4)],
+            ),
             replay_window(5, ids.clone(), 1, &picks(&b)),
         ] {
             let r = line_up(vec![replay_window(3, ids.clone(), 1, &picks(&a)), odd]);
@@ -12843,97 +13001,232 @@ mod tests {
         }
     }
 
+    /// claude-257: a replayed window's eval batch is the one [`row_picks`] scores it in, the
+    /// [`hs::SHEET_EVAL_BATCH`] windows from a multiple of it, the last batch shorter.
+    #[test]
+    fn a_replay_runs_the_window_s_own_eval_batch() {
+        let b = hs::SHEET_EVAL_BATCH;
+        assert_eq!(replay_batch(0, b + 2), 0..b);
+        assert_eq!(replay_batch(5, b + 2), 0..b);
+        assert_eq!(replay_batch(b - 1, b + 2), 0..b);
+        assert_eq!(replay_batch(b, b + 2), b..b + 2);
+        assert_eq!(replay_batch(b + 1, b + 2), b..b + 2);
+        assert_eq!(replay_batch(3, 4), 0..4);
+        assert_eq!(replay_batch(2 * b + 1, 3 * b), 2 * b..3 * b);
+    }
+
     /// claude-257's I-Rerun: pass 0 holds when it traces Q's sealed window byte for byte under the
     /// sealed header; otherwise it names where they first differ.
     #[test]
     fn a_rerun_holds_only_on_the_sealed_window() {
-        let sealed = replay_trace("T", vec![replay_window(7, vec![1, 2, 3], 1, &[None, Some(3), Some(4)])]);
+        let sealed = replay_trace(
+            "T",
+            vec![replay_window(
+                7,
+                vec![1, 2, 3],
+                1,
+                &[None, Some(3), Some(4)],
+            )],
+        );
         let window = &sealed.windows[0];
         rerun_matches(&sealed, &sealed, window).unwrap();
         let mut moved = sealed.clone();
-        moved.windows[0].steps[2].nearest.as_mut().unwrap().runner_up = 9;
+        moved.windows[0].steps[2]
+            .nearest
+            .as_mut()
+            .unwrap()
+            .runner_up = 9;
         let e = rerun_matches(&moved, &sealed, window).unwrap_err();
-        assert!(e.contains("first at step 2") && e.contains("(I-Rerun)"), "{e}");
+        assert!(
+            e.contains("first at step 2") && e.contains("(I-Rerun)"),
+            "{e}"
+        );
         let mut head = sealed.clone();
         head.kept = 8;
-        assert!(rerun_matches(&head, &sealed, window).unwrap_err().contains("its header"));
+        assert!(rerun_matches(&head, &sealed, window)
+            .unwrap_err()
+            .contains("its header"));
+        // The same steps under other ids, or another reply start, are not the sealed window.
+        let (mut ids, mut start) = (sealed.clone(), sealed.clone());
+        ids.windows[0].ids[2] = 9;
+        start.windows[0].reply_start = 2;
+        for moved in [ids, start] {
+            let e = rerun_matches(&moved, &sealed, window).unwrap_err();
+            assert!(
+                e.contains("in its header, ids, reply start or step count"),
+                "{e}"
+            );
+        }
         let mut two = sealed.clone();
         two.windows.push(window.clone());
-        assert!(rerun_matches(&two, &sealed, window).unwrap_err().contains("2 windows"));
+        assert!(rerun_matches(&two, &sealed, window)
+            .unwrap_err()
+            .contains("2 windows"));
     }
 
-    /// claude-257 (Done-when 4, on the GPU): the structure step's replay on a small trunk with both
-    /// Hamming reads, P as Q's own trace. A whole run over 18 windows, two eval batches, traces
-    /// three of them as side T. Without `--at` no offset differs, and every reply step is
-    /// compared. With `--at` at a window of each batch, each replay is one pass on its window's own
-    /// batch, accounted for, whose pass 0 is that window's sealed trace byte for byte (I-Rerun);
-    /// each is in the line file as recorded. A sealed trace with one kept set edited is refused
-    /// at pass 0 (I-Rerun); a position the split does not hold is refused before any forward.
+    /// Removes a replay test's folder however the test ends (claude-257).
     #[cfg(feature = "cuda")]
-    #[test]
-    fn the_structure_steps_replay_reruns_each_window_on_its_own_batch() {
-        use crate::flock_read_hamming::{set_hamming_reads, HammingReads};
-        use uor_r4_integer::fbs_snapshot::{decision_deciles, DecisionSource, REPLAY_COUNTS};
-        let device = Device::new_cuda(0).unwrap();
-        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
-        set_hamming_reads(Some(HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap()));
+    struct ReplayDir(PathBuf);
+
+    #[cfg(feature = "cuda")]
+    impl ReplayDir {
+        /// A new folder `name` under the temp folder, any stale one of this process's removed.
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("{name}_{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            ReplayDir(dir)
+        }
+
+        /// Writes `bytes` to `name` in the folder, and returns its path.
+        fn file(&self, name: &str, bytes: &[u8]) -> String {
+            let path = self.0.join(name);
+            fs::write(&path, bytes).unwrap();
+            path.to_str().unwrap().to_owned()
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    impl Drop for ReplayDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// The replay tests' corpus (claude-257): 18 documents, each a prompt, a reply, a prompt and a
+    /// reply, whose lengths vary with the document, so an eval batch pads its windows unevenly.
+    #[cfg(feature = "cuda")]
+    fn replay_corpus() -> (Vec<u32>, Vec<u8>) {
         let (mut tokens, mut mask) = (Vec::new(), Vec::new());
         for doc in 0..18u32 {
             tokens.push(hs::SHEET_BOS_ID);
             mask.push(0u8);
-            for (ids, flag) in [(10..20u32, 0u8), (20..26, 1), (26..30, 0), (30..34, 1)] {
-                for t in ids {
-                    tokens.push(t + 40 * doc);
+            let mut id = 40 * doc + 2;
+            for (len, flag) in [(10, 0u8), (6 + doc % 3, 1), (4, 0), (4 + doc % 2, 1)] {
+                for _ in 0..len {
+                    tokens.push(id);
                     mask.push(flag);
+                    id += 1;
                 }
             }
         }
-        let (windows, _) =
-            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
-        assert_eq!(windows.len(), 18);
-        let position = |i: usize| windows[i].scored_corpus_positions[0];
-        let mut sealed = FTrace::new(&[position(1), position(5), position(17)]).unwrap().on_side("T").unwrap();
-        row_picks(&model, &windows, &mask, 1, 0, Some(&mut sealed), |_, _| Ok(())).unwrap();
-        let host_table = sealed.table.clone().unwrap();
-        let sealed = sealed.finish().unwrap();
-        // P is Q's own trace as side F, with its deciles, and Q's table as F's snapshot.
-        let dir = std::env::temp_dir().join(format!("uor_structure_replay_{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let file = |name: &str, bytes: &[u8]| {
-            let path = dir.join(name);
-            fs::write(&path, bytes).unwrap();
-            path.to_str().unwrap().to_owned()
+        (tokens, mask)
+    }
+
+    /// The structure step's side files for a replay test (claude-257), in `dir`: P as Q's own
+    /// sealed trace marked side F, its deciles read from P's file, Q's table as F's snapshot, and
+    /// Q's trace; their paths as (reference, other, deciles, table).
+    #[cfg(feature = "cuda")]
+    fn replay_side_files(
+        dir: &ReplayDir,
+        sealed: &DecisionTrace,
+        host_table: &[f32],
+    ) -> [String; 4] {
+        use uor_r4_integer::fbs_snapshot::{decision_deciles, DecisionSource};
+        let reference = DecisionTrace {
+            side: "F".to_owned(),
+            ..sealed.clone()
         };
-        let reference = DecisionTrace { side: "F".to_owned(), ..sealed.clone() };
         let reference_bytes = serde_json::to_vec(&reference).unwrap();
-        let reference_path = file("f.json", &reference_bytes);
-        let other_path = file("t.json", &serde_json::to_vec(&sealed).unwrap());
+        let reference_path = dir.file("f.json", &reference_bytes);
+        let other_path = dir.file("t.json", &serde_json::to_vec(sealed).unwrap());
         let mut deciles = decision_deciles(&reference).unwrap();
-        deciles.trace = Some(DecisionSource { path: reference_path.clone(), sha256: sha256_hex(&reference_bytes) });
-        let deciles_path = file("d.json", &serde_json::to_vec(&deciles).unwrap());
+        deciles.trace = Some(DecisionSource {
+            path: reference_path.clone(),
+            sha256: sha256_hex(&reference_bytes),
+        });
+        let deciles_path = dir.file("d.json", &serde_json::to_vec(&deciles).unwrap());
         let snapshot = serde_json::json!({
             "vocab": host_table.len() / hs::SHEET_WIDTH,
             "width": hs::SHEET_WIDTH,
             "embed": host_table,
         });
-        let table_path = file("s.json", &serde_json::to_vec(&snapshot).unwrap());
+        let table_path = dir.file("s.json", &serde_json::to_vec(&snapshot).unwrap());
+        [reference_path, other_path, deciles_path, table_path]
+    }
+
+    /// Q's sealed trace with the last step's first kept set of the window at `position` reversed
+    /// (claude-257): no check of the trace reads it, so only the rerun can find it.
+    #[cfg(feature = "cuda")]
+    fn kept_set_edited(sealed: &DecisionTrace, position: usize) -> DecisionTrace {
+        let mut edited = sealed.clone();
+        let w = edited
+            .windows
+            .iter_mut()
+            .find(|w| w.position == position)
+            .unwrap();
+        let last = w.steps.len() - 1;
+        let kept = &mut w.steps[last].readout.as_mut().unwrap().heads[0].kept;
+        assert!(kept.len() > 1);
+        kept.reverse();
+        edited
+    }
+
+    /// claude-257 (Done-when 4, on the GPU): the structure step's replay on a small trunk with both
+    /// Hamming reads, P as Q's own trace. A whole run over 18 windows of uneven lengths, two eval
+    /// batches, traces three of them as side T. Without `--at` no offset differs, and every reply
+    /// step is compared. With `--at` at a window of each batch, each replay is one pass on its
+    /// window's own batch, accounted for, whose pass 0 is that window's sealed trace byte for byte
+    /// (I-Rerun); each is in the line file as recorded. A sealed trace with one kept set edited is
+    /// refused at pass 0 (I-Rerun); a position the split does not hold is refused before any
+    /// forward, and before the line file is created.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_structure_steps_replay_reruns_each_window_on_its_own_batch() {
+        use crate::flock_read_hamming::{set_hamming_reads, HammingReads};
+        use uor_r4_integer::fbs_snapshot::REPLAY_COUNTS;
+        let device = Device::new_cuda(0).unwrap();
+        let _guard = ArmGuard;
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        set_hamming_reads(Some(
+            HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap(),
+        ));
+        let (tokens, mask) = replay_corpus();
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        assert_eq!(windows.len(), 18);
+        let position = |i: usize| windows[i].scored_corpus_positions[0];
+        let mut sealed = FTrace::new(&[position(1), position(5), position(17)])
+            .unwrap()
+            .on_side("T")
+            .unwrap();
+        row_picks(&model, &windows, &mask, 1, 0, Some(&mut sealed), |_, _| {
+            Ok(())
+        })
+        .unwrap();
+        let host_table = sealed.table.clone().unwrap();
+        let sealed = sealed.finish().unwrap();
+        let dir = ReplayDir::new("uor_structure_replay");
+        let [reference_path, other_path, deciles_path, table_path] =
+            replay_side_files(&dir, &sealed, &host_table);
         let inputs = |at: &[(usize, usize)], other: &str| {
-            read_replay_inputs(&reference_path, other, &deciles_path, &table_path, 30_228, at).unwrap()
+            read_replay_inputs(
+                &reference_path,
+                other,
+                &deciles_path,
+                &table_path,
+                30_228,
+                at,
+            )
+            .unwrap()
         };
-        let run = |windows: &[CausalWindow], inputs: &ReplayInputs, tally: ReplayTally| {
-            replay_windows(&model, windows, &mask, 1, 0, inputs, tally)
+        let run = |windows: &[CausalWindow], inputs: &ReplayInputs, lines: Option<&Path>| {
+            replay_windows(&model, windows, &mask, 1, 0, inputs, lines)
         };
         let all = inputs(&[], &other_path);
         let steps: usize = sealed.windows.iter().map(|w| nearest_steps(w).len()).sum();
         assert_eq!((all.chosen.len(), all.compared), (0, Some(steps)));
-        let none = run(&windows, &all, ReplayTally::default()).unwrap();
+        let none = run(&windows, &all, None).unwrap();
         assert_eq!((none.tally.replayed.len(), none.rerun), (0, 0));
         // A window of each batch, the second batch two windows long.
-        let lines = dir.join("replay.lines.jsonl");
+        let lines = dir.0.join("replay.lines.jsonl");
         let named = inputs(&[(position(5), 0), (position(17), 1)], &other_path);
-        let two = run(&windows, &named, ReplayTally::with_lines(&lines).unwrap()).unwrap();
+        let two = run(&windows, &named, Some(&lines)).unwrap();
         let counts: Vec<usize> = REPLAY_COUNTS.iter().map(|k| two.tally.counts[k]).collect();
-        assert_eq!((counts, two.rerun), (vec![2, 0, 0, 0, 0, 2, 2], 2));
+        assert_eq!(
+            (counts, two.rerun, two.replay_ms_each.len()),
+            (vec![2, 0, 0, 0, 0, 2, 2], 2, 2)
+        );
         let written: Vec<serde_json::Value> = fs::read_to_string(&lines)
             .unwrap()
             .lines()
@@ -12941,28 +13234,198 @@ mod tests {
             .collect();
         assert_eq!(written, two.tally.replayed);
         assert_eq!(written[1]["replay"]["passes"][0]["outcome"], "nearest");
-        // One kept set of the sealed trace reversed: no check of the trace reads it, so only the
-        // rerun can find it.
-        let mut edited = sealed.clone();
-        let w = edited.windows.iter_mut().find(|w| w.position == position(17)).unwrap();
-        let last = w.steps.len() - 1;
-        let kept = &mut w.steps[last].readout.as_mut().unwrap().heads[0].kept;
-        assert!(kept.len() > 1);
-        kept.reverse();
-        let edited_path = file("t-edited.json", &serde_json::to_vec(&edited).unwrap());
+        let edited_path = dir.file(
+            "t-edited.json",
+            &serde_json::to_vec(&kept_set_edited(&sealed, position(17))).unwrap(),
+        );
         let one = inputs(&[(position(17), 1)], &edited_path);
-        let refused = run(&windows, &one, ReplayTally::default()).unwrap();
+        let refused = run(&windows, &one, None).unwrap();
         assert_eq!((refused.tally.counts["refused"], refused.rerun), (1, 0));
-        let why = refused.tally.replayed[0]["refused"].as_str().unwrap().to_owned();
+        let why = refused.tally.replayed[0]["refused"]
+            .as_str()
+            .unwrap()
+            .to_owned();
         assert!(why.contains("pass 0") && why.contains("(I-Rerun)"), "{why}");
         // The split without window 17 holds no window at its position.
-        let e = run(&windows[..16], &named, ReplayTally::default()).unwrap_err().to_string();
+        let early = dir.0.join("early.lines.jsonl");
+        let e = run(&windows[..16], &named, Some(&early))
+            .unwrap_err()
+            .to_string();
         assert!(e.contains("names no window of the split"), "{e}");
-        set_hamming_reads(None);
-        for name in ["f.json", "t.json", "d.json", "s.json", "t-edited.json", "replay.lines.jsonl"] {
-            fs::remove_file(dir.join(name)).unwrap();
-        }
-        fs::remove_dir(&dir).unwrap();
+        assert!(
+            !early.exists(),
+            "a refusal before any forward leaves no line file"
+        );
+    }
+
+    /// claude-257 (Done-when 4, on the GPU): `--decision-replay` end to end, on an evaluation copy
+    /// rounded as exported of a small trunk with both Hamming reads, saved as a run's step 4, over
+    /// the panel `p-t`. P is Q's own trace, sealed from the copy as the command loads it. Without
+    /// `--at` it replays nothing, compares every reply step, and writes the record and an empty
+    /// line file. With `--at` at a window of each batch, each replay is one accounted pass, and
+    /// the record holds the settings and the line file's replays. It never replaces a record;
+    /// with one replay refused (I-Rerun) it writes both files and then fails; and it refuses the
+    /// source checkpoint, which is not a copy, and a split that is not a panel.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_structure_step_replay_runs_end_to_end_on_a_rounded_copy() {
+        use crate::flock_read_hamming::HammingReads;
+        use uor_r4_integer::fbs_snapshot::REPLAY_COUNTS;
+        let device = Device::new_cuda(0).unwrap();
+        let _guard = ArmGuard;
+        let dir = ReplayDir::new("uor_structure_replay_e2e");
+        let source = dir.0.join("f/models/step-000004");
+        build_fbs_model(FbsArm::OneAtomActive, 1, &device)
+            .unwrap()
+            .save(&source)
+            .unwrap();
+        HammingReads::new(4, hs::SHEET_WIDTH, &device)
+            .unwrap()
+            .save(&source)
+            .unwrap();
+        fs::write(dir.0.join("f/config.json"), br#"{"steps": 4}"#).unwrap();
+        let copy = dir.0.join("t/models/step-000004");
+        crate::fbs_export::write_rounded_copy(&source, &copy).unwrap();
+        // The panel p-t: the corpus behind a 64-byte UORT header.
+        let (tokens, mask) = replay_corpus();
+        let panel = dir.0.join("p-t");
+        fs::create_dir_all(&panel).unwrap();
+        let mut uort = vec![0u8; hs::UORT_HEADER_BYTES];
+        uort[..4].copy_from_slice(b"UORT");
+        uort[8..16].copy_from_slice(&(tokens.len() as u64).to_le_bytes());
+        uort.extend(tokens.iter().flat_map(|&t| (t as u16).to_le_bytes()));
+        fs::write(panel.join("tokens.u16"), uort).unwrap();
+        fs::write(panel.join("response_mask.u8"), &mask).unwrap();
+        let panels = vec![("p-t".to_owned(), panel)];
+        // Q's sealed trace: the copy as the command loads it, at the copy's step.
+        arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+        let model = StackModel::load(&copy, &device).unwrap();
+        load_reads(&copy, &device).unwrap();
+        set_trained_cut(run_trained_cut(&copy).unwrap());
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
+        let position = |i: usize| windows[i].scored_corpus_positions[0];
+        let mut sealed = FTrace::new(&[position(1), position(5), position(17)])
+            .unwrap()
+            .on_side("T")
+            .unwrap();
+        row_picks(&model, &windows, &mask, 1, 4, Some(&mut sealed), |_, _| {
+            Ok(())
+        })
+        .unwrap();
+        let host_table = sealed.table.clone().unwrap();
+        let sealed = sealed.finish().unwrap();
+        drop(model);
+        let [reference_path, other_path, deciles_path, table_path] =
+            replay_side_files(&dir, &sealed, &host_table);
+        let edited_path = dir.file(
+            "t-edited.json",
+            &serde_json::to_vec(&kept_set_edited(&sealed, position(17))).unwrap(),
+        );
+        let replay =
+            |checkpoint: &Path, out: &str, split: &str, at: &[(usize, usize)], other: &str| {
+                let inputs = read_replay_inputs(
+                    &reference_path,
+                    other,
+                    &deciles_path,
+                    &table_path,
+                    30_228,
+                    at,
+                )
+                .unwrap();
+                decision_replay(
+                    &dir.0,
+                    checkpoint,
+                    &dir.0.join(out),
+                    split,
+                    &panels,
+                    &inputs,
+                    false,
+                    false,
+                    false,
+                    1,
+                    FbsArm::OneAtomActive,
+                    &device,
+                )
+            };
+        let read = |out: &str| -> (serde_json::Value, Vec<serde_json::Value>) {
+            let record =
+                serde_json::from_slice(&fs::read(dir.0.join(out).join("replay-p-t.json")).unwrap())
+                    .unwrap();
+            let lines = fs::read_to_string(dir.0.join(out).join("replay-p-t.lines.jsonl")).unwrap();
+            (
+                record,
+                lines
+                    .lines()
+                    .map(|l| serde_json::from_str(l).unwrap())
+                    .collect(),
+            )
+        };
+        let counts = |record: &serde_json::Value| -> Vec<u64> {
+            REPLAY_COUNTS
+                .iter()
+                .map(|k| record["counts"][k].as_u64().unwrap())
+                .collect()
+        };
+        let steps: usize = sealed.windows.iter().map(|w| nearest_steps(w).len()).sum();
+        replay(&copy, "none", "p-t", &[], &other_path).unwrap();
+        let (record, lines) = read("none");
+        assert_eq!(
+            (
+                record["replays"].as_u64(),
+                record["offsets_compared"].as_u64()
+            ),
+            (Some(0), Some(steps as u64))
+        );
+        assert_eq!(
+            (record["equal"].as_u64(), lines.len()),
+            (Some(steps as u64), 0)
+        );
+        let settings = serde_json::json!({
+            "seed": 1,
+            "arm": FbsArm::OneAtomActive,
+            "retain_rates": false,
+            "fold_scores": false,
+            "reflect_floor": false,
+            "trained_cut": null,
+        });
+        assert_eq!(record["settings"], settings);
+        let at = [(position(5), 0), (position(17), 1)];
+        replay(&copy, "two", "p-t", &at, &other_path).unwrap();
+        let (record, lines) = read("two");
+        assert_eq!(
+            (counts(&record), record["rerun"].as_u64()),
+            (vec![2, 0, 0, 0, 0, 2, 2], Some(2))
+        );
+        assert_eq!(
+            (
+                record["replayed"].as_array().unwrap(),
+                record["replay_ms_each"].as_array().unwrap().len()
+            ),
+            (&lines, 2)
+        );
+        let again = replay(&copy, "two", "p-t", &at, &other_path)
+            .unwrap_err()
+            .to_string();
+        assert!(again.contains("never replaced"), "{again}");
+        let e = replay(&copy, "edited", "p-t", &at, &edited_path)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("1 of 2 replays were refused"), "{e}");
+        let (record, lines) = read("edited");
+        assert_eq!(
+            (record["counts"]["refused"].as_u64(), lines.len()),
+            (Some(1), 2)
+        );
+        assert!(lines[1]["refused"].as_str().unwrap().contains("(I-Rerun)"));
+        let e = replay(&source, "source", "p-t", &[], &other_path)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("rounded as exported"), "{e}");
+        let e = replay(&copy, "unnamed", "p-x", &[], &other_path)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("not dev or a --panel"), "{e}");
     }
 
     /// claude-218 (FIT round 1): each query is named by the commonest target among the TRAIN

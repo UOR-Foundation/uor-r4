@@ -1939,8 +1939,10 @@ pub const REPLAY_COUNTS: [&str; 7] = [
 /// What a `--decision-replay` run records of its replays (claude-257): `fbs-toks`'s of the
 /// arithmetic step (T, R) and `train-in-space`'s of the structure step (F, T). Each entry is a
 /// replay's position, offset, step and [`StepReplay`], or its position, offset and refusal, in the
-/// order run. With a line file, each entry is also appended to it, one JSON object a line, and
-/// flushed as its replay ends, so a run cut short keeps every replay it finished.
+/// order run. With a line file, each entry is also appended to it, one JSON object a line,
+/// written to the OS as its replay ends (not synced to disk), so a run cut short keeps every
+/// replay it finished. An entry is kept with its counts before its line is written, so a failed
+/// write leaves the tally whole and the line file short by that entry.
 #[derive(Debug)]
 pub struct ReplayTally {
     pub replayed: Vec<serde_json::Value>,
@@ -2014,13 +2016,13 @@ impl ReplayTally {
                 })
             }
         };
+        self.replayed.push(entry);
         if let Some(lines) = &mut self.lines {
-            let mut line = serde_json::to_vec(&entry)?;
+            let mut line = serde_json::to_vec(self.replayed.last().expect("the entry just kept"))?;
             line.push(b'\n');
             lines.write_all(&line)?;
             lines.flush()?;
         }
-        self.replayed.push(entry);
         Ok(())
     }
 
@@ -4500,9 +4502,11 @@ mod tests {
         assert_eq!(err, "pass 0: no GPU");
     }
 
-    /// claude-257: the tally counts each replay by how it ended, keeps a refused one with its
-    /// refusal and no passes, and writes each entry to its line file, a line a replay, as it is
-    /// recorded. The line file is created new, and the run fails once any replay was refused.
+    /// claude-257: the tally counts each replay by how it ended and whether it is accounted for,
+    /// keeps a refused one with its refusal and no passes, and writes each entry to its line file,
+    /// a line a replay, as it is recorded. Every count differs from the others, so a replay
+    /// counted under another key shows. The line file is created new, and the run fails once any
+    /// replay was refused.
     #[test]
     fn the_replay_tally_counts_each_replay_and_streams_it_as_it_ends() {
         struct Scratch(PathBuf);
@@ -4514,6 +4518,7 @@ mod tests {
         let dir = Scratch(
             std::env::temp_dir().join(format!("uor_fbs_replay_tally_{}", std::process::id())),
         );
+        let _ = std::fs::remove_dir_all(&dir.0);
         std::fs::create_dir_all(&dir.0).expect("scratch");
         let path = dir.0.join("replay.lines.jsonl");
         let nearest = PassOutcome::Nearest {
@@ -4539,31 +4544,69 @@ mod tests {
             },
             accounted,
         };
+        let memory = PassOutcome::Memory {
+            step: 2,
+            reference: DecisionMemory {
+                key: vec![3, 4],
+                stored: Some(7),
+                opening: false,
+            },
+            other: DecisionMemory {
+                key: vec![3, 4],
+                stored: None,
+                opening: false,
+            },
+        };
+        // Each replay's passes, by how it ends, and whether it is accounted for: one ends at the
+        // nearest, three at a kept set and five at a memory lookup; seven are accounted for, two
+        // are not, and they run 13 passes.
+        let (n, k, m) = (nearest, kept, memory);
+        let replays: [(Vec<PassOutcome>, bool); 9] = [
+            (vec![n.clone()], true),
+            (vec![k.clone()], true),
+            (vec![n.clone(), k.clone()], false),
+            (vec![k.clone()], true),
+            (vec![m.clone()], true),
+            (vec![m.clone()], true),
+            (vec![m.clone()], true),
+            (vec![n.clone(), m.clone()], false),
+            (vec![n.clone(), n, m], true),
+        ];
         let mut tally = ReplayTally::with_lines(&path).expect("a new line file");
-        tally
-            .record(7, 0, Ok((4, replay(vec![nearest.clone()], true))))
-            .expect("recorded");
-        let lines = std::fs::read_to_string(&path).expect("lines");
-        assert_eq!(
-            lines.lines().count(),
-            1,
-            "the first replay is on disk as it ends"
-        );
-        tally
-            .record(7, 2, Ok((6, replay(vec![nearest, kept], false))))
-            .expect("recorded");
+        for (offset, (passes, accounted)) in replays.iter().cloned().enumerate() {
+            tally
+                .record(7, offset, Ok((offset + 4, replay(passes, accounted))))
+                .expect("recorded");
+            if offset == 0 {
+                let lines = std::fs::read_to_string(&path).expect("lines");
+                assert_eq!(
+                    lines.lines().count(),
+                    1,
+                    "the first replay is on disk as it ends"
+                );
+            }
+        }
         assert_eq!(tally.refusals("out.json"), Ok(()));
-        tally
-            .record(9, 1, Err("pass 0: no GPU".to_owned()))
-            .expect("recorded");
+        for position in 10..14 {
+            tally
+                .record(position, 1, Err("pass 0: no GPU".to_owned()))
+                .expect("recorded");
+        }
         let counts: Vec<usize> = REPLAY_COUNTS.iter().map(|k| tally.counts[k]).collect();
         // accounted, unaccounted, refused, ended_kept, ended_memory, ended_nearest, passes
-        assert_eq!(counts, [1, 1, 1, 1, 0, 1, 3]);
+        assert_eq!(counts, [7, 2, 4, 3, 5, 1, 13]);
+        for (entry, (passes, accounted)) in tally.replayed.iter().zip(&replays) {
+            assert_eq!(entry["replay"]["accounted"], *accounted);
+            assert_eq!(
+                entry["replay"]["passes"].as_array().map(Vec::len),
+                Some(passes.len())
+            );
+        }
         assert_eq!(
-            tally.replayed[2],
-            serde_json::json!({ "position": 9, "offset": 1, "refused": "pass 0: no GPU" })
+            tally.replayed[9],
+            serde_json::json!({ "position": 10, "offset": 1, "refused": "pass 0: no GPU" })
         );
-        assert_eq!(tally.replayed[1]["step"], 6);
+        assert_eq!(tally.replayed[2]["step"], 6);
         let lines: Vec<serde_json::Value> = std::fs::read_to_string(&path)
             .expect("lines")
             .lines()
@@ -4575,7 +4618,7 @@ mod tests {
         );
         assert_eq!(
             tally.refusals("out.json"),
-            Err("1 of 3 replays were refused; each is recorded in out.json".to_owned())
+            Err("4 of 13 replays were refused; each is recorded in out.json".to_owned())
         );
         // A line file is never replaced, and a tally without one keeps its entries only.
         assert!(ReplayTally::with_lines(&path).is_err());
