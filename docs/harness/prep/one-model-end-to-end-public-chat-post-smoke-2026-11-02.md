@@ -7,7 +7,7 @@ Supersedes the compute claim in
 [the rejected public-chat sheet](one-model-end-to-end-public-chat-baseline-2026-11-02.md);
 that sheet remains immutable as a `TEST FITNESS: NOT_FIT` record.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Prior observations and question
 
@@ -285,4 +285,25 @@ language capability.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
+
+Reviewed at exact head
+`fd57d3ba8ed87717f200b4e7c06bff49ed9f4d0e` by a fresh-context, read-only
+`codex` reviewer using the configured `deepseek-flash` provider in ephemeral
+session `01a19dde-2d22-74b1-ad7e-f7f97f43bfb2`. It used 12 non-model checks and
+did not load the artifact or invoke a prompt.
+
+The reviewer found no blocker. It verified the clean exact head, every listed
+hash, both tokenizer-to-artifact bindings, the six panel categories and exact
+selected prompts, the absent output root and free-disk floor. It also checked
+the binary against its source, dependency lock and Rust 1.97.1 commit, plus
+protocol 2, `/tokens` suffix extraction, the deterministic repeat, the two
+memory anchors, instrument-versus-model classification, the zero-cost
+projection, stop rule and claim boundary.
+
+Its two advisories were retained: the seeds are initialization seeds on a
+common batch stream rather than independent replicates, and the published
+artifact is not chat-capable. The run therefore reports per-seed behavior and
+does not infer cross-seed noise or language capability.
