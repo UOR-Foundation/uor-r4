@@ -84,9 +84,9 @@
 //!   whole forced replay (`replay_step`) of the arithmetic step (T, R), R from ARTIFACT as Q, at
 //!   each chosen position, or, without `--at`, at every offset of REFERENCE's windows inside R's
 //!   (the row's prompt and reference) where R's unforced pick is not the reference's, the rest
-//!   counted equal. A float window reads on past the reference; its offsets there are counted
-//!   beyond R's window, not compared. Each pass steps the row's
-//!   prompt and its reference up to the offset under Φ, as `--forced --force` steps a row. It
+//!   counted equal. A float window reads on past the reference; its picks there are counted
+//!   beyond R's window, not compared. Each pass steps the row's prompt and its reference up to
+//!   the offset under Φ, as `--forced --force` steps a row. It
 //!   writes `uor-r4.decision-replay/1` new: each replay's passes, Φ, and whether it accounts for
 //!   its step.
 //! - Both refuse an `--at` named twice and a deciles file that names no trace.
@@ -1054,10 +1054,10 @@ impl ReplayRun<'_> {
 
 /// The offsets of the reference's `window` inside R's window of `row` (its prompt and its
 /// reference less the last token) where R's unforced picks `r_picks` differ (claude-256), and how
-/// many of the window's offsets lie past R's. A float side's window may read on past the
-/// reference; the forward is causal, so its first offsets read R's tokens. A window that does not
-/// start its reply at the prompt's last step, does not reach R's last offset, or reads other
-/// tokens in R's window is refused (I-Align).
+/// many of the window's picks (its steps with a nearest) lie past R's. A float side's window may
+/// read on past the reference; the forward is causal, so its first offsets read R's tokens. A
+/// window that does not start its reply at the prompt's last step, does not reach R's last
+/// offset, or reads other tokens in R's window is refused (I-Align).
 fn differing_offsets(
     window: &DecisionWindow,
     row: &PanelPrompt,
@@ -1089,13 +1089,14 @@ fn differing_offsets(
             differ.push(offset);
         }
     }
-    Ok((differ, reply.len() - n))
+    let beyond = reply[n..].iter().filter(|s| s.nearest.is_some()).count();
+    Ok((differ, beyond))
 }
 
 /// `--decision-replay` (claude-256): claude-247's forced replay of the arithmetic step (T, R),
 /// R from the artifact at `path` as Q, at each chosen position, or, without `--at`, at every
 /// offset inside R's window where R's unforced pick is not the reference's (`differing_offsets`,
-/// which counts the reference's offsets past R's window); written new
+/// which counts the reference's picks past R's window); written new
 /// as `uor-r4.decision-replay/1`. `args` follow `--decision-replay` on the command line. It
 /// prints one JSON line: the offsets compared and equal, the replays, their counts and the file's
 /// sha256.
@@ -1154,7 +1155,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
             .ok_or_else(|| format!("position {position}: {prompts} has no such row"))
     };
     // The offsets named, or every one of the reference's inside R's window where R's unforced
-    // pick differs, and the reference's offsets past R's window.
+    // pick differs, and the reference's picks past R's window.
     let (chosen, compared, beyond) = if at.is_empty() {
         let (mut chosen, mut compared, mut beyond) = (Vec::new(), 0usize, 0usize);
         for window in &rt.windows {
@@ -1170,7 +1171,16 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
     } else {
         (at, None, None)
     };
-    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    let kinds = [
+        "accounted",
+        "unaccounted",
+        "ended_kept",
+        "ended_memory",
+        "ended_nearest",
+        "passes",
+    ];
+    let mut counts: std::collections::BTreeMap<&str, usize> =
+        kinds.into_iter().map(|k| (k, 0)).collect();
     let mut replayed = Vec::with_capacity(chosen.len());
     let started = Instant::now();
     for (position, offset) in chosen {
@@ -1209,7 +1219,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         "deciles": { "path": deciles_path, "sha256": sha256_hex(&deciles_text), "trace": deciles.trace },
         "g10": g10,
         "offsets_compared": compared,
-        "offsets_beyond_r": beyond,
+        "picks_beyond_r": beyond,
         "equal": compared.map(|c| c - replayed.len()),
         "replays": replayed.len(),
         "counts": counts,
@@ -1220,7 +1230,7 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
     write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
     println!(
         "{}",
-        json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "offsets_beyond_r": record["offsets_beyond_r"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
+        json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "picks_beyond_r": record["picks_beyond_r"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
     );
     Ok(())
 }
@@ -2303,8 +2313,10 @@ mod tests {
             assert_eq!(differing_offsets(&window, &row, &picks), Ok((vec![], 0)));
             let mut longer = window.clone();
             let last = longer.steps.last().cloned().expect("a step");
-            longer.ids.extend([7, 9]);
-            longer.steps.extend([last.clone(), last]);
+            let mut unread = last.clone();
+            unread.nearest = None;
+            longer.ids.extend([7, 9, 11]);
+            longer.steps.extend([last.clone(), last, unread]);
             assert_eq!(differing_offsets(&longer, &row, &picks), Ok((vec![], 2)));
             let mut differs = longer.clone();
             let nearest = differs.steps[window.reply_start + 1]
