@@ -92,12 +92,14 @@ describe('AgentComposer', () => {
         expect(host.textContent).toContain('Session: error');
     });
 
-    it('disables send when the selected API endpoint is missing', () => {
+    it('disables send and reports an invalid selection when the API endpoint is missing', () => {
         const { store } = mount();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: undefined as unknown as string });
         prompt('Hello');
         expect(button('Send').disabled).toBe(true);
         expect(store.canRun()).toBe(false);
+        expect(host.textContent).toContain('Invalid API endpoint');
+        expect(host.textContent).not.toContain('API chat');
     });
 
     it('pins stop capability to the active generation rather than the picker', () => {
@@ -131,6 +133,19 @@ describe('AgentComposer', () => {
         expect(host.textContent).toContain('Generation unavailable');
         prompt('Hello');
         expect(button('Send').disabled).toBe(true);
+    });
+
+    it('does not label an unmatched resident artifact as ready local generation', () => {
+        const { store } = mount();
+        act(() => { store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' }); });
+        expect(host.textContent).toContain('Selected model; not ready');
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                sourceId: 'model-b', schema: 'uor-r4.lut-stack/1', canGenerate: true, engineSupported: true,
+            } });
+        });
+        expect(host.textContent).toContain('Selected model; not ready');
+        expect(host.textContent).not.toContain('Local generation');
     });
 
     it('pins the active generation mode label across source changes', () => {
@@ -171,6 +186,8 @@ describe('AgentComposer', () => {
         prompt('Hello');
         expect(button('Send').disabled).toBe(true);
         expect(store.canRun()).toBe(false);
+        expect(host.textContent).toContain('Invalid API endpoint');
+        expect(host.textContent).not.toContain('API chat');
     });
 
     it('supports current-file, pasted, remove, and clear attachments plus six templates', () => {
@@ -193,6 +210,10 @@ describe('AgentComposer', () => {
         for (const template of Array.from(templates)) act(() => { template.click(); });
         expect(uiApi.api.templatePrompt).toHaveBeenCalledTimes(6);
         expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('Prompt for test');
+        uiApi.attachments.push({ name: 'external.txt', content: 'external context', source: 'workspace' });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        expect(host.textContent).toContain('external.txt');
+        expect(button('Remove external.txt')).not.toBeNull();
     });
 
     it('keeps inserted filenames unique when timestamps collide', () => {

@@ -13,7 +13,7 @@ Implement the approved AppShell, ModelPicker, WorkspaceEditor, AgentComposer, Se
 ## Files in scope
 
 - `web/studio/src/**`, `web/studio/package.json`, `web/studio/package-lock.json`, `web/studio/tsconfig.json`, and `web/studio/vite.config.ts`.
-- Narrow additive hooks and their tests in `web/studio/assets/js/model_sources.js`, `model_sources.d.ts`, `studio_files.js`, `studio_ui.js`, and `web/studio/index.html`.
+- Narrow additive hooks and their tests in `web/studio/assets/js/model_sources.js`, `model_sources.d.ts`, `studio_files.js`, `studio_ui.js`, `studio_ui.d.ts`, and `web/studio/index.html`.
 - Existing `web/studio/verify_*.mjs`, `web/studio/README.md`, this task folder, the implementation plan, and the owning roadmap item/generated issue data.
 
 ## Done when

@@ -64,4 +64,23 @@ describe('Settings', () => {
         act(() => { button('Confirm clear editor tabs').click(); });
         expect(ui.clearEditor).toHaveBeenCalledOnce();
     });
+
+    it('clamps numeric editor preferences to the legacy ranges', () => {
+        const ui = makeUi();
+        const onSettingsChange = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onSettingsChange={onSettingsChange} />, host); });
+        const font = host.querySelector<HTMLInputElement>('input[aria-label="Editor font size"]')!;
+        const tab = host.querySelector<HTMLInputElement>('input[aria-label="Tab size"]')!;
+        act(() => { font.value = '0'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(ui.updateSettings).toHaveBeenLastCalledWith({ fontSize: 10 });
+        expect(font.value).toBe('10');
+        act(() => { font.value = '99'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(ui.updateSettings).toHaveBeenLastCalledWith({ fontSize: 24 });
+        act(() => { tab.value = '0'; tab.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(ui.updateSettings).toHaveBeenLastCalledWith({ tabSize: 1 });
+        expect(tab.value).toBe('1');
+        act(() => { tab.value = '99'; tab.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(ui.updateSettings).toHaveBeenLastCalledWith({ tabSize: 8 });
+        expect(onSettingsChange).toHaveBeenLastCalledWith({ theme: 'dark', reduceMotion: false, fontSize: 24, tabSize: 8, wordWrap: false });
+    });
 });

@@ -10,6 +10,10 @@ interface SettingsProps {
     onSettingsChange?(settings: StudioSettings): void;
 }
 
+function clamp(value: number, min: number, max: number, fallback: number): number {
+    return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+}
+
 export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
@@ -45,8 +49,8 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
             </section>
             <section aria-label="Editor preferences">
                 <h3>Editor</h3>
-                <label>Font size<input aria-label="Editor font size" type="number" min="10" max="24" value={settings.fontSize} onInput={(event) => update('fontSize', Number(event.currentTarget.value))} /></label>
-                <label>Tab size<input aria-label="Tab size" type="number" min="1" max="8" value={settings.tabSize} onInput={(event) => update('tabSize', Number(event.currentTarget.value))} /></label>
+                <label>Font size<input aria-label="Editor font size" type="number" min="10" max="24" value={settings.fontSize} onInput={(event) => update('fontSize', clamp(Number(event.currentTarget.value), 10, 24, 13))} /></label>
+                <label>Tab size<input aria-label="Tab size" type="number" min="1" max="8" value={settings.tabSize} onInput={(event) => update('tabSize', clamp(Number(event.currentTarget.value), 1, 8, 4))} /></label>
                 <label><input aria-label="Word wrap" type="checkbox" checked={settings.wordWrap} onChange={(event) => update('wordWrap', event.currentTarget.checked)} /> Word wrap</label>
             </section>
             <section aria-label="Data controls">

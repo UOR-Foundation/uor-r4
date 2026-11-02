@@ -42,9 +42,11 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         const changed = () => refresh();
         document.addEventListener(GENERATION_FINISHED_EVENT, changed);
         document.addEventListener('uor-session-messages-changed', changed);
+        document.addEventListener('uor-attachments-changed', changed);
         return () => {
             document.removeEventListener(GENERATION_FINISHED_EVENT, changed);
             document.removeEventListener('uor-session-messages-changed', changed);
+            document.removeEventListener('uor-attachments-changed', changed);
         };
     }, []);
 
@@ -58,13 +60,20 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         && state.residentArtifact?.canPredict === true;
     const generating = state.session.phase === 'generating';
     const predictionMode = activeGeneration ? activeGeneration.canStop === false : prediction;
-    const modeKind = activeGeneration?.source.kind ?? selected?.kind;
     const messages = sessions.getConversationMessages();
     const attachments = ui.getAttachments();
     const activeFile = files.activeFile();
     const unavailable = !activeGeneration && residentMatches
         && (state.residentArtifact?.engineSupported === false
             || (state.residentArtifact?.canGenerate === false && state.residentArtifact?.canPredict !== true));
+    const selectionLabel = activeGeneration
+        ? (predictionMode ? 'Local next-token prediction' : activeGeneration.source.kind === 'artifact' ? 'Local generation' : 'API chat')
+        : !selected ? 'No source selected'
+        : selected.kind === 'artifact' && !residentMatches ? 'Selected model; not ready'
+        : selected.kind === 'api' && !store.canRun() ? 'Invalid API endpoint'
+        : unavailable ? 'Generation unavailable'
+        : predictionMode ? 'Local next-token prediction'
+        : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
 
     function send(prompt: string) {
         if (generation.send(prompt)) {
@@ -76,7 +85,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     return (
         <section aria-label="Agent composer">
             <h1>Agent</h1>
-            <p>{!selected && !activeGeneration ? 'No source selected' : unavailable ? 'Generation unavailable' : predictionMode ? 'Local next-token prediction' : modeKind === 'artifact' ? 'Local generation' : 'API chat'}</p>
+            <p>{selectionLabel}</p>
             <p>Session: {state.session.phase}</p>
             {state.session.error && <p role="alert">{state.session.error}</p>}
             {activeGeneration && <p>Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}

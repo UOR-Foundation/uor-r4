@@ -51,15 +51,11 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const resident = state.residentArtifact;
 
     function testProvider(provider: ApiProvider) {
-        if (state.selectedSource?.kind === 'api' && state.selectedSource.id === provider.id) {
-            run(adapter.testApi(provider.id));
-            return;
-        }
-        setTestResults({ ...testResults, [provider.id]: 'testing' });
+        setTestResults((current) => ({ ...current, [provider.id]: 'testing' }));
         run(sources.testApi(provider.id).then((result) => {
-            setTestResults({ ...testResults, [provider.id]: result.ok ? 'passed' : 'failed' });
+            setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
         }).catch((error) => {
-            setTestResults({ ...testResults, [provider.id]: 'failed' });
+            setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
             report(error);
         }));
     }
@@ -84,12 +80,14 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 sources.updateApi(editingId, patch);
                 if (state.selectedSource?.kind === 'api' && state.selectedSource.id === editingId) {
                     store.dispatch({ type: 'api/selected', sourceId: editingId, endpoint: providerDraft.baseUrl });
+                    document.dispatchEvent(new CustomEvent('uor-api-config-changed', { detail: { id: editingId } }));
                 }
             } else {
                 sources.addApi(providerDraft);
             }
             setProviderOpen(false);
             setEditingId(null);
+            setProviderDraft(emptyDraft);
             refresh();
         } catch (error) {
             report(error);

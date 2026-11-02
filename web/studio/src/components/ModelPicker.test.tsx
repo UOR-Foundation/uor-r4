@@ -125,15 +125,23 @@ describe('ModelPicker', () => {
         expect(host.textContent).toContain('Test: passed');
     });
 
-    it('manages providers through native dialogs without rendering an existing secret', () => {
+    it('manages providers through native dialogs without rendering an existing secret', async () => {
         const { store, modelAdapter, modelSources } = mount();
+        const apiConfigChanged = vi.fn();
+        document.addEventListener('uor-api-config-changed', apiConfigChanged);
         modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
         expect(host.innerHTML).not.toContain('secret-sentinel');
         act(() => { button('Use API A').click(); });
         expect(modelAdapter.selectApi).toHaveBeenCalledWith('api-a', provider.baseUrl);
-        act(() => { button('Test API A').click(); });
+        await act(async () => {
+            button('Test API A').click();
+            await Promise.resolve();
+        });
         expect(modelAdapter.selectApi).toHaveBeenCalledTimes(1);
-        expect(modelAdapter.testApi).toHaveBeenCalledWith('api-a');
+        expect(modelAdapter.testApi).not.toHaveBeenCalled();
+        expect(modelSources.testApi).toHaveBeenCalledWith('api-a');
+        expect(store.getState().selectedSource?.id).toBe('api-a');
+        expect(host.textContent).toContain('Test: passed');
         act(() => { button('Edit API A').click(); });
         expect(host.querySelector('dialog')).not.toBeNull();
         expect(host.innerHTML).not.toContain('secret-sentinel');
@@ -141,14 +149,21 @@ describe('ModelPicker', () => {
             input('Provider base URL').value = 'https://new.example.com/v1';
             input('Provider base URL').dispatchEvent(new Event('input', { bubbles: true }));
         });
+        act(() => {
+            input('API key').value = 'new-secret';
+            input('API key').dispatchEvent(new Event('input', { bubbles: true }));
+        });
         act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
-        expect(modelSources.updateApi).toHaveBeenCalledWith('api-a', expect.objectContaining({ baseUrl: 'https://new.example.com/v1' }));
-        expect(vi.mocked(modelSources.updateApi).mock.calls[0][1]).not.toHaveProperty('apiKey');
+        expect(modelSources.updateApi).toHaveBeenCalledWith('api-a', expect.objectContaining({ baseUrl: 'https://new.example.com/v1', apiKey: 'new-secret' }));
         expect(store.getState().selectedSource?.endpoint).toBe('https://new.example.com/v1');
+        expect(apiConfigChanged).toHaveBeenCalledWith(expect.objectContaining({ detail: { id: 'api-a' } }));
+        act(() => { button('Edit API A').click(); });
+        expect(input('API key').value).toBe('');
         act(() => { button('Remove API A').click(); });
         act(() => { button('Confirm removal').click(); });
         expect(modelSources.removeApi).toHaveBeenCalledWith('api-a');
         expect(store.getState().selectedSource?.kind).toBe('artifact');
         expect(store.canRun()).toBe(false);
+        document.removeEventListener('uor-api-config-changed', apiConfigChanged);
     });
 });

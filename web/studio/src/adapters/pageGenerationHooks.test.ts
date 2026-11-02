@@ -16,31 +16,55 @@ function pageHooks() {
         tokenizerArtifact: { sentinel: true },
         generationSerial: 0,
         activeGenerationId: null as number | null,
+        chatGenerationId: null as number | null,
+        activeChatRequestId: null as string | number | null,
+        chatRequests: {} as Record<string, number>,
         activePredictionRequestId: null as string | null,
         predictionRequests: {},
         generating: false,
         mode: 'wasm',
+        activeGenerationKind: 'wasm',
+        apiConfig: null as null | { baseUrl: string },
+        abortController: null as AbortController | null,
+        streamingBodyEl: null,
+        assistantBuffer: '',
         lastWorkerError: '',
     };
-    const factory = new Function('app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
+    interface CapturedApiRequest {
+        onDone(result: { stopped?: boolean }): void;
+        onError(error: Error): void;
+    }
+    const conversation = { id: 'conversation', messages: [] as Array<Record<string, unknown>>, sourceKind: '' };
+    const apiRequests: CapturedApiRequest[] = [];
+    let requestSequence = 0;
+    const factory = new Function(
+        'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
+        'activeConversation', 'appendMessageElement', 'touchConversation', 'updateComposerState', 'requestCheckpoint',
+        'renderConversationList', 'scrollChat', 'formatTps', 'setView', 'makeId', 'streamChatCompletions', 'configFromSources', 'MAX_NEW_TOKENS',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function renderDiscretePrediction', 'function runPrediction')}
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
-         ${section('function nextGenerationId', 'function beginGeneration')}
+         ${section('function nextGenerationId', 'function generationTokenLimit')}
+         ${section('function generationTokenLimit', '/* ------------------------------------------------------------ composer */')}
          ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
-         ${section('function finishLocalGeneration', 'function generationTokenLimit')}
-         ${section('function finishGenerationWithError', 'function generationTokenLimit')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
-         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, finishLocalGeneration, finishGenerationWithError };`);
-    const hooks = factory(app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector)) as {
+         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, finishLocalGeneration, finishGenerationWithError };`,
+    );
+    const hooks = factory(
+        app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
+        () => conversation, vi.fn(() => null), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(() => '1'), vi.fn(),
+        () => `gen-${++requestSequence}`, vi.fn(async (options: CapturedApiRequest) => { apiRequests.push(options); }), vi.fn(() => null), 32,
+    ) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
         onWorkerMessage(event: { data: Record<string, unknown> }): void;
         sendFromComposer(prompt?: string): number | false;
-        finishLocalGeneration(message: { fullText?: string; tokenCount?: number }): void;
-        finishGenerationWithError(error: string): void;
+        sendViaWorker(prompt: string, target: typeof conversation): boolean;
+        sendViaApi(prompt: string, target: typeof conversation): Promise<void>;
+        finishLocalGeneration(message: { id?: string; fullText?: string; tokenCount?: number }): void;
+        finishGenerationWithError(error: string, requestId?: string | number, generationId?: number | null): boolean | void;
     };
-    return { app, hooks };
+    return { app, hooks, conversation, apiRequests };
 }
 
 function events(type: string, listener: (event: CustomEvent) => void) {
@@ -130,5 +154,65 @@ describe('actual page prediction hooks', () => {
         expect(completed.mock.calls[0][0].detail).toMatchObject({ outcome: 'error', generationId: 1, error: 'context full' });
         expect(app.activeGenerationId).toBeNull();
         dispose();
+    });
+
+    it('ignores stale and duplicate local terminals while a newer chat is active', () => {
+        const { app, hooks, conversation } = pageHooks();
+        const completed = vi.fn();
+        const dispose = events('uor-generation-finished', completed);
+        expect(hooks.sendViaWorker('older', conversation)).toBe(true);
+        const older = app.worker.postMessage.mock.calls[0][0];
+        app.generating = false;
+        expect(hooks.sendViaWorker('newer', conversation)).toBe(true);
+        const newer = app.worker.postMessage.mock.calls[1][0];
+        expect(app.chatGenerationId).toBe(2);
+        hooks.onWorkerMessage({ data: { action: 'generate_complete', id: older.id, fullText: 'stale', tokenCount: 1 } });
+        hooks.onWorkerMessage({ data: { action: 'generate_error', id: older.id, error: 'stale error' } });
+        expect(completed).not.toHaveBeenCalled();
+        expect(app.generating).toBe(true);
+        expect(app.chatGenerationId).toBe(2);
+        expect(app.activeChatRequestId).toBe(newer.id);
+        hooks.onWorkerMessage({ data: { action: 'generate_complete', id: newer.id, fullText: 'current', tokenCount: 1 } });
+        expect(completed).toHaveBeenCalledTimes(1);
+        expect(completed.mock.calls[0][0].detail).toMatchObject({ outcome: 'complete', generationId: 2 });
+        expect(app.activeChatRequestId).toBeNull();
+        hooks.onWorkerMessage({ data: { action: 'generate_complete', id: newer.id, fullText: 'duplicate', tokenCount: 1 } });
+        expect(completed).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it('ignores stale API completion and error callbacks', async () => {
+        const { app, hooks, conversation, apiRequests } = pageHooks();
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        const completed = vi.fn();
+        const dispose = events('uor-generation-finished', completed);
+        await hooks.sendViaApi('older', conversation);
+        app.generating = false;
+        await hooks.sendViaApi('newer', conversation);
+        expect(apiRequests).toHaveLength(2);
+        apiRequests[0].onDone({ stopped: false });
+        apiRequests[0].onError(new Error('stale error'));
+        expect(completed).not.toHaveBeenCalled();
+        expect(app.generating).toBe(true);
+        expect(app.chatGenerationId).toBe(2);
+        apiRequests[1].onDone({ stopped: false });
+        expect(completed).toHaveBeenCalledTimes(1);
+        expect(completed.mock.calls[0][0].detail).toMatchObject({ outcome: 'complete', generationId: 2 });
+        apiRequests[1].onDone({ stopped: false });
+        expect(completed).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+});
+
+describe('actual page API configuration hook', () => {
+    it('updates the active API config from the selected provider without navigation', () => {
+        const app = { apiConfig: { baseUrl: 'https://old.example.com/v1' } };
+        const ModelSources = { apiConfig: vi.fn(() => ({ baseUrl: 'https://new.example.com/v1', model: 'model-b' })) };
+        const factory = new Function('app', 'ModelSources', 'updateComposerState', `${section('function onApiConfigChanged', 'function bindHeader')} return onApiConfigChanged;`);
+        const onApiConfigChanged = factory(app, ModelSources, vi.fn()) as (event: { detail: { id: string } }) => void;
+        onApiConfigChanged({ detail: { id: 'api-a' } });
+        expect(ModelSources.apiConfig).toHaveBeenCalledWith('api-a');
+        expect(app.apiConfig.baseUrl).toBe('https://new.example.com/v1');
     });
 });
