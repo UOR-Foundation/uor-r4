@@ -8,13 +8,13 @@ No decode speed is claimed, and no served path changes. R's decode speed is stil
 
 The grader reads traces offline. On the laptop (Apple M1), with the release build of `fbs-toks` at `768c39ff3`, after review round 1:
 
-| Reading on F's DEV s1 base trace (621 MB, 308 windows) | Wall | Peak memory |
+| Reading on F's DEV s1 base trace (621 MB, 308 windows) | Wall | Peak memory footprint (macOS) |
 |---|---|---|
 | `--decision-deciles` | 4.2 s | 1.39 GB |
 | `--decision-check` with F's table | 3.8 s | 1.01 GB |
 | `--decision-grade`, base against base, all 10,840 nearests | 13.6 s | 1.38 GB |
 
-The first readings, at `bc02a2f3e`, took 3.6 s, 3.6 s and 11.9 s at the same peak memory.
+The first readings, at `bc02a2f3e`, took 3.6 s, 3.6 s and 11.9 s at the same peak memory footprint (`/usr/bin/time -l`'s "peak memory footprint"; its maximum resident set size differs between the runs).
 
 ## What did not work, first
 
@@ -54,9 +54,10 @@ The first readings, at `bc02a2f3e`, took 3.6 s, 3.6 s and 11.9 s at the same pea
 - **R's codes are not sign-checked.** R's trace records no coordinates, so R's check covers buckets and nearests only (codes: 0). The card judges a code near tie on P's values, and P is F or T, never R. So R's codes are only compared bit for bit.
 - **T was not read on real data.** The CLI's T table loader (R's `.uorlut` table, divided by 4096) and a T trace never ran in this unit; the library's tests run T as a float side on synthetic traces. The replay driver's unit should check a T trace against its table before the sheet.
 - **`--decision-grade` stops the whole run at its first refusal.** That fits an instrument fault, which voids the run. But it means the three refused readings wrote no file, so their messages are kept verbatim in the store (`reading/README.txt`, and `reading-r1/refusals.txt`). The replay driver grades one pass per call.
-- **The CLI's refusals have no unit test.** `fbs-toks` is a binary without tests. Two of its new refusals, an `--at` named twice and an offset past the window, were each run once by hand at `768c39ff3`: each refused with exit 1 and wrote no file. The third, a side with no table, was not run.
+- **The CLI's refusals have no unit test.** `fbs-toks` is a binary without tests. Two of its new refusals, an `--at` named twice and an offset past the window, were each run once by hand with the binary built at `768c39ff3`: each refused with exit 1 and wrote no file (`local/claude/claude-254/cli-refusals-r1.log`). The third, a side with no table, was not run.
+- **Review round 2 left six minor points open,** carried to "Still open" below, not to a third round. The sharpest: a float pick behind in f64 is accepted however far behind, while f32 rounding explains only a small gap.
 - **The one-forced reading used claude-253's window extracts,** not the whole one-forced trace. The base extract is the base trace's window 41: `jq -c` of each hashes to `22b6430408b493bc…`.
-- **The crate's clippy is not clean,** but none of its findings is in this unit's files. Clippy finds 51 warnings in the library (plus a few in other targets), and 0 in `fbs_snapshot.rs` or `bin/fbs-toks.rs`.
+- **The crate's clippy is not clean,** but none of its findings is in this unit's files. Clippy finds 51 warnings in the library (plus a few in other targets), and 0 in `fbs_snapshot.rs` or `bin/fbs-toks.rs` (`local/claude/claude-254/clippy-r1.log`).
 - **No sheet, FIT or pre-run review was written.** The readings are laptop checks of this unit's own instrument, outside Q5's set (the ORDER's done-when 5), and no claim rests on them.
 - **The disk stays below the 30 GiB floor** (26 GiB free). This unit's copies of the base trace (621 MB, and its 208 MB gzip) are deleted at cleanup. The rest of the usage belongs to other labs or to Casey and is not touched.
 
@@ -85,7 +86,10 @@ The first readings, at `bc02a2f3e`, took 3.6 s, 3.6 s and 11.9 s at the same pea
   - `--decision-grade REFERENCE OTHER --deciles … --g10 G --reference-table … --other-table … [--force …] [--at P:O]… --out …`, which writes `uor-r4.decision-grade/1` new. Without `--at`, it grades every nearest of the other side's windows. The record copies the deciles' trace, which may be the whole cell's trace while REFERENCE is one window of it.
 - **The readings of done-when 5** (below) hold, with the second bullet as amended, at both heads.
 - **32 negative gates.** Each sets one rule aside, and the test that pins it fails. The restored tree passes, and the gates leave it clean.
-- **Review round 1** (five fresh reviewers: the CLI, two library slices and two test slices) returned four APPROVE WITH NITS and one REQUEST CHANGES. Every finding is fixed at `768c39ff3`.
+- **The in-unit reviews** (`local/claude/claude-254/reviews.md`), each by a fresh reviewer:
+  - round 1, five reviewers (the CLI, two library slices and two test slices): four APPROVE WITH NITS and one REQUEST CHANGES, every finding fixed at `768c39ff3`;
+  - round 2, on the fix diff: APPROVE WITH NITS, six minor points left open;
+  - claims against evidence, on this REPORT: APPROVE WITH NITS, no false claim, its wording and logging points fixed.
 
 ## What changed
 
@@ -143,19 +147,19 @@ All on traces outside Q5's set, on the laptop, at $0. They ran first with `fbs-t
 
 ## Checks run at the head
 
-The code's last change is `768c39ff3`, review round 1's fixes. After it, the branch adds documents only: this REPORT, the ORDER's amendment, the item's bullet and the notebook row. Every check below ran at `768c39ff3`; the same checks at `bc02a2f3e` gave the same results.
+The code's last change is `768c39ff3`, review round 1's fixes. After it, the branch adds documents (this REPORT, the ORDER's amendment, the item's bullet and the notebook row) and a merge of main's `454a90031`, which touches only DeepSeek's `uor-r4-cpu-train` crate, its documents and one `Cargo.lock` line, nothing in `uor-r4-integer`. The module tests, the gates, the host suite and the loop gates ran at `768c39ff3`, and clippy and fmt again at the merge `4edc6e841`. The same checks at `bc02a2f3e` gave the same results.
 
 | Gate | Command | Result |
 |---|---|---|
-| Module tests | `cargo test -p uor-r4-integer --lib fbs_snapshot` | 20 passed, 0 failed |
-| Host suite | `cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast` | 629 passed, 38 failed, 4 ignored, in 51 targets (`local/claude/claude-254/host-suite-r1.log`). The 38 are the same 38 tests in the same 9 targets at origin/main `245f47089`, run in a detached worktree with its own target dir (`base-suite.log`; the sorted lists of failed tests are identical). 35 read local bundles or `tokenizer.json`, which this checkout does not hold. m7's one is its browser parity check, which fails while compiling to Wasm. m5's two are the serving audit, below |
-| Clippy | `cargo clippy -p uor-r4-integer --features serving-wasm --all-targets` | 0 findings in `fbs_snapshot.rs` or `bin/fbs-toks.rs` |
-| Formatting | `cargo fmt -p uor-r4-integer -- --check` | exit 0: the whole crate formats clean |
+| Module tests | `cargo test -p uor-r4-integer --lib fbs_snapshot` | 20 passed, 0 failed (`gates/restored.log`) |
+| Host suite | `cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast` | 629 passed, 38 failed, 4 ignored, in 51 targets (`local/claude/claude-254/host-suite-r1.log`). The 9 targets that hold the 38 were re-run at origin/main `245f47089`, in a detached worktree with its own target dir (`base-suite.log`; the worktree's commit was read from `git worktree list` before it was removed, and the log does not record it). There the same 38 tests fail: the sorted lists of failed tests are identical. 35 read local bundles or `tokenizer.json`, which this checkout does not hold. m7's one is its browser parity check, which fails while compiling to Wasm. m5's two are the serving audit, below |
+| Clippy | `cargo clippy -p uor-r4-integer --features serving-wasm --all-targets` | 0 findings in `fbs_snapshot.rs` or `bin/fbs-toks.rs` (`clippy-r1.log`) |
+| Formatting | `cargo fmt -p uor-r4-integer -- --check` | exit 0: the whole crate formats clean (`fmt-r1.log`) |
 | Loop gates | `uor-harness loop gates --full` | 11 green, 0 red (`loop-gates-full-r1.log`) |
 
 ### Negative gates
 
-`local/claude/claude-254/gates.sh`, with each gate's patch and log beside it under `gates/`, at `768c39ff3` on a clean tree. Each gate finds its line by the line's own text, sets one rule aside with `sed`, saves the patch, runs the one test that pins it, reverses the patch and checks the tree is clean. Every gate failed at the test's assertion, not at the build. The restored tree then passed all 20 module tests, and the tree was clean after the gates (`gates.out`).
+`local/claude/claude-254/gates.sh`, with each gate's patch and log beside it under `gates/`, at `768c39ff3`, with `fbs_snapshot.rs` clean. Each gate finds its line by the line's own text, sets one rule aside with `sed`, saves the patch, runs the one test that pins it, reverses the patch and checks the file is clean. Every gate failed inside its test, not at the build: at an `assert!`, or for g09 and g31 at the `expect_err` or `unwrap_err` that takes a refusal. The restored tree then passed all 20 module tests, and the tree was clean after the gates (`gates.out`).
 
 | Gate | Rule set aside | Test | Result |
 |---|---|---|---|
@@ -205,6 +209,13 @@ None.
   - It forces the first differing code or bucket in forward order, structure (F, T) and arithmetic (T, R), and grades each pass with `--decision-grade`.
   - It needs a float mode that runs only the windows it names, since each float pass is now a whole `score_rows` run (204 s on F's s1).
 - **Check a T trace against its table** before the sheet. The CLI's T loader has not run on real data.
+- **Review round 2's open points, for the replay driver's unit,** which changes the grader next:
+  - bound how far a float pick may fall behind in f64 (an f32 rounding bound), and refuse beyond it;
+  - on R, refuse a pick that ties the other side's but has the larger id (R takes the smaller);
+  - test that a negative margin on the reference side is accepted (the gate: refuse it, and a test should fail);
+  - test the CLI's refusals (an `--at` named twice, a side with no table, an offset past the window);
+  - correct `grade_pass`'s doc: the reference side's entries and codes are checked even where forced;
+  - consider refusing a deciles file that names no trace.
 - **The sheet** registers claude-247's rule with this unit's amendment verbatim, with a fresh FIT and a pre-run review. It cites the code that forms each side's turn-memory key (this unit's card). Then the GPU run reads Q5.
 
 ## Plain summary
