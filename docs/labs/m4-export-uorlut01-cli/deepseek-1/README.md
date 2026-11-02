@@ -1,5 +1,10 @@
 # Explicit system-memory serving bridge
 
+> Historical run: review-driven testing changed the executable after this
+> evidence was collected. The preserved first run is not authoritative; the
+> FIT-reviewed rerun under
+> `local/deepseek/m4-memory-bridge-2026-11-02-rerun/` replaces it.
+
 Lab: deepseek. Item:
 [m4-export-uorlut01-cli](../../../roadmap/items/m4-export-uorlut01-cli.md).
 Order:
@@ -33,6 +38,9 @@ not been implemented.
   `local/deepseek/m4-memory-bridge-2026-11-02/`.
 - Sorted SHA-256 manifest digest:
   `35e1f521ccc57cf250a288429e3c7a2e1c1ad1dc73e0e92382698cf988d868e7`.
+- The raw `status.tsv` header labels its second column `au`; its values are the
+  `off`/`on` arm names. The file is retained unchanged, and the transcripts
+  below are the authoritative arm mapping.
 
 ## Transcripts
 
@@ -83,6 +91,8 @@ its stack-mode scalar multiply/divide exemption recognizes ARM register syntax;
 the release binary
 `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
 reports three flagged symbols containing four existing scalar `mul`
-instructions; the debug binary used for the product run reports ten. The audit
-self-test passes, but no full native or WebAssembly audit claim is made for
-this x86 run.
+instructions; the debug binary used for the product run reports ten flagged
+symbols containing 23 such instructions. Both also report two missing mandatory
+symbols, and the non-TAP call-graph path cannot run because `otool` is
+unavailable. The audit self-test passes, but no full native or WebAssembly audit
+claim is made for this x86 run.

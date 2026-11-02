@@ -20,8 +20,10 @@ Order: [ORDER.md](ORDER.md). References #2859.
   D80/D81 exemption recognizes ARM general-register syntax. On release binary
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
   it flags three symbols containing four scalar `mul` instructions; the
-  evidence debug binary yields ten such instructions. Its self-test passes, but
-  no full audit pass is claimed.
+  evidence debug binary yields ten flagged symbols containing 23 such
+  instructions. Both runs report two missing mandatory symbols, and the non-TAP
+  call-graph path cannot run because `otool` is unavailable. Its self-test
+  passes, but no full audit pass is claimed.
 - **The explicit memory line changes output but does not produce recall.** On
   both seeds, every memory-on reply id list differed from its matched
   no-memory control. Neither factual reply contained `Pickle` or tomatoes.
@@ -43,7 +45,7 @@ FIT registration and tracked two-seed evidence add the fixed product probe.
 
 ## Measurements
 
-The new executable is
+The superseded first-run executable was
 `a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`.
 Fourteen fresh processes exited 0 with protocol 2. Stops were 11 `eos` and 3
 `max_new_tokens`. All 14 reply texts decoded from their ids. The two seed-1
@@ -67,14 +69,16 @@ Exact transcripts and ids are in
   stack_chat`: 12 passed, including the memory layout, no-memory equivalence
   and invalid-value controls.
 - `cargo test --locked -p uor-r4-integer --features serving-wasm --bin
-  uor-chat`: 4 passed, including one-turn pending-memory behavior.
+  uor-chat`: 4 passed, including `/memory`, `/memory clear`, one-turn
+  consumption and invalid replacement behavior.
 - Targeted `rustfmt --check` for the changed production files: passed.
 - `python3 scripts/audit_zero_matmul_serving.py --self-test`: passed.
 - Full x86 stack disassembly audit: not admissible. Release binary
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
-  reports three flagged symbols with four scalar `mul` instructions, and the
-  debug evidence binary reports ten. Both are misclassified by the ARM-oriented
-  exemption.
+  reports three flagged symbols with four scalar `mul` instructions; the debug
+  evidence binary reports ten symbols containing 23 instructions. Both also
+  report two missing mandatory symbols, and the non-TAP call-graph path cannot
+  run because `otool` is unavailable.
 - Fresh reviewer: `TEST FITNESS: FIT`, `PRE-RUN: PASS` at
   `3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0`.
 - `uor-harness prep-check`: complete and FIT.
@@ -92,6 +96,8 @@ directly.
 
 - Automatic statement extraction and store lookup remain unimplemented; this
   unit accepts only an explicit value.
+- The first product run is preserved but superseded; rerun the exact 14-process
+  panel against the final FIT-reviewed executable before delivery.
 - ARM64/WebAssembly audit qualification and M4's held-out quality bar remain
   outside this partial unit.
 - The GPU-only served-training and parity work remains tracked separately.

@@ -6,7 +6,7 @@ Order:
 [deepseek-1](../../loop/tasks/m4-export-uorlut01-cli/deepseek-1/ORDER.md).
 Source base: `e0647330314841ddf84ba3bd7cfd57e57c03680e`.
 
-TEST FITNESS: FIT
+TEST FITNESS: PENDING
 
 ## Question and prior evidence
 
@@ -28,7 +28,7 @@ test automatic extraction.
   SHA-256 `3820ae6fe15c5fd6486b47e99b1dba7ecc4216c99a4a65e448fa71a4622b9826`.
 - CLI source:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-integer/src/bin/uor-chat.rs`,
-  SHA-256 `215a0e9584d9416e786f61167a139584c4278cd34302d2945e0ca2e024871f41`.
+  SHA-256 `3d249f6818fc0c4125f0dc77add611c25a1cab53a9a7fc92e0c26cf2c2a7d7a2`.
 - Protocol encoder source:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-tokenizer/src/dialogue.rs`,
   SHA-256 `d3f70a92165ae08a1a359bf77fb83c1f0fa95fe609bbaa51d723758a01254a56`.
@@ -40,7 +40,7 @@ test automatic extraction.
   SHA-256 `0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee`.
 - Executable:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/chat-memory-target/debug/uor-chat`,
-  SHA-256 `a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`.
+  SHA-256 `52490c220071fc0bffe4f21a8d570da01a9f2fdbaa391de4f724bae95476c3bb`.
 - Host architecture: `x86_64`. This test is a product-path integration check,
   not an ARM64 or WebAssembly D11 audit. The current x86 stack audit is not
   admissible as a clean numeric-kernel proof because the script's D80/D81
@@ -48,9 +48,11 @@ test automatic extraction.
   release binary SHA-256
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`,
   it reports three flagged symbols containing four existing scalar `mul`
-  instructions; the evidence debug binary reports ten instructions. The audit
-  self-test passes. No audit pass or portable serving qualification is claimed
-  here.
+  instructions; the evidence debug binary reports ten flagged symbols
+  containing 23 such instructions. Both also report two missing mandatory
+  symbols, and the non-TAP call-graph path cannot run because `otool` is
+  unavailable. The audit self-test passes. No audit pass or portable serving
+  qualification is claimed here.
 - Build:
 
 ```sh
@@ -104,14 +106,16 @@ the same protocol-2 encoder as training.
 
 Use a new output root:
 
-`/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02/`
+`/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02-rerun/`
 
-If it exists, stop. Use fresh `seed-1/`, `seed-2/` and `seed-1-repeat/`
-subdirectories. Run this exact block from the task worktree:
+The original output root is preserved but is not authoritative because review
+added the public `/memory` command-state test and changed the executable hash.
+If the rerun root exists, stop. Use fresh `seed-1/`, `seed-2/` and
+`seed-1-repeat/` subdirectories. Run this exact block from the task worktree:
 
 ```sh
 set -eu
-ROOT=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02
+ROOT=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02-rerun
 BIN=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/chat-memory-target/debug/uor-chat
 ART1=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 TOK1=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/tokenizer-seed-1.json
@@ -119,7 +123,7 @@ ART2=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-du
 TOK2=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/tokenizer-seed-2.json
 test ! -e "$ROOT"
 mkdir -p "$ROOT/seed-1" "$ROOT/seed-2" "$ROOT/seed-1-repeat"
-printf 'pass\tau\tprompt\tstatus\n' >"$ROOT/status.tsv"
+printf 'pass\tarm\tprompt\tstatus\n' >"$ROOT/status.tsv"
 run_off() {
   out=$1 pass=$2 artifact=$3 tokenizer=$4 id=$5 prompt=$6
   if /usr/bin/time -v -o "$out/off-$id.time" "$BIN" --stack "$artifact" \
@@ -240,15 +244,14 @@ WebAssembly zero-multiplier audit. It changes no numeric kernel.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: FIT
+TEST FITNESS: PENDING
 
-PRE-RUN: PASS
+PRE-RUN: PENDING
 
-Reviewed at exact head
+The earlier review at exact head
 `3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0` by a fresh-context, read-only
-`codex` reviewer using the configured `deepseek-flash` provider in ephemeral
-session `01a19dff-36c0-7991-9b9c-3072fbd66d50`. The reviewer confirmed the
-non-tautological no-memory control, literal protocol layout, exact 14-process
-shell block, all pins, the 192-token context margin, the x86 audit limitation,
-the serving-only ledger/storage statement, stop rule and claim boundary. It ran
-no trained-model inference.
+`codex` reviewer using `deepseek-flash` in session
+`01a19dff-36c0-7991-9b9c-3072fbd66d50` passed that earlier revision. A later
+review required the public command-state test and exact audit accounting, so
+this sheet is pending a fresh review of the changed executable and evidence
+root before the rerun.

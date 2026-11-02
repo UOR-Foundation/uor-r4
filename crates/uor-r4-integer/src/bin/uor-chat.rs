@@ -91,6 +91,27 @@ impl PendingMemory {
     }
 }
 
+fn handle_memory_command(
+    pending: &mut PendingMemory,
+    command: &str,
+) -> std::result::Result<String, StackChatError> {
+    let rest = command
+        .strip_prefix("/memory")
+        .ok_or_else(|| StackChatError::InvalidMemory("not an /memory command".into()))?
+        .trim();
+    if rest.is_empty() {
+        Ok(match pending.value() {
+            Some(value) => format!("Queued {}", StackChat::memory_content(value)?),
+            None => "No memory value is queued.".to_owned(),
+        })
+    } else if rest.eq_ignore_ascii_case("clear") {
+        pending.clear();
+        Ok("Cleared the queued memory value.".to_owned())
+    } else {
+        Ok(format!("Queued {}", pending.set(rest)?))
+    }
+}
+
 impl Default for CliArgs {
     fn default() -> Self {
         Self {
@@ -942,16 +963,34 @@ mod tests {
     use uor_r4_integer::session::{ChatSession, ChatTokenStream, StreamStopReason};
 
     #[test]
-    fn pending_memory_applies_once_and_refuses_invalid_replacement() {
-        let mut pending = PendingMemory::new(Some("Pickle".into()));
+    fn pending_memory_command_applies_once_and_refuses_invalid_replacement() {
+        let mut pending = PendingMemory::default();
+        assert_eq!(
+            handle_memory_command(&mut pending, "/memory").unwrap(),
+            "No memory value is queued."
+        );
+        assert_eq!(
+            handle_memory_command(&mut pending, "/memory Pickle").unwrap(),
+            "Queued Memory: Pickle."
+        );
         assert_eq!(pending.value(), Some("Pickle"));
+        assert_eq!(
+            handle_memory_command(&mut pending, "/memory").unwrap(),
+            "Queued Memory: Pickle."
+        );
         pending.finish_turn();
         assert_eq!(pending.value(), None);
 
-        pending.set("tomatoes").unwrap();
-        assert!(pending.set("two\nlines").is_err());
+        assert_eq!(
+            handle_memory_command(&mut pending, "/memory tomatoes").unwrap(),
+            "Queued Memory: tomatoes."
+        );
+        assert!(handle_memory_command(&mut pending, "/memory two\nlines").is_err());
         assert_eq!(pending.value(), Some("tomatoes"));
-        pending.clear();
+        assert_eq!(
+            handle_memory_command(&mut pending, "/memory clear").unwrap(),
+            "Cleared the queued memory value."
+        );
         assert_eq!(pending.value(), None);
     }
 
@@ -1474,28 +1513,10 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                         }
                         "/help" => stack_help(),
                         "/memory" => {
-                            let rest = trimmed.strip_prefix("/memory").unwrap_or("").trim();
-                            if rest.is_empty() {
-                                match pending_memory.value() {
-                                    Some(value) => println!(
-                                        "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Queued {}",
-                                        StackChat::memory_content(value)?
-                                    ),
-                                    None => println!(
-                                        "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} No memory value is queued."
-                                    ),
-                                }
-                            } else if rest.eq_ignore_ascii_case("clear") {
-                                pending_memory.clear();
-                                println!(
-                                    "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Cleared the queued memory value."
-                                );
-                            } else {
-                                let content = pending_memory.set(rest)?;
-                                println!(
-                                    "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Queued {content}"
-                                );
-                            }
+                            println!(
+                                "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} {}",
+                                handle_memory_command(&mut pending_memory, trimmed)?
+                            );
                         }
                         "/reset" | "/clear" => {
                             chat.reset();
