@@ -28,11 +28,12 @@ So before the model the project ships is trained, the scoring must be able to te
 ## What is missing
 
 - **The served surrogate is wired; GPU validation and comparison remain open.**
-  Q16 residual, dynamic i16 activation, D11 snaps and the Q12 query now cover
-  the real training loss/backward and checkpoint generation path. Training-only
-  memory dropout and reply cuts are refused. The next GPU unit must run the
-  finite integration/sparring controls, exact forward parity and the matched
-  four-arm comparison before this changes the end-to-end model.
+  Q16 residual, both dynamic i16 activation boundaries, D11 snaps and the Q12
+  query now cover the real training loss/backward, checkpoint generation and
+  post-training scoring paths. Training-only memory dropout and reply cuts are
+  refused. The next GPU unit must run the finite integration/sparring controls,
+  exact forward parity and the matched four-arm comparison before this changes
+  the end-to-end model.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
   - a TRAIN reply index;

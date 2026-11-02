@@ -600,6 +600,11 @@ pub(crate) fn is_rounding_residual_q16() -> bool {
     ROUND_RESIDUAL_Q16.with(|c| c.get())
 }
 
+/// Whether the Q16 residual passes a straight-through gradient on this thread.
+pub(crate) fn is_bridging_q16_residual() -> bool {
+    BRIDGE_Q16_RESIDUAL.with(|bridge| bridge.get())
+}
+
 /// `x` on the 2^-16 grid under [`with_q16_residual`]; `x` itself otherwise.
 pub(crate) fn q16_residual(x: Tensor) -> Result<Tensor> {
     if !is_rounding_residual_q16() {
@@ -611,7 +616,7 @@ pub(crate) fn q16_residual(x: Tensor) -> Result<Tensor> {
         .floor()?
         .clamp(f64::from(i32::MIN), f64::from(i32::MAX))?
         .affine(1.0 / f64::from(Q16_SCALE), 0.0)?;
-    if !BRIDGE_Q16_RESIDUAL.with(|bridge| bridge.get()) {
+    if !is_bridging_q16_residual() {
         return Ok(rounded);
     }
     let dtype = x.dtype();
@@ -696,6 +701,16 @@ pub(crate) fn activation_quantize16(x: &Tensor) -> Result<Tensor> {
     let inside = (scaled.ge(-32767.0)?.to_dtype(dtype)? * scaled.le(32767.0)?.to_dtype(dtype)?)?;
     let free = x.mul(&inside)?;
     Ok((&free + (quantized - &free)?.detach())?)
+}
+
+/// Quantize a learned activation boundary only under [`with_served_surrogate_training`]; plain
+/// forwards return the input unchanged.
+pub(crate) fn served_activation_quantize16(x: &Tensor) -> Result<Tensor> {
+    if is_bridging_activation_i16() {
+        activation_quantize16(x)
+    } else {
+        Ok(x.clone())
+    }
 }
 
 /// Enable the served graph's discrete training boundaries together: D11 snaps and Q12 query,

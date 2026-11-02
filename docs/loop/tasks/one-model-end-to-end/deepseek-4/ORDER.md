@@ -6,9 +6,10 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 
 Make `train-in-space --train-as-served 1` run the complete tested float
 surrogate for the current supported FBS path: Q16 residual values, dynamic i16
-MLP activations, D11 gate/transition snaps and the Q12 scored query. The wrapper
-must cover both the training forward and its backward, while parameter export
-rounding continues to bind the optimizer step and saved checkpoint.
+recurrence-output and MLP activations, D11 gate/transition snaps and the Q12
+scored query. The wrapper must cover both the training forward and its backward,
+while parameter export rounding continues to bind the optimizer step and saved
+checkpoint.
 
 This unit wires the graph and adds refusal/parity controls. It does not claim a
 training result or replace integer serving.
@@ -31,8 +32,9 @@ Check whether `run_long` already wraps `batch_loss` with
 
 ## Required design
 
-- In one scoped closure, enable Q16 residual, dynamic i16 activation, D11 snaps
-  and Q12 query bridges for both the loss forward and `backward`.
+- In one scoped closure, enable Q16 residual, both dynamic i16 activation
+  boundaries, D11 snaps and Q12 query bridges for both the loss forward and
+  `backward`.
 - Keep `ServedValues` parameter rounding and restoration outside that closure;
   gradients update float masters, while saved values remain export-rounded.
 - In served mode, checkpoint evaluation and generation use the same D11/Q16/i16
@@ -45,10 +47,12 @@ Check whether `run_long` already wraps `batch_loss` with
 
 - The real `run_long` training closure uses `with_served_surrogate_training`
   when `train_as_served` is on and the ordinary gate mode when it is off.
-- The geometric MLP applies the dynamic i16 quantizer in that mode, and scored
-  queries use the Q12 bridge.
-- Exact checkpoint evaluation, panel loss and nearest decoding use the same
-  mode, so checkpoint selection is not scored through a different graph.
+- The geometric recurrence output and MLP apply the dynamic i16 quantizer in
+  that mode, and scored queries use the Q12 bridge.
+- Exact checkpoint evaluation, panel loss and nearest decoding, plus the
+  checkpoint inspection, row-scoring, decoding and speed commands, use the
+  mode recorded by their run, so later evidence is not collected through a
+  different graph.
 - CPU tests verify boundary activation, refusal cases and state restoration.
 - A CUDA-gated finite test verifies the integrated graph produces finite loss
   and gradients, with values restored before the optimizer. It may be

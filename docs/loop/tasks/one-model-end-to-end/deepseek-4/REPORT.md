@@ -21,14 +21,18 @@ Base: `2f8f665c5`. Order: [ORDER.md](ORDER.md).
 - `run_long` now keeps `with_served_surrogate_training` active around the real
   loss forward and its backward when `--train-as-served 1` is set. The ordinary
   Hamilton gate mode remains the off path.
-- The geometric MLP applies the tested dynamic i16 activation quantizer between
-  the Hamilton product and `mlp_down` in served mode.
+- The geometric recurrence output and MLP apply the tested dynamic i16
+  activation quantizer between their Hamilton products and projected outputs in
+  served mode.
 - Scored training queries, DEV nearest picks, panel loss and generated replies
   use the Q12 query bridge while the served graph is active. Writer-mode
   generation also applies that query before the native writer.
 - Checkpoint DEV evaluation, panel loss, nearest/writer readings and sample
   generation all run through the same Q16/i16/D11/Q12 graph before the rounded
   checkpoint is saved.
+- Checkpoint inspection, row scoring, decoding and speed probes read the run's
+  recorded `train_as_served` setting instead of silently reverting to the plain
+  float graph.
 - Served mode now refuses `--turn-memory-dropout` and
   `--reply-read-train`, whose train-only row selections have no serving
   counterpart.
@@ -40,12 +44,16 @@ Base: `2f8f665c5`. Order: [ORDER.md](ORDER.md).
 No model run was possible on the available CPU backend. The host-visible
 integration readings are:
 
-- served graph closure: D11 bridge, i16 activation bridge and Q16 residual
-  rounding all enabled together, then all restored off;
-- ordinary graph closure: all three remain off;
+- served graph closure: Q16 rounding and bridge, i16 activation bridge, D11
+  snap and bridge, and transition snapping all enabled together, then all
+  restored off;
+- ordinary graph closure: all five remain off;
 - all nine existing served-mode refusal controls pass, including new memory
   dropout and reply-cut cases;
-- full float library suite: 208 passed, 0 failed, 0 ignored.
+- post-training mode lookup: saved `train_as_served` controls inspection, row
+  scoring, decoding and speed probes; a missing config keeps the plain path and
+  a malformed value fails closed;
+- full float library suite: 209 passed, 0 failed, 0 ignored.
 
 The CUDA-gated three-step served test now runs the full surrogate graph rather
 than rounded parameters over a plain float forward. It remains the required
@@ -57,8 +65,10 @@ finite-loss/gradient and export-invariance check when a GPU is available.
   the_trainer_selects_and_restores_the_full_served_graph`: passed.
 - `cargo test -p uor-r4-float-train --release
   training_as_served_refuses_what_the_export_does_not_carry`: passed.
+- `cargo test -p uor-r4-float-train --release
+  the_served_graph_mode_is_read_back_from_the_run`: passed.
 - Full `uor-r4-float-train --release --lib` suite in a fresh isolated target:
-  208 passed, 0 failed, 0 ignored.
+  209 passed, 0 failed, 0 ignored.
 - Crate-local strict Clippy still reports the same pre-existing findings in
   `fbs_export.rs`, `flock_read_memory.rs`, `flock_read_register.rs` and
   `in_space_long.rs`; this change adds no reported finding.
