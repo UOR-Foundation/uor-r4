@@ -17,6 +17,8 @@ function pageHooks() {
         caps: { schema: 'uor-r4.lut-discrete-trunk/1', shape: { vocab: 17, context: 64 } },
         tokenizerArtifact: { sentinel: true },
         generationSerial: 0,
+        conversations: [] as Array<{ id: string; messages: Array<Record<string, unknown>>; sourceKind: string }>,
+        activeConversationId: 'conversation',
         activeGenerationId: null as number | null,
         chatGenerationId: null as number | null,
         activeChatRequestId: null as string | number | null,
@@ -46,7 +48,7 @@ function pageHooks() {
         'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
         'activeConversation', 'appendMessageElement', 'touchConversation', 'updateComposerState', 'requestCheckpoint',
         'renderConversationList', 'scrollChat', 'formatTps', 'setView', 'makeId', 'streamChatCompletions', 'configFromSources', 'MAX_NEW_TOKENS',
-        'ensureConversation', 'autoGrowTextarea', 'ModelSources', 'setModelStatus', 'renderMessages',
+        'ensureConversation', 'autoGrowTextarea', 'ModelSources', 'setModelStatus', 'renderMessages', 'persistConversations',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function renderDiscretePrediction', 'function runPrediction')}
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
@@ -74,7 +76,7 @@ function pageHooks() {
             apiRequests.push(options);
         }), vi.fn(() => null), 32,
         () => conversation, vi.fn(),
-        { active: () => ({ kind: 'api', id: 'api-a' }), list: () => ({ wasm: {} }) }, vi.fn(), vi.fn(),
+        { active: () => ({ kind: 'api', id: 'api-a' }), list: () => ({ wasm: {} }) }, vi.fn(), vi.fn(), vi.fn(),
     ) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
@@ -215,11 +217,45 @@ describe('actual page prediction hooks', () => {
     });
 
     it('returns false when the local worker cannot start a composer send', () => {
-        const { app, hooks } = pageHooks();
+        const { app, hooks, conversation } = pageHooks();
+        app.conversations = [conversation];
+        app.activeConversationId = conversation.id;
         app.worker = null as unknown as typeof app.worker;
         expect(hooks.sendFromComposer('chat')).toBe(false);
         expect(app.activeGenerationId).toBeNull();
         expect(app.chatGenerationId).toBeNull();
+        expect(conversation.messages).toHaveLength(0);
+    });
+
+    it('rolls back a worker start exception without persisting the turn', () => {
+        const { app, hooks, conversation } = pageHooks();
+        app.conversations = [conversation];
+        app.activeConversationId = conversation.id;
+        app.worker.postMessage = vi.fn(() => { throw new Error('clone failed'); });
+        expect(hooks.sendFromComposer('chat')).toBe(false);
+        expect(conversation.messages).toHaveLength(0);
+        expect(app.generating).toBe(false);
+        expect(app.activeGenerationId).toBeNull();
+        expect(app.chatGenerationId).toBeNull();
+    });
+
+    it('rolls back an API attachment failure before generation', () => {
+        const { app, hooks, conversation } = pageHooks();
+        app.conversations = [conversation];
+        app.activeConversationId = conversation.id;
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        const legacy = window as unknown as { __studioUi?: { getAttachments(): never[] } };
+        legacy.__studioUi = { getAttachments: () => { throw new Error('attachment bridge failed'); } };
+        try {
+            expect(hooks.sendFromComposer('chat')).toBe(false);
+            expect(conversation.messages).toHaveLength(0);
+            expect(app.generating).toBe(false);
+            expect(app.activeGenerationId).toBeNull();
+            expect(app.abortController).toBeNull();
+        } finally {
+            delete legacy.__studioUi;
+        }
     });
 
     it('dispatches a matching local terminal when no conversation is active', () => {

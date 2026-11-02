@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
+import { createOperationGate } from '../adapters/operations.js';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ApiProvider, LoadResult, ModelSourcesApi } from '../../assets/js/model_sources.js';
 import { ModelPicker } from './ModelPicker.js';
@@ -42,7 +43,7 @@ function sources(): ModelSourcesApi {
 
 function mount(store = new LifecycleStore(), modelAdapter = adapter(), modelSources = sources()) {
     const onError = vi.fn();
-    act(() => { render(<ModelPicker store={store} adapter={modelAdapter} sources={modelSources} onError={onError} />, host); });
+    act(() => { render(<ModelPicker store={store} adapter={modelAdapter} sources={modelSources} operations={createOperationGate()} onError={onError} />, host); });
     return { store, modelAdapter, modelSources, onError };
 }
 

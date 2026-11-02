@@ -510,4 +510,40 @@ describe('StudioApp', () => {
         await act(async () => { rejectFirst(new Error('late failure')); await Promise.resolve(); });
         expect(host.querySelector('[role="alert"]')).toBeNull();
     });
+
+    it('ignores an older palette load rejection after a newer load succeeds', async () => {
+        const store = new LifecycleStore();
+        const adapter = makeModelAdapter();
+        let rejectFirst!: (error: Error) => void;
+        let finishSecond!: (result: { bytes: Uint8Array; fileName: string; meta: { schema: string } }) => void;
+        adapter.loadBundled = vi.fn()
+            .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+            .mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
+        act(() => {
+            render(<StudioApp store={store} adapter={adapter} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="load-demo"]')!.click(); });
+        act(() => { button('Command palette').click(); });
+        act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="load-demo"]')!.click(); });
+        await act(async () => { finishSecond({ bytes: new Uint8Array(), fileName: 'model.lut', meta: { schema: 'uor-r4.lut-stack/1' } }); await Promise.resolve(); });
+        await act(async () => { rejectFirst(new Error('late palette failure')); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('clears a failed provider selection after removing that provider', () => {
+        const store = new LifecycleStore();
+        const sources = makeSources();
+        const provider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'ftp://example.com/v1', model: 'model-a', apiKey: '' };
+        sources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] }));
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={sources} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Only HTTP(S) API endpoints are supported.');
+        act(() => { button('Remove API A').click(); });
+        act(() => { button('Confirm removal').click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
 });

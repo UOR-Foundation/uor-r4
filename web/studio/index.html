@@ -1445,11 +1445,7 @@
             return true;
         }
 
-        async function sendViaApi(prompt, conversation) {
-            beginGeneration(conversation);
-            var apiRequestId = app.activeChatRequestId;
-            var apiGenerationId = app.chatGenerationId;
-            app.abortController = new AbortController();
+        function apiMessages(conversation) {
             var messages = conversation.messages
                 .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
                 .map(function (message) { return { role: message.role, content: message.content }; });
@@ -1462,6 +1458,15 @@
                 }).join('\n\n');
                 messages.unshift({ role: 'user', content: 'Workspace context:\n' + context });
             }
+            return messages;
+        }
+
+        async function sendViaApi(prompt, conversation, preparedMessages) {
+            var messages = preparedMessages || apiMessages(conversation);
+            beginGeneration(conversation);
+            var apiRequestId = app.activeChatRequestId;
+            var apiGenerationId = app.chatGenerationId;
+            app.abortController = new AbortController();
             try {
                 await streamChatCompletions({
                     config: app.apiConfig || configFromSources(),
@@ -1550,25 +1555,73 @@
                 setView('model');
                 return false;
             }
-            if (app.mode === 'wasm' && !app.caps) {
+            if (app.mode === 'wasm' && (!app.worker || !app.caps)) {
                 toast('Load a local model first under Model sources.', 'warn');
                 setView('model');
                 return false;
             }
-            var conversation = ensureConversation();
-            conversation.messages.push({ role: 'user', content: prompt, meta: null });
-            conversation.sourceKind = app.mode;
-            touchConversation(conversation);
-            appendMessageElement('user', prompt, null);
-            if (input) {
-                input.value = '';
-                autoGrowTextarea();
+            var history = app.conversations.map(function (item) {
+                return { conversation: item, messages: item.messages.slice(), title: item.title, updatedAt: item.updatedAt, sourceKind: item.sourceKind };
+            });
+            var activeId = app.activeConversationId;
+            var inputValue = input ? input.value : '';
+            var generationState = {
+                serial: app.generationSerial,
+                activeId: app.activeGenerationId,
+                chatId: app.chatGenerationId,
+                requestId: app.activeChatRequestId,
+                requests: app.chatRequests,
+                kind: app.activeGenerationKind,
+                generating: app.generating,
+                abortController: app.abortController,
+                assistantBuffer: app.assistantBuffer,
+                streamingBodyEl: app.streamingBodyEl,
+            };
+            function rollbackStart() {
+                app.conversations = history.map(function (entry) { return entry.conversation; });
+                history.forEach(function (entry) {
+                    entry.conversation.messages = entry.messages;
+                    entry.conversation.title = entry.title;
+                    entry.conversation.updatedAt = entry.updatedAt;
+                    entry.conversation.sourceKind = entry.sourceKind;
+                });
+                app.activeConversationId = activeId;
+                app.generationSerial = generationState.serial;
+                app.activeGenerationId = generationState.activeId;
+                app.chatGenerationId = generationState.chatId;
+                app.activeChatRequestId = generationState.requestId;
+                app.chatRequests = generationState.requests;
+                app.activeGenerationKind = generationState.kind;
+                app.generating = generationState.generating;
+                app.abortController = generationState.abortController;
+                app.assistantBuffer = generationState.assistantBuffer;
+                app.streamingBodyEl = generationState.streamingBodyEl;
+                if (input) { input.value = inputValue; autoGrowTextarea(); }
+                persistConversations();
+                renderConversationList();
+                renderMessages();
+                updateComposerState();
             }
-            renderConversationList();
-            scrollChat(true);
-            var started = app.mode === 'api' ? sendViaApi(prompt, conversation) : sendViaWorker(prompt, conversation);
-            if (started === false) return false;
-            return app.activeGenerationId;
+            try {
+                var conversation = ensureConversation();
+                conversation.messages.push({ role: 'user', content: prompt, meta: null });
+                conversation.sourceKind = app.mode;
+                touchConversation(conversation);
+                appendMessageElement('user', prompt, null);
+                if (input) {
+                    input.value = '';
+                    autoGrowTextarea();
+                }
+                renderConversationList();
+                scrollChat(true);
+                var preparedMessages = app.mode === 'api' ? apiMessages(conversation) : null;
+                var started = app.mode === 'api' ? sendViaApi(prompt, conversation, preparedMessages) : sendViaWorker(prompt, conversation);
+                if (started === false) { rollbackStart(); return false; }
+                return app.activeGenerationId;
+            } catch (_error) {
+                rollbackStart();
+                return false;
+            }
         }
 
         /* ------------------------------------------------------------ model sources */

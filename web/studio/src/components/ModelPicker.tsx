@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
+import type { OperationGate } from '../adapters/operations.js';
 import type { ApiProvider, ModelSourcesApi } from '../../assets/js/model_sources.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
@@ -10,6 +11,7 @@ interface ModelPickerProps {
     store: LifecycleStore;
     adapter: ModelSourceAdapter;
     sources: ModelSourcesApi;
+    operations: OperationGate;
     onError(message: string, operation: string): void;
     onSuccess?(operation: string): void;
 }
@@ -24,7 +26,7 @@ interface ProviderDraft {
 
 const emptyDraft: ProviderDraft = { label: '', preset: 'custom', baseUrl: '', model: '', apiKey: '' };
 
-export function ModelPicker({ store, adapter, sources, onError, onSuccess }: ModelPickerProps) {
+export function ModelPicker({ store, adapter, sources, operations, onError, onSuccess }: ModelPickerProps) {
     const state = useLifecycle(store);
     const [url, setUrl] = useState('');
     const [providerDraft, setProviderDraft] = useState<ProviderDraft>(emptyDraft);
@@ -34,7 +36,6 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const testVersions = useRef<Record<string, number>>({});
-    const loadVersions = useRef(0);
     const mounted = useRef(true);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
@@ -56,9 +57,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         return () => { mounted.current = false; };
     }, []);
     const run = (action: Promise<unknown>, operation: string) => {
-        const version = ++loadVersions.current;
-        action.then(() => { if (version === loadVersions.current) succeed(operation); })
-            .catch((error) => { if (version === loadVersions.current) report(error, operation); });
+        void operations.run(operation, action, succeed, report);
     };
 
     useEffect(() => {
@@ -82,13 +81,13 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         testVersions.current[provider.id] = version;
         setTestResults((current) => ({ ...current, [provider.id]: 'testing' }));
         sources.testApi(provider.id).then((result) => {
-            if (testVersions.current[provider.id] === version) {
+            if (mounted.current && testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
                 if (result.ok) succeed(operation);
                 else reportProvider(new Error(result.detail || 'Connection test failed.'), operation);
             }
         }).catch((error) => {
-            if (testVersions.current[provider.id] === version) {
+            if (mounted.current && testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
                 reportProvider(error, operation);
             }
@@ -176,6 +175,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             refresh();
             succeed(operation);
             succeed(`provider:test:${id}`);
+            succeed(`provider:select:${id}`);
+            succeed(`provider:save:${id}`);
         } catch (error) {
             reportProvider(error, operation);
         }

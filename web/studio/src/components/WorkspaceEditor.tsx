@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { StudioSettings } from '../adapters/workflow.js';
 import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
+import type { OperationGate } from '../adapters/operations.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -9,6 +10,7 @@ import { useLifecycle } from '../state/useLifecycle.js';
 interface WorkspaceEditorProps {
     store: LifecycleStore;
     files: WorkspaceApi;
+    operations: OperationGate;
     onError(message: string, operation: string): void;
     onSuccess(operation: string): void;
     settings?: StudioSettings;
@@ -16,10 +18,9 @@ interface WorkspaceEditorProps {
 
 const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
 
-export function WorkspaceEditor({ store, files, onError, onSuccess, settings = defaultSettings }: WorkspaceEditorProps) {
+export function WorkspaceEditor({ store, files, operations, onError, onSuccess, settings = defaultSettings }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
     const mounted = useRef(true);
-    const operationVersions = useRef<Record<string, number>>({});
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown, operation: string) => { if (mounted.current) onError(error instanceof Error ? error.message : String(error), operation); };
@@ -48,18 +49,12 @@ export function WorkspaceEditor({ store, files, onError, onSuccess, settings = d
         };
     }, [files, store]);
 
-    async function perform(action: () => Promise<unknown>, operation: string) {
-        const version = (operationVersions.current[operation] || 0) + 1;
-        operationVersions.current[operation] = version;
-        try {
-            await action();
-            if (!mounted.current || operationVersions.current[operation] !== version) return;
+    function perform(action: () => Promise<unknown>, operation: string) {
+        void operations.run(operation, action(), (completed) => {
             sync(files.treeSummary());
             refresh();
-            succeed(operation);
-        } catch (error) {
-            if (mounted.current && operationVersions.current[operation] === version) report(error, operation);
-        }
+            succeed(completed);
+        }, report);
     }
 
     function immediate(action: () => unknown, operation: string) {
@@ -75,6 +70,7 @@ export function WorkspaceEditor({ store, files, onError, onSuccess, settings = d
 
     async function save() {
         await saveActiveFile(store, files, report, succeed);
+        if (!mounted.current) return;
         sync(files.treeSummary());
         refresh();
     }

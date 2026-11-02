@@ -3,6 +3,7 @@ import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ModelSourcesApi } from '../../assets/js/model_sources.js';
 import { createGenerationAdapter } from '../adapters/generation.js';
 import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
+import { createOperationGate } from '../adapters/operations.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
@@ -94,9 +95,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         file: `File: ${state.file.phase}`,
         session: `Session: ${state.session.phase}`,
     };
-    const report = (message: string, operation = 'other') => setError({ message, surface: 'other', operation });
+    const report = (message: unknown, operation = 'other') => setError({ message: String(message), surface: 'other', operation });
     const reportFile = (message: string, operation = 'file:other') => setError({ message, surface: 'file', operation });
     const succeed = (operation: string) => setError((current) => current?.operation === operation ? null : current);
+    const operations = useMemo(() => createOperationGate(), []);
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
@@ -111,10 +113,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                 report('Could not create a session.', 'session:new');
             }
         } },
-        { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { files.openFolder().then(() => succeed('workspace:open-folder')).catch((reason) => report(reason instanceof Error ? reason.message : String(reason), 'workspace:open-folder')); } },
+        { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { void operations.run('workspace:open-folder', files.openFolder(), succeed, report); } },
         { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, reportFile); } },
         { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { saveActiveFileCopy(store, files, reportFile, succeed); } },
-        { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().then(() => succeed('artifact:load')).catch((reason) => report(reason instanceof Error ? reason.message : String(reason), 'artifact:load')); } },
+        { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { void operations.run('artifact:load', adapter.loadBundled(), succeed, report); } },
         { id: 'inspector', group: 'Interface', label: 'Toggle inspector', description: 'Show or hide details', run: () => setInspectorOpen((value) => !value) },
         { id: 'settings', group: 'Interface', label: 'Open settings', description: 'Appearance, editor, and data', run: () => setSettingsOpen(true) },
         { id: 'help', group: 'Help', label: 'Open guide', description: 'Read workflows and model limits', run: () => setActiveSection('guide') },
@@ -152,8 +154,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                     download={download}
                 />
             )}
-            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={reportFile} onSuccess={succeed} settings={editorSettings} />}
-            {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} onSuccess={succeed} />}
+            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} />}
+            {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} operations={operations} onError={report} onSuccess={succeed} />}
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}

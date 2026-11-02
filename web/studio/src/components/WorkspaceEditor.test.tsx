@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
+import { createOperationGate } from '../adapters/operations.js';
 import type { StudioFile, StudioSettings, WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import { WorkspaceEditor } from './WorkspaceEditor.js';
 
@@ -28,7 +29,7 @@ function mount(settings?: StudioSettings) {
     const fileApi = files();
     const onError = vi.fn();
     const onSuccess = vi.fn();
-    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} onSuccess={onSuccess} settings={settings} />, host); });
+    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} operations={createOperationGate()} onError={onError} onSuccess={onSuccess} settings={settings} />, host); });
     return { store, fileApi, onError, onSuccess };
 }
 
