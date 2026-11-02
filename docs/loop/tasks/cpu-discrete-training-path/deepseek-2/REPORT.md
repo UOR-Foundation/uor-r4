@@ -16,14 +16,14 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - Binder nodes now retain `level`, `first` and `last`; Flock ranks only closed subtrees and preserves their source spans across unequal frontier levels.
 - Flock reconstructs each output block from its query payload, exact frame/payload consensus, exact per-level transport, signed gate trits and final scale-matched snap.
 - Parsing requires `read_mode=flock`, `read_kept=1..=8`, `read_sweeps=0` and `read_initialization=active_leaf_v1`.
-- Route, Relation, bad initialization and parameters, malformed trit/count/maps, non-orbit codebooks, bad cells, wrong kinds/lengths/alignment, duplicate/missing tables, malformed spans and nonzero padding fail closed.
-- A serialized copy-successor fixture and a three-level fixture match `IntegerDiscreteModel::evaluate_prefix`; these are direct host-oracle comparisons, not copied queries.
+- Route, Relation, bad initialization and parameters, malformed trit/count/maps, non-orbit codebooks, bad cells, wrong kinds/lengths/alignment, duplicate/missing tables, malformed spans, nonempty matrices, source-geometry mismatches, unknown objectives and nonzero header/data padding fail closed.
+- A serialized generic two-level fixture and a three-level fixture match `IntegerDiscreteModel::evaluate_prefix`; these are direct host-oracle comparisons, not copied queries.
 
 ## Measurements
 
 - Focused Flock tests: 5 passed.
 - Full `uor-r4-cpu-train` release suite: 67 passed.
-- The serialized copy-successor shape and a context-9, three-level synthetic shape matched the host read on every tested prefix.
+- The serialized generic two-level shape and a context-9, three-level synthetic shape matched the host read on every tested prefix.
 - Zero gates returned the last token's payload blocks exactly. Nonzero gates matched the host path, and a positive-gate fixture changed the read from the zero-gate fallback.
 - Release benchmark on the Ryzen 9 9950X: 1,024 prefix reads, width 32, four blocks, five stages, `read_kept=3` and a 64-token prefix in 45.368 ms (`22,570.818` rows/s), checksum `f0078bc7f0078bc7`.
 

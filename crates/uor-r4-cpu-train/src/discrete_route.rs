@@ -24,6 +24,12 @@ const BFS: [u8; 256] = [
     4, 6, 10, 14, 9, 11, 26, 0,
 ];
 
+const FLOCK_SNAPSHOT_SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
+const FLOCK_OPERATOR_KAPPA: &str =
+    "blake3:a0ea3a10dd10c5f4856b0d881d33d94c3293bad0e68bd07a47918e2bb82c819b";
+const FLOCK_COMPOSITION_KAPPA: &str =
+    "blake3:f2986c8e68dcb30a9cb511a42547179a87b66ef212a87b728765d03e70e640b0";
+
 const BRANCH: [[u8; 3]; 16] = [
     [0, 14, 3],
     [1, 3, 14],
@@ -304,9 +310,27 @@ impl CpuDiscreteFlock {
             || !(1..=8).contains(&kept)
             || shape["read_sweeps"].as_u64() != Some(0)
             || expected_stages(context) != Some(stages)
+            || !matches!(
+                shape["objective_policy"].as_str(),
+                Some("nearest_address_margin_v1" | "occupied_cell_rank_hinge_v1")
+            )
         {
             return Err(invalid("Flock shape differs"));
         }
+        if header["matrices"]
+            .as_array()
+            .is_none_or(|matrices| !matrices.is_empty())
+        {
+            return Err(invalid("Flock artifact requires an empty matrices array"));
+        }
+        let source = &header["source"];
+        if source["snapshot_schema"].as_str() != Some(FLOCK_SNAPSHOT_SCHEMA)
+            || source["operator_kappa"].as_str() != Some(FLOCK_OPERATOR_KAPPA)
+            || source["composition_kappa"].as_str() != Some(FLOCK_COMPOSITION_KAPPA)
+        {
+            return Err(invalid("Flock artifact source geometry differs"));
+        }
+        validate_header_padding(bytes)?;
         let tables = header["tables"]
             .as_array()
             .ok_or_else(|| invalid("Flock artifact tables differ"))?;
@@ -749,6 +773,32 @@ fn validate_layout(bytes: &[u8], header: &serde_json::Value) -> Result<()> {
     Ok(())
 }
 
+fn validate_header_padding(bytes: &[u8]) -> Result<()> {
+    let header_len = u64::from_le_bytes(
+        bytes[8..16]
+            .try_into()
+            .map_err(|_| invalid("Flock header length differs"))?,
+    );
+    let unaligned = 16usize
+        .checked_add(
+            usize::try_from(header_len)
+                .map_err(|_| invalid("Flock header length exceeds usize"))?,
+        )
+        .ok_or_else(|| invalid("Flock header end overflows"))?;
+    let data_start = unaligned
+        .checked_add(63)
+        .ok_or_else(|| invalid("Flock data start overflow"))?
+        / 64
+        * 64;
+    let padding = bytes
+        .get(unaligned..data_start)
+        .ok_or_else(|| invalid("Flock header padding is truncated"))?;
+    if padding.iter().any(|byte| *byte != 0) {
+        return Err(invalid("Flock header padding is nonzero"));
+    }
+    Ok(())
+}
+
 fn section_i32(
     bytes: &[u8],
     header: &serde_json::Value,
@@ -1069,6 +1119,48 @@ mod tests {
             header["tables"][1]["name"] = json!("discrete.table");
         });
         assert!(CpuDiscreteFlock::from_bytes(&duplicate).is_err());
+
+        let nonempty_matrices = rewrite_header(artifact.clone(), |header| {
+            header["matrices"] = json!([{"name": "unexpected"}]);
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&nonempty_matrices).is_err());
+
+        let wrong_snapshot = rewrite_header(artifact.clone(), |header| {
+            header["source"]["snapshot_schema"] = json!("uor-r4.wrong/1");
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&wrong_snapshot).is_err());
+
+        let wrong_operator = rewrite_header(artifact.clone(), |header| {
+            header["source"]["operator_kappa"] = json!("blake3:wrong");
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&wrong_operator).is_err());
+
+        let wrong_composition = rewrite_header(artifact.clone(), |header| {
+            header["source"]["composition_kappa"] = json!("blake3:wrong");
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&wrong_composition).is_err());
+
+        let unknown_objective = rewrite_header(artifact.clone(), |header| {
+            header["shape"]["objective_policy"] = json!("unknown");
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&unknown_objective).is_err());
+
+        let missing_objective = rewrite_header(artifact.clone(), |header| {
+            header["shape"]
+                .as_object_mut()
+                .unwrap()
+                .remove("objective_policy");
+        });
+        assert!(CpuDiscreteFlock::from_bytes(&missing_objective).is_err());
+
+        let mut nonzero_header_padding = artifact.clone();
+        let header_len =
+            u64::from_le_bytes(nonzero_header_padding[8..16].try_into().unwrap()) as usize;
+        let unaligned = 16 + header_len;
+        let data_start = unaligned.div_ceil(64) * 64;
+        assert!(unaligned < data_start);
+        nonzero_header_padding[unaligned] = 1;
+        assert!(CpuDiscreteFlock::from_bytes(&nonzero_header_padding).is_err());
 
         let mut nonzero_padding = artifact;
         nonzero_padding.push(1);
