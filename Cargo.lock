@@ -2351,7 +2351,9 @@ dependencies = [
 name = "uor-r4-cpu-train"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "rayon",
+ "serde_json",
  "uor-r4-discrete",
  "uor-r4-integer",
 ]
