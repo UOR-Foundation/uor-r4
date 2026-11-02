@@ -1,68 +1,51 @@
-# ORDER: one-model-end-to-end, claude-259
+# ORDER: one-model-end-to-end, claude-259 (the trained-as-served run's sheet)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `22fecde5a`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `22fecde5a`.
 
 ## Goal
 
-The item's done-when reads:
+Casey, 2 Nov 2026: "Stop Q5 now (Recommended)", to "Stop the Q5 track now and move to one model trained on the exact values it is served with?". Before it: "I thought we had agreed on returning to the end-to-end same-value trained as served method?"
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+**Plan step (the claim check):** PLAN.md's 29 Oct direction, step 4, "One model trained with all of them, exported, served on the laptop and scored on prompts, with tokens/s". **What it changes in the model:** nothing yet. It fixes, before the run, the recipe, the bars and the decision table of the run that trains the model to ship on its served values. claude-258 (PR #3556, merged as `22fecde5a`) built `train-in-space --train-as-served`; unit 3 runs what this sheet fixes.
+
+## This unit
+
+Unit 2 of 3 in the bound recorded in the lab's place record:
+1. claude-258, the build;
+2. this unit: the prep sheet, its FIT and its pre-run review, for (r-drop) trained as served at 3 seeds;
+3. the GPU run, the export, laptop serving, M1's bars and tok/s. Then back to Casey with the result.
+
+No trace, audit or new instrument in this track.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. Is there already a sheet for a trained-as-served run? (`grep -rln "train.as.served" docs/harness/prep/`)
+2. Which (r-drop) recipe is the one to ship? The 29 Oct training sheet's, or the 30 Oct cut-train sheet's with `--reply-read-train all`? Which did the served model claude-220 and its successors used?
+3. Are the inputs in the HF store: the driver data, and the float-trained (r-drop) checkpoints at 3 seeds as the float control? Does the export and laptop serving path take a checkpoint whose `config.json` holds `"train_as_served": true`?
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
 - `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/**`
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
 
 ## Done when
 
-To fill in.
+1. **The sheet**, `docs/harness/prep/one-model-end-to-end-trained-as-served-2026-11-02.md`, one page. It holds:
+   - the question;
+   - the arms, each defined exactly: (r-drop) with `--train-as-served 1` at seeds 1–3, and the float control;
+   - M1's existing bars and a decision table, where every outcome changes a decision;
+   - the instrument checks: every seed's export-identity check (a trained step that rounds as exported must be unchanged), and a two-arm pre-run smoke at the run's head that runs `run_long` itself (claude-258's review, finding 1);
+   - the data and checkpoints with their sha256s;
+   - the cost, and the stop rule, including a value the export refuses mid-run (claude-258's review, finding 3).
+2. **A fresh FIT**, posted on #3407: "TEST FITNESS: FIT".
+3. **A pre-run review (D67)** by a fresh reviewer: the five points, posted on #3407, PASS.
+4. **The REPORT**, negatives first.
 
 ## Stop and ask if
 
-To fill in.
+Each of these is decided in the unit, never waited on:
+- **The run needs a new instrument, trace or audit.** That is outside the track's bound: bring it to Casey.
+- **M1 has no existing bar for what the sheet must judge.** Use the bars that exist; no new bar is invented here.
+- **The projected cost passes the caps.**
