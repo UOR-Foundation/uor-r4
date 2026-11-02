@@ -14237,11 +14237,22 @@ mod tests {
                     "step {step}"
                 );
                 let train_step = || {
+                    assert_eq!(
+                        (
+                            hs::is_bridging_d11(),
+                            hs::is_bridging_activation_i16(),
+                            hs::is_rounding_residual_q16(),
+                        ),
+                        (on, on, on)
+                    );
                     let loss =
                         batch_loss(&model, PointObjective::Cell, &ids, &scored, &targets, batch)?;
                     Ok(loss.backward()?)
                 };
                 let grads = with_served_or_plain_gate(on, 1, step + 1, train_step)?;
+                assert!(!hs::is_bridging_d11());
+                assert!(!hs::is_bridging_activation_i16());
+                assert!(!hs::is_rounding_residual_q16());
                 if let Some(served) = served {
                     served.restore()?;
                 }
