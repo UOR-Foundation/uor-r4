@@ -43,7 +43,7 @@ The family-by-family disposition and the rationale for this order are in [the CP
 
 D84 and the seven child items were registered on 1 November 2026 by `deepseek-1`. This item's registration scope is complete; implementation continues in the child items and is not implied by this close.
 
-As of 2 November 2026, #3504 and #3510 are closed. #3504 delivered the supported FBS forward. #3510 was rejected at its premise audit because the retained whole-path source has no parameter-update trainer. #3502/#3501 await an exact private stored-artifact/query fixture; #3505 remains active for route/gate/normalization updates; #3503 and the #3506 pilot remain downstream. The durable family matrix is in [the CPU training repair program](../../research/cpu-training-program.md).
+As of 2 November 2026, #3504 and #3510 are closed. #3504 delivered the supported FBS forward. #3510 was rejected at its premise audit because the retained whole-path source has no parameter-update trainer. The shared-vector path has delivered its tied-token trainer (#3518), exact BVG-K normalization/bias/decay/route groups (#3522), and matched panel admission plus exact CPU/serving export controls (#3523). #3505 remains open for a pre-registered bounded pilot and trained-artifact complete-reply/fresh-phrasing controls. #3502/#3501 still await an exact private stored-artifact/query fixture; #3503 and the #3506 pilot remain downstream. The durable family matrix is in [the CPU training repair program](../../research/cpu-training-program.md).
 
 ## Cancel if
 

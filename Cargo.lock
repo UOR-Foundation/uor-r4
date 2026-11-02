@@ -2354,6 +2354,7 @@ dependencies = [
  "blake3",
  "rayon",
  "serde_json",
+ "uor-r4-core",
  "uor-r4-discrete",
  "uor-r4-integer",
 ]
