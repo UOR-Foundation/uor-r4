@@ -1,0 +1,119 @@
+import { render } from 'preact';
+import { act } from 'preact/test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LifecycleStore } from '../state/lifecycle.js';
+import type { StudioFile, WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
+import { WorkspaceEditor } from './WorkspaceEditor.js';
+
+let host: HTMLDivElement;
+beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); });
+afterEach(() => { render(null, host); host.remove(); vi.restoreAllMocks(); });
+
+function files() {
+    const summary: WorkspaceSummary = { mode: 'none', rootName: '', fileCount: 0, tabs: [], activePath: null };
+    let active: StudioFile | null = null;
+    const api: WorkspaceApi = {
+        openFolder: vi.fn(async () => undefined), importFiles: vi.fn(), openDemo: vi.fn(),
+        openFile: vi.fn(async () => undefined), newFile: vi.fn(), closeTab: vi.fn(), closeAll: vi.fn(),
+        saveActive: vi.fn(async () => true), saveAsCopy: vi.fn(() => true), insertText: vi.fn(() => true),
+        setActiveContent: vi.fn((content: string) => { if (active) active.content = content; }),
+        activeFile: vi.fn(() => active), workspaceName: vi.fn(() => summary.rootName), mode: vi.fn(() => summary.mode),
+        tabs: vi.fn(() => summary.tabs.map((tab) => ({ ...tab, mode: 'local' }))), treeSummary: vi.fn(() => summary),
+    };
+    return { api, summary, setActive(file: StudioFile | null) { active = file; }, get active() { return active; } };
+}
+
+function mount() {
+    const store = new LifecycleStore();
+    const fileApi = files();
+    const onError = vi.fn();
+    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} />, host); });
+    return { store, fileApi, onError };
+}
+
+function emit(fileApi: ReturnType<typeof files>) {
+    document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: fileApi.summary }));
+}
+
+function button(label: string): HTMLButtonElement {
+    const found = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === label);
+    if (!found) throw new Error(`Missing button ${label}`);
+    return found;
+}
+
+describe('WorkspaceEditor', () => {
+    it('disables editing and save actions with no folder or file', () => {
+        mount();
+        expect(host.textContent).toContain('No folder open');
+        expect(host.textContent).toContain('No file open');
+        expect(button('Save').disabled).toBe(true);
+        expect(button('Save as').disabled).toBe(true);
+        expect(host.querySelector('textarea')!.disabled).toBe(true);
+        expect(host.textContent).not.toContain('Saved');
+    });
+
+    it('synchronizes folder, file, tabs, and dirty content through file events', () => {
+        const { store, fileApi } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        act(() => { emit(fileApi); });
+        expect(store.getState().file.phase).toBe('no-open-file');
+        fileApi.summary.fileCount = 2;
+        fileApi.summary.tabs = [{ path: 'a.md', dirty: false }, { path: 'b.md', dirty: false }];
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        expect(store.getState().file.phase).toBe('clean');
+        expect(host.querySelector('textarea')!.value).toBe('alpha');
+        act(() => {
+            const editor = host.querySelector('textarea')!;
+            editor.value = 'alpha edited';
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        expect(fileApi.api.setActiveContent).toHaveBeenCalledWith('alpha edited');
+        expect(store.getState().file.phase).toBe('dirty');
+        act(() => { button('Open b.md').click(); });
+        expect(fileApi.api.openFile).toHaveBeenCalledWith('b.md');
+    });
+
+    it('tracks saving, saved, and save failure states through the existing save method', async () => {
+        const { store, fileApi, onError } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        let finish!: (value: boolean) => void;
+        fileApi.api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+        act(() => { button('Save').click(); });
+        expect(store.getState().file.phase).toBe('saving');
+        expect(button('Save').disabled).toBe(true);
+        await act(async () => { finish(true); await Promise.resolve(); });
+        expect(store.getState().file.phase).toBe('saved');
+        fileApi.api.saveActive = vi.fn(async () => false);
+        await act(async () => { button('Save').click(); await Promise.resolve(); });
+        expect(store.getState().file.phase).toBe('error');
+        expect(onError).toHaveBeenCalledWith('Save did not complete.');
+        expect(button('Save').disabled).toBe(false);
+    });
+
+    it('uses save-as and closes tabs through the existing API', () => {
+        const { store, fileApi } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.summary.tabs = [{ path: 'a.md', dirty: true }];
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        button('Save as').click();
+        expect(fileApi.api.saveAsCopy).toHaveBeenCalledOnce();
+        act(() => { button('Close a.md').click(); });
+        expect(fileApi.api.closeTab).toHaveBeenCalledWith('a.md');
+        fileApi.summary.activePath = null;
+        fileApi.summary.tabs = [];
+        fileApi.setActive(null);
+        act(() => { emit(fileApi); });
+        expect(store.getState().file.phase).toBe('no-open-file');
+        expect(button('Save').disabled).toBe(true);
+    });
+});
