@@ -54,12 +54,41 @@ struct CliArgs {
     /// Path to read a `UR4SESS1` binary session snapshot before a `--stack` step batch.
     restore_session: Option<PathBuf>,
     system_prompt: Option<String>,
+    /// One-turn explicit system-memory value for the stack chat path.
+    memory: Option<String>,
     temperature: f64,
     top_k: usize,
     seed: u64,
     read_mode: ReadMode,
     max_tokens: usize,
     verify_kernel: bool,
+}
+
+#[derive(Default)]
+struct PendingMemory(Option<String>);
+
+impl PendingMemory {
+    fn new(value: Option<String>) -> Self {
+        Self(value)
+    }
+
+    fn value(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+
+    fn set(&mut self, value: &str) -> std::result::Result<String, StackChatError> {
+        let content = StackChat::memory_content(value)?;
+        self.0 = Some(value.to_owned());
+        Ok(content)
+    }
+
+    fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    fn finish_turn(&mut self) {
+        self.clear();
+    }
 }
 
 impl Default for CliArgs {
@@ -76,6 +105,7 @@ impl Default for CliArgs {
             save_session: None,
             restore_session: None,
             system_prompt: None,
+            memory: None,
             temperature: 0.0,
             top_k: 16,
             seed: 0,
@@ -118,6 +148,9 @@ fn print_usage() {
         "      --restore-session <P>   restore UR4SESS1 session snapshot bytes before --prompt-ids"
     );
     eprintln!("  -s, --system <PROMPT>       Initial persistent system persona");
+    eprintln!(
+        "      --memory <VALUE>        Queue System: Memory: <VALUE>. for the next stack-chat turn"
+    );
     eprintln!(
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
     );
@@ -167,6 +200,15 @@ fn parse_cli_args() -> CliArgs {
                     args.system_prompt = Some(raw[idx].clone());
                 } else {
                     eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--system'");
+                    process::exit(1);
+                }
+            }
+            "--memory" => {
+                idx += 1;
+                if idx < raw.len() {
+                    args.memory = Some(raw[idx].clone());
+                } else {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--memory'");
                     process::exit(1);
                 }
             }
@@ -425,6 +467,16 @@ fn parse_cli_args() -> CliArgs {
     {
         eprintln!(
             "{ANSI_RED_BOLD}error:{ANSI_RESET} '--save-session' and '--restore-session' require '--stack'"
+        );
+        process::exit(1);
+    }
+    if args.memory.is_some() && args.stack_path.is_none() {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--memory' requires text chat with '--stack'");
+        process::exit(1);
+    }
+    if args.memory.is_some() && args.prompt_ids.is_some() {
+        eprintln!(
+            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--memory' requires a text turn; it does not apply to '--prompt-ids'"
         );
         process::exit(1);
     }
@@ -890,6 +942,20 @@ mod tests {
     use uor_r4_integer::session::{ChatSession, ChatTokenStream, StreamStopReason};
 
     #[test]
+    fn pending_memory_applies_once_and_refuses_invalid_replacement() {
+        let mut pending = PendingMemory::new(Some("Pickle".into()));
+        assert_eq!(pending.value(), Some("Pickle"));
+        pending.finish_turn();
+        assert_eq!(pending.value(), None);
+
+        pending.set("tomatoes").unwrap();
+        assert!(pending.set("two\nlines").is_err());
+        assert_eq!(pending.value(), Some("tomatoes"));
+        pending.clear();
+        assert_eq!(pending.value(), None);
+    }
+
+    #[test]
     fn chat_stream_cli_distinguishes_failed_and_successful_exhaustion() -> Result<()> {
         let bundle = create_test_bundle_with_byte_vocab();
         let mut session = ChatSession::new(&bundle, None, 17)?;
@@ -1190,9 +1256,10 @@ fn stack_reply(
     chat: &mut StackChat<'_>,
     initial: &[u32],
     user: &str,
+    memory: Option<&str>,
     max_tokens: usize,
 ) -> std::result::Result<StackReply, StackCliError> {
-    match chat.reply(user, max_tokens) {
+    match chat.reply_with_memory(user, memory, max_tokens) {
         Ok(reply) => Ok(reply),
         Err(StackChatError::Context { needed, context }) => {
             println!(
@@ -1200,7 +1267,7 @@ fn stack_reply(
             );
             chat.reset();
             chat.seed(initial)?;
-            Ok(chat.reply(user, max_tokens)?)
+            Ok(chat.reply_with_memory(user, memory, max_tokens)?)
         }
         Err(error) => Err(StackCliError::Chat(error)),
     }
@@ -1224,6 +1291,9 @@ fn print_stack_reply(reply: &StackReply, positions: usize, seconds: f64) {
 fn stack_help() {
     println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Available Slash Commands (stack path):");
     println!("  /reset, /clear        Reset dialogue history and start a fresh conversation");
+    println!("  /memory <VALUE>       Queue System: Memory: <VALUE>. for the next user turn");
+    println!("  /memory               Show the queued memory value");
+    println!("  /memory clear         Clear the queued memory value");
     println!("  /history              Display the exact token history length and context");
     println!("  /tokens               Display the exact token ids of the conversation");
     println!("  /stats                Display session telemetry and process RSS");
@@ -1338,8 +1408,19 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
 
     if let Some(text) = cli.say.as_deref() {
         let started = std::time::Instant::now();
-        let reply = stack_reply(&mut chat, &initial, text, cli.max_tokens)?;
+        let reply = stack_reply(
+            &mut chat,
+            &initial,
+            text,
+            cli.memory.as_deref(),
+            cli.max_tokens,
+        )?;
         let seconds = started.elapsed().as_secs_f64();
+        let memory = cli
+            .memory
+            .as_deref()
+            .map(StackChat::memory_content)
+            .transpose()?;
         let record = serde_json::json!({
             "schema": "uor-r4.uor-chat-stack-reply/1",
             "artifact": artifact,
@@ -1350,6 +1431,7 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "context": chat.context(),
             "decoding": STACK_DECODING,
             "user": text,
+            "memory": memory,
             "reply_text": reply.text,
             "reply_ids": reply.ids,
             "stop": reply.stop.name(),
@@ -1364,6 +1446,7 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut turns = 0usize;
+    let mut pending_memory = PendingMemory::new(cli.memory.clone());
     loop {
         print!("{ANSI_CYAN_BOLD}User>{ANSI_RESET} ");
         if io::stdout().flush().is_err() {
@@ -1390,9 +1473,34 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                             return Ok(());
                         }
                         "/help" => stack_help(),
+                        "/memory" => {
+                            let rest = trimmed.strip_prefix("/memory").unwrap_or("").trim();
+                            if rest.is_empty() {
+                                match pending_memory.value() {
+                                    Some(value) => println!(
+                                        "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Queued {}",
+                                        StackChat::memory_content(value)?
+                                    ),
+                                    None => println!(
+                                        "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} No memory value is queued."
+                                    ),
+                                }
+                            } else if rest.eq_ignore_ascii_case("clear") {
+                                pending_memory.clear();
+                                println!(
+                                    "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Cleared the queued memory value."
+                                );
+                            } else {
+                                let content = pending_memory.set(rest)?;
+                                println!(
+                                    "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Queued {content}"
+                                );
+                            }
+                        }
                         "/reset" | "/clear" => {
                             chat.reset();
                             chat.seed(&initial)?;
+                            pending_memory.clear();
                             turns = 0;
                             println!(
                                 "{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Dialogue history reset cleanly."
@@ -1417,10 +1525,17 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                 print!("{ANSI_GREEN_BOLD}Assistant>{ANSI_RESET} ");
                 io::stdout().flush().ok();
                 let started = std::time::Instant::now();
-                match stack_reply(&mut chat, &initial, trimmed, cli.max_tokens) {
+                match stack_reply(
+                    &mut chat,
+                    &initial,
+                    trimmed,
+                    pending_memory.value(),
+                    cli.max_tokens,
+                ) {
                     Ok(reply) => {
                         let seconds = started.elapsed().as_secs_f64();
                         print_stack_reply(&reply, chat.tokens().len(), seconds);
+                        pending_memory.finish_turn();
                         turns += 1;
                     }
                     Err(error) => {
