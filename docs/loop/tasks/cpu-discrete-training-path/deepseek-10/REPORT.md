@@ -18,10 +18,13 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 - Focused apply/no-op and exact mutation tests pass after state synchronization.
 - Exact mutation tests pin sequential chooser state, Table root transform, Route composition, refusal immutability and epoch-max refusal.
+- Full `uor-r4-cpu-train` release suite: 81 passed and four ignored release benchmarks.
 
 ## Checks run at the head
 
-- Focused release apply/mutation tests pass after known duplicate-artifact collision retries. Full repaired-head verification remains pending.
+- `CARGO_TARGET_DIR=target/deepseek-apply-serial CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after known duplicate-artifact collision retries, 81 passed and four ignored.
+- `CARGO_TARGET_DIR=target/deepseek-apply-serial CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS.
+- `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
 
 ## Skills used
 
