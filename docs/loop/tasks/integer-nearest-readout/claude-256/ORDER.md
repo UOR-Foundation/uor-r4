@@ -81,7 +81,9 @@ Cancel if origin/main already has a replay driver, or if an open PR touches this
    - one that forces a clear decision: not accounted, although the picks end equal;
    - one that ends at a kept set: not accounted;
    - a pass that does not take a forced value: refused (I-Force);
-   - a replay that does not end within its prefix's decision count: refused.
+   - the replay ends, with one pass per differing decision and one more: Φ grows at every pass by a decision of p's prefix that it did not hold.
+
+   *Amended before any code was written.* The first draft asked for a refusal of a replay that runs past its prefix's decision count. No replay can reach one: `grade_pass` refuses a pass that does not take Φ's values, so each pass's first difference is a new decision of the prefix. The test of that end replaces it.
 2. **`fbs-toks ARTIFACT --decision-replay`** runs the arithmetic step's replay with R as Q.
    - Without `--at`, it replays every offset of the reference's windows where the unforced picks differ, and counts the rest as equal.
    - It writes `uor-r4.decision-replay/1` new: each replay's passes, its forced set and whether it is accounted for.
