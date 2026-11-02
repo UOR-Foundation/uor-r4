@@ -3056,6 +3056,7 @@ mod tests {
     fn served_surrogate_scalar_and_state_controls_are_exact() -> Result<()> {
         assert_eq!(q16_residual_scalar(1.4 / Q16_SCALE), 1.0 / Q16_SCALE);
         assert_eq!(q16_residual_scalar(-2.6 / Q16_SCALE), -3.0 / Q16_SCALE);
+        assert_eq!(q16_residual_scalar(-0.5 / Q16_SCALE), 0.0);
         assert_eq!(q16_residual_scalar(32768.0), i32::MAX as f32 / Q16_SCALE);
         assert_eq!(activation_scale_scalar(40_000.0), 0.5);
         assert_eq!(activation_scale_scalar(70_000.0), 0.25);
@@ -3072,7 +3073,8 @@ mod tests {
             (1 << 16) - 1,
             u32::MAX as u64,
             1 << 47,
-            (1 << 63) - 1,
+            // The greatest f64 below 2^63. Casting 2^63 - 1 rounds it up to the boundary.
+            (1 << 63) - 1024,
             1 << 63,
             u64::MAX,
         ] {
