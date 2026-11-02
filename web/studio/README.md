@@ -77,8 +77,9 @@ rendered or copied into component state; newly entered keys go only to the exist
 
 Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` in this directory. The library
 build emits uncommitted `dist/` output; `src/studio.css` does not alter the legacy `index.css`.
-Native progress and dialog elements preserve unknown totals, indeterminate finalization, and native
-focus behavior. M1 discrete artifacts are labeled next-token prediction, not conversational chat.
+Native progress and dialog elements preserve unknown totals and indeterminate finalization; dialogs
+use native focus semantics, while browser focus-return verification remains in the parity record.
+M1 discrete artifacts are labeled next-token prediction, not conversational chat.
 
 This is core-workflow evidence only. Full real-browser/worker parity, mobile/accessibility checks,
 one-time browser-data migration, publisher changes, and production cutover remain later units.
