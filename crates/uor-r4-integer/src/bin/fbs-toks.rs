@@ -2441,9 +2441,10 @@ mod tests {
         /// artifact; T's check is not circular (a T score off its table's is refused); R's reads
         /// have four heads. A clean run compares R's window and replays nothing; a refused
         /// replay is recorded with its refusal, and the command fails after writing its file.
-        /// Refused before any replay, writing nothing: R's trace as the reference, two windows at
-        /// one position, deciles read from another trace, a table that is not the artifact, and
-        /// a named offset past the window.
+        /// Refused before any replay, writing nothing, each by its own check alone: a trace named
+        /// side R as the reference, two windows at one position, deciles read from another
+        /// trace, another artifact as the table, and a named offset past the window but inside
+        /// the reference.
         #[test]
         fn the_replay_command_records_each_replay_and_refuses_what_it_cannot_replay() {
             /// The test's own folder, removed when the test ends, a failing one too.
@@ -2463,7 +2464,18 @@ mod tests {
             let put = |name: &str, bytes: &[u8]| std::fs::write(path(name), bytes).expect("write");
             let bytes = raw_bytes(true);
             put("r.uorlut", &bytes);
-            put("plain.uorlut", &raw_bytes(false));
+            // Another artifact T's loader takes (snapped, with the same Hamming reads): only
+            // the table's identity check can refuse it.
+            let other = {
+                use uor_r4_integer::stack::synthetic::synthetic_hamming;
+                let mut snap = synthetic_fbs_trunk(7);
+                snap.readout_nearest = true;
+                snap.hamming = Some(synthetic_hamming(snap.width, snap.layers.len(), 4, 188));
+                export_fbs_trunk_uorlut01(&snap).expect("export")
+            };
+            assert_ne!(other, bytes);
+            put("other.uorlut", &other);
+            load_table("T", &path("other.uorlut")).expect("T's loader takes it");
             let model = IntegerStackModel::parse(&bytes).expect("parse");
             let writer = model.fbs_writer_table().expect("the FBS trunk");
             let width = writer.len() / model.shape().vocab;
@@ -2516,8 +2528,6 @@ mod tests {
                 .as_mut()
                 .expect("a nearest");
             nearest.pick = (nearest.pick + 1) % model.shape().vocab as u32;
-            // R's trace has no deciles of its own: G₁₀ is read on the reference side.
-            put("r.json", &json_of(&r));
             for (name, trace) in [("t", &t), ("twice", &twice), ("moved", &moved)] {
                 put(&format!("{name}.json"), &json_of(trace));
                 put(
@@ -2525,23 +2535,43 @@ mod tests {
                     &deciles_of(trace, &format!("{name}.json")),
                 );
             }
-            let rows = json!([{ "position": 4, "prompt": prompt, "reference": reference }]);
-            put("prompts.json", &serde_json::to_vec(&rows).expect("json"));
+            // T's trace named side R, with deciles that name it: only the side check can refuse
+            // it (R's own trace has no deciles: G₁₀ is read on the reference side).
+            let mut as_r = t.clone();
+            as_r.side = "R".to_owned();
+            put("as-r.json", &json_of(&as_r));
+            let mut deciles = decision_deciles(&t).expect("deciles");
+            deciles.trace = Some(DecisionSource {
+                path: path("as-r.json"),
+                sha256: sha256_hex(&json_of(&as_r)),
+            });
+            put("d-as-r.json", &serde_json::to_vec(&deciles).expect("json"));
+            for (name, reference) in [("prompts", &reference[..]), ("long", &[3, 5, 7, 9])] {
+                let rows = json!([{ "position": 4, "prompt": prompt, "reference": reference }]);
+                put(
+                    &format!("{name}.json"),
+                    &serde_json::to_vec(&rows).expect("json"),
+                );
+            }
+            let run_on =
+                |prompts: &str, trace: &str, deciles: &str, table: &str, out: &str, at: &[&str]| {
+                    let mut args = vec![path(trace)];
+                    for (flag, value) in [
+                        ("--prompts", path(prompts)),
+                        ("--deciles", path(deciles)),
+                        ("--g10", "0".to_owned()),
+                        ("--reference-table", path(table)),
+                        ("--out", path(out)),
+                    ] {
+                        args.extend([flag.to_owned(), value]);
+                    }
+                    for a in at {
+                        args.extend(["--at".to_owned(), (*a).to_owned()]);
+                    }
+                    decision_replay_out(&path("r.uorlut"), &args)
+                };
             let run = |trace: &str, deciles: &str, table: &str, out: &str, at: &[&str]| {
-                let mut args = vec![path(trace)];
-                for (flag, value) in [
-                    ("--prompts", path("prompts.json")),
-                    ("--deciles", path(deciles)),
-                    ("--g10", "0".to_owned()),
-                    ("--reference-table", path(table)),
-                    ("--out", path(out)),
-                ] {
-                    args.extend([flag.to_owned(), value]);
-                }
-                for a in at {
-                    args.extend(["--at".to_owned(), (*a).to_owned()]);
-                }
-                decision_replay_out(&path("r.uorlut"), &args)
+                run_on("prompts.json", trace, deciles, table, out, at)
             };
             let read = |name: &str| -> serde_json::Value {
                 serde_json::from_slice(&std::fs::read(path(name)).expect("read")).expect("json")
@@ -2570,8 +2600,11 @@ mod tests {
             let moved_out = read("moved-out.json");
             assert_eq!(moved_out["counts"]["refused"], 1);
             assert_eq!(moved_out["replayed"][0]["offset"], 2);
+            // The moved pick is refused by pass 0's grade: T's table does not score it so.
             assert!(
-                moved_out["replayed"][0]["refused"].is_string(),
+                moved_out["replayed"][0]["refused"]
+                    .as_str()
+                    .is_some_and(|e| e.starts_with("pass 0: ")),
                 "{moved_out}"
             );
             let refusal = |trace: &str, deciles: &str, table: &str, at: &[&str]| {
@@ -2579,7 +2612,7 @@ mod tests {
             };
             for (got, want) in [
                 (
-                    refusal("r.json", "d-t.json", "r.uorlut", &[]),
+                    refusal("as-r.json", "d-as-r.json", "r.uorlut", &[]),
                     "side R, but --decision-replay replays the arithmetic step (T, R)",
                 ),
                 (
@@ -2591,14 +2624,25 @@ mod tests {
                     "the deciles were read from another trace than",
                 ),
                 (
-                    refusal("t.json", "d-t.json", "plain.uorlut", &[]),
+                    refusal("t.json", "d-t.json", "other.uorlut", &[]),
                     "T's table is R's artifact divided by 4096, and this is not",
                 ),
             ] {
                 assert!(got.contains(want), "{got}");
             }
+            // A reference that reads on past T's window: only the window's own check refuses
+            // offset 3 before any replay.
+            let past = run_on(
+                "long.json",
+                "t.json",
+                "d-t.json",
+                "r.uorlut",
+                "never.json",
+                &["4:3"],
+            )
+            .expect_err("refused");
             assert_eq!(
-                refusal("t.json", "d-t.json", "r.uorlut", &["4:3"]),
+                past,
                 format!(
                     "position 4, offset 3: past the window's {} steps",
                     t.windows[0].steps.len()
