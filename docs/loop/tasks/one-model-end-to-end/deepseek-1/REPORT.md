@@ -75,7 +75,9 @@ heldout-panel out=.../train-control tokenizer=.../tokenizer-seed-1.json \
 - `cargo test --offline --all-targets`: 13 evidence tests, 1 panel-writer test and 3 CLI tests passed.
 - `cargo clippy --offline --all-targets -- -D warnings`: passed; only pre-existing path-dependency warnings appeared.
 - `rustfmt --check` on the changed Rust files: passed.
-- `cargo run --release --locked --bin m2-evidence`: public artifact/panel smoke run completed and wrote the measured report.
+- `cargo build --offline --bins -j1` with an isolated target directory passed; the public
+  artifact/panel smoke ran the resulting debug binaries and wrote the measured report. A parallel
+  release-bin build hit the existing duplicate `uor-r4-integer` artifact race and is not claimed.
 - `uor-harness check`: 0 errors and 40 existing/site-wide warnings.
 - `cargo run --locked -p xtask -- roadmap check`: 134 items OK.
 - `cargo run --locked -p xtask -- links`: completed; it reports repository-wide historical broken links, with no command failure.
