@@ -34,6 +34,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const testVersions = useRef<Record<string, number>>({});
+    const loadVersions = useRef(0);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const messageFor = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -47,7 +48,11 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         clearProviderError(operation);
         onSuccess?.(operation);
     };
-    const run = (action: Promise<unknown>, operation: string) => { action.then(() => succeed(operation)).catch((error) => report(error, operation)); };
+    const run = (action: Promise<unknown>, operation: string) => {
+        const version = ++loadVersions.current;
+        action.then(() => { if (version === loadVersions.current) succeed(operation); })
+            .catch((error) => { if (version === loadVersions.current) report(error, operation); });
+    };
 
     useEffect(() => {
         let active = true;
@@ -92,7 +97,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
     function saveProvider(event: Event) {
         event.preventDefault();
-        const operation = `provider:save:${editingId || 'new'}`;
+        const providerId = editingId;
+        const operation = `provider:save:${providerId || 'new'}`;
         clearProviderError(operation);
         try {
             classifyEndpoint(providerDraft.baseUrl);
@@ -123,6 +129,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             setProviderDraft(emptyDraft);
             refresh();
             succeed(operation);
+            if (providerId) succeed(`provider:test:${providerId}`);
         } catch (error) {
             reportProvider(error, operation);
         }
@@ -161,6 +168,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             setRemoving(null);
             refresh();
             succeed(operation);
+            succeed(`provider:test:${id}`);
         } catch (error) {
             reportProvider(error, operation);
         }
@@ -251,7 +259,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             {providerOpen && (
                 <Modal title={editingId ? 'Edit API provider' : 'Add API provider'} onClose={() => { setProviderOpen(false); setEditingId(null); }}>
-                    {providerError && <p role="alert">{providerError.message}</p>}
+                    {providerError && providerError.operation === `provider:save:${editingId || 'new'}` && <p role="alert">{providerError.message}</p>}
                     <form data-action="save-provider" onSubmit={saveProvider}>
                         <label>Provider name<input aria-label="Provider name" required value={providerDraft.label} onInput={(event) => setProviderDraft({ ...providerDraft, label: event.currentTarget.value })} /></label>
                         <label>Provider base URL<input aria-label="Provider base URL" required type="url" value={providerDraft.baseUrl} onInput={(event) => setProviderDraft({ ...providerDraft, baseUrl: event.currentTarget.value })} /></label>
@@ -264,7 +272,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             {removing && (
                 <Modal title="Remove API provider" onClose={() => setRemoving(null)}>
-                    {providerError && <p role="alert">{providerError.message}</p>}
+                    {providerError && providerError.operation === `provider:remove:${removing.id}` && <p role="alert">{providerError.message}</p>}
                     <p>Remove {removing.label}? Existing conversations are preserved.</p>
                     <button type="button" autofocus onClick={() => setRemoving(null)}>Keep provider</button>
                     <button type="button" onClick={removeProvider}>Confirm removal</button>

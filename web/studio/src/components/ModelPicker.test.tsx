@@ -344,6 +344,14 @@ describe('ModelPicker', () => {
         expect(modelAdapter.loadBundled).toHaveBeenCalledOnce();
     });
 
+    it('does not render a provider-test error inside an edit dialog', async () => {
+        const { modelSources } = mount();
+        modelSources.testApi = vi.fn().mockRejectedValue(new Error('test failed'));
+        act(() => { button('Edit API A').click(); });
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('dialog [role="alert"]')).toBeNull();
+    });
+
     it('blocks provider removal during generation', () => {
         const { store, modelAdapter } = mount();
         modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));

@@ -97,6 +97,8 @@ describe('saveActiveFile', () => {
         store.dispatch({ type: 'file/dirty' });
         expect(await saveActiveFile(store, api, vi.fn())).toBe(false);
         expect(api.saveActive).not.toHaveBeenCalled();
+        expect(store.getState().file.phase).toBe('error');
+        expect(store.getState().file.error).toBe('The active file changed before saving.');
     });
 
     it('does not complete a newer save from an older completion', async () => {

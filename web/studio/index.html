@@ -1093,7 +1093,8 @@
             var stop = $('#btnStop');
             if (!send || !stop) return;
             send.hidden = app.generating;
-            stop.hidden = !app.generating;
+            stop.hidden = !app.generating || Boolean(app.activePredictionRequestId);
+            stop.disabled = Boolean(app.activePredictionRequestId);
             var ready = app.mode === 'api' ? Boolean(app.apiConfig) : Boolean(app.caps);
             send.disabled = app.generating || !ready;
             send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Load a model source first.');
@@ -1521,6 +1522,7 @@
         }
 
         function stopGeneration() {
+            if (app.activePredictionRequestId) return;
             if (!app.generating) return;
             if ((app.activeGenerationKind || app.mode) === 'api') {
                 if (app.abortController) app.abortController.abort();
@@ -1607,6 +1609,18 @@
                 renderMessages();
                 setView('chat');
                 toast('API mode active. Prompts now go to ' + (detail.apiConfig.baseUrl || 'the configured endpoint') + '.', 'warn');
+                return;
+            }
+            if (detail.kind === 'state' && detail.apiConfig) {
+                var active = ModelSources.active();
+                if (active && active.kind === 'api' && active.id === detail.id) {
+                    app.mode = 'api';
+                    app.apiConfig = detail.apiConfig;
+                    setModelStatus('API · ' + (detail.apiConfig.model || detail.apiConfig.label || 'endpoint'), 'accent', detail.apiConfig.baseUrl || '');
+                    updatePrivacyStatus();
+                    updateComposerState();
+                    renderMessages();
+                }
                 return;
             }
             if (detail.kind === 'state' && detail.removedActive) {

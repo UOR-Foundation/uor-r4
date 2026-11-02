@@ -14,13 +14,17 @@ export function saveActiveFile(store: LifecycleStore, files: WorkspaceApi, onErr
     const operation = saveQueue.then(async () => {
         if (!started && (store.getState().file.path !== path || store.getState().file.saveId !== saveId)) return false;
         started = true;
-        try {
-            if (files.activeFile()?.path !== path) {
+        const failActivePath = () => {
+            if (store.getState().file.path === path && store.getState().file.saveId === saveId) {
+                store.dispatch({ type: 'file/saveFailed', path, saveId, error: 'The active file changed before saving.' });
                 onError('The active file changed before saving.', `file:save:${path}`);
-                return false;
             }
+            return false;
+        };
+        try {
+            if (files.activeFile()?.path !== path) return failActivePath();
             const saved = await files.saveActive();
-            if (files.activeFile()?.path !== path) return false;
+            if (files.activeFile()?.path !== path) return failActivePath();
             if (store.getState().file.path !== path || store.getState().file.saveId !== saveId) return saved;
             if (saved) {
                 store.dispatch({ type: 'file/saveFinished', path, saveId });

@@ -20,7 +20,7 @@ Implement the approved AppShell, ModelPicker, WorkspaceEditor, AgentComposer, Se
 
 - The composed workflow uses lifecycle state through subscribing views and prop/callback-coordinated views, native progress/dialog semantics, accessible names, and truthful enabled/disabled states in behavioral tests.
 - The store notifies component subscribers of external adapter completion without changing existing transition guarantees.
-- Typed adapters call existing public APIs; additive editor/generation/settings hooks and tested live-bridge corrections never scrape DOM or duplicate engine, tokenization, hashing, persistence, or API logic. API attachment inclusion, per-session clear results, provider storage rollback, and request-correlated completion are the only intentional live behavior corrections.
+- Typed adapters call existing public APIs; additive editor/generation/settings hooks and tested live-bridge corrections never scrape DOM or duplicate engine, tokenization, hashing, persistence, or API logic. Intentional live corrections cover API attachment inclusion, per-session clear results and partial warnings, provider storage rollback and selected-provider edit/removal refresh, request-correlated generation/prediction lifetime with unavailable prediction Stop, editor/settings propagation, and active-path save/copy guards.
 - Model, workspace, agent, session, inspector, guide, and settings behavior is covered with synthetic fixtures, including negative cases and explicit remaining parity records.
 - TypeScript, the production Vite build, all Vitest/Node tests, legacy static checks, repository gates, claim wording, local policy, and fresh exact-head review pass. The PR uses `References #3500`, which remains ready for parity/migration and cutover units.
 

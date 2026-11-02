@@ -286,13 +286,14 @@ describe('actual page prediction hooks', () => {
         }
     });
 
-    it('stops a worker prediction after a previous API generation', () => {
+    it('does not offer or send cancellation for synchronous prediction', () => {
         const { app, hooks } = pageHooks();
         app.activeGenerationKind = 'api';
         app.abortController = null;
         expect(hooks.runPrediction('hello')).toBe(true);
         hooks.stopGeneration();
-        expect(app.worker.postMessage).toHaveBeenLastCalledWith({ action: 'cancel' });
+        expect(app.worker.postMessage).toHaveBeenCalledTimes(1);
+        expect(app.worker.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'predict_discrete' }));
     });
 
     it('finishes a synchronous page API error after the adapter starts generation', () => {
@@ -301,7 +302,7 @@ describe('actual page prediction hooks', () => {
         app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
-        const sessions = { sendPrompt: hooks.sendFromComposer, predict: vi.fn(), stopGeneration: vi.fn() } as unknown as Parameters<typeof createGenerationAdapter>[1];
+        const sessions = { getMode: () => app.mode, sendPrompt: hooks.sendFromComposer, predict: vi.fn(), stopGeneration: vi.fn() } as unknown as Parameters<typeof createGenerationAdapter>[1];
         const adapter = createGenerationAdapter(store, sessions);
         failNextApi('synchronous config error');
         expect(adapter.send('hello')).toBe(true);
@@ -377,6 +378,36 @@ describe('actual page local fallback hook', () => {
         expect(app.caps).toBeNull();
         expect(document.querySelector<HTMLButtonElement>('#btnSend')!.disabled).toBe(true);
         expect(ModelSources.apiConfig(provider.id)).toBeNull();
+        document.removeEventListener('uor-model-source-changed', onModelSourceChanged);
+        window.localStorage.clear();
+    });
+
+    it('updates the live API config and privacy after editing the selected provider', async () => {
+        window.localStorage.clear();
+        document.body.innerHTML = '<button id="btnSend"></button><button id="btnStop"></button>';
+        vi.resetModules();
+        const { ModelSources } = await import('../../assets/js/model_sources.js');
+        const app = {
+            mode: 'wasm', apiConfig: null as null | { baseUrl: string; model: string }, caps: { schema: 'uor-r4.lut-stack/1' } as null | { schema: string },
+            generating: false,
+        };
+        const updatePrivacyStatus = vi.fn();
+        const setModelStatus = vi.fn();
+        const factory = new Function(
+            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
+            `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
+             ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
+             return onModelSourceChanged;`,
+        );
+        const onModelSourceChanged = factory(app, ModelSources, setModelStatus, updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;
+        document.addEventListener('uor-model-source-changed', onModelSourceChanged);
+        const provider = ModelSources.addApi({ label: 'Edit me', baseUrl: 'https://old.example.com/v1', model: 'old' });
+        ModelSources.setActive({ kind: 'api', id: provider.id });
+        ModelSources.updateApi(provider.id, { baseUrl: 'http://127.0.0.1:8000/v1', model: 'new' });
+        expect(app.apiConfig).toMatchObject({ baseUrl: 'http://127.0.0.1:8000/v1', model: 'new' });
+        expect(setModelStatus).toHaveBeenLastCalledWith('API · new', 'accent', 'http://127.0.0.1:8000/v1');
+        expect(updatePrivacyStatus).toHaveBeenCalled();
+        expect(document.querySelector<HTMLButtonElement>('#btnSend')!.disabled).toBe(false);
         document.removeEventListener('uor-model-source-changed', onModelSourceChanged);
         window.localStorage.clear();
     });

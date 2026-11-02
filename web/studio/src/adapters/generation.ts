@@ -28,16 +28,18 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
         send(prompt) {
             const selected = store.getState().selectedSource;
             if (!selected || !prompt.trim() || !store.canRun()) return false;
-            if (store.getState().session.phase === 'new') store.dispatch({ type: 'session/activated' });
-            const prediction = selected.kind === 'artifact'
-                && store.getState().residentArtifact?.canGenerate === false
-                && store.getState().residentArtifact?.canPredict === true;
             const fail = () => {
                 store.dispatch({ type: 'generation/started', source: selected });
                 const active = store.getState().session.activeGeneration;
                 if (active) store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: active.generationId, error: 'Generation could not be started.' });
                 return false;
             };
+            const expectedMode = selected.kind === 'api' ? 'api' : 'wasm';
+            if (sessions.getMode() !== expectedMode) return fail();
+            if (store.getState().session.phase === 'new') store.dispatch({ type: 'session/activated' });
+            const prediction = selected.kind === 'artifact'
+                && store.getState().residentArtifact?.canGenerate === false
+                && store.getState().residentArtifact?.canPredict === true;
             const deferred: Event[] = [];
             deferredEvents = deferred;
             try {

@@ -64,8 +64,25 @@ describe('generation adapter', () => {
         adapter.dispose();
     });
 
+    it('refuses generation when the selected source and live mode disagree', () => {
+        const api = sessions();
+        api.getMode = vi.fn((): 'wasm' | 'api' => 'api');
+        const adapter = createGenerationAdapter(store, api);
+        store.dispatch({ type: 'artifact/selected', sourceId: 'url' });
+        store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+            schema: 'uor-r4.lut-stack/1', canGenerate: true, engineSupported: true,
+        } });
+        expect(adapter.send('hello')).toBe(false);
+        expect(api.sendPrompt).not.toHaveBeenCalled();
+        expect(api.predict).not.toHaveBeenCalled();
+        expect(store.getState().session.phase).toBe('error');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        adapter.dispose();
+    });
+
     it('uses the discrete predictor rather than chat generation', () => {
         const api = sessions();
+        api.getMode = vi.fn((): 'wasm' | 'api' => 'wasm');
         const adapter = createGenerationAdapter(store, api);
         store.dispatch({ type: 'artifact/selected', sourceId: 'url' });
         store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
