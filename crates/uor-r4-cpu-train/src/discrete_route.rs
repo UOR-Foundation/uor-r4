@@ -1964,26 +1964,47 @@ mod tests {
 
     #[test]
     fn route_and_table_ties_choose_the_lower_resulting_port() {
+        const ROUTE_PORTS: [u32; 15] = [16, 27, 34, 41, 47, 2, 3, 4, 5, 21, 22, 23, 24, 25, 26];
+        const TABLE_PORTS: [u32; 15] = [0, 10, 2, 5, 6, 5, 13, 7, 9, 11, 0, 2, 8, 7, 4];
         let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
         let route = CpuDiscreteProposalChooser::from_bytes(&route_artifact).unwrap();
+        let observed_route_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            route
+                .resulting_port(CpuDiscreteProposalKind::Route, 0, lane + 1)
+                .unwrap()
+        });
+        assert_eq!(observed_route_ports, ROUTE_PORTS);
         let mut losses = [1u64; 16];
         losses[0] = 2;
-        let route_expected = (1..16)
-            .min_by_key(|&lane| {
-                (
-                    route
-                        .resulting_port(CpuDiscreteProposalKind::Route, 0, lane)
-                        .unwrap(),
-                    lane,
-                )
-            })
-            .unwrap();
+        let route_expected = 1 + ROUTE_PORTS
+            .iter()
+            .enumerate()
+            .min_by_key(|&(lane, &port)| (port, lane))
+            .unwrap()
+            .0;
         assert_eq!(
             route
                 .choose(CpuDiscreteProposalKind::Route, 0, &losses, 3)
                 .unwrap()
                 .lane,
             route_expected
+        );
+        let tied_to_current = [1u64; 16];
+        assert_eq!(
+            route
+                .choose(CpuDiscreteProposalKind::Route, 0, &tied_to_current, 3)
+                .unwrap()
+                .lane,
+            0
+        );
+        let mut lower_loss = [1u64; 16];
+        lower_loss[7] = 0;
+        assert_eq!(
+            route
+                .choose(CpuDiscreteProposalKind::Route, 0, &lower_loss, 3)
+                .unwrap()
+                .lane,
+            7
         );
 
         let table_artifact = serialized_flock_fixture(
@@ -1993,22 +2014,38 @@ mod tests {
             2,
         );
         let table = CpuDiscreteProposalChooser::from_bytes(&table_artifact).unwrap();
-        let table_expected = (1..16)
-            .min_by_key(|&lane| {
-                (
-                    table
-                        .resulting_port(CpuDiscreteProposalKind::Table, 0, lane)
-                        .unwrap(),
-                    lane,
-                )
-            })
-            .unwrap();
+        let observed_table_ports = std::array::from_fn::<_, 15, _>(|lane| {
+            table
+                .resulting_port(CpuDiscreteProposalKind::Table, 0, lane + 1)
+                .unwrap()
+        });
+        assert_eq!(observed_table_ports, TABLE_PORTS);
+        let table_expected = 1 + TABLE_PORTS
+            .iter()
+            .enumerate()
+            .min_by_key(|&(lane, &port)| (port, lane))
+            .unwrap()
+            .0;
         assert_eq!(
             table
                 .choose(CpuDiscreteProposalKind::Table, 0, &losses, 3)
                 .unwrap()
                 .lane,
             table_expected
+        );
+        assert_eq!(
+            table
+                .choose(CpuDiscreteProposalKind::Table, 0, &tied_to_current, 3)
+                .unwrap()
+                .lane,
+            0
+        );
+        assert_eq!(
+            table
+                .choose(CpuDiscreteProposalKind::Table, 0, &lower_loss, 3)
+                .unwrap()
+                .lane,
+            7
         );
     }
 
