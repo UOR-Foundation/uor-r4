@@ -1596,9 +1596,6 @@ fn check_forced(
     Ok(())
 }
 
-/// Each decision of a window's forced set as its traced `steps` recorded it (claude-253, the
-/// card's I-Force): every forced bucket and code took its value in the forward. Refused, as an
-/// instrument fault: one that did not, and one at a step past the window's traced steps.
 /// Refuses, before any forward, a forced decision at a step past its window's traced steps:
 /// the trace records a window from step 0 to its last scored offset, and no further.
 fn forced_within(force: &DecisionForce, windows: &[CausalWindow]) -> Result<()> {
@@ -1628,6 +1625,10 @@ fn forced_within(force: &DecisionForce, windows: &[CausalWindow]) -> Result<()> 
     Ok(())
 }
 
+/// Each decision of a window's forced set as its traced `steps` recorded it (claude-253, the
+/// card's I-Force): every forced bucket and code took its value in the forward. Refused, as an
+/// instrument fault: one that did not. A step past the window's traced steps is refused here
+/// too, as a backstop: `forced_within` refuses it before any forward.
 fn forced_taken(force: &DecisionForceWindow, steps: &[DecisionStep]) -> Result<()> {
     let at = |step: usize| {
         steps.get(step).ok_or_else(|| {

@@ -20,7 +20,7 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
 
 ## What did not work, first
 
-- **Q5 is not read, and nothing here moves done-when 3.** This unit lets the float side run under a forced set. The replay driver, the near-tie grader, the sheet and the GPU run that reads Q5 come next, in that order.
+- **Q5 is not read, and nothing here moves the item's done-when 3.** This unit lets the float side run under a forced set. The replay driver, the near-tie grader, the sheet and the GPU run that reads Q5 come next, in that order.
 - **The forward's tests are CUDA tests, run on the pod, not host tests.** The ORDER's done-when 2 first said "the CPU forward". The vendored candle refuses tensor compute on the CPU (D24), so the ORDER was corrected before the work was committed:
   - the self-force, the one-bucket and the one-code cases are a CUDA test (`a_forced_forward_takes_each_forced_decision`);
   - the host tests cover the checks, the rows a batch forces, the record of each decision as used, and the trace's exemption.
@@ -40,7 +40,7 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
   - Clippy finds 7 lints in the float crate, all in code this unit does not touch. None is on an added line.
 - **The forced passes' times measure no cost of forcing.** The job ran self-force and one-force at the same time on one GPU, so their walls are not comparable to the base's.
 - **The seal's first sums file listed itself,** with the sum of a file still being written. It was rebuilt without that line and put again; the store's copy reads back equal to the pod's.
-- **No sheet, FIT or pre-run review was written for the pod run.** It checks this unit's own instrument (done-when 3), as claude-251's and claude-252's smokes did, and no claim rests on it.
+- **No sheet, FIT or pre-run review was written for the pod run.** It checks this unit's own instrument (the ORDER's done-when 3), as claude-251's and claude-252's smokes did, and no claim rests on it.
 - **The pod tool's provider adapter had to be rebuilt in this worktree,** as a debug build: `uor-pod` reads `local/pod-provider-target/debug/`, and a release build there is not found. Until then `status` hid Vast's pods from the caps count.
 
 ## What worked
@@ -73,6 +73,7 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
     - The trace records both as taken, the score as computed, and a base code that differs from the forced one.
     - Steps 0–48 of that window are unchanged, all 49 later steps change, and the other 307 windows are equal.
     - Of the six rows files only `rows-dev-memory.json` differs: the no-memory pass and the panels are not forced.
+    - The job gated the forced step itself: both taken, the score as computed, and the base's code different. The unchanged earlier steps, the later steps, the other windows and the rows files were read and reported, not gated.
 - **The CUDA gates.** Each set-aside makes `a_forced_forward_takes_each_forced_decision` fail at its not-taken check, and the restored tree passes:
   - n1 sets the bucket force aside: "the bucket forced at step 12, layer 0, lane 0 was not taken";
   - n2 sets the code force aside: "the code forced at step 23, depth 2, head 0 was not taken".
@@ -84,14 +85,18 @@ The pod run checks the instrument; it is not a speed result. One RTX 5090 (Vast)
 
 ## Checks run at the head
 
-The code's last change is round 1's head, `9859c419f`. After it the branch adds only this REPORT, the item's bullet and a merge of `origin/main`, whose three commits touch `uor-r4-cpu-train` and DeepSeek's task folders.
+The code's last behavioural change is round 1's head, `9859c419f`. After it:
+- review round 2 moved one doc comment to the function it describes (`forced_taken`);
+- the branch adds this REPORT, the item's bullet, and a merge of `origin/main`, whose three commits touch `uor-r4-cpu-train` and DeepSeek's task folders.
+
+The host suite ran again at the final head, after the doc move (`local/claude/claude-253/final-host-suite.txt`).
 
 | Gate | Command | Result |
 |---|---|---|
 | Host tests (float, `9859c419f`) | `cargo test --offline --locked -p uor-r4-float-train --no-fail-fast`: the library, its bins and integration targets | 228 passed, 0 failed (201 in the library) |
 | CUDA type-check (`9859c419f`) | `cargo check --offline --locked --features cuda --all-targets -p uor-r4-float-train`, stub nvcc, `UOR_NVCC_ARCH=compute_120` | exit 0 |
-| Clippy (`9859c419f`) | clippy on the float crate with its CUDA features, stub nvcc | 7 findings in the float crate, the same as the base's; none is on a line this unit adds, and `in_space_long.rs`'s two (lines 5446 and 5500) are older than the branch by blame |
-| Formatting (`9859c419f`) | `rustfmt` on this unit's own hunks (`local/claude/claude-253/fmt-own.sh`) | each file's drift at or below its base's (above) |
+| Clippy (`9859c419f`) | clippy on the float crate with its CUDA features, stub nvcc | 7 findings in the float crate, none on a line this unit adds. Five are in files this unit does not change. `in_space_long.rs`'s two (lines 5446 and 5500) come from claude-142's commit, an ancestor of the base, by `git blame` (`local/claude/claude-253/evidence/clippy-blame.txt`). No clippy run of the base was saved |
+| Formatting | `rustfmt` on this unit's own hunks (`local/claude/claude-253/fmt-own.sh`); then `rustfmt --check --edition 2021` on the crate roots, at the base and at the head, counting each file's hunks (`local/claude/claude-253/evidence/fmt-counts.sh`) | base against head: `flock_read_hamming.rs` 26 → 23, `in_space_long.rs` 320 → 319, `bin/train-in-space.rs` 18 → 18, `geometric_stack_native.rs` 0 → 0 |
 | CUDA library suite (RTX 5090, `f6097ced9`) | `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- --test-threads=1` | 276 passed, 0 failed, 6 ignored |
 | CUDA library suite (RTX 5090, `9859c419f`) | the same | 277 passed, 0 failed, 6 ignored; the forcing and trace tests pass by name |
 
