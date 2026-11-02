@@ -263,6 +263,21 @@ describe('generation source authority', () => {
     });
 });
 
+describe('lifecycle subscriptions', () => {
+    it('notifies external transitions and stops after unsubscribe', () => {
+        const store = new LifecycleStore();
+        let calls = 0;
+        const unsubscribe = store.subscribe(() => { calls += 1; });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        expect(calls).toBe(1);
+        store.dispatch({ type: 'api/testStarted', sourceId: 'other' });
+        expect(calls).toBe(1);
+        unsubscribe();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-b', endpoint: 'https://other.example.com/v1' });
+        expect(calls).toBe(1);
+    });
+});
+
 describe('folder, file-close, and session activation states', () => {
     it('supports no-open-file after opening a folder or closing a file', () => {
         const store = new LifecycleStore();

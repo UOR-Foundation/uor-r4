@@ -111,9 +111,15 @@ function initialState(): LifecycleState {
 export class LifecycleStore {
     private state: LifecycleState = initialState();
     private nextOperationId = 0;
+    private listeners = new Set<() => void>();
 
     getState(): LifecycleState {
         return this.state;
+    }
+
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
     }
 
     canRun(): boolean {
@@ -127,6 +133,14 @@ export class LifecycleStore {
     }
 
     dispatch(action: LifecycleAction): void {
+        const previous = this.state;
+        this.apply(action);
+        if (this.state !== previous) {
+            for (const listener of this.listeners) listener();
+        }
+    }
+
+    private apply(action: LifecycleAction): void {
         switch (action.type) {
             case 'artifact/selected': {
                 this.nextOperationId += 1;
