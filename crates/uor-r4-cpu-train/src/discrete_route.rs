@@ -1311,6 +1311,130 @@ impl CpuDiscreteProposalScorer {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteApplyError {
+    pub status: u32,
+    pub message: String,
+}
+
+impl std::fmt::Display for CpuDiscreteApplyError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "status {}: {}", self.status, self.message)
+    }
+}
+
+impl std::error::Error for CpuDiscreteApplyError {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteApplyReceipt {
+    pub kind: CpuDiscreteProposalKind,
+    pub index: usize,
+    pub lane: usize,
+    pub loss_before: u64,
+    pub loss_after: u64,
+    pub epoch_before: u64,
+    pub epoch_after: u64,
+    pub applied: bool,
+}
+
+pub struct CpuDiscreteProposalApplier {
+    scorer: CpuDiscreteProposalScorer,
+    epoch: u64,
+}
+
+impl CpuDiscreteProposalApplier {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let header = header(bytes)?;
+        let epoch = header["shape"]["epoch"]
+            .as_u64()
+            .ok_or_else(|| invalid("proposal apply epoch differs"))?;
+        Ok(Self {
+            scorer: CpuDiscreteProposalScorer::from_bytes(bytes)?,
+            epoch,
+        })
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    pub fn apply(
+        &mut self,
+        kind: CpuDiscreteProposalKind,
+        index: usize,
+        proposal: CpuDiscreteProposal,
+    ) -> std::result::Result<CpuDiscreteApplyReceipt, CpuDiscreteApplyError> {
+        if proposal.epoch != self.epoch {
+            return Err(apply_error(3, "proposal epoch differs"));
+        }
+        self.scorer
+            .validate_proposal(kind, index)
+            .map_err(|error| {
+                apply_error(self.scorer.proposal_refusal_status(kind), error.to_string())
+            })?;
+        let active = if kind == CpuDiscreteProposalKind::Gate {
+            3
+        } else {
+            16
+        };
+        if proposal.lane >= active {
+            return Err(apply_error(4, "proposal lane outside active inventory"));
+        }
+        let epoch_before = self.epoch;
+        if proposal.lane == 0 {
+            return Ok(CpuDiscreteApplyReceipt {
+                kind,
+                index,
+                lane: 0,
+                loss_before: proposal.current_loss,
+                loss_after: proposal.current_loss,
+                epoch_before,
+                epoch_after: epoch_before,
+                applied: false,
+            });
+        }
+        if proposal.selected_loss >= proposal.current_loss || self.epoch == u64::MAX {
+            return Err(apply_error(5, "proposal is not a strict-improving move"));
+        }
+        let model = self
+            .scorer
+            .virtual_model(kind, index, proposal.lane)
+            .map_err(|error| apply_error(4, error.to_string()))?;
+        self.scorer.model = model;
+        match kind {
+            CpuDiscreteProposalKind::Route => {
+                let CpuDiscreteProposalModel::Route(route) = &self.scorer.model else {
+                    return Err(apply_error(4, "applied Route state changed mode"));
+                };
+                self.scorer.chooser.routes = route.routes.iter().flatten().copied().collect();
+            }
+            CpuDiscreteProposalKind::Table => {
+                let token_blocks = self.scorer.token_blocks(&self.scorer.model).to_vec();
+                self.scorer.chooser.token_blocks = token_blocks;
+            }
+            CpuDiscreteProposalKind::Gate => {}
+        }
+        self.epoch += 1;
+        Ok(CpuDiscreteApplyReceipt {
+            kind,
+            index,
+            lane: proposal.lane,
+            loss_before: proposal.current_loss,
+            loss_after: proposal.selected_loss,
+            epoch_before,
+            epoch_after: self.epoch,
+            applied: true,
+        })
+    }
+}
+
+fn apply_error(status: u32, message: impl Into<String>) -> CpuDiscreteApplyError {
+    CpuDiscreteApplyError {
+        status,
+        message: message.into(),
+    }
+}
+
 fn score_error(status: u32, message: impl Into<String>) -> CpuDiscreteScoreError {
     CpuDiscreteScoreError {
         status,
@@ -2896,6 +3020,303 @@ mod tests {
             samples.len(),
             seconds * 1_000.0,
             ROWS as f64 / seconds
+        );
+    }
+
+    #[test]
+    fn exact_gate_route_and_table_applies_mutate_only_the_coordinate() {
+        let roots = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]];
+        let gate_artifact = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let mut gate = CpuDiscreteProposalApplier::from_bytes(&gate_artifact).unwrap();
+        let before_gate = match &gate.scorer.model {
+            CpuDiscreteProposalModel::Active(active) => active.level_gates[0][0],
+            _ => unreachable!(),
+        };
+        let receipt = gate
+            .apply(
+                CpuDiscreteProposalKind::Gate,
+                0,
+                CpuDiscreteProposal {
+                    lane: 1,
+                    current_loss: 2,
+                    selected_loss: 1,
+                    epoch: 0,
+                    sensitive: true,
+                },
+            )
+            .unwrap();
+        assert!(receipt.applied);
+        assert_eq!(receipt.epoch_after, 1);
+        let after_gate = match &gate.scorer.model {
+            CpuDiscreteProposalModel::Active(active) => active.level_gates[0][0],
+            _ => unreachable!(),
+        };
+        assert_ne!(before_gate, after_gate);
+        assert_eq!(after_gate, sibling_gate(before_gate, 1).unwrap());
+
+        let table_artifact = serialized_flock_fixture(6, &roots, &[1, 0, 1, 0], 2);
+        let mut table = CpuDiscreteProposalApplier::from_bytes(&table_artifact).unwrap();
+        let before_table = match &table.scorer.model {
+            CpuDiscreteProposalModel::Active(active) => active.token_blocks[0][0],
+            _ => unreachable!(),
+        };
+        table
+            .apply(
+                CpuDiscreteProposalKind::Table,
+                0,
+                CpuDiscreteProposal {
+                    lane: 1,
+                    current_loss: 2,
+                    selected_loss: 1,
+                    epoch: 0,
+                    sensitive: true,
+                },
+            )
+            .unwrap();
+        let after_table = match &table.scorer.model {
+            CpuDiscreteProposalModel::Active(active) => active.token_blocks[0][0],
+            _ => unreachable!(),
+        };
+        let expected_table = move_root(
+            &before_table,
+            table.scorer.chooser.move_actions[1],
+            &table.scorer.chooser.composition,
+        )
+        .unwrap();
+        assert_eq!(after_table, expected_table);
+        assert_eq!(table.scorer.chooser.token_blocks[0][0], expected_table);
+        let tie_losses = {
+            let mut losses = [1u64; 16];
+            losses[0] = 2;
+            losses
+        };
+        let table_expected = (1..16)
+            .min_by_key(|&lane| {
+                (
+                    table
+                        .scorer
+                        .chooser
+                        .resulting_port(CpuDiscreteProposalKind::Table, 0, lane)
+                        .unwrap(),
+                    lane,
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            table
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Table, 0, &tie_losses, 1)
+                .unwrap()
+                .lane,
+            table_expected
+        );
+
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let mut route = CpuDiscreteProposalApplier::from_bytes(&route_artifact).unwrap();
+        route
+            .apply(
+                CpuDiscreteProposalKind::Route,
+                0,
+                CpuDiscreteProposal {
+                    lane: 1,
+                    current_loss: 2,
+                    selected_loss: 1,
+                    epoch: 0,
+                    sensitive: true,
+                },
+            )
+            .unwrap();
+        let after_route = match &route.scorer.model {
+            CpuDiscreteProposalModel::Route(route) => route.routes[0][0],
+            _ => unreachable!(),
+        };
+        assert_eq!(after_route, 16);
+        assert_eq!(route.scorer.chooser.routes[0], 16);
+        let route_expected = (1..16)
+            .min_by_key(|&lane| {
+                (
+                    route
+                        .scorer
+                        .chooser
+                        .resulting_port(CpuDiscreteProposalKind::Route, 0, lane)
+                        .unwrap(),
+                    lane,
+                )
+            })
+            .unwrap();
+        assert_eq!(
+            route
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Route, 0, &tie_losses, 1)
+                .unwrap()
+                .lane,
+            route_expected
+        );
+    }
+
+    #[test]
+    fn apply_status_order_and_noop_match_cuda() {
+        let artifact = serialized_flock_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[1, 0, 1, 0],
+            2,
+        );
+        let mut applier = CpuDiscreteProposalApplier::from_bytes(&artifact).unwrap();
+        let prefix = [0u32, 1, 2, 3, 4, 1];
+        let initial_read = applier.scorer.read(&applier.scorer.model, &prefix).unwrap();
+        let proposal = |lane, current, selected, epoch| CpuDiscreteProposal {
+            lane,
+            current_loss: current,
+            selected_loss: selected,
+            epoch,
+            sensitive: true,
+        };
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 0, proposal(1, 2, 1, 1))
+                .unwrap_err()
+                .status,
+            3
+        );
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Route, 0, proposal(1, 2, 1, 0))
+                .unwrap_err()
+                .status,
+            9
+        );
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 4, proposal(1, 2, 1, 0))
+                .unwrap_err()
+                .status,
+            4
+        );
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 0, proposal(3, 2, 1, 0))
+                .unwrap_err()
+                .status,
+            4
+        );
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 0, proposal(1, 2, 2, 0))
+                .unwrap_err()
+                .status,
+            5
+        );
+        let noop = applier
+            .apply(CpuDiscreteProposalKind::Gate, 0, proposal(0, 2, 2, 0))
+            .unwrap();
+        assert!(!noop.applied);
+        assert_eq!(applier.epoch(), 0);
+        assert_eq!(
+            applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
+            initial_read
+        );
+        applier.epoch = u64::MAX;
+        assert_eq!(
+            applier
+                .apply(
+                    CpuDiscreteProposalKind::Gate,
+                    0,
+                    proposal(1, 2, 1, u64::MAX)
+                )
+                .unwrap_err()
+                .status,
+            5
+        );
+        assert_eq!(
+            applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
+            initial_read
+        );
+        let epoch_five = rewrite_header(artifact, |header| {
+            header["shape"]["epoch"] = json!(5);
+        });
+        let mut applier = CpuDiscreteProposalApplier::from_bytes(&epoch_five).unwrap();
+        assert_eq!(applier.epoch(), 5);
+        assert_eq!(
+            applier
+                .apply(CpuDiscreteProposalKind::Gate, 0, proposal(1, 2, 1, 5))
+                .unwrap()
+                .epoch_after,
+            6
+        );
+    }
+
+    #[test]
+    fn sequential_apply_refreshes_route_and_table_tie_ports() {
+        let proposal = CpuDiscreteProposal {
+            lane: 1,
+            current_loss: 2,
+            selected_loss: 1,
+            epoch: 0,
+            sensitive: true,
+        };
+        let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let mut route = CpuDiscreteProposalApplier::from_bytes(&route_artifact).unwrap();
+        route
+            .apply(CpuDiscreteProposalKind::Route, 0, proposal)
+            .unwrap();
+        let route_losses = [2u64, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+        let expected_route = (1..16)
+            .min_by_key(|&lane| {
+                let port = route
+                    .scorer
+                    .chooser
+                    .composition
+                    .compose_index(
+                        route.scorer.chooser.move_actions[lane],
+                        route.scorer.chooser.routes[0] as u8,
+                    )
+                    .unwrap();
+                (port, lane)
+            })
+            .unwrap();
+        assert_eq!(
+            route
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Route, 0, &route_losses, 1)
+                .unwrap()
+                .lane,
+            expected_route
+        );
+
+        let table_artifact = serialized_flock_fixture(
+            6,
+            &[[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]],
+            &[1, 0, 1, 0],
+            2,
+        );
+        let mut table = CpuDiscreteProposalApplier::from_bytes(&table_artifact).unwrap();
+        table
+            .apply(CpuDiscreteProposalKind::Table, 0, proposal)
+            .unwrap();
+        let table_losses = [2u64, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+        let expected_table = (1..16)
+            .min_by_key(|&lane| {
+                let moved = move_root(
+                    &table.scorer.chooser.token_blocks[0][0],
+                    table.scorer.chooser.move_actions[lane],
+                    &table.scorer.chooser.composition,
+                )
+                .unwrap();
+                (identify_orbit_root(&moved).unwrap(), lane)
+            })
+            .unwrap();
+        assert_eq!(
+            table
+                .scorer
+                .chooser
+                .choose(CpuDiscreteProposalKind::Table, 0, &table_losses, 1)
+                .unwrap()
+                .lane,
+            expected_table
         );
     }
 

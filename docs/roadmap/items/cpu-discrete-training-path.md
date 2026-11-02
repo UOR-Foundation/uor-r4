@@ -18,7 +18,7 @@ The discrete learner is the strongest comparison-heavy CPU candidate, but its ea
 
 ## What is missing
 
-Route, Flock and Relation reads, exact 16-lane proposal scoring and the chooser now have independent finite parity slices. Next port staged atomic-free apply, BVG-K and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
+Route, Flock and Relation reads, exact 16-lane proposal scoring, the chooser and single-coordinate apply now have independent finite parity slices. Next port BVG-K joint apply and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
 
 ## Done when
 
