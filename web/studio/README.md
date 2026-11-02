@@ -65,6 +65,24 @@ were "not organized or labeled very well". The page is now a workable AI studio:
   and all four verifiers pass with assertions untouched. The page remains offline-first: no
   external request at load; remote model/API contacts are user-initiated only.
 
+### Typed workflow components (development library)
+
+The `src/` library now contains the lifecycle store and all eight approved core components:
+AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings.
+`StudioApp` composes them without mounting or replacing the live page. Components subscribe to one
+store and call the existing file/session/UI/model-source APIs through typed bridges. Small public
+hooks forward editor content, generation completion, settings, and attachment changes; the engine,
+worker, tokenizer, and `studio_api.js` remain unchanged. Existing provider credentials are not
+rendered or copied into component state; newly entered keys go only to the existing `modelSources.v1` writer.
+
+Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` in this directory. The library
+build emits uncommitted `dist/` output; `src/studio.css` does not alter the legacy `index.css`.
+Native progress and dialog elements preserve unknown totals, indeterminate finalization, and native
+focus behavior. M1 discrete artifacts are labeled next-token prediction, not conversational chat.
+
+This is core-workflow evidence only. Full real-browser/worker parity, mobile/accessibility checks,
+one-time browser-data migration, publisher changes, and production cutover remain later units.
+
 This directory holds the page source. **The wasm bundle, the demo model and the tokenizer are
 generated, never committed** (CHARTER §3.13 forbids committed binaries and corpora); the generated
 files live in the gitignored `pkg/` and are produced by the build below or by
