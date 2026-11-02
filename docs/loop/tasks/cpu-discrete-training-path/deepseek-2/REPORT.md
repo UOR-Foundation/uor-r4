@@ -18,6 +18,10 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 - Pending implementation and verification.
 
+## Skills used
+
+No repository skill was invoked. The executed Flock semantics and finite SpiralCore tables are being read directly from the repository.
+
 ## Still open
 
 - Flock parsing, exact active-leaf read parity and refusal controls.
