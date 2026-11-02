@@ -33,6 +33,7 @@ function pageHooks() {
         lastWorkerError: '',
     };
     interface CapturedApiRequest {
+        messages?: Array<{ role: string; content: string }>;
         onDone(result: { stopped?: boolean }): void;
         onError(error: Error): void;
     }
@@ -51,9 +52,10 @@ function pageHooks() {
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
          ${section('function nextGenerationId', 'function generationTokenLimit')}
          ${section('function generationTokenLimit', '/* ------------------------------------------------------------ composer */')}
+         ${section('function stopGeneration', 'function sendFromComposer')}
          ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
-         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, finishLocalGeneration, finishGenerationWithError };`,
+         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, stopGeneration, finishLocalGeneration, finishGenerationWithError };`,
     );
     const hooks = factory(
         app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
@@ -75,6 +77,7 @@ function pageHooks() {
         sendFromComposer(prompt?: string): number | false;
         sendViaWorker(prompt: string, target: typeof conversation): boolean;
         sendViaApi(prompt: string, target: typeof conversation): Promise<void>;
+        stopGeneration(): void;
         finishLocalGeneration(message: { id?: string; fullText?: string; tokenCount?: number }): void;
         finishGenerationWithError(error: string, requestId?: string | number, generationId?: number | null): boolean | void;
     };
@@ -239,6 +242,34 @@ describe('actual page prediction hooks', () => {
         apiRequests[1].onDone({ stopped: false });
         expect(completed).toHaveBeenCalledTimes(1);
         dispose();
+    });
+
+    it('uses the pinned API abort or worker cancel channel for stop', () => {
+        const { app, hooks } = pageHooks();
+        app.generating = true;
+        app.activeGenerationKind = 'api';
+        app.abortController = { abort: vi.fn() } as unknown as AbortController;
+        hooks.stopGeneration();
+        expect(vi.mocked(app.abortController.abort)).toHaveBeenCalledOnce();
+        expect(app.worker.postMessage).not.toHaveBeenCalled();
+        app.activeGenerationKind = 'wasm';
+        hooks.stopGeneration();
+        expect(app.worker.postMessage).toHaveBeenCalledWith({ action: 'cancel' });
+    });
+
+    it('prepends stored attachments to API prompts', async () => {
+        const { app, hooks, conversation, apiRequests } = pageHooks();
+        const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<{ name: string; content: string }> } };
+        legacy.__studioUi = { getAttachments: () => [{ name: 'notes.md', content: 'attached context' }] };
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        try {
+            await hooks.sendViaApi('prompt', conversation);
+            expect(apiRequests).toHaveLength(1);
+            expect(apiRequests[0].messages?.[0]).toEqual({ role: 'user', content: 'Workspace context:\n--- notes.md ---\nattached context' });
+        } finally {
+            delete legacy.__studioUi;
+        }
     });
 
     it('finishes a synchronous page API error after the adapter starts generation', () => {

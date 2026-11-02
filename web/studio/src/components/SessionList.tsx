@@ -37,7 +37,10 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                         <span>{session.messageCount} messages · {session.preview}</span>
                         <button type="button" onClick={() => { if (sessions.selectSession(session.id)) activate(); else onError('Could not select that session.'); }}>{`Select ${session.title}`}</button>
                         <button type="button" onClick={() => rename(session)}>{`Rename ${session.title}`}</button>
-                        <button type="button" onClick={() => { sessions.duplicateSession(session.id); refresh(); }}>{`Duplicate ${session.title}`}</button>
+                        <button type="button" onClick={() => {
+                            if (sessions.duplicateSession(session.id)) refresh();
+                            else onError('Could not duplicate that session.');
+                        }}>{`Duplicate ${session.title}`}</button>
                         <button type="button" onClick={() => {
                             const exported = sessions.exportSession(session.id);
                             if (exported) download(`${session.title}.json`, exported);
@@ -51,9 +54,12 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                 <Modal title="Rename session" onClose={() => setRenaming(null)}>
                     <form onSubmit={(event) => {
                         event.preventDefault();
-                        if (title.trim()) sessions.renameSession(renaming.id, title.trim());
-                        setRenaming(null);
-                        refresh();
+                        if (title.trim() && sessions.renameSession(renaming.id, title.trim())) {
+                            setRenaming(null);
+                            refresh();
+                        } else {
+                            onError('Could not rename that session.');
+                        }
                     }}>
                         <label>Session title<input aria-label="Session title" autofocus value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label>
                         <button type="submit">Save title</button>

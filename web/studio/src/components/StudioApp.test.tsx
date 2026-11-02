@@ -200,6 +200,25 @@ describe('StudioApp', () => {
         expect(files.setActiveContent).toHaveBeenCalledWith('a  ');
     });
 
+    it('clears a provider error after a successful selection retry', () => {
+        const store = new LifecycleStore();
+        const sources = makeSources();
+        const adapter = makeModelAdapter();
+        const provider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
+        sources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] }));
+        adapter.selectApi = vi.fn()
+            .mockImplementationOnce(() => { throw new Error('storage full'); })
+            .mockImplementationOnce((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
+        act(() => {
+            render(<StudioApp store={store} adapter={adapter} sources={sources} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('storage full');
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
     it('clears the top-level error after a successful retry', async () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'file/opened', path: 'a.md' });

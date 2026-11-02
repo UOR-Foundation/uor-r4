@@ -151,7 +151,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                 />
             )}
             {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={report} settings={editorSettings} />}
-            {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} />}
+            {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} onSuccess={() => setError(null)} />}
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}

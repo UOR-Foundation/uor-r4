@@ -58,6 +58,18 @@ describe('SessionList', () => {
         expect(store.getState().session.phase).toBe('new');
     });
 
+    it('reports rejected rename and duplicate operations', () => {
+        const { api, onError } = mount();
+        api.renameSession = vi.fn(() => false);
+        api.duplicateSession = vi.fn(() => null);
+        act(() => { button('Duplicate Session A').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not duplicate that session.');
+        act(() => { button('Rename Session A').click(); });
+        act(() => { button('Save title').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not rename that session.');
+        expect(host.querySelector('dialog')).not.toBeNull();
+    });
+
     it('supports new, select, rename, duplicate, export, and confirmed delete', () => {
         const { store, api, download } = mount();
         act(() => { button('New session').click(); });

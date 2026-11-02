@@ -10,6 +10,7 @@ interface ModelPickerProps {
     adapter: ModelSourceAdapter;
     sources: ModelSourcesApi;
     onError(message: string): void;
+    onSuccess?(): void;
 }
 
 interface ProviderDraft {
@@ -22,7 +23,7 @@ interface ProviderDraft {
 
 const emptyDraft: ProviderDraft = { label: '', preset: 'custom', baseUrl: '', model: '', apiKey: '' };
 
-export function ModelPicker({ store, adapter, sources, onError }: ModelPickerProps) {
+export function ModelPicker({ store, adapter, sources, onError, onSuccess }: ModelPickerProps) {
     const state = useLifecycle(store);
     const [url, setUrl] = useState('');
     const [providerDraft, setProviderDraft] = useState<ProviderDraft>(emptyDraft);
@@ -59,6 +60,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
         run(sources.testApi(provider.id).then((result) => {
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
+                if (result.ok) onSuccess?.();
             }
         }).catch((error) => {
             if (testVersions.current[provider.id] === version) {
@@ -105,6 +107,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
             setEditingId(null);
             setProviderDraft(emptyDraft);
             refresh();
+            onSuccess?.();
         } catch (error) {
             setProviderError(error instanceof Error ? error.message : String(error));
             report(error);
@@ -115,6 +118,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
         try {
             setProviderError(null);
             adapter.selectApi(provider.id, provider.baseUrl);
+            onSuccess?.();
         } catch (error) {
             setProviderError(error instanceof Error ? error.message : String(error));
             report(error);
@@ -135,11 +139,11 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
             });
             if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
                 const active = sources.active();
-                sources.setActive({ kind: 'wasm', id: active.id || 'bundled-demo' });
                 store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
             }
             setRemoving(null);
             refresh();
+            onSuccess?.();
         } catch (error) {
             setProviderError(error instanceof Error ? error.message : String(error));
             report(error);

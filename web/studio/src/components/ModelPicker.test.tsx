@@ -221,4 +221,18 @@ describe('ModelPicker', () => {
         expect(onError).toHaveBeenCalled();
         expect(store.getState().selectedSource?.id).toBe('api-a');
     });
+
+    it('does not write selection again after removing the active provider', () => {
+        const { store, modelAdapter, modelSources } = mount();
+        modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
+        modelSources.removeApi = vi.fn(() => {
+            modelSources.active = vi.fn(() => ({ kind: 'wasm', id: 'bundled-demo' }));
+            return { active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [] };
+        });
+        act(() => { button('Use API A').click(); });
+        act(() => { button('Remove API A').click(); });
+        act(() => { button('Confirm removal').click(); });
+        expect(modelSources.setActive).not.toHaveBeenCalled();
+        expect(store.getState().selectedSource?.kind).toBe('artifact');
+    });
 });
