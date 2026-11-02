@@ -101,9 +101,9 @@ For each seed, first require the instrument gates:
 - baseline and final Q12 query, token and kept-cell mismatches exactly zero;
 - final artifact parses and checkpoint resume reproduces the final artifact;
 - baseline artifact bytes and hash remain unchanged; and
-- every trained arm records positive candidate work and at least one accepted
-  update. Zero accepted updates from positive candidate work is a configuration
-  negative, not an instrument failure.
+- every trained arm must record positive candidate work. Zero accepted updates
+  from positive candidate work is a preserved configuration negative, not an
+  instrument pass.
 
 For each group and seed, compare against that seed's zero-update control:
 
@@ -138,11 +138,26 @@ It must not exist. Run one process at a time:
 
 ```sh
 set -eu
+WORK=/home/callard/projects/codex-playground/uor-r4-chat-baseline
 ROOT=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/cpu-counterfactual-compare-2026-11-02
 BIN=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/counterfactual-prereg-target/release/cpu-counterfactual-corpus-driver
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
 ART=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual
+SOURCE_RUNNER=$WORK/crates/uor-r4-cpu-train/src/bin/cpu-counterfactual-corpus-driver.rs
+SOURCE_TRAINER=$WORK/crates/uor-r4-cpu-train/src/counterfactual.rs
+SOURCE_CORPUS=$WORK/crates/uor-r4-cpu-train/src/corpus.rs
 test ! -e "$ROOT"
+sha256sum -c <<PINS
+57dfe4e21f4d997612c2225f8257d0ef48bf2d95085114916fb605ed05b0b346  $SOURCE_RUNNER
+3996837bc5abb805c3f1972cf506e6b34c964e5cfc14d070fc6ecc9e3a1649f6  $SOURCE_TRAINER
+cdb1d18d0b07d248f0296146ef654d425005bf0ab3c39e60ee46b354268a5fa0  $SOURCE_CORPUS
+42d0768cd6b0d359ba229daa9f06b74dd115d6276de6541b8b2eef0b8feef59a  $BIN
+a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $ART/dual-c131-seed-1-raw_both.uorlut
+da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $ART/dual-c131-seed-2-raw_both.uorlut
+0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  $DATA/dev-tokens.u16
+a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  $DATA/dev-response-mask.u8
+ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab  $DATA/dev-manifest.json
+PINS
 mkdir -p "$ROOT"
 run_arm() {
   seed=$1
@@ -166,7 +181,8 @@ for seed in 1 2; do
   run_arm "$seed" route 128
 done
 sha256sum "$BIN" >"$ROOT/postflight-binary.sha256"
-find "$ROOT" -type f -print0 | sort -z | xargs -0 sha256sum >"$ROOT/SHA256SUMS"
+find "$ROOT" -type f ! -name SHA256SUMS -print0 |
+  sort -z | xargs -0 sha256sum >"$ROOT/SHA256SUMS"
 ```
 
 Apply the bar from the raw JSON. A missing or inconsistent arm is an instrument
