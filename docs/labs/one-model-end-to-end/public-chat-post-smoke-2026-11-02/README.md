@@ -4,7 +4,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../roadmap/items/one-model-end
 Order: [deepseek-6](../../../loop/tasks/one-model-end-to-end/deepseek-6/ORDER.md).
 Sheet:
 [post-smoke FIT](../../../harness/prep/one-model-end-to-end-public-chat-post-smoke-2026-11-02.md).
-Measured source head: `c60815bb4` (documentation-only branch over `b44402e0c`).
+Measured source head: `ffe7e5491` (documentation-only branch over `b44402e0c`).
 
 ## Evidence-integrity repair
 
@@ -21,7 +21,8 @@ were rechecked. A fresh sibling root,
 Its raw outputs are written once, its status and timing files record all 24
 processes, and its aggregate is written only after every process finishes. The
 rerun is a serving-determinism repair, not a new model question. The decision
-rule and claim boundary are unchanged.
+rule and claim boundary are unchanged. The rerun's 33 reply structures (text,
+ids, stop and history) are identical to the preserved first-run outputs.
 
 ## Result
 

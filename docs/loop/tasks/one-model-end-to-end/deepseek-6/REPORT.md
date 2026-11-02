@@ -18,6 +18,10 @@ Evidence:
   preserves the displayed rate; the evidence record derives per-turn seconds
   from `id count / displayed rate` and retains the 24 process-level timing
   records. This timing-precision limitation does not affect the memory verdict.
+- Post-run analysis rewrote the first root's aggregate in place. Its raw outputs
+  are preserved but its aggregate is not authoritative. A pre-recorded fresh
+  sibling rerun reproduced all 33 reply structures exactly and is now the only
+  aggregate cited.
 - The public artifact's own README explicitly says it is not an assistant and
   is not chat-capable. This run does not contradict that warning.
 
@@ -30,7 +34,7 @@ within the ORDER's documentation-only estimate.
 
 ## Measurements
 
-At source head `c60815bb4`, the pinned executable
+At source head `ffe7e5491`, the pinned executable
 `4f7458c4bfe3b5129033564e97f7cd7d781d838c24f79edf62c92a26109f45a2` ran the
 eight fixed panel entries at protocol 2, greedy, 16 threads and 16 maximum
 replies.
