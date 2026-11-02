@@ -9,15 +9,23 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 ## What changed
 
-- The ORDER reserves exact BVG-K member selection, joint decision and atomic batch apply.
+- Added BVG-K records, member summary, joint-vs-best commit selection and atomic disjoint batch apply.
+- Joint loss must be strictly below the best member; ties select only the best member. Missing joint loss with two or more members refuses status 17.
+- Batch validation covers member kind, epoch, inventory/mode, strict improvement and duplicate indices before any write; valid batches advance epoch once.
 
 ## Measurements
 
-- Pending implementation and verification.
+- Focused BVG-K decision/apply test passed.
+- Full `uor-r4-cpu-train` release suite: 82 passed and four ignored release benchmarks.
 
 ## Checks run at the head
 
-- Pending implementation and verification.
+- `CARGO_TARGET_DIR=target/deepseek-bvgk-serial CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after known duplicate-artifact collision retries, 82 passed and four ignored.
+- `CARGO_TARGET_DIR=target/deepseek-bvgk-serial CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS.
+- `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
+- `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
 
 ## Skills used
 

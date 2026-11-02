@@ -1426,6 +1426,159 @@ impl CpuDiscreteProposalApplier {
             applied: true,
         })
     }
+
+    pub fn decide_bvgk(
+        &self,
+        kind: CpuDiscreteProposalKind,
+        records: &[CpuBvgkRecord],
+        joint_loss: Option<u64>,
+    ) -> std::result::Result<CpuBvgkDecision, CpuDiscreteApplyError> {
+        let mut members = vec![false; records.len()];
+        let mut count = 0usize;
+        let mut best: Option<usize> = None;
+        for (ordinal, record) in records.iter().enumerate() {
+            let valid = record.status == 0
+                && record.eligible
+                && record.kind == kind
+                && record.proposal.lane != 0
+                && record.proposal.selected_loss < record.proposal.current_loss
+                && self.scorer.validate_proposal(kind, record.index).is_ok();
+            members[ordinal] = valid;
+            if valid {
+                count += 1;
+                if best.is_none_or(|ordinal| {
+                    record.proposal.selected_loss < records[ordinal].proposal.selected_loss
+                }) {
+                    best = Some(ordinal);
+                }
+            }
+        }
+        if count >= 2 && joint_loss.is_none() {
+            return Err(apply_error(17, "BVG-K joint loss is absent"));
+        }
+        let joint =
+            count >= 2 && joint_loss < best.map(|ordinal| records[ordinal].proposal.selected_loss);
+        let commit = records
+            .iter()
+            .enumerate()
+            .map(|(ordinal, _)| {
+                count != 0 && (joint && members[ordinal] || !joint && Some(ordinal) == best)
+            })
+            .collect::<Vec<_>>();
+        Ok(CpuBvgkDecision {
+            members,
+            count,
+            best,
+            commit,
+            joint,
+            joint_loss,
+            epoch: self.epoch,
+        })
+    }
+
+    pub fn apply_bvgk(
+        &mut self,
+        kind: CpuDiscreteProposalKind,
+        records: &[CpuBvgkRecord],
+        decision: &CpuBvgkDecision,
+    ) -> std::result::Result<CpuBvgkBatchReceipt, CpuDiscreteApplyError> {
+        if records.len() != decision.commit.len() || records.len() != decision.members.len() {
+            return Err(apply_error(4, "BVG-K record and decision lengths differ"));
+        }
+        if decision.epoch != self.epoch {
+            return Err(apply_error(3, "BVG-K decision epoch differs"));
+        }
+        let mut committed: Vec<usize> = Vec::new();
+        for (ordinal, record) in records.iter().enumerate() {
+            if !decision.commit[ordinal] {
+                continue;
+            }
+            if record.kind != kind {
+                return Err(apply_error(14, "BVG-K member kind differs"));
+            }
+            if record.proposal.epoch != self.epoch {
+                return Err(apply_error(3, "BVG-K member epoch differs"));
+            }
+            self.scorer
+                .validate_proposal(kind, record.index)
+                .map_err(|error| {
+                    apply_error(self.scorer.proposal_refusal_status(kind), error.to_string())
+                })?;
+            if record.proposal.lane == 0
+                || record.proposal.selected_loss >= record.proposal.current_loss
+                || self.epoch == u64::MAX
+            {
+                return Err(apply_error(5, "BVG-K member is not improving"));
+            }
+            if committed
+                .iter()
+                .any(|&prior| records[prior].index == record.index)
+            {
+                return Err(apply_error(15, "BVG-K members share one index"));
+            }
+            committed.push(ordinal);
+        }
+        if committed.is_empty() {
+            return Err(apply_error(16, "BVG-K commit set is empty"));
+        }
+        for &ordinal in &committed {
+            let record = &records[ordinal];
+            let model = self
+                .scorer
+                .virtual_model(kind, record.index, record.proposal.lane)
+                .map_err(|error| apply_error(4, error.to_string()))?;
+            self.scorer.model = model;
+        }
+        match kind {
+            CpuDiscreteProposalKind::Route => {
+                let CpuDiscreteProposalModel::Route(route) = &self.scorer.model else {
+                    return Err(apply_error(4, "BVG-K Route state changed mode"));
+                };
+                self.scorer.chooser.routes = route.routes.iter().flatten().copied().collect();
+            }
+            CpuDiscreteProposalKind::Table => {
+                self.scorer.chooser.token_blocks =
+                    self.scorer.token_blocks(&self.scorer.model).to_vec();
+            }
+            CpuDiscreteProposalKind::Gate => {}
+        }
+        let epoch_before = self.epoch;
+        self.epoch += 1;
+        Ok(CpuBvgkBatchReceipt {
+            committed,
+            joint: decision.joint,
+            epoch_before,
+            epoch_after: self.epoch,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CpuBvgkRecord {
+    pub kind: CpuDiscreteProposalKind,
+    pub index: usize,
+    pub proposal: CpuDiscreteProposal,
+    pub eligible: bool,
+    pub status: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuBvgkDecision {
+    pub members: Vec<bool>,
+    pub count: usize,
+    pub best: Option<usize>,
+    pub commit: Vec<bool>,
+    pub joint: bool,
+    pub joint_loss: Option<u64>,
+    pub epoch: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuBvgkBatchReceipt {
+    pub committed: Vec<usize>,
+    pub joint: bool,
+    pub epoch_before: u64,
+    pub epoch_after: u64,
 }
 
 fn apply_error(status: u32, message: impl Into<String>) -> CpuDiscreteApplyError {
@@ -3245,6 +3398,73 @@ mod tests {
                 .unwrap()
                 .epoch_after,
             6
+        );
+    }
+
+    #[test]
+    fn bvgk_joint_decision_and_batch_apply_are_exact() {
+        let artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
+        let mut applier = CpuDiscreteProposalApplier::from_bytes(&artifact).unwrap();
+        let record = |index, lane, current, selected| CpuBvgkRecord {
+            kind: CpuDiscreteProposalKind::Route,
+            index,
+            proposal: CpuDiscreteProposal {
+                lane,
+                current_loss: current,
+                selected_loss: selected,
+                epoch: 0,
+                sensitive: true,
+            },
+            eligible: true,
+            status: 0,
+        };
+        let records = vec![record(0, 1, 10, 7), record(1, 2, 10, 5)];
+        let single = applier
+            .decide_bvgk(CpuDiscreteProposalKind::Route, &records, Some(7))
+            .unwrap();
+        assert_eq!(single.count, 2);
+        assert!(!single.joint);
+        assert_eq!(single.commit, [false, true]);
+        let joint = applier
+            .decide_bvgk(CpuDiscreteProposalKind::Route, &records, Some(4))
+            .unwrap();
+        assert!(joint.joint);
+        assert_eq!(joint.commit, [true, true]);
+        let receipt = applier
+            .apply_bvgk(CpuDiscreteProposalKind::Route, &records, &joint)
+            .unwrap();
+        assert_eq!(receipt.committed, [0, 1]);
+        assert_eq!(receipt.epoch_after, 1);
+        let CpuDiscreteProposalModel::Route(route) = &applier.scorer.model else {
+            unreachable!()
+        };
+        assert_ne!(route.routes[0][0], 1);
+        assert_ne!(route.routes[0][1], 2);
+        assert_eq!(applier.scorer.chooser.routes[..2], route.routes[0]);
+        assert_eq!(
+            applier
+                .decide_bvgk(CpuDiscreteProposalKind::Route, &records, None)
+                .unwrap_err()
+                .status,
+            17
+        );
+        let mut duplicate = vec![record(0, 1, 10, 7), record(0, 2, 10, 5)];
+        for record in &mut duplicate {
+            record.proposal.epoch = 1;
+        }
+        let duplicate_decision = applier
+            .decide_bvgk(CpuDiscreteProposalKind::Route, &duplicate, Some(4))
+            .unwrap();
+        assert_eq!(
+            applier
+                .apply_bvgk(
+                    CpuDiscreteProposalKind::Route,
+                    &duplicate,
+                    &duplicate_decision
+                )
+                .unwrap_err()
+                .status,
+            15
         );
     }
 
