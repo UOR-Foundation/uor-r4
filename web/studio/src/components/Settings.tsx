@@ -6,7 +6,7 @@ interface SettingsProps {
     ui: StudioUiApi;
     onClose(): void;
     onChange?(kind: 'sessions' | 'editor'): void;
-    onError?(message: string): void;
+    onError?(message: string, operation: string): void;
     onSettingsChange?(settings: StudioSettings): void;
     generating?: boolean;
 }
@@ -24,7 +24,7 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange, gen
 
     function reportError(message: string) {
         setError(message);
-        onError?.(message);
+        onError?.(message, `settings:${clearing || 'other'}`);
     }
 
     function update<K extends keyof StudioSettings>(key: K, value: StudioSettings[K]) {

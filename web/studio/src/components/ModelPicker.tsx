@@ -10,8 +10,8 @@ interface ModelPickerProps {
     store: LifecycleStore;
     adapter: ModelSourceAdapter;
     sources: ModelSourcesApi;
-    onError(message: string): void;
-    onSuccess?(): void;
+    onError(message: string, operation: string): void;
+    onSuccess?(operation: string): void;
 }
 
 interface ProviderDraft {
@@ -30,20 +30,30 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const [providerDraft, setProviderDraft] = useState<ProviderDraft>(emptyDraft);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [providerOpen, setProviderOpen] = useState(false);
-    const [providerError, setProviderError] = useState<string | null>(null);
+    const [providerError, setProviderError] = useState<{ message: string; operation: string } | null>(null);
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const testVersions = useRef<Record<string, number>>({});
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
-    const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
-    const run = (action: Promise<unknown>, succeeded?: () => void) => { action.then(() => succeeded?.()).catch(report); };
+    const messageFor = (error: unknown) => error instanceof Error ? error.message : String(error);
+    const report = (error: unknown, operation: string) => onError(messageFor(error), operation);
+    const reportProvider = (error: unknown, operation: string) => {
+        setProviderError({ message: messageFor(error), operation });
+        report(error, operation);
+    };
+    const clearProviderError = (operation: string) => setProviderError((current) => current?.operation === operation ? null : current);
+    const succeed = (operation: string) => {
+        clearProviderError(operation);
+        onSuccess?.(operation);
+    };
+    const run = (action: Promise<unknown>, operation: string) => { action.then(() => succeed(operation)).catch((error) => report(error, operation)); };
 
     useEffect(() => {
         let active = true;
         const changed = () => { if (active) refresh(); };
         document.addEventListener('uor-model-catalog-changed', changed);
-        sources.loadModelCatalog().then(changed).catch(report);
+        sources.loadModelCatalog().then(() => { changed(); succeed('catalog:load'); }).catch((error) => report(error, 'catalog:load'));
         return () => {
             active = false;
             document.removeEventListener('uor-model-catalog-changed', changed);
@@ -55,23 +65,21 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const resident = state.residentArtifact;
 
     function testProvider(provider: ApiProvider) {
+        const operation = `provider:test:${provider.id}`;
         const version = (testVersions.current[provider.id] || 0) + 1;
         testVersions.current[provider.id] = version;
         setTestResults((current) => ({ ...current, [provider.id]: 'testing' }));
-        run(sources.testApi(provider.id).then((result) => {
+        sources.testApi(provider.id).then((result) => {
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
-                if (result.ok) {
-                    setProviderError(null);
-                    onSuccess?.();
-                }
+                if (result.ok) succeed(operation);
             }
         }).catch((error) => {
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
-                report(error);
+                reportProvider(error, operation);
             }
-        }));
+        });
     }
 
     function editProvider(provider?: ApiProvider) {
@@ -83,7 +91,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
     function saveProvider(event: Event) {
         event.preventDefault();
-        setProviderError(null);
+        const operation = `provider:save:${editingId || 'new'}`;
+        clearProviderError(operation);
         try {
             classifyEndpoint(providerDraft.baseUrl);
             if (editingId) {
@@ -112,30 +121,30 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             setEditingId(null);
             setProviderDraft(emptyDraft);
             refresh();
-            onSuccess?.();
+            succeed(operation);
         } catch (error) {
-            setProviderError(error instanceof Error ? error.message : String(error));
-            report(error);
+            reportProvider(error, operation);
         }
     }
 
     function selectProvider(provider: ApiProvider) {
+        const operation = `provider:select:${provider.id}`;
         try {
-            setProviderError(null);
+            clearProviderError(operation);
             classifyEndpoint(provider.baseUrl);
             adapter.selectApi(provider.id, provider.baseUrl);
-            onSuccess?.();
+            succeed(operation);
         } catch (error) {
-            setProviderError(error instanceof Error ? error.message : String(error));
-            report(error);
+            reportProvider(error, operation);
         }
     }
 
     function removeProvider() {
         if (!removing || state.session.phase === 'generating') return;
         const id = removing.id;
+        const operation = `provider:remove:${id}`;
         try {
-            setProviderError(null);
+            clearProviderError(operation);
             sources.removeApi(id);
             testVersions.current[id] = (testVersions.current[id] || 0) + 1;
             setTestResults((current) => {
@@ -146,14 +155,13 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
                 const active = sources.active();
                 store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
-                run(adapter.loadBundled(), onSuccess);
+                run(adapter.loadBundled(), 'artifact:load');
             }
             setRemoving(null);
             refresh();
-            onSuccess?.();
+            succeed(operation);
         } catch (error) {
-            setProviderError(error instanceof Error ? error.message : String(error));
-            report(error);
+            reportProvider(error, operation);
         }
     }
 
@@ -166,14 +174,14 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             <section aria-label="Local engine">
                 <h2>Local engine</h2>
-                <button type="button" onClick={() => run(adapter.loadBundled(), onSuccess)}>Load bundled demo</button>
+                <button type="button" onClick={() => run(adapter.loadBundled(), 'artifact:load')}>Load bundled demo</button>
                 <label>Model file<input aria-label="Model file" type="file" accept=".lut,.bin,.d11" onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
-                    if (file) run(adapter.loadLocalFile(file), onSuccess);
+                    if (file) run(adapter.loadLocalFile(file), 'artifact:load');
                 }} /></label>
                 <form data-action="load-url" onSubmit={(event) => {
                     event.preventDefault();
-                    if (url.trim()) run(adapter.loadFromUrl(url.trim()), onSuccess);
+                    if (url.trim()) run(adapter.loadFromUrl(url.trim()), 'artifact:load');
                 }}>
                     <label>Model URL<input aria-label="Model URL" type="url" value={url} onInput={(event) => setUrl(event.currentTarget.value)} /></label>
                     <button type="submit">Load URL</button>
@@ -183,7 +191,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             <section aria-label="Published models">
                 <h2>Published models</h2>
                 {sources.catalog().models.map((entry) => (
-                    <button type="button" onClick={() => run(adapter.loadPublished(entry.id || entry.url), onSuccess)}>{`Load ${entry.label || entry.id || entry.url}`}</button>
+                    <button type="button" onClick={() => run(adapter.loadPublished(entry.id || entry.url), 'artifact:load')}>{`Load ${entry.label || entry.id || entry.url}`}</button>
                 ))}
             </section>
 
@@ -218,7 +226,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             <section aria-label="API providers">
                 <h2>API providers</h2>
                 <p>Connection test: {state.selectedSource?.kind === 'api' ? testResults[state.selectedSource.id] || state.api.testStatus : 'untested'}. Selection does not prove reachability.</p>
-                {providerError && !providerOpen && !removing && <p role="alert">{providerError}</p>}
+                {providerError && !providerOpen && !removing && <p role="alert">{providerError.message}</p>}
                 <button type="button" onClick={() => editProvider()}>Add API provider</button>
                 <ul>
                     {sources.list().api.map((provider) => (
@@ -242,7 +250,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             {providerOpen && (
                 <Modal title={editingId ? 'Edit API provider' : 'Add API provider'} onClose={() => { setProviderOpen(false); setEditingId(null); }}>
-                    {providerError && <p role="alert">{providerError}</p>}
+                    {providerError && <p role="alert">{providerError.message}</p>}
                     <form data-action="save-provider" onSubmit={saveProvider}>
                         <label>Provider name<input aria-label="Provider name" required value={providerDraft.label} onInput={(event) => setProviderDraft({ ...providerDraft, label: event.currentTarget.value })} /></label>
                         <label>Provider base URL<input aria-label="Provider base URL" required type="url" value={providerDraft.baseUrl} onInput={(event) => setProviderDraft({ ...providerDraft, baseUrl: event.currentTarget.value })} /></label>
@@ -255,7 +263,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             {removing && (
                 <Modal title="Remove API provider" onClose={() => setRemoving(null)}>
-                    {providerError && <p role="alert">{providerError}</p>}
+                    {providerError && <p role="alert">{providerError.message}</p>}
                     <p>Remove {removing.label}? Existing conversations are preserved.</p>
                     <button type="button" autofocus onClick={() => setRemoving(null)}>Keep provider</button>
                     <button type="button" onClick={removeProvider}>Confirm removal</button>

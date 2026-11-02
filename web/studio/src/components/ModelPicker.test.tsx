@@ -194,7 +194,7 @@ describe('ModelPicker', () => {
         expect(host.querySelector('dialog')).not.toBeNull();
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not persist model sources');
         expect(input('API key').value).toBe('new-secret');
-        expect(onError).toHaveBeenCalledWith('Could not persist model sources: browser storage is unavailable or full.');
+        expect(onError).toHaveBeenCalledWith('Could not persist model sources: browser storage is unavailable or full.', 'provider:save:api-a');
         expect(store.getState().selectedSource).toBeNull();
     });
 
@@ -304,7 +304,7 @@ describe('ModelPicker', () => {
         expect(modelAdapter.selectApi).not.toHaveBeenCalled();
         expect(configChanged).not.toHaveBeenCalled();
         expect(store.getState().selectedSource).toBeNull();
-        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.');
+        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.', expect.any(String));
         document.removeEventListener('uor-api-config-changed', configChanged);
     });
 
@@ -321,17 +321,17 @@ describe('ModelPicker', () => {
         expect(modelSources.updateApi).not.toHaveBeenCalled();
         expect(configChanged).not.toHaveBeenCalled();
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Only HTTP(S) API endpoints are supported.');
-        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.');
+        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.', expect.any(String));
         document.removeEventListener('uor-api-config-changed', configChanged);
     });
 
-    it('clears a local provider error after a successful connection test', async () => {
+    it('keeps a selection error after an unrelated successful connection test', async () => {
         const { modelAdapter } = mount();
         modelAdapter.selectApi = vi.fn(() => { throw new Error('selection failed'); });
         act(() => { button('Use API A').click(); });
         expect(host.querySelector('[role="alert"]')?.textContent).toContain('selection failed');
         await act(async () => { button('Test API A').click(); await Promise.resolve(); });
-        expect(host.querySelector('[role="alert"]')).toBeNull();
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('selection failed');
     });
 
     it('loads the local fallback after removing the selected provider', () => {

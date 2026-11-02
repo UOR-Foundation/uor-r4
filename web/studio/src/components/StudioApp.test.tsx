@@ -367,4 +367,64 @@ describe('StudioApp', () => {
         act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="new-session"]')!.click(); });
         expect(host.querySelector('[role="alert"]')).toBeNull();
     });
+
+    it('does not clear file A save failure after file B saves', async () => {
+        const store = new LifecycleStore();
+        const files = makeFiles();
+        let activePath = 'a.md';
+        files.activeFile = vi.fn(() => ({ path: activePath, name: activePath, content: 'edited', mode: 'local' }));
+        files.treeSummary = vi.fn(() => ({ mode: 'local', rootName: 'project', fileCount: 1, tabs: [{ path: activePath, dirty: true }], activePath }));
+        files.saveActive = vi.fn(async () => activePath !== 'a.md');
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Workspace').click(); });
+        await act(async () => { button('Save').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Save did not complete.');
+        activePath = 'b.md';
+        act(() => {
+            store.dispatch({ type: 'file/opened', path: 'b.md' });
+            store.dispatch({ type: 'file/dirty' });
+        });
+        await act(async () => { button('Save').click(); await Promise.resolve(); });
+        expect(store.getState().file.phase).toBe('saved');
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Save did not complete.');
+    });
+
+    it('keeps a provider selection error after an unrelated successful test', async () => {
+        const store = new LifecycleStore();
+        const sources = makeSources();
+        const adapter = makeModelAdapter();
+        const provider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
+        sources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] }));
+        sources.testApi = vi.fn(async () => ({ ok: true }));
+        adapter.selectApi = vi.fn(() => { throw new Error('selection failed'); });
+        act(() => {
+            render(<StudioApp store={store} adapter={adapter} sources={sources} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('selection failed');
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('selection failed');
+    });
+
+    it('clears a provider test error after that test succeeds', async () => {
+        const store = new LifecycleStore();
+        const sources = makeSources();
+        const provider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
+        sources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] }));
+        sources.testApi = vi.fn().mockRejectedValueOnce(new Error('test failed')).mockResolvedValueOnce({ ok: true });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={sources} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('test failed');
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
 });

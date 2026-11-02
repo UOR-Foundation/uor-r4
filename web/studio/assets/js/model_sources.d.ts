@@ -50,3 +50,5 @@ export interface ModelSourcesApi {
     loadBundled(operation?: LoadOperation): Promise<LoadResult>;
     testApi(id?: string): Promise<{ ok: boolean; detail?: string; models?: unknown[] }>;
 }
+
+export const ModelSources: ModelSourcesApi;

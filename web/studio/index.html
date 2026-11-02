@@ -1095,7 +1095,7 @@
             send.hidden = app.generating;
             stop.hidden = !app.generating;
             var ready = app.mode === 'api' ? Boolean(app.apiConfig) : Boolean(app.caps);
-            send.disabled = app.generating;
+            send.disabled = app.generating || !ready;
             send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Load a model source first.');
         }
 
@@ -1607,6 +1607,16 @@
                 renderMessages();
                 setView('chat');
                 toast('API mode active. Prompts now go to ' + (detail.apiConfig.baseUrl || 'the configured endpoint') + '.', 'warn');
+                return;
+            }
+            if (detail.kind === 'state' && detail.removedActive) {
+                app.mode = 'wasm';
+                app.apiConfig = null;
+                app.caps = null;
+                setModelStatus('No model selected; load a local artifact', 'muted');
+                updatePrivacyStatus();
+                updateComposerState();
+                renderMessages();
                 return;
             }
             if (detail.kind === 'wasm') {

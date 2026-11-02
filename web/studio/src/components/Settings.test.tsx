@@ -50,7 +50,7 @@ describe('Settings', () => {
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} onChange={onChange} />, host); });
         act(() => { button('Clear sessions').click(); });
         act(() => { button('Confirm clear sessions').click(); });
-        expect(onError).toHaveBeenCalledWith('Cleared 1 of 2 sessions; stop the current reply before deleting the rest.');
+        expect(onError).toHaveBeenCalledWith('Cleared 1 of 2 sessions; stop the current reply before deleting the rest.', 'settings:sessions');
         expect(onChange).toHaveBeenCalledWith('sessions');
     });
 
@@ -62,7 +62,7 @@ describe('Settings', () => {
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} onChange={onChange} />, host); });
         act(() => { button('Clear sessions').click(); });
         act(() => { button('Confirm clear sessions').click(); });
-        expect(onError).toHaveBeenCalledWith('Session store not ready.');
+        expect(onError).toHaveBeenCalledWith('Session store not ready.', 'settings:sessions');
         expect(onChange).not.toHaveBeenCalled();
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Session store not ready.');
     });

@@ -3,7 +3,7 @@ import type { WorkspaceApi } from './workflow.js';
 
 let saveQueue: Promise<void> = Promise.resolve();
 
-export function saveActiveFile(store: LifecycleStore, files: WorkspaceApi, onError: (message: string) => void): Promise<boolean> {
+export function saveActiveFile(store: LifecycleStore, files: WorkspaceApi, onError: (message: string, operation: string) => void): Promise<boolean> {
     const path = store.getState().file.path;
     if (!path || !store.canSave()) return Promise.resolve(false);
     store.dispatch({ type: 'file/saveStarted', path });
@@ -21,14 +21,14 @@ export function saveActiveFile(store: LifecycleStore, files: WorkspaceApi, onErr
                 store.dispatch({ type: 'file/saveFinished', path, saveId });
             } else {
                 store.dispatch({ type: 'file/saveFailed', path, saveId, error: 'Save did not complete.' });
-                onError('Save did not complete.');
+                onError('Save did not complete.', `file:save:${path}`);
             }
             return saved;
         } catch (error) {
             if (store.getState().file.path === path && store.getState().file.saveId === saveId) {
                 const message = error instanceof Error ? error.message : String(error);
                 store.dispatch({ type: 'file/saveFailed', path, saveId, error: message });
-                onError(message);
+                onError(message, `file:save:${path}`);
             }
             return false;
         }

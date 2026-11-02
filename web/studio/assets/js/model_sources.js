@@ -691,8 +691,9 @@ const api = {
         if (index < 0) return publicList();
         const removed = state.api[index];
         const previousActive = clone(state.active);
+        const removedActive = previousActive.kind === 'api' && previousActive.id === id;
         state.api.splice(index, 1);
-        if (state.active.kind === 'api' && state.active.id === id) {
+        if (removedActive) {
             state.active = { kind: 'wasm', id: state.wasm.id || 'bundled-demo' };
         }
         if (!persist()) {
@@ -702,7 +703,7 @@ const api = {
         }
         setMessage('muted', '');
         if (mounted) mounted.render();
-        emit({ kind: 'state', id: null });
+        emit({ kind: 'state', id: null, removedActive });
         return publicList();
     },
 

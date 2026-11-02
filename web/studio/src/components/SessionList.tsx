@@ -8,9 +8,9 @@ interface SessionListProps {
     store: LifecycleStore;
     sessions: SessionApi;
     download(name: string, content: string): void;
-    onError(message: string): void;
-    onChange?(): void;
-    onSuccess?(): void;
+    onError(message: string, operation: string): void;
+    onChange?(operation: string): void;
+    onSuccess?(operation: string): void;
 }
 
 export function SessionList({ store, sessions, download, onError, onChange, onSuccess }: SessionListProps) {
@@ -19,11 +19,16 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
     const [renaming, setRenaming] = useState<SessionSummary | null>(null);
     const [deleting, setDeleting] = useState<SessionSummary | null>(null);
     const [title, setTitle] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<{ message: string; operation: string } | null>(null);
     const generating = state.session.phase === 'generating';
     const refresh = () => setRevision((value) => value + 1);
-    const activate = () => { setError(null); store.dispatch({ type: 'session/activated' }); refresh(); onChange?.(); };
-    const reportError = (message: string) => { setError(message); onError(message); };
+    const succeed = (operation: string, callback?: (operation: string) => void) => {
+        setError((current) => current?.operation === operation ? null : current);
+        refresh();
+        callback?.(operation);
+    };
+    const activate = (operation: string) => { store.dispatch({ type: 'session/activated' }); succeed(operation, onChange); };
+    const reportError = (message: string, operation: string) => { setError({ message, operation }); onError(message, operation); };
     const items = sessions.listSessions();
 
     function rename(session: SessionSummary) {
@@ -35,24 +40,25 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
     return (
         <section aria-label="Sessions">
             <h2>Sessions</h2>
-            {error && !renaming && !deleting && <p role="alert">{error}</p>}
-            <button type="button" disabled={generating} onClick={() => { if (sessions.newSession()) activate(); else reportError('Could not create a session.'); }}>New session</button>
+            {error && !renaming && !deleting && <p role="alert">{error.message}</p>}
+            <button type="button" disabled={generating} onClick={() => { if (sessions.newSession()) activate('session:new'); else reportError('Could not create a session.', 'session:new'); }}>New session</button>
             {items.length === 0 && <p>No sessions yet</p>}
             <ul>
                 {items.map((session) => (
                     <li>
                         <strong>{session.title}</strong>
                         <span>{session.messageCount} messages · {session.preview}</span>
-                        <button type="button" disabled={generating} onClick={() => { if (sessions.selectSession(session.id)) activate(); else reportError('Could not select that session.'); }}>{`Select ${session.title}`}</button>
+                        <button type="button" disabled={generating} onClick={() => { if (sessions.selectSession(session.id)) activate(`session:select:${session.id}`); else reportError('Could not select that session.', `session:select:${session.id}`); }}>{`Select ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => rename(session)}>{`Rename ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => {
-                            if (sessions.duplicateSession(session.id)) { setError(null); refresh(); onChange?.(); }
-                            else reportError('Could not duplicate that session.');
+                            if (sessions.duplicateSession(session.id)) succeed(`session:duplicate:${session.id}`, onChange);
+                            else reportError('Could not duplicate that session.', `session:duplicate:${session.id}`);
                         }}>{`Duplicate ${session.title}`}</button>
                         <button type="button" onClick={() => {
+                            const operation = `session:export:${session.id}`;
                             const exported = sessions.exportSession(session.id);
-                            if (exported) { setError(null); download(`${session.title}.json`, exported); onSuccess?.(); }
-                            else reportError('Session export is unavailable.');
+                            if (exported) { download(`${session.title}.json`, exported); succeed(operation, onSuccess); }
+                            else reportError('Session export is unavailable.', operation);
                         }}>{`Export ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => { setError(null); setDeleting(session); }}>{`Delete ${session.title}`}</button>
                     </li>
@@ -60,16 +66,14 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
             </ul>
             {renaming && (
                 <Modal title="Rename session" onClose={() => setRenaming(null)}>
-                    {error && <p role="alert">{error}</p>}
+                    {error && <p role="alert">{error.message}</p>}
                     <form onSubmit={(event) => {
                         event.preventDefault();
                         if (title.trim() && sessions.renameSession(renaming.id, title.trim())) {
-                            setError(null);
                             setRenaming(null);
-                            refresh();
-                            onChange?.();
+                            succeed(`session:rename:${renaming.id}`, onChange);
                         } else {
-                            reportError('Could not rename that session.');
+                            reportError('Could not rename that session.', `session:rename:${renaming.id}`);
                         }
                     }}>
                         <label>Session title<input aria-label="Session title" autofocus value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label>
@@ -79,15 +83,15 @@ export function SessionList({ store, sessions, download, onError, onChange, onSu
             )}
             {deleting && (
                 <Modal title="Delete session" onClose={() => setDeleting(null)}>
-                    {error && <p role="alert">{error}</p>}
+                    {error && <p role="alert">{error.message}</p>}
                     <p>Delete {deleting.title}? This affects only the selected local session.</p>
                     <button type="button" autofocus onClick={() => setDeleting(null)}>Keep session</button>
                     <button type="button" onClick={() => {
                         if (sessions.deleteSession(deleting.id)) {
                             setDeleting(null);
-                            activate();
+                            activate(`session:delete:${deleting.id}`);
                         } else {
-                            reportError('Could not delete that session. Stop the current reply first.');
+                            reportError('Could not delete that session. Stop the current reply first.', `session:delete:${deleting.id}`);
                         }
                     }}>Confirm delete</button>
                 </Modal>

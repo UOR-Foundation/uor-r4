@@ -349,4 +349,35 @@ describe('actual page local fallback hook', () => {
         expect(app.worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'load_model' }));
         expect(setView).toHaveBeenCalledWith('chat');
     });
+
+    it('fails closed immediately when the manager removes the active provider', async () => {
+        window.localStorage.clear();
+        document.body.innerHTML = '<button id="btnSend"></button><button id="btnStop"></button>';
+        vi.resetModules();
+        const { ModelSources } = await import('../../assets/js/model_sources.js');
+        const app = {
+            mode: 'wasm', apiConfig: null as null | { baseUrl: string }, caps: { schema: 'uor-r4.lut-stack/1' } as null | { schema: string },
+            generating: false,
+        };
+        const updatePrivacyStatus = vi.fn();
+        const factory = new Function(
+            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
+            `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
+             ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
+             return onModelSourceChanged;`,
+        );
+        const onModelSourceChanged = factory(app, ModelSources, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;
+        document.addEventListener('uor-model-source-changed', onModelSourceChanged);
+        const provider = ModelSources.addApi({ label: 'Remove me', baseUrl: 'https://old.example.com/v1', model: 'old' });
+        ModelSources.setActive({ kind: 'api', id: provider.id });
+        expect(app.mode).toBe('api');
+        ModelSources.removeApi(provider.id);
+        expect(app.mode).toBe('wasm');
+        expect(app.apiConfig).toBeNull();
+        expect(app.caps).toBeNull();
+        expect(document.querySelector<HTMLButtonElement>('#btnSend')!.disabled).toBe(true);
+        expect(ModelSources.apiConfig(provider.id)).toBeNull();
+        document.removeEventListener('uor-model-source-changed', onModelSourceChanged);
+        window.localStorage.clear();
+    });
 });

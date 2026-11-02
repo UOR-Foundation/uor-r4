@@ -95,7 +95,7 @@ describe('WorkspaceEditor', () => {
         fileApi.api.saveActive = vi.fn(async () => false);
         await act(async () => { button('Save').click(); await Promise.resolve(); });
         expect(store.getState().file.phase).toBe('error');
-        expect(onError).toHaveBeenCalledWith('Save did not complete.');
+        expect(onError).toHaveBeenCalledWith('Save did not complete.', 'file:save:a.md');
         expect(button('Save').disabled).toBe(false);
     });
 

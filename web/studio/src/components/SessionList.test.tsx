@@ -52,9 +52,9 @@ describe('SessionList', () => {
         api.newSession = vi.fn(() => false);
         api.selectSession = vi.fn(() => false);
         act(() => { button('New session').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not create a session.');
+        expect(onError).toHaveBeenCalledWith('Could not create a session.', 'session:new');
         act(() => { button('Select Session A').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not select that session.');
+        expect(onError).toHaveBeenCalledWith('Could not select that session.', 'session:select:session-a');
         expect(store.getState().session.phase).toBe('new');
     });
 
@@ -63,10 +63,10 @@ describe('SessionList', () => {
         api.renameSession = vi.fn(() => false);
         api.duplicateSession = vi.fn(() => null);
         act(() => { button('Duplicate Session A').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not duplicate that session.');
+        expect(onError).toHaveBeenCalledWith('Could not duplicate that session.', 'session:duplicate:session-a');
         act(() => { button('Rename Session A').click(); });
         act(() => { button('Save title').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not rename that session.');
+        expect(onError).toHaveBeenCalledWith('Could not rename that session.', 'session:rename:session-a');
         expect(host.querySelector('dialog')).not.toBeNull();
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not rename that session.');
     });
@@ -76,10 +76,10 @@ describe('SessionList', () => {
         api.exportSession = vi.fn(() => null);
         api.deleteSession = vi.fn(() => false);
         act(() => { button('Export Session A').click(); });
-        expect(onError).toHaveBeenCalledWith('Session export is unavailable.');
+        expect(onError).toHaveBeenCalledWith('Session export is unavailable.', 'session:export:session-a');
         act(() => { button('Delete Session A').click(); });
         act(() => { button('Confirm delete').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.');
+        expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.', 'session:delete:session-a');
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not delete that session.');
     });
 

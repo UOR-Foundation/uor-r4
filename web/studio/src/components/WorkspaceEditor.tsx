@@ -9,7 +9,7 @@ import { useLifecycle } from '../state/useLifecycle.js';
 interface WorkspaceEditorProps {
     store: LifecycleStore;
     files: WorkspaceApi;
-    onError(message: string): void;
+    onError(message: string, operation: string): void;
     settings?: StudioSettings;
 }
 
@@ -19,7 +19,7 @@ export function WorkspaceEditor({ store, files, onError, settings = defaultSetti
     const state = useLifecycle(store);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
-    const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
+    const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error), 'file:other');
 
     function sync(summary: WorkspaceSummary) {
         syncWorkspaceSummary(store, summary);
