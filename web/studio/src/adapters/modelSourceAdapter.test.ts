@@ -201,6 +201,14 @@ describe('model source adapter', () => {
         expect(store.getState().api.testStatus).toBe('untested');
     });
 
+    it('rejects a non-HTTP API selection before changing active state', () => {
+        const api = sources();
+        const adapter = createModelSourceAdapter(store, api, worker());
+        expect(() => adapter.selectApi('api-a', 'ftp://example.com/v1')).toThrow('Only HTTP(S) API endpoints are supported.');
+        expect(api.setActive).not.toHaveBeenCalled();
+        expect(store.getState().selectedSource).toBeNull();
+    });
+
     it('refuses to test an endpoint that is not selected', async () => {
         const api = sources();
         const adapter = createModelSourceAdapter(store, api, worker());

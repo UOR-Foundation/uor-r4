@@ -46,7 +46,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [paletteOpen, setPaletteOpen] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [inspectorOpen, setInspectorOpen] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<{ message: string; surface: 'file' | 'other' } | null>(null);
     const [sessionRevision, setSessionRevision] = useState(0);
     const [agentDraft, setAgentDraft] = useState('');
     const [agentPasted, setAgentPasted] = useState('');
@@ -73,8 +73,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     }, [store]);
 
     useEffect(() => {
-        if (state.file.phase === 'saved' || state.artifact.phase === 'ready' || state.session.phase === 'complete') setError(null);
-    }, [state.file.phase, state.artifact.phase, state.session.phase]);
+        if (state.file.phase === 'saved' && error?.surface === 'file') setError(null);
+    }, [state.file.phase, error?.surface]);
     useEffect(() => { setError(null); }, [activeSection]);
 
     const selected = state.selectedSource;
@@ -95,7 +95,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         file: `File: ${state.file.phase}`,
         session: `Session: ${state.session.phase}`,
     };
-    const report = (message: string) => setError(message);
+    const report = (message: string) => setError({ message, surface: 'other' });
+    const reportFile = (message: string) => setError({ message, surface: 'file' });
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
@@ -110,7 +111,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             }
         } },
         { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { files.openFolder().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
-        { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, report); } },
+        { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, reportFile); } },
         { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { files.saveAsCopy(); } },
         { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
         { id: 'inspector', group: 'Interface', label: 'Toggle inspector', description: 'Show or hide details', run: () => setInspectorOpen((value) => !value) },
@@ -128,9 +129,9 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             onSettings={() => setSettingsOpen(true)}
             onInspector={() => setInspectorOpen((value) => !value)}
             inspectorOpen={inspectorOpen}
-            sessions={<SessionList store={store} sessions={sessions} download={download} onError={report} onChange={() => setSessionRevision((value) => value + 1)} />}
+            sessions={<SessionList store={store} sessions={sessions} download={download} onError={report} onChange={() => { setError(null); setSessionRevision((value) => value + 1); }} />}
         >
-            {error && <p role="alert">{error}</p>}
+            {error && <p role="alert">{error.message}</p>}
             {activeSection === 'agent' && (
                 <AgentComposer
                     key={`${sessions.activeSessionId() || 'new'}:${sessionRevision}`}
@@ -150,7 +151,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                     download={download}
                 />
             )}
-            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={report} settings={editorSettings} />}
+            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={reportFile} settings={editorSettings} />}
             {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} onSuccess={() => setError(null)} />}
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />

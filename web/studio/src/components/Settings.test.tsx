@@ -67,6 +67,16 @@ describe('Settings', () => {
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Session store not ready.');
     });
 
+    it('does not change session state when a clear deletes nothing', () => {
+        const ui = makeUi();
+        ui.clearSessions = vi.fn(() => ({ cleared: 0, total: 2 }));
+        const onChange = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onChange={onChange} />, host); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('requires confirmation before clearing sessions or editor tabs', () => {
         const ui = makeUi();
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} />, host); });

@@ -66,8 +66,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         }).catch((error) => {
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
+                report(error);
             }
-            report(error);
         }));
     }
 
@@ -119,6 +119,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     function selectProvider(provider: ApiProvider) {
         try {
             setProviderError(null);
+            classifyEndpoint(provider.baseUrl);
             adapter.selectApi(provider.id, provider.baseUrl);
             onSuccess?.();
         } catch (error) {
@@ -205,8 +206,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
                     <dt>Schema</dt><dd>{resident.schema || 'Unknown schema'}</dd>
                     {resident.sha256 && <><dt>Hash</dt><dd>SHA-256 {resident.sha256} ({resident.verified === true ? 'verified' : 'not verified'})</dd></>}
                     <dt>Engine</dt><dd>{resident.engineSupported === false ? 'Engine unsupported' : 'Engine supported'}</dd>
-                    {resident.canGenerate === false && resident.canPredict === true && <><dt>Capability</dt><dd>Next-token prediction only</dd></>}
-                    {resident.canGenerate === false && resident.canPredict !== true && <><dt>Capability</dt><dd>Generation unavailable</dd></>}
+                    {resident.engineSupported !== false && resident.canGenerate === false && resident.canPredict === true && <><dt>Capability</dt><dd>Next-token prediction only</dd></>}
+                    {(resident.engineSupported === false || (resident.canGenerate === false && resident.canPredict !== true)) && <><dt>Capability</dt><dd>Generation unavailable</dd></>}
                 </dl>
             )}
 

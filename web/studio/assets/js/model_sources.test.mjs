@@ -22,10 +22,11 @@ function deferred() {
 }
 
 let moduleCounter = 0;
-async function fresh(fetchImpl) {
+async function fresh(fetchImpl, seed) {
     const listeners = new Map();
     const events = [];
     const values = new Map();
+    if (seed) values.set('uor.studio.modelSources.v1', JSON.stringify(seed));
     const storage = {
         fail: false,
         getItem(key) { return values.has(key) ? values.get(key) : null; },
@@ -142,6 +143,22 @@ test('bundled loads accept operation metadata and finalize', async () => {
     const progress = events.filter((event) => event.type === LOAD_PROGRESS_EVENT);
     assert.equal(progress.at(-1).detail.phase, 'finalizing');
     assert.equal(progress.at(-1).detail.operationId, 3);
+});
+
+test('model catalog loading emits the actual catalog change', async () => {
+    const { api, events } = await fresh(async () => new Response(JSON.stringify({ schema: 'uor-r4.studio-models/1', models: [{ id: 'm1', label: 'M1', url: 'https://example.com/m1.lut' }] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    await api.loadModelCatalog();
+    assert.ok(events.some((event) => event.type === 'uor-model-catalog-changed'));
+    assert.equal(api.catalog().models[0].id, 'published-m1');
+    assert.equal(api.catalog().models[0].label, 'M1');
+});
+
+test('non-HTTP API sources cannot be selected or persisted', async () => {
+    const invalid = { id: 'bad', label: 'Bad', preset: 'custom', baseUrl: 'ftp://example.com/v1', model: 'model', apiKey: '', createdAt: 1 };
+    const { api } = await fresh(async () => { throw new Error('network must not run'); }, { wasm: {}, api: [invalid], active: { kind: 'wasm', id: 'bundled-demo' } });
+    assert.throws(() => api.updateApi(invalid.id, { baseUrl: 'ftp://example.com/v1' }), /Only HTTP\(S\) API endpoints are supported/);
+    assert.throws(() => api.setActive({ kind: 'api', id: invalid.id }), /Only HTTP\(S\) API endpoints are supported/);
+    assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
 });
 
 test('API provider writes roll back when browser storage fails', async () => {

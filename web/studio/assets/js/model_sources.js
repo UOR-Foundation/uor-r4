@@ -130,6 +130,12 @@ function nextId(prefix) {
     return prefix + '-' + Date.now().toString(36) + '-' + idCounter.toString(36);
 }
 
+function requireApiBaseUrl(value) {
+    let url;
+    try { url = new URL(String(value || '').trim()); } catch (_error) { throw new Error('Only HTTP(S) API endpoints are supported.'); }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only HTTP(S) API endpoints are supported.');
+}
+
 function apiEntry(input) {
     return {
         id: input.id || nextId('api'),
@@ -247,6 +253,7 @@ function setActive(next) {
     if (next.kind === 'api' && !findApi(next.id)) {
         throw new Error('That API endpoint no longer exists.');
     }
+    if (next.kind === 'api') requireApiBaseUrl(findApi(next.id).baseUrl);
     const previous = clone(state.active);
     selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
@@ -255,7 +262,7 @@ function setActive(next) {
         selectionEpoch -= 1;
         throw new Error(message.text);
     }
-    message = { tone: 'muted', text: '' };
+    setMessage('muted', '');
     if (mounted) mounted.render();
     emit({ kind: state.active.kind, id: state.active.id, apiConfig: state.active.kind === 'api' ? publicConfig(activeApi()) : null });
     return publicList();
@@ -645,11 +652,13 @@ const api = {
     addApi(input) {
         const entry = apiEntry(input || {});
         if (!entry.baseUrl) throw new Error('An API base URL is required.');
+        requireApiBaseUrl(entry.baseUrl);
         state.api.push(entry);
         if (!persist()) {
             state.api.pop();
             throw new Error(message.text);
         }
+        setMessage('muted', '');
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);
@@ -660,10 +669,17 @@ const api = {
         if (!entry) throw new Error('No API endpoint with that id.');
         const previous = clone(entry);
         Object.assign(entry, apiEntry(Object.assign({}, entry, patch, { id: entry.id, createdAt: entry.createdAt })));
+        try {
+            requireApiBaseUrl(entry.baseUrl);
+        } catch (error) {
+            Object.assign(entry, previous);
+            throw error;
+        }
         if (!persist()) {
             Object.assign(entry, previous);
             throw new Error(message.text);
         }
+        setMessage('muted', '');
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);
@@ -683,6 +699,7 @@ const api = {
             state.active = previousActive;
             throw new Error(message.text);
         }
+        setMessage('muted', '');
         if (mounted) mounted.render();
         emit({ kind: 'state', id: null });
         return publicList();

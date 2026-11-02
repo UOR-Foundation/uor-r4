@@ -22,7 +22,7 @@ const destinations: Array<{ id: StudioSection; label: string }> = [
 ];
 
 export function AppShell({ activeSection, onSection, status, sessions, children, onPalette, onSettings, onInspector, inspectorOpen = false }: AppShellProps) {
-    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(() => window.innerWidth > 800);
     return (
         <div class="studio-shell">
             <header class="studio-toolbar">

@@ -1,6 +1,6 @@
 import { LOAD_PROGRESS_EVENT } from '../../assets/js/model_sources.js';
 import type { LoadOperation, LoadResult, ModelSourcesApi } from '../../assets/js/model_sources.js';
-import { LifecycleStore } from '../state/lifecycle.js';
+import { classifyEndpoint, LifecycleStore } from '../state/lifecycle.js';
 
 export { LOAD_PROGRESS_EVENT };
 
@@ -156,6 +156,7 @@ export function createModelSourceAdapter(
             return attempt(operation, () => sources.loadBundled(operation));
         },
         selectApi(sourceId, endpoint) {
+            classifyEndpoint(endpoint);
             sources.setActive({ kind: 'api', id: sourceId });
             store.dispatch({ type: 'api/selected', sourceId, endpoint });
         },

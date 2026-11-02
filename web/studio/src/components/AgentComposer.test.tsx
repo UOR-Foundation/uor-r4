@@ -235,10 +235,10 @@ describe('AgentComposer', () => {
     });
 
     it('keeps inserted filenames unique when timestamps collide', () => {
-        const { sessionApi, fileApi } = mount();
+        const { store, sessionApi, fileApi } = mount();
         sessionApi.getConversationMessages = vi.fn(() => [{ role: 'assistant', content: 'First' }, { role: 'assistant', content: 'Second' }]);
         const now = vi.spyOn(Date, 'now').mockReturnValue(123);
-        act(() => { document.dispatchEvent(new CustomEvent('uor-session-messages-changed')); });
+        act(() => { store.dispatch({ type: 'session/activated' }); });
         const buttons = Array.from(host.querySelectorAll('article[data-role="assistant"]')).map((article) => Array.from(article.querySelectorAll('button')).find((node) => node.textContent === 'Insert into editor')!);
         act(() => { buttons[0].click(); buttons[1].click(); });
         const names = vi.mocked(fileApi.insertText).mock.calls.map((call) => call[1]);
@@ -252,7 +252,7 @@ describe('AgentComposer', () => {
         const { store, sessionApi, fileApi, generation, copy, download } = mount();
         const messages = [{ role: 'user', content: 'Original prompt' }, { role: 'assistant', content: 'Assistant answer' }];
         sessionApi.getConversationMessages = vi.fn(() => messages);
-        act(() => { document.dispatchEvent(new CustomEvent('uor-session-messages-changed')); });
+        act(() => { store.dispatch({ type: 'session/activated' }); });
         const assistant = host.querySelector('article[data-role="assistant"]')!;
         const action = (label: string) => Array.from(assistant.querySelectorAll('button')).find((node) => node.textContent === label)!;
         act(() => { action('Copy').click(); });

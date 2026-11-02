@@ -22,6 +22,14 @@ function ui(): StudioUiApi {
 }
 
 describe('Inspector', () => {
+    it('labels a previous generation as last rather than current', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
+        store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 });
+        act(() => { render(<Inspector store={store} ui={ui()} open onClose={vi.fn()} />, host); });
+        expect(host.textContent).toContain('Last generation');
+    });
     it('renders details only when opened', () => {
         const store = new LifecycleStore();
         act(() => { render(<Inspector store={store} ui={ui()} open={false} onClose={vi.fn()} />, host); });

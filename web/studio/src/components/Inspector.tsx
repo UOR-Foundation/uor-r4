@@ -28,7 +28,7 @@ export function Inspector({ store, ui, open, onClose }: InspectorProps) {
                 <dt>Source</dt><dd>{state.selectedSource ? `${state.selectedSource.kind}: ${state.selectedSource.id}` : 'No source selected'}</dd>
                 <dt>Artifact</dt><dd>{state.residentArtifact?.fileName || state.artifact.phase}</dd>
                 <dt>File</dt><dd>{state.file.path || 'No file open'}</dd>
-                {generation && <><dt>Generation</dt><dd>{generation.source.id} · {generation.privacy}</dd></>}
+                {generation && <><dt>{state.session.activeGeneration ? 'Generation' : 'Last generation'}</dt><dd>{generation.source.id} · {generation.privacy}</dd></>}
                 <dt>Attachments</dt><dd>{ui.getAttachments().length ? ui.getAttachments().map((item) => item.name).join(', ') : 'No context attached'}</dd>
             </dl>
         </aside>

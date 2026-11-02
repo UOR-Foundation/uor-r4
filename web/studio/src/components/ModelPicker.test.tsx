@@ -96,6 +96,19 @@ describe('ModelPicker', () => {
         expect(host.textContent).not.toContain('Conversational chat');
     });
 
+    it('does not present an engine-unsupported artifact as prediction-capable', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                schema: 'uor-r4.lut-discrete-trunk/1', engineSupported: false, canGenerate: false, canPredict: true,
+            } });
+        });
+        expect(host.textContent).toContain('Engine unsupported');
+        expect(host.textContent).toContain('Generation unavailable');
+        expect(host.textContent).not.toContain('Next-token prediction only');
+    });
+
     it('forwards bundled, published, URL, and local-file loads', () => {
         const { modelAdapter, modelSources } = mount();
         expect(modelSources.loadModelCatalog).toHaveBeenCalledOnce();
@@ -188,7 +201,7 @@ describe('ModelPicker', () => {
     it('ignores a provider test result from before an edit', async () => {
         const { modelSources } = mount();
         let finish!: (result: { ok: boolean }) => void;
-        modelSources.testApi = vi.fn(() => new Promise<{ ok: boolean }>((resolve) => { finish = resolve; }));
+        modelSources.testApi = vi.fn((): Promise<{ ok: boolean }> => new Promise((resolve) => { finish = resolve; }));
         act(() => { button('Test API A').click(); });
         act(() => { button('Edit API A').click(); });
         act(() => {
@@ -199,6 +212,22 @@ describe('ModelPicker', () => {
         await act(async () => { finish({ ok: true }); await Promise.resolve(); });
         expect(host.textContent).toContain('Test: untested');
         expect(host.textContent).not.toContain('Test: passed');
+    });
+
+    it('ignores a provider test rejection from before an edit', async () => {
+        const { modelSources, onError } = mount();
+        let reject!: (error: Error) => void;
+        modelSources.testApi = vi.fn((): Promise<{ ok: boolean }> => new Promise((_resolve, rejectPromise) => { reject = rejectPromise; }));
+        act(() => { button('Test API A').click(); });
+        act(() => { button('Edit API A').click(); });
+        act(() => {
+            input('Provider base URL').value = 'https://new.example.com/v1';
+            input('Provider base URL').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        await act(async () => { reject(new Error('old endpoint failed')); await Promise.resolve(); });
+        expect(onError).not.toHaveBeenCalled();
+        expect(host.textContent).toContain('Test: untested');
     });
 
     it('shows provider selection persistence failures', () => {
@@ -261,6 +290,22 @@ describe('ModelPicker', () => {
         expect(host.querySelector('dialog')).toBeNull();
         act(() => { button('Add API provider').click(); });
         expect(input('API key').value).toBe('');
+    });
+
+    it('rejects a non-HTTP provider selection before writing or emitting config', () => {
+        const modelAdapter = adapter();
+        const modelSources = sources();
+        const configChanged = vi.fn();
+        document.addEventListener('uor-api-config-changed', configChanged);
+        const invalid = { ...provider, baseUrl: 'ftp://example.com/v1' };
+        modelSources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [invalid] }));
+        const { store, onError } = mount(new LifecycleStore(), modelAdapter, modelSources);
+        act(() => { button('Use API A').click(); });
+        expect(modelAdapter.selectApi).not.toHaveBeenCalled();
+        expect(configChanged).not.toHaveBeenCalled();
+        expect(store.getState().selectedSource).toBeNull();
+        expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.');
+        document.removeEventListener('uor-api-config-changed', configChanged);
     });
 
     it('rejects a non-HTTP provider edit before writing or emitting config', () => {

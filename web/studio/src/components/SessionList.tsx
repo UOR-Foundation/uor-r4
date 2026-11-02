@@ -45,7 +45,7 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                         <button type="button" disabled={generating} onClick={() => { if (sessions.selectSession(session.id)) activate(); else reportError('Could not select that session.'); }}>{`Select ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => rename(session)}>{`Rename ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => {
-                            if (sessions.duplicateSession(session.id)) { setError(null); refresh(); }
+                            if (sessions.duplicateSession(session.id)) { setError(null); refresh(); onChange?.(); }
                             else reportError('Could not duplicate that session.');
                         }}>{`Duplicate ${session.title}`}</button>
                         <button type="button" onClick={() => {
@@ -66,6 +66,7 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                             setError(null);
                             setRenaming(null);
                             refresh();
+                            onChange?.();
                         } else {
                             reportError('Could not rename that session.');
                         }

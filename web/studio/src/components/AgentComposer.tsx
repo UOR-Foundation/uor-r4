@@ -49,11 +49,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     useEffect(() => {
         const changed = () => refresh();
         document.addEventListener(GENERATION_FINISHED_EVENT, changed);
-        document.addEventListener('uor-session-messages-changed', changed);
         document.addEventListener('uor-attachments-changed', changed);
         return () => {
             document.removeEventListener(GENERATION_FINISHED_EVENT, changed);
-            document.removeEventListener('uor-session-messages-changed', changed);
             document.removeEventListener('uor-attachments-changed', changed);
         };
     }, []);

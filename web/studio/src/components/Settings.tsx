@@ -48,7 +48,7 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
             const result = ui.clearSessions();
             if (result.error) reportError(result.error);
             else {
-                completed = true;
+                completed = result.cleared > 0 || result.total === 0;
                 if (result.cleared < result.total) reportError(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
             }
         }

@@ -298,10 +298,14 @@ describe('actual page API configuration hook', () => {
     it('updates the active API config from the selected provider without navigation', () => {
         const app = { apiConfig: { baseUrl: 'https://old.example.com/v1' } };
         const ModelSources = { apiConfig: vi.fn(() => ({ baseUrl: 'https://new.example.com/v1', model: 'model-b' })) };
-        const factory = new Function('app', 'ModelSources', 'updateComposerState', `${section('function onApiConfigChanged', 'function bindHeader')} return onApiConfigChanged;`);
-        const onApiConfigChanged = factory(app, ModelSources, vi.fn()) as (event: { detail: { id: string } }) => void;
+        const setModelStatus = vi.fn();
+        const updatePrivacyStatus = vi.fn();
+        const factory = new Function('app', 'ModelSources', 'updateComposerState', 'setModelStatus', 'updatePrivacyStatus', `${section('function onApiConfigChanged', 'function bindHeader')} return onApiConfigChanged;`);
+        const onApiConfigChanged = factory(app, ModelSources, vi.fn(), setModelStatus, updatePrivacyStatus) as (event: { detail: { id: string } }) => void;
         onApiConfigChanged({ detail: { id: 'api-a' } });
         expect(ModelSources.apiConfig).toHaveBeenCalledWith('api-a');
         expect(app.apiConfig.baseUrl).toBe('https://new.example.com/v1');
+        expect(setModelStatus).toHaveBeenCalledWith('API · model-b', 'accent', 'https://new.example.com/v1');
+        expect(updatePrivacyStatus).toHaveBeenCalledOnce();
     });
 });

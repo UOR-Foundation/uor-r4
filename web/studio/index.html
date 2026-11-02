@@ -1619,6 +1619,10 @@
             var detail = event && event.detail ? event.detail : {};
             if (!detail.id) return;
             app.apiConfig = ModelSources.apiConfig(detail.id);
+            if (app.apiConfig) {
+                setModelStatus('API · ' + (app.apiConfig.model || app.apiConfig.label || 'endpoint'), 'accent', app.apiConfig.baseUrl || '');
+                updatePrivacyStatus();
+            }
             updateComposerState();
         }
 

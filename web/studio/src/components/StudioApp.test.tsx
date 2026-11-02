@@ -200,6 +200,20 @@ describe('StudioApp', () => {
         expect(files.setActiveContent).toHaveBeenCalledWith('a  ');
     });
 
+    it('clears a session error after a successful duplicate', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        sessions.listSessions = vi.fn(() => [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }]);
+        sessions.duplicateSession = vi.fn().mockReturnValueOnce(null).mockReturnValueOnce('session-copy');
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Duplicate Session A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not duplicate');
+        act(() => { button('Duplicate Session A').click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
     it('clears a provider error after a successful selection retry', () => {
         const store = new LifecycleStore();
         const sources = makeSources();
