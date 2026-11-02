@@ -6,34 +6,6 @@
     "lab": "deepseek",
     "note": ""
   },
-  "deepseek/cpu-corpus-driver": {
-    "branch": "deepseek/cpu-corpus-driver",
-    "claimed_at": "2026-11-02T02:18:20-05:00",
-    "head": "af1979886",
-    "lab": "deepseek",
-    "note": ""
-  },
-  "deepseek/cpu-hamming-memory-resume": {
-    "branch": "deepseek/cpu-hamming-memory-resume",
-    "claimed_at": "2026-11-02T00:12:55-05:00",
-    "head": "454a90031",
-    "lab": "deepseek",
-    "note": ""
-  },
-  "deepseek/cpu-public-fbs-raw": {
-    "branch": "deepseek/cpu-public-fbs-raw",
-    "claimed_at": "2026-11-02T01:32:08-05:00",
-    "head": "52ddbb0b0",
-    "lab": "deepseek",
-    "note": ""
-  },
-  "deepseek/cpu-quant-shadow": {
-    "branch": "deepseek/cpu-quant-shadow",
-    "claimed_at": "2026-11-02T00:16:13-05:00",
-    "head": "14b8b0144",
-    "lab": "deepseek",
-    "note": ""
-  },
   "kimi/docs-current-status": {
     "branch": "kimi/docs-current-status",
     "claimed_at": "2026-10-30T13:16:33-04:00",
