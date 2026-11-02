@@ -48,6 +48,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [inspectorOpen, setInspectorOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionRevision, setSessionRevision] = useState(0);
+    const [agentDraft, setAgentDraft] = useState('');
+    const [agentPasted, setAgentPasted] = useState('');
     const [editorSettings, setEditorSettings] = useState(() => ui.getSettings());
     const generation = useMemo(() => createGenerationAdapter(store, sessions), [store, sessions]);
     useEffect(() => () => generation.dispose(), [generation]);
@@ -87,7 +89,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         privacy = `Last generation: ${state.session.lastGeneration.privacy}`;
     }
     const status: ShellStatus = {
-        source: selected ? `${selected.kind}: ${selected.id}` : 'No source selected',
+        source: activeGeneration ? `${activeGeneration.source.kind}: ${activeGeneration.source.id}` : selected ? `${selected.kind}: ${selected.id}` : 'No source selected',
         artifact: `Artifact: ${state.artifact.phase}`,
         privacy,
         file: `File: ${state.file.phase}`,
@@ -137,6 +139,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                     files={files}
                     ui={ui}
                     generation={generation}
+                    draft={agentDraft}
+                    pasted={agentPasted}
+                    onDraftChange={setAgentDraft}
+                    onPastedChange={setAgentPasted}
                     copy={(text) => {
                         if (navigator.clipboard) return navigator.clipboard.writeText(text);
                         ui.toast('Clipboard unavailable.', 'error');

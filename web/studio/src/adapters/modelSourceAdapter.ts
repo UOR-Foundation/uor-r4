@@ -170,7 +170,6 @@ export function createModelSourceAdapter(
                     store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok });
                 }
             };
-            sources.setActive({ kind: 'api', id: targetId });
             store.dispatch({ type: 'api/testStarted', sourceId: targetId });
             try {
                 const result = await sources.testApi(targetId);

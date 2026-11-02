@@ -80,6 +80,18 @@ describe('StudioApp', () => {
         expect(store.getState().file.phase).toBe('saved');
     });
 
+    it('pins the top status source while a generation is active', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-b' });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('api: api-a');
+        expect(host.querySelector('[role="status"]')?.textContent).not.toContain('artifact: model-b');
+    });
+
     it('uses current selection privacy after a previous generation completes', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
@@ -126,6 +138,55 @@ describe('StudioApp', () => {
         expect(store.getState().file.path).toMatch(/^agent-message-\d+-\d+\.md$/);
         expect(store.getState().file.phase).toBe('dirty');
         expect(store.canSave()).toBe(true);
+    });
+
+    it('preserves unsent prompt and pasted context across section navigation', () => {
+        const store = new LifecycleStore();
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        const pasted = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!;
+        act(() => { prompt.value = 'Keep this prompt'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { pasted.value = 'Keep this context'; pasted.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { destination('Models').click(); });
+        act(() => { destination('Agent').click(); });
+        expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('Keep this prompt');
+        expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!.value).toBe('Keep this context');
+    });
+
+    it('propagates committed Settings values to the composed WorkspaceEditor', () => {
+        const store = new LifecycleStore();
+        const files = makeFiles();
+        const ui = makeUi();
+        store.dispatch({ type: 'folder/opened', path: 'project' });
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        files.activeFile = vi.fn(() => ({ path: 'a.md', name: 'a.md', content: 'a', mode: 'local' }));
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={ui} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Workspace').click(); });
+        act(() => { button('Settings').click(); });
+        const font = host.querySelector<HTMLInputElement>('input[aria-label="Editor font size"]')!;
+        act(() => { font.value = '1'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(font.isConnected).toBe(true);
+        act(() => { font.value = '16'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(font.isConnected).toBe(true);
+        act(() => { font.focus(); font.blur(); });
+        const tab = host.querySelector<HTMLInputElement>('input[aria-label="Tab size"]')!;
+        act(() => { tab.value = '2'; tab.dispatchEvent(new Event('input', { bubbles: true })); tab.focus(); tab.blur(); });
+        const wrap = host.querySelector<HTMLInputElement>('input[aria-label="Word wrap"]')!;
+        act(() => { wrap.checked = true; wrap.dispatchEvent(new Event('change', { bubbles: true })); });
+        const reduce = host.querySelector<HTMLInputElement>('input[aria-label="Reduce motion"]')!;
+        act(() => { reduce.checked = true; reduce.dispatchEvent(new Event('change', { bubbles: true })); });
+        const editor = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="File contents"]')!;
+        expect(ui.updateSettings).toHaveBeenCalledWith({ fontSize: 16 });
+        expect(host.querySelector('div[data-reduce-motion]')?.getAttribute('data-reduce-motion')).toBe('1');
+        expect(editor.style.fontSize).toBe('16px');
+        expect(editor.getAttribute('wrap')).toBe('soft');
+        editor.setSelectionRange(1, 1);
+        act(() => { editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
+        expect(files.setActiveContent).toHaveBeenCalledWith('a  ');
     });
 
     it('clears the top-level error after a successful retry', async () => {

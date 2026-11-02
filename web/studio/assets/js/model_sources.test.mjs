@@ -26,11 +26,13 @@ async function fresh(fetchImpl) {
     const listeners = new Map();
     const events = [];
     const values = new Map();
-    globalThis.localStorage = {
+    const storage = {
+        fail: false,
         getItem(key) { return values.has(key) ? values.get(key) : null; },
-        setItem(key, value) { values.set(key, value); },
+        setItem(key, value) { if (this.fail) throw new Error('storage full'); values.set(key, value); },
         removeItem(key) { values.delete(key); },
     };
+    globalThis.localStorage = storage;
     globalThis.document = {
         baseURI: 'https://example.test/',
         addEventListener(type, listener) {
@@ -45,7 +47,7 @@ async function fresh(fetchImpl) {
     };
     moduleCounter += 1;
     const module = await import(`./model_sources.js?test=${moduleCounter}`);
-    return { api: module.ModelSources, events, LOAD_PROGRESS_EVENT: module.LOAD_PROGRESS_EVENT };
+    return { api: module.ModelSources, events, storage, LOAD_PROGRESS_EVENT: module.LOAD_PROGRESS_EVENT };
 }
 
 test('loadFromUrl emits real byte progress and one finalization', async () => {
@@ -140,4 +142,15 @@ test('bundled loads accept operation metadata and finalize', async () => {
     const progress = events.filter((event) => event.type === LOAD_PROGRESS_EVENT);
     assert.equal(progress.at(-1).detail.phase, 'finalizing');
     assert.equal(progress.at(-1).detail.operationId, 3);
+});
+
+test('API add and update roll back when browser storage fails', async () => {
+    const { api, storage, events } = await fresh(async () => { throw new Error('network must not run'); });
+    const existing = api.list().api[0];
+    storage.fail = true;
+    assert.throws(() => api.addApi({ id: 'api-new', label: 'New', baseUrl: 'https://new.example.com/v1', model: 'model' }), /Could not persist model sources/);
+    assert.equal(api.list().api.some((item) => item.id === 'api-new'), false);
+    assert.throws(() => api.updateApi(existing.id, { baseUrl: 'https://changed.example.com/v1' }), /Could not persist model sources/);
+    assert.equal(api.list().api.find((item) => item.id === existing.id).baseUrl, existing.baseUrl);
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed').length, 0);
 });

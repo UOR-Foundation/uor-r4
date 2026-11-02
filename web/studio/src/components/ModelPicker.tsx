@@ -28,6 +28,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const [providerDraft, setProviderDraft] = useState<ProviderDraft>(emptyDraft);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [providerOpen, setProviderOpen] = useState(false);
+    const [providerError, setProviderError] = useState<string | null>(null);
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const [, setRevision] = useState(0);
@@ -62,12 +63,14 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
 
     function editProvider(provider?: ApiProvider) {
         setEditingId(provider?.id ?? null);
+        setProviderError(null);
         setProviderDraft(provider ? { label: provider.label, preset: provider.preset, baseUrl: provider.baseUrl, model: provider.model, apiKey: '' } : emptyDraft);
         setProviderOpen(true);
     }
 
     function saveProvider(event: Event) {
         event.preventDefault();
+        setProviderError(null);
         try {
             if (editingId) {
                 const patch: Partial<ApiProvider> = {
@@ -78,6 +81,11 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 };
                 if (providerDraft.apiKey) patch.apiKey = providerDraft.apiKey;
                 sources.updateApi(editingId, patch);
+                setTestResults((current) => {
+                    const next = { ...current };
+                    delete next[editingId];
+                    return next;
+                });
                 if (state.selectedSource?.kind === 'api' && state.selectedSource.id === editingId) {
                     store.dispatch({ type: 'api/selected', sourceId: editingId, endpoint: providerDraft.baseUrl });
                     document.dispatchEvent(new CustomEvent('uor-api-config-changed', { detail: { id: editingId } }));
@@ -90,6 +98,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
             setProviderDraft(emptyDraft);
             refresh();
         } catch (error) {
+            setProviderError(error instanceof Error ? error.message : String(error));
             report(error);
         }
     }
@@ -98,7 +107,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
         <section aria-label="Model sources">
             <h1>Models</h1>
             <p>{state.selectedSource ? `${state.selectedSource.kind === 'api' ? 'API' : 'Artifact'}: ${state.selectedSource.id}` : 'No model source selected'}</p>
-            <p>{state.artifact.phase === 'selected' ? 'Selected model; not ready' : `Artifact: ${state.artifact.phase}`}</p>
+            <p>{state.selectedSource?.kind === 'artifact' && (state.artifact.phase !== 'ready' || state.residentArtifact?.sourceId !== state.selectedSource.id) ? 'Selected model; not ready' : `Artifact: ${state.artifact.phase}`}</p>
             {state.artifact.error && <p role="alert">{state.artifact.error}</p>}
 
             <section aria-label="Local engine">
@@ -178,6 +187,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
 
             {providerOpen && (
                 <Modal title={editingId ? 'Edit API provider' : 'Add API provider'} onClose={() => { setProviderOpen(false); setEditingId(null); }}>
+                    {providerError && <p role="alert">{providerError}</p>}
                     <form data-action="save-provider" onSubmit={saveProvider}>
                         <label>Provider name<input aria-label="Provider name" required value={providerDraft.label} onInput={(event) => setProviderDraft({ ...providerDraft, label: event.currentTarget.value })} /></label>
                         <label>Provider base URL<input aria-label="Provider base URL" required type="url" value={providerDraft.baseUrl} onInput={(event) => setProviderDraft({ ...providerDraft, baseUrl: event.currentTarget.value })} /></label>

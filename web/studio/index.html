@@ -1330,6 +1330,7 @@
                 app.chatGenerationId = null;
                 app.generating = false;
                 updateComposerState();
+                document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete', generationId: localGenerationId } }));
                 return;
             }
             var text = typeof message.fullText === 'string' ? message.fullText : app.assistantBuffer;
@@ -1554,11 +1555,8 @@
             }
             renderConversationList();
             scrollChat(true);
-            if (app.mode === 'api') {
-                sendViaApi(prompt, conversation);
-            } else {
-                sendViaWorker(prompt, conversation);
-            }
+            var started = app.mode === 'api' ? sendViaApi(prompt, conversation) : sendViaWorker(prompt, conversation);
+            if (started === false) return false;
             return app.activeGenerationId;
         }
 

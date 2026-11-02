@@ -187,8 +187,10 @@ let editing = null; // { id: string|null, values: {...} }
 function persist() {
     try {
         globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        return true;
     } catch (_error) {
         setMessage('error', 'Could not persist model sources: browser storage is unavailable or full.');
+        return false;
     }
 }
 
@@ -639,7 +641,10 @@ const api = {
         const entry = apiEntry(input || {});
         if (!entry.baseUrl) throw new Error('An API base URL is required.');
         state.api.push(entry);
-        persist();
+        if (!persist()) {
+            state.api.pop();
+            throw new Error(message.text);
+        }
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);
@@ -648,8 +653,12 @@ const api = {
     updateApi(id, patch) {
         const entry = findApi(id);
         if (!entry) throw new Error('No API endpoint with that id.');
+        const previous = clone(entry);
         Object.assign(entry, apiEntry(Object.assign({}, entry, patch, { id: entry.id, createdAt: entry.createdAt })));
-        persist();
+        if (!persist()) {
+            Object.assign(entry, previous);
+            throw new Error(message.text);
+        }
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);

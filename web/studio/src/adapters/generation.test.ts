@@ -53,6 +53,17 @@ describe('generation adapter', () => {
         expect(store.getState().session.phase).toBe('error');
     });
 
+    it('rejects a missing generation ID instead of treating the send as started', () => {
+        const api = sessions();
+        api.sendPrompt = vi.fn(() => undefined as unknown as number);
+        const adapter = createGenerationAdapter(store, api);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        expect(adapter.send('hello')).toBe(false);
+        expect(store.getState().session.phase).toBe('error');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        adapter.dispose();
+    });
+
     it('uses the discrete predictor rather than chat generation', () => {
         const api = sessions();
         const adapter = createGenerationAdapter(store, api);

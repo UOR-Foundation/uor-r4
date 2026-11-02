@@ -143,7 +143,8 @@ export class LifecycleStore {
         }
         if (this.state.artifact.phase !== 'ready') return false;
         const resident = this.state.residentArtifact;
-        if (resident?.engineSupported === false) return false;
+        if (!resident || resident.sourceId !== this.state.selectedSource.id) return false;
+        if (resident.engineSupported === false) return false;
         return !(resident?.canGenerate === false && resident.canPredict !== true);
     }
 

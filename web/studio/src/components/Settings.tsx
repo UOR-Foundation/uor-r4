@@ -16,6 +16,8 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
 
 export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
+    const [fontSizeDraft, setFontSizeDraft] = useState(String(settings.fontSize));
+    const [tabSizeDraft, setTabSizeDraft] = useState(String(settings.tabSize));
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
 
     function update<K extends keyof StudioSettings>(key: K, value: StudioSettings[K]) {
@@ -23,6 +25,14 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
         setSettings(next);
         ui.updateSettings({ [key]: value });
         onSettingsChange?.(next);
+    }
+
+    function commitNumber(key: 'fontSize' | 'tabSize', raw: string) {
+        const font = key === 'fontSize';
+        const value = clamp(Number(raw), font ? 10 : 1, font ? 24 : 8, font ? 13 : 4);
+        if (font) setFontSizeDraft(String(value));
+        else setTabSizeDraft(String(value));
+        update(key, value);
     }
 
     function confirmClear() {
@@ -49,8 +59,8 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
             </section>
             <section aria-label="Editor preferences">
                 <h3>Editor</h3>
-                <label>Font size<input aria-label="Editor font size" type="number" min="10" max="24" value={settings.fontSize} onInput={(event) => update('fontSize', clamp(Number(event.currentTarget.value), 10, 24, 13))} /></label>
-                <label>Tab size<input aria-label="Tab size" type="number" min="1" max="8" value={settings.tabSize} onInput={(event) => update('tabSize', clamp(Number(event.currentTarget.value), 1, 8, 4))} /></label>
+                <label>Font size<input aria-label="Editor font size" type="number" min="10" max="24" value={fontSizeDraft} onInput={(event) => setFontSizeDraft(event.currentTarget.value)} onBlur={(event) => commitNumber('fontSize', event.currentTarget.value)} /></label>
+                <label>Tab size<input aria-label="Tab size" type="number" min="1" max="8" value={tabSizeDraft} onInput={(event) => setTabSizeDraft(event.currentTarget.value)} onBlur={(event) => commitNumber('tabSize', event.currentTarget.value)} /></label>
                 <label><input aria-label="Word wrap" type="checkbox" checked={settings.wordWrap} onChange={(event) => update('wordWrap', event.currentTarget.checked)} /> Word wrap</label>
             </section>
             <section aria-label="Data controls">

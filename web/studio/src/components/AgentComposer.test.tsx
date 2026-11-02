@@ -135,8 +135,8 @@ describe('AgentComposer', () => {
         expect(button('Send').disabled).toBe(true);
     });
 
-    it('does not label an unmatched resident artifact as ready local generation', () => {
-        const { store } = mount();
+    it('does not label or enable an unmatched resident artifact as ready local generation', () => {
+        const { store, generation } = mount();
         act(() => { store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' }); });
         expect(host.textContent).toContain('Selected model; not ready');
         act(() => {
@@ -146,6 +146,11 @@ describe('AgentComposer', () => {
         });
         expect(host.textContent).toContain('Selected model; not ready');
         expect(host.textContent).not.toContain('Local generation');
+        prompt('Hello');
+        expect(store.canRun()).toBe(false);
+        expect(button('Send').disabled).toBe(true);
+        act(() => { button('Send').click(); });
+        expect(generation.send).not.toHaveBeenCalled();
     });
 
     it('pins the active generation mode label across source changes', () => {

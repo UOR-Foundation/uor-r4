@@ -66,6 +66,15 @@ describe('artifact lifecycle', () => {
         expect(store.canRun()).toBe(true);
     });
 
+    it('does not run a ready resident belonging to another source', () => {
+        const store = new LifecycleStore();
+        const current = selectAndStart(store, 'model-a');
+        store.dispatch({ type: 'artifact/ready', operation: current, artifact: { sourceId: 'model-b', schema: 'uor-r4.lut-stack/1', canGenerate: true } });
+        expect(store.getState().artifact.phase).toBe('ready');
+        expect(store.getState().residentArtifact?.sourceId).toBe('model-b');
+        expect(store.canRun()).toBe(false);
+    });
+
     it('ignores stale progress, ready, and failure events after superseding a load', () => {
         const store = new LifecycleStore();
         const first = selectAndStart(store, 'model-a');

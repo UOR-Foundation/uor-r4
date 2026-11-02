@@ -35,7 +35,7 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
             };
             try {
                 const generationId = prediction ? sessions.predict(prompt) : sessions.sendPrompt(prompt);
-                if (generationId === false) return fail();
+                if (typeof generationId !== 'number' || !Number.isInteger(generationId) || generationId <= 0) return fail();
                 store.dispatch({ type: 'generation/started', source: selected, generationId });
                 return store.getState().session.phase === 'generating';
             } catch {

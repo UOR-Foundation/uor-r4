@@ -68,8 +68,8 @@
         if (!patch || typeof patch !== 'object') return;
         if (patch.theme !== undefined) settings.theme = patch.theme === 'light' ? 'light' : (patch.theme === 'system' ? 'system' : 'dark');
         if (patch.reduceMotion !== undefined) settings.reduceMotion = Boolean(patch.reduceMotion);
-        if (patch.fontSize !== undefined) settings.fontSize = Math.max(10, Math.min(24, Number(patch.fontSize) || defaults.fontSize));
-        if (patch.tabSize !== undefined) settings.tabSize = Math.max(1, Math.min(8, Number(patch.tabSize) || defaults.tabSize));
+        if (patch.fontSize !== undefined) settings.fontSize = Math.max(10, Math.min(24, Number.isFinite(Number(patch.fontSize)) ? Number(patch.fontSize) : defaults.fontSize));
+        if (patch.tabSize !== undefined) settings.tabSize = Math.max(1, Math.min(8, Number.isFinite(Number(patch.tabSize)) ? Number(patch.tabSize) : defaults.tabSize));
         if (patch.wordWrap !== undefined) settings.wordWrap = Boolean(patch.wordWrap);
         saveSettings();
         applySettings();

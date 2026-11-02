@@ -157,6 +157,7 @@ describe('ModelPicker', () => {
         expect(modelSources.updateApi).toHaveBeenCalledWith('api-a', expect.objectContaining({ baseUrl: 'https://new.example.com/v1', apiKey: 'new-secret' }));
         expect(store.getState().selectedSource?.endpoint).toBe('https://new.example.com/v1');
         expect(apiConfigChanged).toHaveBeenCalledWith(expect.objectContaining({ detail: { id: 'api-a' } }));
+        expect(host.textContent).toContain('Test: untested');
         act(() => { button('Edit API A').click(); });
         expect(input('API key').value).toBe('');
         act(() => { button('Remove API A').click(); });
@@ -165,5 +166,21 @@ describe('ModelPicker', () => {
         expect(store.getState().selectedSource?.kind).toBe('artifact');
         expect(store.canRun()).toBe(false);
         document.removeEventListener('uor-api-config-changed', apiConfigChanged);
+    });
+
+    it('keeps the provider draft and shows an inline error when persistence fails', () => {
+        const { store, modelSources, onError } = mount();
+        modelSources.updateApi = vi.fn(() => { throw new Error('Could not persist model sources: browser storage is unavailable or full.'); });
+        act(() => { button('Edit API A').click(); });
+        act(() => {
+            input('API key').value = 'new-secret';
+            input('API key').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        expect(host.querySelector('dialog')).not.toBeNull();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not persist model sources');
+        expect(input('API key').value).toBe('new-secret');
+        expect(onError).toHaveBeenCalledWith('Could not persist model sources: browser storage is unavailable or full.');
+        expect(store.getState().selectedSource).toBeNull();
     });
 });

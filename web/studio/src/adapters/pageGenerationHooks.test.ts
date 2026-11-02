@@ -35,12 +35,14 @@ function pageHooks() {
         onError(error: Error): void;
     }
     const conversation = { id: 'conversation', messages: [] as Array<Record<string, unknown>>, sourceKind: '' };
+    let currentConversation: typeof conversation | null = conversation;
     const apiRequests: CapturedApiRequest[] = [];
     let requestSequence = 0;
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
         'activeConversation', 'appendMessageElement', 'touchConversation', 'updateComposerState', 'requestCheckpoint',
         'renderConversationList', 'scrollChat', 'formatTps', 'setView', 'makeId', 'streamChatCompletions', 'configFromSources', 'MAX_NEW_TOKENS',
+        'ensureConversation', 'autoGrowTextarea',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function renderDiscretePrediction', 'function runPrediction')}
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
@@ -52,8 +54,9 @@ function pageHooks() {
     );
     const hooks = factory(
         app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
-        () => conversation, vi.fn(() => null), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(() => '1'), vi.fn(),
+        () => currentConversation, vi.fn(() => null), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(() => '1'), vi.fn(),
         () => `gen-${++requestSequence}`, vi.fn(async (options: CapturedApiRequest) => { apiRequests.push(options); }), vi.fn(() => null), 32,
+        () => conversation, vi.fn(),
     ) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
@@ -64,7 +67,7 @@ function pageHooks() {
         finishLocalGeneration(message: { id?: string; fullText?: string; tokenCount?: number }): void;
         finishGenerationWithError(error: string, requestId?: string | number, generationId?: number | null): boolean | void;
     };
-    return { app, hooks, conversation, apiRequests };
+    return { app, hooks, conversation, apiRequests, clearConversation: () => { currentConversation = null; } };
 }
 
 function events(type: string, listener: (event: CustomEvent) => void) {
@@ -178,6 +181,29 @@ describe('actual page prediction hooks', () => {
         expect(app.activeChatRequestId).toBeNull();
         hooks.onWorkerMessage({ data: { action: 'generate_complete', id: newer.id, fullText: 'duplicate', tokenCount: 1 } });
         expect(completed).toHaveBeenCalledTimes(1);
+        dispose();
+    });
+
+    it('returns false when the local worker cannot start a composer send', () => {
+        const { app, hooks } = pageHooks();
+        app.worker = null as unknown as typeof app.worker;
+        expect(hooks.sendFromComposer('chat')).toBe(false);
+        expect(app.activeGenerationId).toBeNull();
+        expect(app.chatGenerationId).toBeNull();
+    });
+
+    it('dispatches a matching local terminal when no conversation is active', () => {
+        const { app, hooks, conversation, clearConversation } = pageHooks();
+        const completed = vi.fn();
+        const dispose = events('uor-generation-finished', completed);
+        expect(hooks.sendViaWorker('chat', conversation)).toBe(true);
+        const request = app.worker.postMessage.mock.calls[0][0];
+        clearConversation();
+        hooks.onWorkerMessage({ data: { action: 'generate_complete', id: request.id, fullText: 'done', tokenCount: 1 } });
+        expect(completed).toHaveBeenCalledTimes(1);
+        expect(completed.mock.calls[0][0].detail).toMatchObject({ outcome: 'complete', generationId: 1 });
+        expect(app.activeChatRequestId).toBeNull();
+        expect(app.generating).toBe(false);
         dispose();
     });
 

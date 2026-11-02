@@ -75,7 +75,7 @@ coordinated through props and callbacks.
 The components call the existing file/session/UI/model-source APIs through typed bridges. Small public
 hooks forward editor content, generation completion, settings, and attachment changes; the engine,
 worker, tokenizer, and `studio_api.js` remain unchanged. Existing provider credentials are not
-rendered or copied into component state; newly entered keys go only to the existing `modelSources.v1` writer, and the provider draft is cleared after saving.
+rendered or copied into component state; newly entered keys go only to the existing `modelSources.v1` writer, and the provider draft is cleared after a successful save. Failed storage writes roll back and remain visible in the dialog.
 
 Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` in this directory. The library
 build emits uncommitted `dist/` output; `src/studio.css` does not alter the legacy `index.css`.

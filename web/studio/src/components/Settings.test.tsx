@@ -29,9 +29,9 @@ describe('Settings', () => {
         const reduce = host.querySelector<HTMLInputElement>('input[aria-label="Reduce motion"]')!;
         act(() => { reduce.checked = true; reduce.dispatchEvent(new Event('change', { bubbles: true })); });
         const font = host.querySelector<HTMLInputElement>('input[aria-label="Editor font size"]')!;
-        act(() => { font.value = '16'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { font.value = '16'; font.dispatchEvent(new Event('input', { bubbles: true })); font.dispatchEvent(new Event('blur', { bubbles: true })); });
         const tab = host.querySelector<HTMLInputElement>('input[aria-label="Tab size"]')!;
-        act(() => { tab.value = '2'; tab.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { tab.value = '2'; tab.dispatchEvent(new Event('input', { bubbles: true })); tab.dispatchEvent(new Event('blur', { bubbles: true })); });
         const wrap = host.querySelector<HTMLInputElement>('input[aria-label="Word wrap"]')!;
         act(() => { wrap.checked = true; wrap.dispatchEvent(new Event('change', { bubbles: true })); });
         expect(ui.updateSettings).toHaveBeenCalledWith({ theme: 'light' });
@@ -65,22 +65,37 @@ describe('Settings', () => {
         expect(ui.clearEditor).toHaveBeenCalledOnce();
     });
 
-    it('clamps numeric editor preferences to the legacy ranges', () => {
+    it('clamps numeric editor preferences on blur', () => {
         const ui = makeUi();
         const onSettingsChange = vi.fn();
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} onSettingsChange={onSettingsChange} />, host); });
         const font = host.querySelector<HTMLInputElement>('input[aria-label="Editor font size"]')!;
         const tab = host.querySelector<HTMLInputElement>('input[aria-label="Tab size"]')!;
-        act(() => { font.value = '0'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { font.value = '0'; font.dispatchEvent(new Event('input', { bubbles: true })); font.dispatchEvent(new Event('blur', { bubbles: true })); });
         expect(ui.updateSettings).toHaveBeenLastCalledWith({ fontSize: 10 });
         expect(font.value).toBe('10');
-        act(() => { font.value = '99'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { font.value = '99'; font.dispatchEvent(new Event('input', { bubbles: true })); font.dispatchEvent(new Event('blur', { bubbles: true })); });
         expect(ui.updateSettings).toHaveBeenLastCalledWith({ fontSize: 24 });
-        act(() => { tab.value = '0'; tab.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { tab.value = '0'; tab.dispatchEvent(new Event('input', { bubbles: true })); tab.dispatchEvent(new Event('blur', { bubbles: true })); });
         expect(ui.updateSettings).toHaveBeenLastCalledWith({ tabSize: 1 });
         expect(tab.value).toBe('1');
-        act(() => { tab.value = '99'; tab.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { tab.value = '99'; tab.dispatchEvent(new Event('input', { bubbles: true })); tab.dispatchEvent(new Event('blur', { bubbles: true })); });
         expect(ui.updateSettings).toHaveBeenLastCalledWith({ tabSize: 8 });
         expect(onSettingsChange).toHaveBeenLastCalledWith({ theme: 'dark', reduceMotion: false, fontSize: 24, tabSize: 8, wordWrap: false });
+    });
+
+    it('keeps the numeric draft intact during sequential typing', () => {
+        const ui = makeUi();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} />, host); });
+        const font = host.querySelector<HTMLInputElement>('input[aria-label="Editor font size"]')!;
+        act(() => { font.value = '1'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(font.value).toBe('1');
+        expect(ui.updateSettings).not.toHaveBeenCalled();
+        act(() => { font.value = '16'; font.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(font.value).toBe('16');
+        expect(ui.updateSettings).not.toHaveBeenCalled();
+        act(() => { font.dispatchEvent(new Event('blur', { bubbles: true })); });
+        expect(ui.updateSettings).toHaveBeenCalledWith({ fontSize: 16 });
+        expect(font.value).toBe('16');
     });
 });

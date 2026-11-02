@@ -95,6 +95,7 @@ describe('model source adapter', () => {
         expect(store.getState().artifact.phase).toBe('unselected');
         await adapter.testApi('api-a');
         expect(api.testApi).toHaveBeenCalledWith('api-a');
+        expect(api.setActive).toHaveBeenCalledTimes(1);
         expect(api.setActive).toHaveBeenCalledWith({ kind: 'api', id: 'api-a' });
         expect(store.getState().api.testStatus).toBe('passed');
     });

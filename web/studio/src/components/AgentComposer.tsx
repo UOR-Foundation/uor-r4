@@ -13,6 +13,10 @@ interface AgentComposerProps {
     generation: GenerationAdapter;
     copy(text: string): void | Promise<void>;
     download(name: string, content: string): void;
+    draft?: string;
+    pasted?: string;
+    onDraftChange?(value: string): void;
+    onPastedChange?(value: string): void;
 }
 
 let insertSequence = 0;
@@ -31,10 +35,14 @@ const templates = [
     ['test', 'Write a verification plan'],
 ] as const;
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange }: AgentComposerProps) {
     const state = useLifecycle(store);
-    const [draft, setDraft] = useState('');
-    const [pasted, setPasted] = useState('');
+    const [draftState, setDraftState] = useState('');
+    const [pastedState, setPastedState] = useState('');
+    const draft = controlledDraft ?? draftState;
+    const pasted = controlledPasted ?? pastedState;
+    const setDraft = (value: string) => { setDraftState(value); onDraftChange?.(value); };
+    const setPasted = (value: string) => { setPastedState(value); onPastedChange?.(value); };
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
 
