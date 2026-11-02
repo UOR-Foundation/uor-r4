@@ -1301,6 +1301,11 @@ impl StackModel {
         let mixed = gate
             .contiguous()?
             .apply_op2(&up.contiguous()?, HamiltonGate)?;
+        let mixed = if crate::hamilton_sheet::is_bridging_activation_i16() {
+            crate::hamilton_sheet::activation_quantize16(&mixed)?
+        } else {
+            mixed
+        };
         let down = self.linear(&mixed, p.layer(layer, "mlp.down.weight")?)?;
         if crate::hamilton_sheet::is_capturing_gate_telemetry() {
             let unrotated = self.linear(&up, p.layer(layer, "mlp.down.weight")?)?;

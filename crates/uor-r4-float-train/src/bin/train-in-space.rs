@@ -3,12 +3,13 @@
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
 //! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--samples N] [--reply-tokens N] [--profile K] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1]`
 //!
-//! `--train-as-served 1` trains on the values the integer artifact serves (one-model-end-to-end,
-//! claude-258): before each step's forward the trunk's tables, the Hamming reads and the turn
-//! memory's weights are rounded as the export rounds them, the gradient at those values moves the
-//! float values they came from, and every checkpoint is scored and saved rounded, so its export
-//! changes nothing (`in_space_long::ServedValues`). It refuses the reads the export does not
-//! carry and the type spin.
+//! `--train-as-served 1` trains through the integer artifact's served graph (one-model-end-to-end,
+//! claude-258 and deepseek-4): parameters, Hamming and memory weights are rounded as exported;
+//! Q16 residual values, dynamic i16 activations, D11 snaps and the Q12 query cover the forward and
+//! backward; and checkpoints are evaluated and saved through the same graph and rounded values.
+//! The gradient moves the float values they came from (`in_space_long::ServedValues`). The switch
+//! refuses reads the export does not carry, the type spin, folded/reflected scores, memory dropout
+//! and reply-row cuts.
 //!
 //! `--profile K` times each stage of K training steps on the GPU after 8 of warm-up, each against
 //! the unprofiled step after it, into `DIR/profile.jsonl` and `DIR/profile.json`

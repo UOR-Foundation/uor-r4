@@ -699,8 +699,9 @@ pub(crate) fn activation_quantize16(x: &Tensor) -> Result<Tensor> {
 }
 
 /// Enable the served graph's discrete training boundaries together: D11 snaps and Q12 query,
-/// Q16 residual quantization and dynamic i16 activation quantization. Full trainer wiring
-/// remains outside this primitive unit; this function makes the intended shadow explicit.
+/// Q16 residual quantization and dynamic i16 activation quantization. The trainer keeps this
+/// closure active through its loss and backward; callers remain responsible for parameter
+/// export rounding and for invoking [`q12_query`] on scored queries.
 pub fn with_served_surrogate_training<T>(
     seed: u64,
     step: usize,
@@ -730,6 +731,11 @@ pub fn with_served_surrogate_training<T>(
         hook,
     };
     with_d11_training(seed, step, f)
+}
+
+/// Whether the served surrogate applies the dynamic i16 activation quantizer.
+pub(crate) fn is_bridging_activation_i16() -> bool {
+    BRIDGE_ACTIVATION_I16.with(|bridge| bridge.get())
 }
 
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
