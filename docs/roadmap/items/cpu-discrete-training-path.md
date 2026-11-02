@@ -18,7 +18,7 @@ The discrete learner is the strongest comparison-heavy CPU candidate, but its ea
 
 ## What is missing
 
-Port Route, Flock and Relation reads one at a time; then the 16-lane counterfactual proposal rule, strict-improvement and tie semantics, staged atomic-free apply, BVG-K and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
+Route and Flock reads now have independent finite parity slices. Port Relation next; then the 16-lane counterfactual proposal rule, strict-improvement and tie semantics, staged atomic-free apply, BVG-K and the deterministic cursor/checkpoint path. Preserve the current status codes and post-apply checks.
 
 ## Done when
 
@@ -34,7 +34,7 @@ The writer oracle fails to reproduce the stored observation, or the required sou
 
 ## How to start
 
-Read `crates/uor-r4-discrete/src/discrete.cu` for the executed semantics and the host source files `rows_source.rs`, `rowsk_source.rs`, `bvgk_source.rs`, `training.rs` and `objective.rs` for ordering and validation. Port Route first and keep every later stage disabled until its finite parity test passes.
+Read `crates/uor-r4-discrete/src/discrete.cu` for the executed semantics and the host source files `rows_source.rs`, `rowsk_source.rs`, `bvgk_source.rs`, `training.rs` and `objective.rs` for ordering and validation. Port reads one at a time and keep every later stage disabled until its finite parity test passes.
 
 ## Rules that apply
 
