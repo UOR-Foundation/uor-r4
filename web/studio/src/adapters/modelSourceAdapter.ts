@@ -8,9 +8,20 @@ export interface WorkerLike {
     postMessage(message: unknown): void;
 }
 
+export interface WorkerCapabilities {
+    schema?: string;
+    file_name?: string;
+    artifact_sha256?: string;
+    sha256_verified?: boolean | null;
+    engine_supported?: boolean;
+    can_generate?: boolean;
+    source?: string;
+}
+
 export interface WorkerMessage {
     action: string;
-    capabilities?: { schema?: string };
+    id?: number;
+    capabilities?: WorkerCapabilities;
     error?: string;
 }
 
@@ -22,6 +33,11 @@ export interface ModelSourceAdapter {
     selectApi(sourceId: string, endpoint: string): void;
     testApi(id?: string): Promise<unknown>;
     handleWorkerMessage(message: WorkerMessage): void;
+}
+
+interface PendingLoad {
+    operation: LoadOperation;
+    result: LoadResult;
 }
 
 function sourceKind(result: LoadResult): string {
@@ -36,6 +52,9 @@ export function createModelSourceAdapter(
     sources: ModelSourcesApi,
     worker: WorkerLike,
 ): ModelSourceAdapter {
+    let pending: PendingLoad | null = null;
+    let workerQueue: Promise<void> = Promise.resolve();
+
     function start(sourceId: string): LoadOperation {
         store.dispatch({ type: 'artifact/selected', sourceId });
         const operation = store.getState().operation;
@@ -43,22 +62,58 @@ export function createModelSourceAdapter(
         return operation;
     }
 
-    async function finish(result: LoadResult, operation: LoadOperation): Promise<LoadResult> {
-        if (result.stale) return result;
-        worker.postMessage({
-            action: 'load_model',
-            payload: {
-                bytes: result.bytes,
-                fileName: result.fileName,
-                source: sourceKind(result),
-                sourceLabel: result.meta.label || result.meta.fileName || '',
-                expectedSha256: result.expectedSha256,
-                tokenizerArtifact: result.tokenizerArtifact,
-                operationId: operation.operationId,
-            },
-        });
-        store.dispatch({ type: 'artifact/finalizing', operation });
+    function isCurrent(operation: LoadOperation): boolean {
+        const current = store.getState().operation;
+        const selected = store.getState().selectedSource;
+        return Boolean(
+            current
+            && selected?.kind === 'artifact'
+            && current.operationId === operation.operationId
+            && current.sourceId === operation.sourceId
+            && selected.id === operation.sourceId,
+        );
+    }
+
+    function errorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
+    }
+
+    function failCurrent(operation: LoadOperation, error: unknown): void {
+        if (isCurrent(operation)) {
+            store.dispatch({ type: 'artifact/failed', operation, error: errorMessage(error) });
+        }
+    }
+
+    function postToWorker(result: LoadResult, operation: LoadOperation): LoadResult {
+        if (result.stale || !isCurrent(operation)) return { ...result, stale: true };
+        workerQueue = workerQueue.then(() => {
+            if (!isCurrent(operation)) return;
+            store.dispatch({ type: 'artifact/finalizing', operation });
+            pending = { operation, result };
+            worker.postMessage({
+                action: 'load_model',
+                id: operation.operationId,
+                payload: {
+                    bytes: result.bytes,
+                    fileName: result.fileName,
+                    source: sourceKind(result),
+                    sourceLabel: result.meta.label || result.meta.fileName || '',
+                    expectedSha256: result.expectedSha256,
+                    tokenizerArtifact: result.tokenizerArtifact,
+                    operationId: operation.operationId,
+                },
+            });
+        }, () => undefined);
         return result;
+    }
+
+    async function attempt(operation: LoadOperation, load: () => Promise<LoadResult>): Promise<LoadResult> {
+        try {
+            return postToWorker(await load(), operation);
+        } catch (error) {
+            failCurrent(operation, error);
+            throw error;
+        }
     }
 
     document.addEventListener(LOAD_PROGRESS_EVENT, (event) => {
@@ -80,45 +135,71 @@ export function createModelSourceAdapter(
     return {
         async loadPublished(idOrEntry) {
             const operation = start(typeof idOrEntry === 'string' ? idOrEntry : 'published');
-            return finish(await sources.loadPublished(idOrEntry, operation), operation);
+            return attempt(operation, () => sources.loadPublished(idOrEntry, operation));
         },
         async loadFromUrl(rawUrl) {
             const operation = start('url');
-            return finish(await sources.loadFromUrl(rawUrl, operation), operation);
+            return attempt(operation, () => sources.loadFromUrl(rawUrl, operation));
         },
         async loadLocalFile(file) {
             const operation = start('local-file');
-            return finish(await sources.loadLocalFile(file, operation), operation);
+            return attempt(operation, () => sources.loadLocalFile(file, operation));
         },
         async loadBundled() {
             const operation = start('bundled-demo');
-            return finish(await sources.loadBundled(operation), operation);
+            return attempt(operation, () => sources.loadBundled(operation));
         },
         selectApi(sourceId, endpoint) {
+            sources.setActive({ kind: 'api', id: sourceId });
             store.dispatch({ type: 'api/selected', sourceId, endpoint });
         },
         async testApi(id) {
-            store.dispatch({ type: 'api/testStarted' });
+            const selected = store.getState().selectedSource;
+            const targetId = id ?? selected?.id;
+            if (selected?.kind !== 'api' || !targetId || selected.id !== targetId) throw new Error('Cannot test a non-selected API source');
+            sources.setActive({ kind: 'api', id: targetId });
+            store.dispatch({ type: 'api/testStarted', sourceId: targetId });
             try {
-                const result = await sources.testApi(id);
-                store.dispatch({ type: 'api/testFinished', ok: result.ok });
+                const result = await sources.testApi(targetId);
+                store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok: result.ok });
                 return result;
             } catch (error) {
-                store.dispatch({ type: 'api/testFinished', ok: false });
+                store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok: false });
                 throw error;
             }
         },
         handleWorkerMessage(message) {
-            const operation = store.getState().operation;
-            if (!operation) return;
+            const current = pending;
+            if (!current) return;
+            const operation = current.operation;
             if (message.action === 'model_loaded') {
+                const capabilities = message.capabilities;
+                if (!isCurrent(operation)) {
+                    pending = null;
+                    return;
+                }
+                if (capabilities?.file_name && capabilities.file_name !== current.result.fileName) return;
+                if (current.result.expectedSha256 && capabilities?.artifact_sha256 && capabilities.artifact_sha256 !== current.result.expectedSha256) return;
+                pending = null;
                 store.dispatch({
                     type: 'artifact/ready',
                     operation,
-                    artifact: { schema: message.capabilities?.schema || '' },
+                    artifact: {
+                        sourceId: operation.sourceId,
+                        schema: capabilities?.schema || '',
+                        fileName: capabilities?.file_name || current.result.fileName,
+                        sha256: capabilities?.artifact_sha256,
+                        verified: capabilities?.sha256_verified ?? null,
+                        engineSupported: capabilities?.engine_supported,
+                        canGenerate: capabilities?.can_generate,
+                        source: capabilities?.source,
+                    },
                 });
-            } else if (message.action === 'operation_error') {
-                store.dispatch({ type: 'artifact/failed', operation, error: message.error || 'Operation failed.' });
+                return;
+            }
+            if (message.action === 'operation_error' && message.id === operation.operationId) {
+                pending = null;
+                failCurrent(operation, message.error || 'Operation failed.');
             }
         },
     };

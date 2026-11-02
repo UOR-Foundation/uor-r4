@@ -91,5 +91,24 @@ describe('copy-forward plan', () => {
         expect(plan.filter((entry) => entry.destinationKey !== null).map((entry) => entry.destinationKey)).not.toContain('uor.studio.modelSources.v1');
         expect(plan.every((entry) => !('migrationMarker' in entry))).toBe(true);
         expect(plan.every((entry) => !('payload' in entry))).toBe(true);
+        expect(JSON.stringify(plan)).not.toContain('sentinel-not-a-secret');
+    });
+
+    it('preserves the raw theme as a valid value and plan', () => {
+        const snapshot = readMigrationSnapshot(storageWith({ 'uor.studio.theme': 'dark' }));
+        const entry = snapshot.find((item) => item.key === 'uor.studio.theme');
+        expect(entry?.value).toBe('dark');
+        expect(entry?.error).toBeNull();
+        const plan = createCopyForwardPlan(snapshot);
+        expect(plan.find((item) => item.sourceKey === 'uor.studio.theme')?.value).toBe('dark');
+    });
+
+    it('marks malformed entries non-copyable instead of erasing them', () => {
+        const snapshot = readMigrationSnapshot(storageWith({ 'uor.studio.settings.v1': '{bad-json' }));
+        const plan = createCopyForwardPlan(snapshot);
+        const entry = plan.find((item) => item.sourceKey === 'uor.studio.settings.v1');
+        expect(entry?.migratable).toBe(false);
+        expect(entry?.destinationKey).toBeNull();
+        expect(entry?.raw).toBe('{bad-json');
     });
 });

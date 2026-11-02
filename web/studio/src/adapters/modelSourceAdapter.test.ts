@@ -3,12 +3,13 @@ import { LifecycleStore } from '../state/lifecycle.js';
 import { createModelSourceAdapter, LOAD_PROGRESS_EVENT } from './modelSourceAdapter.js';
 
 function sources() {
-    const result = { bytes: new Uint8Array(), fileName: 'model.lut', meta: { schema: 'uor-r4.lut-stack/1' } };
+    const result = { bytes: new Uint8Array(), fileName: 'model.lut', expectedSha256: 'abc', meta: { schema: 'uor-r4.lut-stack/1' } };
     return {
         loadPublished: vi.fn(async () => result),
-        loadFromUrl: vi.fn(async () => result),
+        loadFromUrl: vi.fn(async (url: string) => ({ ...result, fileName: url.split('/').pop() || 'downloaded-stack.lut' })),
         loadLocalFile: vi.fn(async () => result),
         loadBundled: vi.fn(async () => result),
+        setActive: vi.fn(),
         testApi: vi.fn(async () => ({ ok: true, detail: 'ok', models: [] })),
     };
 }
@@ -58,7 +59,7 @@ describe('model source adapter', () => {
         adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old' } });
         expect(store.canRun()).toBe(true);
         await adapter.loadFromUrl('https://example.com/b.lut');
-        adapter.handleWorkerMessage({ action: 'operation_error', error: 'bad model' });
+        adapter.handleWorkerMessage({ action: 'operation_error', id: 2, error: 'bad model' });
         expect(store.getState().artifact.phase).toBe('error');
         expect(store.getState().residentArtifact?.sourceId).toBe('url');
         expect(store.canRun()).toBe(false);
@@ -83,6 +84,84 @@ describe('model source adapter', () => {
         expect(store.getState().artifact.phase).toBe('unselected');
         await adapter.testApi('api-a');
         expect(api.testApi).toHaveBeenCalledWith('api-a');
+        expect(api.setActive).toHaveBeenCalledWith({ kind: 'api', id: 'api-a' });
         expect(store.getState().api.testStatus).toBe('passed');
+    });
+
+    it('uses the selected API id when omitted', async () => {
+        const api = sources();
+        const adapter = createModelSourceAdapter(store, api, worker());
+        adapter.selectApi('api-a', 'https://api.example.com/v1');
+        await adapter.testApi();
+        expect(api.testApi).toHaveBeenCalledWith('api-a');
+        expect(store.getState().api.testStatus).toBe('passed');
+    });
+
+    it('forwards the real expected hash to the worker', async () => {
+        const transport = worker();
+        const adapter = createModelSourceAdapter(store, sources(), transport);
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        expect(transport.postMessage).toHaveBeenCalledWith({
+            action: 'load_model',
+            id: 1,
+            payload: expect.objectContaining({ expectedSha256: 'abc' }),
+        });
+    });
+
+    it('does not mark a newer operation ready from an older worker result', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/a.lut');
+        await adapter.loadFromUrl('https://example.com/b.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old', file_name: 'a.lut', artifact_sha256: 'a' } });
+        expect(store.canRun()).toBe(false);
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'b.lut', artifact_sha256: 'abc', sha256_verified: true, engine_supported: true, can_generate: false, source: 'url' } });
+        expect(store.getState().residentArtifact).toMatchObject({
+            sourceId: 'url',
+            schema: 'new',
+            fileName: 'b.lut',
+            sha256: 'abc',
+            verified: true,
+            engineSupported: true,
+            canGenerate: false,
+            source: 'url',
+        });
+        expect(store.canRun()).toBe(true);
+    });
+
+    it('ignores non-load worker errors after readiness', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'model.lut' } });
+        expect(store.canRun()).toBe(true);
+        adapter.handleWorkerMessage({ action: 'operation_error', id: 999, error: 'unrelated error' });
+        expect(store.getState().artifact.phase).toBe('ready');
+        expect(store.canRun()).toBe(true);
+    });
+
+    it('records rejected loads as errors instead of leaving them pending', async () => {
+        const api = sources();
+        api.loadFromUrl.mockRejectedValueOnce(new Error('network down'));
+        const adapter = createModelSourceAdapter(store, api, worker());
+        await expect(adapter.loadFromUrl('https://example.com/model.lut')).rejects.toThrow('network down');
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toBe('network down');
+    });
+
+    it('does not attribute an API test to a source selected later', async () => {
+        const api = sources();
+        const adapter = createModelSourceAdapter(store, api, worker());
+        adapter.selectApi('api-a', 'https://api.example.com/v1');
+        const pending = adapter.testApi('api-a');
+        adapter.selectApi('api-b', 'https://other.example.com/v1');
+        await pending;
+        expect(store.getState().api.testStatus).toBe('untested');
+    });
+
+    it('refuses to test an endpoint that is not selected', async () => {
+        const api = sources();
+        const adapter = createModelSourceAdapter(store, api, worker());
+        adapter.selectApi('api-a', 'https://api.example.com/v1');
+        await expect(adapter.testApi('api-b')).rejects.toThrow('non-selected API');
+        expect(api.testApi).not.toHaveBeenCalled();
     });
 });

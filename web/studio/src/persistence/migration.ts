@@ -59,6 +59,17 @@ export function readMigrationSnapshot(storage: MigrationStorage): MigrationEntry
                 migratable: !isLiveCompatibilityKey(key),
             };
         }
+        if (key === 'uor.studio.theme') {
+            return {
+                key,
+                sourceKey: key,
+                raw,
+                value: raw,
+                error: null,
+                destinationKey: null,
+                migratable: true,
+            };
+        }
         try {
             return {
                 key,
@@ -84,11 +95,17 @@ export function readMigrationSnapshot(storage: MigrationStorage): MigrationEntry
 }
 
 export function createCopyForwardPlan(snapshot: MigrationEntry[]): MigrationEntry[] {
-    return snapshot.map((entry) => ({
-        ...entry,
-        value: entry.value === undefined ? null : structuredClone(entry.value),
-        destinationKey: entry.migratable
-            ? DESTINATION_KEYS[entry.sourceKey as Exclude<MigrationKey, 'uor.studio.modelSources.v1'>]
-            : null,
-    }));
+    return snapshot.map((entry) => {
+        if (isLiveCompatibilityKey(entry.sourceKey)) {
+            return { ...entry, raw: null, value: null, destinationKey: null, migratable: false };
+        }
+        if (entry.error !== null) {
+            return { ...entry, value: null, destinationKey: null, migratable: false };
+        }
+        return {
+            ...entry,
+            value: entry.value === undefined ? null : structuredClone(entry.value),
+            destinationKey: DESTINATION_KEYS[entry.sourceKey as Exclude<MigrationKey, 'uor.studio.modelSources.v1'>],
+        };
+    });
 }

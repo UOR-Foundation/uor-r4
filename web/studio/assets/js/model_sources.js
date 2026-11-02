@@ -345,7 +345,7 @@ async function readArtifact(bytes, fileName, origin, options) {
         format: meta.format,
         meta: clone(meta),
     });
-    return { bytes, fileName, header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
+    return { bytes, fileName, expectedSha256: extra.expectedSha256 || '', header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
 }
 
 function getBundledDemo() {

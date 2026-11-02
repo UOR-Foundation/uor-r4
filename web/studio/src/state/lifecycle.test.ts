@@ -115,11 +115,11 @@ describe('API source state', () => {
     it('tracks an independent connection test', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
-        store.dispatch({ type: 'api/testStarted' });
+        store.dispatch({ type: 'api/testStarted', sourceId: 'api-a' });
         expect(store.getState().api.testStatus).toBe('testing');
-        store.dispatch({ type: 'api/testFinished', ok: true });
+        store.dispatch({ type: 'api/testFinished', sourceId: 'api-a', ok: true });
         expect(store.getState().api.testStatus).toBe('passed');
-        store.dispatch({ type: 'api/testFinished', ok: false });
+        store.dispatch({ type: 'api/testFinished', sourceId: 'api-a', ok: false });
         expect(store.getState().api.testStatus).toBe('failed');
     });
 });
@@ -214,5 +214,63 @@ describe('endpoint privacy classification', () => {
         expect(classifyEndpoint('https://api.example.com')).toBe('remoteAPI');
         expect(classifyEndpoint('http://172.32.0.1')).toBe('remoteAPI');
         expect(() => classifyEndpoint('not a url')).toThrow(TypeError);
+    });
+
+    it('does not treat private-looking public hostnames as local networks', () => {
+        for (const endpoint of ['https://fda.gov', 'https://127.example.com', 'https://10.example.com', 'https://fe80.example.com']) {
+            expect(classifyEndpoint(endpoint)).toBe('remoteAPI');
+        }
+    });
+
+    it('covers the full fe80::/10 link-local range', () => {
+        expect(classifyEndpoint('http://[fe90::1]')).toBe('privateNetworkAPI');
+        expect(classifyEndpoint('http://[febf::1]')).toBe('privateNetworkAPI');
+        expect(classifyEndpoint('http://[fec0::1]')).toBe('remoteAPI');
+    });
+});
+
+describe('generation source authority', () => {
+    it('uses the selected endpoint rather than a caller-supplied endpoint', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a', endpoint: 'http://127.0.0.1' } });
+        expect(store.getState().session.activeGeneration?.privacy).toBe('remoteAPI');
+        expect(store.getState().session.activeGeneration?.source.endpoint).toBe('https://api.example.com/v1');
+    });
+
+    it('uses the selected endpoint when the action omits it', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
+        expect(store.getState().session.activeGeneration?.privacy).toBe('remoteAPI');
+    });
+
+    it('reports an invalid selected endpoint without throwing', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'not a url' });
+        expect(() => store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } })).not.toThrow();
+        expect(store.getState().session.phase).toBe('error');
+        expect(store.canRun()).toBe(false);
+    });
+});
+
+describe('folder, file-close, and session activation states', () => {
+    it('supports no-open-file after opening a folder or closing a file', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'folder/opened', path: 'project' });
+        expect(store.getState().file.phase).toBe('no-open-file');
+        store.dispatch({ type: 'file/opened', path: 'project/a.md' });
+        store.dispatch({ type: 'file/closed' });
+        expect(store.getState().file.phase).toBe('no-open-file');
+        expect(store.canSave()).toBe(false);
+    });
+
+    it('supports new to active to generating', () => {
+        const store = new LifecycleStore();
+        readyArtifact(store, 'model-a');
+        store.dispatch({ type: 'session/activated' });
+        expect(store.getState().session.phase).toBe('active');
+        store.dispatch({ type: 'generation/started', source: { kind: 'artifact', id: 'model-a' } });
+        expect(store.getState().session.phase).toBe('generating');
     });
 });

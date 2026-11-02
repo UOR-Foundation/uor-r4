@@ -20,6 +20,7 @@ export interface LoadResult {
 }
 
 export interface ModelSourcesApi {
+    setActive(next: { kind: string; id: string }): unknown;
     loadPublished(idOrEntry: unknown, operation?: LoadOperation): Promise<LoadResult>;
     loadFromUrl(rawUrl: string, operation?: LoadOperation): Promise<LoadResult>;
     loadLocalFile(file: File, operation?: LoadOperation): Promise<LoadResult>;

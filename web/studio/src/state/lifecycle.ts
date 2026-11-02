@@ -25,6 +25,12 @@ export interface DownloadProgress {
 export interface ResidentArtifact {
     sourceId: string;
     schema: string;
+    fileName?: string;
+    sha256?: string;
+    verified?: boolean | null;
+    engineSupported?: boolean;
+    canGenerate?: boolean;
+    source?: string;
 }
 
 export interface ArtifactState {
@@ -73,12 +79,15 @@ export type LifecycleAction =
     | ({ type: 'artifact/downloadStarted' } & OperationAction)
     | ({ type: 'artifact/downloadProgress'; loaded: number; total: number | null } & OperationAction)
     | ({ type: 'artifact/finalizing' } & OperationAction)
-    | ({ type: 'artifact/ready'; artifact: Pick<ResidentArtifact, 'schema'> } & OperationAction)
+    | ({ type: 'artifact/ready'; artifact: Omit<ResidentArtifact, 'sourceId'> & { sourceId?: string } } & OperationAction)
     | ({ type: 'artifact/failed'; error: string } & OperationAction)
     | { type: 'api/selected'; sourceId: string; endpoint: string }
-    | { type: 'api/testStarted' }
-    | { type: 'api/testFinished'; ok: boolean }
+    | { type: 'api/testStarted'; sourceId: string }
+    | { type: 'api/testFinished'; sourceId: string; ok: boolean }
+    | { type: 'folder/opened'; path: string }
     | { type: 'file/opened'; path: string }
+    | { type: 'file/closed' }
+    | { type: 'session/activated' }
     | { type: 'file/dirty' }
     | { type: 'file/saveStarted' }
     | { type: 'file/saveFinished' }
@@ -108,7 +117,7 @@ export class LifecycleStore {
     }
 
     canRun(): boolean {
-        if (this.state.session.phase === 'generating' || !this.state.selectedSource) return false;
+        if (this.state.session.phase === 'generating' || this.state.session.phase === 'error' || !this.state.selectedSource) return false;
         if (this.state.selectedSource.kind === 'api') return true;
         return this.state.artifact.phase === 'ready';
     }
@@ -169,7 +178,7 @@ export class LifecycleStore {
                     this.state = {
                         ...this.state,
                         artifact: { phase: 'ready', error: null },
-                        residentArtifact: { sourceId: action.operation.sourceId, schema: action.artifact.schema },
+                        residentArtifact: { ...action.artifact, sourceId: action.artifact.sourceId || action.operation.sourceId },
                         progress: null,
                     };
                 }
@@ -194,13 +203,33 @@ export class LifecycleStore {
                 };
                 return;
             case 'api/testStarted':
-                if (this.state.selectedSource?.kind === 'api') {
+                if (this.state.selectedSource?.kind === 'api' && this.state.selectedSource.id === action.sourceId) {
                     this.state = { ...this.state, api: { testStatus: 'testing' } };
                 }
                 return;
             case 'api/testFinished':
-                if (this.state.selectedSource?.kind === 'api') {
+                if (this.state.selectedSource?.kind === 'api' && this.state.selectedSource.id === action.sourceId) {
                     this.state = { ...this.state, api: { testStatus: action.ok ? 'passed' : 'failed' } };
+                }
+                return;
+            case 'folder/opened':
+                this.state = {
+                    ...this.state,
+                    file: { phase: 'no-open-file', path: null, error: null },
+                };
+                return;
+            case 'file/closed':
+                this.state = {
+                    ...this.state,
+                    file: { phase: 'no-open-file', path: null, error: null },
+                };
+                return;
+            case 'session/activated':
+                if (this.state.session.phase !== 'generating') {
+                    this.state = {
+                        ...this.state,
+                        session: { ...this.state.session, phase: 'active', activeGeneration: null },
+                    };
                 }
                 return;
             case 'file/opened':
@@ -232,10 +261,17 @@ export class LifecycleStore {
             case 'generation/started': {
                 const selected = this.state.selectedSource;
                 if (!this.canRun() || !selected || selected.kind !== action.source.kind || selected.id !== action.source.id) return;
-                const generation = {
-                    source: { ...action.source },
-                    privacy: action.source.kind === 'api' ? classifyEndpoint(action.source.endpoint) : 'localWASM' as const,
-                };
+                let privacy: Privacy;
+                try {
+                    privacy = selected.kind === 'api' ? classifyEndpoint(selected.endpoint) : 'localWASM';
+                } catch {
+                    this.state = {
+                        ...this.state,
+                        session: { phase: 'error', activeGeneration: null, lastGeneration: null },
+                    };
+                    return;
+                }
+                const generation = { source: { ...selected }, privacy };
                 this.state = {
                     ...this.state,
                     session: { phase: 'generating', activeGeneration: generation, lastGeneration: this.state.session.lastGeneration },
@@ -267,21 +303,36 @@ export class LifecycleStore {
     }
 }
 
+function isIpv4Literal(hostname: string): boolean {
+    const parts = hostname.split('.');
+    return parts.length === 4 && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
+}
+
+function isIpv6Literal(hostname: string): boolean {
+    return /^[0-9a-f]*(?::[0-9a-f]*)+$/.test(hostname);
+}
+
 export function classifyEndpoint(input?: string): Privacy {
     if (input === undefined) return 'localWASM';
     const hostname = new URL(input).hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    if (hostname === 'localhost' || hostname === '::1' || hostname.startsWith('127.')) return 'loopbackAPI';
-    if (
-        hostname === '::'
-        || hostname.startsWith('fc')
-        || hostname.startsWith('fd')
-        || hostname.startsWith('fe80')
-        || hostname.startsWith('10.')
-        || hostname.startsWith('192.168.')
-        || hostname.startsWith('169.254.')
-        || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
-    ) {
-        return 'privateNetworkAPI';
+    if (hostname === 'localhost') return 'loopbackAPI';
+    if (isIpv4Literal(hostname)) {
+        if (hostname.startsWith('127.')) return 'loopbackAPI';
+        if (
+            hostname.startsWith('10.')
+            || hostname.startsWith('192.168.')
+            || hostname.startsWith('169.254.')
+            || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
+        ) {
+            return 'privateNetworkAPI';
+        }
+        return 'remoteAPI';
+    }
+    if (isIpv6Literal(hostname)) {
+        if (hostname === '::1') return 'loopbackAPI';
+        const first = Number.parseInt(hostname.split(':')[0] || '0', 16);
+        if ((first & 0xff00) === 0xfc00 || (first & 0xff00) === 0xfd00) return 'privateNetworkAPI';
+        if (first >= 0xfe80 && first <= 0xfebf) return 'privateNetworkAPI';
     }
     return 'remoteAPI';
 }
