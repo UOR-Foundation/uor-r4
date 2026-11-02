@@ -17,7 +17,7 @@ DeepSeek's v2 Studio is published and its engine/model-source/API layer is prese
 
 ## What is missing
 
-There is no typed shell or implementation yet; only a rebased design exists. The current source remains 11,068 lines across HTML, CSS, and JavaScript with no component build system. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
+The foundation adds a typed lifecycle store, narrow model-source adapters, a fixture-backed migration reader, and additive operation/progress hooks without replacing the live page. Core workflow components, complete feature and browser-data parity, and cutover remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
 
 ## Done when
 
