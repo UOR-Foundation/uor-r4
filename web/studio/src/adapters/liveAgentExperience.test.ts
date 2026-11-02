@@ -18,6 +18,7 @@ function pageHooks() {
         generating: false,
     };
     const conversation = { messages: [] as Array<Record<string, unknown>>, sourceKind: '' };
+    const setView = vi.fn();
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setView', 'ensureConversation', 'touchConversation',
         'appendMessageElement', 'renderConversationList', 'scrollChat', 'sendViaWorker', 'sendViaApi',
@@ -29,14 +30,14 @@ function pageHooks() {
          return { updateComposerState, renderEmptyState, sendFromComposer };`,
     );
     const hooks = factory(
-        app, document, window, vi.fn(), vi.fn(), () => conversation, vi.fn(), vi.fn(() => null), vi.fn(), vi.fn(),
+        app, document, window, vi.fn(), setView, () => conversation, vi.fn(), vi.fn(() => null), vi.fn(), vi.fn(),
         vi.fn(() => true), vi.fn(() => true), vi.fn(), vi.fn(() => true), (selector: string) => document.querySelector(selector),
     ) as {
         updateComposerState(): void;
         renderEmptyState(container: HTMLElement): void;
         sendFromComposer(prompt?: string): number | false;
     };
-    return { app, hooks };
+    return { app, hooks, setView };
 }
 
 function sendButton(): HTMLButtonElement {
@@ -100,5 +101,19 @@ describe('live Agent source readiness', () => {
         hooks.renderEmptyState(container);
         expect(container.textContent).toContain('Local synthetic continuation ready.');
         expect(container.textContent).not.toContain('No conversational model is configured');
+    });
+
+    it('enters the demo workspace from the Agent quick action', () => {
+        const openDemo = vi.fn(() => true);
+        const legacy = window as unknown as { __studioFiles?: { openDemo(): boolean } };
+        legacy.__studioFiles = { openDemo };
+        const { hooks, setView } = pageHooks();
+        const container = document.querySelector<HTMLElement>('#chatMessages')!;
+        hooks.renderEmptyState(container);
+        const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((node) => node.textContent === 'Explore demo workspace')!;
+        button.click();
+        expect(openDemo).toHaveBeenCalledOnce();
+        expect(setView).toHaveBeenCalledWith('workspace');
+        delete legacy.__studioFiles;
     });
 });

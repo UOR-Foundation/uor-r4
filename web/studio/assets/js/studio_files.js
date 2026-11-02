@@ -82,6 +82,10 @@
             state.tabs = (parsed.tabs || []).filter(function (tab) { return tab && typeof tab.content === 'string'; }).map(function (tab) {
                 return { path: tab.path, name: baseName(tab.path), content: tab.content, dirty: Boolean(tab.dirty), mode: tab.mode || 'local', handle: null };
             });
+            if (state.tabs.length && state.tabs.every(function (tab) { return tab.mode === 'demo'; })) {
+                state.mode = 'demo';
+                state.rootName = 'uor-r4';
+            }
             state.activePath = parsed.activePath || (state.tabs[0] ? state.tabs[0].path : null);
             renderTabs();
             if (state.activePath) loadTabIntoEditor(state.activePath, true);
@@ -208,6 +212,10 @@
     }
 
     function demoWorkspace() {
+        if (state.tabs.some(function (tab) { return tab.dirty; })) {
+            toast('Save or close unsaved tabs before exploring the demo workspace.', 'warn');
+            return false;
+        }
         try { window.localStorage.removeItem(TABS_KEY); } catch (error) { /* optional */ }
         state.tabs = [];
         state.activePath = null;
@@ -254,18 +262,9 @@
         openFile('web/studio/index.html').then(function () { return openFile('web/studio/index.css'); });
         window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); }, 800);
         window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); }, 1600);
-        window.setTimeout(function () {
-            if (state.tabs.length) {
-                state.tabs[0].dirty = true;
-                state.activePath = state.tabs[0].path;
-                loadTabIntoEditor(state.tabs[0].path, true);
-                renderTabs();
-                var badge = document.getElementById('editorSavedBadge');
-                if (badge) badge.textContent = 'Unsaved changes';
-            }
-        }, 1700);
         emit();
         toast('Loaded the demo workspace tree (screenshot/QA state).', 'info');
+        return true;
     }
 
     function renderTree() {
@@ -678,12 +677,15 @@
         var ctxMeta = document.getElementById('ctxWorkspaceMeta');
         var badge = document.getElementById('filesAccessBadge');
         var label = state.rootName || 'No folder open';
-        if (name) name.textContent = label;
+        var displayLabel = label + (state.mode === 'demo' ? ' · demo' : '');
+        if (name) name.textContent = displayLabel;
         if (crumb) crumb.textContent = state.rootName || 'no folder';
         var topCrumb = document.getElementById('topWorkspaceName');
-        if (topCrumb) topCrumb.textContent = state.rootName ? state.rootName + ' / main' : 'uor-r4 / main';
-        if (folder) folder.textContent = state.rootName || 'no folder';
-        if (ctxLabel) ctxLabel.textContent = label;
+        if (topCrumb) topCrumb.textContent = state.rootName ? state.rootName + ' / main' + (state.mode === 'demo' ? ' · demo' : '') : 'uor-r4 / main';
+        if (folder) folder.textContent = displayLabel;
+        var statusWorkspace = document.getElementById('statusWorkspaceLabel');
+        if (statusWorkspace) statusWorkspace.textContent = displayLabel;
+        if (ctxLabel) ctxLabel.textContent = displayLabel;
         if (meta) meta.textContent = state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree · QA state' : (state.mode === 'imported' ? 'imported · read-only session' : 'browser workspace · open folder'));
         if (ctxMeta) ctxMeta.textContent = state.mode === 'directory' ? 'Read/write access to this folder in this tab.' : (state.mode === 'demo' ? 'Demo tree for screenshots; open a real folder for disk access.' : (state.mode === 'imported' ? 'Imported read-only copies; save downloads a copy.' : 'Open a folder in Files to enable editor tabs and save.'));
         if (badge) badge.textContent = state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree' : (state.mode === 'imported' ? 'imported · read-only' : 'browser workspace'));
@@ -793,7 +795,7 @@
             insertText: insertText,
             setActiveContent: setActiveContent,
             activeFile: activeFile,
-            workspaceName: function () { return state.rootName; },
+            workspaceName: function () { return state.rootName + (state.mode === 'demo' ? ' · demo' : ''); },
             mode: function () { return state.mode; },
             tabs: function () { return state.tabs.map(function (tab) { return { path: tab.path, dirty: tab.dirty, mode: tab.mode }; }); },
             treeSummary: function () { return summary(); }
