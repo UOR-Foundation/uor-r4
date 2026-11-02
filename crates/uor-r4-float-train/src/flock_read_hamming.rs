@@ -73,6 +73,7 @@ thread_local! {
     static ROW_CUT: RefCell<Option<(ReadScope, Vec<usize>)>> = const { RefCell::new(None) };
     static TIE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static TRACE: RefCell<Option<Vec<HammingTraceWindow>>> = const { RefCell::new(None) };
+    static COORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Which earlier positions the read may choose while a reply decodes (claude-215), or, for a
@@ -210,22 +211,37 @@ pub fn take_hamming_trace() -> Option<Vec<HammingTraceWindow>> {
     TRACE.with(|t| t.borrow_mut().as_mut().map(std::mem::take))
 }
 
-/// One head's codes and choice over a forward's rows, copied to the host for the trace.
+/// claude-251: also record each code's coordinates, as `f32::to_bits`, while the trace is on
+/// (`true`), for the decision trace's float side; or record the codes alone (`false`, the
+/// default), so `fbs-snapshot --hamming-trace` writes what it wrote before.
+pub fn set_hamming_trace_coords(on: bool) {
+    COORDS.with(|c| c.set(on));
+}
+
+/// One head's codes and choice over a forward's rows, copied to the host for the trace; with
+/// coordinates on, the query's and key's coordinates before the sign, beside their ±1 codes.
 struct HeadChoice {
     query: Vec<Vec<f32>>,
     key: Vec<Vec<f32>>,
     picks: Vec<Vec<u32>>,
     real: Vec<Vec<u8>>,
+    coords: Option<Coords>,
 }
+
+/// A head's query and key coordinates before the sign, row by row, and a window's view of them.
+type Coords = (Vec<Vec<f32>>, Vec<Vec<f32>>);
+type CoordsRef<'a> = (&'a [Vec<f32>], &'a [Vec<f32>]);
 
 /// One head's trace over one window's rows: each row's query and key code packed as
 /// [`pack_signs`] packs it, one word, so a head of at most 64 coordinates; and each row's real
-/// picks, in the order chosen.
+/// picks, in the order chosen. With `coords`, the query's and key's coordinates the sign read,
+/// each refused unless it signs to its row's word.
 fn trace_head(
     query: &[Vec<f32>],
     key: &[Vec<f32>],
     picks: &[Vec<u32>],
     real: &[Vec<u8>],
+    coords: Option<CoordsRef<'_>>,
 ) -> Result<HammingTraceHead> {
     let rows = query.len();
     if key.len() != rows || picks.len() != rows || real.len() != rows {
@@ -237,6 +253,10 @@ fn trace_head(
             _ => Err(invalid("the Hamming trace records heads of 1 to 64 coordinates")),
         }
     };
+    let (query_words, key_words) = (
+        query.iter().map(word).collect::<Result<Vec<_>>>()?,
+        key.iter().map(word).collect::<Result<Vec<_>>>()?,
+    );
     let kept = picks
         .iter()
         .zip(real)
@@ -247,11 +267,26 @@ fn trace_head(
             Ok(picks.iter().zip(real).filter(|(_, &ok)| ok == 1).map(|(&s, _)| s).collect())
         })
         .collect::<Result<Vec<Vec<u32>>>>()?;
-    Ok(HammingTraceHead {
-        query: query.iter().map(word).collect::<Result<_>>()?,
-        key: key.iter().map(word).collect::<Result<_>>()?,
-        kept,
-    })
+    // Each coordinate row as bits, refused unless it signs to the word its code packed.
+    let bits = |rows: &[Vec<f32>], words: &[u64]| -> Result<Vec<Vec<u32>>> {
+        if rows.len() != words.len() {
+            return Err(invalid("the Hamming trace needs coordinates for every row"));
+        }
+        rows.iter()
+            .zip(words)
+            .map(|(row, &w)| {
+                if word(row)? != w {
+                    return Err(invalid("a code's coordinates do not sign to its word"));
+                }
+                Ok(row.iter().map(|v| v.to_bits()).collect())
+            })
+            .collect()
+    };
+    let (query_f32, key_f32) = match coords {
+        Some((q, k)) => (bits(q, &query_words)?, bits(k, &key_words)?),
+        None => (Vec::new(), Vec::new()),
+    };
+    Ok(HammingTraceHead { query: query_words, key: key_words, kept, query_f32, key_f32 })
 }
 
 /// Add one forward's reads, one per window of `time` positions of `ids`, to the record: a
@@ -631,6 +666,9 @@ impl HammingRead {
             let bits = p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?;
             Ok(p.add(&bits.sub(p)?.detach())?)
         };
+        // claude-251: the coordinates the sign reads, kept for the decision trace only.
+        let tracing = TRACE.with(|t| t.borrow().is_some());
+        let raw = (tracing && COORDS.with(|c| c.get())).then(|| (query.clone(), key.clone()));
         let (query, key) = (code(&query)?, code(&key)?);
         let zero = Tensor::new(&[0u32], device)?;
         let margins = self.margin.as_tensor();
@@ -666,7 +704,6 @@ impl HammingRead {
         // claude-235: with both off, the read computes as before them. Since claude-239 the tie
         // rule is on by default and the trace off.
         let tie = TIE.with(|t| t.get());
-        let tracing = TRACE.with(|t| t.borrow().is_some());
         let mut traced = Vec::new();
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
@@ -677,11 +714,18 @@ impl HammingRead {
             let (picks, real) =
                 choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1, &limits, tie)?;
             if tracing {
+                let head = |p: &Tensor| -> Result<Vec<Vec<f32>>> {
+                    Ok(p.narrow(1, h * head_width, head_width)?.contiguous()?.to_vec2::<f32>()?)
+                };
                 traced.push(HeadChoice {
                     query: q.to_vec2::<f32>()?,
                     key: k.to_vec2::<f32>()?,
                     picks: picks.to_vec2::<u32>()?,
                     real: real.to_vec2::<u8>()?,
+                    coords: match &raw {
+                        Some((query, key)) => Some((head(query)?, head(key)?)),
+                        None => None,
+                    },
                 });
             }
             // A pick that is not real points at its window's first position, whose successor is
@@ -744,6 +788,9 @@ impl HammingRead {
                                 &c.key[window.clone()],
                                 &c.picks[window.clone()],
                                 &c.real[window.clone()],
+                                c.coords
+                                    .as_ref()
+                                    .map(|(q, k)| (&q[window.clone()], &k[window.clone()])),
                             )
                         })
                         .collect::<Result<Vec<_>>>()?;
@@ -978,14 +1025,52 @@ mod tests {
         let key = vec![row(&[2]), row(&[]), row(&[5])];
         let picks = vec![vec![0, 0], vec![1, 0], vec![2, 1]];
         let real = vec![vec![0, 0], vec![1, 0], vec![1, 1]];
-        let head = trace_head(&query, &key, &picks, &real).unwrap();
+        let head = trace_head(&query, &key, &picks, &real, None).unwrap();
         assert_eq!(head.query, vec![1, 0b10 | (1 << 63), 0]);
         assert_eq!(head.key, vec![1 << 2, 0, 1 << 5]);
         assert_eq!(head.kept, vec![vec![], vec![1], vec![2, 1]]);
+        // claude-251: without coordinates the head is what it was, and they are not written.
+        assert!(head.query_f32.is_empty() && head.key_f32.is_empty());
+        assert!(!serde_json::to_string(&head).unwrap().contains("_f32"));
         let wide = vec![vec![1.0f32; 65]; 3];
-        assert!(trace_head(&wide, &wide, &picks, &real).is_err());
-        assert!(trace_head(&query, &key, &picks[..2], &real).is_err());
-        assert!(trace_head(&query, &key, &picks, &[vec![1], vec![1, 0], vec![1, 1]]).is_err());
+        assert!(trace_head(&wide, &wide, &picks, &real, None).is_err());
+        assert!(trace_head(&query, &key, &picks[..2], &real, None).is_err());
+        assert!(trace_head(&query, &key, &picks, &[vec![1], vec![1, 0], vec![1, 1]], None).is_err());
+    }
+
+    /// claude-251: with coordinates, each row's query and key coordinates before the sign are
+    /// kept bit for bit, beside the words and kept sets its ±1 codes give; coordinates that do
+    /// not sign to their row's code are refused.
+    #[test]
+    fn a_head_trace_with_coordinates_keeps_them_bit_for_bit() {
+        let query = vec![vec![0.25f32, -0.0, 3e-38], vec![-1.5, 0.0, f32::MIN_POSITIVE]];
+        let key = vec![vec![1.0f32, -2.0, 0.5], vec![0.0, -0.0, -7.25]];
+        // The codes the read signs them to: ±1 by `p ≥ 0`, so a 0 of either sign is a 1.
+        let code = |rows: &[Vec<f32>]| -> Vec<Vec<f32>> {
+            rows.iter().map(|r| r.iter().map(|&v| if v >= 0.0 { 1.0 } else { -1.0 }).collect()).collect()
+        };
+        let (query_code, key_code) = (code(&query), code(&key));
+        let picks = vec![vec![0], vec![1]];
+        let real = vec![vec![0], vec![1]];
+        let plain = trace_head(&query_code, &key_code, &picks, &real, None).unwrap();
+        let head =
+            trace_head(&query_code, &key_code, &picks, &real, Some((&query, &key))).unwrap();
+        assert_eq!((&head.query, &head.key, &head.kept), (&plain.query, &plain.key, &plain.kept));
+        assert_eq!((head.query.as_slice(), head.key.as_slice()), (&[0b111, 0b110][..], &[0b101, 0b011][..]));
+        let bits = |rows: &[Vec<f32>]| -> Vec<Vec<u32>> {
+            rows.iter().map(|r| r.iter().map(|v| v.to_bits()).collect()).collect()
+        };
+        assert_eq!(head.query_f32, bits(&query));
+        assert_eq!(head.key_f32, bits(&key));
+        // −0.0 keeps its sign bit, which the code reads as a 0 coordinate's 1.
+        assert_eq!(head.query_f32[0][1], (-0.0f32).to_bits());
+        let back: HammingTraceHead =
+            serde_json::from_str(&serde_json::to_string(&head).unwrap()).unwrap();
+        assert_eq!(back, head);
+        // Coordinates of another sign than their code, or for too few rows, are refused.
+        let flipped = vec![query[1].clone(), query[0].clone()];
+        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&flipped, &key))).is_err());
+        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&query[..1], &key))).is_err());
     }
 
     /// claude-235: a stream read opens one window per batch row, the readout read joins them,

@@ -515,7 +515,7 @@ pub fn hamming_trace_window(ids: &[u32], steps: &[HammingStepRead]) -> Result<Ha
         .map(|r| HammingTraceRead {
             depth: r.depth,
             heads: vec![
-                HammingTraceHead { query: Vec::with_capacity(ids.len()), key: Vec::with_capacity(ids.len()), kept: Vec::with_capacity(ids.len()) };
+                HammingTraceHead { query: Vec::with_capacity(ids.len()), key: Vec::with_capacity(ids.len()), kept: Vec::with_capacity(ids.len()), query_f32: Vec::new(), key_f32: Vec::new() };
                 r.heads.len()
             ],
         })

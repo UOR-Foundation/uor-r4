@@ -471,10 +471,13 @@ fn forced_picks(
         for (i, query_q12) in queries.into_iter().enumerate() {
             steps[first + i].nearest = Some(DecisionNearest {
                 pick: forced.picks[i],
-                score_q12: forced.score_q12[i],
+                score_q12: Some(forced.score_q12[i]),
+                score_f64: None,
                 runner_up: forced.runner_up[i],
-                runner_score_q12: forced.runner_score_q12[i],
+                runner_score_q12: Some(forced.runner_score_q12[i]),
+                runner_score_f64: None,
                 query_q12,
+                query_f32: Vec::new(),
             });
         }
         forced.steps = Some(steps);
@@ -1555,7 +1558,7 @@ mod tests {
                             nearest.runner_up,
                             nearest.runner_score_q12
                         ),
-                        (top[0].0, top[0].1, top[1].0, top[1].1),
+                        (top[0].0, Some(top[0].1), top[1].0, Some(top[1].1)),
                         "prompt {prompt:?} step {t}"
                     );
                     assert_eq!(
