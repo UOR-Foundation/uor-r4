@@ -2071,11 +2071,12 @@ impl CpuDiscreteSchedule {
                         "checkpoint o_vec/o_read differ from the block schedule",
                     ));
                 }
+                let max_moves = cursor
+                    .accepted_updates
+                    .checked_mul(u64::from(k))
+                    .ok_or_else(|| invalid("checkpoint accepted-update bound overflow"))?;
                 if block.committed_moves < cursor.accepted_updates
-                    || cursor
-                        .accepted_updates
-                        .checked_mul(u64::from(k))
-                        .is_some_and(|bound| block.committed_moves > bound)
+                    || block.committed_moves > max_moves
                 {
                     return Err(invalid(
                         "checkpoint committed_moves outside accepted-update bounds",
@@ -5196,6 +5197,32 @@ mod tests {
         missing_block.cursor.block = None;
         let missing = serde_json::to_vec(&missing_block).unwrap();
         assert!(CpuDiscreteCheckpointDriver::resume(&missing, &source).is_err());
+        let mut move_bound_overflow = k3_driver.checkpoint().unwrap();
+        let accepted_updates = u64::MAX / 2;
+        let (o_vec, o_read) = family_cursors(
+            accepted_updates,
+            3,
+            SchedulePolicy::CanonicalVectorThenReadV1,
+            6,
+            4,
+        )
+        .unwrap();
+        move_bound_overflow.cursor.completed_batches = accepted_updates;
+        move_bound_overflow.cursor.accepted_updates = accepted_updates;
+        move_bound_overflow.cursor.corpus_pass = accepted_updates / 4;
+        move_bound_overflow.cursor.next_target = (accepted_updates % 4) * 2;
+        move_bound_overflow.cursor.next_coordinate = (accepted_updates % 10) as u32;
+        move_bound_overflow.cursor.block = Some(BlockCursor {
+            o_vec,
+            o_read,
+            committed_moves: accepted_updates,
+        });
+        move_bound_overflow.model_epoch = accepted_updates;
+        assert!(CpuDiscreteCheckpointDriver::resume(
+            &serde_json::to_vec(&move_bound_overflow).unwrap(),
+            &source
+        )
+        .is_err());
 
         let mut overflow_cursor = checkpoint.cursor;
         overflow_cursor.completed_batches = u64::MAX;

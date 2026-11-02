@@ -9,6 +9,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - **The first round-trip fixture used the canonical schedule for active-leaf Flock and Relation.** Reference configuration requires their active-leaf read initialization to use the interleaved schedule. The test now exercises the matching schedule for each mode.
 - **The first continuation test read six tokens from a three-token Route context.** It failed before proving restart semantics; the control now uses a valid three-token prefix.
 - **The first draft tested serialization across calls but not an actual process boundary.** A child-process helper now writes the next reading and canonical checkpoint digest after reloading the file.
+- **Fresh adversarial review found an overflow hole in the K>1 move bound.** `accepted_updates * K` used `Option::is_some_and`, so multiplication overflow skipped the upper-bound check. Overflow is now a refusal, with a coherently rehashed impossible-cursor control.
 
 ## What changed
 
@@ -18,7 +19,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - Canonical and interleaved schedules are supported. Carrier schedules are explicitly refused until CUDA-side carrier target selection is represented.
 - A committed BVG-K batch advances the model epoch and `accepted_updates` once. A no-commit batch advances `completed_batches`, `next_target`, `next_coordinate` and family block cursors without changing accepted updates, model bytes or chooser bytes.
 - Route, Flock, Relation, Table, level-Gate and relation-tail mutations continue byte-identically after restore. A K=3 canonical block resumes correctly after a truncated two-coordinate family boundary.
-- Corrupt/truncated/trailing JSON, unknown fields, invalid schedules, source/model/chooser hash mismatches, shape/objective mismatches, missing block fields and cursor overflow all refuse without constructing or mutating a driver.
+- Corrupt/truncated/trailing JSON, unknown fields, invalid schedules, source/model/chooser hash mismatches, shape/objective mismatches, missing block fields, completed-batch overflow and accepted-update/move-bound multiplication overflow all refuse without constructing or mutating a driver.
 
 ## Measurements
 
