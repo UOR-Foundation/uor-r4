@@ -1,0 +1,147 @@
+# REPORT: integer-nearest-readout, claude-252 (Q5's trace instrument, side T)
+
+Lab: claude. Item: [integer-nearest-readout](../../../../roadmap/items/integer-nearest-readout.md) (#3462). Order: [ORDER.md](ORDER.md). Rule: claude-247's [decision card](../claude-247/DECISION.md). References #3462.
+
+## Tokens per second
+
+No decode speed is claimed, and no served path changes. R's decode speed is still claude-243's: 1,204 tok/s median decode on R s1.
+- On the GPU, F's command on T's s1 copy took 325 s with the trace on and 325 s with it off, side by side on one RTX 5090. Both processes ran at once, so this is an instrument's cost, not a serving reading. The trace covered 308 DEV windows, 36,541 steps.
+- The copy itself runs on the CPU, about 1 s per seed. Each snapshot and each export took about 1 s.
+
+## What did not work, first
+
+- **Q5 is not read, and nothing here moves done-when 3.** This unit builds T's side of the trace. The replay driver, the near-tie grader and the sheet come next, in that order.
+- **No snapshot equals claude-227's, the one R was exported from;** the check holds on the artifact instead.
+  - This head's `fbs-snapshot` adds a `readout_nearest` field that claude-227's snapshots lack.
+  - The copy's snapshot differs from the as-trained one from about byte 100, where its rounded floats begin.
+  - All nine exports (three per seed) still equal R's sealed artifacts. So I-Twin is read on the artifact's sha256, as the card defines it, not on the snapshot.
+- **The agreements below are readings, not Q5.** They come from 308 DEV windows outside Q5's set, with nothing forced, over the first scored rows only.
+  - By the card, attribution alone accounts for nothing: whether a flip is a near tie or a fault is the replay driver's and the grader's to decide.
+  - No row of the set was traced. The positions are F's smoke's (`960f4340…`).
+- **The smoke ran F's command with `--samples 1`, as F's did.** `score_rows` writes every rows file before it decodes a sample.
+- **The ORDER named `flock_read_memory.rs` for the weights' accessors; none was needed.** The opening and reply weights are `pub(crate)` fields (`flock_read_memory.rs:153`, `:172`), which the copy reads and sets directly. The file is unchanged.
+- **One cleanup path has no test of its own.** If writing the copy fails after its staging folder is made, the folder is removed before the error returns. No fault can be injected inside that write, so the path is read, not tested. Gate m2 shows the write's own read-back check fires: with the memory left unrounded, the copy refuses itself ("the copy does not read back as the rounded checkpoint").
+- **The suites carry failures this unit did not add.**
+  - `cargo fmt --check` already fails on the crate's base. Only this unit's lines were formatted, so the base's drift is unchanged in every file it touches (`in_space_long.rs` 320 lines, `fbs_export.rs` 10, `bin/train-in-space.rs` 18, `bin/fbs-snapshot.rs` 0).
+  - Clippy with `-D warnings` finds 7 lints in the float crate, all in code this unit does not touch. None is on an added line.
+- **No sheet, FIT or pre-run review was written for the pod run.** It checks this unit's own instrument (done-whens 4 and 5), as claude-251's smoke did, and no claim rests on it. The sheet that reads Q5 comes after the replay driver and the grader.
+- **The pod tool's provider adapter had to be rebuilt in this worktree.** claude-251's build went with its worktree, and `uor-pod up` refused until `local/pod-provider-target` held it again (logged in `local/claude/FRICTION.md`).
+- **The disk was under the 30 GiB floor (22 GiB free).** This unit's build folders are inside its worktree and go with it.
+
+## What worked
+
+- **The copy: `fbs-snapshot --round-as-exported MODEL_DIR OUT_MODEL_DIR`,** the fifth form beside `--rebind-fbs-backward`. It runs on the CPU and writes an evaluation copy of a step in which every parameter the artifact holds is rounded as `fbs-export --raw-gates --raw-transition` rounds it:
+  - `model.safetensors`: `round_tables_as_exported` (grid codes, Q16, Q12);
+  - `hamming_read.safetensors`: `round_hamming_as_exported` (rotations 2^−24, margins 2^−16, weights 2^−24);
+  - `turn_memory.safetensors` and `turn_memory_reply.safetensors`: the opening and reply weights at 2^−24, by the new `round_memory_as_exported`. The keys and the tables are exact and are copied unchanged;
+  - the step's `config.json` and the run's config, byte for byte;
+  - last, a marker, `rounded-as-exported.json` (`uor-r4.rounded-as-exported/1`), with each file's source and copy sha256 and its rounding.
+- **The copy refuses** an existing output or staging folder, another step's name, a step file it does not know, and whatever the export refuses (a NaN, a value past i32 at its step, a folded run). It is written into a staging folder, reloaded with every check and compared bit for bit with the rounded tensors, then renamed into place, so no refusal leaves anything behind.
+- **The side.** `score_rows` writes side `T` when the checkpoint holds the marker and every file it names still has its recorded sha256, and side `F` when it holds none. A copy whose files do not match its marker is refused. So T's command is F's, unchanged.
+- **I-Twin holds at seeds 1–3,** on one RTX 5090 at `1590b6011`. The path is the copy, then `fbs-snapshot COPY SNAP` with no readouts, then `fbs-export --raw-gates --raw-transition --run-config CONFIG SNAP OUT`. It gives R's sealed artifact byte for byte at each seed: `f86a7856…`, `0a69a009…` and `66ae49de…`. So T's parameters are R's.
+  - **Two controls ran in the same pass,** each also equal to R's artifact at every seed. Had I-Twin failed, they would have located the fault:
+    - *rerun*, claude-227's snapshot exported again by this build. It places a fault in the export;
+    - *orig*, the as-trained step snapshotted at this head, then exported. It places a fault in the snapshot.
+  - **The copy's run config** is byte-identical to the checkpoint's at every seed.
+- **T's smoke passes,** outside Q5's set. F's command, unchanged, ran on T's s1 copy and traced DEV s1's 308 windows of R's smoke:
+  - **the side:** the trace's side is `T`;
+  - **it changes nothing:** the six rows files are equal byte for byte with the trace on and off;
+  - **the alignment:** T's windows join F's exactly (same position, `reply_start`, ids, and nearest and memory steps) and R's exactly (same position and `reply_start`; R's ids a prefix of T's; the same nearest and memory steps across R's range). All 308 windows hold.
+- **The reading (no bar):** over R's range, T's pick equals R's on 4,380 of 4,382 scored rows, where F's equals R's on 4,298. Over F's whole range, T's equals F's on 10,650 of 10,840.
+  - **Row by row** (`cross.jq`), over R's 4,382 rows:
+
+    | F = R | T = R | T = F | Rows |
+    |---|---|---|---|
+    | yes | yes | yes | 4,297 |
+    | no | yes | no | 83 |
+    | no | no | no | 1 |
+    | yes | no | no | 1 |
+
+  - **In the card's terms:**
+    - Of the 84 rows where F and R differ, the structure step (F to T, rounding the parameters) moves 83 to R's pick. On the 84th, all three differ.
+    - On one row where F and R agree, T differs from both: the structure step moves the pick away, and the arithmetic step (T to R) brings it back.
+  - Which of these flips are near ties is still unread.
+
+## What changed
+
+- **`crates/uor-r4-float-train/src/fbs_export.rs`:**
+  - `MEMORY_WEIGHT_EXP` (−24, checked against the integer format's constant) and `round_memory_as_exported`;
+  - the copy, `write_rounded_copy`, its marker (`RoundedCopy`, `CopiedFile`), and `checkpoint_trace_side`;
+  - two host tests: `rounding_the_turn_memory_holds_the_exported_weights` and `a_copy_rounded_as_exported_holds_every_rounding_and_is_side_t`. `the_hamming_exponents_are_the_integer_formats` also checks the memory's exponent.
+- **`crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`:** the fifth form, `--round-as-exported`.
+- **`crates/uor-r4-float-train/src/in_space_long.rs`:** `FTrace::on_side`, and `score_rows` reading the side from the checkpoint. One host test: `a_float_trace_is_side_f_or_t`.
+- **`crates/uor-r4-float-train/src/bin/train-in-space.rs`:** the `--decision-trace` docs name side T.
+- **The item's "What is missing"** marks T's side built and names the replay driver next.
+
+## Measurements
+
+The pod run used the binaries `fbs-snapshot` `31666fcc…`, `train-in-space` `79636161…` and `fbs-export` `6dc37d87…`, built at `1590b6011` on the pod.
+
+| What | Compared | Result |
+|---|---|---|
+| I-Twin | the copy's snapshot, exported raw, against R's sealed `a7r-sN` (sha256) | 3 of 3 equal |
+| Control: rerun | claude-227's snapshot `sN`, exported again by this build | 3 of 3 equal |
+| Control: orig | this head's snapshot of the as-trained step, exported | 3 of 3 equal |
+| Snapshots | orig and the copy's, each against claude-227's; the copy's against orig | all differ (a new field; the rounded floats) |
+| The copy's run config | `cmp` against the checkpoint's | 3 of 3 equal |
+| T's smoke: side | the trace's `side` | `T` |
+| T's smoke: on = off | `cmp`, the six rows files, trace on against off | 6 equal |
+| Alignment with F | position, `reply_start`, ids, nearest and memory steps, against F's smoke summary (claude-251, round 2) | 308 of 308 windows |
+| Alignment with R | position, `reply_start`, ids prefix, nearest and memory steps over R's range, against R's smoke trace (`11e6b7d9…`) | 308 of 308 windows |
+| Reading: T's pick = R's | R's range, the steps with a nearest | 4,380 of 4,382 |
+| Reading: F's pick = R's | the same rows | 4,298 of 4,382 |
+| Reading: T's pick = F's | F's range | 10,650 of 10,840 |
+| Trace size | DEV s1, R's 308 windows | 36,541 steps; 621 MB JSON (`b1970581…`), 208 MB gzipped (`ca52fa85…`) |
+| Wall time | the two smoke runs side by side on one GPU | traced 325 s, untraced 325 s |
+| Pod | 1 × RTX 5090 at $0.563/h | 20 minutes, about $0.19 |
+
+The alignment and the readings come from `local/claude/claude-252/align.jq`. It was first probed with F's summary in T's place, giving 308 of 308 windows and 10,840 of 10,840 picks, F's own count. It was then probed with R's summary in T's place, where `t_vs_f` falls to 69 of 308, so the check can fail.
+
+The evidence is sealed in the HF store:
+- **`results/claude/integer-nearest-readout-trace-t-2026-11-02/`:** 151 files under a manifest (sha256 `0e7d2101…`), read back 151 of 151 equal. It holds:
+  - the pod's logs and sums, and the export verdicts;
+  - the traced and untraced rows, and T's summary;
+  - the alignment and cross-table checks with their outputs, and R's summary;
+  - the job and its pins;
+  - the negative gates' patches and logs.
+- **The pod's archive:** `vast-archive/vast-58748616/uor-r4/runs/claude-252/`, 1,607 MB, read back 171 files. It holds the three copies, the six snapshots, the nine artifacts, the opening tables and the gzipped trace. The uncompressed trace was removed on the pod first, once `gunzip -c` hashed to its `SHA256SUMS` line.
+
+## Checks run at the head
+
+| Gate | Command | Result |
+|---|---|---|
+| Host tests (float) | `cargo test --offline --locked -p uor-r4-float-train --lib`, then its bins and integration targets | 200 passed; every bin and integration target passes |
+| CUDA type-check | `CUDARC_CUDA_VERSION=12080 NVCC=<stub> UOR_NVCC_ARCH=compute_120 cargo check --offline --locked --features cuda --all-targets -p uor-r4-float-train` | exit 0 |
+| Clippy, lines this unit adds | `cargo clippy --no-deps --features cuda --all-targets -p uor-r4-float-train -- -D warnings`, stub nvcc | 0 findings on the 824 added lines; 7 in code this unit does not touch |
+| CUDA library suite (RTX 5090, `1590b6011`) | `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- --test-threads=1` | 275 passed, 0 failed, 6 ignored; this unit's three tests and claude-251's trace tests pass by name |
+
+### Negative gates
+
+Each mutation sets aside one piece of this unit's own lines with `sed`, is saved as a patch against the head (`1590b6011`), has its test run, and is reversed with `git apply -R`; the tree then matched the head again (`local/claude/claude-252/neg/gates.sh`, its logs and patches beside it). Every test failed at an assertion or a refusal, not a build, and the head then passed all three tests.
+
+| Gate | Piece set aside | Mutation | Test | Result |
+|---|---|---|---|---|
+| m1 | The reply weight's rounding | the reply table left out of the rounded weights | `rounding_the_turn_memory_holds_the_exported_weights` | FAILED (`fbs_export.rs:1507`) |
+| m2 | The copy rounds the memory | `round_memory_as_exported` not called | `a_copy_rounded_as_exported_holds_every_rounding_and_is_side_t` | FAILED: the copy refuses itself at its read-back check |
+| m3 | A marked copy is side T | `checkpoint_trace_side` returning `F` | the same | FAILED (`:1636`) |
+| m4 | The marker's sha256s | the file check skipped | the same | FAILED: a tampered `model.safetensors` still read as side T (`:1765`) |
+| m5 | An unknown step file is refused | the name check removed | the same | FAILED: `transport.json` was refused only later, by the loader's sidecar check, not by the copy's own (`:1704`) |
+| m6 | An existing staging folder is refused | only the output checked | the same | FAILED: the copy was written over an existing `v.partial` (`:1703`) |
+| m7 | `on_side` sets the side | the side not set | `a_float_trace_is_side_f_or_t` | FAILED (`in_space_long.rs:9576`) |
+
+## Skills used
+
+None.
+
+## Still open
+
+- **Next, under the same card: the replay driver and the near-tie grader, then the sheet** with the card's rule verbatim, a fresh FIT and a pre-run review, then the GPU run that reads Q5.
+- **The rows the grader starts from.** In R's range, T and R differ on 2 rows and F and T on 85 (83 + 1 + 1 in the table above); over F's whole range, F and T differ on 190. The replay driver forces each first differing decision in forward order, and the grader judges each flip by G₁₀ on the reference side (F for structure, T for arithmetic).
+- **The staging folder's cleanup after a failed write** has no test (above).
+- **Carried from claude-251 and claude-249:** the open items of their "Still open", unchanged.
+
+## Plain summary
+
+To find out why the integer model and the trained model sometimes pick different words, claude-247's rule puts a third model between them: the trained model running on the integer model's own rounded numbers. This unit builds that third model.
+
+It is a copy of the trained checkpoint with every number rounded exactly as the integer export rounds it. Exported again, the copy gives the integer model byte for byte at all three seeds, so the two share every parameter, and only the arithmetic differs. On 308 test windows, the trained model and the integer model disagree on 84 picks. Running the trained model on the rounded copy gives the integer model's pick on 83 of them. That points at the rounding, not at the integer arithmetic. Deciding whether each one is an honest near tie is the next unit's work.
