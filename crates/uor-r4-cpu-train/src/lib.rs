@@ -13,6 +13,7 @@ mod counterfactual;
 mod fbs;
 mod hamming;
 mod memory;
+mod panel;
 mod train;
 
 pub use counterfactual::{
@@ -20,6 +21,10 @@ pub use counterfactual::{
     CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
 };
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
+pub use panel::{
+    panel_admission_gate, CpuPanelEvaluator, PanelDelta, PanelExportReading, PanelGateDecision,
+    PanelReading,
+};
 pub use train::{
     CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,
 };

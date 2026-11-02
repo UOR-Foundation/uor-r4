@@ -1361,6 +1361,24 @@ mod tests {
                         let after = changed.evaluate_sample(&sample).unwrap();
                         if before.target_admitted && !after.target_admitted {
                             assert!(!candidate_improves(&after, &before));
+                            let mut baseline_panel =
+                                crate::CpuPanelEvaluator::from_artifact(&artifact, vec![sample], 1)
+                                    .unwrap();
+                            let mut changed_panel = crate::CpuPanelEvaluator::from_artifact(
+                                &patched,
+                                vec![RankMarginSample {
+                                    input: vec![input],
+                                    target,
+                                }],
+                                1,
+                            )
+                            .unwrap();
+                            let before_panel = baseline_panel.evaluate().unwrap();
+                            let after_panel = changed_panel.evaluate().unwrap();
+                            assert!(matches!(
+                                crate::panel_admission_gate(&before_panel, &after_panel).unwrap(),
+                                crate::PanelGateDecision::RejectAdmission(_)
+                            ));
                             return;
                         }
                     }
