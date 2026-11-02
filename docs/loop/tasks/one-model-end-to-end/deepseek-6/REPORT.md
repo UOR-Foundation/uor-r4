@@ -14,6 +14,10 @@ Evidence:
   not a model reading.
 - The corrected protocol-2 panel is still negative: neither seed recalled
   `Pickle` or `tomato` in either fixed memory probe.
+- The REPL prints ids/s but not its internal per-turn seconds. The transcript
+  preserves the displayed rate; the evidence record derives per-turn seconds
+  from `id count / displayed rate` and retains the 24 process-level timing
+  records. This timing-precision limitation does not affect the memory verdict.
 - The public artifact's own README explicitly says it is not an assistant and
   is not chat-capable. This run does not contradict that warning.
 
@@ -41,13 +45,14 @@ replies.
   reason and history depth.
 - Memory anchors: 0 of 4 passed. Seed 1 and seed 2 both failed the `Pickle`
   and `tomato(s)` anchors.
-- Peak per-process RSS: 11,528 KiB. Complete panel wall time: 2.9 s.
+- Peak per-process RSS: 11,528 KiB. The 24 process timing records sum to
+  2.810 s; no separate orchestrator timer is asserted.
 - Observed reply rates ranged from 143.54 to 350.35 ids/s.
 - External spend: `$0.00`.
 
 Exact reply text, ids, stops, histories, timings and rates are in the evidence
 record linked above. Raw transcripts and `verification.json`
-(`1ffe1f54cc0b45f4e778f6fcc342aa25efe6c63b89db99c328bb180effab7b18`) are
+(`d1b03c3882cc9fb683a41ee1c57246f12f4922f7ec7cff60c9475e0b9dfcbfcf`) are
 under `local/deepseek/public-chat-post-smoke-2026-11-02/`.
 
 ## Checks run at the head

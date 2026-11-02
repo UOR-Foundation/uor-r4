@@ -17,6 +17,11 @@ The earlier protocol-1 `" Whilk from you."` smoke is not used as model evidence.
 The corrected protocol-2 panel emitted different, internally decoded text and
 token sequences.
 
+The REPL exposes per-turn ids/s but not its private per-turn seconds. The
+memory tables therefore derive seconds from `id count / displayed rate`; the
+separate `/usr/bin/time -v` records supply process-level timing and memory.
+This timing-precision limitation does not affect the memory classification.
+
 ## Instrument result
 
 - 24 `uor-chat` processes produced 33 replies: 11 for each of seed 1, seed 2
@@ -27,14 +32,14 @@ token sequences.
 - All 33 reply texts independently decoded from their recorded reply ids.
 - The seed-1 repeat matched the first pass in reply text, ids, stop reason and
   history depth for all 11 replies. Timing differed, as expected.
-- Peak RSS over all processes was 11,528 KiB. The complete local run took 2.9 s
-  wall time and retained 276 KiB of evidence. External compute cost was
-  `$0.00`.
+- Peak RSS over all processes was 11,528 KiB. The 24 process timing records sum
+  to 2.810 s; no separate orchestrator timer is asserted. The evidence retained
+  is 276 KiB. External compute cost was `$0.00`.
 - Raw stdout, stderr, `/usr/bin/time -v` records and
   `verification.json` are under
   `local/deepseek/public-chat-post-smoke-2026-11-02/`.
   `verification.json` SHA-256:
-  `1ffe1f54cc0b45f4e778f6fcc342aa25efe6c63b89db99c328bb180effab7b18`.
+  `d1b03c3882cc9fb683a41ee1c57246f12f4922f7ec7cff60c9475e0b9dfcbfcf`.
 - `uor-chat` reported a residual contract notice: the retained bundle contract
   says 256 context positions while these artifacts declare 192. No turn in this
   panel reached that limit.
@@ -97,27 +102,33 @@ the table's panel order.
 
 ### Seed 1
 
-| Probe/turn | Reply text | Reply ids | Stop | History | Ids/s |
-|---|---|---|---|---:|---:|
-| `mem-01` turn 1 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 38 | 322.53 |
-| `mem-01` turn 2 | `small Pretty good, I M coat.` | `[563,971,623,576,561,14,340,379,581,299,16,1]` | `eos` | 68 | 290.19 |
-| `mem-02` turn 1 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 39 | 311.34 |
-| `mem-02` turn 2 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 72 | 349.72 |
-| `mem-02` turn 3 | `small Pretty good, I M coat.` | `[563,971,623,576,561,14,340,379,581,299,16,1]` | `eos` | 99 | 320.26 |
+| Probe/turn | Reply text | Reply ids | Stop | History | Ids/s | Seconds* |
+|---|---|---|---|---:|---:|---:|
+| `mem-01` turn 1 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 38 | 322.53 | 0.049608 |
+| `mem-01` turn 2 | `small Pretty good, I M coat.` | `[563,971,623,576,561,14,340,379,581,299,16,1]` | `eos` | 68 | 290.19 | 0.041352 |
+| `mem-02` turn 1 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 39 | 311.34 | 0.051391 |
+| `mem-02` turn 2 | `small Pur I G's greatice'm good,uc cobweb!.` | `[563,971,456,340,1155,386,972,552,915,561,14,592,3606,3,16,1]` | `eos` | 72 | 349.72 | 0.045751 |
+| `mem-02` turn 3 | `small Pretty good, I M coat.` | `[563,971,623,576,561,14,340,379,581,299,16,1]` | `eos` | 99 | 320.26 | 0.037470 |
 
 ### Seed 2
 
-| Probe/turn | Reply text | Reply ids | Stop | History | Ids/s |
-|---|---|---|---|---:|---:|
-| `mem-01` turn 1 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 38 | 309.95 |
-| `mem-01` turn 2 | `Your G me legs.` | `[2997,1155,519,2295,16,1]` | `eos` | 62 | 187.68 |
-| `mem-02` turn 1 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 39 | 303.57 |
-| `mem-02` turn 2 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 72 | 349.64 |
-| `mem-02` turn 3 | `Your G me legs.` | `[2997,1155,519,2295,16,1]` | `eos` | 93 | 216.24 |
+| Probe/turn | Reply text | Reply ids | Stop | History | Ids/s | Seconds* |
+|---|---|---|---|---:|---:|---:|
+| `mem-01` turn 1 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 38 | 309.95 | 0.051621 |
+| `mem-01` turn 2 | `Your G me legs.` | `[2997,1155,519,2295,16,1]` | `eos` | 62 | 187.68 | 0.031969 |
+| `mem-02` turn 1 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 39 | 303.57 | 0.052706 |
+| `mem-02` turn 2 | `Your G me have all oflkreonddot in am you'm` | `[2997,1155,519,500,434,372,78,77,275,2795,70,302,315,745,351,915]` | `max_new_tokens` | 72 | 349.64 | 0.045761 |
+| `mem-02` turn 3 | `Your G me legs.` | `[2997,1155,519,2295,16,1]` | `eos` | 93 | 216.24 | 0.027747 |
 
 The seed-1 repeat's five memory replies matched every text, id, stop and history
 value above. Its rates were
 `320.52 / 288.68 / 313.28 / 350.35 / 320.73` ids/s in table order.
+
+`Seconds*` is derived as reply-id count divided by the product's displayed
+two-decimal ids/s. It preserves the observed rate exactly; sub-10 μs precision
+is not claimed because `uor-chat`'s REPL prints the rate, not its internal
+microsecond timer. The complete 24-process elapsed sum is retained separately
+in `verification.json`.
 
 ## Decision
 
