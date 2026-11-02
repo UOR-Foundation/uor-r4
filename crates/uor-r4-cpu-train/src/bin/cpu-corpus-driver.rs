@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use uor_r4_cpu_train::{
     panel_admission_gate, validate_corpus_manifest, CpuMaskedCorpus, CpuPanelEvaluator,
@@ -47,6 +47,12 @@ fn run() -> Result<(), String> {
     if identity.vocab != shape.vocab || identity.bos != 0 {
         return Err("corpus vocabulary or BOS differs from the artifact".to_owned());
     }
+    if identity.validate_context(shape.context).is_err() {
+        return Err(format!(
+            "corpus manifest max_tokens {} is below artifact context {}",
+            identity.max_tokens, shape.context
+        ));
+    }
     let corpus = CpuMaskedCorpus::from_bytes(
         &token_bytes,
         &mask,
@@ -78,13 +84,20 @@ fn run() -> Result<(), String> {
 
     std::fs::create_dir_all(&config.checkpoint_dir)
         .map_err(|error| format!("checkpoint directory: {error}"))?;
-    let training_started = Instant::now();
+    let mut step_elapsed = Duration::ZERO;
+    let mut checkpoint_elapsed = Duration::ZERO;
     let mut accepted = 0usize;
     let mut refused = 0usize;
     let mut context_tokens = 0usize;
+    let mut target_visits = 0usize;
     let mut checkpoints = Vec::new();
     for completed in 1..=config.steps {
+        let step_started = Instant::now();
         let step = trainer.train_step().map_err(|error| error.to_string())?;
+        step_elapsed += step_started.elapsed();
+        target_visits = target_visits
+            .checked_add(1)
+            .ok_or_else(|| "target visit count overflow".to_owned())?;
         if step.updated {
             accepted += 1;
         } else {
@@ -94,6 +107,7 @@ fn run() -> Result<(), String> {
             .checked_add(split.training[step.sample].input.len())
             .ok_or_else(|| "training context-token count overflow".to_owned())?;
         if completed % config.checkpoint_every == 0 {
+            let checkpoint_started = Instant::now();
             let bytes = trainer.checkpoint().map_err(|error| error.to_string())?;
             let path = config
                 .checkpoint_dir
@@ -105,9 +119,9 @@ fn run() -> Result<(), String> {
                 "path": path,
                 "sha256": uor_r4_discrete::corpus::sha256(&bytes),
             }));
+            checkpoint_elapsed += checkpoint_started.elapsed();
         }
     }
-    let training_elapsed = training_started.elapsed();
 
     let mut final_panel = CpuPanelEvaluator::from_artifact(
         trainer.artifact(),
@@ -150,7 +164,7 @@ fn run() -> Result<(), String> {
     let final_checkpoint_path = config.checkpoint_dir.join("final.ckpt");
     std::fs::write(&final_checkpoint_path, &final_checkpoint)
         .map_err(|error| format!("final checkpoint: {error}"))?;
-    let training_seconds = training_elapsed.as_secs_f64();
+    let step_seconds = step_elapsed.as_secs_f64();
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-masked-corpus-run/1",
         "substrate": "cpu-development-research",
@@ -172,6 +186,8 @@ fn run() -> Result<(), String> {
             "tokens": identity.tokens,
             "token_bytes": identity.token_bytes,
             "mask_bytes": identity.mask_bytes,
+            "response_targets": identity.response_targets,
+            "max_tokens": identity.max_tokens,
             "documents": corpus.document_count(),
             "training_documents": split.training_documents,
             "evaluation_documents": split.evaluation_documents,
@@ -184,15 +200,27 @@ fn run() -> Result<(), String> {
             "steps": config.steps,
             "accepted_updates": accepted,
             "refused_steps": refused,
+            "target_visits": target_visits,
             "context_tokens": context_tokens,
-            "training_elapsed_ms": training_seconds * 1_000.0,
-            "context_tokens_per_second": if training_seconds > 0.0 {
-                context_tokens as f64 / training_seconds
+            "step_elapsed_ms": step_elapsed.as_secs_f64() * 1_000.0,
+            "mean_step_ms": if config.steps > 0 {
+                step_elapsed.as_secs_f64() * 1_000.0 / config.steps as f64
             } else {
                 0.0
             },
-            "steps_per_second": if training_seconds > 0.0 {
-                config.steps as f64 / training_seconds
+            "checkpoint_elapsed_ms": checkpoint_elapsed.as_secs_f64() * 1_000.0,
+            "context_tokens_per_second": if step_seconds > 0.0 {
+                context_tokens as f64 / step_seconds
+            } else {
+                0.0
+            },
+            "target_visits_per_second": if step_seconds > 0.0 {
+                target_visits as f64 / step_seconds
+            } else {
+                0.0
+            },
+            "steps_per_second": if step_seconds > 0.0 {
+                config.steps as f64 / step_seconds
             } else {
                 0.0
             },

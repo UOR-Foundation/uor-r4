@@ -26,8 +26,21 @@ pub struct CpuCorpusIdentity {
     pub tokens: usize,
     pub token_bytes: usize,
     pub mask_bytes: usize,
+    pub response_targets: usize,
+    pub max_tokens: usize,
     pub vocab: usize,
     pub bos: u32,
+}
+
+impl CpuCorpusIdentity {
+    pub fn validate_context(&self, context: usize) -> Result<()> {
+        if context == 0 || self.max_tokens < context {
+            return Err(invalid(
+                "corpus manifest maximum horizon is below the model context",
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -267,6 +280,9 @@ pub fn validate_corpus_manifest(
     let tokens = integer("tokens")?;
     let token_bytes_declared = integer("tokens_bytes")?;
     let mask_bytes = integer("mask_bytes")?;
+    let response_targets = integer("response_tokens")?;
+    let max_tokens = integer("max_tokens")?;
+    let selected_positions = mask.iter().filter(|&&value| value == 1).count();
     if token_bytes.len() < UORT_HEADER_BYTES
         || &token_bytes[..4] != b"UORT"
         || u64::from_le_bytes(
@@ -276,8 +292,10 @@ pub fn validate_corpus_manifest(
         ) != tokens as u64
         || token_bytes_declared != token_bytes.len()
         || mask_bytes != mask.len()
+        || selected_positions != response_targets
+        || max_tokens == 0
     {
-        return Err(invalid("corpus manifest token or mask byte length differs"));
+        return Err(invalid("corpus manifest inventory differs"));
     }
     let tokens_sha256 = text("tokens_sha256")?;
     let mask_sha256 = text("mask_sha256")?;
@@ -299,6 +317,8 @@ pub fn validate_corpus_manifest(
         tokens,
         token_bytes: token_bytes_declared,
         mask_bytes,
+        response_targets,
+        max_tokens,
         vocab,
         bos,
     })
@@ -413,6 +433,15 @@ mod tests {
         let mut bad_count = token_bytes.clone();
         bad_count[8..16].copy_from_slice(&3u64.to_le_bytes());
         assert!(CpuMaskedCorpus::from_bytes(&bad_count, &[0, 1], 64, 3, 0).is_err());
+        let mut bad_version = token_bytes.clone();
+        bad_version[4..8].copy_from_slice(&2u32.to_le_bytes());
+        assert!(CpuMaskedCorpus::from_bytes(&bad_version, &[0, 1], 64, 3, 0).is_err());
+        let mut bad_vocab = token_bytes.clone();
+        bad_vocab[16..20].copy_from_slice(&65u32.to_le_bytes());
+        assert!(CpuMaskedCorpus::from_bytes(&bad_vocab, &[0, 1], 64, 3, 0).is_err());
+        let mut bad_reserved = token_bytes;
+        bad_reserved[20] = 1;
+        assert!(CpuMaskedCorpus::from_bytes(&bad_reserved, &[0, 1], 64, 3, 0).is_err());
     }
 
     #[test]
@@ -428,6 +457,8 @@ mod tests {
             "tokens_sha256": uor_r4_discrete::corpus::sha256(&token_bytes),
             "mask_bytes": 3,
             "mask_sha256": uor_r4_discrete::corpus::sha256(&mask),
+            "response_tokens": 2,
+            "max_tokens": 192,
             "tokenizer": {
                 "vocab_size": 4096,
                 "bos_id": 0,
@@ -438,13 +469,25 @@ mod tests {
         let identity = validate_corpus_manifest(&bytes, &token_bytes, &mask).unwrap();
         assert_eq!(identity.split, "train");
         assert_eq!(identity.vocab, 4096);
+        assert_eq!(identity.response_targets, 2);
+        assert_eq!(identity.max_tokens, 192);
+        identity.validate_context(192).unwrap();
+        assert!(identity.validate_context(193).is_err());
         assert!(validate_corpus_manifest(&bytes, &token_bytes[..4], &mask).is_err());
         assert!(validate_corpus_manifest(&bytes, &token_bytes, &[0, 1, 2]).is_err());
+        let mut tampered: Value = serde_json::from_slice(&bytes).unwrap();
+        tampered["response_tokens"] = serde_json::json!(1);
+        assert!(validate_corpus_manifest(
+            &serde_json::to_vec(&tampered).unwrap(),
+            &token_bytes,
+            &mask
+        )
+        .is_err());
     }
 
     #[test]
-    fn checkpoint_resume_repeats_the_next_corpus_step() {
-        use crate::CpuRankMarginTrainer;
+    fn two_checkpoint_resumes_reproduce_the_complete_corpus_continuation() {
+        use crate::{CpuPanelEvaluator, CpuRankMarginTrainer};
         use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
         use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
@@ -488,13 +531,30 @@ mod tests {
         .unwrap();
         left.train_steps(3).unwrap();
         let checkpoint = left.checkpoint().unwrap();
-        let mut right = CpuRankMarginTrainer::resume(&checkpoint, split.training.clone()).unwrap();
+        let mut right_a =
+            CpuRankMarginTrainer::resume(&checkpoint, split.training.clone()).unwrap();
+        let mut right_b =
+            CpuRankMarginTrainer::resume(&checkpoint, split.training.clone()).unwrap();
         assert!(split
             .training
             .iter()
             .chain(&split.evaluation)
             .any(|sample| sample.input.len() == 8));
-        assert_eq!(left.train_step().unwrap(), right.train_step().unwrap());
-        assert_eq!(left.checkpoint().unwrap(), right.checkpoint().unwrap());
+        let continuation = 2;
+        let continued = left.train_steps(continuation).unwrap();
+        assert_eq!(continued, right_a.train_steps(continuation).unwrap());
+        assert_eq!(continued, right_b.train_steps(continuation).unwrap());
+        assert_eq!(left.artifact(), right_a.artifact());
+        assert_eq!(right_a.artifact(), right_b.artifact());
+        assert_eq!(left.checkpoint().unwrap(), right_a.checkpoint().unwrap());
+        assert_eq!(right_a.checkpoint().unwrap(), right_b.checkpoint().unwrap());
+        let mut left_panel =
+            CpuPanelEvaluator::from_artifact(left.artifact(), split.evaluation.clone(), 1).unwrap();
+        let mut right_panel =
+            CpuPanelEvaluator::from_artifact(right_b.artifact(), split.evaluation, 1).unwrap();
+        assert_eq!(
+            left_panel.evaluate().unwrap(),
+            right_panel.evaluate().unwrap()
+        );
     }
 }
