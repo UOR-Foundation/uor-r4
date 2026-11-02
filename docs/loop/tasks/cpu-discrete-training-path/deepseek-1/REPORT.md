@@ -5,7 +5,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 ## What did not work
 
 - **This is a first slice, not #3501 completion.** It parses and evaluates Route reads, but Flock, Relation, proposals, BVG-K, apply and resume remain disabled.
-- **No release Route benchmark is included yet.**
+- **The benchmark is an in-memory synthetic Route model.** It does not measure artifact parsing, training proposals or apply.
 - **No corpus or training run occurred.**
 
 ## What changed
@@ -23,6 +23,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - Serialized nonzero-action Route reads match `IntegerDiscreteModel` on four prefixes.
 - Identity Route output is deterministic; empty and out-of-vocabulary prefixes are refused.
 - Malformed artifact, non-orbit root, structure and bounds controls pass.
+- Release benchmark on the Ryzen 9 9950X: 1,024 prefix reads, width 32, four blocks, five stages and 64-token prefix in 1.068 ms (`958,930.792` rows/s), checksum `401ffb34401ffb34`, peak RSS 3,336 KiB.
 
 ## Checks run at the head
 

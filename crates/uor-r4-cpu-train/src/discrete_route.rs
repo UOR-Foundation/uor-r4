@@ -128,6 +128,29 @@ impl CpuDiscreteRoute {
             .chunks_exact(stages)
             .map(|row| row.to_vec())
             .collect();
+        Self::from_parts(context, token_blocks, routes)
+    }
+
+    pub fn from_parts(
+        context: usize,
+        token_blocks: Vec<Vec<[i32; 8]>>,
+        routes: Vec<Vec<u32>>,
+    ) -> Result<Self> {
+        let blocks = token_blocks.first().map_or(0, Vec::len);
+        let stages = routes.first().map_or(0, Vec::len);
+        if !(2..=8192).contains(&token_blocks.len())
+            || !(2..=16).contains(&blocks)
+            || expected_stages(context) != Some(stages)
+            || routes.len() != blocks
+            || routes
+                .iter()
+                .any(|row| row.len() != stages || row.iter().any(|&value| value >= 64))
+            || token_blocks.iter().any(|token| {
+                token.len() != blocks || token.iter().any(|block| root_id(block).is_none())
+            })
+        {
+            return Err(invalid("Route parts differ"));
+        }
         let composition =
             cl06_finite_composition_table().map_err(|error| invalid(error.to_string()))?;
         Ok(Self {
@@ -236,7 +259,7 @@ fn expected_stages(context: usize) -> Option<usize> {
     let mut span = 3usize;
     while span <= context {
         stages += 1;
-        span += span + span;
+        span = span.saturating_mul(3);
     }
     Some(stages)
 }

@@ -37,3 +37,7 @@ path = "src/bin/cpu-panel-export-bench.rs"
 [[bin]]
 name = "cpu-public-discrete-parity"
 path = "src/bin/cpu-public-discrete-parity.rs"
+
+[[bin]]
+name = "cpu-discrete-route-bench"
+path = "src/bin/cpu-discrete-route-bench.rs"
