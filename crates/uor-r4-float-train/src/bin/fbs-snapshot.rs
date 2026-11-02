@@ -56,6 +56,19 @@
 //!   was inspected. On a rebound copy, its lines are compared with the run's sealed inspection;
 //! - `tie-rule`: the integer session's rule, the read's default since claude-239.
 //!
+//! The fifth form (claude-252, Q5's side T) makes an evaluation copy of a checkpoint with every
+//! parameter the integer artifact holds rounded as `fbs-export --raw-gates --raw-transition`
+//! rounds it (`fbs_export::write_rounded_copy`), on the CPU:
+//!
+//! ```text
+//! fbs-snapshot --round-as-exported MODEL_DIR OUT_MODEL_DIR
+//! ```
+//!
+//! The trunk's tables, the Hamming reads and the turn memory's weights are rounded; the routes,
+//! the memory's tables and both configs are as they are. The copy's step holds the marker
+//! `rounded-as-exported.json`, with each file's sha256 before and after, on which
+//! `train-in-space --score-rows --decision-trace` writes side T.
+//!
 //! It never replaces or leaves a partial output file, and it prints each
 //! file's sha256.
 //!
@@ -72,7 +85,7 @@ use sha2::{Digest, Sha256};
 use uor_r4_float_train::fbs_export::{
     check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_float_readout_on,
     fbs_hamming_snapshot, fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported,
-    round_tables_as_exported, run_rate_reading, READOUT_SEQUENCES,
+    round_tables_as_exported, run_rate_reading, write_rounded_copy, READOUT_SEQUENCES,
 };
 use uor_r4_float_train::flock_read_hamming::{
     set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
@@ -470,7 +483,7 @@ fn inspect(ties: &str, data_root: &str, run: &str) -> Result<()> {
 
 fn usage() -> ! {
     eprintln!(
-        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON\n       fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR\n       fbs-snapshot --inspect as-trained|tie-rule DATA_ROOT RUN_DIR"
+        "usage: fbs-snapshot [--dev DATA_ROOT] MODEL_DIR OUT_JSON [READOUT_JSON [EXPORT_READOUT_JSON [D11_READOUT_JSON]]]\n       fbs-snapshot [--dev DATA_ROOT] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON\n       fbs-snapshot --rebind-fbs-backward MODEL_DIR OUT_MODEL_DIR\n       fbs-snapshot --inspect as-trained|tie-rule DATA_ROOT RUN_DIR\n       fbs-snapshot --round-as-exported MODEL_DIR OUT_MODEL_DIR"
     );
     std::process::exit(2);
 }
@@ -491,6 +504,31 @@ fn main() -> Result<()> {
             usage();
         };
         return inspect(ties, data_root, run);
+    }
+    if args
+        .first()
+        .is_some_and(|flag| flag == "--round-as-exported")
+    {
+        let [_, model_dir, out_dir] = args.as_slice() else {
+            usage();
+        };
+        let copy = write_rounded_copy(Path::new(model_dir), Path::new(out_dir))?;
+        let run = &copy.run_config;
+        println!(
+            "{}  run {} (from {})",
+            run.copy_sha256, run.name, run.source_sha256
+        );
+        for file in &copy.files {
+            println!(
+                "{}  {} (from {})",
+                file.copy_sha256, file.name, file.source_sha256
+            );
+        }
+        println!(
+            "rounded as exported: {} files; the copy reads back as rounded, and re-rounding it changes nothing",
+            copy.files.len()
+        );
+        return Ok(());
     }
     let dev = if args.first().is_some_and(|flag| flag == "--dev") {
         if args.len() < 2 {

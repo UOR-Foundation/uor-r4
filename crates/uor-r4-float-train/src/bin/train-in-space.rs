@@ -111,6 +111,8 @@
 //! five kinds in the memory pass's own forward, written new as `decision-trace-{SPLIT}.json`
 //! (`uor-r4.decision-trace/1`, side `F`, the f32 values as `f32::to_bits`). It changes no rows
 //! file, and refuses a position that names no window and a checkpoint with a read R does not serve.
+//! On an evaluation copy rounded as exported (`fbs-snapshot --round-as-exported`, claude-252) the
+//! trace is side `T`, and a copy whose files are not the ones its marker names is refused.
 //!
 //! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on

@@ -1211,6 +1211,8 @@ fn row_picks(
 /// trace, each named by its `position` (its first scored position, as `split_prompts` names a
 /// panel row), and what [`row_picks`] recorded for them in its own forward, in panel order. Row
 /// `t` of a window is R's step `t`. Recording copies to the host and changes nothing computed.
+/// On an evaluation copy rounded as exported, the same trace is side T (claude-252,
+/// [`FTrace::on_side`]).
 pub struct FTrace {
     positions: std::collections::BTreeSet<usize>,
     trace: DecisionTrace,
@@ -1246,6 +1248,16 @@ impl FTrace {
             },
             table: None,
         })
+    }
+
+    /// This trace on a float side: `F`, or `T` on an evaluation copy rounded as exported
+    /// (claude-252, [`crate::fbs_export::checkpoint_trace_side`]).
+    pub fn on_side(mut self, side: &str) -> Result<Self> {
+        if side != "F" && side != "T" {
+            return Err(invalid(format!("a float trace is side F or T, not {side}")));
+        }
+        self.trace.side = side.to_owned();
+        Ok(self)
     }
 
     fn wants(&self, window: &CausalWindow) -> bool {
@@ -5734,6 +5746,12 @@ pub fn score_rows(
             unserved.join(", ")
         )));
     }
+    // The trace's side (claude-252): T on an evaluation copy rounded as exported, F otherwise.
+    let side = if traces.is_empty() {
+        "F"
+    } else {
+        crate::fbs_export::checkpoint_trace_side(checkpoint)?
+    };
     // A run trained with the reply's read held to the prompt scores its rows the same way
     // (claude-216); its decodes take the cut through `--reply-read`, as served.
     let trained = run_trained_cut(checkpoint)?;
@@ -5789,7 +5807,7 @@ pub fn score_rows(
         for split in &splits {
             // Q5's decision trace (claude-251), in the memory pass only, as F′'s rows are read.
             let mut trace = match traces.iter().find(|(name, _)| on && *name == split.name) {
-                Some((_, positions)) => Some(FTrace::new(positions)?),
+                Some((_, positions)) => Some(FTrace::new(positions)?.on_side(side)?),
                 None => None,
             };
             let picks =
@@ -9548,6 +9566,22 @@ mod tests {
         let (nearest, farthest) = root_separation().unwrap();
         println!("address roots: nearest {nearest}, farthest {farthest}");
         assert!(nearest > 0.0 && nearest <= farthest);
+    }
+
+    /// claude-252: a float trace is side F unless put on side T, and no other side is taken.
+    #[test]
+    fn a_float_trace_is_side_f_or_t() {
+        let side = |trace: FTrace| trace.trace.side;
+        assert_eq!(side(FTrace::new(&[500]).unwrap()), "F");
+        assert_eq!(
+            side(FTrace::new(&[500]).unwrap().on_side("T").unwrap()),
+            "T"
+        );
+        assert_eq!(
+            side(FTrace::new(&[500]).unwrap().on_side("F").unwrap()),
+            "F"
+        );
+        assert!(FTrace::new(&[500]).unwrap().on_side("R").is_err());
     }
 
     /// claude-251: a traced window's steps hold, in R's order, each layer's buckets and the stream
