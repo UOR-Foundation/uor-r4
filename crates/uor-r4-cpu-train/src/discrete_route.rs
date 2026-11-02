@@ -1170,7 +1170,7 @@ impl CpuDiscreteProposalScorer {
             let mut sentinel = false;
             for (sample, baseline_loss) in &eligible {
                 let cost = if candidate == 0 {
-                    *baseline_loss
+                    Some(*baseline_loss)
                 } else {
                     let query = self
                         .read(&model, &sample.prefix)
@@ -1183,15 +1183,15 @@ impl CpuDiscreteProposalScorer {
                         self.objective,
                     )
                     .map_err(writer_score_error)?;
-                    if loss.token_rivals == 0 {
+                    (loss.token_rivals != 0 && loss.loss != u64::MAX).then_some(loss.loss)
+                };
+                match accumulate_lane(total, cost)? {
+                    Some(next) => total = next,
+                    None => {
                         sentinel = true;
                         break;
                     }
-                    loss.loss
-                };
-                total = total
-                    .checked_add(cost)
-                    .ok_or_else(|| score_error(12, "proposal lane loss sum overflows"))?;
+                }
             }
             *lane_loss = if sentinel { u64::MAX } else { total };
         }
@@ -1322,6 +1322,19 @@ fn writer_score_error(error: CpuTrainError) -> CpuDiscreteScoreError {
     let message = error.to_string();
     let status = if message.contains("overflow") { 12 } else { 8 };
     score_error(status, message)
+}
+
+fn accumulate_lane(
+    total: u64,
+    cost: Option<u64>,
+) -> std::result::Result<Option<u64>, CpuDiscreteScoreError> {
+    let Some(cost) = cost else {
+        return Ok(None);
+    };
+    total
+        .checked_add(cost)
+        .map(Some)
+        .ok_or_else(|| score_error(12, "proposal lane loss sum overflows"))
 }
 
 impl CpuDiscreteProposalModel {
@@ -2836,6 +2849,16 @@ mod tests {
             header["matrices"] = json!([{"name": "unexpected"}]);
         });
         assert!(CpuDiscreteProposalScorer::from_bytes(&bad_route_header).is_err());
+    }
+
+    #[test]
+    fn proposal_lane_sentinel_and_checked_overflow_are_explicit() {
+        assert_eq!(accumulate_lane(7, None).unwrap(), None);
+        assert_eq!(accumulate_lane(7, Some(5)).unwrap(), Some(12));
+        assert_eq!(
+            accumulate_lane(u64::MAX - 1, Some(2)).unwrap_err().status,
+            12
+        );
     }
 
     #[test]

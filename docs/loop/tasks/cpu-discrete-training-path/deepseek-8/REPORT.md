@@ -5,12 +5,12 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 ## What did not work
 
 - **The first exact-head review requested changes.** Arithmetic matched, but scorer errors did not carry numeric statuses, Route scorer construction accepted header forms the host rejects, and some failure controls were absent.
-- **Legal four-table states cannot reach status 12 in this scorer.** Root coordinates are bounded to the 16-root orbit, so the checked u64 products remain far below overflow under the admitted widths. The checked branch remains fail-closed but has no legal-value overflow fixture.
-- **Candidate-only ineligibility has no dedicated fixture yet.** Baseline ineligibility and status precedence are pinned; candidate MAX propagation remains code-reviewed but not independently exercised.
+- **Legal four-table states cannot reach status 12 end-to-end.** Root coordinates are bounded to the 16-root orbit, so checked products remain below overflow; the lane accumulator is now directly tested with values that cross `u64::MAX`.
 
 ## What changed
 
 - Added `CpuDiscreteScoreError` with numeric status and message; scorer now returns status 2, 4, 8, 9 or 12 by decision path.
+- Candidate ineligibility/`MAX` and checked overflow are centralized in `accumulate_lane` and directly tested.
 - Route scorer construction now enforces empty matrices, source identities, admitted objective policy and header-padding rules before state loading.
 - Tests pin all-ineligible status 8, mode mismatch status 9, inventory status 4 and malformed Route-header refusal.
 
