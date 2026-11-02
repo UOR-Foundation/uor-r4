@@ -1501,7 +1501,7 @@ mod tests {
         artifact_with(true, true)
     }
 
-    fn full_path_artifact(point_table: bool) -> Vec<u8> {
+    fn full_path_artifact(point_table: bool, reply_table: bool) -> Vec<u8> {
         let mut snapshot = synthetic_fbs_trunk_with(
             705,
             FbsSynth {
@@ -1527,15 +1527,15 @@ mod tests {
                 value: 42,
             }],
             opening_weight: vec![1.0; snapshot.width],
-            reply: Some(uor_r4_integer::stack::FbsReplyTable {
+            reply: reply_table.then(|| uor_r4_integer::stack::FbsReplyTable {
                 turn: 3,
                 entries: vec![
                     FbsMemoryEntry {
-                        key: vec![0, 42, 77, MEMORY_PAD, 1, MEMORY_PAD, 11],
+                        key: vec![42, 77, MEMORY_PAD, 1, MEMORY_PAD, 11],
                         value: 42,
                     },
                     FbsMemoryEntry {
-                        key: vec![0, 42, 77, MEMORY_PAD, 2, MEMORY_PAD, 22],
+                        key: vec![42, 77, MEMORY_PAD, 2, MEMORY_PAD, 22],
                         value: 77,
                     },
                 ],
@@ -1835,8 +1835,9 @@ mod tests {
             reply_start: Some(3),
             measure_timing: false,
         };
-        let without_point = full_path_artifact(false);
-        let with_point = full_path_artifact(true);
+        let without_point = full_path_artifact(false, true);
+        let with_point = full_path_artifact(true, true);
+        let without_reply = full_path_artifact(true, false);
         let plain = audit_served_forward(&without_point, &config).unwrap();
         let first = audit_served_forward(&with_point, &config).unwrap();
         let second = audit_served_forward(&with_point, &config).unwrap();
@@ -1911,18 +1912,22 @@ mod tests {
         let served = |artifact: &[u8]| {
             let model = IntegerStackModel::parse(artifact).unwrap();
             let mut session = model.session();
-            let mut tokens_out = Vec::new();
+            let mut steps = Vec::new();
             for (row, &token) in tokens.iter().enumerate() {
                 if row + 1 == 3 {
                     session.mark_reply_start();
                 }
-                tokens_out.push(session.step_native(token).unwrap().token);
+                steps.push(session.step_native(token).unwrap());
             }
-            tokens_out
+            steps
         };
-        assert_eq!(served(&with_point)[2], 99);
+        let with_reply = served(&with_point);
+        let reply_miss = served(&without_reply);
+        assert_ne!(with_reply[3].query_q12, reply_miss[3].query_q12);
+        assert_ne!(with_reply[4].query_q12, reply_miss[4].query_q12);
+        assert_eq!(with_reply[2].token, 99);
         assert_ne!(
-            served(&without_point)[2],
+            served(&without_point)[2].token,
             99,
             "the control without a point table cannot take the fallback"
         );

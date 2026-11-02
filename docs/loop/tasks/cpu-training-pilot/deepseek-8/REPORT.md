@@ -5,12 +5,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 ## What did not work, first
 
-- **The first artifact shape did not prove that reply hits changed the native
-  head.** Its reply-table keys were reached, but moving the normalized point to
-  writer rows 42 and 77 left the same later head decisions as a reply-less
-  control. The test therefore claims only what the audit can directly observe:
-  the active reply manifest, three key lookups, exact parity and a stable
-  report. The opening point fallback has a direct token-level control.
+- **The first reply-table keys did not fire.** They included the leading BOS
+  token even though the memory turn anchor starts after the latest BOS/EOS
+  boundary. The repaired keys start with `[42, 77]`; both reply rows now change
+  their Q12 query relative to a reply-less control even though the downstream
+  head happens to choose the same token.
 - **A shared target first made the isolated CPU test look like a source
   failure.** Reusing that target reproduced the existing incompatible-feature
   artifact collision. Every accepted run below used a fresh
@@ -32,7 +31,9 @@ Added one deterministic served-forward audit test in
 
 The control artifact removes only the point table. The test checks complete
 parity, report determinism, mechanism manifests and non-zero stage costs, then
-observes the point fallback's token-level change from the control.
+observes the point fallback's token-level change from the control. A second
+control removes the reply table; both reply rows must change their complete Q12
+query relative to it.
 
 ## Measurements
 
@@ -48,6 +49,9 @@ and a fresh release target.
   24 popcount words over the sequence, with non-zero typed Hamilton work;
 - the memory stage modelled 3 exact key lookups and 1 point-table row scan on
   the missed opening;
+- both reply rows changed their complete Q12 query when the reply table was
+  present, proving that their exact keys fired rather than merely contributing
+  to the declared lookup count;
 - the point-table artifact returned token 99 at the opening row; the otherwise
   identical control without the point table did not;
 - the native readout modelled 80 candidate-token visits over the sequence.
@@ -81,8 +85,8 @@ served-forward audit and synthetic FBS fixture patterns.
 - A readable trained full-path artifact must replace the synthetic fixture
   before this can support a trained-model claim.
 - The audit models memory key lookups but does not currently expose per-step
-  opening/reply hit counters; reply activity is established by the manifest,
-  lookup cost and exact parity rather than a direct hit bit.
+  hit counters; reply and point activity are established through their
+  token/query controls and exact parity rather than a direct hit bit.
 - Training through the complete served graph, the bounded surrogate comparison
   and Claude's end-to-end local-chat qualification remain tracked by the active
   program sequence.
