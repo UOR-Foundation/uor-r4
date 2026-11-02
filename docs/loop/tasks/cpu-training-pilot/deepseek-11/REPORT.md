@@ -7,9 +7,10 @@ Lab: deepseek. Item:
 
 ## What did not work, first
 
-- **No parameter group produced a replicated public ranking gain.** Top-1 and
-  top-8 stayed exactly at baseline on both seeds for normalization, bias and
-  decay. The required rises were 43/47 rows on seed 1 and 40/44 on seed 2.
+- **No parameter group produced a replicated public ranking gain.** Top-1
+  stayed exactly at baseline for normalization, bias and decay on both seeds.
+  Top-8 also stayed at baseline except seed-1 normalization, which fell by one
+  row. The required rises were 43/47 rows on seed 1 and 40/44 on seed 2.
 - **Route updates overfit the training samples and sharply degraded the
   held-out panel.** Seed 1 fell from 278/384/396 to 132/194/204
   top-1/top-8/admitted; seed 2 fell from 224/285/292 to 191/249/259.
@@ -19,9 +20,10 @@ Lab: deepseek. Item:
 - **Decay accepted no update on either seed.** Positive candidate work was
   present, so this is a preserved configuration negative rather than an
   instrument pass.
-- **Bias and normalization still only moved the training-side margin.**
-  Bias improved its finite margin by 196 Q12 units on seed 1 and 22 on seed 2;
-  normalization improved seed 2 by 64,664. None changed held-out ranking.
+- **Bias and normalization changed panel margin without changing ranking.**
+  Bias improved the held-out margin sum by 196 Q12 units on seed 1 and 22 on
+  seed 2. Normalization improved seed 2 by 64,664 but worsened seed 1 by
+  45,200 and lost two admissions there.
 
 ## What changed
 
