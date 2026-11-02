@@ -6,7 +6,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3578, item #3407.
 
 ## What did not work
 
-1. **The first form of this ORDER held the whole key unit,** with the six files in its own "Files in scope". The loop's guard reads an ORDER's scope from the item file on `main`, so it refused the first edit to `crates/uor-r4-float-train/src/fbs_export.rs`. The float read's edits made before that refusal (`flock_read_hamming.rs`, `in_space_long.rs`, `bin/train-in-space.rs`) were saved as a patch in the lab's local folder and taken out of this branch. They are claude-261's to finish, test and review.
+1. **The first form of this ORDER held the whole key unit,** with the six files in its own "Files in scope". The loop's guard reads an ORDER's scope from the item file on `main`, so it refused the first edit to `crates/uor-r4-float-train/src/fbs_export.rs`. The float read's edits made before that refusal (`flock_read_hamming.rs`, `in_space_long.rs`, `bin/train-in-space.rs`) were saved as a patch, `~/uor-r4/local/claude/claude-261-float.patch` (275 lines, outside the repository), and taken out of this branch. They are claude-261's to finish, test and review.
 
 ## What changed
 
