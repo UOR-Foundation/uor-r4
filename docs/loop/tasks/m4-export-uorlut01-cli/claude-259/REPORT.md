@@ -63,3 +63,25 @@ Commits: 3ba027cdd (ORDER), 91adaec2e (the fix and tests), 28fbdb86b (one copy o
   - conv-b: "hello" / "How are you today?" / "What can you help me with?" / "Tell me something about the sea."
 - **Parity:** each turn's `/tokens` history, cut at the turn's prompt, went into `fbs-toks ARTIFACT --replies PROMPTS --out FILE --reply-tokens 64`, and its reply was compared with the chat's reply ids.
 - **Evidence** (local, not committed): `local/claude/claude-259/` in this worktree holds the inputs, the six transcripts `s{1,2,3}-{a,b}.txt`, and the `fbs-toks` outputs.
+
+## Checks run at the head
+
+- `~/.cargo/bin/cargo test -p uor-r4-integer --features serving-wasm --lib stack_chat`: 9 passed, 0 failed.
+- The four negative gates above (G1 to G4): each failed with its fix set aside and passed once restored.
+- `cargo fmt --check`: no diff. `cargo clippy`: no warning in this unit's lines (the warnings it prints are in older `uor-chat.rs` code).
+- The full crate suite, `loop gates --full`, `loop pr-check --local` and the fresh-context review: recorded below once run.
+
+## Skills used
+
+None.
+
+## Still open
+
+- **Grounded replies.** The served model copies its previous reply instead of reading the question. That is the path's step 3, fixed with geometry; these transcripts are its starting evidence, and they say step 3 may need to come before more training at the same recipe.
+- **The trained-as-served run** (one-model-end-to-end, claude-259 prep on draft PR #3558): its sheet, FIT, pre-run review and GPU run at 3 seeds, scored with these same two conversations and M2's panels.
+- **The item's own bars:** the 0.90 bpb bar, the export gap, and a restored chat keeping the turn memory's mark (`save_state` drops it).
+- **`--prompt-ids` has no roles,** so it cannot mark a reply start; a raw-id path that marks would need a role flag.
+
+## Plain summary
+
+The chat program can now talk to the model we trained. Before, it crashed on the first reply, because it looked for the model's scores in a place this kind of model leaves empty, and it never told the model's memory where a reply starts. Now it asks the model for its own pick, marks each reply's start, and gives on every turn the same answer as the reference decoder, at about 1,300 tokens a second on the laptop. What it shows is that the model does not chat yet: it repeats its first reply, echoes the user, and answers no question from what it was told. That is the next problem on the path.
