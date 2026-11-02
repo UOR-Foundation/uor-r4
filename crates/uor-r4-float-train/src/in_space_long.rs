@@ -173,12 +173,13 @@ pub struct LongConfig {
     /// same cut to its rows. Left out of `config.json` when none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reply_read_train: Option<ReadScope>,
-    /// Train as served (one-model-end-to-end, claude-258): before each step's forward, the trunk's
-    /// tables, the Hamming reads and the turn memory's weights are rounded as the integer export
-    /// rounds them, so the loss and its gradient are the served model's; the gradient then moves
-    /// the float values they were rounded from ([`ServedValues`]). Every checkpoint is scored and
-    /// saved at the rounded values, so rounding a saved step as exported changes nothing. Left
-    /// out of `config.json` when false.
+    /// Train as served (one-model-end-to-end, claude-258 and deepseek-4): before each step's
+    /// forward, the trunk's tables, the Hamming reads and the turn memory's weights are rounded
+    /// as the integer export rounds them; the D11 gates/transition, Q16 residual and dynamic i16
+    /// activations are on; and the scored query is Q12. The gradient moves the float values the
+    /// rounded forward came from ([`ServedValues`]). Every checkpoint is scored in the same
+    /// served forward and saved at the rounded values, so rounding a saved step as exported
+    /// changes nothing. Left out of `config.json` when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub train_as_served: bool,
 }
@@ -250,6 +251,20 @@ fn round_if_served(
 ) -> Result<Option<ServedValues>> {
     on.then(|| ServedValues::round(model, reads, memory))
         .transpose()
+}
+
+/// Run a training step under the graph it will export, or retain the existing plain path.
+fn with_training_forward<T>(
+    served: bool,
+    seed: u64,
+    step: usize,
+    f: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    if served {
+        hs::with_served_surrogate_training(seed, step + 1, f)
+    } else {
+        hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step + 1, false, f)
+    }
 }
 
 fn is_zero_u32(n: &u32) -> bool {
@@ -958,10 +973,16 @@ fn batch_loss(
     scored: &[u32],
     targets: &[u32],
     batch: usize,
+    q12: bool,
 ) -> Result<Tensor> {
     let hidden = trained_points(model, ids, batch)?;
     let idx = Tensor::from_vec(scored.to_vec(), scored.len(), model.device())?;
     let query = hidden.index_select(&idx, 0)?;
+    let query = if q12 {
+        hs::q12_query(&query)?
+    } else {
+        query
+    };
     stage_clock::mark("points.select");
     query_loss(model, objective, &query, targets)
 }
@@ -1071,19 +1092,29 @@ fn nearest_reading(
     mask: &[u8],
     seed: u64,
     step: usize,
+    served: bool,
 ) -> Result<(NearestReading, WriterReading)> {
     let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
-    let picks = row_picks(model, dev, mask, seed, step, None, |query, opens| {
-        let at: Vec<u32> = (0..opens.len() as u32)
-            .filter(|&i| opens[i as usize])
-            .collect();
-        if !at.is_empty() {
-            let at = Tensor::from_vec(at.clone(), at.len(), model.device())?;
-            opening_queries.push(query.index_select(&at, 0)?);
-        }
-        all_queries.push(query.clone());
-        Ok(())
-    })?;
+    let picks = row_picks(
+        model,
+        dev,
+        mask,
+        seed,
+        step,
+        served,
+        None,
+        |query, opens| {
+            let at: Vec<u32> = (0..opens.len() as u32)
+                .filter(|&i| opens[i as usize])
+                .collect();
+            if !at.is_empty() {
+                let at = Tensor::from_vec(at.clone(), at.len(), model.device())?;
+                opening_queries.push(query.index_select(&at, 0)?);
+            }
+            all_queries.push(query.clone());
+            Ok(())
+        },
+    )?;
     let (mut reading, written) = fold_picks(&picks);
     if !opening_queries.is_empty() {
         reading.opening_query_spread = spread(&Tensor::cat(&opening_queries, 0)?)?;
@@ -1132,18 +1163,20 @@ fn fold_picks(picks: &[RowPick]) -> (NearestReading, WriterReading) {
 /// (its openings, and its reply table's later rows). `on_query` sees each batch's query rows
 /// and which of them open a reply. A `trace` (claude-251) records the decisions of the windows it
 /// names, in this same forward.
+#[allow(clippy::too_many_arguments)]
 fn row_picks(
     model: &StackModel,
     dev: &[CausalWindow],
     mask: &[u8],
     seed: u64,
     step: usize,
+    served: bool,
     mut trace: Option<&mut FTrace>,
     mut on_query: impl FnMut(&Tensor, &[bool]) -> Result<()>,
 ) -> Result<Vec<RowPick>> {
     let table = table(model)?;
     let writer = model.native_vector_writer()?;
-    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, || {
+    let forward = || {
         let mut out = Vec::new();
         for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
             let windows: Vec<&CausalWindow> = chunk.iter().collect();
@@ -1227,7 +1260,12 @@ fn row_picks(
             });
             let hidden = hidden?;
             let idx = Tensor::from_vec(scored.clone(), scored.len(), model.device())?;
-            let query = hidden.index_select(&idx, 0)?.detach();
+            let query = hidden.index_select(&idx, 0)?;
+            let query = if served {
+                hs::q12_query(&query)?.detach()
+            } else {
+                query.detach()
+            };
             let scores = nearest_scores(&query, &table)?;
             let best = scores.argmax(1)?.to_vec1::<u32>()?;
             if let (Some(sink), Some((rows, reply)), Some((hamming, rates))) =
@@ -1290,7 +1328,12 @@ fn row_picks(
             on_query(&query, &opens)?;
         }
         Ok(out)
-    })
+    };
+    if served {
+        hs::with_served_surrogate_training(seed, step, forward)
+    } else {
+        hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, step, false, forward)
+    }
 }
 
 /// claude-251, Q5's decision trace (side F, `uor-r4.decision-trace/1`): one split's windows to
@@ -5623,7 +5666,7 @@ pub fn inspect_run(
             let idx = Tensor::from_vec(scored.clone(), scored.len(), device)?;
             Ok(hidden.index_select(&idx, 0)?)
         })?;
-        let (nearest, _) = nearest_reading(&model, &dev_windows, &dev_mask, seed, step)?;
+        let (nearest, _) = nearest_reading(&model, &dev_windows, &dev_mask, seed, step, false)?;
         // The last checkpoint's register, one slot dropped at a time and then all of them
         // (claude-155): the same nearest-token reading, with the register restored after each.
         let register_drop = match crate::flock_read_register::prompt_register() {
@@ -5631,7 +5674,8 @@ pub fn inspect_run(
                 let mut rows = Vec::with_capacity(reg.q() + 1);
                 for slot in (0..reg.q()).map(Some).chain([None]) {
                     crate::flock_read_register::set_prompt_register(Some(reg.without_slot(slot)?));
-                    let dropped = nearest_reading(&model, &dev_windows, &dev_mask, seed, step);
+                    let dropped =
+                        nearest_reading(&model, &dev_windows, &dev_mask, seed, step, false);
                     crate::flock_read_register::set_prompt_register(Some(reg.clone()));
                     let (dropped, _) = dropped?;
                     rows.push(RegisterDrop {
@@ -5649,7 +5693,8 @@ pub fn inspect_run(
         let memory_drop = match crate::flock_read_memory::turn_memory() {
             Some(memory) if index == last => {
                 crate::flock_read_memory::set_turn_memory(None);
-                let dropped = nearest_reading(&model, &dev_windows, &dev_mask, seed, step);
+                let dropped =
+                    nearest_reading(&model, &dev_windows, &dev_mask, seed, step, false);
                 crate::flock_read_memory::set_turn_memory(Some(memory));
                 let (dropped, _) = dropped?;
                 Some(RegisterDrop {
@@ -6144,8 +6189,16 @@ pub fn score_rows(
                 }
                 None => None,
             };
-            let picks =
-                row_picks(&model, &split.windows, &split.mask, seed, step, trace.as_mut(), |_, _| Ok(()))?;
+            let picks = row_picks(
+                &model,
+                &split.windows,
+                &split.mask,
+                seed,
+                step,
+                false,
+                trace.as_mut(),
+                |_, _| Ok(()),
+            )?;
             if let Some(trace) = trace {
                 let file = format!("decision-trace-{}.json", split.name);
                 let trace = trace.finish()?;
@@ -8986,6 +9039,7 @@ pub fn run_recall(
                     &scored,
                     &targets,
                     config.batch,
+                    false,
                 )?;
                 let value = f64::from(loss.to_scalar::<f32>()?);
                 if !value.is_finite() {
@@ -9192,6 +9246,7 @@ pub fn gradient_norms(
             &scored,
             &targets,
             config.batch,
+            false,
         )?
         .backward()?)
     })?;
@@ -9461,13 +9516,15 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             || config.opening_read > 0
             || config.prompt_register > 0
             || config.type_spin
+            || config.reply_read_train.is_some()
             || config.fold_scores
             || config.reflect_floor)
     {
         return Err(invalid(
             "--train-as-served rounds the trunk, the Hamming read and the turn memory as the export \
              does; the Flock, content and opening reads, the prompt register and the type spin \
-             have no exported form, and the export refuses folded or reflected rate scores",
+             have no exported form, the reply-read training cut is not served, and the export \
+             refuses folded or reflected rate scores",
         ));
     }
     if out.exists() {
@@ -9606,18 +9663,30 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             crate::flock_read_hamming::hamming_reads().as_ref(),
             crate::flock_read_memory::turn_memory().as_ref(),
         )?;
-        let (dev, _) = hs::evaluate_dev_panel(
-            model,
-            &dev_windows,
-            HamiltonArm::HamiltonActive,
-            config.seed,
-            step,
-            false,
-            false,
-        )?;
-        let dev_loss = panel_loss(model, &dev_windows, config.seed, step, false)?;
-        let (nearest, written) =
-            nearest_reading(model, &dev_windows, &dev_mask, config.seed, step)?;
+        let (dev, dev_loss, nearest, written) = if config.train_as_served {
+            hs::with_served_surrogate_training(config.seed, step, || {
+                let (dev, _) = hs::evaluate_dev_panel_d11(model, &dev_windows)?;
+                let dev_loss =
+                    crate::spiralcore_fbs_sheet::panel_loss_d11(model, &dev_windows)?;
+                let (nearest, written) =
+                    nearest_reading(model, &dev_windows, &dev_mask, config.seed, step, true)?;
+                Ok((dev, dev_loss, nearest, written))
+            })?
+        } else {
+            let (dev, _) = hs::evaluate_dev_panel(
+                model,
+                &dev_windows,
+                HamiltonArm::HamiltonActive,
+                config.seed,
+                step,
+                false,
+                false,
+            )?;
+            let dev_loss = panel_loss(model, &dev_windows, config.seed, step, false)?;
+            let (nearest, written) =
+                nearest_reading(model, &dev_windows, &dev_mask, config.seed, step, false)?;
+            (dev, dev_loss, nearest, written)
+        };
         let point = Checkpoint {
             step,
             epoch: (step * config.batch) as f64 / usable.len() as f64,
@@ -9795,12 +9864,12 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             stage_clock::mark("served.round");
         }
         // The gate hook carries the real step: at step 0 its backward runs diagnostics with host
-        // syncs, and a checkpoint's replies leave it at 0.
-        let (value, grads) = hs::with_gate_mode(
-            HamiltonArm::HamiltonActive,
+        // syncs, and a checkpoint's replies leave it at 0. Training as served adds the complete
+        // quantization bridge and Q12 query used by the exported graph.
+        let (value, grads) = with_training_forward(
+            config.train_as_served,
             config.seed,
-            step + 1,
-            false,
+            step,
             || {
                 let loss = batch_loss(
                     &model,
@@ -9809,6 +9878,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                     &scored,
                     &targets,
                     config.batch,
+                    config.train_as_served,
                 )?;
                 // The copy to the host waits for the GPU to finish the forward. Only the nearest
                 // and cell objectives mark their own stages; the sheet's and Voronoi objectives
@@ -11403,7 +11473,8 @@ mod tests {
         let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
         let ids: Vec<u32> = (0..SHEET_CONTEXT as u32).map(|i| (i * 37) % 4096).collect();
         let (scored, targets) = ([10u32, 50, 100, 191], [11u32, 2000, 7, 300]);
-        let loss = || batch_loss(&model, PointObjective::Cell, &ids, &scored, &targets, 1).unwrap();
+        let loss =
+            || batch_loss(&model, PointObjective::Cell, &ids, &scored, &targets, 1, false).unwrap();
         let off = loss().to_scalar::<f32>().unwrap();
         stage_clock::start(&device);
         let on = loss();
@@ -12131,7 +12202,7 @@ mod tests {
         assert_eq!(positions, [11, 21]);
         assert_eq!(targets, [20, 30]);
         let mut seen = Vec::new();
-        row_picks(&model, &windows, &mask, 1, 0, None, |query, opens| {
+        row_picks(&model, &windows, &mask, 1, 0, false, None, |query, opens| {
             let rows: Vec<u32> = (0..opens.len() as u32).filter(|&i| opens[i as usize]).collect();
             let idx = Tensor::from_vec(rows.clone(), rows.len(), query.device())?;
             seen.push(query.index_select(&idx, 0)?);
@@ -12174,7 +12245,7 @@ mod tests {
             hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID).unwrap();
         assert_eq!(windows.len(), 2);
         let picks = |trace: Option<&mut FTrace>| {
-            row_picks(&model, &windows, &mask, 1, 0, trace, |_, _| Ok(())).unwrap()
+            row_picks(&model, &windows, &mask, 1, 0, false, trace, |_, _| Ok(())).unwrap()
         };
         let plain = picks(None);
         let named = &windows[1];
@@ -12295,9 +12366,16 @@ mod tests {
                     .with_force(file, 6, lanes, &[(2, 4, head_width), (6, 4, head_width)])
                     .unwrap();
             }
-            let picks = row_picks(&model, &windows, &mask, 1, 0, Some(&mut trace), |_, _| {
-                Ok(())
-            })
+            let picks = row_picks(
+                &model,
+                &windows,
+                &mask,
+                1,
+                0,
+                false,
+                Some(&mut trace),
+                |_, _| Ok(()),
+            )
             .unwrap();
             (picks, trace.finish().unwrap())
         };
@@ -14184,18 +14262,18 @@ mod tests {
                     on,
                     "step {step}"
                 );
-                let grads =
-                    hs::with_gate_mode(HamiltonArm::HamiltonActive, 1, step + 1, false, || {
-                        let loss = batch_loss(
-                            &model,
-                            PointObjective::Cell,
-                            &ids,
-                            &scored,
-                            &targets,
-                            batch,
-                        )?;
-                        Ok(loss.backward()?)
-                    })?;
+                let grads = with_training_forward(on, 1, step, || {
+                    let loss = batch_loss(
+                        &model,
+                        PointObjective::Cell,
+                        &ids,
+                        &scored,
+                        &targets,
+                        batch,
+                        on,
+                    )?;
+                    Ok(loss.backward()?)
+                })?;
                 if let Some(served) = served {
                     served.restore()?;
                 }
@@ -14259,6 +14337,23 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn the_training_forward_selects_and_restores_the_served_bridges() -> Result<()> {
+        let flags = || {
+            [
+                hs::is_rounding_residual_q16(),
+                hs::is_bridging_q16_residual(),
+                hs::is_bridging_activation_i16(),
+                hs::is_bridging_d11(),
+                hs::is_snapping_transition(),
+            ]
+        };
+        assert_eq!(with_training_forward(false, 1, 3, || Ok(flags()))?, [false; 5]);
+        assert_eq!(with_training_forward(true, 1, 3, || Ok(flags()))?, [true; 5]);
+        assert_eq!(flags(), [false; 5]);
+        Ok(())
+    }
+
     /// claude-258: training as served refuses the reads the export does not carry, the type spin,
     /// and folded or reflected rate scores, before the run writes anything.
     #[test]
@@ -14279,6 +14374,10 @@ mod tests {
             |c| c.opening_read = 1,
             |c| c.prompt_register = 1,
             |c| c.type_spin = true,
+            |c| {
+                c.hamming_read = 4;
+                c.reply_read_train = Some(ReadScope::Copy);
+            },
             |c| c.fold_scores = true,
             |c| c.reflect_floor = true,
         ] {
