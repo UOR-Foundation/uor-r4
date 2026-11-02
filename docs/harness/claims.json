@@ -1,8 +1,8 @@
 {
-  "deepseek/cpu-program-reconcile": {
-    "branch": "deepseek/cpu-program-reconcile",
-    "claimed_at": "2026-11-02T03:07:24-05:00",
-    "head": "9c7fbbd8e",
+  "deepseek/cpu-harness-prep-shape": {
+    "branch": "deepseek/cpu-harness-prep-shape",
+    "claimed_at": "2026-11-02T04:18:05-05:00",
+    "head": "4cdb4181e",
     "lab": "deepseek",
     "note": ""
   },
