@@ -5,6 +5,7 @@ export default defineConfig({
     plugins: [preact()],
     test: {
         environment: 'jsdom',
+        include: ['src/**/*.test.ts'],
     },
     build: {
         target: 'es2022',
