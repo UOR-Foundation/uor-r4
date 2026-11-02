@@ -30,6 +30,11 @@ The first reading, at `3aa60ad71` before the fixes, took the same walls (the 14 
   - an `--at` past its window was refused only when its replay ran. It is now refused up front, as are one past its reference and one past R's offsets;
   - the tests never ran T's and R's tables from a file, a T trace whose check could fail, or an `--at` named twice apart. They do now.
   - The readings were run again at the fixed code (`read-r2/`): the check and the deciles are byte for byte the first run's, and the two replays are the same (the sha256 of `.replayed` is equal), with 0 refused.
+- **Three of those gates failed for the wrong reason** (round 2's fresh review, APPROVE WITH NITS). With its check set aside, each test was still refused by a neighbouring check, and failed only on the wording:
+  - G14: the R trace was then refused by the deciles check;
+  - G16: the table had no Hamming read;
+  - G19: the reference ended at the window.
+  - The test now gives each check an input only that check refuses: T's trace named side R with deciles that name it, a second valid artifact with the same reads, and a reference longer than the window. With the check set aside, G14 and G16 now see the input accepted, and G19 sees it refused only late, after a file is written (`gates-bin-r3.txt`). This is a test-only change, about 40 lines, made in the session without a third review round.
 - **The ORDER's first done-when 1 asked for a refusal no replay can reach:** a replay that runs past its prefix's decision count. `grade_pass` refuses a pass that does not take Φ's values, so each pass ends at a new decision of the prefix. It was amended before any code was written, and the test of the replay's end replaced it.
 - **Two of claude-254's tests asserted what this unit forbids.** They accepted float picks 1,024 and 1,280 behind the other side's in f64. Done-when 3 refuses a pick behind past f32's rounding bound, so both now expect the refusal, and new tests cover the cases inside the bound. The behaviour changed by the ORDER, not to reach green.
 - **The 36 failing tests of `uor-r4-integer --features serving-wasm` are still red.** They are the base's own (claude-255's `head-failed-names.txt`, at its head merged as `175fca2a8`): the M1/M2/M3 challenger and timing tests and the frozen-panel CLI test. None is touched here.
@@ -57,7 +62,7 @@ The first reading, at `3aa60ad71` before the fixes, took the same walls (the 14 
 - **`fbs-toks ARTIFACT --decision-replay`** runs the arithmetic step (T, R) with Q = R from the artifact. R's table is the model's own writer table (`fbs_writer_table`). Each pass steps the row's prompt and its reference cut at p, under Φ, through `forced_picks`. It writes `uor-r4.decision-replay/1` new.
 - **The decision commands' refusals,** before any file is read: an unknown or doubled flag, an `--at` named twice, a side with no table (only F, R and T have one), an offset past the window, and a deciles file that names no trace.
 - **`--decision-replay`'s refusals before any replay** (the review's fixes): a reference that is not side T, two windows at one position, deciles read from another trace than the reference (by sha256), a `--reference-table` whose bytes are not the artifact's, and an `--at` past its window, its reference or R's offsets. In each replay, pass 0 must pick R's unforced pick (I-Rerun). A refused replay is recorded as `{position, offset, refused}` and counted under `refused`; the command then fails after writing its file.
-- **Size:** code +612 −70, tests +721 −10, in `fbs_snapshot.rs`, `bin/fbs-toks.rs` and `stack/session.rs`. The docs are this REPORT, the ORDER, one notebook row and one item bullet. The ORDER gave no size estimate.
+- **Size:** code +612 −70, tests +765 −10, in `fbs_snapshot.rs`, `bin/fbs-toks.rs` and `stack/session.rs`. The docs are this REPORT, the ORDER, one notebook row and one item bullet. The ORDER gave no size estimate.
 
 ## Measurements
 
@@ -77,7 +82,7 @@ The first reading, at `3aa60ad71` before the fixes, took the same walls (the 14 
     - G3: the trace check holds a float pick to its runner-up within the bound (2 tests).
     - G4: R's larger-id tie is refused.
     - G5: a negative reference margin inside the bound is accepted.
-  - **The CLI** (`gates/run-gates-bin.zsh`; `gates-bin.txt`, and `gates-bin-r2.txt` with the review round, all fourteen):
+  - **The CLI** (`gates/run-gates-bin.zsh`; `gates-bin.txt`, then `gates-bin-r2.txt` and `gates-bin-r3.txt` with the review rounds, all fourteen):
     - G6: a deciles file with no trace is refused.
     - G7: a side with no table is refused.
     - G8: each pass hands Φ to R.
@@ -96,7 +101,7 @@ The first reading, at `3aa60ad71` before the fixes, took the same walls (the 14 
 
 ## Checks run at the head
 
-The suite, the gates and the readings ran at `cdc016259`, the last commit that changes code. The commits after it change only docs.
+The suite and the readings ran at `cdc016259`, the last commit that changes code outside the tests. `23d4ee94a` after it changes only `fbs-toks`'s `forced` test module, which builds only with `fbs-synthetic`, so neither the suite nor the release binary includes it. The bin tests and the fourteen CLI gates ran at `23d4ee94a`. The other commits change only docs.
 
 - `cargo test -p uor-r4-integer --features serving-wasm --no-fail-fast` at `cdc016259`: 636 passed, 36 failed and 4 ignored (`suite-cdc016259.log`). The 36 names are the base's, with none new and none fixed. The 24 `fbs_snapshot` tests all pass. The runs at `3aa60ad71` and `b07851a2b`, before the review's fixes, gave the same counts (`suite-head.log`, `suite-b07851a2b.log`).
 - `cargo test -p uor-r4-integer --features serving-wasm,fbs-synthetic --bin fbs-toks`: 15 passed. The `forced` module builds only with `fbs-synthetic`, so the suite above does not run it.
@@ -118,6 +123,8 @@ None.
   - For a width that is not a power of two, the sum's bound needs γₙ₊₁. R's 256 is a power of two.
   - A NaN margin passes `margin < 0.0`.
   - No test replays to a memory lookup.
+- **The replay file is written once, when the run ends.** Each replay is in it, refused ones too, but a run killed partway loses those already done. At 14 passes in 723 ms this costs nothing today. The structure step's float passes are whole GPU runs (204 s each on F's s1), so that unit should append each replay to a line file as it ends (round 2's review).
+- **With `--at`, a window's alignment is left to the grade:** `grade_pass` refuses a pass whose ids are not the reference's (I-Align), and the replay is recorded as refused. The up-front check that runs without `--at` (`differing_offsets`) is not run on named windows. A refused entry also carries no `step`. Both are low severity (round 2's review).
 - **Seven scratch folders were left** in the macOS temp folder: `uor_fbs_toks_replay_<pid>`, 2.0 MB in all. One is from the new file test's first failing run and six from the gates' failing runs, before the test removed its folder on a failure too. The loop guard refuses any write outside the worktree, so they were not deleted here. The test now removes its folder however it ends; a later gate run left none.
 
 ## Plain summary
