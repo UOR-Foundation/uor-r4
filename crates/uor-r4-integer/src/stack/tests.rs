@@ -1833,6 +1833,28 @@ fn stack_chat_marks_each_turn_of_an_fbs_conversation() -> ChatTest {
     Ok(())
 }
 
+/// claude-259: the chat's history is the tokens the session stepped, each once. A reply that ends
+/// on EOS or a short cycle leaves its last id pending; the next turn steps it and kept a second
+/// copy in the history ("16, 1, 1, 201" on a7r-s1), which the next turn's prompt then carried.
+#[test]
+fn stack_chat_keeps_a_pending_terminal_id_once() -> ChatTest {
+    let (model, json, keys) = fbs_chat(43)?;
+    let mut chat = open_chat(&model, &json)?;
+    let bos = chat.protocol().bos_id;
+    let mut pending = 0;
+    for pair in keys.windows(2) {
+        chat.seed(&[bos])?;
+        let first_history = [&[bos][..], &pair[0]].concat();
+        let first = chat.reply_history(&first_history, 8)?;
+        pending += usize::from(first.stop != super::StackStop::MaximumNewTokens);
+        let second_history = [chat.tokens(), &pair[1]].concat();
+        let second = chat.reply_history(&second_history, 4)?;
+        assert_eq!(chat.tokens(), &[second_history.as_slice(), &second.ids].concat()[..]);
+    }
+    assert!(pending > 0, "no first reply left an id pending: the test cannot see the copy");
+    Ok(())
+}
+
 /// `artifact(seed)` with the schema set and the shape edited.
 fn read_schema_artifact(schema: &str, edit: impl FnOnce(&mut Value)) -> Vec<u8> {
     with_header(&artifact(5), |header| {

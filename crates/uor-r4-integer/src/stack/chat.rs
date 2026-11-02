@@ -345,8 +345,11 @@ impl<'m> StackChat<'m> {
                 self.session.mark_reply_start();
             }
             self.pick = Some(self.session.serve_step(token)?.0);
-            self.history.push(token);
-            self.fed = self.history.len();
+            // A pending generated id is already in the history: keep one copy.
+            if index == self.history.len() {
+                self.history.push(token);
+            }
+            self.fed = index + 1;
         }
         if self.pick.is_none() {
             return Err(StackChatError::EmptyHistory);
