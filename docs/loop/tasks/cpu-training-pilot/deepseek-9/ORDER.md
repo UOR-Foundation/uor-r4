@@ -49,7 +49,8 @@ settings, reuse it and do not duplicate them.
 - The full CPU library test suite and CPU-local strict Clippy pass; formatting
   and diff checks pass.
 - A fresh FIT review approves the prep sheet before compute.
-- Every registered arm completes with exact CPU/serving export and admission
-  preserved, or records a declared stop.
+- Every registered arm completes with exact CPU/serving export; an admission
+  or ranking miss against the pre-registered bar is retained as a negative
+  outcome rather than relabelled as success.
 - The REPORT and notebook preserve raw panel readings, update acceptance,
   throughput/cost and the registered verdict on both seeds.

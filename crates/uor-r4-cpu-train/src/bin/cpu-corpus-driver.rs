@@ -304,6 +304,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
         "run": {
             "seed": config.seed,
             "rank_margin": config.rank_margin,
+            "final_epoch": trainer.epoch(),
             "steps": target_steps,
             "resumed_from_step": resumed_from_step,
             "executed_steps": executed_steps,
@@ -762,6 +763,7 @@ mod tests {
         assert_eq!(reference["panel_final"], resumed["panel_final"]);
         assert_eq!(resumed["run"]["resumed_from_step"], 2);
         assert_eq!(resumed["run"]["executed_steps"], 4);
+        assert_eq!(resumed["run"]["final_epoch"], 0);
         assert_eq!(resumed["resume"]["verified"], true);
 
         let binding_path = binding_path(&interval);
