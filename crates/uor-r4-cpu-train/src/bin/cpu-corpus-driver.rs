@@ -694,8 +694,18 @@ mod tests {
                 "corpus, seed or split",
             ),
             (
+                "mask_sha256",
+                serde_json::json!("00".repeat(32)),
+                "corpus, seed or split",
+            ),
+            (
                 "manifest_sha256",
                 serde_json::json!("00".repeat(32)),
+                "corpus, seed or split",
+            ),
+            (
+                "tokenizer_sha256",
+                serde_json::json!("11".repeat(32)),
                 "corpus, seed or split",
             ),
             (
@@ -709,17 +719,26 @@ mod tests {
                 "corpus, seed or split",
             ),
             (
+                "max_evaluation",
+                serde_json::json!(8),
+                "corpus, seed or split",
+            ),
+            (
                 "checkpoint_sha256",
                 serde_json::json!("00".repeat(32)),
                 "checkpoint hash",
             ),
+            ("completed_steps", serde_json::json!(1), "completed step"),
+            ("schema", serde_json::json!("changed"), "schema"),
         ];
         for (field, value, expected_error) in tamper_cases {
             let mut binding: serde_json::Value = serde_json::from_slice(&original_binding).unwrap();
             binding[field] = value;
             std::fs::write(&binding_path, serde_json::to_vec_pretty(&binding).unwrap()).unwrap();
-            let error =
-                execute(&config(&fixture, 6, "tampered", Some(interval.clone()))).unwrap_err();
+            let error = match execute(&config(&fixture, 6, "tampered", Some(interval.clone()))) {
+                Ok(_) => panic!("tampered {field} resumed"),
+                Err(error) => error,
+            };
             assert!(
                 error.contains(expected_error),
                 "tampered {field} was not refused as expected: {error}"
