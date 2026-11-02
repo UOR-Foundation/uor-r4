@@ -8,6 +8,7 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - **The benchmark is an in-memory synthetic Flock model.** It does not include artifact parsing, training proposals or apply.
 - **The device-only controls are not ported.** The four-table host path uses legacy endpoint BFS and scale-matched snap; CUDA-only position transport and raw/unit-snap controls remain outside this artifact slice.
 - **No corpus or training run occurred.**
+- **Cargo intermittently reported unresolved imports while linking two same-named `uor-r4-integer` artifacts.** The identical command passed on rerun at the same source; the passing outputs below are the counted results. The benchmark is an ignored release test because the package's build-only targets hit that collision reproducibly.
 
 ## What changed
 
@@ -28,10 +29,15 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 ## Checks run at the head
 
-- `cargo test --release --locked -p uor-r4-cpu-train`: PASS, 67 tests.
-- `cargo test --release --locked -p uor-r4-cpu-train discrete_route::tests::release_flock_read_benchmark -- --ignored --exact --nocapture`: PASS.
-- `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
+- `CARGO_TARGET_DIR=target/deepseek-flock-serial CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS, 67 tests passed and one ignored benchmark.
+- `CARGO_TARGET_DIR=target/deepseek-flock-serial cargo test --release --locked -p uor-r4-cpu-train discrete_route::tests::release_flock_read_benchmark -- --ignored --exact --nocapture`: PASS.
+- `CARGO_TARGET_DIR=target/deepseek-flock-serial CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
+- `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: PASS.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: PASS, 11 gates green.
 
 ## Skills used
 
