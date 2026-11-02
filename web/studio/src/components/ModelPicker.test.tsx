@@ -183,4 +183,42 @@ describe('ModelPicker', () => {
         expect(onError).toHaveBeenCalledWith('Could not persist model sources: browser storage is unavailable or full.');
         expect(store.getState().selectedSource).toBeNull();
     });
+
+    it('ignores a provider test result from before an edit', async () => {
+        const { modelSources } = mount();
+        let finish!: (result: { ok: boolean }) => void;
+        modelSources.testApi = vi.fn(() => new Promise<{ ok: boolean }>((resolve) => { finish = resolve; }));
+        act(() => { button('Test API A').click(); });
+        act(() => { button('Edit API A').click(); });
+        act(() => {
+            input('Provider base URL').value = 'https://new.example.com/v1';
+            input('Provider base URL').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        await act(async () => { finish({ ok: true }); await Promise.resolve(); });
+        expect(host.textContent).toContain('Test: untested');
+        expect(host.textContent).not.toContain('Test: passed');
+    });
+
+    it('shows provider selection persistence failures', () => {
+        const { store, modelAdapter, onError } = mount();
+        modelAdapter.selectApi = vi.fn(() => { throw new Error('Could not persist model sources: browser storage is unavailable or full.'); });
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not persist model sources');
+        expect(onError).toHaveBeenCalled();
+        expect(store.getState().selectedSource).toBeNull();
+    });
+
+    it('keeps removal open and selected when provider deletion cannot persist', () => {
+        const { store, modelAdapter, modelSources, onError } = mount();
+        modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
+        modelSources.removeApi = vi.fn(() => { throw new Error('Could not persist model sources: browser storage is unavailable or full.'); });
+        act(() => { button('Use API A').click(); });
+        act(() => { button('Remove API A').click(); });
+        act(() => { button('Confirm removal').click(); });
+        expect(host.querySelector('dialog')).not.toBeNull();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not persist model sources');
+        expect(onError).toHaveBeenCalled();
+        expect(store.getState().selectedSource?.id).toBe('api-a');
+    });
 });

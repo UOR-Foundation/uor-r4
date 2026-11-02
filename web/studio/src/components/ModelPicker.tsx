@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ApiProvider, ModelSourcesApi } from '../../assets/js/model_sources.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -31,6 +31,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const [providerError, setProviderError] = useState<string | null>(null);
     const [removing, setRemoving] = useState<{ id: string; label: string } | null>(null);
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
+    const testVersions = useRef<Record<string, number>>({});
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
@@ -52,11 +53,17 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const resident = state.residentArtifact;
 
     function testProvider(provider: ApiProvider) {
+        const version = (testVersions.current[provider.id] || 0) + 1;
+        testVersions.current[provider.id] = version;
         setTestResults((current) => ({ ...current, [provider.id]: 'testing' }));
         run(sources.testApi(provider.id).then((result) => {
-            setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
+            if (testVersions.current[provider.id] === version) {
+                setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
+            }
         }).catch((error) => {
-            setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
+            if (testVersions.current[provider.id] === version) {
+                setTestResults((current) => ({ ...current, [provider.id]: 'failed' }));
+            }
             report(error);
         }));
     }
@@ -81,6 +88,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                 };
                 if (providerDraft.apiKey) patch.apiKey = providerDraft.apiKey;
                 sources.updateApi(editingId, patch);
+                testVersions.current[editingId] = (testVersions.current[editingId] || 0) + 1;
                 setTestResults((current) => {
                     const next = { ...current };
                     delete next[editingId];
@@ -96,6 +104,41 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
             setProviderOpen(false);
             setEditingId(null);
             setProviderDraft(emptyDraft);
+            refresh();
+        } catch (error) {
+            setProviderError(error instanceof Error ? error.message : String(error));
+            report(error);
+        }
+    }
+
+    function selectProvider(provider: ApiProvider) {
+        try {
+            setProviderError(null);
+            adapter.selectApi(provider.id, provider.baseUrl);
+        } catch (error) {
+            setProviderError(error instanceof Error ? error.message : String(error));
+            report(error);
+        }
+    }
+
+    function removeProvider() {
+        if (!removing) return;
+        const id = removing.id;
+        try {
+            setProviderError(null);
+            sources.removeApi(id);
+            testVersions.current[id] = (testVersions.current[id] || 0) + 1;
+            setTestResults((current) => {
+                const next = { ...current };
+                delete next[id];
+                return next;
+            });
+            if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
+                const active = sources.active();
+                sources.setActive({ kind: 'wasm', id: active.id || 'bundled-demo' });
+                store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
+            }
+            setRemoving(null);
             refresh();
         } catch (error) {
             setProviderError(error instanceof Error ? error.message : String(error));
@@ -164,6 +207,7 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
             <section aria-label="API providers">
                 <h2>API providers</h2>
                 <p>Connection test: {state.api.testStatus}. Selection does not prove reachability.</p>
+                {providerError && !providerOpen && !removing && <p role="alert">{providerError}</p>}
                 <button type="button" onClick={() => editProvider()}>Add API provider</button>
                 <ul>
                     {sources.list().api.map((provider) => (
@@ -171,10 +215,10 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                             <strong>{provider.label}</strong>
                             <span>{provider.baseUrl} · {provider.model}</span>
                             <span>Test: {testResults[provider.id] || (state.selectedSource?.kind === 'api' && state.selectedSource.id === provider.id ? state.api.testStatus : 'untested')}</span>
-                            <button type="button" onClick={() => adapter.selectApi(provider.id, provider.baseUrl)}>{`Use ${provider.label}`}</button>
+                            <button type="button" onClick={() => selectProvider(provider)}>{`Use ${provider.label}`}</button>
                             <button type="button" onClick={() => testProvider(provider)}>{`Test ${provider.label}`}</button>
                             <button type="button" onClick={() => editProvider(provider)}>{`Edit ${provider.label}`}</button>
-                            <button type="button" onClick={() => setRemoving({ id: provider.id, label: provider.label })}>{`Remove ${provider.label}`}</button>
+                            <button type="button" onClick={() => { setProviderError(null); setRemoving({ id: provider.id, label: provider.label }); }}>{`Remove ${provider.label}`}</button>
                         </li>
                     ))}
                 </ul>
@@ -200,19 +244,10 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
 
             {removing && (
                 <Modal title="Remove API provider" onClose={() => setRemoving(null)}>
+                    {providerError && <p role="alert">{providerError}</p>}
                     <p>Remove {removing.label}? Existing conversations are preserved.</p>
                     <button type="button" autofocus onClick={() => setRemoving(null)}>Keep provider</button>
-                    <button type="button" onClick={() => {
-                        const id = removing.id;
-                        sources.removeApi(id);
-                        if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
-                            const active = sources.active();
-                            sources.setActive({ kind: 'wasm', id: active.id || 'bundled-demo' });
-                            store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
-                        }
-                        setRemoving(null);
-                        refresh();
-                    }}>Confirm removal</button>
+                    <button type="button" onClick={removeProvider}>Confirm removal</button>
                 </Modal>
             )}
         </section>

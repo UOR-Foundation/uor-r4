@@ -10,7 +10,12 @@ export interface GenerationAdapter {
 }
 
 export function createGenerationAdapter(store: LifecycleStore, sessions: SessionApi): GenerationAdapter {
+    let deferredEvents: Event[] | null = null;
     const finished = (event: Event) => {
+        if (deferredEvents) {
+            deferredEvents.push(event);
+            return;
+        }
         const detail = (event as CustomEvent<{ outcome?: 'complete' | 'stopped' | 'error'; generationId?: number; error?: string }>).detail;
         if (detail?.generationId === undefined) return;
         if (detail.outcome === 'complete' || detail.outcome === 'stopped' || detail.outcome === 'error') {
@@ -33,12 +38,17 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
                 if (active) store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: active.generationId, error: 'Generation could not be started.' });
                 return false;
             };
+            const deferred: Event[] = [];
+            deferredEvents = deferred;
             try {
                 const generationId = prediction ? sessions.predict(prompt) : sessions.sendPrompt(prompt);
+                deferredEvents = null;
                 if (typeof generationId !== 'number' || !Number.isInteger(generationId) || generationId <= 0) return fail();
                 store.dispatch({ type: 'generation/started', source: selected, generationId });
-                return store.getState().session.phase === 'generating';
+                deferred.forEach(finished);
+                return true;
             } catch {
+                deferredEvents = null;
                 return fail();
             }
         },

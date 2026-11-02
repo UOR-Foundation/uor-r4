@@ -90,7 +90,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     }
     const status: ShellStatus = {
         source: activeGeneration ? `${activeGeneration.source.kind}: ${activeGeneration.source.id}` : selected ? `${selected.kind}: ${selected.id}` : 'No source selected',
-        artifact: `Artifact: ${state.artifact.phase}`,
+        artifact: selected?.kind === 'artifact' && (state.artifact.phase !== 'ready' || state.residentArtifact?.sourceId !== selected.id) ? 'Selected model; not ready' : `Artifact: ${state.artifact.phase}`,
         privacy,
         file: `File: ${state.file.phase}`,
         session: `Session: ${state.session.phase}`,

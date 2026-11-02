@@ -40,6 +40,8 @@ describe('actual studio UI attachment hooks', () => {
 
 describe('actual studio UI settings hooks', () => {
     it('clamps finite numeric values and applies the editor font size', () => {
+        const changed = vi.fn();
+        window.addEventListener('uor-settings-changed', changed);
         ui.updateSettings({ fontSize: 0, tabSize: 0 });
         expect(ui.getSettings()).toMatchObject({ fontSize: 10, tabSize: 1 });
         expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('10px');
@@ -47,6 +49,10 @@ describe('actual studio UI settings hooks', () => {
         expect(ui.getSettings()).toMatchObject({ fontSize: 24, tabSize: 8, wordWrap: true, reduceMotion: true });
         expect(document.documentElement.style.getPropertyValue('--editor-font-size')).toBe('24px');
         expect(document.documentElement.getAttribute('data-reduce-motion')).toBe('1');
+        expect(JSON.parse(window.localStorage.getItem('uor.studio.settings.v1') || '{}')).toMatchObject({ fontSize: 24, tabSize: 8, wordWrap: true, reduceMotion: true });
+        expect(changed).toHaveBeenCalledTimes(2);
+        expect(changed.mock.calls[1][0].detail).toMatchObject({ fontSize: 24, tabSize: 8, wordWrap: true, reduceMotion: true });
+        window.removeEventListener('uor-settings-changed', changed);
     });
 });
 

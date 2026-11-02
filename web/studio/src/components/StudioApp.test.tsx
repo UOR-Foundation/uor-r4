@@ -92,6 +92,17 @@ describe('StudioApp', () => {
         expect(host.querySelector('[role="status"]')?.textContent).not.toContain('artifact: model-b');
     });
 
+    it('does not report an unmatched resident as ready in the top status', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: { sourceId: 'model-b', schema: 'uor-r4.lut-stack/1', canGenerate: true } });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('Selected model; not ready');
+        expect(host.querySelector('[role="status"]')?.textContent).not.toContain('Artifact: ready');
+    });
+
     it('uses current selection privacy after a previous generation completes', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });

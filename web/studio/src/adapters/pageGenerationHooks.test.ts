@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import source from '../../index.html?raw';
+import { LifecycleStore } from '../state/lifecycle.js';
+import { createGenerationAdapter } from './generation.js';
 
 function section(start: string, end: string): string {
     const from = source.indexOf(start);
@@ -37,6 +39,7 @@ function pageHooks() {
     const conversation = { id: 'conversation', messages: [] as Array<Record<string, unknown>>, sourceKind: '' };
     let currentConversation: typeof conversation | null = conversation;
     const apiRequests: CapturedApiRequest[] = [];
+    let synchronousApiError: string | null = null;
     let requestSequence = 0;
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
@@ -55,7 +58,15 @@ function pageHooks() {
     const hooks = factory(
         app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
         () => currentConversation, vi.fn(() => null), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(), vi.fn(() => '1'), vi.fn(),
-        () => `gen-${++requestSequence}`, vi.fn(async (options: CapturedApiRequest) => { apiRequests.push(options); }), vi.fn(() => null), 32,
+        () => `gen-${++requestSequence}`, vi.fn(async (options: CapturedApiRequest) => {
+            if (synchronousApiError) {
+                const message = synchronousApiError;
+                synchronousApiError = null;
+                options.onError(new Error(message));
+                return;
+            }
+            apiRequests.push(options);
+        }), vi.fn(() => null), 32,
         () => conversation, vi.fn(),
     ) as {
         runPrediction(prompt?: string): boolean;
@@ -67,7 +78,7 @@ function pageHooks() {
         finishLocalGeneration(message: { id?: string; fullText?: string; tokenCount?: number }): void;
         finishGenerationWithError(error: string, requestId?: string | number, generationId?: number | null): boolean | void;
     };
-    return { app, hooks, conversation, apiRequests, clearConversation: () => { currentConversation = null; } };
+    return { app, hooks, conversation, apiRequests, clearConversation: () => { currentConversation = null; }, failNextApi: (message: string) => { synchronousApiError = message; } };
 }
 
 function events(type: string, listener: (event: CustomEvent) => void) {
@@ -228,6 +239,23 @@ describe('actual page prediction hooks', () => {
         apiRequests[1].onDone({ stopped: false });
         expect(completed).toHaveBeenCalledTimes(1);
         dispose();
+    });
+
+    it('finishes a synchronous page API error after the adapter starts generation', () => {
+        const { app, hooks, failNextApi } = pageHooks();
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const sessions = { sendPrompt: hooks.sendFromComposer, predict: vi.fn(), stopGeneration: vi.fn() } as unknown as Parameters<typeof createGenerationAdapter>[1];
+        const adapter = createGenerationAdapter(store, sessions);
+        failNextApi('synchronous config error');
+        expect(adapter.send('hello')).toBe(true);
+        expect(store.getState().session.phase).toBe('error');
+        expect(store.getState().session.error).toBe('synchronous config error');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        expect(app.generating).toBe(false);
+        adapter.dispose();
     });
 });
 

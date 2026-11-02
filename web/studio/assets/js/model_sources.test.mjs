@@ -144,7 +144,7 @@ test('bundled loads accept operation metadata and finalize', async () => {
     assert.equal(progress.at(-1).detail.operationId, 3);
 });
 
-test('API add and update roll back when browser storage fails', async () => {
+test('API provider writes roll back when browser storage fails', async () => {
     const { api, storage, events } = await fresh(async () => { throw new Error('network must not run'); });
     const existing = api.list().api[0];
     storage.fail = true;
@@ -152,5 +152,15 @@ test('API add and update roll back when browser storage fails', async () => {
     assert.equal(api.list().api.some((item) => item.id === 'api-new'), false);
     assert.throws(() => api.updateApi(existing.id, { baseUrl: 'https://changed.example.com/v1' }), /Could not persist model sources/);
     assert.equal(api.list().api.find((item) => item.id === existing.id).baseUrl, existing.baseUrl);
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed').length, 0);
+    storage.fail = false;
+    api.setActive({ kind: 'api', id: existing.id });
+    events.length = 0;
+    storage.fail = true;
+    assert.throws(() => api.setActive({ kind: 'wasm', id: 'bundled-demo' }), /Could not persist model sources/);
+    assert.deepEqual(api.active(), { kind: 'api', id: existing.id });
+    assert.throws(() => api.removeApi(existing.id), /Could not persist model sources/);
+    assert.equal(api.list().api.some((item) => item.id === existing.id), true);
+    assert.deepEqual(api.active(), { kind: 'api', id: existing.id });
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed').length, 0);
 });

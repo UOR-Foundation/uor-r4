@@ -247,9 +247,14 @@ function setActive(next) {
     if (next.kind === 'api' && !findApi(next.id)) {
         throw new Error('That API endpoint no longer exists.');
     }
+    const previous = clone(state.active);
     selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
-    persist();
+    if (!persist()) {
+        state.active = previous;
+        selectionEpoch -= 1;
+        throw new Error(message.text);
+    }
     message = { tone: 'muted', text: '' };
     if (mounted) mounted.render();
     emit({ kind: state.active.kind, id: state.active.id, apiConfig: state.active.kind === 'api' ? publicConfig(activeApi()) : null });
@@ -667,11 +672,17 @@ const api = {
     removeApi(id) {
         const index = state.api.findIndex((item) => item.id === id);
         if (index < 0) return publicList();
+        const removed = state.api[index];
+        const previousActive = clone(state.active);
         state.api.splice(index, 1);
         if (state.active.kind === 'api' && state.active.id === id) {
             state.active = { kind: 'wasm', id: state.wasm.id || 'bundled-demo' };
         }
-        persist();
+        if (!persist()) {
+            state.api.splice(index, 0, removed);
+            state.active = previousActive;
+            throw new Error(message.text);
+        }
         if (mounted) mounted.render();
         emit({ kind: 'state', id: null });
         return publicList();

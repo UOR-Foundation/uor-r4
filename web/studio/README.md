@@ -76,6 +76,7 @@ The components call the existing file/session/UI/model-source APIs through typed
 hooks forward editor content, generation completion, settings, and attachment changes; the engine,
 worker, tokenizer, and `studio_api.js` remain unchanged. Existing provider credentials are not
 rendered or copied into component state; newly entered keys go only to the existing `modelSources.v1` writer, and the provider draft is cleared after a successful save. Failed storage writes roll back and remain visible in the dialog.
+Narrow live-page bridge corrections correlate chat completion, include attachments in API prompts, and return per-session clear results without creating a replacement session; the engine, worker, tokenizer, and `studio_api.js` are unchanged.
 
 Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` in this directory. The library
 build emits uncommitted `dist/` output; `src/studio.css` does not alter the legacy `index.css`.
