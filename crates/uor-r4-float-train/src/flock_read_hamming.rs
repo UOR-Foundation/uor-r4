@@ -1110,8 +1110,16 @@ mod tests {
     #[test]
     fn a_forced_code_wider_than_64_bits_is_refused() {
         let codes = Tensor::zeros((1, 130), DType::F32, &Device::Cpu).unwrap();
-        let forced = [ForcedRowCode { depth: 2, row: 0, head: 0, key: false, code: 1 }];
-        let err = force_codes(&codes, &forced, false, 65).unwrap_err().to_string();
+        let forced = [ForcedRowCode {
+            depth: 2,
+            row: 0,
+            head: 0,
+            key: false,
+            code: 1,
+        }];
+        let err = force_codes(&codes, &forced, false, 65)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("wider than its 64-bit code"), "{err}");
     }
 
