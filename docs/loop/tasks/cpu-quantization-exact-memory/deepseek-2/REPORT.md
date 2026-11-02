@@ -40,7 +40,7 @@ Lab: deepseek. Item: [cpu-quantization-exact-memory](../../../../roadmap/items/c
 
 ## Checks run at the head
 
-- `cargo test --release --locked -p uor-r4-cpu-train` on merged `origin/main` through `175fca2a8`: PASS after the known duplicate-artifact retry, 104 passed and 4 ignored release benchmarks.
+- `cargo test --release --locked -p uor-r4-cpu-train` on merged `origin/main` through `13bbbe4ce`: PASS after the known duplicate-artifact retry, 105 passed and 4 ignored release benchmarks.
 - Focused `quant_shadow` tests: PASS, 7/7.
 - `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
