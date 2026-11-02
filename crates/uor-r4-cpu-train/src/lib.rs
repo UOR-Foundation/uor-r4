@@ -9,6 +9,16 @@ use std::collections::BTreeSet;
 
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
+mod fbs;
+mod hamming;
+mod memory;
+mod train;
+
+pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
+pub use train::{
+    CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,
+};
+
 pub const VOCABULARY: usize = 4_096;
 pub const TRUNK_BLOCKS: usize = 4;
 pub const BLOCK_WIDTH: usize = 8;

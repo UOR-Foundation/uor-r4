@@ -7,9 +7,20 @@ description = "Isolated CPU development trainers for the UOR-R4 geometric model"
 publish = false
 
 [dependencies]
+blake3 = "1.5"
 rayon = "1.10"
+serde_json = "1.0"
 uor-r4-discrete = { path = "../uor-r4-discrete" }
+uor-r4-integer = { path = "../uor-r4-integer", features = ["fbs-synthetic", "serving-wasm"] }
 
 [[bin]]
 name = "cpu-writer-bench"
 path = "src/bin/cpu-writer-bench.rs"
+
+[[bin]]
+name = "cpu-fbs-forward-bench"
+path = "src/bin/cpu-fbs-forward-bench.rs"
+
+[[bin]]
+name = "cpu-rank-margin-bench"
+path = "src/bin/cpu-rank-margin-bench.rs"
