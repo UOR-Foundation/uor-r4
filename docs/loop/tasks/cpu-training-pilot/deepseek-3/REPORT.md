@@ -20,7 +20,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 The registered post-FIT six-process comparison is retained under
 [evidence/post-fit](evidence/post-fit/). The reviewed sheet is
-`docs/harness/prep/cpu-public-resume-control-2026-11-02.md` at SHA-256
+`docs/harness/prep/cpu-training-pilot-public-resume-control-2026-11-02.md` at SHA-256
 `275450b83d1b85904bee5043b3e29555f39e84efd6ff348cfa802e94d5cc83a9`.
 
 The same pinned public inputs from the earlier pilot were used: both raw dual-c131 artifacts, public tokens and mask, trainer seed `1`, evaluation stride `2`, cap `1024`, and checkpoint interval `64`. For each artifact seed, a separate process ran 256 uninterrupted attempts; another process stopped at 64 and exited; a third process resumed that bound checkpoint to total step 256.
@@ -74,7 +74,7 @@ No repository skill was invoked. The work used the D84 CPU program, the existing
 
 ## Plain summary
 
-The CPU trainer stopped after a hash-bound checkpoint and finished in a
+The CPU trainer stopped after a hash-bound step-64 checkpoint and finished in a
 fresh process with exactly the same model bytes and evaluation reading on both
-public FBS seeds. That closes the interval-restart gap without changing the
-earlier zero-gain training result into capability.
+public FBS seeds. That closes the tested public 64→256 interval-restart gap
+without changing the earlier zero-gain training result into capability.
