@@ -27,7 +27,7 @@ function mount(settings?: StudioSettings) {
     const store = new LifecycleStore();
     const fileApi = files();
     const onError = vi.fn();
-    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} settings={settings} />, host); });
+    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} onSuccess={vi.fn()} settings={settings} />, host); });
     return { store, fileApi, onError };
 }
 
@@ -131,6 +131,31 @@ describe('WorkspaceEditor', () => {
         editor.setSelectionRange(1, 1);
         act(() => { editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); });
         expect(fileApi.api.setActiveContent).toHaveBeenCalledWith('a  ');
+    });
+
+    it('refuses save-as when the store and active file differ', () => {
+        const { store, fileApi, onError } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' });
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        act(() => { emit(fileApi); });
+        button('Save as').click();
+        expect(fileApi.api.saveAsCopy).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledWith('The active file changed before Save as.', 'file:save-as:a.md');
+    });
+
+    it('reports a rejected save-as instead of treating it as success', () => {
+        const { fileApi, onError } = mount();
+        fileApi.summary.mode = 'directory';
+        fileApi.summary.rootName = 'project';
+        fileApi.summary.activePath = 'a.md';
+        fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
+        act(() => { emit(fileApi); });
+        fileApi.api.saveAsCopy = vi.fn(() => false);
+        button('Save as').click();
+        expect(onError).toHaveBeenCalledWith('Save as did not complete.', 'file:save-as:a.md');
     });
 
     it('uses save-as and closes tabs through the existing API', () => {

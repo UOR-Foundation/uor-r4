@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { StudioSettings } from '../adapters/workflow.js';
-import { saveActiveFile } from '../adapters/fileSave.js';
+import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -10,16 +10,17 @@ interface WorkspaceEditorProps {
     store: LifecycleStore;
     files: WorkspaceApi;
     onError(message: string, operation: string): void;
+    onSuccess(operation: string): void;
     settings?: StudioSettings;
 }
 
 const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
 
-export function WorkspaceEditor({ store, files, onError, settings = defaultSettings }: WorkspaceEditorProps) {
+export function WorkspaceEditor({ store, files, onError, onSuccess, settings = defaultSettings }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
-    const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error), 'file:other');
+    const report = (error: unknown, operation: string) => onError(error instanceof Error ? error.message : String(error), operation);
 
     function sync(summary: WorkspaceSummary) {
         syncWorkspaceSummary(store, summary);
@@ -39,28 +40,36 @@ export function WorkspaceEditor({ store, files, onError, settings = defaultSetti
         };
     }, [files, store]);
 
-    async function perform(action: () => Promise<unknown>) {
+    async function perform(action: () => Promise<unknown>, operation: string) {
         try {
             await action();
             sync(files.treeSummary());
             refresh();
+            onSuccess(operation);
         } catch (error) {
-            report(error);
+            report(error, operation);
         }
     }
 
-    function immediate(action: () => unknown) {
+    function immediate(action: () => unknown, operation: string) {
         try {
             action();
             sync(files.treeSummary());
             refresh();
+            onSuccess(operation);
         } catch (error) {
-            report(error);
+            report(error, operation);
         }
     }
 
     async function save() {
-        await saveActiveFile(store, files, onError);
+        await saveActiveFile(store, files, onError, onSuccess);
+        sync(files.treeSummary());
+        refresh();
+    }
+
+    function saveCopy() {
+        saveActiveFileCopy(store, files, onError, onSuccess);
         sync(files.treeSummary());
         refresh();
     }
@@ -76,17 +85,17 @@ export function WorkspaceEditor({ store, files, onError, settings = defaultSetti
             <p>File: {state.file.phase}{state.file.path ? ` · ${state.file.path}` : ' · No file open'}</p>
             {state.file.error && <p role="alert">{state.file.error}</p>}
             <div>
-                <button type="button" onClick={() => void perform(files.openFolder)}>Open folder</button>
-                <button type="button" onClick={() => immediate(files.importFiles)}>Import files</button>
-                <button type="button" onClick={() => immediate(files.openDemo)}>Open demo</button>
-                <button type="button" onClick={() => immediate(files.newFile)}>New file</button>
+                <button type="button" onClick={() => void perform(files.openFolder, 'workspace:open-folder')}>Open folder</button>
+                <button type="button" onClick={() => immediate(files.importFiles, 'workspace:import-files')}>Import files</button>
+                <button type="button" onClick={() => immediate(files.openDemo, 'workspace:demo')}>Open demo</button>
+                <button type="button" onClick={() => immediate(files.newFile, 'workspace:new-file')}>New file</button>
             </div>
             {summary.tabs.length > 0 && (
                 <ul aria-label="Open editor tabs">
                     {summary.tabs.map((tab) => (
                         <li>
-                            <button type="button" aria-current={summary.activePath === tab.path ? 'page' : undefined} onClick={() => void perform(() => files.openFile(tab.path))}>{`Open ${tab.path}`}</button>
-                            <button type="button" aria-label={`Close ${tab.path}`} onClick={() => immediate(() => files.closeTab(tab.path))}>{`Close ${tab.path}`}</button>
+                            <button type="button" aria-current={summary.activePath === tab.path ? 'page' : undefined} onClick={() => void perform(() => files.openFile(tab.path), `workspace:open:${tab.path}`)}>{`Open ${tab.path}`}</button>
+                            <button type="button" aria-label={`Close ${tab.path}`} onClick={() => immediate(() => files.closeTab(tab.path), `workspace:close:${tab.path}`)}>{`Close ${tab.path}`}</button>
                             {tab.dirty && <span> Unsaved</span>}
                         </li>
                     ))}
@@ -121,7 +130,7 @@ export function WorkspaceEditor({ store, files, onError, settings = defaultSetti
             </label>
             <div>
                 <button type="button" disabled={!canSave} onClick={() => void save()}>Save</button>
-                <button type="button" disabled={!canSave} onClick={() => immediate(files.saveAsCopy)}>Save as</button>
+                <button type="button" disabled={!canSave} onClick={saveCopy}>Save as</button>
             </div>
         </section>
     );

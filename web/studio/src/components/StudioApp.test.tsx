@@ -67,6 +67,7 @@ describe('StudioApp', () => {
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         store.dispatch({ type: 'file/dirty' });
         const files = makeFiles();
+        files.activeFile = vi.fn(() => ({ path: 'a.md', name: 'a.md', content: 'edited', mode: 'local' }));
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
         });
@@ -426,5 +427,51 @@ describe('StudioApp', () => {
         expect(host.querySelector('[role="alert"]')?.textContent).toContain('test failed');
         await act(async () => { button('Test API A').click(); await Promise.resolve(); });
         expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('clears a workspace open-folder error only after that operation succeeds', async () => {
+        const store = new LifecycleStore();
+        const files = makeFiles();
+        files.openFolder = vi.fn().mockRejectedValueOnce(new Error('open failed')).mockResolvedValueOnce(undefined);
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Workspace').click(); });
+        await act(async () => { button('Open folder').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('open failed');
+        await act(async () => { button('Open folder').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('replaces a provider-test rejection with the settled failure detail', async () => {
+        const store = new LifecycleStore();
+        const sources = makeSources();
+        const provider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
+        sources.list = vi.fn(() => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] }));
+        sources.testApi = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ ok: false, detail: 'unauthorized' });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={sources} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('network down');
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('unauthorized');
+        expect(host.querySelector('[role="alert"]')?.textContent).not.toContain('network down');
+    });
+
+    it('keeps the partial session-clear warning after refreshing sessions', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        sessions.activeSessionId = vi.fn(() => 'session-a');
+        const ui = makeUi();
+        ui.clearSessions = vi.fn(() => ({ cleared: 1, total: 2 }));
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
+        });
+        act(() => { button('Settings').click(); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(host.querySelector('main > p[role="alert"]')?.textContent).toContain('Cleared 1 of 2 sessions');
     });
 });

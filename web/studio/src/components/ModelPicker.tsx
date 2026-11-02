@@ -73,6 +73,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
                 if (result.ok) succeed(operation);
+                else reportProvider(new Error(result.detail || 'Connection test failed.'), operation);
             }
         }).catch((error) => {
             if (testVersions.current[provider.id] === version) {

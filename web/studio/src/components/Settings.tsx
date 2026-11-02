@@ -6,6 +6,7 @@ interface SettingsProps {
     ui: StudioUiApi;
     onClose(): void;
     onChange?(kind: 'sessions' | 'editor'): void;
+    onSuccess?(kind: 'sessions' | 'editor'): void;
     onError?(message: string, operation: string): void;
     onSettingsChange?(settings: StudioSettings): void;
     generating?: boolean;
@@ -15,7 +16,7 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
     return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
-export function Settings({ ui, onClose, onChange, onError, onSettingsChange, generating = false }: SettingsProps) {
+export function Settings({ ui, onClose, onChange, onSuccess, onError, onSettingsChange, generating = false }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [fontSizeDraft, setFontSizeDraft] = useState(String(settings.fontSize));
     const [tabSizeDraft, setTabSizeDraft] = useState(String(settings.tabSize));
@@ -43,23 +44,28 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange, gen
     }
 
     function confirmClear() {
-        let completed = false;
+        let changed = false;
+        let succeeded = false;
         setError(null);
         if (clearing === 'sessions') {
             if (generating) { setClearing(null); return; }
             const result = ui.clearSessions();
             if (result.error) reportError(result.error);
             else {
-                completed = result.cleared > 0;
+                changed = result.cleared > 0;
+                succeeded = result.cleared > 0 && result.cleared === result.total;
                 if (result.cleared < result.total) reportError(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
             }
         }
         if (clearing === 'editor') {
             ui.clearEditor();
-            completed = true;
+            changed = true;
+            succeeded = true;
         }
+        const completed = clearing;
         setClearing(null);
-        if (completed && clearing) onChange?.(clearing);
+        if (changed && completed) onChange?.(completed);
+        if (succeeded && completed) onSuccess?.(completed);
     }
 
     return (

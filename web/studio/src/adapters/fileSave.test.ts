@@ -7,7 +7,7 @@ function files(): WorkspaceApi {
     return {
         openFolder: vi.fn(async () => undefined), importFiles: vi.fn(), openDemo: vi.fn(), openFile: vi.fn(async () => undefined),
         newFile: vi.fn(), closeTab: vi.fn(), closeAll: vi.fn(), saveActive: vi.fn(async () => true), saveAsCopy: vi.fn(() => true),
-        insertText: vi.fn(() => true), setActiveContent: vi.fn(), activeFile: vi.fn(() => null), workspaceName: vi.fn(() => 'project'),
+        insertText: vi.fn(() => true), setActiveContent: vi.fn(), activeFile: vi.fn(() => ({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' })), workspaceName: vi.fn(() => 'project'),
         mode: vi.fn(() => 'directory'), tabs: vi.fn(() => []),
         treeSummary: vi.fn(() => ({ mode: 'directory', rootName: 'project', fileCount: 2, tabs: [], activePath: null })),
     };
@@ -79,13 +79,24 @@ describe('saveActiveFile', () => {
         const first = saveActiveFile(store, api, vi.fn());
         await vi.waitFor(() => expect(api.saveActive).toHaveBeenCalledOnce());
         store.dispatch({ type: 'file/opened', path: 'b.md' });
+        api.activeFile = vi.fn(() => ({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' }));
         const second = saveActiveFile(store, api, vi.fn());
         store.dispatch({ type: 'file/opened', path: 'c.md' });
         finish(true);
-        expect(await first).toBe(true);
+        expect(await first).toBe(false);
         expect(await second).toBe(false);
         expect(api.saveActive).toHaveBeenCalledTimes(1);
         expect(store.getState().file.path).toBe('c.md');
+    });
+
+    it('refuses to save when the store and file module disagree on the active path', async () => {
+        const store = new LifecycleStore();
+        const api = files();
+        api.activeFile = vi.fn(() => ({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' }));
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        expect(await saveActiveFile(store, api, vi.fn())).toBe(false);
+        expect(api.saveActive).not.toHaveBeenCalled();
     });
 
     it('does not complete a newer save from an older completion', async () => {
@@ -97,9 +108,10 @@ describe('saveActiveFile', () => {
         const first = saveActiveFile(store, api, vi.fn());
         await vi.waitFor(() => expect(completions).toHaveLength(1));
         store.dispatch({ type: 'file/opened', path: 'b.md' });
+        api.activeFile = vi.fn(() => ({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' }));
         const second = saveActiveFile(store, api, vi.fn());
         completions[0](true);
-        expect(await first).toBe(true);
+        expect(await first).toBe(false);
         expect(store.getState().file.phase).toBe('saving');
         await vi.waitFor(() => expect(completions).toHaveLength(2));
         completions[1](true);

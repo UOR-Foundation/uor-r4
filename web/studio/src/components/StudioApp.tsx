@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ModelSourcesApi } from '../../assets/js/model_sources.js';
 import { createGenerationAdapter } from '../adapters/generation.js';
-import { saveActiveFile } from '../adapters/fileSave.js';
+import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
@@ -113,7 +113,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         } },
         { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { files.openFolder().then(() => succeed('workspace:open-folder')).catch((reason) => report(reason instanceof Error ? reason.message : String(reason), 'workspace:open-folder')); } },
         { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, reportFile); } },
-        { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { files.saveAsCopy(); } },
+        { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { saveActiveFileCopy(store, files, reportFile, succeed); } },
         { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().then(() => succeed('artifact:load')).catch((reason) => report(reason instanceof Error ? reason.message : String(reason), 'artifact:load')); } },
         { id: 'inspector', group: 'Interface', label: 'Toggle inspector', description: 'Show or hide details', run: () => setInspectorOpen((value) => !value) },
         { id: 'settings', group: 'Interface', label: 'Open settings', description: 'Appearance, editor, and data', run: () => setSettingsOpen(true) },
@@ -152,13 +152,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                     download={download}
                 />
             )}
-            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={reportFile} settings={editorSettings} />}
+            {activeSection === 'workspace' && <WorkspaceEditor store={store} files={files} onError={reportFile} onSuccess={succeed} settings={editorSettings} />}
             {activeSection === 'models' && <ModelPicker store={store} adapter={adapter} sources={sources} onError={report} onSuccess={succeed} />}
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} generating={state.session.phase === 'generating'} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onChange={(kind) => {
-                succeed(`settings:${kind}`);
+            {settingsOpen && <Settings ui={ui} generating={state.session.phase === 'generating'} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onSuccess={(kind) => succeed(`settings:${kind}`)} onChange={(kind) => {
                 if (kind === 'editor') store.dispatch({ type: 'file/closed' });
                 else {
                     setSessionRevision((value) => value + 1);
