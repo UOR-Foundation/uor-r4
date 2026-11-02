@@ -1,9 +1,9 @@
 ---
 id: cpu-whole-path-exact-updates
-title: Port whole-path exact-update and recovery parity to CPU
+title: Resolve the whole-path update premise and retain transaction/replay evidence
 milestone: research
 area: training
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [cpu-training-program, cpu-discrete-writer-core]
@@ -14,23 +14,26 @@ scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, crates/uor-r4-harnes
 
 ## Why it matters
 
-The historical whole-path code records native decisions and applies bounded exact updates, but it is inactive evidence rather than a current trainer. Leaving it out would omit one of the project's CPU learning mechanisms from the requested all-family repair.
+The historical whole-path code records native decisions and stages exact store transactions, but its own contract and retained records say that it has no optimizer or run loop. It was initially registered as an exact-update trainer; the CPU repair needed to establish whether that premise was real before porting it.
 
 ## What is missing
 
-Port the decision-record ordering, legal-update candidates, acceptance checks and recovery traces into the isolated CPU crate without importing the old M2 objective or linking `uor-r4-training`. Reuse ideas only after checking each operation against the current geometry and scan rules.
+Apply the cancel probe to the retained source. Separate its useful transaction, record-selection and replay mechanics from the rejected sampled M2 objective. Do not relabel replay as parameter training.
 
 ## Done when
 
-- Deterministic fixtures reproduce exact update choices and rejection reasons for accepted, tied and illegal moves.
-- Apply, rollback and recovery traces match the reference semantics without host mutation during comparison.
-- The new crate is an independently scanned module with no dependency edge to `uor-r4-training`.
-- A negative or blocked historical arm remains labelled as such; this item does not revive the M2 context/prototype objective.
-- One notebook row and REPORT distinguish exact-reference parity from training capability.
+- The source contract, batch API and retained recovery record establish whether an exact parameter-update implementation exists.
+- The result separates transactional replay from sampled/objective training and names the banned dependencies that prevent direct reuse.
+- The rejected M2 configuration remains a historical negative, with transaction/replay ideas retained only as future design input.
+- One notebook row and REPORT record the definitive disposition.
 
 ## Cancel if
 
 The retained source cannot be separated from a banned model objective or a dependency on `uor-r4-training`. Preserve the negative and use the current discrete/shared-vector paths instead of reviving the old model.
+
+## Disposition
+
+**Rejected as a CPU port target, 2 November 2026.** The retained implementation explicitly performs no optimizer, training loop or parameter update. Its decision tape also depends on normalized-exponential sampling, dense tensor products and Candle, so the cancel condition holds. The independently useful concepts are exact-store staging/rollback, bounded route-record ordering, journaled replay and fail-closed checkpoint identity. They may inform a future transaction primitive, but they do not constitute a trainer and are not imported here.
 
 ## How to start
 

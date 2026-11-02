@@ -2,7 +2,7 @@
 
 The project has used several lawful training families, and most now survive only as inactive source or dated evidence. D84 authorizes a CPU research program to repair them without changing the default GPU training path or reopening mechanisms that already failed their rules.
 
-This page is the durable plan behind the `cpu-training-program` roadmap item. It is not evidence that any CPU trainer works.
+This page is the durable plan behind the `cpu-training-program` roadmap item. Component parity below is evidence for the named implementation only; it is not qualification of CPU training or language capability.
 
 ## Boundary
 
@@ -15,18 +15,18 @@ This page is the durable plan behind the `cpu-training-program` roadmap item. It
 
 ## Historical families
 
-| Family | Mechanism served | Recorded outcome | CPU disposition |
-|---|---|---|---|
-| R4G1 teacher compilation | Context hashes, E8 codebooks, zeta and prime routing, shift-add tables | 29.52% top-1 against 28.12%, but no coherent free text; depended on a now-banned transformer teacher | Preserve as historical. Do not reactivate the teacher. |
-| September native geometric model | Prime/zeta addresses, H4 transport, exact memory, typed heads, Route/Flock/Relation | 437/512 on authored rows, 0/128 fresh; no free prose | Preserve the panel-fitting negative and salvage only lawful mechanisms that pass current controls. |
-| Joint recurrent learner | One tied token input/output vector table, recurrent transport, pointer output | CPU-trained at 1,362-1,365 target visits/s on an 8-core M1; ordinary control better by 0.025 nats; prose unreliable | Reuse optimizer, checkpoint and tied-table ideas; replace the dense/softmax model math. |
-| Quantization-aware joint continuation | Packed parameters, learned rounding, bounded admission | Learned rounding retained fit; bounded admission lost source retention | Reuse parity and admission lessons with the current exporter. |
-| Geometric stack | Quaternion recurrence, Lorentz/Dot reads, Hamilton/FBS projections, dense gated blocks | Loss matched a transformer, but complete stories were 0/5 and serving was 1.20-1.24 BPB against 0.90 | Keep the banned dense/softmax form parked. Keep lawful components available to composed paths. |
-| Starling hard read | Hard selection from geometric neighbours | Recall 0.009 against 0.617 for its softmax control; selected neighbours received no learning signal | Do not revive independently. Use discrete counterfactuals or Hamming reads with an explicit credit path. |
-| M2 joint reply/context/prototype fit | Joint source, generation, prefix, context and prototype training | Cross-entropy improved 6.199 to 5.339 while complete replies fell 8/512 to 0 | Preserve as the loss-versus-capability negative. Do not restore the objective. |
-| Discrete counterfactual learner | Exact E8 carrier moves, Route/Flock/Relation, A8, BVG-K, Hamilton trunk | Early runs lost admission and ranking; later Stage T/M1 runs reached a passing saved model | Repair first on CPU, beginning with an exact writer/admission oracle, then read, proposal and apply parity. |
-| Shared-vector FBS trunk | Tied 4,096 x 256 token/writer table, SpiralCore/FBS, Hamilton gate, Hamming reads, exact turn memory | Strong next-token fit; incomplete reply openings and new-phrasing generalization remain open | Build a new CPU forward and trainer around this serving-aligned path. |
-| Whole-path/exact-update reference | Sampled native decisions, bounded exact updates, carrier credit and recovery traces | The retained CPU source is a decision-recording reference, not an unbiased gradient or a qualified producer | Reimplement its lawful bounded-update mechanics in the CPU crate and test exact trajectories; do not revive the failed M2 context/prototype recipe. |
+| Family | Mechanism served | Recorded outcome | CPU disposition | Evidence |
+|---|---|---|---|---|
+| R4G1 teacher compilation | Context hashes, E8 codebooks, zeta and prime routing, shift-add tables | 29.52% top-1 against 28.12%, but no coherent free text; depended on a now-banned transformer teacher | **Rejected configuration.** Preserve as historical; do not reactivate the teacher. | [R4G1 line](lines/r4g1-transformerless.md) |
+| September native geometric model | Prime/zeta addresses, H4 transport, exact memory, typed heads, Route/Flock/Relation | 437/512 on authored rows, 0/128 fresh; no free prose | **Rejected configuration and superseded mechanism bundle.** Only separately reregistered lawful mechanisms may advance. | [September line](lines/native-geometric-sept.md) |
+| Joint recurrent learner | One tied token input/output vector table, recurrent transport, pointer output | CPU-trained at 1,362-1,365 target visits/s on an 8-core M1; ordinary control better by 0.025 nats; prose unreliable | **Model rejected; tied-table/checkpoint ideas superseded.** `CpuRankMarginTrainer` now tests a lawful tied-table update without the old math. | [Joint result](../../archive/integration/joint-recurrent-result-2026-09-25.md); [CPU trainer](../loop/tasks/cpu-shared-vector-train/deepseek-1/REPORT.md) |
+| Quantization-aware joint continuation | Packed parameters, learned rounding, bounded admission | Learned rounding retained fit; bounded admission lost source retention | **Active repair, blocked/downstream.** Exact artifact/forward and memory parity exist; quantization-aware updates and export-gap controls remain #3503. | [Joint result](../../archive/integration/joint-recurrent-result-2026-09-25.md); [roadmap item](../roadmap/items/cpu-quantization-exact-memory.md) |
+| Geometric stack | Quaternion recurrence, Lorentz/Dot reads, Hamilton/FBS projections, dense gated blocks | Loss matched a transformer, but complete stories were 0/5 and serving was 1.20-1.24 BPB against 0.90 | **Dense/squashing configuration rejected.** Lawful recurrence, Hamilton and FBS components remain supported in composed paths. | [Geometric-stack line](lines/geometric-stack-pretraining.md) |
+| Starling hard read | Hard selection from geometric neighbours | Recall 0.009 against 0.617 for its softmax control; selected neighbours received no learning signal | **Rejected independent configuration.** Superseded by Hamming reads and discrete counterfactual paths with explicit credit. | [Starling pre-registration](../../archive/harness/prep/m4-starling-rung0b-finite-2026-10-13.md) |
+| M2 joint reply/context/prototype fit | Joint source, generation, prefix, context and prototype training | Cross-entropy improved 6.199 to 5.339 while complete replies fell 8/512 to 0 | **Rejected objective.** Preserve the loss-versus-capability negative; do not restore it. | [M2 exact-memory line](lines/m2-exact-memory.md) |
+| Discrete counterfactual learner | Exact E8 carrier moves, Route/Flock/Relation, A8, BVG-K, Hamilton trunk | Early runs lost admission and ranking; later Stage T/M1 runs reached a passing saved model | **Active repair.** Exact CPU writer is supported on host oracle; stored-GPU parity is #3502 and reads/proposals are #3501. | [M1 close](../labs/m1-close-saved-model/README.md); [CPU writer report](../loop/tasks/cpu-discrete-writer-core/deepseek-1/REPORT.md) |
+| Shared-vector FBS trunk | Tied 4,096 x 256 token/writer table, SpiralCore/FBS, Hamilton gate, Hamming reads, exact turn memory | Strong next-token fit; incomplete reply openings and new-phrasing generalization remain open | **Active supported component.** Forward/Hamming/memory parity and first tied-table rank-margin unit are delivered; route/gate/normalization updates and controls remain #3505. | [Forward report](../loop/tasks/cpu-shared-vector-forward/deepseek-4/REPORT.md); [training report](../loop/tasks/cpu-shared-vector-train/deepseek-1/REPORT.md) |
+| Whole-path/exact-update reference | Sampled native decision recording, exact-store transactions and replay | The retained CPU source has no optimizer/run loop and is not a parameter-update trainer | **Rejected trainer premise.** No optimizer/run loop exists; transaction/replay mechanics remain design evidence only. | [Disposition report](../loop/tasks/cpu-whole-path-exact-updates/deepseek-1/REPORT.md); [source](../../crates/uor-r4-training/src/whole_path_learning.rs) |
 
 The September native geometric model keeps its own re-registration path in [`native-geometric-reregister-hinge`](../roadmap/items/native-geometric-reregister-hinge.md). This CPU program supplies the parity/oracle foundation if that item advances; it does not bypass that item's held status, controls or GPU qualification.
 
@@ -60,7 +60,7 @@ Add Hamming reads and exact turn memory, then integer-aware continuation. Compar
 
 ### 6. Whole-path exact updates
 
-Port the historical whole-path decision-recording and bounded legal-update mechanics into the isolated CPU crate after the exact writer exists. Preserve update order, acceptance checks and recovery traces, but do not import the old M2 objective or depend on `uor-r4-training`. This closes the remaining CPU reference path and supplies an exact control for the newer trainers.
+Cancelled at its probe. The retained source has no optimizer or run loop and cannot be separated from its rejected sampled M2 objective and dependencies. Exact-store transaction, bounded record ordering and replay remain future design input, not a trainer.
 
 ### 7. CPU pilot and disposition
 
@@ -77,9 +77,23 @@ Local synthetic diagnostics on the Ryzen 9 9950X recorded:
 - exact outer-L1 writer rows: 216,251 rows/s on one thread and 3,034,004 rows/s on 16 threads;
 - precomputed joint-pointer trunk rows: 132,385 rows/s on one thread and 1,793,613 rows/s on 16 threads;
 - current synthetic integer FBS forward: about 5.4-7.5k tok/s with the native writer and 1.4-1.83k tok/s with whole-table nearest.
+- full Hamming plus memory FBS path: about 3.1k tok/s on the current six-layer synthetic shape.
+- first tied-table rank-margin unit: about 236 accepted-step attempts/s on a width-64, two-layer synthetic Hamming path; 56 of 64 repeated steps accepted.
 
 These are unsealed component ceilings, not training rates or language evidence. They justify building the CPU path; they do not qualify it.
 
+## Child-item state
+
+| Item | State on 2 November 2026 | Blocker or next action |
+|---|---|---|
+| `cpu-discrete-writer-core` (#3502) | Host-oracle parity and benchmark delivered | Needs an exact stored trained codebook + GPU row observation; the private HF store currently returns HTTP 401 without credentials. |
+| `cpu-discrete-training-path` (#3501) | Not started beyond the writer | Depends on #3502; do not infer stored-row parity from aggregate receipts. |
+| `cpu-shared-vector-forward` (#3504) | Done for the supported snapped/rotated/decay-rate/recurrence-only/no-pointer mode | Refused modes and trained-artifact/query-panel parity remain explicitly outside that scope. |
+| `cpu-shared-vector-train` (#3505) | First tied-table rank-margin unit delivered | Route, gate and normalization counterfactual updates plus matched corpus controls remain. |
+| `cpu-quantization-exact-memory` (#3503) | Hamming and exact-memory forward parity delivered | Quantization-aware checkpoint updates and exact export-gap evaluation remain; depends on #3505/#3501. |
+| `cpu-whole-path-exact-updates` (#3510) | Closed as a rejected trainer premise | Transaction/replay mechanics may become a separate future component item. |
+| `cpu-training-pilot` (#3506) | Not admitted | Requires the remaining component gates, trained fixture and pre-registration. |
+
 ## End state
 
-The overall repair effort is complete only when every historical family has a supported, superseded or rejected disposition, the implemented paths have finite parity and deterministic resume, and at least one CPU pilot has been compared with the same evaluator and controls as its GPU counterpart. The `cpu-training-program` registration item is closed now; the child items carry the remaining work. Until that work lands, do not describe CPU training as qualified project training.
+Every historical family now has a durable disposition in the matrix above. The overall repair effort still requires the active component paths to close, the exact stored-artifact fixture to become available, and at least one CPU pilot to compare against the same evaluator and controls as its GPU counterpart. The `cpu-training-program` registration item remains closed while its child items carry that work. Until it lands, do not describe CPU training as qualified project training.
