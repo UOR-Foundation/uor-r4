@@ -71,7 +71,8 @@ use std::fmt;
 
 pub use chat::{StackChat, StackChatError, StackReply, StackStop, CHAT_CONTEXT, CYCLE_REPEATS};
 pub use dialogue_memory::{
-    recall as recall_from_dialogue, recall_value as recall_value_from_dialogue, SieveRecall,
+    is_query as is_dialogue_query, recall as recall_from_dialogue,
+    recall_value as recall_value_from_dialogue, SieveRecall,
 };
 
 pub use flock::{

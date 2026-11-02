@@ -115,7 +115,9 @@ fn is_stop(stemmed: &str) -> bool {
     QUERY_STOP_WORDS.contains(&stemmed)
 }
 
-fn looks_like_question(query: &str) -> bool {
+/// Whether this turn is a recall question and therefore should not be stored
+/// as a fact for later turns.
+pub fn is_query(query: &str) -> bool {
     query.trim_end().ends_with('?')
         || words(query).first().is_some_and(|word| {
             matches!(
@@ -287,7 +289,7 @@ pub fn recall_value(history: &[&str], query: &str) -> Option<String> {
 /// The serving recall decision. A question with no matching prior clause is an
 /// explicit absence; ordinary non-question text requests no memory line.
 pub fn recall(history: &[&str], query: &str) -> SieveRecall {
-    if !looks_like_question(query) {
+    if !is_query(query) {
         SieveRecall::NotRequested
     } else if let Some(value) = recall_value(history, query) {
         SieveRecall::Value(value)

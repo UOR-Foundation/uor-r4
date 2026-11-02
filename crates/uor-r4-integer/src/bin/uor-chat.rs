@@ -18,8 +18,8 @@ use uor_r4_integer::generation::Stop;
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
-    recall_from_dialogue, IntegerStackModel, SieveRecall, StackChat, StackChatError, StackError,
-    StackReply,
+    is_dialogue_query, recall_from_dialogue, IntegerStackModel, SieveRecall, StackChat,
+    StackChatError, StackError, StackReply,
 };
 
 /// How the stack path picks each token: `IntegerStackSession::serve_step`.
@@ -131,7 +131,9 @@ impl ConversationMemory {
         if explicit_memory {
             self.pending.finish_turn();
         }
-        self.user_turns.push(user.to_owned());
+        if !is_dialogue_query(user) {
+            self.user_turns.push(user.to_owned());
+        }
     }
 
     fn reset(&mut self) {
@@ -1071,6 +1073,16 @@ mod tests {
             "Cleared the queued memory value."
         );
         assert_eq!(memory.pending.value(), None);
+        assert_eq!(
+            handle_memory_command(&mut memory, "/memory auto").unwrap(),
+            "Automatic dialogue memory enabled."
+        );
+        assert!(memory.sieve);
+        assert_eq!(
+            handle_memory_command(&mut memory, "/memory manual").unwrap(),
+            "Automatic dialogue memory disabled."
+        );
+        assert!(!memory.sieve);
     }
 
     #[test]
@@ -1084,6 +1096,15 @@ mod tests {
         assert_eq!(value.as_deref(), Some("Pickle"));
         assert!(!explicit);
         memory.finish_turn("What did we name the new puppy?", explicit);
+
+        handle_memory_command(&mut memory, "/memory Goldie").unwrap();
+        let (override_value, explicit) = memory.value_for("What did we name the new puppy?");
+        assert_eq!(override_value.as_deref(), Some("Goldie"));
+        assert!(explicit);
+        memory.finish_turn("What did we name the new puppy?", explicit);
+        let (restored_value, explicit) = memory.value_for("What did we name the new puppy?");
+        assert_eq!(restored_value.as_deref(), Some("Pickle"));
+        assert!(!explicit);
 
         let (absent, explicit) = memory.value_for("What did I eat for breakfast yesterday?");
         assert_eq!(absent.as_deref(), Some("none"));
