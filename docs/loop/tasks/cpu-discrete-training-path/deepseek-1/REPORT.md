@@ -5,21 +5,24 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 ## What did not work
 
 - **This is a first slice, not #3501 completion.** It parses and evaluates Route reads, but Flock, Relation, proposals, BVG-K, apply and resume remain disabled.
-- **The tests use a locally constructed identity Route model.** They prove deterministic context transport and refusal behavior, not parity against a serialized `IntegerDiscreteModel` artifact.
+- **No release Route benchmark is included yet.**
 - **No corpus or training run occurred.**
 
 ## What changed
 
 - Added `CpuDiscreteRoute`, an independent reader for four-table `uor-r4.lut-discrete/1` Route artifacts.
 - Validates artifact schema, Route-only initialization, shape, codebook orbit roots, map lengths and action bounds.
+- Validates all four required tables, kinds, lengths, duplicate/missing names, zero Route gates, expected stage counts and checked section bounds.
 - Reimplements the ternary binder plan and Route traversal using the exact finite SpiralCore composition table.
+- A serialized two-block, two-stage artifact with nonzero Route actions matches `IntegerDiscreteModel` exactly on one- and multi-token prefixes.
 - Explicitly refuses non-Route artifacts; Flock and Relation cannot enter this path.
 
 ## Measurements
 
-- Focused tests: 2 passed.
-- Identity Route output is deterministic across one- and three-token prefixes; empty and out-of-vocabulary prefixes are refused.
-- Malformed artifact and non-orbit root controls pass.
+- Focused tests: 3 passed.
+- Serialized nonzero-action Route reads match `IntegerDiscreteModel` on four prefixes.
+- Identity Route output is deterministic; empty and out-of-vocabulary prefixes are refused.
+- Malformed artifact, non-orbit root, structure and bounds controls pass.
 
 ## Checks run at the head
 

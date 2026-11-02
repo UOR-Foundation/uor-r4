@@ -89,12 +89,23 @@ impl CpuDiscreteRoute {
         if !(2..=8192).contains(&vocab)
             || !(2..=16).contains(&blocks)
             || !(1..=243).contains(&context)
-            || stages == 0
+            || expected_stages(context) != Some(stages)
         {
             return Err(invalid("Route shape differs"));
         }
-        let table = section_i32(bytes, &header, "discrete.table", vocab * blocks * 8)?;
-        let routes = section_u32(bytes, &header, "discrete.routes", blocks * stages)?;
+        let tables = header["tables"]
+            .as_array()
+            .ok_or_else(|| invalid("Route artifact tables differ"))?;
+        if tables.len() != 4 {
+            return Err(invalid("Route artifact requires four tables"));
+        }
+        let table = section_i32(bytes, &header, "discrete.table", vocab * blocks * 8, "i32")?;
+        section_u32(bytes, &header, "discrete.cells", vocab, "u32")?;
+        let routes = section_u32(bytes, &header, "discrete.routes", blocks * stages, "u32")?;
+        let gates = section_i32(bytes, &header, "discrete.gates", blocks * stages, "i32")?;
+        if gates.iter().any(|gate| *gate != 0) {
+            return Err(invalid("Route initialization requires zero gates"));
+        }
         if routes.iter().any(|&action| action >= 64) {
             return Err(invalid("Route action outside 0..64"));
         }
@@ -217,6 +228,19 @@ fn root_id(block: &[i32; 8]) -> Option<usize> {
         .map(usize::from)
 }
 
+fn expected_stages(context: usize) -> Option<usize> {
+    if !(1..=243).contains(&context) {
+        return None;
+    }
+    let mut stages = 1usize;
+    let mut span = 3usize;
+    while span <= context {
+        stages += 1;
+        span += span + span;
+    }
+    Some(stages)
+}
+
 fn root_cost(block: &[i32; 8], root: usize) -> (u32, u32) {
     let target = orbit_root_coords(root as u8).expect("root index is 0..16");
     let mut distance = 0u32;
@@ -283,17 +307,24 @@ fn section<'a>(
     header: &serde_json::Value,
     name: &str,
     expected_len: usize,
+    expected_kind: &str,
 ) -> Result<&'a [u8]> {
-    let entry = header["tables"]
+    let mut matches = header["tables"]
         .as_array()
-        .and_then(|tables| {
-            tables
-                .iter()
-                .find(|entry| entry["name"].as_str() == Some(name))
-        })
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry["name"].as_str() == Some(name));
+    let entry = matches
+        .next()
         .ok_or_else(|| invalid(format!("missing {name}")))?;
+    if matches.next().is_some() {
+        return Err(invalid(format!("duplicate {name}")));
+    }
     if entry["len"].as_u64() != Some(expected_len as u64) {
         return Err(invalid(format!("{name} length differs")));
+    }
+    if entry["kind"].as_str() != Some(expected_kind) {
+        return Err(invalid(format!("{name} kind differs")));
     }
     let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
     let start = (16 + header_len as usize).div_ceil(64) * 64
@@ -301,8 +332,11 @@ fn section<'a>(
             .map_err(|_| invalid("section offset"))?;
     let len = usize::try_from(entry["span"]["bytes"].as_u64().unwrap_or(0))
         .map_err(|_| invalid("section bytes"))?;
+    let end = start
+        .checked_add(len)
+        .ok_or_else(|| invalid(format!("{name} end overflows")))?;
     bytes
-        .get(start..start + len)
+        .get(start..end)
         .ok_or_else(|| invalid(format!("{name} outside artifact")))
 }
 
@@ -311,8 +345,9 @@ fn section_i32(
     header: &serde_json::Value,
     name: &str,
     len: usize,
+    kind: &str,
 ) -> Result<Vec<i32>> {
-    Ok(section(bytes, header, name, len)?
+    Ok(section(bytes, header, name, len, kind)?
         .chunks_exact(4)
         .map(|v| i32::from_le_bytes(v.try_into().unwrap()))
         .collect())
@@ -323,8 +358,9 @@ fn section_u32(
     header: &serde_json::Value,
     name: &str,
     len: usize,
+    kind: &str,
 ) -> Result<Vec<u32>> {
-    Ok(section(bytes, header, name, len)?
+    Ok(section(bytes, header, name, len, kind)?
         .chunks_exact(4)
         .map(|v| u32::from_le_bytes(v.try_into().unwrap()))
         .collect())
@@ -333,6 +369,8 @@ fn section_u32(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
     fn identity_route() -> CpuDiscreteRoute {
         let root = orbit_root_coords(0).unwrap();
@@ -368,5 +406,91 @@ mod tests {
     fn malformed_artifacts_are_refused() {
         assert!(CpuDiscreteRoute::from_bytes(b"bad").is_err());
         assert!(root_id(&[1; 8]).is_none());
+    }
+
+    #[test]
+    fn serialized_nonzero_route_matches_integer_discrete_model() {
+        let artifact = serialized_route();
+        let cpu = CpuDiscreteRoute::from_bytes(&artifact).unwrap();
+        let oracle = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+        for prefix in [&[0u32][..], &[0, 1][..], &[0, 1, 2][..], &[1, 2, 0][..]] {
+            assert_eq!(
+                cpu.read(prefix).unwrap(),
+                oracle.evaluate_prefix(prefix).unwrap().read_vector
+            );
+        }
+    }
+
+    fn serialized_route() -> Vec<u8> {
+        let roots = [[0u8, 1], [2, 3], [4, 5]];
+        let mut table = Vec::new();
+        let mut cells = Vec::new();
+        for blocks in roots {
+            for root in blocks {
+                table.extend_from_slice(&orbit_root_coords(root).unwrap());
+            }
+            cells.push(u32::from(blocks[0] << 4 | blocks[1]));
+        }
+        let routes = vec![1u32, 2, 3, 4];
+        let gates = vec![0i32; 4];
+        let mut blob = Vec::new();
+        let table_span = append(&mut blob, &ints_i32(&table));
+        let cells_span = append(&mut blob, &ints_u32(&cells));
+        let routes_span = append(&mut blob, &ints_u32(&routes));
+        let gates_span = append(&mut blob, &ints_i32(&gates));
+        let header = json!({
+            "schema": "uor-r4.lut-discrete/1",
+            "shape": {
+                "vocabulary": 3, "blocks": 2, "context": 3, "kept_cells": 2,
+                "stages": 2, "read_mode": "route", "read_kept": 0,
+                "read_sweeps": 0, "objective_policy": "nearest_address_margin_v1",
+                "read_initialization": "zero_gates_v1", "seed": 1, "epoch": 0
+            },
+            "matrices": [],
+            "tables": [
+                {"name":"discrete.table","kind":"i32","len":table.len(),"span":table_span},
+                {"name":"discrete.cells","kind":"u32","len":cells.len(),"span":cells_span},
+                {"name":"discrete.routes","kind":"u32","len":routes.len(),"span":routes_span},
+                {"name":"discrete.gates","kind":"i32","len":gates.len(),"span":gates_span}
+            ],
+            "source": {
+                "snapshot_schema":"uor-r4.discrete-spiralcore-fbs/2",
+                "snapshot_sha256":"00".repeat(32),
+                "operator_kappa":"blake3:a0ea3a10dd10c5f4856b0d881d33d94c3293bad0e68bd07a47918e2bb82c819b",
+                "composition_kappa":"blake3:f2986c8e68dcb30a9cb511a42547179a87b66ef212a87b728765d03e70e640b0",
+                "kernel_sha256":"11".repeat(32),
+                "source_sha256":"22".repeat(32),
+                "geometry_sha256":"33".repeat(32)
+            }
+        });
+        let header = serde_json::to_vec(&header).unwrap();
+        let mut out = Vec::new();
+        out.extend_from_slice(b"UORLUT01");
+        out.extend_from_slice(&(header.len() as u64).to_le_bytes());
+        out.extend_from_slice(&header);
+        out.resize(out.len().div_ceil(64) * 64, 0);
+        out.extend_from_slice(&blob);
+        out
+    }
+
+    fn append(blob: &mut Vec<u8>, bytes: &[u8]) -> serde_json::Value {
+        blob.resize(blob.len().div_ceil(64) * 64, 0);
+        let offset = blob.len();
+        blob.extend_from_slice(bytes);
+        json!({"offset": offset, "bytes": bytes.len()})
+    }
+
+    fn ints_i32(values: &[i32]) -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
+    }
+
+    fn ints_u32(values: &[u32]) -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
     }
 }
