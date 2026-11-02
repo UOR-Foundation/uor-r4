@@ -2,7 +2,7 @@
 
 Lab: deepseek. Item: [cpu-training-pilot](../../roadmap/items/cpu-training-pilot.md) (#3506). Order: [deepseek-3](../../loop/tasks/cpu-training-pilot/deepseek-3/ORDER.md). Source base for the implementation: `636f5e1ed`.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## The question
 
@@ -94,4 +94,10 @@ A pass supports only authenticated, process-separated continuation from this ste
 
 ## Verdict
 
-Pending fresh-context non-author review of this sheet at its committed SHA-256.
+TEST FITNESS: FIT — an independent fresh-context non-author review approved
+sheet SHA-256 `6fd2630cb2f874078ff897be3063bb412c14bda8e97fa5cf9e37f93547793ca8`
+for this bounded host determinism check at source head `fc488513b`.
+
+The reviewer required all six runs to be repeated after FIT against the reviewed
+source and binary. Existing results remain pre-FIT diagnostics and are not the
+registered outcome. The review is recorded in [FIT_REVIEW.md](../../loop/tasks/cpu-training-pilot/deepseek-3/FIT_REVIEW.md).
