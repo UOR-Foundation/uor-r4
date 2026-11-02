@@ -28,6 +28,9 @@ The served session is unchanged byte for byte (below), and on the laptop it deco
   - It was claude-254's `--decision-check` and self-grade on F's trace. Both read stored traces and tables and never run the served session.
   - The replacement is a base-against-head decode of R's artifact, plain and forced. The ORDER records the amendment, and that it was written after the decodes ran (their script was written before).
 - **The forced-against-unforced comparison in `decodes.sh` is weak.** The forced run decodes the 3 windows `force-own-3.json` names, and the plain run decodes 4. So "DIFFER" there shows only that the outputs are not one file. What carries the forced branch is the base-equals-head comparison of the forced run itself.
+- **The review's findings, all fixed.** Both reviews were APPROVE WITH NITS.
+  - **The claims check:** the first notebook row and plain summary said the forced decode covered DEV's 308 rows, but it covered `prompts-4.json`'s 3 forced windows. The head binary's `mean_by` claim had no saved disassembly, and the base binary's pin cited no file. All three are fixed above.
+  - **The code review:** the release binaries were not yet tied to the head, because the set-aside and restore had touched `hamming.rs` after the fix commit. The release rebuild at the final head ties them. Its doc-comment nit is applied, with the comment's line count kept, so no code moved.
 - **The 36 failing tests of `uor-r4-integer --features serving-wasm` are still red.** They are the base's own: claude-254's run at `4edc6e841`, whose crate tree is identical to `05021840e`, failed the same 36 plus the two this unit repairs. They are the M1/M2/M3 challenger and timing tests and the frozen-panel CLI test. Of their 36 panics, 32 are a quaternion or Householder bundle not found, 3 a missing `tokenizer.json`, and 1 is `verify_m7_parity.mjs` at its WASM target check. None is touched here.
 
 ## What changed
@@ -41,9 +44,13 @@ The served session is unchanged byte for byte (below), and on the laptop it deco
 
 - **The audit at the base `05021840e`:** `m5_full_path_cost_controls --features serving-wasm` gives 2 passed and 2 failed (`probe-base.log`). Both failures name `fmov x8, d0` in `TypeHeads::mean_by::<ServedHamming::type_mean::{closure#0}>` and in `TypeHeads::mean_by::<TypeHeads::mean::{closure#0}>`.
 - **The disassembly,** with the instructions before the `fmov`, is in `local/claude/claude-254/typeheads-fmov-excerpt.txt`, from claude-254's test build.
-- **At the head:** 4 passed (`m5-head.log`). The head's test-profile `uor-r4-stack` has one `TypeHeads::mean_by` symbol, with 0 `fmov` in it (`objdump --demangle -d`).
+- **At the head:** 4 passed (`m5-head.log`, and again at the final head in `m5-final.log`).
+  - The head's test-profile `uor-r4-stack` (sha256 in `head-test-uor-r4-stack.sha256`) has one, non-generic `TypeHeads::mean_by` symbol, saved as `head-mean_by-disassembly.txt` (`objdump --demangle -d`). Its 442 lines hold no `fmov` and no `q`, `d` or `v` register.
+  - The review found no `fmov` in any other `stack::hamming` symbol. That includes all three `CopyHeads::mean_by` instances.
 - **Negative gate:** `fix.patch` is `git diff 05021840e -- hamming.rs`. With it set aside, `uor-r4-integer` recompiled and `m5` failed 2 of 4, naming `TypeHeads::mean_by`'s `fmov` twice (`m5-negative.log`). Restored and recompiled, it passed 4 of 4 (`m5-restored.log`), and the tree had no diff.
-- **Served bytes:** `decodes.sh` ran the base's and the head's release `fbs-toks` on `a7r-s1.uorlut`, recording rows and decision traces. The base binary is the set-aside build, and its sha256 `c8db382a…` equals claude-254's pinned grader at `768c39ff3`.
+- **Served bytes:** `decodes.sh` ran the base's and the head's release `fbs-toks` on `a7r-s1.uorlut`, recording rows and decision traces. The base binary is the set-aside build, and its sha256 `c8db382a…` equals claude-254's pinned grader at `768c39ff3` (`local/claude/claude-254/reading-r1/README.txt`).
+  - The head binaries are tied to the head. A fresh release build at the final head, which recompiled `uor-r4-integer` after the doc-comment fix, gave the same sha256s as `bin/head-fbs-toks` and `bin/head-uor-r4-stack` (`build-final.log`).
+  - So the decodes, the speed runs and the Python audit all ran the head's binaries, and the comment fix changed no byte.
   - DEV s1 plain: 308 rows, 4,382 positions.
   - Forced: `prompts-4.json` under claude-249's `force-own-3.json`, 3 rows and 56 positions.
   - Plain: `prompts-4.json`, 4 rows and 66 positions.
@@ -77,4 +84,4 @@ None.
 
 The project serves its language model with integer arithmetic only, and an audit reads the compiled machine code to make sure no floating-point or vector instruction is used. On main, the audit failed. One function that averages the "type heads'" picks (a part of the model's memory read) got a vector-register move, `fmov`. It came from how the compiler copied a small bundle of captured pointers that the function was handed as a closure, not from any arithmetic.
 
-The function now receives the forced choices directly instead of a closure, so nothing is left to copy, and the audit passes. To show nothing else changed, the old and new programs decoded the same 308 test windows, plain and with forced choices. Every output file is identical, and identical to files stored by an earlier unit. The new build also decoded about 30% faster in three alternating runs. That is reported as a reading only; no bar was set for speed.
+The function now receives the forced choices directly instead of a closure, so nothing is left to copy, and the audit passes. To show nothing else changed, the old and new programs decoded the same 308 test windows, and 7 short ones: 4 plain and 3 with forced choices. Every output file is identical, and identical to files stored by an earlier unit. The new build also decoded about 30% faster in three alternating runs. That is reported as a reading only; no bar was set for speed.

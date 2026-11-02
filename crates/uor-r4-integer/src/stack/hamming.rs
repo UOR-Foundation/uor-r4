@@ -396,8 +396,8 @@ impl TypeHeads {
     }
 
     /// [`Self::mean`], with each head `j`'s kept positions from [`Self::choose_forced`] under
-    /// `force[j]` when `force` is given. It takes no `choose` closure: the closure's captures were
-    /// copied through a SIMD register (`fmov`), which the serving audit refuses (claude-255).
+    /// `force[j]` when `force` is given, else from [`Self::choose`]. It takes no `choose` closure:
+    /// its captures were copied through a SIMD register (`fmov`), which the audit refuses (claude-255).
     fn mean_by(&self, queries: &[u64], tokens: &[u32], payloads: &[i64], force: Option<&[HeadForce]>) -> Option<Vec<i128>> {
         let width = self.width;
         let mut sum = vec![0i128; width];
