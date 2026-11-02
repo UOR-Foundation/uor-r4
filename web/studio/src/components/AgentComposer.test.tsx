@@ -39,7 +39,7 @@ function ui() {
             getAttachments: vi.fn(() => attachments), addAttachment: vi.fn((entry: Attachment) => { attachments.push(entry); }),
             removeAttachment: vi.fn((name: string) => { const index = attachments.findIndex((item) => item.name === name); if (index >= 0) attachments.splice(index, 1); }),
             clearAttachments: vi.fn(() => { attachments.splice(0); }), templatePrompt: vi.fn((kind: string) => `Prompt for ${kind}`),
-            clearSessions: vi.fn(), clearEditor: vi.fn(),
+            clearSessions: vi.fn(() => ({ cleared: 0, total: 0 })), clearEditor: vi.fn(),
         } satisfies StudioUiApi,
     };
 }
@@ -99,6 +99,25 @@ describe('AgentComposer', () => {
         expect(store.canRun()).toBe(false);
     });
 
+    it('pins stop capability to the active generation rather than the picker', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        prompt('API generation');
+        act(() => { button('Send').click(); });
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                schema: 'uor-r4.lut-discrete-trunk/1', canGenerate: false, canPredict: true, engineSupported: true,
+            } });
+        });
+        expect(button('Stop').disabled).toBe(false);
+        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 }); });
+        prompt('Discrete prediction');
+        act(() => { button('Predict next tokens').click(); });
+        act(() => { store.dispatch({ type: 'api/selected', sourceId: 'api-b', endpoint: 'https://other.example.com/v1' }); });
+        expect(button('Stop').disabled).toBe(true);
+    });
+
     it('labels discrete local execution as next-token prediction', () => {
         const { store } = mount();
         store.dispatch({ type: 'artifact/selected', sourceId: 'url' });
@@ -155,7 +174,7 @@ describe('AgentComposer', () => {
         act(() => { action('Copy').click(); });
         expect(copy).toHaveBeenCalledWith('Assistant answer');
         act(() => { action('Insert into editor').click(); });
-        expect(fileApi.insertText).toHaveBeenCalledWith('Assistant answer', 'agent-message.md');
+        expect(fileApi.insertText).toHaveBeenCalledWith('Assistant answer', expect.stringMatching(/^agent-message-\d+\.md$/));
         act(() => { action('Save as file').click(); });
         expect(download).toHaveBeenCalledWith('studio-message.md', 'Assistant answer');
         act(() => { store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' }); });

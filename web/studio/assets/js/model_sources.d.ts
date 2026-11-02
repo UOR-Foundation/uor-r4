@@ -36,6 +36,7 @@ export interface ModelSourceList {
 
 export interface ModelSourcesApi {
     catalog(): { models: Array<{ id?: string; label?: string; url: string; note?: string; sha256?: string }> };
+    loadModelCatalog(): Promise<void>;
     list(): ModelSourceList;
     active(): { kind: string; id: string | null };
     apiConfig(id?: string): ApiProvider | null;

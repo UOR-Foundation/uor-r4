@@ -43,7 +43,8 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
             }
         },
         stop() {
-            if (store.getState().session.phase === 'generating') sessions.stopGeneration();
+            const active = store.getState().session.activeGeneration;
+            if (active?.canStop !== false) sessions.stopGeneration();
         },
         dispose() {
             document.removeEventListener(GENERATION_FINISHED_EVENT, finished);

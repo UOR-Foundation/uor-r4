@@ -94,6 +94,40 @@ describe('StudioApp', () => {
         expect(host.querySelector('[role="status"]')?.textContent).not.toContain('remoteAPI');
     });
 
+    it('follows session and insert navigation events into coherent workflow state', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        const files = makeFiles();
+        sessions.newSession = vi.fn(() => {
+            document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: 'chat' } }));
+            return true;
+        });
+        sessions.getConversationMessages = vi.fn(() => [{ role: 'assistant', content: 'Answer' }]);
+        files.insertText = vi.fn((_text: string, name?: string) => {
+            const path = name || 'agent-message.md';
+            const summary = {
+                mode: 'local', rootName: 'project', fileCount: 1,
+                tabs: [{ path, dirty: true }], activePath: path,
+            };
+            files.treeSummary = vi.fn(() => summary);
+            document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: summary }));
+            document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: 'workspace' } }));
+            return true;
+        });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={files} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        act(() => { button('New session').click(); });
+        expect(destination('Agent').getAttribute('aria-current')).toBe('page');
+        const insert = Array.from(host.querySelectorAll<HTMLButtonElement>('article[data-role="assistant"] button')).find((node) => node.textContent === 'Insert into editor')!;
+        act(() => { insert.click(); });
+        expect(destination('Workspace').getAttribute('aria-current')).toBe('page');
+        expect(store.getState().file.path).toMatch(/^agent-message-\d+\.md$/);
+        expect(store.getState().file.phase).toBe('dirty');
+        expect(store.canSave()).toBe(true);
+    });
+
     it('closes lifecycle file state when editor tabs are cleared outside Workspace', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'file/opened', path: 'a.md' });
@@ -114,7 +148,7 @@ describe('StudioApp', () => {
         const ui = makeUi();
         let items = [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }];
         sessions.listSessions = vi.fn(() => items);
-        ui.clearSessions = vi.fn(() => { items = []; });
+        ui.clearSessions = vi.fn(() => { items = []; return { cleared: 0, total: 0 }; });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
         });

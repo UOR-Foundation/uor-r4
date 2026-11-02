@@ -55,6 +55,7 @@ export interface GenerationSnapshot {
     generationId: number;
     source: SourceRef;
     privacy: Privacy;
+    canStop: boolean;
 }
 
 export interface SessionState {
@@ -306,7 +307,9 @@ export class LifecycleStore {
                 if (!this.canRun()) return;
                 const generationId = action.generationId ?? this.nextGenerationId + 1;
                 this.nextGenerationId = Math.max(this.nextGenerationId, generationId);
-                const generation = { generationId, source: { ...selected }, privacy };
+                const canStop = selected.kind === 'api'
+                    || !(this.state.residentArtifact?.canGenerate === false && this.state.residentArtifact.canPredict === true);
+                const generation = { generationId, source: { ...selected }, privacy, canStop };
                 this.state = {
                     ...this.state,
                     session: { phase: 'generating', activeGeneration: generation, lastGeneration: this.state.session.lastGeneration, error: null },

@@ -524,6 +524,7 @@
             mode: 'wasm',
             apiConfig: null,
             activeStreamId: null,
+            predictionRequests: {},
             editorSaveTimer: null,
             booted: false,
             tokenizerArtifact: null,
@@ -932,9 +933,11 @@
         }
 
         function renderDiscretePrediction(message) {
-            var predictionGenerationId = app.activeGenerationId;
-            app.activeGenerationId = null;
+            var predictionGenerationId = app.predictionRequests[message.id];
+            if (message.id !== app.activePredictionRequestId || predictionGenerationId === undefined) return;
+            delete app.predictionRequests[message.id];
             app.activePredictionRequestId = null;
+            if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
             document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
             var result = $('#predictorResult');
             var list = $('#predictorTop');
@@ -980,6 +983,10 @@
 
         function runPrediction(providedPrompt) {
             var status = $('#predictorStatus');
+            if (app.activePredictionRequestId) {
+                toast('Wait for the current prediction to finish.', 'warn');
+                return false;
+            }
             if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {
                 toast('Load the M1 discrete model first under Model sources.', 'warn');
                 return false;
@@ -1012,6 +1019,7 @@
             nextGenerationId();
             var predictionRequestId = 'predict-' + Date.now().toString(36);
             app.activePredictionRequestId = predictionRequestId;
+            app.predictionRequests[predictionRequestId] = app.activeGenerationId;
             app.worker.postMessage({
                 action: 'predict_discrete',
                 id: predictionRequestId,
@@ -1247,10 +1255,11 @@
                         : workerError;
                     setEngineStatus('unavailable', 'err', 'Engine unavailable: ' + reason);
                 }
-                if (message.id && message.id === app.activePredictionRequestId) {
-                    var failedPredictionId = app.activeGenerationId;
-                    app.activeGenerationId = null;
+                var failedPredictionId = app.predictionRequests[message.id];
+                if (message.id === app.activePredictionRequestId && failedPredictionId !== undefined) {
+                    delete app.predictionRequests[message.id];
                     app.activePredictionRequestId = null;
+                    if (app.activeGenerationId === failedPredictionId) app.activeGenerationId = null;
                     document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: failedPredictionId, error: workerError } }));
                 }
                 toast(workerError, 'error');

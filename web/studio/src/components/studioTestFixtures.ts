@@ -17,7 +17,8 @@ export function makeModelAdapter(): ModelSourceAdapter {
 export function makeSources(): ModelSourcesApi {
     const list = () => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [] });
     return {
-        catalog: vi.fn(() => ({ models: [] })), list: vi.fn(list), active: vi.fn(() => list().active), apiConfig: vi.fn(() => null),
+        catalog: vi.fn(() => ({ models: [] })), loadModelCatalog: vi.fn(async () => undefined),
+        list: vi.fn(list), active: vi.fn(() => list().active), apiConfig: vi.fn(() => null),
         setActive: vi.fn(), addApi: vi.fn(), updateApi: vi.fn(), removeApi: vi.fn(() => list()),
         loadPublished: vi.fn(), loadFromUrl: vi.fn(), loadLocalFile: vi.fn(), loadBundled: vi.fn(), testApi: vi.fn(),
     };
@@ -46,6 +47,6 @@ export function makeUi(): StudioUiApi {
     return {
         setView: vi.fn(), toast: vi.fn(), getSettings: vi.fn(() => ({ ...testSettings })), updateSettings: vi.fn(),
         getAttachments: vi.fn(() => []), addAttachment: vi.fn(), removeAttachment: vi.fn(), clearAttachments: vi.fn(),
-        templatePrompt: vi.fn((kind: string) => `Prompt for ${kind}`), clearSessions: vi.fn(), clearEditor: vi.fn(),
+        templatePrompt: vi.fn((kind: string) => `Prompt for ${kind}`), clearSessions: vi.fn(() => ({ cleared: 0, total: 0 })), clearEditor: vi.fn(),
     };
 }

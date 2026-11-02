@@ -449,6 +449,7 @@ async function loadModelCatalog() {
             });
         });
         catalog.models = published;
+        document.dispatchEvent(new CustomEvent('uor-model-catalog-changed'));
         if (mounted) mounted.render();
     } catch (_error) {
         // A publish catalog is optional; a missing or malformed one is ignored.

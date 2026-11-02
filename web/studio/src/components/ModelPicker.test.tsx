@@ -31,6 +31,7 @@ function sources(): ModelSourcesApi {
     return {
         list: vi.fn(list), active: vi.fn(() => list().active), apiConfig: vi.fn(() => provider),
         catalog: vi.fn(() => ({ models: [{ id: 'm1-a', label: 'M1 seed A', url: 'https://example.com/m1.lut' }] })),
+        loadModelCatalog: vi.fn(async () => undefined),
         setActive: vi.fn(), addApi: vi.fn((input: Partial<ApiProvider>) => ({ ...provider, ...input, id: 'api-new', apiKey: input.apiKey || '' })),
         updateApi: vi.fn((id: string, patch: Partial<ApiProvider>) => ({ ...provider, ...patch, id })), removeApi: vi.fn(() => list()),
         loadPublished: vi.fn(async () => result), loadFromUrl: vi.fn(async () => result),
@@ -96,7 +97,8 @@ describe('ModelPicker', () => {
     });
 
     it('forwards bundled, published, URL, and local-file loads', () => {
-        const { modelAdapter } = mount();
+        const { modelAdapter, modelSources } = mount();
+        expect(modelSources.loadModelCatalog).toHaveBeenCalledOnce();
         button('Load bundled demo').click();
         button('Load M1 seed A').click();
         act(() => {

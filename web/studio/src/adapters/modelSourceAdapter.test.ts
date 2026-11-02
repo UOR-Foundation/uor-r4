@@ -9,6 +9,7 @@ function sources() {
     const list = (): ModelSourceList => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] });
     return {
         catalog: vi.fn(() => ({ models: [] })),
+        loadModelCatalog: vi.fn(async () => undefined),
         list: vi.fn(list),
         active: vi.fn(() => list().active),
         apiConfig: vi.fn((id?: string) => id && id !== provider.id ? null : provider),

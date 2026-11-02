@@ -3,6 +3,7 @@ import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ModelSourcesApi } from '../../assets/js/model_sources.js';
 import { createGenerationAdapter } from '../adapters/generation.js';
 import { saveActiveFile } from '../adapters/fileSave.js';
+import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -49,6 +50,24 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [sessionRevision, setSessionRevision] = useState(0);
     const generation = useMemo(() => createGenerationAdapter(store, sessions), [store, sessions]);
     useEffect(() => () => generation.dispose(), [generation]);
+    useEffect(() => {
+        const viewChanged = (event: Event) => {
+            const view = (event as CustomEvent<{ view?: string }>).detail?.view;
+            if (view === 'chat') setActiveSection('agent');
+            if (view === 'model') setActiveSection('models');
+            if (view === 'workspace' || view === 'editor' || view === 'files') setActiveSection('workspace');
+            if (view === 'guide') setActiveSection('guide');
+        };
+        const filesChanged = (event: Event) => {
+            syncWorkspaceSummary(store, (event as CustomEvent<Parameters<typeof syncWorkspaceSummary>[1]>).detail);
+        };
+        document.addEventListener('uor-view-changed', viewChanged);
+        document.addEventListener('uor-files-changed', filesChanged);
+        return () => {
+            document.removeEventListener('uor-view-changed', viewChanged);
+            document.removeEventListener('uor-files-changed', filesChanged);
+        };
+    }, [store]);
 
     const selected = state.selectedSource;
     const activeGeneration = state.session.activeGeneration;
@@ -123,7 +142,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onChange={(kind) => {
+            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onError={report} onChange={(kind) => {
                 if (kind === 'editor') store.dispatch({ type: 'file/closed' });
                 else {
                     setSessionRevision((value) => value + 1);

@@ -1,3 +1,5 @@
+import type { LifecycleStore } from '../state/lifecycle.js';
+
 export interface StudioFile {
     path: string;
     name: string;
@@ -93,7 +95,7 @@ export interface StudioUiApi {
     removeAttachment(name: string): void;
     clearAttachments(): void;
     templatePrompt(kind: string): string;
-    clearSessions(): void;
+    clearSessions(): { cleared: number; total: number };
     clearEditor(): void;
 }
 
@@ -109,4 +111,21 @@ export function createLegacyWorkflowApis(root: Window = window): LegacyWorkflowA
         __studioUi: SessionApi & StudioUiApi;
     };
     return { files: legacy.__studioFiles, sessions: legacy.__studioUi, ui: legacy.__studioUi };
+}
+
+export function syncWorkspaceSummary(store: LifecycleStore, summary: WorkspaceSummary): void {
+    if (summary.mode !== 'none' && store.getState().file.phase === 'no-folder') {
+        store.dispatch({ type: 'folder/opened', path: summary.rootName });
+    }
+    if (summary.activePath) {
+        if (store.getState().file.path !== summary.activePath) {
+            store.dispatch({ type: 'file/opened', path: summary.activePath });
+        }
+        const activeTab = summary.tabs.find((tab) => tab.path === summary.activePath);
+        if (activeTab?.dirty && !['dirty', 'saving', 'error'].includes(store.getState().file.phase)) {
+            store.dispatch({ type: 'file/dirty' });
+        }
+    } else if (store.getState().file.path !== null) {
+        store.dispatch({ type: 'file/closed' });
+    }
 }

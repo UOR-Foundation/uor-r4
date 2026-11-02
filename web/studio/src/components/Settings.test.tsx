@@ -40,6 +40,16 @@ describe('Settings', () => {
         expect(ui.updateSettings).toHaveBeenCalledWith({ wordWrap: true });
     });
 
+    it('reports partial session clearing through the typed error channel', () => {
+        const ui = makeUi();
+        ui.clearSessions = vi.fn(() => ({ cleared: 1, total: 2 }));
+        const onError = vi.fn();
+        act(() => { render(<Settings ui={ui} onClose={vi.fn()} onError={onError} />, host); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(onError).toHaveBeenCalledWith('Cleared 1 of 2 sessions; stop the current reply before deleting the rest.');
+    });
+
     it('requires confirmation before clearing sessions or editor tabs', () => {
         const ui = makeUi();
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} />, host); });

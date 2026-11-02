@@ -45,6 +45,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const prediction = selected?.kind === 'artifact' && state.residentArtifact?.canGenerate === false && state.residentArtifact.canPredict === true;
     const generating = state.session.phase === 'generating';
     const activeGeneration = state.session.activeGeneration;
+    const predictionMode = activeGeneration ? activeGeneration.canStop === false : prediction;
     const messages = sessions.getConversationMessages();
     const attachments = ui.getAttachments();
     const activeFile = files.activeFile();
@@ -59,7 +60,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     return (
         <section aria-label="Agent composer">
             <h1>Agent</h1>
-            <p>{prediction ? 'Local next-token prediction' : selected?.kind === 'artifact' ? 'Local generation' : 'API chat'}</p>
+            <p>{predictionMode ? 'Local next-token prediction' : selected?.kind === 'artifact' ? 'Local generation' : 'API chat'}</p>
             <p>Session: {state.session.phase}</p>
             {state.session.error && <p role="alert">{state.session.error}</p>}
             {activeGeneration && <p>Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
@@ -71,7 +72,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                         <strong>{message.role}</strong>
                         <p>{message.content}</p>
                         <button type="button" onClick={() => void copy(message.content)}>Copy</button>
-                        <button type="button" onClick={() => files.insertText(message.content, 'agent-message.md')}>Insert into editor</button>
+                        <button type="button" onClick={() => files.insertText(message.content, `agent-message-${Date.now()}.md`)}>Insert into editor</button>
                         <button type="button" onClick={() => download('studio-message.md', message.content)}>Save as file</button>
                         {message.role === 'assistant' && (
                             <button type="button" disabled={!store.canRun()} onClick={() => {
@@ -115,7 +116,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
             <label>Prompt<textarea aria-label="Prompt" value={draft} onInput={(event) => setDraft(event.currentTarget.value)} /></label>
             <button type="button" disabled={!draft.trim() || !store.canRun()} onClick={() => send(draft)}>{prediction ? 'Predict next tokens' : 'Send'}</button>
-            <button type="button" disabled={!generating || prediction} onClick={() => { generation.stop(); refresh(); }}>Stop</button>
+            <button type="button" disabled={!generating || activeGeneration?.canStop === false} onClick={() => { generation.stop(); refresh(); }}>Stop</button>
         </section>
     );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import type { ModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import type { ApiProvider, ModelSourcesApi } from '../../assets/js/model_sources.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
@@ -33,6 +33,18 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
     const run = (action: Promise<unknown>) => { action.catch(report); };
+
+    useEffect(() => {
+        let active = true;
+        const changed = () => { if (active) refresh(); };
+        document.addEventListener('uor-model-catalog-changed', changed);
+        sources.loadModelCatalog().then(changed).catch(report);
+        return () => {
+            active = false;
+            document.removeEventListener('uor-model-catalog-changed', changed);
+        };
+    }, [sources]);
+
     const progress = state.progress;
     const total = progress?.total ?? null;
     const resident = state.residentArtifact;

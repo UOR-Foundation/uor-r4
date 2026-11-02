@@ -728,6 +728,7 @@
         if (cleared === sessions.length) toast('Cleared ' + cleared + ' session(s).', 'success');
         else toast('Cleared ' + cleared + ' of ' + sessions.length + ' session(s); stop the current reply before deleting the rest.', 'warn');
         window.setTimeout(renderSessionEnhancements, 60);
+        return { cleared: cleared, total: sessions.length };
     }
     function clearEditor() { var files = window.__studioFiles; if (files && files.closeAll) files.closeAll(); else { var text = document.getElementById('editorText'); if (text) text.value = ''; } toast('Editor tabs cleared.', 'success'); }
 

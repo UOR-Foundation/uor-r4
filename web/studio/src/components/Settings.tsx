@@ -6,9 +6,10 @@ interface SettingsProps {
     ui: StudioUiApi;
     onClose(): void;
     onChange?(kind: 'sessions' | 'editor'): void;
+    onError?(message: string): void;
 }
 
-export function Settings({ ui, onClose, onChange }: SettingsProps) {
+export function Settings({ ui, onClose, onChange, onError }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
 
@@ -18,7 +19,10 @@ export function Settings({ ui, onClose, onChange }: SettingsProps) {
     }
 
     function confirmClear() {
-        if (clearing === 'sessions') ui.clearSessions();
+        if (clearing === 'sessions') {
+            const result = ui.clearSessions();
+            if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
+        }
         if (clearing === 'editor') ui.clearEditor();
         setClearing(null);
         if (clearing) onChange?.(clearing);

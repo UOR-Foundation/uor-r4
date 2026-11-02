@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { saveActiveFile } from '../adapters/fileSave.js';
+import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
@@ -17,20 +18,7 @@ export function WorkspaceEditor({ store, files, onError }: WorkspaceEditorProps)
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
 
     function sync(summary: WorkspaceSummary) {
-        if (summary.mode !== 'none' && store.getState().file.phase === 'no-folder') {
-            store.dispatch({ type: 'folder/opened', path: summary.rootName });
-        }
-        if (summary.activePath) {
-            if (store.getState().file.path !== summary.activePath) {
-                store.dispatch({ type: 'file/opened', path: summary.activePath });
-            }
-            const activeTab = summary.tabs.find((tab) => tab.path === summary.activePath);
-            if (activeTab?.dirty && !['dirty', 'saving'].includes(store.getState().file.phase)) {
-                store.dispatch({ type: 'file/dirty' });
-            }
-        } else if (store.getState().file.path !== null) {
-            store.dispatch({ type: 'file/closed' });
-        }
+        syncWorkspaceSummary(store, summary);
     }
 
     useEffect(() => {

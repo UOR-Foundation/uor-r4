@@ -88,8 +88,10 @@ describe('WorkspaceEditor', () => {
         act(() => { button('Save').click(); });
         expect(store.getState().file.phase).toBe('saving');
         expect(button('Save').disabled).toBe(true);
+        await vi.waitFor(() => expect(fileApi.api.saveActive).toHaveBeenCalledOnce());
         await act(async () => { finish(true); await Promise.resolve(); });
         expect(store.getState().file.phase).toBe('saved');
+        fileApi.summary.tabs = [{ path: 'a.md', dirty: true }];
         fileApi.api.saveActive = vi.fn(async () => false);
         await act(async () => { button('Save').click(); await Promise.resolve(); });
         expect(store.getState().file.phase).toBe('error');
@@ -107,6 +109,7 @@ describe('WorkspaceEditor', () => {
         let finish!: (value: boolean) => void;
         fileApi.api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
         act(() => { button('Save').click(); });
+        await vi.waitFor(() => expect(fileApi.api.saveActive).toHaveBeenCalledOnce());
         fileApi.summary.activePath = 'b.md';
         fileApi.setActive({ path: 'b.md', name: 'b.md', content: 'bravo', mode: 'directory' });
         act(() => { emit(fileApi); });
