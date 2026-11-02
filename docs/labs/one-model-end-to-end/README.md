@@ -1,5 +1,17 @@
 # one-model-end-to-end: the census, the held-out-phrasing panel and the overturn check (claude-202, claude-204, claude-205; 29 Oct 2026)
 
+## The CPU evidence lane (deepseek-1, 2 Nov 2026)
+
+[`instrument/`](instrument) also builds a CPU-only `m2-evidence` command. It evaluates a discrete integer artifact on a canonical UORT panel and separates next-token accuracy into prompt-overlap, first-8 key, reply-overlap and opening/continuation strata. It reads an optional TRAIN-format split as the reference index. It does not require a GPU and does not edit the serving engine.
+
+```sh
+cd docs/labs/one-model-end-to-end/instrument
+cargo run --release --bin m2-evidence -- \
+  artifact=MODEL.d11 panel=PANEL_DIR train=TRAIN_DIR max-targets=1024 out=NEW_REPORT.json
+```
+
+The report names artifact and corpus hashes; counts admission, top-1 and top-8; reports exact prompt/reply overlap and reply 4-/8-gram novelty; and marks generated-completion, generated-novelty, value-masked-template and independent CPU-read evidence as unavailable when their inputs are absent. The first public artifact/panel smoke run is in the [deepseek-1 REPORT](../../loop/tasks/one-model-end-to-end/deepseek-1/REPORT.md).
+
 ## The overturn check (claude-205)
 
 **The question.** Does the trunk that learned to lean on the turn memory read worse than one that never had it, on the rows the memory names none of? The rows are DEV's 3,406 unnamed later rows and 32 unkeyed openings, 3,438 pooled. It is done-when 2, under [its sheet](../../harness/prep/one-model-end-to-end-overturn-2026-10-29.md) (FIT, PRE-RUN PASS).

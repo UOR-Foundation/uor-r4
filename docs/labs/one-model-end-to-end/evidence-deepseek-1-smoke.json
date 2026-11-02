@@ -1,0 +1,96 @@
+{
+  "schema": "uor-r4.m2-evidence/1",
+  "artifact": {
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/m2-evidence/m1-s1.d11",
+    "sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
+    "model_sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
+    "vocabulary": 4096,
+    "context": 192,
+    "blocks": 4,
+    "kept_cells": 8,
+    "read_mode": "relation"
+  },
+  "panel": {
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/m2-evidence/dev-panel-v3",
+    "tokens_sha256": "add1f3954fc67e12822bdac395d7167bf6d6a0f074856efe2beec2c4ac81e442",
+    "mask_sha256": "da1ae9ee3bdc4fe1bf4a84a12ee9c1ac02ee51a419e3806cb77df430a44a3c01",
+    "documents": 16,
+    "tokens": 1925,
+    "response_targets": 616,
+    "prompt_runs": 58,
+    "reply_runs": 58,
+    "max_tokens": 256
+  },
+  "train": {
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/m2-evidence/train-control-v3",
+    "tokens_sha256": "a7511c32fdf1532ef903e0f04e34a48664e4ba68cefde1414ab2e057198cdaf5",
+    "mask_sha256": "89144e366a9b9856a10376e983b4dc98c673fb6aa1bd6315f970f4bdfe57234f",
+    "documents": 64,
+    "tokens": 7906,
+    "response_targets": 2708,
+    "prompt_runs": 235,
+    "reply_runs": 235,
+    "max_tokens": 256
+  },
+  "measured_targets": 616,
+  "overall": {
+    "targets": 616,
+    "admitted": 365,
+    "top1": 293,
+    "top8": 306
+  },
+  "strata": {
+    "memory-key:absent": {
+      "targets": 616,
+      "admitted": 365,
+      "top1": 293,
+      "top8": 306
+    },
+    "prompt-overlap:absent": {
+      "targets": 616,
+      "admitted": 365,
+      "top1": 293,
+      "top8": 306
+    },
+    "reference-reply-overlap:absent": {
+      "targets": 437,
+      "admitted": 232,
+      "top1": 184,
+      "top8": 192
+    },
+    "reference-reply-overlap:present": {
+      "targets": 179,
+      "admitted": 133,
+      "top1": 109,
+      "top8": 114
+    },
+    "reply-position:continuation": {
+      "targets": 558,
+      "admitted": 358,
+      "top1": 286,
+      "top8": 299
+    },
+    "reply-position:opening": {
+      "targets": 58,
+      "admitted": 7,
+      "top1": 7,
+      "top8": 7
+    }
+  },
+  "reply_overlap": {
+    "reference_replies": 58,
+    "reference_replies_seen_in_train": 19,
+    "reference_prompts_seen_in_train": 0,
+    "reference_prompts_keyed_in_train": 0,
+    "reference_reply_new_4grams": 241,
+    "reference_reply_total_4grams": 442,
+    "reference_reply_new_8grams": 158,
+    "reference_reply_total_8grams": 234
+  },
+  "unavailable": {
+    "generated_complete_reply": "requires a sealed/generated reply file; corpus rows are teacher-forced targets",
+    "generated_reply_novelty": "requires model-generated replies; the report measures reference and panel overlap only",
+    "independent_cpu_read": "this instrument calls the native integer serving engine directly; independent CPU-trunk parity belongs to the isolated CPU-crate lane",
+    "value_masked_prompt_template": "requires the generator's value spans or a precomputed masked-template census"
+  }
+}
