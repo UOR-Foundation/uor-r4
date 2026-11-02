@@ -53,9 +53,13 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const generating = state.session.phase === 'generating';
     const activeGeneration = state.session.activeGeneration;
     const predictionMode = activeGeneration ? activeGeneration.canStop === false : prediction;
+    const modeKind = activeGeneration?.source.kind ?? selected?.kind;
     const messages = sessions.getConversationMessages();
     const attachments = ui.getAttachments();
     const activeFile = files.activeFile();
+    const unavailable = selected?.kind === 'artifact' && state.residentArtifact
+        && (state.residentArtifact.engineSupported === false
+            || (state.residentArtifact.canGenerate === false && state.residentArtifact.canPredict !== true));
 
     function send(prompt: string) {
         if (generation.send(prompt)) {
@@ -67,7 +71,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     return (
         <section aria-label="Agent composer">
             <h1>Agent</h1>
-            <p>{predictionMode ? 'Local next-token prediction' : selected?.kind === 'artifact' ? 'Local generation' : 'API chat'}</p>
+            <p>{unavailable ? 'Generation unavailable' : predictionMode ? 'Local next-token prediction' : modeKind === 'artifact' ? 'Local generation' : 'API chat'}</p>
             <p>Session: {state.session.phase}</p>
             {state.session.error && <p role="alert">{state.session.error}</p>}
             {activeGeneration && <p>Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}

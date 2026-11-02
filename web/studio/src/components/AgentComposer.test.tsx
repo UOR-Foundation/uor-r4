@@ -118,6 +118,35 @@ describe('AgentComposer', () => {
         expect(button('Stop').disabled).toBe(true);
     });
 
+    it('disables generation for unsupported or prediction-incompatible artifacts', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                schema: 'uor-r4.lut-stack/99', engineSupported: false, canGenerate: true,
+            } });
+        });
+        expect(store.canRun()).toBe(false);
+        expect(host.textContent).toContain('Generation unavailable');
+        prompt('Hello');
+        expect(button('Send').disabled).toBe(true);
+    });
+
+    it('pins the active generation mode label across source changes', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        prompt('API generation');
+        act(() => { button('Send').click(); });
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                schema: 'uor-r4.lut-stack/1', canGenerate: true, engineSupported: true,
+            } });
+        });
+        expect(host.textContent).toContain('API chat');
+        expect(host.textContent).not.toContain('Local generation');
+    });
+
     it('labels discrete local execution as next-token prediction', () => {
         const { store } = mount();
         store.dispatch({ type: 'artifact/selected', sourceId: 'url' });

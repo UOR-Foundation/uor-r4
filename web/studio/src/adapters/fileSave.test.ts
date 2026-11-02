@@ -35,10 +35,10 @@ describe('saveActiveFile', () => {
         api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { completions.push(resolve); }));
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         const first = saveActiveFile(store, api, vi.fn());
+        await vi.waitFor(() => expect(completions).toHaveLength(1));
         store.dispatch({ type: 'file/opened', path: 'b.md' });
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         const second = saveActiveFile(store, api, vi.fn());
-        await vi.waitFor(() => expect(completions).toHaveLength(1));
         completions[0](true);
         expect(await first).toBe(true);
         expect(store.getState().file.phase).toBe('saving');
@@ -56,10 +56,10 @@ describe('saveActiveFile', () => {
         api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { completions.push(resolve); }));
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         const first = saveActiveFile(store, api, onError);
+        await vi.waitFor(() => expect(completions).toHaveLength(1));
         store.dispatch({ type: 'file/opened', path: 'b.md' });
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         const second = saveActiveFile(store, api, onError);
-        await vi.waitFor(() => expect(completions).toHaveLength(1));
         completions[0](false);
         expect(await first).toBe(false);
         expect(onError).not.toHaveBeenCalled();
@@ -70,6 +70,24 @@ describe('saveActiveFile', () => {
         expect(store.getState().file.phase).toBe('saved');
     });
 
+    it('skips a queued save when its captured path is no longer active', async () => {
+        const store = new LifecycleStore();
+        const api = files();
+        let finish!: (value: boolean) => void;
+        api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        const first = saveActiveFile(store, api, vi.fn());
+        await vi.waitFor(() => expect(api.saveActive).toHaveBeenCalledOnce());
+        store.dispatch({ type: 'file/opened', path: 'b.md' });
+        const second = saveActiveFile(store, api, vi.fn());
+        store.dispatch({ type: 'file/opened', path: 'c.md' });
+        finish(true);
+        expect(await first).toBe(true);
+        expect(await second).toBe(false);
+        expect(api.saveActive).toHaveBeenCalledTimes(1);
+        expect(store.getState().file.path).toBe('c.md');
+    });
+
     it('does not complete a newer save from an older completion', async () => {
         const store = new LifecycleStore();
         const api = files();
@@ -77,9 +95,9 @@ describe('saveActiveFile', () => {
         api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { completions.push(resolve); }));
         store.dispatch({ type: 'file/opened', path: 'a.md' });
         const first = saveActiveFile(store, api, vi.fn());
+        await vi.waitFor(() => expect(completions).toHaveLength(1));
         store.dispatch({ type: 'file/opened', path: 'b.md' });
         const second = saveActiveFile(store, api, vi.fn());
-        await vi.waitFor(() => expect(completions).toHaveLength(1));
         completions[0](true);
         expect(await first).toBe(true);
         expect(store.getState().file.phase).toBe('saving');

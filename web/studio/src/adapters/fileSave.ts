@@ -10,7 +10,10 @@ export function saveActiveFile(store: LifecycleStore, files: WorkspaceApi, onErr
     const saveId = store.getState().file.saveId;
     if (store.getState().file.phase !== 'saving' || saveId === null) return Promise.resolve(false);
 
+    let started = false;
     const operation = saveQueue.then(async () => {
+        if (!started && (store.getState().file.path !== path || store.getState().file.saveId !== saveId)) return false;
+        started = true;
         try {
             const saved = await files.saveActive();
             if (store.getState().file.path !== path || store.getState().file.saveId !== saveId) return saved;

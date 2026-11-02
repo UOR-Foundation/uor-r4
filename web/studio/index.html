@@ -1496,6 +1496,10 @@
 
         function sendFromComposer(providedPrompt) {
             if (app.generating) return false;
+            if (app.activePredictionRequestId) {
+                toast('Wait for the current prediction to finish.', 'warn');
+                return false;
+            }
             var input = $('#chatInput');
             var prompt = typeof providedPrompt === 'string' ? providedPrompt.trim() : (input ? input.value.trim() : '');
             if (!prompt) {
@@ -1979,10 +1983,10 @@
                     }
                 }, null, 2);
             },
-            deleteSession: function (id) {
+            deleteSession: function (id, createReplacement) {
                 var wasActive = app.activeConversationId === id;
                 var deleted = deleteConversation(id);
-                if (wasActive && deleted) startNewChat();
+                if (wasActive && deleted && createReplacement !== false) startNewChat();
                 return deleted;
             },
             getConversationMessages: function (id) {

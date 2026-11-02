@@ -456,6 +456,8 @@
         });
     }
     function removeAttachment(name) { attachments = attachments.filter(function (item) { return item.name !== name; }); saveAttachments(); renderAttachments(); }
+    document.dispatchEvent(new CustomEvent('uor-attachments-changed', { detail: { count: attachments.length } }));
+    }
     function clearAttachments() { attachments = []; saveAttachments(); renderAttachments(); }
     function attachContext() {
         var files = window.__studioFiles;
@@ -724,7 +726,7 @@
         if (!list || !deleteFn) { toast('Session store not ready.', 'error'); return { cleared: 0, total: 0, error: 'Session store not ready.' }; }
         var sessions = list();
         var cleared = 0;
-        sessions.forEach(function (session) { if (deleteFn(session.id)) cleared += 1; });
+        sessions.forEach(function (session) { if (deleteFn(session.id, false)) cleared += 1; });
         if (cleared === sessions.length) toast('Cleared ' + cleared + ' session(s).', 'success');
         else toast('Cleared ' + cleared + ' of ' + sessions.length + ' session(s); stop the current reply before deleting the rest.', 'warn');
         window.setTimeout(renderSessionEnhancements, 60);

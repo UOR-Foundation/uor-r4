@@ -28,5 +28,8 @@ describe('Inspector', () => {
         expect(host.querySelector('#studio-inspector')).not.toBeNull();
         expect(host.textContent).toContain('notes.md');
         expect(host.textContent).toContain('No source selected');
+        const attachments = ui().getAttachments();
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        expect(host.textContent).toContain('notes.md');
     });
 });

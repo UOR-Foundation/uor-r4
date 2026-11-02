@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'preact/hooks';
 import type { StudioUiApi } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
@@ -11,6 +12,12 @@ interface InspectorProps {
 
 export function Inspector({ store, ui, open, onClose }: InspectorProps) {
     const state = useLifecycle(store);
+    const [, setRevision] = useState(0);
+    useEffect(() => {
+        const changed = () => setRevision((value) => value + 1);
+        document.addEventListener('uor-attachments-changed', changed);
+        return () => document.removeEventListener('uor-attachments-changed', changed);
+    }, []);
     if (!open) return null;
     const generation = state.session.activeGeneration || state.session.lastGeneration;
     return (

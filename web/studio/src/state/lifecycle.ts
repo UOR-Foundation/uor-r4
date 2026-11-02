@@ -141,7 +141,10 @@ export class LifecycleStore {
                 return false;
             }
         }
-        return this.state.artifact.phase === 'ready';
+        if (this.state.artifact.phase !== 'ready') return false;
+        const resident = this.state.residentArtifact;
+        if (resident?.engineSupported === false) return false;
+        return !(resident?.canGenerate === false && resident.canPredict !== true);
     }
 
     canSave(): boolean {
