@@ -172,8 +172,9 @@ function loadState() {
         let active = parsed.active && (parsed.active.kind === 'wasm' || parsed.active.kind === 'api')
             ? { kind: parsed.active.kind, id: parsed.active.id || null }
             : fallback.active;
-        if (active.kind === 'api' && !api.some((item) => item.id === active.id)) {
-            active = fallback.active;
+        if (active.kind === 'api') {
+            const selected = api.find((item) => item.id === active.id);
+            try { requireApiBaseUrl(selected && selected.baseUrl); } catch (_error) { active = fallback.active; }
         }
         return { wasm, api, active };
     } catch (_error) {

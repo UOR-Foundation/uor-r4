@@ -324,4 +324,26 @@ describe('ModelPicker', () => {
         expect(onError).toHaveBeenCalledWith('Only HTTP(S) API endpoints are supported.');
         document.removeEventListener('uor-api-config-changed', configChanged);
     });
+
+    it('clears a local provider error after a successful connection test', async () => {
+        const { modelAdapter } = mount();
+        modelAdapter.selectApi = vi.fn(() => { throw new Error('selection failed'); });
+        act(() => { button('Use API A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('selection failed');
+        await act(async () => { button('Test API A').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('refreshes the legacy configuration after removing the selected provider', () => {
+        const { store, modelAdapter, modelSources } = mount();
+        const configChanged = vi.fn();
+        document.addEventListener('uor-api-config-changed', configChanged);
+        modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
+        modelSources.active = vi.fn(() => ({ kind: 'wasm', id: 'bundled-demo' }));
+        act(() => { button('Use API A').click(); });
+        act(() => { button('Remove API A').click(); });
+        act(() => { button('Confirm removal').click(); });
+        expect(configChanged).toHaveBeenLastCalledWith(expect.objectContaining({ detail: { id: 'bundled-demo' } }));
+        document.removeEventListener('uor-api-config-changed', configChanged);
+    });
 });

@@ -67,11 +67,15 @@ describe('Settings', () => {
         expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Session store not ready.');
     });
 
-    it('does not change session state when a clear deletes nothing', () => {
+    it('does not change session state when a clear deletes nothing, including an empty store', () => {
         const ui = makeUi();
         ui.clearSessions = vi.fn(() => ({ cleared: 0, total: 2 }));
         const onChange = vi.fn();
         act(() => { render(<Settings ui={ui} onClose={vi.fn()} onChange={onChange} />, host); });
+        act(() => { button('Clear sessions').click(); });
+        act(() => { button('Confirm clear sessions').click(); });
+        expect(onChange).not.toHaveBeenCalled();
+        ui.clearSessions = vi.fn(() => ({ cleared: 0, total: 0 }));
         act(() => { button('Clear sessions').click(); });
         act(() => { button('Confirm clear sessions').click(); });
         expect(onChange).not.toHaveBeenCalled();

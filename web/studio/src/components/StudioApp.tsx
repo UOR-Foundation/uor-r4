@@ -102,7 +102,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
         { id: 'models', group: 'Navigation', label: 'Go to Models', description: 'Artifacts and providers', run: () => setActiveSection('models') },
         { id: 'guide', group: 'Navigation', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
-        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', run: () => {
+        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', disabled: state.session.phase === 'generating', run: () => {
             if (sessions.newSession()) {
                 store.dispatch({ type: 'session/activated' });
                 setSessionRevision((value) => value + 1);
@@ -129,7 +129,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             onSettings={() => setSettingsOpen(true)}
             onInspector={() => setInspectorOpen((value) => !value)}
             inspectorOpen={inspectorOpen}
-            sessions={<SessionList store={store} sessions={sessions} download={download} onError={report} onChange={() => { setError(null); setSessionRevision((value) => value + 1); }} />}
+            sessions={<SessionList store={store} sessions={sessions} download={download} onError={report} onSuccess={() => setError(null)} onChange={() => { setError(null); setSessionRevision((value) => value + 1); }} />}
         >
             {error && <p role="alert">{error.message}</p>}
             {activeSection === 'agent' && (
@@ -156,7 +156,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onChange={(kind) => {
+            {settingsOpen && <Settings ui={ui} generating={state.session.phase === 'generating'} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onChange={(kind) => {
                 setError(null);
                 if (kind === 'editor') store.dispatch({ type: 'file/closed' });
                 else {

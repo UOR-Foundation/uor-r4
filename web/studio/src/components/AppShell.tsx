@@ -36,7 +36,7 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
                 </div>
             </header>
             <div class="studio-body">
-                <nav id="studio-navigation" aria-label="Studio" data-open={drawerOpen}>
+                <nav id="studio-navigation" aria-label="Studio" data-open={drawerOpen} hidden={!drawerOpen}>
                     <ul>
                         {destinations.map((destination) => (
                             <li><button type="button" aria-current={activeSection === destination.id ? 'page' : undefined} onClick={() => onSection(destination.id)}>{destination.label}</button></li>

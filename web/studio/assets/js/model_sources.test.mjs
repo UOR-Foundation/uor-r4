@@ -161,6 +161,13 @@ test('non-HTTP API sources cannot be selected or persisted', async () => {
     assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
 });
 
+test('a persisted active non-HTTP API source falls back to the local selection', async () => {
+    const invalid = { id: 'bad', label: 'Bad', preset: 'custom', baseUrl: 'ftp://example.com/v1', model: 'model', apiKey: '', createdAt: 1 };
+    const { api } = await fresh(async () => { throw new Error('network must not run'); }, { wasm: {}, api: [invalid], active: { kind: 'api', id: 'bad' } });
+    assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
+    assert.equal(api.apiConfig(), null);
+});
+
 test('API provider writes roll back when browser storage fails', async () => {
     const { api, storage, events } = await fresh(async () => { throw new Error('network must not run'); });
     const existing = api.list().api[0];

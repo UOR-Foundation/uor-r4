@@ -10,9 +10,10 @@ interface SessionListProps {
     download(name: string, content: string): void;
     onError(message: string): void;
     onChange?(): void;
+    onSuccess?(): void;
 }
 
-export function SessionList({ store, sessions, download, onError, onChange }: SessionListProps) {
+export function SessionList({ store, sessions, download, onError, onChange, onSuccess }: SessionListProps) {
     const state = useLifecycle(store);
     const [, setRevision] = useState(0);
     const [renaming, setRenaming] = useState<SessionSummary | null>(null);
@@ -50,7 +51,7 @@ export function SessionList({ store, sessions, download, onError, onChange }: Se
                         }}>{`Duplicate ${session.title}`}</button>
                         <button type="button" onClick={() => {
                             const exported = sessions.exportSession(session.id);
-                            if (exported) { setError(null); download(`${session.title}.json`, exported); }
+                            if (exported) { setError(null); download(`${session.title}.json`, exported); onSuccess?.(); }
                             else reportError('Session export is unavailable.');
                         }}>{`Export ${session.title}`}</button>
                         <button type="button" disabled={generating} onClick={() => { setError(null); setDeleting(session); }}>{`Delete ${session.title}`}</button>

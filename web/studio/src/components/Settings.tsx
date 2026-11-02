@@ -8,13 +8,14 @@ interface SettingsProps {
     onChange?(kind: 'sessions' | 'editor'): void;
     onError?(message: string): void;
     onSettingsChange?(settings: StudioSettings): void;
+    generating?: boolean;
 }
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
     return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
-export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: SettingsProps) {
+export function Settings({ ui, onClose, onChange, onError, onSettingsChange, generating = false }: SettingsProps) {
     const [settings, setSettings] = useState<StudioSettings>(() => ui.getSettings());
     const [fontSizeDraft, setFontSizeDraft] = useState(String(settings.fontSize));
     const [tabSizeDraft, setTabSizeDraft] = useState(String(settings.tabSize));
@@ -45,10 +46,11 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
         let completed = false;
         setError(null);
         if (clearing === 'sessions') {
+            if (generating) { setClearing(null); return; }
             const result = ui.clearSessions();
             if (result.error) reportError(result.error);
             else {
-                completed = result.cleared > 0 || result.total === 0;
+                completed = result.cleared > 0;
                 if (result.cleared < result.total) reportError(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
             }
         }
@@ -81,7 +83,7 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
             <section aria-label="Data controls">
                 <h3>Data</h3>
                 <p>Clearing uses the existing session and editor stores. Provider settings are not included.</p>
-                <button type="button" onClick={() => setClearing('sessions')}>Clear sessions</button>
+                <button type="button" disabled={generating} title={generating ? 'Stop the current reply before clearing sessions.' : undefined} onClick={() => setClearing('sessions')}>Clear sessions</button>
                 <button type="button" onClick={() => setClearing('editor')}>Clear editor tabs</button>
                 {clearing && (
                     <section aria-label="Confirm data clearing">

@@ -940,6 +940,8 @@
                 delete app.predictionRequests[message.id];
                 app.activePredictionRequestId = null;
                 if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
+                app.generating = false;
+                updateComposerState();
                 document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
             }
             var result = $('#predictorResult');
@@ -1027,6 +1029,8 @@
             var predictionRequestId = 'predict-' + Date.now().toString(36);
             app.activePredictionRequestId = predictionRequestId;
             app.predictionRequests[predictionRequestId] = app.activeGenerationId;
+            app.generating = true;
+            updateComposerState();
             app.worker.postMessage({
                 action: 'predict_discrete',
                 id: predictionRequestId,
@@ -1267,6 +1271,8 @@
                     delete app.predictionRequests[message.id];
                     app.activePredictionRequestId = null;
                     if (app.activeGenerationId === failedPredictionId) app.activeGenerationId = null;
+                    app.generating = false;
+                    updateComposerState();
                     document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: failedPredictionId, error: workerError } }));
                 }
                 toast(workerError, 'error');

@@ -37,7 +37,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown) => onError(error instanceof Error ? error.message : String(error));
-    const run = (action: Promise<unknown>) => { action.catch(report); };
+    const run = (action: Promise<unknown>, succeeded?: () => void) => { action.then(() => succeeded?.()).catch(report); };
 
     useEffect(() => {
         let active = true;
@@ -61,7 +61,10 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
         run(sources.testApi(provider.id).then((result) => {
             if (testVersions.current[provider.id] === version) {
                 setTestResults((current) => ({ ...current, [provider.id]: result.ok ? 'passed' : 'failed' }));
-                if (result.ok) onSuccess?.();
+                if (result.ok) {
+                    setProviderError(null);
+                    onSuccess?.();
+                }
             }
         }).catch((error) => {
             if (testVersions.current[provider.id] === version) {
@@ -142,7 +145,9 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             });
             if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
                 const active = sources.active();
-                store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
+                const sourceId = active.id || 'bundled-demo';
+                store.dispatch({ type: 'artifact/selected', sourceId });
+                document.dispatchEvent(new CustomEvent('uor-api-config-changed', { detail: { id: sourceId } }));
             }
             setRemoving(null);
             refresh();
@@ -162,14 +167,14 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
 
             <section aria-label="Local engine">
                 <h2>Local engine</h2>
-                <button type="button" onClick={() => run(adapter.loadBundled())}>Load bundled demo</button>
+                <button type="button" onClick={() => run(adapter.loadBundled(), onSuccess)}>Load bundled demo</button>
                 <label>Model file<input aria-label="Model file" type="file" accept=".lut,.bin,.d11" onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
-                    if (file) run(adapter.loadLocalFile(file));
+                    if (file) run(adapter.loadLocalFile(file), onSuccess);
                 }} /></label>
                 <form data-action="load-url" onSubmit={(event) => {
                     event.preventDefault();
-                    if (url.trim()) run(adapter.loadFromUrl(url.trim()));
+                    if (url.trim()) run(adapter.loadFromUrl(url.trim()), onSuccess);
                 }}>
                     <label>Model URL<input aria-label="Model URL" type="url" value={url} onInput={(event) => setUrl(event.currentTarget.value)} /></label>
                     <button type="submit">Load URL</button>
@@ -179,7 +184,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             <section aria-label="Published models">
                 <h2>Published models</h2>
                 {sources.catalog().models.map((entry) => (
-                    <button type="button" onClick={() => run(adapter.loadPublished(entry.id || entry.url))}>{`Load ${entry.label || entry.id || entry.url}`}</button>
+                    <button type="button" onClick={() => run(adapter.loadPublished(entry.id || entry.url), onSuccess)}>{`Load ${entry.label || entry.id || entry.url}`}</button>
                 ))}
             </section>
 

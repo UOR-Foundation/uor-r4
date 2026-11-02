@@ -278,7 +278,7 @@ describe('StudioApp', () => {
         const ui = makeUi();
         let items = [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }];
         sessions.listSessions = vi.fn(() => items);
-        ui.clearSessions = vi.fn(() => { items = []; return { cleared: 0, total: 0 }; });
+        ui.clearSessions = vi.fn(() => { items = []; return { cleared: 1, total: 1 }; });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
         });
@@ -288,5 +288,53 @@ describe('StudioApp', () => {
         act(() => { button('Confirm clear sessions').click(); });
         expect(host.textContent).toContain('No sessions yet');
         expect(store.getState().session.phase).toBe('new');
+    });
+
+    it('blocks palette and settings session mutations during generation', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        const ui = makeUi();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        const paletteNew = host.querySelector<HTMLButtonElement>('button[data-command-id="new-session"]')!;
+        expect(paletteNew.disabled).toBe(true);
+        act(() => { host.querySelector<HTMLDialogElement>('dialog')!.close(); });
+        act(() => { button('Settings').click(); });
+        expect(button('Clear sessions').disabled).toBe(true);
+        expect(sessions.newSession).not.toHaveBeenCalled();
+        expect(ui.clearSessions).not.toHaveBeenCalled();
+        expect(store.getState().session.activeGeneration).not.toBeNull();
+    });
+
+    it('clears a parent export error after a successful export retry', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        sessions.listSessions = vi.fn(() => [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }]);
+        sessions.exportSession = vi.fn().mockReturnValueOnce(null).mockReturnValueOnce('{"schema":"uor-r4.studio-session/1"}');
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Export Session A').click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Session export is unavailable.');
+        act(() => { button('Export Session A').click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('clears a parent artifact-load error after a successful retry', async () => {
+        const store = new LifecycleStore();
+        const adapter = makeModelAdapter();
+        adapter.loadBundled = vi.fn().mockRejectedValueOnce(new Error('load failed')).mockResolvedValueOnce({ bytes: new Uint8Array(), fileName: 'model.lut', meta: { schema: 'uor-r4.lut-stack/1' } });
+        act(() => {
+            render(<StudioApp store={store} adapter={adapter} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { destination('Models').click(); });
+        await act(async () => { button('Load bundled demo').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('load failed');
+        await act(async () => { button('Load bundled demo').click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
     });
 });

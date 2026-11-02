@@ -28,7 +28,7 @@ describe('AppShell', () => {
         expect(host.querySelectorAll('main')).toHaveLength(1);
         expect(host.querySelectorAll('[role="status"]')).toHaveLength(1);
         expect(host.querySelector('[role="status"]')?.textContent).toContain('API A');
-        const navigation = host.querySelector('nav[aria-label="Studio"]')!;
+        const navigation = host.querySelector<HTMLElement>('nav[aria-label="Studio"]')!;
         expect(Array.from(navigation.querySelectorAll('button')).map((node) => node.textContent)).toEqual(['Agent', 'Workspace', 'Models', 'Guide']);
         const workspace = Array.from(navigation.querySelectorAll('button')).find((node) => node.textContent === 'Workspace')!;
         workspace.click();
@@ -37,8 +37,10 @@ describe('AppShell', () => {
         expect(drawer.getAttribute('aria-expanded')).toBe('true');
         act(() => { drawer.click(); });
         expect(drawer.getAttribute('aria-expanded')).toBe('false');
+        expect(navigation.hidden).toBe(true);
         act(() => { drawer.click(); });
         expect(drawer.getAttribute('aria-expanded')).toBe('true');
+        expect(navigation.hidden).toBe(false);
         const inspector = host.querySelector<HTMLButtonElement>('button[aria-controls="studio-inspector"]')!;
         inspector.click();
         expect(onInspector).toHaveBeenCalledOnce();

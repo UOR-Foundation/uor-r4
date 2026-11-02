@@ -109,6 +109,16 @@ describe('actual page prediction hooks', () => {
         dispose();
     });
 
+    it('marks prediction as generating only for its correlated lifetime', () => {
+        const { app, hooks } = pageHooks();
+        expect(hooks.runPrediction('hello')).toBe(true);
+        expect(app.generating).toBe(true);
+        const request = app.worker.postMessage.mock.calls[0][0];
+        hooks.onWorkerMessage({ data: { action: 'discrete_prediction_result', id: request.id, top8: [1], decoded: [] } });
+        expect(app.generating).toBe(false);
+        expect(app.activeGenerationId).toBeNull();
+    });
+
     it('renders diagnostic results without completing the typed prediction', () => {
         const { app, hooks } = pageHooks();
         document.body.innerHTML = '<div id="predictorResult"></div><ol id="predictorTop"></ol><span id="predictorPrediction"></span><span id="predictorMs"></span><span id="predictorStatus"></span>';
