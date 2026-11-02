@@ -25,6 +25,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - Q16 residual quantization now clamps to the served i32 grid and, under
   `with_served_surrogate_training`, forwards the exact rounded value while
   passing identity gradient inside the range and zero gradient at saturation.
+  Its upper mask bound is exclusive because `i32::MAX as f32` rounds up to
+  `2^31`; the new host oracle caught and pinned this boundary.
 - Added dynamic per-row i16 activation quantization. It selects one
   power-of-two scale from the row maximum, uses the served half-up rounding
   rule, clamps to `[-32767, 32767]`, and applies the same straight-through rule.
@@ -44,6 +46,9 @@ Finite scalar controls:
 - A row `[40000, -12001, 3, -1]` at scale `1/2` quantizes/dequantizes to
   `[40000, -12000, 4, 0]`, pinning half-up and precision loss.
 - Saturated scaled values are outside the `[-32767,32767]` gradient mask.
+- Host scalar gradient oracles pin identity gradients inside both ranges and
+  zero gradients at Q16 and activation saturation. Planted saturation-gradient
+  faults make the controls fail, so they are not forward-only assertions.
 - Wrapper tests seed every gate-hook field, then verify exact restoration after
   success, error and panic.
 

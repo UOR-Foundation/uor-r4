@@ -616,7 +616,7 @@ pub(crate) fn q16_residual(x: Tensor) -> Result<Tensor> {
     }
     let dtype = x.dtype();
     let inside = (scaled.ge(f64::from(i32::MIN))?.to_dtype(dtype)?
-        * scaled.le(f64::from(i32::MAX))?.to_dtype(dtype)?)?;
+        * scaled.lt(f64::from(i32::MAX))?.to_dtype(dtype)?)?;
     let free = x.mul(&inside)?;
     Ok((&free + (rounded - &free)?.detach())?)
 }
@@ -630,6 +630,18 @@ fn q16_residual_scalar(value: f32) -> f32 {
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
+fn q16_residual_ste_scalar(value: f32) -> (f32, f32) {
+    let scaled = value * Q16_SCALE;
+    // `i32::MAX as f32` rounds up to 2^31, so the upper bound is exclusive.
+    let gradient = if scaled >= i32::MIN as f32 && scaled < i32::MAX as f32 {
+        1.0
+    } else {
+        0.0
+    };
+    (q16_residual_scalar(value), gradient)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 fn activation_scale_scalar(max: f64) -> f64 {
     let mut scale = 1.0;
     let mut threshold = 32768.0;
@@ -640,6 +652,19 @@ fn activation_scale_scalar(max: f64) -> f64 {
         threshold *= 2.0;
     }
     scale
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn activation_quantize16_ste_scalar(value: f32, scale: f64) -> (f32, f32) {
+    let scale = scale as f32;
+    let scaled = value * scale;
+    let rounded = (scaled + 0.5).floor().clamp(-32767.0, 32767.0);
+    let gradient = if (-32767.0..=32767.0).contains(&scaled) {
+        1.0
+    } else {
+        0.0
+    };
+    (rounded / scale, gradient)
 }
 
 /// Quantize each row to signed i16 at a power-of-two scale selected from the row maximum.
@@ -3108,6 +3133,50 @@ mod tests {
         assert_eq!(
             row.map(|value| (value * scale + 0.5).floor().clamp(-32767.0, 32767.0) / scale),
             [40_000.0, -12_000.0, 4.0, 0.0]
+        );
+        let q16_gradients = [
+            q16_residual_ste_scalar(1.4 / Q16_SCALE),
+            q16_residual_ste_scalar(-0.5 / Q16_SCALE),
+            q16_residual_ste_scalar(32768.0),
+        ];
+        assert_eq!(
+            q16_gradients,
+            [
+                (1.0 / Q16_SCALE, 1.0),
+                (0.0, 1.0),
+                (i32::MAX as f32 / Q16_SCALE, 0.0),
+            ]
+        );
+        let mut planted_q16_gradient = q16_gradients;
+        planted_q16_gradient[2].1 = 1.0;
+        assert_ne!(
+            planted_q16_gradient, q16_gradients,
+            "a forward-only control must reject the planted Q16 saturation-gradient fault"
+        );
+
+        let activation_gradients =
+            row.map(|value| activation_quantize16_ste_scalar(value, f64::from(scale)));
+        assert_eq!(
+            activation_gradients,
+            [
+                (40_000.0, 1.0),
+                (-12_000.0, 1.0),
+                (4.0, 1.0),
+                (0.0, 1.0),
+            ]
+        );
+        let clamped_scale = activation_scale_scalar(1e30) as f32;
+        let clamped_activation = [
+            activation_quantize16_ste_scalar(1e30, f64::from(clamped_scale)),
+            activation_quantize16_ste_scalar(1.0, f64::from(clamped_scale)),
+        ];
+        assert_eq!(clamped_activation[1], (0.0, 1.0));
+        assert_eq!(clamped_activation[0].1, 0.0);
+        let mut planted_activation_gradient = clamped_activation;
+        planted_activation_gradient[0].1 = 1.0;
+        assert_ne!(
+            planted_activation_gradient, clamped_activation,
+            "a forward-only control must reject the planted activation-clamp-gradient fault"
         );
         assert!(with_served_surrogate_training(1, 0, || {
             Ok(is_rounding_residual_q16()
