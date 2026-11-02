@@ -14,7 +14,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - Kept `<steps>` as the total target: a step-64 checkpoint resumed with target 256 executes exactly 192 more attempts.
 - Wrote a sidecar binding beside every interval and final checkpoint. It binds the source artifact, token and mask hashes, manifest hash, tokenizer, trainer seed, split controls, completed step and checkpoint hash.
 - Refused a resume before continuation when any bound input, the step count or the checkpoint bytes differ.
-- Extended the driver tests to compare an uninterrupted run with an interval-resumed run and to exercise source, token, manifest, seed, split and checkpoint-hash tampering.
+- Extended the driver tests to compare an uninterrupted run with an interval-resumed run and to exercise source, token, mask, manifest, tokenizer, seed, split controls, completed step, schema and checkpoint-hash tampering.
 
 ## Measurements
 
@@ -57,9 +57,10 @@ The program-level usefulness verdict is now explicit:
 - Focused driver tests: 3/3, including uninterrupted-versus-resumed byte/panel equality and eleven binding-identity tamper cases.
 - Public process restart: six runs across two seeds, with `sha256sum` equality on both final artifacts and both final checkpoints.
 - Evidence `sha256sum -c SHA256SUMS`: all committed evidence files verified.
-- Full CPU crate suite with the final production code: 111 library tests and 3 driver tests passed; 4 release benchmarks ignored.
+- Full release CPU crate suite with the final production code: 111 library tests and 3 driver tests passed; 4 release benchmarks ignored.
 - Strict Clippy and formatting passed.
 - Roadmap check/render passed for all 134 items; `uor-harness check` reported zero errors and 39 pre-existing advisory warnings.
+- `uor-harness loop gates --full`: 11/11 green.
 
 ## Skills used
 
