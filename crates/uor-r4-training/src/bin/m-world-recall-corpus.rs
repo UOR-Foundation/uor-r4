@@ -29,8 +29,8 @@ use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 use uor_r4_training::milestone_world::{normalized, Split};
 use uor_r4_training::milestone_world_v2::{
-    oracle_recall, recall_line, takes_recall, Conversation2, MWorld2, Mix, Turn2, Variant, CONTEXT,
-    REVISION,
+    oracle_recall, recall_line, takes_recall, Conversation2, MWorld2, Meter, Mix, Turn2, Variant,
+    CONTEXT, REVISION,
 };
 
 type Result<T> = std::result::Result<T, String>;
@@ -193,14 +193,19 @@ struct Receipt {
     longest: usize,
 }
 
-fn load_tokenizer(path: &Path) -> Result<ByteBpeTokenizer> {
-    ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(path).map_err(|e| e.to_string())?)
-        .ok_or_else(|| "tokenizer JSON is not a supported byte-level BPE".to_owned())
+fn load_tokenizer(path: &Path) -> Result<(ByteBpeTokenizer, String)> {
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let sha256 = uor_r4_training::sha256_bytes(&bytes);
+    let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
+        .ok_or_else(|| "tokenizer JSON is not a supported byte-level BPE".to_owned())?;
+    Ok((tokenizer, sha256))
 }
 
-fn load_exclusions(path: &Path) -> Result<BTreeSet<String>> {
-    let rows: Value = serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+fn load_exclusions(path: &Path) -> Result<(BTreeSet<String>, String)> {
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let sha256 = uor_r4_training::sha256_bytes(&bytes);
+    let rows: Value =
+        serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     let rows = rows
         .as_array()
         .ok_or_else(|| format!("{}: panel must be a JSON array", path.display()))?;
@@ -216,7 +221,7 @@ fn load_exclusions(path: &Path) -> Result<BTreeSet<String>> {
             turns.insert(normalized(turn));
         }
     }
-    Ok(turns)
+    Ok((turns, sha256))
 }
 
 fn messages<'a>(turns: &'a [Turn2], lines: &'a [Option<String>], at: RecallAt) -> Vec<Message<'a>> {
@@ -267,7 +272,7 @@ fn lines_for(conversation: &Conversation2, recall: Recall) -> (Vec<Option<String
 }
 
 fn generate(options: &Options) -> Result<Receipt> {
-    let tokenizer = load_tokenizer(&options.tokenizer)?;
+    let (tokenizer, tokenizer_sha256) = load_tokenizer(&options.tokenizer)?;
     let protocol = DialogueProtocol::literal_roles_version(&tokenizer, options.protocol)
         .map_err(|e| format!("protocol: {e}"))?;
     let encoder = protocol
@@ -278,9 +283,12 @@ fn generate(options: &Options) -> Result<Receipt> {
         .map_err(|e| e.to_string())?
         .with_variant(options.world);
     let mut rng = uor_r4_training::milestone_world::Rng::new(options.seed);
-    let excluded = match &options.exclude {
-        Some(path) => load_exclusions(path)?,
-        None => BTreeSet::new(),
+    let (excluded, excluded_sha256) = match &options.exclude {
+        Some(path) => {
+            let (turns, sha256) = load_exclusions(path)?;
+            (turns, Some(sha256))
+        }
+        None => (BTreeSet::new(), None),
     };
     let vocab = u32::try_from(tokenizer.vocab_size())
         .map_err(|_| "tokenizer vocabulary does not fit the token store".to_owned())?;
@@ -294,6 +302,11 @@ fn generate(options: &Options) -> Result<Receipt> {
     let mut longest = 0usize;
     let mut by_kind: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
     let mut by_category: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
+    let episode_meter = if options.protocol == 1 {
+        Meter::new(&count)
+    } else {
+        Meter::spaced(&count)
+    };
 
     for index in 0..options.conversations {
         let conversation = world
@@ -331,14 +344,14 @@ fn generate(options: &Options) -> Result<Receipt> {
             .or_default();
         *kind = (kind.0 + 1, kind.1 + encoded.tokens.len(), kind.2 + response);
         turns += conversation.turns.len();
-        for turn in &conversation.turns {
+        for (turn_index, turn) in conversation.turns.iter().enumerate() {
             let category = by_category
                 .entry(format!("{:?}", turn.category))
                 .or_default();
             *category = (
                 category.0 + 1,
-                category.1 + count(&turn.user) + count(&turn.reply) + 1,
-                category.2 + count(&turn.reply) + 1,
+                category.1 + episode_meter.exchange(turn_index, &turn.user, &turn.reply),
+                category.2 + episode_meter.text(&turn.reply) + 1,
             );
         }
     }
@@ -360,8 +373,6 @@ fn generate(options: &Options) -> Result<Receipt> {
     fs::write(&mask_path, &response_mask).map_err(|e| e.to_string())?;
     let response_tokens = response_mask.iter().filter(|&&mask| mask == 1).count();
 
-    let tokenizer_sha256 =
-        uor_r4_training::sha256_file(&options.tokenizer).map_err(|e| e.to_string())?;
     let table = |cells: &BTreeMap<String, (usize, usize, usize)>, unit: &str| {
         json!(cells
             .iter()
@@ -388,7 +399,7 @@ fn generate(options: &Options) -> Result<Receipt> {
     let excluded_record = options.exclude.as_ref().map(|path| {
         json!({
             "path": path,
-            "sha256": uor_r4_training::sha256_file(path).ok(),
+            "sha256": excluded_sha256,
             "turns": excluded.len(),
             "rejected_draws": rejected,
         })
@@ -547,6 +558,9 @@ mod tests {
     use std::sync::OnceLock;
     use uor_r4_core::native_geometric::mmap_corpus::MmapCorpusReader;
 
+    const PINNED_TOKENIZER_SHA256: &str =
+        "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89";
+
     fn byte_tokenizer_json() -> Value {
         let mut printable: Vec<u32> = (u32::from(b'!')..=u32::from(b'~')).collect();
         printable.extend(0xA1..=0xAC);
@@ -627,6 +641,22 @@ mod tests {
         }
     }
 
+    fn pinned_options(root: &Path, tokenizer: PathBuf, recall: Recall) -> Options {
+        Options {
+            out: root.to_owned(),
+            tokenizer,
+            world: Variant::V2,
+            conversations: 128,
+            seed: 73,
+            mix: Mix::default(),
+            recall,
+            recall_at: RecallAt::Reply,
+            context: 384,
+            protocol: 2,
+            exclude: None,
+        }
+    }
+
     fn clean(name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "m-world-recall-corpus-{}-{name}",
@@ -646,20 +676,32 @@ mod tests {
         root
     }
 
-    fn read(root: &Path) -> (Vec<u8>, Vec<u8>, Vec<u8>, String) {
+    fn read_with(root: &Path, tokenizer: &ByteBpeTokenizer) -> (Vec<u8>, Vec<u8>, Vec<u8>, String) {
         let train = root.join("train");
         let token_bytes = fs::read(train.join("tokens.u16")).expect("tokens");
         let mask_bytes = fs::read(train.join("response_mask.u8")).expect("mask");
         let manifest_bytes = fs::read(train.join("manifest.json")).expect("manifest");
         let reader = MmapCorpusReader::open(train.join("tokens.u16")).expect("token store");
         let ids: Vec<u32> = reader.as_slice().iter().map(|&id| u32::from(id)).collect();
-        let tokenizer = byte_tokenizer();
         (
             token_bytes,
             mask_bytes,
             manifest_bytes,
             tokenizer.decode(&ids),
         )
+    }
+
+    fn read(root: &Path) -> (Vec<u8>, Vec<u8>, Vec<u8>, String) {
+        read_with(root, &byte_tokenizer())
+    }
+
+    fn table_total(manifest: &Value, table: &str, field: &str) -> u64 {
+        manifest["composition"]["m_world"][table]
+            .as_object()
+            .expect("table")
+            .values()
+            .map(|row| row[field].as_u64().expect("integer count"))
+            .sum()
     }
 
     #[test]
@@ -693,6 +735,14 @@ mod tests {
             manifest["composition"]["m_world"]["recall"]["value_lines"],
             json!(receipt.recall_value_lines)
         );
+        assert_eq!(
+            table_total(&manifest, "episodes_per_kind", "tokens"),
+            receipt.tokens as u64
+        );
+        assert_eq!(
+            table_total(&manifest, "turns_per_category", "response_tokens"),
+            receipt.response_tokens as u64
+        );
         let _ = fs::remove_dir_all(root);
 
         let root = clean("off");
@@ -706,6 +756,102 @@ mod tests {
         let manifest: Value = serde_json::from_slice(&manifest).expect("JSON");
         assert!(manifest["composition"]["m_world"]["recall"].is_null());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn pinned_tokenizer_default_mix_is_deterministic_and_teaches_memory() {
+        let Some(tokenizer_path) = std::env::var_os("UOR_R4_TOKENIZER").map(PathBuf::from) else {
+            return;
+        };
+        assert_eq!(
+            uor_r4_training::sha256_file(&tokenizer_path).expect("pinned tokenizer"),
+            PINNED_TOKENIZER_SHA256
+        );
+
+        let first_root = clean("pinned-oracle-first");
+        let second_root = clean("pinned-oracle-second");
+        let first = generate(&pinned_options(
+            &first_root,
+            tokenizer_path.clone(),
+            Recall::Oracle,
+        ))
+        .expect("first pinned corpus");
+        let second = generate(&pinned_options(
+            &second_root,
+            tokenizer_path.clone(),
+            Recall::Oracle,
+        ))
+        .expect("second pinned corpus");
+        assert_eq!(
+            first,
+            Receipt {
+                conversations: 128,
+                turns: 446,
+                tokens: 16_214,
+                response_tokens: 4_903,
+                recall_lines: 72,
+                recall_value_lines: 64,
+                recall_none_lines: 8,
+                longest: 256,
+            }
+        );
+        assert_eq!(first, second);
+        let first_bytes = read(&first_root);
+        let second_bytes = read(&second_root);
+        assert_eq!(
+            (&first_bytes.0, &first_bytes.1, &first_bytes.2),
+            (&second_bytes.0, &second_bytes.1, &second_bytes.2)
+        );
+
+        let manifest: Value = serde_json::from_slice(&first_bytes.2).expect("JSON");
+        assert_eq!(
+            table_total(&manifest, "episodes_per_kind", "tokens"),
+            first.tokens as u64
+        );
+        assert_eq!(
+            table_total(&manifest, "turns_per_category", "response_tokens"),
+            first.response_tokens as u64
+        );
+        let train = first_root.join("train");
+        let (tokenizer, _) = load_tokenizer(&tokenizer_path).expect("pinned tokenizer");
+        let reader = MmapCorpusReader::open(train.join("tokens.u16")).expect("token store");
+        let ids: Vec<u32> = reader.as_slice().iter().map(|&id| u32::from(id)).collect();
+        let text = tokenizer.decode(&ids);
+        assert_eq!(text.matches("Memory:").count(), first.recall_lines);
+        assert_eq!(
+            text.matches("Memory: none.").count(),
+            first.recall_none_lines
+        );
+
+        let control_root = clean("pinned-off");
+        let control = generate(&pinned_options(
+            &control_root,
+            tokenizer_path.clone(),
+            Recall::Off,
+        ))
+        .expect("pinned control");
+        assert_eq!(
+            control,
+            Receipt {
+                conversations: 128,
+                turns: 446,
+                tokens: 15_134,
+                response_tokens: 4_903,
+                recall_lines: 0,
+                recall_value_lines: 0,
+                recall_none_lines: 0,
+                longest: 241,
+            }
+        );
+        let (_, _, control_manifest, control_text) = read_with(&control_root, &tokenizer);
+        assert!(!control_text.contains("Memory:"));
+        let control_manifest: Value =
+            serde_json::from_slice(&control_manifest).expect("control JSON");
+        assert!(control_manifest["composition"]["m_world"]["recall"].is_null());
+
+        let _ = fs::remove_dir_all(first_root);
+        let _ = fs::remove_dir_all(second_root);
+        let _ = fs::remove_dir_all(control_root);
     }
 
     #[test]
@@ -730,6 +876,33 @@ mod tests {
         report_output::verify(&root).expect("verified root");
         assert!(root.join("manifest.json").is_file());
         assert!(root.join("train/manifest.json").is_file());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn exclusion_panel_identity_is_the_hash_of_its_parsed_bytes() {
+        let root = clean("excluded");
+        let panel = root.join("exclude.json");
+        fs::write(
+            &panel,
+            serde_json::to_vec(&json!([{
+                "id": "excluded-1",
+                "category": "memory",
+                "user_turns": ["This exact turn is not in the seeded training stream."]
+            }]))
+            .expect("JSON"),
+        )
+        .expect("panel");
+        let mut args = options(&root, Recall::Off);
+        args.exclude = Some(panel.clone());
+        generate(&args).expect("excluded corpus");
+        let manifest: Value =
+            serde_json::from_slice(&fs::read(root.join("train/manifest.json")).expect("manifest"))
+                .expect("JSON");
+        assert_eq!(
+            manifest["composition"]["m_world"]["exclude"]["sha256"],
+            json!(uor_r4_training::sha256_file(&panel).expect("panel hash"))
+        );
         let _ = fs::remove_dir_all(root);
     }
 

@@ -23,6 +23,7 @@ research decision.
 
 - `crates/uor-r4-training/Cargo.toml`
 - `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
+- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-8/**`
 - `docs/roadmap/items/one-model-end-to-end.md`
 
