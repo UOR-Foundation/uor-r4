@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { StudioSettings } from '../adapters/workflow.js';
 import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
@@ -18,13 +18,21 @@ const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fo
 
 export function WorkspaceEditor({ store, files, onError, onSuccess, settings = defaultSettings }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
+    const mounted = useRef(true);
+    const operationVersions = useRef<Record<string, number>>({});
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
-    const report = (error: unknown, operation: string) => onError(error instanceof Error ? error.message : String(error), operation);
+    const report = (error: unknown, operation: string) => { if (mounted.current) onError(error instanceof Error ? error.message : String(error), operation); };
+    const succeed = (operation: string) => { if (mounted.current) onSuccess(operation); };
 
     function sync(summary: WorkspaceSummary) {
         syncWorkspaceSummary(store, summary);
     }
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
 
     useEffect(() => {
         const changed = (event: Event) => {
@@ -41,13 +49,16 @@ export function WorkspaceEditor({ store, files, onError, onSuccess, settings = d
     }, [files, store]);
 
     async function perform(action: () => Promise<unknown>, operation: string) {
+        const version = (operationVersions.current[operation] || 0) + 1;
+        operationVersions.current[operation] = version;
         try {
             await action();
+            if (!mounted.current || operationVersions.current[operation] !== version) return;
             sync(files.treeSummary());
             refresh();
-            onSuccess(operation);
+            succeed(operation);
         } catch (error) {
-            report(error, operation);
+            if (mounted.current && operationVersions.current[operation] === version) report(error, operation);
         }
     }
 
@@ -56,20 +67,20 @@ export function WorkspaceEditor({ store, files, onError, onSuccess, settings = d
             action();
             sync(files.treeSummary());
             refresh();
-            onSuccess(operation);
+            succeed(operation);
         } catch (error) {
             report(error, operation);
         }
     }
 
     async function save() {
-        await saveActiveFile(store, files, onError, onSuccess);
+        await saveActiveFile(store, files, report, succeed);
         sync(files.treeSummary());
         refresh();
     }
 
     function saveCopy() {
-        saveActiveFileCopy(store, files, onError, onSuccess);
+        saveActiveFileCopy(store, files, report, succeed);
         sync(files.treeSummary());
         refresh();
     }

@@ -108,7 +108,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                         {message.role === 'assistant' && (
                             <button type="button" disabled={!store.canRun()} onClick={() => {
                                 const previous = messages.slice(0, index + 1).reverse().find((item) => item.role === 'user');
-                                if (previous) send(previous.content);
+                                if (previous) generation.send(previous.content);
                             }}>Retry</button>
                         )}
                     </article>

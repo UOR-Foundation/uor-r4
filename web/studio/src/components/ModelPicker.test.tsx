@@ -352,6 +352,22 @@ describe('ModelPicker', () => {
         expect(host.querySelector('dialog [role="alert"]')).toBeNull();
     });
 
+    it('ignores a stale artifact-load rejection after unmount and remount', async () => {
+        const first = mount();
+        let rejectFirst!: (error: Error) => void;
+        let finishSecond!: (result: LoadResult) => void;
+        first.modelAdapter.loadBundled = vi.fn((): Promise<LoadResult> => new Promise((_resolve, reject) => { rejectFirst = reject; }));
+        act(() => { button('Load bundled demo').click(); });
+        act(() => { render(null, host); });
+        const second = mount();
+        second.modelAdapter.loadBundled = vi.fn((): Promise<LoadResult> => new Promise((resolve) => { finishSecond = resolve; }));
+        act(() => { button('Load bundled demo').click(); });
+        await act(async () => { finishSecond(result); await Promise.resolve(); });
+        await act(async () => { rejectFirst(new Error('stale failure')); await Promise.resolve(); });
+        expect(first.onError).not.toHaveBeenCalled();
+        expect(second.onError).not.toHaveBeenCalled();
+    });
+
     it('blocks provider removal during generation', () => {
         const { store, modelAdapter } = mount();
         modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));

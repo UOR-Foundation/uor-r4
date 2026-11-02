@@ -265,4 +265,16 @@ describe('AgentComposer', () => {
         act(() => { action('Retry').click(); });
         expect(generation.send).toHaveBeenCalledWith('Original prompt');
     });
+
+    it('preserves the current unsent draft when retrying an older message', () => {
+        const { store, sessionApi } = mount();
+        sessionApi.getConversationMessages = vi.fn(() => [{ role: 'user', content: 'Original prompt' }, { role: 'assistant', content: 'Assistant answer' }]);
+        act(() => { store.dispatch({ type: 'session/activated' }); });
+        act(() => { store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' }); });
+        prompt('Unsent current draft');
+        const assistant = host.querySelector('article[data-role="assistant"]')!;
+        const retry = Array.from(assistant.querySelectorAll('button')).find((node) => node.textContent === 'Retry')!;
+        act(() => { retry.click(); });
+        expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('Unsent current draft');
+    });
 });

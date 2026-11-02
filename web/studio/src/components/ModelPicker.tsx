@@ -35,19 +35,26 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     const [testResults, setTestResults] = useState<Record<string, 'testing' | 'passed' | 'failed'>>({});
     const testVersions = useRef<Record<string, number>>({});
     const loadVersions = useRef(0);
+    const mounted = useRef(true);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const messageFor = (error: unknown) => error instanceof Error ? error.message : String(error);
-    const report = (error: unknown, operation: string) => onError(messageFor(error), operation);
+    const report = (error: unknown, operation: string) => { if (mounted.current) onError(messageFor(error), operation); };
     const reportProvider = (error: unknown, operation: string) => {
+        if (!mounted.current) return;
         setProviderError({ message: messageFor(error), operation });
         report(error, operation);
     };
     const clearProviderError = (operation: string) => setProviderError((current) => current?.operation === operation ? null : current);
     const succeed = (operation: string) => {
+        if (!mounted.current) return;
         clearProviderError(operation);
         onSuccess?.(operation);
     };
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
     const run = (action: Promise<unknown>, operation: string) => {
         const version = ++loadVersions.current;
         action.then(() => { if (version === loadVersions.current) succeed(operation); })

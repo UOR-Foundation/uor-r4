@@ -46,16 +46,20 @@ function pageHooks() {
         'app', 'document', 'window', 'toast', 'setMetrics', 'setEngineStatus', 'encodeTextWithArtifact', 'fillPredictorSha', '$',
         'activeConversation', 'appendMessageElement', 'touchConversation', 'updateComposerState', 'requestCheckpoint',
         'renderConversationList', 'scrollChat', 'formatTps', 'setView', 'makeId', 'streamChatCompletions', 'configFromSources', 'MAX_NEW_TOKENS',
-        'ensureConversation', 'autoGrowTextarea',
+        'ensureConversation', 'autoGrowTextarea', 'ModelSources', 'setModelStatus', 'renderMessages',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function renderDiscretePrediction', 'function runPrediction')}
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
+         ${section('function setChip', 'function toast')}
+         ${section('function updatePrivacyStatus', 'function updateComposerState')}
          ${section('function nextGenerationId', 'function generationTokenLimit')}
          ${section('function generationTokenLimit', '/* ------------------------------------------------------------ composer */')}
          ${section('function stopGeneration', 'function sendFromComposer')}
          ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
+         ${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
+         ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
          ${section('function onWorkerMessage', 'function activeAssistantElement')}
-         return { runPrediction, renderDiscretePrediction, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, stopGeneration, finishLocalGeneration, finishGenerationWithError };`,
+         return { runPrediction, renderDiscretePrediction, onModelSourceChanged, onWorkerMessage, sendFromComposer, sendViaWorker, sendViaApi, stopGeneration, finishLocalGeneration, finishGenerationWithError };`,
     );
     const hooks = factory(
         app, document, window, vi.fn(), vi.fn(), vi.fn(), vi.fn(() => [1, 2]), vi.fn(), (selector: string) => document.querySelector(selector),
@@ -70,9 +74,11 @@ function pageHooks() {
             apiRequests.push(options);
         }), vi.fn(() => null), 32,
         () => conversation, vi.fn(),
+        { active: () => ({ kind: 'api', id: 'api-a' }), list: () => ({ wasm: {} }) }, vi.fn(), vi.fn(),
     ) as {
         runPrediction(prompt?: string): boolean;
         renderDiscretePrediction(message: unknown): void;
+        onModelSourceChanged(event: { detail: Record<string, unknown> }): void;
         onWorkerMessage(event: { data: Record<string, unknown> }): void;
         sendFromComposer(prompt?: string): number | false;
         sendViaWorker(prompt: string, target: typeof conversation): boolean;
@@ -296,6 +302,22 @@ describe('actual page prediction hooks', () => {
         expect(app.worker.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ action: 'predict_discrete' }));
     });
 
+    it('aborts and pins API privacy until the removed stream terminates', async () => {
+        const { app, hooks, conversation, apiRequests } = pageHooks();
+        document.body.innerHTML = '<span id="privacyStatus"></span><span id="chatSourceBadge"></span><button id="btnSend"></button><button id="btnStop"></button>';
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        await hooks.sendViaApi('prompt', conversation);
+        const abort = vi.spyOn(app.abortController!, 'abort');
+        hooks.onModelSourceChanged({ detail: { kind: 'state', removedActive: true } });
+        expect(abort).toHaveBeenCalledOnce();
+        expect(app.mode).toBe('wasm');
+        expect(app.apiConfig).toBeNull();
+        expect(document.getElementById('privacyStatus')?.textContent).toContain('API mode: prompts leave this device');
+        apiRequests[0].onDone({ stopped: true });
+        expect(document.getElementById('privacyStatus')?.textContent).toContain('Local only');
+    });
+
     it('finishes a synchronous page API error after the adapter starts generation', () => {
         const { app, hooks, failNextApi } = pageHooks();
         app.mode = 'api';
@@ -340,7 +362,8 @@ describe('actual page local fallback hook', () => {
         const setView = vi.fn();
         const factory = new Function(
             'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'updateComposerState', 'renderMessages', 'setView', 'toast', 'window',
-            `${section('function onModelSourceChanged', 'function onApiConfigChanged')} return onModelSourceChanged;`,
+            `${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
+         ${section('function onModelSourceChanged', 'function onApiConfigChanged')} return onModelSourceChanged;`,
         );
         const onModelSourceChanged = factory(app, {}, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), setView, vi.fn(), window) as (event: { detail: Record<string, unknown> }) => void;
         onModelSourceChanged({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'demo.lut', meta: { kind: 'bundled' } } });
@@ -364,7 +387,8 @@ describe('actual page local fallback hook', () => {
         const factory = new Function(
             'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
             `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
-             ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
+             ${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
+         ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
              return onModelSourceChanged;`,
         );
         const onModelSourceChanged = factory(app, ModelSources, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;
@@ -396,7 +420,8 @@ describe('actual page local fallback hook', () => {
         const factory = new Function(
             'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
             `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
-             ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
+             ${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
+         ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
              return onModelSourceChanged;`,
         );
         const onModelSourceChanged = factory(app, ModelSources, setModelStatus, updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;

@@ -27,8 +27,9 @@ function mount(settings?: StudioSettings) {
     const store = new LifecycleStore();
     const fileApi = files();
     const onError = vi.fn();
-    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} onSuccess={vi.fn()} settings={settings} />, host); });
-    return { store, fileApi, onError };
+    const onSuccess = vi.fn();
+    act(() => { render(<WorkspaceEditor store={store} files={fileApi.api} onError={onError} onSuccess={onSuccess} settings={settings} />, host); });
+    return { store, fileApi, onError, onSuccess };
 }
 
 function emit(fileApi: ReturnType<typeof files>) {
@@ -176,5 +177,30 @@ describe('WorkspaceEditor', () => {
         act(() => { emit(fileApi); });
         expect(store.getState().file.phase).toBe('no-open-file');
         expect(button('Save').disabled).toBe(true);
+    });
+
+    it('ignores an async workspace rejection after unmount', async () => {
+        const { fileApi, onError } = mount();
+        let rejectOpen!: (error: Error) => void;
+        fileApi.api.openFolder = vi.fn((): Promise<void> => new Promise((_resolve, reject) => { rejectOpen = reject; }));
+        act(() => { button('Open folder').click(); });
+        act(() => { render(null, host); });
+        await act(async () => { rejectOpen(new Error('late open failure')); await Promise.resolve(); });
+        expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('does not let an older workspace success override a newer failure', async () => {
+        const { fileApi, onError, onSuccess } = mount();
+        let finishFirst!: () => void;
+        let rejectSecond!: (error: Error) => void;
+        fileApi.api.openFolder = vi.fn()
+            .mockImplementationOnce(() => new Promise<void>((resolve) => { finishFirst = resolve; }))
+            .mockImplementationOnce((): Promise<void> => new Promise((_resolve, reject) => { rejectSecond = reject; }));
+        act(() => { button('Open folder').click(); });
+        act(() => { button('Open folder').click(); });
+        await act(async () => { rejectSecond(new Error('newer failure')); await Promise.resolve(); });
+        await act(async () => { finishFirst(); await Promise.resolve(); });
+        expect(onError).toHaveBeenCalledWith('newer failure', 'workspace:open-folder');
+        expect(onSuccess).not.toHaveBeenCalled();
     });
 });

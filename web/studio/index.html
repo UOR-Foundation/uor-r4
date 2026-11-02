@@ -1079,7 +1079,7 @@
         }
 
         function updatePrivacyStatus() {
-            if (app.mode === 'api') {
+            if (app.mode === 'api' || (app.generating && app.activeGenerationKind === 'api')) {
                 setChip('#privacyStatus', 'warn', 'API mode: prompts leave this device', 'Chat requests go to the configured OpenAI-compatible endpoint.');
             } else {
                 setChip('#privacyStatus', 'ok', 'Local only', 'Local WASM mode: prompts and replies stay in this tab.');
@@ -1403,6 +1403,7 @@
             app.generating = false;
             app.streamingBodyEl = null;
             app.assistantBuffer = '';
+            updatePrivacyStatus();
             updateComposerState();
             setMetrics('Error');
             toast(String(errorText), 'error');
@@ -1489,6 +1490,7 @@
                         app.generating = false;
                         app.streamingBodyEl = null;
                         app.abortController = null;
+                        updatePrivacyStatus();
                         updateComposerState();
                         setMetrics('API response · ' + text.length + ' chars');
                         renderConversationList();
@@ -1571,9 +1573,14 @@
 
         /* ------------------------------------------------------------ model sources */
 
+        function abortApiForLocalSource() {
+            if (app.generating && app.activeGenerationKind === 'api' && app.abortController) app.abortController.abort();
+        }
+
         function onModelSourceChanged(event) {
             var detail = event && event.detail ? event.detail : {};
             if (detail.kind === 'wasm' && detail.bytes) {
+                abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
                 app.tokenizerArtifact = detail.tokenizerArtifact || null;
@@ -1624,6 +1631,7 @@
                 return;
             }
             if (detail.kind === 'state' && detail.removedActive) {
+                abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
                 app.caps = null;
@@ -1634,6 +1642,7 @@
                 return;
             }
             if (detail.kind === 'wasm') {
+                abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
                 var list = ModelSources.list();
