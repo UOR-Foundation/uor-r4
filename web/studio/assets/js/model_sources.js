@@ -43,7 +43,30 @@ import { sha256Hex, validateTokenizerArtifact } from './uor_tokenizer_artifact.j
 
 const STORAGE_KEY = 'uor.studio.modelSources.v1';
 const EVENT_NAME = 'uor-model-source-changed';
+export const LOAD_PROGRESS_EVENT = 'uor-model-load-progress';
 const MAX_WASM_BYTES = 128 * 1024 * 1024; // matches the worker's MAX_ARTIFACT_BYTES (M1 trunk is 86.5 MB)
+let latestOperationId = 0;
+let selectionEpoch = 0;
+
+function beginOperation(operation) {
+    if (!operation || !Number.isInteger(operation.operationId) || typeof operation.sourceId !== 'string') return null;
+    latestOperationId = Math.max(latestOperationId, operation.operationId);
+    return { operationId: operation.operationId, sourceId: operation.sourceId, selectionEpoch };
+}
+
+function isStaleOperation(operation) {
+    return Boolean(operation && (operation.operationId < latestOperationId || operation.selectionEpoch !== selectionEpoch));
+}
+
+function emitLoadProgress(detail) {
+    const progress = {
+        loaded: Math.max(0, Number(detail.loaded) || 0),
+        total: Number(detail.total) > 0 ? Number(detail.total) : null,
+        phase: detail.phase,
+    };
+    if (Number.isInteger(detail.operationId)) progress.operationId = detail.operationId;
+    document.dispatchEvent(new CustomEvent(LOAD_PROGRESS_EVENT, { detail: progress }));
+}
 const BUNDLED_DEMO_URL = './pkg/synthetic-stack.lut';
 const BUNDLED_DEMO_LABEL = 'Synthetic demo (seed 5)';
 const MODELS_CATALOG_URL = './models.json';
@@ -222,6 +245,7 @@ function setActive(next) {
     if (next.kind === 'api' && !findApi(next.id)) {
         throw new Error('That API endpoint no longer exists.');
     }
+    selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
     persist();
     message = { tone: 'muted', text: '' };
@@ -288,6 +312,7 @@ function parseUorLutHeader(input) {
 
 async function readArtifact(bytes, fileName, origin, options) {
     const extra = options || {};
+    if (isStaleOperation(extra.operation)) return { stale: true };
     const parsed = parseUorLutHeader(bytes);
     const meta = {
         kind: origin.kind,
@@ -322,7 +347,7 @@ async function readArtifact(bytes, fileName, origin, options) {
         format: meta.format,
         meta: clone(meta),
     });
-    return { bytes, fileName, header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
+    return { bytes, fileName, expectedSha256: extra.expectedSha256 || '', header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
 }
 
 function getBundledDemo() {
@@ -525,7 +550,8 @@ async function fetchTokenizerArtifact(entry, stackSha256, vocabSize) {
 }
 
 /** Load a published catalog entry: user-initiated download, hash/size check, tokenizer binding. */
-async function loadPublished(idOrEntry) {
+async function loadPublished(idOrEntry, operation) {
+    const currentOperation = beginOperation(operation);
     var entry = typeof idOrEntry === 'string'
         ? catalog.models.find(function (item) { return item.id === idOrEntry; })
         : idOrEntry;
@@ -536,8 +562,10 @@ async function loadPublished(idOrEntry) {
         expectedBytes: entry.sizeBytes,
         onProgress: function (pct, loaded, total) {
             setMessage('info', 'Downloading ' + entry.label + ' from ' + host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+            emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded, total, phase: 'downloading' });
         },
     });
+    emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
     var stackSha256 = await sha256Hex(bytes);
     if (entry.sha256 && stackSha256 !== entry.sha256) {
         throw new Error('sha256 mismatch for ' + entry.label + ': expected ' + shortSha(entry.sha256) + ', got ' + shortSha(stackSha256) + '; refusing to load.');
@@ -557,8 +585,9 @@ async function loadPublished(idOrEntry) {
         sizeBytes: entry.sizeBytes || bytes.byteLength,
         format: entry.format || 'UORLUT01',
         sha256: stackSha256,
+        operation: currentOperation,
     });
-    setMessage('success', 'Loaded ' + entry.label + ' from ' + host + ' (' + formatBytes(bytes.byteLength) + ', ' + parsed.schema + (tokenizerArtifact ? ', tokenizer bound' : ', no tokenizer') + ').');
+    if (!result.stale) setMessage('success', 'Loaded ' + entry.label + ' from ' + host + ' (' + formatBytes(bytes.byteLength) + ', ' + parsed.schema + (tokenizerArtifact ? ', tokenizer bound' : ', no tokenizer') + ').');
     return result;
 }
 
@@ -597,8 +626,8 @@ const api = {
         return loadModelCatalog();
     },
 
-    loadPublished(idOrEntry) {
-        return loadPublished(idOrEntry);
+    loadPublished(idOrEntry, operation) {
+        return loadPublished(idOrEntry, operation);
     },
 
     setActive(next) {
@@ -647,7 +676,8 @@ const api = {
         return globalThis.UORStudioApi.testConnection(config);
     },
 
-    async loadLocalFile(file) {
+    async loadLocalFile(file, operation) {
+        const currentOperation = beginOperation(operation);
         if (!file) throw new Error('Choose a .lut/.bin stack artifact first.');
         if (file.size > MAX_WASM_BYTES) {
             throw new Error('That model file is larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser limit for this Studio.');
@@ -655,23 +685,31 @@ const api = {
         if (file.size === 0) throw new Error('The selected model file is empty.');
         setMessage('info', 'Reading ' + file.name + '…');
         const bytes = await file.arrayBuffer();
-        const result = await readArtifact(bytes, file.name, { kind: 'local-file', id: 'local-file', label: file.name });
-        setMessage('success', 'Loaded ' + file.name + '.');
+        emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
+        const result = await readArtifact(bytes, file.name, { kind: 'local-file', id: 'local-file', label: file.name }, { operation: currentOperation });
+        if (!result.stale) setMessage('success', 'Loaded ' + file.name + '.');
         return result;
     },
 
-    async loadFromUrl(rawUrl) {
+    async loadFromUrl(rawUrl, operation) {
+        const currentOperation = beginOperation(operation);
         const url = resolveModelUrl(rawUrl);
         setMessage('info', 'Downloading ' + (url.pathname.split('/').pop() || 'model') + ' from ' + url.host + '…');
         const bytes = await fetchArtifactWithProgress(url.href, {
             onProgress: function (pct, loaded, total) {
                 setMessage('info', 'Downloading from ' + url.host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+                emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded, total, phase: 'downloading' });
             },
         });
+        emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
         const fileName = url.pathname.split('/').pop() || 'downloaded-stack.lut';
-        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName, host: url.host });
-        setMessage('success', 'Loaded ' + fileName + ' (' + formatBytes(bytes.byteLength) + ').');
+        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName, host: url.host }, { operation: currentOperation });
+        if (!result.stale) setMessage('success', 'Loaded ' + fileName + ' (' + formatBytes(bytes.byteLength) + ').');
         return result;
+    },
+
+    loadBundled(operation) {
+        return loadBundled(operation);
     },
 
     mount(container) {
@@ -1005,7 +1043,8 @@ async function onClick(event) {
     }
 }
 
-async function loadBundled() {
+async function loadBundled(operation) {
+    const currentOperation = beginOperation(operation);
     const demo = getBundledDemo();
     setMessage('info', 'Loading the bundled synthetic demo…');
     const url = new URL(demo.url, document.baseURI);
@@ -1014,9 +1053,10 @@ async function loadBundled() {
         throw new Error('The bundled demo model is not present in this build (HTTP ' + response.status + '). A wasm build must produce pkg/synthetic-stack.lut first.');
     }
     const bytes = await response.arrayBuffer();
+    emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
     const fileName = url.pathname.split('/').pop() || 'synthetic-stack.lut';
-    const result = await readArtifact(bytes, fileName, { kind: 'bundled', id: 'bundled-demo', label: demo.label });
-    setMessage('success', 'Bundled synthetic demo loaded (' + Math.round(bytes.byteLength / 1024) + ' KB).');
+    const result = await readArtifact(bytes, fileName, { kind: 'bundled', id: 'bundled-demo', label: demo.label }, { operation: currentOperation });
+    if (!result.stale) setMessage('success', 'Bundled synthetic demo loaded (' + Math.round(bytes.byteLength / 1024) + ' KB).');
     return result;
 }
 

@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [m7-studio-live-model-sources]
 done_class: host
-scope: [web/studio/src/**, web/studio/assets/js/model_sources.js, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/legacy.html, web/studio/verify_*.mjs, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
+scope: [web/studio/src/**, web/studio/assets/js/model_sources.js, web/studio/assets/js/model_sources.d.ts, web/studio/assets/js/model_sources.test.mjs, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/legacy.html, web/studio/verify_*.mjs, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/superpowers/plans/2026-11-01-studio-foundation.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -17,7 +17,7 @@ DeepSeek's v2 Studio is published and its engine/model-source/API layer is prese
 
 ## What is missing
 
-There is no typed shell or implementation yet; only a rebased design exists. The current source remains 11,068 lines across HTML, CSS, and JavaScript with no component build system. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
+The foundation adds a typed lifecycle store, narrow model-source adapters, a fixture-backed migration reader, and additive operation/progress hooks without replacing the live page. Core workflow components, complete feature and browser-data parity, and cutover remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
 
 ## Done when
 
