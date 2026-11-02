@@ -1029,6 +1029,7 @@
             var predictionRequestId = 'predict-' + Date.now().toString(36);
             app.activePredictionRequestId = predictionRequestId;
             app.predictionRequests[predictionRequestId] = app.activeGenerationId;
+            app.activeGenerationKind = 'wasm';
             app.generating = true;
             updateComposerState();
             app.worker.postMessage({

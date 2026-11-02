@@ -286,6 +286,15 @@ describe('actual page prediction hooks', () => {
         }
     });
 
+    it('stops a worker prediction after a previous API generation', () => {
+        const { app, hooks } = pageHooks();
+        app.activeGenerationKind = 'api';
+        app.abortController = null;
+        expect(hooks.runPrediction('hello')).toBe(true);
+        hooks.stopGeneration();
+        expect(app.worker.postMessage).toHaveBeenLastCalledWith({ action: 'cancel' });
+    });
+
     it('finishes a synchronous page API error after the adapter starts generation', () => {
         const { app, hooks, failNextApi } = pageHooks();
         app.mode = 'api';
@@ -317,5 +326,27 @@ describe('actual page API configuration hook', () => {
         expect(app.apiConfig.baseUrl).toBe('https://new.example.com/v1');
         expect(setModelStatus).toHaveBeenCalledWith('API · model-b', 'accent', 'https://new.example.com/v1');
         expect(updatePrivacyStatus).toHaveBeenCalledOnce();
+    });
+});
+
+describe('actual page local fallback hook', () => {
+    it('restores local mode and privacy from a loaded fallback artifact', () => {
+        const app = {
+            mode: 'api', apiConfig: { baseUrl: 'https://old.example.com/v1' } as null | { baseUrl: string },
+            worker: { postMessage: vi.fn() }, loadStartedAt: 0,
+        };
+        const updatePrivacyStatus = vi.fn();
+        const setView = vi.fn();
+        const factory = new Function(
+            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'updateComposerState', 'renderMessages', 'setView', 'toast', 'window',
+            `${section('function onModelSourceChanged', 'function onApiConfigChanged')} return onModelSourceChanged;`,
+        );
+        const onModelSourceChanged = factory(app, {}, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), setView, vi.fn(), window) as (event: { detail: Record<string, unknown> }) => void;
+        onModelSourceChanged({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'demo.lut', meta: { kind: 'bundled' } } });
+        expect(app.mode).toBe('wasm');
+        expect(app.apiConfig).toBeNull();
+        expect(updatePrivacyStatus).toHaveBeenCalledOnce();
+        expect(app.worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({ action: 'load_model' }));
+        expect(setView).toHaveBeenCalledWith('chat');
     });
 });

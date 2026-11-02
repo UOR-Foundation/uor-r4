@@ -337,4 +337,34 @@ describe('StudioApp', () => {
         await act(async () => { button('Load bundled demo').click(); await Promise.resolve(); });
         expect(host.querySelector('[role="alert"]')).toBeNull();
     });
+
+    it('clears a palette artifact-load error after a successful retry', async () => {
+        const store = new LifecycleStore();
+        const adapter = makeModelAdapter();
+        adapter.loadBundled = vi.fn().mockRejectedValueOnce(new Error('palette load failed')).mockResolvedValueOnce({ bytes: new Uint8Array(), fileName: 'model.lut', meta: { schema: 'uor-r4.lut-stack/1' } });
+        act(() => {
+            render(<StudioApp store={store} adapter={adapter} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        await act(async () => { host.querySelector<HTMLButtonElement>('button[data-command-id="load-demo"]')!.click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('palette load failed');
+        act(() => { button('Command palette').click(); });
+        await act(async () => { host.querySelector<HTMLButtonElement>('button[data-command-id="load-demo"]')!.click(); await Promise.resolve(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
+
+    it('clears a palette new-session error after a successful retry', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="new-session"]')!.click(); });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('Could not create a session.');
+        act(() => { button('Command palette').click(); });
+        act(() => { host.querySelector<HTMLButtonElement>('button[data-command-id="new-session"]')!.click(); });
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+    });
 });

@@ -334,16 +334,21 @@ describe('ModelPicker', () => {
         expect(host.querySelector('[role="alert"]')).toBeNull();
     });
 
-    it('refreshes the legacy configuration after removing the selected provider', () => {
+    it('loads the local fallback after removing the selected provider', () => {
         const { store, modelAdapter, modelSources } = mount();
-        const configChanged = vi.fn();
-        document.addEventListener('uor-api-config-changed', configChanged);
         modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
         modelSources.active = vi.fn(() => ({ kind: 'wasm', id: 'bundled-demo' }));
         act(() => { button('Use API A').click(); });
         act(() => { button('Remove API A').click(); });
         act(() => { button('Confirm removal').click(); });
-        expect(configChanged).toHaveBeenLastCalledWith(expect.objectContaining({ detail: { id: 'bundled-demo' } }));
-        document.removeEventListener('uor-api-config-changed', configChanged);
+        expect(modelAdapter.loadBundled).toHaveBeenCalledOnce();
+    });
+
+    it('blocks provider removal during generation', () => {
+        const { store, modelAdapter } = mount();
+        modelAdapter.selectApi = vi.fn((id: string, endpoint: string) => store.dispatch({ type: 'api/selected', sourceId: id, endpoint }));
+        act(() => { button('Use API A').click(); });
+        act(() => { store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } }); });
+        expect(button('Remove API A').disabled).toBe(true);
     });
 });

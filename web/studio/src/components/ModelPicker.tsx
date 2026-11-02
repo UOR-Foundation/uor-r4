@@ -132,7 +132,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
     }
 
     function removeProvider() {
-        if (!removing) return;
+        if (!removing || state.session.phase === 'generating') return;
         const id = removing.id;
         try {
             setProviderError(null);
@@ -145,9 +145,8 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
             });
             if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
                 const active = sources.active();
-                const sourceId = active.id || 'bundled-demo';
-                store.dispatch({ type: 'artifact/selected', sourceId });
-                document.dispatchEvent(new CustomEvent('uor-api-config-changed', { detail: { id: sourceId } }));
+                store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
+                run(adapter.loadBundled(), onSuccess);
             }
             setRemoving(null);
             refresh();
@@ -230,7 +229,7 @@ export function ModelPicker({ store, adapter, sources, onError, onSuccess }: Mod
                             <button type="button" onClick={() => selectProvider(provider)}>{`Use ${provider.label}`}</button>
                             <button type="button" onClick={() => testProvider(provider)}>{`Test ${provider.label}`}</button>
                             <button type="button" onClick={() => editProvider(provider)}>{`Edit ${provider.label}`}</button>
-                            <button type="button" onClick={() => { setProviderError(null); setRemoving({ id: provider.id, label: provider.label }); }}>{`Remove ${provider.label}`}</button>
+                            <button type="button" disabled={state.session.phase === 'generating'} onClick={() => { setProviderError(null); setRemoving({ id: provider.id, label: provider.label }); }}>{`Remove ${provider.label}`}</button>
                         </li>
                     ))}
                 </ul>

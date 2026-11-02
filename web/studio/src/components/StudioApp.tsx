@@ -104,6 +104,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         { id: 'guide', group: 'Navigation', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
         { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', disabled: state.session.phase === 'generating', run: () => {
             if (sessions.newSession()) {
+                setError(null);
                 store.dispatch({ type: 'session/activated' });
                 setSessionRevision((value) => value + 1);
             } else {
@@ -113,7 +114,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { files.openFolder().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
         { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, reportFile); } },
         { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { files.saveAsCopy(); } },
-        { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
+        { id: 'load-demo', group: 'Models', label: 'Load bundled demo', description: 'Load the synthetic local artifact', run: () => { adapter.loadBundled().then(() => setError(null)).catch((reason) => report(reason instanceof Error ? reason.message : String(reason))); } },
         { id: 'inspector', group: 'Interface', label: 'Toggle inspector', description: 'Show or hide details', run: () => setInspectorOpen((value) => !value) },
         { id: 'settings', group: 'Interface', label: 'Open settings', description: 'Appearance, editor, and data', run: () => setSettingsOpen(true) },
         { id: 'help', group: 'Help', label: 'Open guide', description: 'Read workflows and model limits', run: () => setActiveSection('guide') },
