@@ -5,7 +5,7 @@ import { Modal } from './Modal.js';
 interface SettingsProps {
     ui: StudioUiApi;
     onClose(): void;
-    onChange?(): void;
+    onChange?(kind: 'sessions' | 'editor'): void;
 }
 
 export function Settings({ ui, onClose, onChange }: SettingsProps) {
@@ -21,7 +21,7 @@ export function Settings({ ui, onClose, onChange }: SettingsProps) {
         if (clearing === 'sessions') ui.clearSessions();
         if (clearing === 'editor') ui.clearEditor();
         setClearing(null);
-        onChange?.();
+        if (clearing) onChange?.(clearing);
     }
 
     return (

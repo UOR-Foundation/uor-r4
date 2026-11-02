@@ -112,6 +112,14 @@ describe('API source state', () => {
         expect(store.canRun()).toBe(true);
     });
 
+    it('resets connection test state when an artifact is selected', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'api/testStarted', sourceId: 'api-a' });
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        expect(store.getState().api.testStatus).toBe('untested');
+    });
+
     it('tracks an independent connection test', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
@@ -176,7 +184,7 @@ describe('generation privacy', () => {
         store.dispatch({ type: 'artifact/selected', sourceId: 'model-b' });
         expect(store.getState().session.activeGeneration?.source.id).toBe('api-a');
         expect(store.getState().session.activeGeneration?.privacy).toBe('remoteAPI');
-        store.dispatch({ type: 'generation/finished', outcome: 'complete' });
+        store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 });
         expect(store.getState().session.lastGeneration?.source.id).toBe('api-a');
         expect(store.getState().session.lastGeneration?.privacy).toBe('remoteAPI');
     });
@@ -185,12 +193,12 @@ describe('generation privacy', () => {
         const store = new LifecycleStore();
         readyArtifact(store, 'model-a');
         store.dispatch({ type: 'generation/started', source: { kind: 'artifact', id: 'model-a' } });
-        store.dispatch({ type: 'generation/finished', outcome: 'stopped' });
+        store.dispatch({ type: 'generation/finished', outcome: 'stopped', generationId: 1 });
         expect(store.getState().session.phase).toBe('stopped');
         expect(store.getState().session.lastGeneration?.privacy).toBe('localWASM');
         store.dispatch({ type: 'api/selected', sourceId: 'api-b', endpoint: 'http://127.0.0.1:8000' });
         store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-b', endpoint: 'http://127.0.0.1:8000' } });
-        store.dispatch({ type: 'generation/finished', outcome: 'error' });
+        store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: 2 });
         expect(store.getState().session.phase).toBe('error');
         expect(store.getState().session.lastGeneration?.privacy).toBe('loopbackAPI');
     });
@@ -223,6 +231,7 @@ describe('endpoint privacy classification', () => {
         expect(classifyEndpoint('https://api.example.com')).toBe('remoteAPI');
         expect(classifyEndpoint('http://172.32.0.1')).toBe('remoteAPI');
         expect(() => classifyEndpoint('not a url')).toThrow(TypeError);
+        expect(() => classifyEndpoint('ftp://example.com/v1')).toThrow(TypeError);
     });
 
     it('does not treat private-looking public hostnames as local networks', () => {

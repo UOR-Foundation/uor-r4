@@ -170,7 +170,9 @@ export function ModelPicker({ store, adapter, sources, onError }: ModelPickerPro
                         const id = removing.id;
                         sources.removeApi(id);
                         if (state.selectedSource?.kind === 'api' && state.selectedSource.id === id) {
-                            store.dispatch({ type: 'artifact/selected', sourceId: sources.active().id || 'bundled-demo' });
+                            const active = sources.active();
+                            sources.setActive({ kind: 'wasm', id: active.id || 'bundled-demo' });
+                            store.dispatch({ type: 'artifact/selected', sourceId: active.id || 'bundled-demo' });
                         }
                         setRemoving(null);
                         refresh();

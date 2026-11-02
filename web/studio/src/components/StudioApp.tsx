@@ -123,9 +123,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             {activeSection === 'guide' && <Guide />}
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
-            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onChange={() => {
-                setSessionRevision((value) => value + 1);
-                store.dispatch({ type: 'session/activated' });
+            {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onChange={(kind) => {
+                if (kind === 'editor') store.dispatch({ type: 'file/closed' });
+                else {
+                    setSessionRevision((value) => value + 1);
+                    store.dispatch({ type: 'session/activated' });
+                }
             }} />}
         </AppShell>
     );

@@ -47,6 +47,7 @@ export interface FileState {
     phase: FilePhase;
     path: string | null;
     savePath: string | null;
+    saveId: number | null;
     error: string | null;
 }
 
@@ -94,10 +95,10 @@ export type LifecycleAction =
     | { type: 'session/activated' }
     | { type: 'file/dirty' }
     | { type: 'file/saveStarted'; path: string }
-    | { type: 'file/saveFinished'; path: string }
-    | { type: 'file/saveFailed'; path: string; error: string }
+    | { type: 'file/saveFinished'; path: string; saveId?: number }
+    | { type: 'file/saveFailed'; path: string; saveId?: number; error: string }
     | { type: 'generation/started'; source: SourceRef; generationId?: number }
-    | { type: 'generation/finished'; outcome: 'complete' | 'stopped' | 'error'; generationId?: number; error?: string };
+    | { type: 'generation/finished'; outcome: 'complete' | 'stopped' | 'error'; generationId: number; error?: string };
 
 function initialState(): LifecycleState {
     return {
@@ -107,7 +108,7 @@ function initialState(): LifecycleState {
         residentArtifact: null,
         api: { testStatus: 'untested' },
         progress: null,
-        file: { phase: 'no-folder', path: null, savePath: null, error: null },
+        file: { phase: 'no-folder', path: null, savePath: null, saveId: null, error: null },
         session: { phase: 'new', activeGeneration: null, lastGeneration: null, error: null },
     };
 }
@@ -116,6 +117,7 @@ export class LifecycleStore {
     private state: LifecycleState = initialState();
     private nextOperationId = 0;
     private nextGenerationId = 0;
+    private nextSaveId = 0;
     private listeners = new Set<() => void>();
 
     getState(): LifecycleState {
@@ -162,6 +164,7 @@ export class LifecycleStore {
                     selectedSource: { kind: 'artifact', id: action.sourceId },
                     operation: { operationId: this.nextOperationId, sourceId: action.sourceId },
                     artifact: { ...this.state.artifact, phase: 'selected', error: null },
+                    api: { testStatus: 'untested' },
                     progress: null,
                 };
                 return;
@@ -242,13 +245,13 @@ export class LifecycleStore {
             case 'folder/opened':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'no-open-file', path: null, savePath: null, error: null },
+                    file: { phase: 'no-open-file', path: null, savePath: null, saveId: null, error: null },
                 };
                 return;
             case 'file/closed':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'no-open-file', path: null, savePath: null, error: null },
+                    file: { phase: 'no-open-file', path: null, savePath: null, saveId: null, error: null },
                 };
                 return;
             case 'session/activated':
@@ -262,7 +265,7 @@ export class LifecycleStore {
             case 'file/opened':
                 this.state = {
                     ...this.state,
-                    file: { phase: 'clean', path: action.path, savePath: null, error: null },
+                    file: { phase: 'clean', path: action.path, savePath: null, saveId: null, error: null },
                 };
                 return;
             case 'file/dirty':
@@ -272,17 +275,18 @@ export class LifecycleStore {
                 return;
             case 'file/saveStarted':
                 if (this.state.file.path === action.path && this.state.file.phase !== 'saving') {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saving', savePath: action.path, error: null } };
+                    this.nextSaveId += 1;
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saving', savePath: action.path, saveId: this.nextSaveId, error: null } };
                 }
                 return;
             case 'file/saveFinished':
-                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path) {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saved', savePath: null, error: null } };
+                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path && (action.saveId === undefined || this.state.file.saveId === action.saveId)) {
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'saved', savePath: null, saveId: null, error: null } };
                 }
                 return;
             case 'file/saveFailed':
-                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path) {
-                    this.state = { ...this.state, file: { ...this.state.file, phase: 'error', savePath: null, error: action.error } };
+                if (this.state.file.path === action.path && this.state.file.phase === 'saving' && this.state.file.savePath === action.path && (action.saveId === undefined || this.state.file.saveId === action.saveId)) {
+                    this.state = { ...this.state, file: { ...this.state.file, phase: 'error', savePath: null, saveId: null, error: action.error } };
                 }
                 return;
             case 'generation/started': {
@@ -311,7 +315,7 @@ export class LifecycleStore {
             }
             case 'generation/finished': {
                 const active = this.state.session.activeGeneration;
-                if (!active || (action.generationId !== undefined && active.generationId !== action.generationId)) return;
+                if (!active || active.generationId !== action.generationId) return;
                 this.state = {
                     ...this.state,
                     session: { phase: action.outcome, activeGeneration: null, lastGeneration: active, error: action.error ?? null },
@@ -345,7 +349,9 @@ function isIpv6Literal(hostname: string): boolean {
 
 export function classifyEndpoint(input?: string): Privacy {
     if (input === undefined) return 'localWASM';
-    const hostname = new URL(input).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    const endpoint = new URL(input);
+    if (endpoint.protocol !== 'http:' && endpoint.protocol !== 'https:') throw new TypeError('Only HTTP(S) API endpoints are supported.');
+    const hostname = endpoint.hostname.toLowerCase().replace(/^\[|\]$/g, '');
     if (hostname === 'localhost') return 'loopbackAPI';
     if (isIpv4Literal(hostname)) {
         if (hostname.startsWith('127.')) return 'loopbackAPI';

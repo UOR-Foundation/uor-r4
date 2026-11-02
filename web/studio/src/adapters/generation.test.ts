@@ -33,7 +33,7 @@ describe('generation adapter', () => {
         expect(api.sendPrompt).toHaveBeenCalledWith('hello');
         expect(store.getState().session.activeGeneration?.privacy).toBe('remoteAPI');
         store.dispatch({ type: 'api/selected', sourceId: 'api-b', endpoint: 'http://127.0.0.1:8000/v1' });
-        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'stopped' } }));
+        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'stopped', generationId: 1 } }));
         expect(store.getState().session.phase).toBe('stopped');
         expect(store.getState().session.lastGeneration?.source.id).toBe('api-a');
         expect(store.getState().session.lastGeneration?.privacy).toBe('remoteAPI');
@@ -49,7 +49,7 @@ describe('generation adapter', () => {
         expect(store.getState().session.phase).toBe('error');
         adapter.dispose();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
-        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'complete' } }));
+        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'complete', generationId: 1 } }));
         expect(store.getState().session.phase).toBe('error');
     });
 

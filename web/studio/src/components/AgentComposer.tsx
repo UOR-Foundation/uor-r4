@@ -115,7 +115,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
             <label>Prompt<textarea aria-label="Prompt" value={draft} onInput={(event) => setDraft(event.currentTarget.value)} /></label>
             <button type="button" disabled={!draft.trim() || !store.canRun()} onClick={() => send(draft)}>{prediction ? 'Predict next tokens' : 'Send'}</button>
-            <button type="button" disabled={!generating} onClick={() => { generation.stop(); refresh(); }}>Stop</button>
+            <button type="button" disabled={!generating || prediction} onClick={() => { generation.stop(); refresh(); }}>Stop</button>
         </section>
     );
 }

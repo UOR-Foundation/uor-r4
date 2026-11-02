@@ -27,6 +27,24 @@ describe('saveActiveFile', () => {
         expect(store.getState().file).toMatchObject({ path: 'b.md', phase: 'clean', error: null });
     });
 
+    it('does not complete a newer same-path save from an older operation', async () => {
+        const store = new LifecycleStore();
+        const api = files();
+        const completions: Array<(value: boolean) => void> = [];
+        api.saveActive = vi.fn(() => new Promise<boolean>((resolve) => { completions.push(resolve); }));
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        const first = saveActiveFile(store, api, vi.fn());
+        store.dispatch({ type: 'file/opened', path: 'b.md' });
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        const second = saveActiveFile(store, api, vi.fn());
+        completions[0](true);
+        expect(await first).toBe(true);
+        expect(store.getState().file.phase).toBe('saving');
+        completions[1](true);
+        expect(await second).toBe(true);
+        expect(store.getState().file.phase).toBe('saved');
+    });
+
     it('does not complete a newer save from an older completion', async () => {
         const store = new LifecycleStore();
         const api = files();

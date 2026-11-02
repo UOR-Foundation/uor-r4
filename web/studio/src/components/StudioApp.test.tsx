@@ -84,7 +84,7 @@ describe('StudioApp', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
         store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } });
-        store.dispatch({ type: 'generation/finished', outcome: 'complete' });
+        store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 });
         store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
         act(() => {
             store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: { schema: 'uor-r4.lut-stack/1', canGenerate: true } });
@@ -92,6 +92,20 @@ describe('StudioApp', () => {
         });
         expect(host.querySelector('[role="status"]')?.textContent).toContain('localWASM');
         expect(host.querySelector('[role="status"]')?.textContent).not.toContain('remoteAPI');
+    });
+
+    it('closes lifecycle file state when editor tabs are cleared outside Workspace', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'file/opened', path: 'a.md' });
+        store.dispatch({ type: 'file/dirty' });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Settings').click(); });
+        act(() => { button('Clear editor tabs').click(); });
+        act(() => { button('Confirm clear editor tabs').click(); });
+        expect(store.getState().file.phase).toBe('no-open-file');
+        expect(store.getState().file.path).toBeNull();
     });
 
     it('refreshes the session list after confirmed clearing', () => {

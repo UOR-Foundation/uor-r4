@@ -12,7 +12,8 @@ export interface GenerationAdapter {
 export function createGenerationAdapter(store: LifecycleStore, sessions: SessionApi): GenerationAdapter {
     const finished = (event: Event) => {
         const detail = (event as CustomEvent<{ outcome?: 'complete' | 'stopped' | 'error'; generationId?: number; error?: string }>).detail;
-        if (detail?.outcome === 'complete' || detail?.outcome === 'stopped' || detail?.outcome === 'error') {
+        if (detail?.generationId === undefined) return;
+        if (detail.outcome === 'complete' || detail.outcome === 'stopped' || detail.outcome === 'error') {
             store.dispatch({ type: 'generation/finished', outcome: detail.outcome, generationId: detail.generationId, error: detail.error });
         }
     };

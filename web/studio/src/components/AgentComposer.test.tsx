@@ -87,7 +87,7 @@ describe('AgentComposer', () => {
         expect(host.textContent).toContain('Generating with api-a (remoteAPI)');
         act(() => { button('Stop').click(); });
         expect(generation.stop).toHaveBeenCalledOnce();
-        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'error' }); });
+        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: 1 }); });
         expect(host.textContent).toContain('Session: error');
     });
 
@@ -110,6 +110,17 @@ describe('AgentComposer', () => {
         expect(host.textContent).toContain('Local next-token prediction');
         expect(host.textContent).not.toContain('Conversational chat');
         expect(button('Predict next tokens').disabled).toBe(true);
+        prompt('Hello');
+        act(() => { button('Predict next tokens').click(); });
+        expect(button('Stop').disabled).toBe(true);
+    });
+
+    it('rejects a non-HTTP API endpoint', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'ftp://example.com/v1' });
+        prompt('Hello');
+        expect(button('Send').disabled).toBe(true);
+        expect(store.canRun()).toBe(false);
     });
 
     it('supports current-file, pasted, remove, and clear attachments plus six templates', () => {

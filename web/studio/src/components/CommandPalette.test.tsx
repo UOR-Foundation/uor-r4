@@ -10,7 +10,7 @@ beforeEach(() => {
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: vi.fn(function (this: HTMLDialogElement) { this.open = true; }) });
     Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: vi.fn(function (this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); }) });
 });
-afterEach(() => { render(null, host); host.remove(); vi.restoreAllMocks(); });
+afterEach(() => { act(() => { render(null, host); }); host.remove(); vi.restoreAllMocks(); });
 
 function key(input: HTMLInputElement, key: string) {
     input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));

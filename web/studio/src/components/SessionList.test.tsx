@@ -47,6 +47,17 @@ describe('SessionList', () => {
         expect(button('New session').disabled).toBe(false);
     });
 
+    it('reports rejected new/select actions instead of activating them', () => {
+        const { store, api, onError } = mount();
+        api.newSession = vi.fn(() => false);
+        api.selectSession = vi.fn(() => false);
+        act(() => { button('New session').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not create a session.');
+        act(() => { button('Select Session A').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not select that session.');
+        expect(store.getState().session.phase).toBe('new');
+    });
+
     it('supports new, select, rename, duplicate, export, and confirmed delete', () => {
         const { store, api, download } = mount();
         act(() => { button('New session').click(); });
