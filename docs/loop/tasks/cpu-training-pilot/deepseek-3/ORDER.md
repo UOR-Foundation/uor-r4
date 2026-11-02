@@ -10,6 +10,7 @@ Close the public-run interval-restart gap without changing the completed rank-ma
 
 - `crates/uor-r4-cpu-train/src/bin/cpu-corpus-driver.rs`
 - `crates/uor-r4-cpu-train/README.md`
+- `docs/harness/prep/cpu-training-pilot-public-resume-control-2026-11-02.md`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-3/**`
 - `docs/roadmap/items/cpu-training-pilot.md`
 - `docs/research/cpu-training-program.md`
