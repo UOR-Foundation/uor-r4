@@ -14,7 +14,7 @@ scope: [CHARTER.md, AGENTS.md, PLAN.md, docs/rules/changes.md, docs/rules/README
 
 ## Why it matters
 
-The owner asked on 1 November 2026 for every CPU training method to be repaired systematically, delivered on GitHub `main`, and kept clear of Claude's active serving work. The repository contains ten historical training families with different failures; most are inactive evidence, and no current CPU trainer exists. Treating them as one broken program would erase the reasons each configuration failed.
+The owner asked on 1 November 2026 for every CPU training method to be repaired systematically, delivered on GitHub `main`, and kept clear of Claude's active serving work. The repository contains ten historical training families with different failures; most are inactive evidence, and at registration no current CPU trainer existed. Treating them as one broken program would erase the reasons each configuration failed.
 
 The project now has stronger mechanisms than the early runs had: address-cell initialization, admission-preserving controls, within-cell reranking, BVG-K, exact Hamming reads, deterministic checkpoints and exact export comparison. Those discoveries make a fresh CPU program worth testing, but they do not reverse the old negatives.
 
@@ -27,7 +27,7 @@ D84 now permits named CPU research, and this item registers the ordered repairs:
 3. [`cpu-shared-vector-forward`](cpu-shared-vector-forward.md): the serving-aligned token/vector forward in an isolated crate.
 4. [`cpu-shared-vector-train`](cpu-shared-vector-train.md): lawful rank-margin training on that forward.
 5. [`cpu-quantization-exact-memory`](cpu-quantization-exact-memory.md): integer-aware continuation, Hamming reads and exact turn memory.
-6. [`cpu-whole-path-exact-updates`](cpu-whole-path-exact-updates.md): exact bounded legal-update and recovery parity without importing the failed M2 objective.
+6. [`cpu-whole-path-exact-updates`](cpu-whole-path-exact-updates.md): the proposed exact-update premise was later rejected by its source audit; retain transaction/replay evidence without importing the failed M2 objective.
 7. [`cpu-training-pilot`](cpu-training-pilot.md): bounded workstation pilot, performance and complete-reply/fresh-phrasing evidence.
 
 The family-by-family disposition and the rationale for this order are in [the CPU training repair program](../../research/cpu-training-program.md).
