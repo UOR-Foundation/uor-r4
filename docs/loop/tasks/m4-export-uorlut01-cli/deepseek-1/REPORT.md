@@ -75,7 +75,9 @@ Exact transcripts and ids are in
 - `cargo test --locked -p uor-r4-integer --features serving-wasm --bin
   uor-chat`: 4 passed, including `/memory`, `/memory clear`, one-turn
   consumption and invalid replacement behavior.
-- Targeted `rustfmt --check` for the changed production files: passed.
+- `rustfmt --check --edition 2021` on `stack/chat.rs` and `bin/uor-chat.rs`:
+  passed. The combined check including the pre-existing unformatted
+  `stack/tests.rs` is not a clean repository gate at this base.
 - `python3 scripts/audit_zero_matmul_serving.py --self-test`: passed.
 - Full x86 stack disassembly audit: not admissible. Release binary
   `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`

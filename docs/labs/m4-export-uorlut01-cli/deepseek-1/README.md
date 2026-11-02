@@ -33,9 +33,6 @@ not been implemented.
   `local/deepseek/m4-memory-bridge-2026-11-02-rerun/`.
 - Sorted SHA-256 manifest digest:
   `548054f348cb6f4ccf733071b32824c024e2050d1e7f08b7cc8f3bc82f0dd5e3`.
-- The raw `status.tsv` header labels its second column `au`; its values are the
-  `off`/`on` arm names. The file is retained unchanged, and the transcripts
-  below are the authoritative arm mapping.
 
 ## Transcripts
 
