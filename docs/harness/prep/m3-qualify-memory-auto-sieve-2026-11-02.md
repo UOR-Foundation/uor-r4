@@ -4,7 +4,9 @@ Lab: deepseek. Item:
 [m3-qualify-memory](../../roadmap/items/m3-qualify-memory.md).
 Order:
 [deepseek-1](../../loop/tasks/m3-qualify-memory/deepseek-1/ORDER.md).
-Source base: `8cf219d4575203e8ff664d65de11ecaecbb50caf`.
+Reviewed code base: `fb24b48dce5e175fbc8e84eca9a8735a6e7a2c22`.
+The source pins below bind that commit; the prep-sheet wording and report may
+advance without changing the executable or model inputs.
 
 TEST FITNESS: PENDING
 
@@ -22,13 +24,13 @@ the exact value into the bridge automatically? It does not test model quality.
 
 - Sieve source:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-integer/src/stack/dialogue_memory.rs`,
-  SHA-256 `0d8f31ef1c0008af7796d930130aae92c6349558f971b3fa956b8a8cbb9f39da`.
+  SHA-256 `d700ddaa2272d37f4d22f69df568627f9b53eefab0cf4fdf6d7f037c018e643a`.
 - Stack-chat source:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-integer/src/stack/chat.rs`,
   SHA-256 `3820ae6fe15c5fd6486b47e99b1dba7ecc4216c99a4a65e448fa71a4622b9826`.
 - CLI source:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-integer/src/bin/uor-chat.rs`,
-  SHA-256 `064cb7fed7acd1bf0ac3505dab2bb968d7dac5580b78376f48b129a2f1ebd26f`.
+  SHA-256 `da6375cfbac284c639f46533259197655129875bc14628d535fbf933fceb5a04`.
 - Protocol encoder:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/crates/uor-r4-tokenizer/src/dialogue.rs`,
   SHA-256 `d3f70a92165ae08a1a359bf77fb83c1f0fa95fe609bbaa51d723758a01254a56`.
@@ -40,7 +42,7 @@ the exact value into the bridge automatically? It does not test model quality.
   SHA-256 `0a4b55522951f5475fcdd9ebcbfbbe650bfac272e8baff599585f0e8a120d5ee`.
 - Executable:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/chat-auto-memory-target/debug/uor-chat`,
-  SHA-256 `5a8ebe7807cdacc4bb7263bb7f4a3d125a1b76cfad115afe6af5f529d83da741`.
+  SHA-256 `ed1e082fb485862368062b68d4b996242d1e200b0eb31e610ee63c05abbb38a9`.
 - Build command:
 
 ```sh
@@ -195,11 +197,12 @@ quality.
 ## Cost
 
 Local Ryzen 9 9950X, 16 threads, one process at a time, no GPU and `$0.00`
-external spend. At FIT time the host had at least `30 GiB + 128 MiB` free; the
-build target is 730,981,575 bytes and new evidence is under 1 MiB. The shared
-training ledger path is absent; this serving-only run creates no model and
-charges no model-time. No automatic retry; use a fresh sibling root for any
-recorded repair.
+external spend. At FIT time the host had `590,433,398,784` bytes available,
+above the required `30 GiB + 128 MiB`; the isolated build target is
+1,785,321,921 bytes and new evidence is under 1 MiB. The shared training ledger
+path is absent; this serving-only run creates no model and charges no
+model-time. No automatic retry; use a fresh sibling root for any recorded
+repair.
 
 ## Stop rule
 
