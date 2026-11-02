@@ -25,10 +25,6 @@ The item's done-when reads:
 > 4. **Tokens per second,** with the nearest scan counted (4,096 rows a token), and the resident memory.
 > 5. **One notebook row, and a REPORT with the negatives first.**
 
-## Cancel probe (run first)
-
-To fill in.
-
 ## Files in scope
 
 - `crates/uor-r4-integer/src/fbs_snapshot.rs`
@@ -55,10 +51,42 @@ To fill in.
 - `docs/loop/tasks/integer-nearest-readout/**`
 - `docs/research/notebook/m4-serving.md`
 
+## This unit
+
+Q5 chain step 5, under claude-247's card: the serving-audit repair that done-when 2 needs before the replay driver (step 6). On main, the serving audit refuses two `fmov` instructions, both in `TypeHeads::mean_by` (`stack/hamming.rs`, from claude-249's forced reads). They are its two instances:
+- `TypeHeads::mean`'s closure;
+- `ServedHamming::type_mean`'s forced closure.
+
+The disassembly (`local/claude/claude-254/typeheads-fmov-excerpt.txt`, from claude-254's build) shows LLVM copying the `choose` closure's captured environment with `ldr q0` / `str q0`, then taking its low word with `fmov x8, d0`. No arithmetic is involved: it is a capture copy through a SIMD register, the case session.rs's pool note avoids by giving every closure one pointer.
+
+The fix, in `hamming.rs` only:
+- `TypeHeads::mean_by` takes no closure;
+- it takes the forced heads as an `Option`, and calls `choose` or `choose_forced` itself;
+- the served arithmetic is unchanged.
+
+## Cancel probe (run first)
+
+Run `m5_full_path_cost_controls` with `--features serving-wasm` at base `05021840e`. If it passes, nothing needs repairing and this unit cancels.
+
+**Result, 2 Nov:** it fails, 2 passed and 2 failed (`local/claude/claude-255/probe-base.log`).
+- `serving_controls::test_parameter_breakdown_and_phase_timing_on_synthetic_stack` and `serving_controls::test_uor_r4_stack_cost_cli_emits_dynamic_breakdown_and_phase_latency` fail.
+- Each names the same two findings: `fmov x8, d0` in `TypeHeads::mean_by::<ServedHamming::type_mean::{closure#0}>` and in `TypeHeads::mean_by::<TypeHeads::mean::{closure#0}>`.
+- **Class: the object under test (the served code), not the instrument.** The audit is right that the stack's serving call graph holds a SIMD-to-general transfer, which D11's serving instruction set excludes. The unit goes ahead.
+
 ## Done when
 
-To fill in.
+1. `m5_full_path_cost_controls --features serving-wasm` passes at the head, all 4 tests, with a negative gate: with the `hamming.rs` fix set aside (diffed against the base), it fails again naming `fmov` in `TypeHeads::mean_by`.
+2. `scripts/audit_zero_matmul_serving.py --stack` passes on the head's release `uor-r4-stack`.
+3. The type mean is unchanged.
+   - `uor-r4-integer`'s suite with `--features serving-wasm` fails no test beyond the base's own failures.
+   - The forced-read tests from claude-249 and the hamming tests pass.
+   - claude-254's `fbs-toks --decision-check` and its self-grade on F's DEV s1 trace give the same "check" and "graded" fields as `reading-r1`.
+4. A REPORT with the negatives first, and one notebook row in `docs/research/notebook/m4-serving.md`.
 
-## Stop and ask if
+The item stays `ready`: Q5 is not read in this unit.
 
-To fill in.
+## Stop and ask if (stop and decide; never wait)
+
+- **The fix needs a file outside the scope above** (the audit test or the audit script). Then the audit itself is the question: classify it, record it, and decide in a card.
+- **Removing the closure does not remove the `fmov`.** Then try session.rs's pattern next: one pointer to a record, and a named `#[inline(never)]` function. If LLVM still emits it, record what the disassembly shows, and decide.
+- **Any served value changes** (a test or reading in done-when 3 moves). Then the change is not a pure refactor; set it aside and find out why.
