@@ -12,7 +12,7 @@ Implement only the design's foundation: a typed lifecycle store, narrow model/pe
 - `web/studio/src/adapters/modelSourceAdapter.ts` and `modelSourceAdapter.test.ts`
 - `web/studio/src/persistence/migration.ts` and `migration.test.ts`
 - `web/studio/src/main.ts`
-- `web/studio/assets/js/model_sources.js` and `model_sources.test.mjs`
+- `web/studio/assets/js/model_sources.js`, `model_sources.d.ts`, and `model_sources.test.mjs`
 - `web/studio/package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`
 - `docs/superpowers/plans/2026-11-01-studio-foundation.md`
 - `docs/roadmap/items/studio-typed-shell-upgrade.md` and canonical roadmap sync/render outputs
