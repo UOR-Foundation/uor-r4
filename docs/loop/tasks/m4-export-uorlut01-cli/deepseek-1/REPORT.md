@@ -45,8 +45,12 @@ FIT registration and tracked two-seed evidence add the fixed product probe.
 
 ## Measurements
 
-The superseded first-run executable was
-`a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`.
+The reviewed executable was
+`52490c220071fc0bffe4f21a8d570da01a9f2fdbaa391de4f724bae95476c3bb`.
+The first run used the pre-review executable
+`a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`;
+its raw root is preserved but retired after the review-driven command-state
+test changed the binary. The rerun below reproduced every reply structure.
 Fourteen fresh processes exited 0 with protocol 2. Stops were 11 `eos` and 3
 `max_new_tokens`. All 14 reply texts decoded from their ids. The two seed-1
 memory-on repeats matched text, ids, stop, history and system line exactly.
@@ -56,10 +60,10 @@ memory-on repeats matched text, ids, stop, history and system line exactly.
 | 1 | 2 / 2 | 0 / 2 |
 | 2 | 2 / 2 | 0 / 2 |
 
-Peak process RSS was 11,612 KiB. The 14 `/usr/bin/time` records sum to 1.52 s.
-The evidence root contains 44 files in 32,964 bytes; its sorted SHA-256
+Peak process RSS was 11,620 KiB. The 14 `/usr/bin/time` records sum to 1.50 s.
+The evidence root contains 44 files in 32,966 bytes; its sorted SHA-256
 manifest digest is
-`35e1f521ccc57cf250a288429e3c7a2e1c1ad1dc73e0e92382698cf988d868e7`.
+`548054f348cb6f4ccf733071b32824c024e2050d1e7f08b7cc8f3bc82f0dd5e3`.
 Exact transcripts and ids are in
 [the lab record](../../../labs/m4-export-uorlut01-cli/deepseek-1/README.md).
 
@@ -80,7 +84,7 @@ Exact transcripts and ids are in
   report two missing mandatory symbols, and the non-TAP call-graph path cannot
   run because `otool` is unavailable.
 - Fresh reviewer: `TEST FITNESS: FIT`, `PRE-RUN: PASS` at
-  `3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0`.
+  `f2ca27e984310fea67b3ece9c8a32ab6d94ba9fe`.
 - `uor-harness prep-check`: complete and FIT.
 - `git diff --check`: passed.
 - The registered 14-process command block: all statuses 0, no nonempty stderr,
@@ -96,8 +100,6 @@ directly.
 
 - Automatic statement extraction and store lookup remain unimplemented; this
   unit accepts only an explicit value.
-- The first product run is preserved but superseded; rerun the exact 14-process
-  panel against the final FIT-reviewed executable before delivery.
 - ARM64/WebAssembly audit qualification and M4's held-out quality bar remain
   outside this partial unit.
 - The GPU-only served-training and parity work remains tracked separately.

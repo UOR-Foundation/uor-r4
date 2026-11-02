@@ -6,7 +6,7 @@ Order:
 [deepseek-1](../../loop/tasks/m4-export-uorlut01-cli/deepseek-1/ORDER.md).
 Source base: `e0647330314841ddf84ba3bd7cfd57e57c03680e`.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question and prior evidence
 
@@ -244,14 +244,14 @@ WebAssembly zero-multiplier audit. It changes no numeric kernel.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
-PRE-RUN: PENDING
+PRE-RUN: PASS
 
-The earlier review at exact head
-`3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0` by a fresh-context, read-only
+Reviewed at exact head
+`f2ca27e984310fea67b3ece9c8a32ab6d94ba9fe` by a fresh-context, read-only
 `codex` reviewer using `deepseek-flash` in session
-`01a19dff-36c0-7991-9b9c-3072fbd66d50` passed that earlier revision. A later
-review required the public command-state test and exact audit accounting, so
-this sheet is pending a fresh review of the changed executable and evidence
-root before the rerun.
+`01a19e0b-7e34-78d0-8341-940e919a9b8b`. The reviewer confirmed that the REPL
+uses the tested command-state function, set/show/clear/one-turn/invalid
+transitions are covered, the corrected audit accounting matches both binaries,
+all pins match, and the rerun root was absent. It ran no model inference.
