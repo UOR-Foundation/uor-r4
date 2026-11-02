@@ -330,7 +330,9 @@ fn header(bytes: &[u8]) -> Result<serde_json::Value> {
         return Err(invalid("Route artifact magic differs"));
     }
     let len = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-    let end = 16 + usize::try_from(len).map_err(|_| invalid("Route header length"))?;
+    let end = 16usize
+        .checked_add(usize::try_from(len).map_err(|_| invalid("Route header length"))?)
+        .ok_or_else(|| invalid("Route header end overflows"))?;
     serde_json::from_slice(
         bytes
             .get(16..end)
@@ -373,12 +375,20 @@ fn section<'a>(
     if offset % 64 != 0 {
         return Err(invalid(format!("{name} is not 64-byte aligned")));
     }
-    let start = (16 + header_len as usize)
+    let header_end = 16usize
+        .checked_add(
+            usize::try_from(header_len)
+                .map_err(|_| invalid("Route header length exceeds usize"))?,
+        )
+        .ok_or_else(|| invalid("Route header end overflows"))?;
+    let data_start = header_end
         .checked_add(63)
         .ok_or_else(|| invalid("data start overflow"))?
         / 64
-        * 64
-        + offset;
+        * 64;
+    let start = data_start
+        .checked_add(offset)
+        .ok_or_else(|| invalid("Route section start overflows"))?;
     let len = usize::try_from(entry["span"]["bytes"].as_u64().unwrap_or(0))
         .map_err(|_| invalid("section bytes"))?;
     let end = start
@@ -407,7 +417,20 @@ fn validate_layout(bytes: &[u8], header: &serde_json::Value) -> Result<()> {
         .collect::<Result<_>>()?;
     spans.sort_unstable_by_key(|span| span.0);
     let header_len = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-    let data = &bytes[(16 + header_len as usize).div_ceil(64) * 64..];
+    let header_end = 16usize
+        .checked_add(
+            usize::try_from(header_len)
+                .map_err(|_| invalid("Route header length exceeds usize"))?,
+        )
+        .ok_or_else(|| invalid("Route header end overflows"))?;
+    let data_start = header_end
+        .checked_add(63)
+        .ok_or_else(|| invalid("data start overflow"))?
+        / 64
+        * 64;
+    let data = bytes
+        .get(data_start..)
+        .ok_or_else(|| invalid("Route data start outside artifact"))?;
     let mut cursor = 0usize;
     for (start, end, name) in spans {
         if start < cursor || end > data.len() || data[cursor..start].iter().any(|byte| *byte != 0) {
