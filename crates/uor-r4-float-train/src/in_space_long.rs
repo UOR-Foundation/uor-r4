@@ -1589,6 +1589,28 @@ fn check_forced(
 /// Each decision of a window's forced set as its traced `steps` recorded it (claude-253, the
 /// card's I-Force): every forced bucket and code took its value in the forward. Refused, as an
 /// instrument fault: one that did not, and one at a step past the window's traced steps.
+/// Refuses, before any forward, a forced decision at a step past its window's traced steps:
+/// the trace records a window from step 0 to its last scored offset, and no further.
+fn forced_within(force: &DecisionForce, windows: &[CausalWindow]) -> Result<()> {
+    for w in &force.windows {
+        let last = windows
+            .iter()
+            .find(|c| c.scored_corpus_positions.first() == Some(&w.position))
+            .and_then(|c| c.scored_offsets.last())
+            .ok_or_else(|| {
+                invalid(format!("--decision-force: position {} names no window of its split", w.position))
+            })?;
+        let steps = w.buckets.iter().map(|b| b.step).chain(w.codes.iter().map(|c| c.step));
+        if let Some(step) = steps.filter(|s| s > last).max() {
+            return Err(invalid(format!(
+                "--decision-force: position {}: step {step} is past the window's traced steps (0 to {last})",
+                w.position
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn forced_taken(force: &DecisionForceWindow, steps: &[DecisionStep]) -> Result<()> {
     let at = |step: usize| {
         steps.get(step).ok_or_else(|| {
@@ -5952,6 +5974,10 @@ pub fn score_rows(
             )));
         };
         FTrace::new(positions)?.with_force(force.clone(), layers, lanes, &reads)?;
+        match splits.iter().find(|s| s.name == split) {
+            Some(s) => forced_within(&force, &s.windows)?,
+            None => return Err(invalid(format!("--decision-force {split}: no such split"))),
+        }
         if forced.insert(split.clone(), force).is_some() {
             return Err(invalid(format!("--decision-force {split} is given twice")));
         }
@@ -9961,6 +9987,14 @@ mod tests {
         assert!(run_with(&mut under(forced(vec![], vec![query.clone()])), taken(taken_rates.clone(), both())).is_err());
         let late = ForcedBucket { step: 6, ..bucket.clone() };
         assert!(run_with(&mut under(forced(vec![late], vec![])), taken(rates.clone(), both())).is_err());
+        // The key forced to another code: taken where the key reads it (the query left as
+        // computed), refused where it does not.
+        let other_key = ForcedCode { code: 0b0100, ..key.clone() };
+        let mut key_taken = both();
+        key_taken[1].reads[1].heads[0].key[2] = 0b0100;
+        assert_ne!(key_taken[1].reads[1].heads[0].query[2], 0b0100);
+        assert!(run_with(&mut under(forced(vec![], vec![other_key.clone()])), taken(rates.clone(), key_taken)).is_ok());
+        assert!(run_with(&mut under(forced(vec![], vec![other_key])), taken(rates.clone(), both())).is_err());
         // Each forced decision at its window's row of the batch, `b · SHEET_CONTEXT + step`.
         let trace = under(forced(vec![bucket.clone()], vec![key.clone()]));
         assert_eq!(
@@ -9998,6 +10032,13 @@ mod tests {
         assert!(with(file("uor-r4.decision-force/0", &[500])));
         assert!(with(file(DECISION_FORCE_SCHEMA, &[777])));
         assert!(with(file(DECISION_FORCE_SCHEMA, &[500, 500])));
+        // A step past its window's traced steps (0 to 5 at position 500), and a position with no
+        // window, refused before any forward.
+        let at = |step| forced(vec![ForcedBucket { step, ..bucket.clone() }], vec![]);
+        assert!(forced_within(&at(5), &windows).is_ok());
+        assert!(forced_within(&at(6), &windows).is_err());
+        assert!(forced_within(&forced(vec![], vec![ForcedCode { step: 6, ..query.clone() }]), &windows).is_err());
+        assert!(forced_within(&file(DECISION_FORCE_SCHEMA, &[777]), &windows).is_err());
     }
 
     #[test]
