@@ -88,6 +88,20 @@ test('a stale completion cannot select or emit a source change', async () => {
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed').length, 1);
 });
 
+test('an explicit API selection supersedes an in-flight metadata load', async () => {
+    const bytes = artifactBytes();
+    const gate = deferred();
+    const { api, events } = await fresh(() => gate.promise);
+    const active = api.list().api[0];
+    const load = api.loadFromUrl('https://example.com/a.lut', { operationId: 1, sourceId: 'url' });
+    api.setActive({ kind: 'api', id: active.id });
+    gate.resolve(response(bytes));
+    const result = await load;
+    assert.equal(result.stale, true);
+    assert.deepEqual(api.active(), { kind: 'api', id: active.id });
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 0);
+});
+
 test('legacy calls without metadata retain their behavior', async () => {
     const bytes = artifactBytes();
     const { api, events } = await fresh(async () => response(bytes));

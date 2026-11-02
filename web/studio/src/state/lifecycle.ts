@@ -263,6 +263,7 @@ export class LifecycleStore {
                 if (!this.canRun() || !selected || selected.kind !== action.source.kind || selected.id !== action.source.id) return;
                 let privacy: Privacy;
                 try {
+                    if (selected.kind === 'api' && !selected.endpoint) throw new TypeError('An API endpoint is required.');
                     privacy = selected.kind === 'api' ? classifyEndpoint(selected.endpoint) : 'localWASM';
                 } catch {
                     this.state = {

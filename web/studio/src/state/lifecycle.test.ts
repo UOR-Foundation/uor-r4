@@ -245,6 +245,15 @@ describe('generation source authority', () => {
         expect(store.getState().session.activeGeneration?.privacy).toBe('remoteAPI');
     });
 
+    it('fails closed when an API selection has no endpoint', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: undefined as unknown as string });
+        expect(() => store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } })).not.toThrow();
+        expect(store.getState().session.phase).toBe('error');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        expect(store.canRun()).toBe(false);
+    });
+
     it('reports an invalid selected endpoint without throwing', () => {
         const store = new LifecycleStore();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'not a url' });

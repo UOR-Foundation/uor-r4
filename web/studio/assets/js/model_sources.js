@@ -46,15 +46,16 @@ const EVENT_NAME = 'uor-model-source-changed';
 export const LOAD_PROGRESS_EVENT = 'uor-model-load-progress';
 const MAX_WASM_BYTES = 128 * 1024 * 1024; // matches the worker's MAX_ARTIFACT_BYTES (M1 trunk is 86.5 MB)
 let latestOperationId = 0;
+let selectionEpoch = 0;
 
 function beginOperation(operation) {
     if (!operation || !Number.isInteger(operation.operationId) || typeof operation.sourceId !== 'string') return null;
     latestOperationId = Math.max(latestOperationId, operation.operationId);
-    return { operationId: operation.operationId, sourceId: operation.sourceId };
+    return { operationId: operation.operationId, sourceId: operation.sourceId, selectionEpoch };
 }
 
 function isStaleOperation(operation) {
-    return Boolean(operation && operation.operationId < latestOperationId);
+    return Boolean(operation && (operation.operationId < latestOperationId || operation.selectionEpoch !== selectionEpoch));
 }
 
 function emitLoadProgress(detail) {
@@ -244,6 +245,7 @@ function setActive(next) {
     if (next.kind === 'api' && !findApi(next.id)) {
         throw new Error('That API endpoint no longer exists.');
     }
+    selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
     persist();
     message = { tone: 'muted', text: '' };
