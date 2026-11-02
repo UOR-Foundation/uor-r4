@@ -21,7 +21,7 @@ No decode claim: nothing served changed. Training cost, measured on one RTX 5090
 - **Training's forward is still not the served forward.** The step runs with `with_gate_mode(.., export_mode = false)`, so the D11 export mode is not in training: the Q12 gate, the icosian snap, and the Q12 hidden before the writer. This unit closes the parameter half of the trained-against-served gap only.
 - **Left behind on the laptop:**
   - three temp folders from the negative-gate runs, `/var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/claude-258-none-69152`, `claude-258-none-18885` and `claude-258-saved-68801` (the tests write under the system temp folder and clean up only on success);
-  - a stray `crates/uor-r4-float-train/local/claude/target/.rustc_info.json` (4 KB, untracked), written by a test that ran cargo with a relative `CARGO_TARGET_DIR`.
+  - a stray `crates/uor-r4-float-train/local/claude/target/.rustc_info.json` (2 KB, untracked), written by a test that ran cargo with a relative `CARGO_TARGET_DIR`.
 
   The loop guard refused to delete any of them (outside the worktree, or out of scope). None is committed. A FRICTION line records the second.
 

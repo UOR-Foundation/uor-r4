@@ -14259,8 +14259,8 @@ mod tests {
         Ok(())
     }
 
-    /// claude-258: training as served refuses the reads the export does not carry and the type
-    /// spin, before the run writes anything.
+    /// claude-258: training as served refuses the reads the export does not carry, the type spin,
+    /// and folded or reflected rate scores, before the run writes anything.
     #[test]
     fn training_as_served_refuses_what_the_export_does_not_carry() {
         let missing = std::env::temp_dir().join(format!("claude-258-none-{}", std::process::id()));
