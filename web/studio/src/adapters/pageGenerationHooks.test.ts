@@ -55,6 +55,7 @@ function pageHooks() {
          ${section('function runPrediction', '/* ------------------------------------------------------------ status & toasts */')}
          ${section('function setChip', 'function toast')}
          ${section('function updatePrivacyStatus', 'function updateComposerState')}
+         ${section('function chatReadiness', '/* ------------------------------------------------------------ metrics */')}
          ${section('function nextGenerationId', 'function generationTokenLimit')}
          ${section('function generationTokenLimit', '/* ------------------------------------------------------------ composer */')}
          ${section('function stopGeneration', 'function sendFromComposer')}
