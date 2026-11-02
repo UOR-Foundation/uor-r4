@@ -287,7 +287,7 @@ impl CpuRankMarginTrainer {
         })
     }
 
-    fn query_for(&mut self, sample: &RankMarginSample) -> Result<Vec<i32>> {
+    pub(crate) fn query_for(&mut self, sample: &RankMarginSample) -> Result<Vec<i32>> {
         self.forward.reset();
         let mut step = None;
         for &token in &sample.input {
@@ -413,7 +413,7 @@ impl CpuRankMarginTrainer {
         })
     }
 
-    fn reading(&self, query: &[i32], target: u32) -> Result<RankMarginReading> {
+    pub(crate) fn reading(&self, query: &[i32], target: u32) -> Result<RankMarginReading> {
         if query.len() != self.forward.width() {
             return Err(invalid("rank-margin query width differs from the table"));
         }
@@ -498,7 +498,7 @@ impl CpuRankMarginTrainer {
     }
 }
 
-fn validate_training_model(artifact: &[u8]) -> Result<()> {
+pub(crate) fn validate_training_model(artifact: &[u8]) -> Result<()> {
     let model = IntegerStackModel::parse(artifact)
         .map_err(|error| invalid(format!("rank-margin model does not parse: {error}")))?;
     if model.shape().vocab != VOCABULARY {
@@ -530,7 +530,7 @@ fn validate_samples(samples: &[RankMarginSample], forward: &CpuFbsForward) -> Re
     Ok(())
 }
 
-fn sample_fingerprint(samples: &[RankMarginSample]) -> [u8; 32] {
+pub(crate) fn sample_fingerprint(samples: &[RankMarginSample]) -> [u8; 32] {
     let mut hash = blake3::Hasher::new();
     hash.update(b"uor-r4.cpu-rank-margin-samples/1\0");
     hash.update(&(samples.len() as u64).to_le_bytes());
@@ -544,7 +544,7 @@ fn sample_fingerprint(samples: &[RankMarginSample]) -> [u8; 32] {
     *hash.finalize().as_bytes()
 }
 
-fn shuffled_order(len: usize, seed: u64, epoch: u64) -> Vec<usize> {
+pub(crate) fn shuffled_order(len: usize, seed: u64, epoch: u64) -> Vec<usize> {
     let mut order: Vec<usize> = (0..len).collect();
     let mut state = seed
         .wrapping_mul(0xD6E8_FEB8_6659_FD93)
