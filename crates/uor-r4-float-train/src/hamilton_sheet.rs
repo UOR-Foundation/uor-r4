@@ -721,8 +721,8 @@ pub(crate) fn served_activation_quantize16(x: &Tensor) -> Result<Tensor> {
 }
 
 /// Enable the served graph's discrete training boundaries together: D11 snaps and Q12 query,
-/// Q16 residual quantization and dynamic i16 activation quantization. Full trainer wiring
-/// remains outside this primitive unit; this function makes the intended shadow explicit.
+/// Q16 residual quantization and dynamic i16 activation quantization. `train-in-space` uses it
+/// around the real training forward and served checkpoint evaluation.
 pub fn with_served_surrogate_training<T>(
     seed: u64,
     step: usize,

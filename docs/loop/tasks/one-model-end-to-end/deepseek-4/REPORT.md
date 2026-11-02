@@ -28,6 +28,9 @@ Base: `2f8f665c5`. Order: [ORDER.md](ORDER.md).
   master values are restored before the optimizer receives the gradients.
 - Served checkpoints are scored while variables are rounded as exported through
   the D11 panel, served panel loss, Q12 nearest/writer reading and native writer.
+- `--inspect`, `--decode-speed` and `--score-rows` now read
+  `train_as_served` from the checkpoint's run config and use the same served
+  forward, Q12 row/opening/decode paths when it is set.
 - The rounded-master guard now restores variables on `Drop` as well as the
   explicit success path, so a failed evaluation or training forward cannot
   leave the optimizer's float masters silently rounded.
