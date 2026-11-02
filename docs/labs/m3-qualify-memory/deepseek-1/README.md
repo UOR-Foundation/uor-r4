@@ -29,7 +29,8 @@ transfer or M3 qualification.
 ## Instrument
 
 - All 6 processes exited 0 with empty stderr.
-- All 18 replies used protocol 2 and produced valid stops.
+- All 15 replies used protocol 2 and produced valid stops (10 EOS, 5
+  token-cap).
 - The seed-1 repeat matched the first pass exactly after excluding only the
   registered `id/s` timing field.
 - Peak RSS was 11,888 KiB; process wall times were 0.17–0.22 seconds.

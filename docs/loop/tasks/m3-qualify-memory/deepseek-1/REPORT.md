@@ -43,10 +43,11 @@ questions and pronoun-only queries.
 
 The FIT/PRE-RUN-PASS host smoke then ran six fresh processes: two fixed
 multi-turn conversations on each of the two public seeds, plus an exact seed-1
-repeat. All 6 exited 0 with empty stderr. All 18 replies used protocol 2 and
-had valid stops. Both seeds emitted `Memory: Pickle.` before the first answer
-and `Memory: tomatoes.` before the second. The seed-1 repeat matched the first
-pass after excluding only the registered `id/s` timing field.
+repeat. All 6 exited 0 with empty stderr. All 15 replies used protocol 2 and
+had valid stops (10 EOS, 5 token-cap). Both seeds emitted `Memory: Pickle.`
+before the first answer and `Memory: tomatoes.` before the second. The seed-1
+repeat matched the first pass after excluding only the registered `id/s`
+timing field.
 
 No factual reply contained its supplied value: **0/6**. This is
 `AUTO_MEMORY_OBSERVED` with `MODEL_RECALL_NOT_OBSERVED`. Peak RSS was 11,888
