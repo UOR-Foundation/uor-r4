@@ -33,8 +33,8 @@ eight-entry public conversational panel, at seeds 1 and 2 with an exact seed-1
 repeat. The integration path passed: all 24 processes exited 0, all 33 replies
 stopped by EOS or the 16-token cap, every reply text decoded from its recorded
 ids, and the repeat matched all text, ids, stops and history depths. Both fixed
-multi-turn memory anchors failed on both seeds. Peak RSS was 11,528 KiB and
-observed reply rates were 143.54–350.35 ids/s on the local workstation.
+multi-turn memory anchors failed on both seeds. Peak RSS was 11,592 KiB and
+observed reply rates were 144.47–350.35 ids/s on the local workstation.
 
 This is an ungraded product baseline, not a language or mechanism result. It
 establishes that the public artifact is connected and deterministic and is not

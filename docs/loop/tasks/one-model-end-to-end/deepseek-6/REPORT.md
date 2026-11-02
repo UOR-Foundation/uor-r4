@@ -45,15 +45,15 @@ replies.
   reason and history depth.
 - Memory anchors: 0 of 4 passed. Seed 1 and seed 2 both failed the `Pickle`
   and `tomato(s)` anchors.
-- Peak per-process RSS: 11,528 KiB. The 24 process timing records sum to
-  2.810 s; no separate orchestrator timer is asserted.
-- Observed reply rates ranged from 143.54 to 350.35 ids/s.
+- Peak per-process RSS: 11,592 KiB. The 24 process timing records sum to
+  2.82 s; no separate orchestrator timer is asserted.
+- Observed reply rates ranged from 144.47 to 350.35 ids/s.
 - External spend: `$0.00`.
 
 Exact reply text, ids, stops, histories, timings and rates are in the evidence
 record linked above. Raw transcripts and `verification.json`
-(`5d95c4e763abfceff77a1b78930c631a5db36d1f748ee91892c007229d799c3b`) are
-under `local/deepseek/public-chat-post-smoke-2026-11-02/`.
+(`45e28a60e49369bbd46d877b9e06a429d98ad6ac64aa640a09928216626e8a4b`) are
+under `local/deepseek/public-chat-post-smoke-2026-11-02-rerun/`.
 
 ## Checks run at the head
 
