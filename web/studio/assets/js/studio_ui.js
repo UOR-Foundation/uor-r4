@@ -108,6 +108,16 @@
         }
     }
     function chromeValue(name, fallback) { var stored = readUi()[name]; return stored === 'expanded' || stored === 'collapsed' ? stored : fallback; }
+    function syncNavPresentation() {
+        if (!app) return;
+        var expanded = app.getAttribute('data-nav') === 'expanded';
+        var mobile = window.matchMedia('(max-width: 900px)').matches;
+        document.documentElement.classList.toggle('nav-open', expanded && mobile);
+        var scrim = document.getElementById('btnNavScrim');
+        if (scrim) scrim.hidden = !(expanded && mobile);
+        var main = document.getElementById('mainColumn');
+        if (main) main.inert = expanded && mobile;
+    }
     function setChrome(name, value, persist) {
         if (!app) return;
         app.setAttribute('data-' + name, value);
@@ -115,14 +125,7 @@
         var map = { nav: ['btnToggleNav', 'btnNavCollapse', 'btnMobileNav'], inspector: ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4'] };
         (map[name] || []).forEach(function (id) { var node = document.getElementById(id); if (node) node.setAttribute('aria-expanded', expanded ? 'true' : 'false'); });
         if (persist) { var patch = {}; patch[name] = value; writeUi(patch); }
-        if (name === 'nav') {
-            var mobile = window.matchMedia('(max-width: 900px)').matches;
-            document.documentElement.classList.toggle('nav-open', expanded && mobile);
-            var scrim = document.getElementById('btnNavScrim');
-            if (scrim) scrim.hidden = !expanded;
-            var main = document.getElementById('mainColumn');
-            if (main) main.inert = expanded && mobile;
-        }
+        if (name === 'nav') syncNavPresentation();
     }
     function toggleChrome(name) { if (!app) return; var current = app.getAttribute('data-' + name) === 'collapsed' ? 'collapsed' : 'expanded'; setChrome(name, current === 'expanded' ? 'collapsed' : 'expanded', true); }
 
@@ -918,6 +921,8 @@
                 if (help && !help.hidden) { event.preventDefault(); event.stopPropagation(); closeHelp(); }
             }
         }, true);
+        var navMedia = window.matchMedia('(max-width: 900px)');
+        if (navMedia && navMedia.addEventListener) navMedia.addEventListener('change', syncNavPresentation);
         window.addEventListener('pagehide', function () { if (clockTimer) window.clearInterval(clockTimer); });
         window.addEventListener('focus', updateStatus);
     }

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StudioUiApi } from './workflow.js';
 
 const studioUiModule = '../../assets/js/studio_ui.js';
+let mobileMedia: { matches: boolean; addEventListener: ReturnType<typeof vi.fn> };
 
 beforeEach(() => {
     vi.useFakeTimers();
     window.localStorage.clear();
     window.location.hash = '';
-    window.matchMedia = vi.fn((query: string) => ({ matches: query === '(max-width: 900px)', addEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
+    mobileMedia = { matches: true, addEventListener: vi.fn() };
+    window.matchMedia = vi.fn((query: string) => query === '(max-width: 900px)' ? mobileMedia : { matches: false, addEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
     document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button id="navAgent" data-section="agent">Agent</button><button id="navWorkspace" data-section="workspace">Workspace</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Models</button><button id="viewBtnEditor">Workspace</button></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea></div>';
     vi.resetModules();
 });
@@ -55,5 +57,26 @@ describe('actual mobile navigation dismissal', () => {
         expect(menu.getAttribute('aria-expanded')).toBe('false');
         expect(scrim.hidden).toBe(true);
         expect(main.inert).toBe(false);
+    });
+
+    it('resynchronizes scrim and inert state across the mobile breakpoint', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const menu = document.getElementById('btnMobileNav')!;
+        const scrim = document.getElementById('btnNavScrim')!;
+        const main = document.getElementById('mainColumn')!;
+        const registration = mobileMedia.addEventListener.mock.calls.find(([name]) => name === 'change');
+        const synchronize = registration?.[1] as (() => void) | undefined;
+        expect(synchronize).toBeTypeOf('function');
+        menu.click();
+        mobileMedia.matches = false;
+        synchronize!();
+        expect(scrim.hidden).toBe(true);
+        expect(main.inert).toBe(false);
+        mobileMedia.matches = true;
+        synchronize!();
+        expect(scrim.hidden).toBe(false);
+        expect(main.inert).toBe(true);
     });
 });

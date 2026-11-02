@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import source from '../../index.html?raw';
+// @ts-expect-error The existing JavaScript API has no declaration file.
+import { normalizeBaseUrl } from '../../assets/js/studio_api.js';
 
 function section(start: string, end: string): string {
     const from = source.indexOf(start);
@@ -22,7 +24,7 @@ function pageHooks() {
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setView', 'ensureConversation', 'touchConversation',
         'appendMessageElement', 'renderConversationList', 'scrollChat', 'sendViaWorker', 'sendViaApi',
-        'autoGrowTextarea', 'startNewChat', '$',
+        'autoGrowTextarea', 'startNewChat', '$', 'normalizeBaseUrl',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function chatReadiness', '/* ------------------------------------------------------------ metrics */')}
          ${section('function renderEmptyState', 'function listItem')}
@@ -31,7 +33,7 @@ function pageHooks() {
     );
     const hooks = factory(
         app, document, window, vi.fn(), setView, () => conversation, vi.fn(), vi.fn(() => null), vi.fn(), vi.fn(),
-        vi.fn(() => true), vi.fn(() => true), vi.fn(), vi.fn(() => true), (selector: string) => document.querySelector(selector),
+        vi.fn(() => true), vi.fn(() => true), vi.fn(), vi.fn(() => true), (selector: string) => document.querySelector(selector), normalizeBaseUrl,
     ) as {
         updateComposerState(): void;
         renderEmptyState(container: HTMLElement): void;
@@ -82,6 +84,29 @@ describe('live Agent source readiness', () => {
         expect(hooks.sendFromComposer('hello')).toBe(7);
     });
 
+    it('refuses malformed and non-HTTP API configurations', () => {
+        const { app, hooks } = pageHooks();
+        app.mode = 'api';
+        for (const baseUrl of ['not-a-url', 'ftp://example.com/v1']) {
+            app.apiConfig = { baseUrl };
+            hooks.updateComposerState();
+            expect(sendButton().disabled).toBe(true);
+            expect(hooks.sendFromComposer('hello')).toBe(false);
+        }
+    });
+
+    it('does not render API readiness without a provider configuration', () => {
+        const { app, hooks } = pageHooks();
+        app.mode = 'api';
+        const container = document.querySelector<HTMLElement>('#chatMessages')!;
+        hooks.renderEmptyState(container);
+        expect(container.textContent).toContain('Build with your files. Connect an agent when ready.');
+        expect(container.textContent).toContain('No conversational model is configured');
+        expect(container.textContent).not.toContain('API configured');
+        hooks.updateComposerState();
+        expect(sendButton().disabled).toBe(true);
+    });
+
     it('renders distinct unavailable, API-ready, and local-ready empty states', () => {
         const { app, hooks } = pageHooks();
         const container = document.querySelector<HTMLElement>('#chatMessages')!;
@@ -93,7 +118,9 @@ describe('live Agent source readiness', () => {
         app.mode = 'api';
         app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
         hooks.renderEmptyState(container);
-        expect(container.textContent).toContain('Agent connected — external baseline mode.');
+        expect(container.textContent).toContain('API configured — external baseline mode.');
+        expect(container.textContent).toContain('will be sent');
+        expect(container.textContent).not.toContain('Agent connected');
         expect(container.textContent).not.toContain('No conversational model is configured');
         container.innerHTML = '';
         app.mode = 'wasm';
@@ -103,17 +130,21 @@ describe('live Agent source readiness', () => {
         expect(container.textContent).not.toContain('No conversational model is configured');
     });
 
-    it('enters the demo workspace from the Agent quick action', () => {
+    it('activates the Workspace section from the Agent demo quick action', () => {
         const openDemo = vi.fn(() => true);
-        const legacy = window as unknown as { __studioFiles?: { openDemo(): boolean } };
+        const activateSection = vi.fn();
+        const legacy = window as unknown as { __studioFiles?: { openDemo(): boolean }; __studioUi?: { activateSection(section: string): void } };
         legacy.__studioFiles = { openDemo };
+        legacy.__studioUi = { activateSection };
         const { hooks, setView } = pageHooks();
         const container = document.querySelector<HTMLElement>('#chatMessages')!;
         hooks.renderEmptyState(container);
         const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((node) => node.textContent === 'Explore demo workspace')!;
         button.click();
         expect(openDemo).toHaveBeenCalledOnce();
-        expect(setView).toHaveBeenCalledWith('workspace');
+        expect(activateSection).toHaveBeenCalledWith('workspace');
+        expect(setView).not.toHaveBeenCalled();
         delete legacy.__studioFiles;
+        delete legacy.__studioUi;
     });
 });

@@ -57,7 +57,7 @@ describe('actual demo workspace behavior', () => {
         expect(network).not.toHaveBeenCalled();
     });
 
-    it('restores demo tabs as labeled demo state', async () => {
+    it('restores demo tabs with their labels and synthetic tree', async () => {
         window.localStorage.setItem(TABS_KEY, JSON.stringify({
             activePath: 'web/studio/index.html',
             tabs: [{ path: 'web/studio/index.html', content: '<p>demo</p>', dirty: false, mode: 'demo' }],
@@ -69,5 +69,37 @@ describe('actual demo workspace behavior', () => {
         expect(files.activeFile()?.content).toBe('<p>demo</p>');
         expect(document.getElementById('topWorkspaceName')?.textContent).toContain('demo');
         expect(document.getElementById('statusWorkspaceLabel')?.textContent).toContain('demo');
+        expect(document.getElementById('fileTree')?.textContent).not.toContain('No folder open');
+        expect(document.getElementById('fileTree')?.textContent).toContain('index.css');
+    });
+
+    it('keeps new and inserted demo tabs in demo mode after reload', async () => {
+        const files = await loadFiles();
+        expect(files.openDemo()).toBe(true);
+        await vi.advanceTimersByTimeAsync(1800);
+        files.newFile();
+        expect(files.activeFile()?.mode).toBe('demo');
+        files.insertText('agent context', 'agent-snippet.md');
+        expect(files.activeFile()?.mode).toBe('demo');
+        delete (window as unknown as { __studioFiles?: WorkspaceApi }).__studioFiles;
+        const restored = await loadFiles();
+        expect(restored.mode()).toBe('demo');
+        expect(restored.tabs().every((tab) => tab.mode === 'demo')).toBe(true);
+        expect(restored.activeFile()?.content).toBe('agent context');
+        expect(document.getElementById('fileTree')?.textContent).toContain('agent-snippet.md');
+        expect(document.getElementById('fileTree')?.textContent).not.toContain('No folder open');
+    });
+
+    it('restores an empty new demo tab and its tree entry', async () => {
+        const files = await loadFiles();
+        expect(files.openDemo()).toBe(true);
+        await vi.advanceTimersByTimeAsync(1800);
+        files.newFile();
+        delete (window as unknown as { __studioFiles?: WorkspaceApi }).__studioFiles;
+        const restored = await loadFiles();
+        expect(restored.mode()).toBe('demo');
+        expect(restored.activeFile()).toMatchObject({ path: 'untitled.md', content: '', mode: 'demo' });
+        expect(restored.treeSummary().fileCount).toBe(7);
+        expect(document.getElementById('fileTree')?.textContent).toContain('untitled.md');
     });
 });

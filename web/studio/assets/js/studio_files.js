@@ -85,6 +85,11 @@
             if (state.tabs.length && state.tabs.every(function (tab) { return tab.mode === 'demo'; })) {
                 state.mode = 'demo';
                 state.rootName = 'uor-r4';
+                var samples = demoSamples();
+                state.tabs.forEach(function (tab) { samples[tab.path] = tab.content; });
+                buildDemoTree(samples);
+                updateWorkspaceUI();
+                renderTree();
             }
             state.activePath = parsed.activePath || (state.tabs[0] ? state.tabs[0].path : null);
             renderTabs();
@@ -211,15 +216,8 @@
         input.click();
     }
 
-    function demoWorkspace() {
-        if (state.tabs.some(function (tab) { return tab.dirty; })) {
-            toast('Save or close unsaved tabs before exploring the demo workspace.', 'warn');
-            return false;
-        }
-        try { window.localStorage.removeItem(TABS_KEY); } catch (error) { /* optional */ }
-        state.tabs = [];
-        state.activePath = null;
-        var samples = {
+    function demoSamples() {
+        return {
             'web/studio/index.html': '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <title>UOR-R4 Studio</title>\n    <link rel="stylesheet" href="./index.css">\n</head>\n<body>\n    <!-- sample workspace file loaded from the demo tree -->\n</body>\n</html>\n',
             'web/studio/index.css': '/* UOR-R4 Studio — warm graphite + ember */\n:root {\n    --bg: #0b0a09;\n    --accent: #e8894a;\n}\n.studio { color: var(--accent); }\n',
             'web/studio/assets/js/studio_ui.js': '// Interaction layer: theme, command palette, navigation, sessions.\nexport function init() {\n    console.log("studio ui");\n}\n',
@@ -227,9 +225,9 @@
             'crates/uor-r4-integer/src/lib.rs': '// Sample Rust module from the demo tree.\npub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n',
             'tools/README.md': '# Tools\n\nVerification scripts, tokenizer tools and build helpers.\n'
         };
-        state.rootHandle = null;
-        state.rootName = 'uor-r4';
-        state.mode = 'demo';
+    }
+
+    function buildDemoTree(samples) {
         state.files = {};
         var tree = {};
         Object.keys(samples).forEach(function (path) {
@@ -257,6 +255,20 @@
             return entries.concat((node.files || []).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }));
         }
         state.tree = build(tree, '');
+    }
+
+    function demoWorkspace() {
+        if (state.tabs.some(function (tab) { return tab.dirty; })) {
+            toast('Save or close unsaved tabs before exploring the demo workspace.', 'warn');
+            return false;
+        }
+        try { window.localStorage.removeItem(TABS_KEY); } catch (error) { /* optional */ }
+        state.tabs = [];
+        state.activePath = null;
+        state.rootHandle = null;
+        state.rootName = 'uor-r4';
+        state.mode = 'demo';
+        buildDemoTree(demoSamples());
         updateWorkspaceUI();
         renderTree();
         openFile('web/studio/index.html').then(function () { return openFile('web/studio/index.css'); });
@@ -531,7 +543,7 @@
         var index = 1;
         var name = 'untitled.md';
         while (state.tabs.some(function (tab) { return tab.path === name; })) { index += 1; name = 'untitled-' + index + '.md'; }
-        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'directory' ? 'directory' : 'local', handle: null });
+        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local'), handle: null });
         state.activePath = name;
         loadTabIntoEditor(name, false);
         renderTabs();
@@ -645,7 +657,7 @@
             existing.dirty = true;
             state.activePath = existing.path;
         } else {
-            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'directory' ? 'directory' : 'local', handle: null });
+            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local'), handle: null });
             state.activePath = tabName;
         }
         loadTabIntoEditor(state.activePath, false);

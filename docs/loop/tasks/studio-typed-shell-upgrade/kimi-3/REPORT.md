@@ -10,6 +10,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Initial phone rendering put quick actions behind the composer and squeezed attachments into a vertical strip. Mobile quick actions now fit in two rows and the composer stacks full-width controls and attachments.
 - The first full suite exposed an older page-hook fixture missing the new `chatReadiness` function. Including it restored both actual-page tests; no production behavior was weakened to accommodate the fixture.
 - Policy initially reported only the required REPORT missing. Other checks were advisories; the report now exists.
+- **The first fresh review returned CHANGES.** API readiness accepted malformed/non-HTTP URLs and implied connectivity, demo-created tabs lost demo mode/tree state, mobile scrim/inert state missed breakpoint changes, quick actions left stale section state, and source edits were described as deployed. Seven focused regressions failed first. The page now reuses HTTP(S) validation, says API configured without a reachability claim, restores demo tabs/tree, synchronizes breakpoints and quick-action sections, and labels these as source changes.
+- A later full-suite fixture also needed the existing URL validator injected; that test-only binding was corrected without weakening readiness. An empty restored demo tab has explicit tree/content/mode coverage, while a real-browser reload preserved a non-empty demo buffer and seven-file tree.
 - No real model, real API response, real user file, real disk access, production publish, or typed-library cutover is claimed. Real File System Access and full typed-library parity/migration remain later units.
 
 ## What changed
@@ -24,7 +26,7 @@ No engine, worker, tokenizer, `studio_api.js`, model artifact, publisher, deploy
 
 ## Measurements
 
-- **146 Vitest tests pass across 23 files**, including 6 live Agent readiness/empty-state tests, 3 actual demo workspace tests, and 1 actual mobile navigation test. **9 Node model-source tests pass. 155 tests total, 0 failures.**
+- **151 Vitest tests pass across 23 files**, including 8 live Agent readiness/empty-state tests, 5 actual demo workspace tests, and 2 actual mobile navigation tests. **9 Node model-source tests pass. 160 tests total, 0 failures.**
 - `npm run typecheck`: PASS, no TypeScript errors.
 - `npm run build`: PASS; `dist/studio-foundation.js` 117.69 kB (gzip 32.31 kB) and `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
 - `node verify_studio_page.mjs --strict-router`: PASS, both legacy strict pages clean. Modified `studio_ui.js`, `studio_files.js`, and `model_sources.js` syntax checks pass.
@@ -32,15 +34,16 @@ No engine, worker, tokenizer, `studio_api.js`, model artifact, publisher, deploy
 
 ## Real browser evidence
 
-Built-in browser checks exercised the live page, not only component fixtures:
+Built-in browser checks exercised the running source page, not only component fixtures or the deployed site:
 
 - Desktop 1440×900: Agent welcome, Workspace, Models, Guide, demo tree, editor tabs, attachment state, and no-source Send disabled.
-- iPhone 14 Pro 393×852: all four quick actions fit above the composer; attachments remain full width; drawer opens with a dimmed backdrop and closes via scrim and Escape. No horizontal page overflow was visible in these viewports.
+- Mobile 393×852: all four quick actions fit above the composer; attachments remain full width; the drawer opens with a dimmed backdrop and closes via scrim and Escape. Desktop/mobile transitions end without a stale overlay; the media-change listener itself has module coverage.
 - Dark and light themes preserve readable contrast.
-- Demo workflow: Explore demo → open both tabs → edit `index.css` → switch to Agent → attach it. The inspector shows one context file and Send remains disabled.
-- API-ready state: a dummy `https://example.invalid/v1` provider was saved and selected. The empty state reads “Agent connected — external baseline mode.” No Test or Send was invoked, so no endpoint was contacted.
+- Demo workflow: Explore demo → open both tabs → edit `index.css` → switch to Agent → attach it. The inspector shows one context file and Send remains disabled. After creating a demo tab and entering an 11-character buffer, reload preserved the unsaved tab, demo labels, and seven-file tree including `untitled.md`.
+- Settings showed the demo-only open/unsaved tab counts, and Clear draft removed that test state before the clean demo workflow.
+- API-ready state: the existing dummy `https://example.invalid/v1` configuration renders “API configured — external baseline mode” and “Configuration does not prove reachability.” No Test or Send was invoked, so no endpoint was contacted.
 
-These are live visual/non-model checks, not model, API, real-disk, production-publish, accessibility-certification, or typed-library parity claims.
+These are source-page visual/non-model checks, not model, API, real-disk, production-publish, accessibility-certification, or typed-library parity claims.
 
 ## Checks run at the head
 
@@ -56,4 +59,4 @@ This delivery does not provide real model/API/disk trajectories or mount the typ
 
 ## Plain summary
 
-The live Studio now looks and behaves like a coherent IDE harness: navigation and sessions at left, useful work in the center, context at right, and command/status chrome around it. Users can explore and edit a demo workspace before a serving model exists. Chat availability is honest, the demo is safe, and desktop/mobile presentation is verified. No serving-model capability is claimed.
+The Studio source page now looks and behaves like a coherent IDE harness: navigation and sessions at left, useful work in the center, context at right, and command/status chrome around it. Users can explore and edit a demo workspace before a serving model exists. Chat availability is honest, the demo is safe, and desktop/mobile presentation is verified. No serving-model capability is claimed.
