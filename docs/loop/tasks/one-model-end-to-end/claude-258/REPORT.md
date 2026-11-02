@@ -13,9 +13,14 @@ No decode claim: nothing served changed. Training cost, measured on one RTX 5090
 - **The ORDER's "few-step host run" could not run on the host.** D24/D29's CPU backend refuses arithmetic: three of the first draft's tests failed with "CPU model compute is unavailable". The few training steps moved to a CUDA test, ignored on hosts and run on the pod. The host tests keep what needs no arithmetic: a saved step's zero export gap, a refused rounding giving every value back, the switch-off path, and the CLI refusals.
 - **Done-when 3 was shown, not measured against the base.** Without the flag, `round_if_served` returns `None` before touching a value. The host test `training_without_the_switch_rounds_nothing` pins that (no value moves, and `config.json` leaves the field out). No run's bytes were compared with a run from a base binary.
 - **The first pod job stopped at its own check.** It grepped `config.json` for the compact `"train_as_served":true`, but the run writes the file pretty-printed (`"train_as_served": true`), so it ended with EXIT 5 after both runs had finished cleanly. A fault in the job, not the build: `job2.sh` went on from that check with the same runs and binaries (their sums checked), and exited 0.
+- **No `cargo test` pins `run_long`'s own wiring** (the fresh review's finding 1). The CUDA test replays the order in test code: round, forward and backward, give back, optimizers, then a save through a test helper that rounds. So deleting the checkpoint's rounding from `run_long`, or moving the give-back after the optimizers, would leave every test green. What pins the wiring today is the pod's real runs:
+  - **The checkpoint's rounding.** Without it, `on`'s step 0 trunk would be the float initial values, which the export changes (as it changes `off`'s); it changed nothing.
+  - **The step's rounding.** `on` and `off` start from the same values, and every checkpoint gives its float values back, so without the step's rounding the two runs would train alike. Their step-64 train losses differ (1.0041624 against 1.0042354). That is on the condition that training is deterministic at one seed, as claude-216's probe showed byte for byte. The extra ~17 ms a step points the same way.
+
+  This is evidence from one run, not a regression test.
 - **Training's forward is still not the served forward.** The step runs with `with_gate_mode(.., export_mode = false)`, so the D11 export mode is not in training: the Q12 gate, the icosian snap, and the Q12 hidden before the writer. This unit closes the parameter half of the trained-against-served gap only.
 - **Left behind on the laptop:**
-  - two temp folders from the negative-gate runs, `/var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/claude-258-none-69152` and `claude-258-saved-68801`;
+  - three temp folders from the negative-gate runs, `/var/folders/29/pd94_f9169d2zr7bg7xvqg8m0000gn/T/claude-258-none-69152`, `claude-258-none-18885` and `claude-258-saved-68801` (the tests write under the system temp folder and clean up only on success);
   - a stray `crates/uor-r4-float-train/local/claude/target/.rustc_info.json` (4 KB, untracked), written by a test that ran cargo with a relative `CARGO_TARGET_DIR`.
 
   The loop guard refused to delete any of them (outside the worktree, or out of scope). None is committed. A FRICTION line records the second.
@@ -42,7 +47,7 @@ No decode claim: nothing served changed. Training cost, measured on one RTX 5090
   - `LongConfig::train_as_served`;
   - `ServedValues` (rounds through `fbs_export::round_tables_as_exported`, `round_hamming_as_exported` and `round_memory_as_exported`, keeps the float values, gives them back);
   - `round_if_served`, called around each step's forward and backward and around each checkpoint's scoring and save;
-  - a refusal when the flag meets a read the export does not carry (the Flock, content and opening reads, the prompt register, the type spin);
+  - a refusal when the flag meets a read the export does not carry (the Flock, content and opening reads, the prompt register, the type spin), or folded or reflected rate scores, whose runs the export refuses outright (`run_rate_reading`; added after the fresh review's finding 2);
   - four host tests and one CUDA test.
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`: the `--train-as-served 0|1` switch, for training with `--out` only.
 - `docs/research/notebook/float-training.md`: one row.
@@ -74,6 +79,8 @@ No decode claim: nothing served changed. Training cost, measured on one RTX 5090
   - the CUDA test, passed;
   - n1 failed as it should;
   - the restored source passed.
+- **After the pod run:** the refusal of folded and reflected rate scores. It is host-tested, and its negative gate failed as it should: with the two conditions set aside, the refusal test fails at `in_space_long.rs:14283`. It changes no training path, so the GPU evidence at `90b1a8976` stands for it.
+- **The fresh-context adversarial review** at `94cb80c8b`: APPROVE WITH NITS. It found no correctness defect in the round, forward and backward, give-back and optimizer order. Finding 2 is fixed here; findings 1 and 3 are under "Still open"; the nits (done-when 3 shown by inspection, test temp folders) are named above.
 - `uor-harness loop report --check`, `loop gates --full` and `loop pr-check --local` at the head: results in the PR.
 
 ## Skills used
@@ -85,7 +92,14 @@ None.
 - **Unit 2:** the prep sheet, a non-author FIT and the pre-run review for (r-drop) trained as served at 3 seeds, 16,384 steps. Recipe choice for that sheet: the 29 Oct training sheet's (r-drop), or the 30 Oct cut-train sheet's, which adds `--reply-read-train all`.
 - **Unit 3:** the GPU run, the export, laptop serving, M1's bars and tok/s. Then back to Casey.
 - **The forward's half of the gap.** Training does not yet run the D11 export mode's forward (the Q12 gate, the icosian snap, the Q12 hidden before the writer). Whether the served model needs it is unit 3's reading: it scores what the laptop serves against what trained.
-- **A margin trained to zero stops the run.** A Hamming margin the export would round to zero or below is refused, and the run stops there with its values untouched. None did in 64 steps. At 16,384 steps it is a risk unit 2's sheet names.
+- **Any value the export refuses stops the run mid-step** (the fresh review's finding 3), with its float values untouched and up to `--eval-every` steps unsaved. The cases:
+  - a Hamming margin that rounds to zero or below;
+  - an embedding value past Q12's i16 range;
+  - a grid code out of range for an RMS gain or a convolution tap;
+  - an i32 overflow in the Hamming read or the turn memory.
+
+  None did in 64 steps. Unit 2's sheet names them for 16,384 steps.
+- **A test that runs `run_long` itself on the GPU** (finding 1): a short `--train-as-served` run whose rounded copy is checked, on a tiny data folder or the pinned one. The cheapest form is unit 2's pre-run smoke at the sheet's head, the same two-arm check as this unit's `job.sh`.
 
 ## Plain summary
 

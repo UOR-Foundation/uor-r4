@@ -9453,18 +9453,21 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
     }
     // Training as served (claude-258) rounds what the export carries: the trunk, the Hamming
-    // read and the turn memory. A read it does not carry would train at values no artifact holds.
+    // read and the turn memory. A read it does not carry would train at values no artifact holds,
+    // and a run with folded or reflected rate scores has no export at all (`run_rate_reading`).
     if config.train_as_served
         && (config.flock_read > 0
             || config.content_read > 0
             || config.opening_read > 0
             || config.prompt_register > 0
-            || config.type_spin)
+            || config.type_spin
+            || config.fold_scores
+            || config.reflect_floor)
     {
         return Err(invalid(
             "--train-as-served rounds the trunk, the Hamming read and the turn memory as the export \
              does; the Flock, content and opening reads, the prompt register and the type spin \
-             have no exported form",
+             have no exported form, and the export refuses folded or reflected rate scores",
         ));
     }
     if out.exists() {
@@ -14276,6 +14279,8 @@ mod tests {
             |c| c.opening_read = 1,
             |c| c.prompt_register = 1,
             |c| c.type_spin = true,
+            |c| c.fold_scores = true,
+            |c| c.reflect_floor = true,
         ] {
             assert!(refusal(set).contains("--train-as-served"));
         }
