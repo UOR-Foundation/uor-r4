@@ -191,6 +191,7 @@ pub struct LongConfig {
 /// being rounded away.
 struct ServedValues {
     float: Vec<(candle_core::Var, Tensor)>,
+    restored: bool,
 }
 
 impl ServedValues {
@@ -213,7 +214,10 @@ impl ServedValues {
             .into_iter()
             .map(|var| Ok((var.clone(), var.as_tensor().copy()?)))
             .collect::<Result<Vec<_>>>()?;
-        let served = Self { float };
+        let served = Self {
+            float,
+            restored: false,
+        };
         let rounded = (|| -> Result<()> {
             crate::fbs_export::round_tables_as_exported(model)?;
             if let Some(reads) = reads {
@@ -234,11 +238,30 @@ impl ServedValues {
     }
 
     /// Put each variable's float value back.
-    fn restore(self) -> Result<()> {
-        for (var, value) in self.float {
-            var.set(&value)?;
+    fn restore_values(&self) -> Result<()> {
+        for (var, value) in &self.float {
+            var.set(value)?;
         }
         Ok(())
+    }
+
+    /// Put each variable's float value back and mark the guard restored.
+    fn restore(mut self) -> Result<()> {
+        self.restore_values()?;
+        self.restored = true;
+        Ok(())
+    }
+}
+
+impl Drop for ServedValues {
+    fn drop(&mut self) {
+        if !self.restored {
+            // Every `?` between rounding and the explicit restore takes this path. A failed
+            // restoration cannot be reported from `Drop`, but it is no worse than leaving the
+            // rounded values in place; the explicit success/error path still returns any error.
+            let _ = self.restore_values();
+            self.restored = true;
+        }
     }
 }
 
@@ -14219,6 +14242,17 @@ mod tests {
         let (model, reads, memory) = served_parts(&Device::Cpu)?;
         let vars = served_vars(&model, &reads, &memory);
         let float = served_bits(&vars)?;
+        {
+            let guard = round_if_served(true, &model, Some(&reads), Some(&memory))?
+                .expect("the rounding guard is on");
+            assert!(crate::fbs_export::check_tables_rounded_as_exported(&model).is_ok());
+            drop(guard);
+        }
+        assert_eq!(
+            served_bits(&vars)?,
+            float,
+            "an early return or panic drops the guard back to the float masters"
+        );
         save_step(&root.join("on"), true, &model, &reads, &memory)?;
         assert_eq!(served_bits(&vars)?, float, "the float values are back");
         assert_eq!(export_changes(&root.join("on"))?, [false; 3]);
