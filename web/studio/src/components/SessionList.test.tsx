@@ -68,6 +68,7 @@ describe('SessionList', () => {
         act(() => { button('Save title').click(); });
         expect(onError).toHaveBeenCalledWith('Could not rename that session.');
         expect(host.querySelector('dialog')).not.toBeNull();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not rename that session.');
     });
 
     it('reports rejected export and delete operations', () => {
@@ -79,6 +80,18 @@ describe('SessionList', () => {
         act(() => { button('Delete Session A').click(); });
         act(() => { button('Confirm delete').click(); });
         expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.');
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not delete that session.');
+    });
+
+    it('disables session mutations while a reply is generating', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        act(() => { store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' } }); });
+        expect(button('New session').disabled).toBe(true);
+        expect(button('Select Session A').disabled).toBe(true);
+        expect(button('Rename Session A').disabled).toBe(true);
+        expect(button('Duplicate Session A').disabled).toBe(true);
+        expect(button('Delete Session A').disabled).toBe(true);
     });
 
     it('supports new, select, rename, duplicate, export, and confirmed delete', () => {

@@ -19,6 +19,12 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
     const [fontSizeDraft, setFontSizeDraft] = useState(String(settings.fontSize));
     const [tabSizeDraft, setTabSizeDraft] = useState(String(settings.tabSize));
     const [clearing, setClearing] = useState<'sessions' | 'editor' | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    function reportError(message: string) {
+        setError(message);
+        onError?.(message);
+    }
 
     function update<K extends keyof StudioSettings>(key: K, value: StudioSettings[K]) {
         const next = { ...settings, [key]: value };
@@ -37,12 +43,13 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
 
     function confirmClear() {
         let completed = false;
+        setError(null);
         if (clearing === 'sessions') {
             const result = ui.clearSessions();
-            if (result.error) onError?.(result.error);
+            if (result.error) reportError(result.error);
             else {
                 completed = true;
-                if (result.cleared < result.total) onError?.(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
+                if (result.cleared < result.total) reportError(`Cleared ${result.cleared} of ${result.total} sessions; stop the current reply before deleting the rest.`);
             }
         }
         if (clearing === 'editor') {
@@ -55,6 +62,7 @@ export function Settings({ ui, onClose, onChange, onError, onSettingsChange }: S
 
     return (
         <Modal title="Studio settings" onClose={onClose}>
+            {error && <p role="alert">{error}</p>}
             <section aria-label="Appearance">
                 <h3>Appearance</h3>
                 <label>Theme

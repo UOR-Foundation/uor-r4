@@ -62,7 +62,7 @@ were "not organized or labeled very well". The page is now a workable AI studio:
 - **Contract:** every pre-existing element id and handler is preserved (hidden compatibility block
   where the UI moved), the two status markers and the data-studio-ready boot contract are intact,
   the engine/worker/API client are unchanged, model-source changes are limited to tested provider/catalog/storage behavior, no external assets or requests are added,
-  and all four verifiers pass with assertions untouched. The page remains offline-first: no
+  and the strict static checks pass with assertions intact. Real-browser/worker parity checks remain later work. The page remains offline-first: no
   external request at load; remote model/API contacts are user-initiated only.
 
 ### Typed workflow components (development library)

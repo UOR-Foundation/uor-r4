@@ -135,6 +135,19 @@ describe('AgentComposer', () => {
         expect(button('Send').disabled).toBe(true);
     });
 
+    it('does not offer prediction for an engine-unsupported artifact', () => {
+        const { store } = mount();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        act(() => {
+            store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+                schema: 'uor-r4.lut-discrete-trunk/1', engineSupported: false, canGenerate: false, canPredict: true,
+            } });
+        });
+        expect(host.textContent).toContain('Generation unavailable');
+        expect(host.textContent).not.toContain('Local next-token prediction');
+        expect(button('Send').disabled).toBe(true);
+    });
+
     it('does not label or enable an unmatched resident artifact as ready local generation', () => {
         const { store, generation } = mount();
         act(() => { store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' }); });

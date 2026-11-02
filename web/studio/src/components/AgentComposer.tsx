@@ -67,13 +67,13 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         && state.residentArtifact?.canGenerate === false
         && state.residentArtifact?.canPredict === true;
     const generating = state.session.phase === 'generating';
-    const predictionMode = activeGeneration ? activeGeneration.canStop === false : prediction;
     const messages = sessions.getConversationMessages();
     const attachments = ui.getAttachments();
     const activeFile = files.activeFile();
     const unavailable = !activeGeneration && residentMatches
         && (state.residentArtifact?.engineSupported === false
             || (state.residentArtifact?.canGenerate === false && state.residentArtifact?.canPredict !== true));
+    const predictionMode = activeGeneration ? activeGeneration.canStop === false : prediction && !unavailable;
     const selectionLabel = activeGeneration
         ? (predictionMode ? 'Local next-token prediction' : activeGeneration.source.kind === 'artifact' ? 'Local generation' : 'API chat')
         : !selected ? 'No source selected'

@@ -237,6 +237,32 @@ describe('ModelPicker', () => {
         expect(store.getState().selectedSource?.kind).toBe('artifact');
     });
 
+    it('adds a provider through the native dialog and clears the draft', () => {
+        const { modelSources } = mount();
+        act(() => { button('Add API provider').click(); });
+        act(() => {
+            input('Provider name').value = 'API B';
+            input('Provider name').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => {
+            input('Provider base URL').value = 'https://b.example.com/v1';
+            input('Provider base URL').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => {
+            input('Provider model').value = 'model-b';
+            input('Provider model').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => {
+            input('API key').value = 'new-secret';
+            input('API key').dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { host.querySelector('form[data-action="save-provider"]')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        expect(modelSources.addApi).toHaveBeenCalledWith({ label: 'API B', preset: 'custom', baseUrl: 'https://b.example.com/v1', model: 'model-b', apiKey: 'new-secret' });
+        expect(host.querySelector('dialog')).toBeNull();
+        act(() => { button('Add API provider').click(); });
+        expect(input('API key').value).toBe('');
+    });
+
     it('rejects a non-HTTP provider edit before writing or emitting config', () => {
         const { modelSources, onError } = mount();
         const configChanged = vi.fn();

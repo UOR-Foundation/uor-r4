@@ -273,5 +273,6 @@ describe('StudioApp', () => {
         act(() => { button('Clear sessions').click(); });
         act(() => { button('Confirm clear sessions').click(); });
         expect(host.textContent).toContain('No sessions yet');
+        expect(store.getState().session.phase).toBe('new');
     });
 });

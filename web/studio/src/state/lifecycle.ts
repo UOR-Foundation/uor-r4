@@ -94,6 +94,7 @@ export type LifecycleAction =
     | { type: 'file/opened'; path: string }
     | { type: 'file/closed' }
     | { type: 'session/activated' }
+    | { type: 'session/cleared' }
     | { type: 'file/dirty' }
     | { type: 'file/saveStarted'; path: string }
     | { type: 'file/saveFinished'; path: string; saveId?: number }
@@ -257,6 +258,12 @@ export class LifecycleStore {
                 this.state = {
                     ...this.state,
                     file: { phase: 'no-open-file', path: null, savePath: null, saveId: null, error: null },
+                };
+                return;
+            case 'session/cleared':
+                this.state = {
+                    ...this.state,
+                    session: { phase: 'new', activeGeneration: null, lastGeneration: null, error: null },
                 };
                 return;
             case 'session/activated':

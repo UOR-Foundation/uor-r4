@@ -156,10 +156,11 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
             {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
             {settingsOpen && <Settings ui={ui} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onChange={(kind) => {
+                setError(null);
                 if (kind === 'editor') store.dispatch({ type: 'file/closed' });
                 else {
                     setSessionRevision((value) => value + 1);
-                    store.dispatch({ type: 'session/activated' });
+                    store.dispatch({ type: sessions.activeSessionId() ? 'session/activated' : 'session/cleared' });
                 }
             }} />}
         </AppShell>

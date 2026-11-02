@@ -64,6 +64,7 @@ describe('Settings', () => {
         act(() => { button('Confirm clear sessions').click(); });
         expect(onError).toHaveBeenCalledWith('Session store not ready.');
         expect(onChange).not.toHaveBeenCalled();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Session store not ready.');
     });
 
     it('requires confirmation before clearing sessions or editor tabs', () => {

@@ -30,7 +30,7 @@ The foundation and core typed workflow components are implemented without replac
 
 ## How to start
 
-Read the rebased/rescoped design at `docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md`. The foundation merged in #3520; the current unit implements the core workflows in `docs/superpowers/plans/2026-11-02-studio-core-workflows.md`. Keep the legacy page live, do not invoke the publisher, and do not migrate real browser data.
+Read the rebased/rescoped design at `docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md`. The foundation merged in #3520 and the core workflows are implemented in PR #3541. Continue with the live IDE experience and remaining real-browser parity/migration work rather than reopening the core library. Do not invoke the publisher or migrate real browser data; production publication is a separate owner decision.
 
 ## Rules that apply
 
