@@ -58,7 +58,7 @@ fn main() {
         20_261_105,
     )
     .expect("rank-margin probe");
-    let sample = (0u32..64)
+    let sample = (0u32..VOCABULARY as u32)
         .find_map(|input| {
             let reading = probe
                 .evaluate_sample(&RankMarginSample {
@@ -70,13 +70,28 @@ fn main() {
                 .top8
                 .iter()
                 .copied()
-                .find(|&target| target != reading.top1)
-                .map(|target| RankMarginSample {
-                    input: vec![input],
-                    target,
+                .filter(|&target| target != reading.top1)
+                .find_map(|target| {
+                    let sample = RankMarginSample {
+                        input: vec![input],
+                        target,
+                    };
+                    let mut trial = CpuRankMarginTrainer::from_artifact(
+                        &artifact,
+                        vec![sample.clone()],
+                        config,
+                        20_261_105,
+                    )
+                    .expect("rank-margin trial");
+                    trial
+                        .train_steps(1)
+                        .expect("rank-margin trial")
+                        .first()
+                        .is_some_and(|step| step.updated)
+                        .then_some(sample)
                 })
         })
-        .expect("an admitted non-top-1 sample");
+        .expect("a sample with one accepted update");
 
     let mut warmup =
         CpuRankMarginTrainer::from_artifact(&artifact, vec![sample.clone()], config, 20_261_105)

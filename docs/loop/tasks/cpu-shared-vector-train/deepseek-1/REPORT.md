@@ -18,8 +18,9 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
   - target moves one bounded Q12 step toward the query;
   - rival moves one bounded Q12 step away;
   - lower coordinate wins deterministic ties;
-  - the first eight and last eight values stay fixed, preserving the writer cell identity.
-- Patched only `writer.table` in the artifact bytes, reparsed the full model, and accepted the step only on strict exact-margin decrease with target admission preserved.
+  - the first eight and last eight values stay fixed.
+- Rank/admission readings use serving's residue cell `token % 256` and its kept-cell scan, not a guessed root-derived token cell.
+- Patched only `writer.table` in the artifact bytes, reparsed the full model, reran the sample through the changed forward, and accepted the step only on strict exact-margin decrease with target admission preserved.
 - Rebuilding the CPU forward from the patched artifact refreshes all Hamming vocabulary keys and codes.
 - Added exact readings for target distance/rank, margin loss, top-1, top-8, target admission and kept cells.
 - Added a versioned checkpoint containing the patched artifact, sample fingerprint and order, config, seed, step, epoch and cursor.
@@ -36,9 +37,9 @@ Lab: deepseek. Item: [cpu-shared-vector-train](../../../../roadmap/items/cpu-sha
 
 | Timed steps | Accepted | Elapsed | Steps/s | Final margin | Peak RSS |
 |---:|---:|---:|---:|---:|---:|
-| 64 | 48 | 236.274 ms | 270.872 | 0 | 11,560 KiB |
+| 64 | 56 | 271.829 ms | 235.442 | 9,838 | 11,416 KiB |
 
-Checkpoint SHA-256: `08a08f5e42cf29ab7b53b48423694088a2073cd318c49be6779ab5aeb3d6af7a`.
+Checkpoint SHA-256: `f4561fb028718df033b85ca1de16b58fe742cc65014b09b14e0ef50bb4e0726f`.
 
 ## Checks run at the head
 

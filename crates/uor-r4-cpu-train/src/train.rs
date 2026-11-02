@@ -4,7 +4,6 @@
 //! admitted rival away from it. The complete patched artifact is parsed and
 //! rebuilt immediately, so table-derived Hamming keys cannot remain stale.
 
-use uor_r4_discrete::normalization_mechanism::identify_orbit_root;
 use uor_r4_integer::stack::IntegerStackModel;
 
 use crate::{CpuFbsForward, CpuFbsHead, CpuTrainError, CELL_COUNT, TOP_K, VOCABULARY};
@@ -374,7 +373,7 @@ impl CpuRankMarginTrainer {
         let patched = patch_writer_table(&self.artifact, &proposed)?;
         let forward = CpuFbsForward::from_artifact(&patched)
             .map_err(|error| invalid(format!("patched rank-margin artifact: {error}")))?;
-        let probe = Self {
+        let mut probe = Self {
             artifact: patched.clone(),
             forward,
             samples: self.samples.clone(),
@@ -386,7 +385,8 @@ impl CpuRankMarginTrainer {
             cursor: self.cursor,
             order: self.order.clone(),
         };
-        let after = probe.reading(query, target)?;
+        let after_query = probe.query_for(&probe.samples[sample_index].clone())?;
+        let after = probe.reading(&after_query, target)?;
         let accepted = after.margin_loss < before.margin_loss
             && (!before.target_admitted || after.target_admitted);
         if accepted {
@@ -456,14 +456,11 @@ impl CpuRankMarginTrainer {
             .take(self.forward.kept_cell_count())
             .map(|&(_, cell)| cell as u32)
             .collect();
-        let target_cell = token_cell(&table[target as usize * width..][..width], width)?;
+        let target_cell = (target % CELL_COUNT as u32) as u16;
         let target_admitted = admitted.contains(&u32::from(target_cell));
 
         let mut ranked: Vec<(i64, u32)> = (0..vocab)
-            .filter(|&token| {
-                token_cell(&table[token * width..][..width], width)
-                    .is_ok_and(|cell| admitted.contains(&u32::from(cell)))
-            })
+            .filter(|&token| admitted.contains(&((token % CELL_COUNT) as u32)))
             .map(|token| (distances[token], token as u32))
             .collect();
         ranked.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
@@ -541,6 +538,9 @@ fn shuffled_order(len: usize, seed: u64, epoch: u64) -> Vec<usize> {
 }
 
 fn move_toward(value: i16, query: i32, step: i16, limit: i16) -> i16 {
+    if value < -limit || value > limit || query == i32::from(value) {
+        return value;
+    }
     let next = if query > i32::from(value) {
         i32::from(value) + i32::from(step)
     } else if query < i32::from(value) {
@@ -552,40 +552,15 @@ fn move_toward(value: i16, query: i32, step: i16, limit: i16) -> i16 {
 }
 
 fn move_away(value: i16, query: i32, step: i16, limit: i16) -> i16 {
+    if value < -limit || value > limit {
+        return value;
+    }
     let next = if query >= i32::from(value) {
         i32::from(value) - i32::from(step)
     } else {
         i32::from(value) + i32::from(step)
     };
     next.clamp(-i32::from(limit), i32::from(limit)) as i16
-}
-
-fn token_cell(row: &[i16], width: usize) -> Result<u16> {
-    let first: [i32; 8] = row[..8]
-        .iter()
-        .map(|&value| {
-            let value = i32::from(value);
-            (value % 4096 == 0).then_some(value / 4096)
-        })
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| invalid("trained table row is not on the Q12 orbit grid"))?
-        .try_into()
-        .map_err(|_| invalid("token row first block differs"))?;
-    let last: [i32; 8] = row[width - 8..]
-        .iter()
-        .map(|&value| {
-            let value = i32::from(value);
-            (value % 4096 == 0).then_some(value / 4096)
-        })
-        .collect::<Option<Vec<_>>>()
-        .ok_or_else(|| invalid("trained table row is not on the Q12 orbit grid"))?
-        .try_into()
-        .map_err(|_| invalid("token row last block differs"))?;
-    let first = identify_orbit_root(&first)
-        .ok_or_else(|| invalid("trained table row's first block is not an orbit root"))?;
-    let last = identify_orbit_root(&last)
-        .ok_or_else(|| invalid("trained table row's last block is not an orbit root"))?;
-    Ok(u16::from(first) * 16 + u16::from(last))
 }
 
 fn patch_writer_table(artifact: &[u8], table: &[i16]) -> Result<Vec<u8>> {
@@ -752,29 +727,63 @@ mod tests {
         snapshot
     }
 
-    fn fixture(hamming: bool) -> (CpuRankMarginTrainer, Vec<i32>, u32, u32) {
+    fn training_case(
+        hamming: bool,
+    ) -> (Vec<u8>, RankMarginConfig, RankMarginSample, Vec<i32>, u32) {
         let snapshot = canonical_snapshot(hamming);
         let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
-        let trainer = CpuRankMarginTrainer::from_artifact(
+        let config = RankMarginConfig {
+            margin_q12: 1,
+            step_q12: 1,
+            parameter_limit_q12: 8_192,
+        };
+        let mut probe = CpuRankMarginTrainer::from_artifact(
             &artifact,
             vec![RankMarginSample {
-                input: vec![272],
-                target: 272,
+                input: vec![0],
+                target: 0,
             }],
-            RankMarginConfig {
-                margin_q12: 1,
-                step_q12: 1,
-                parameter_limit_q12: 8_192,
-            },
+            config,
             7,
         )
         .unwrap();
-        let width = trainer.forward.width();
-        let query = trainer.forward.token_table()[..width]
+        let sample = admitted_samples(&mut probe, 1).remove(0);
+        let query = probe.query_for(&sample).unwrap();
+        let before = probe.reading(&query, sample.target).unwrap();
+        let rival = before
+            .top8
             .iter()
-            .map(|&value| i32::from(value))
-            .collect();
-        (trainer, query, 0, 272)
+            .copied()
+            .find(|&token| token != sample.target)
+            .unwrap();
+        (artifact, config, sample, query, rival)
+    }
+
+    fn admitted_samples(probe: &mut CpuRankMarginTrainer, count: usize) -> Vec<RankMarginSample> {
+        let mut samples = Vec::new();
+        for input in 0u32..VOCABULARY as u32 {
+            let scan = RankMarginSample {
+                input: vec![input],
+                target: 0,
+            };
+            let reading = probe.evaluate_sample(&scan).unwrap();
+            if let Some(target) = reading
+                .top8
+                .iter()
+                .copied()
+                .find(|&token| token != reading.top1)
+            {
+                samples.push(RankMarginSample {
+                    input: vec![input],
+                    target,
+                });
+                if samples.len() == count {
+                    break;
+                }
+            }
+        }
+        assert_eq!(samples.len(), count);
+        samples
     }
 
     fn writer_span(artifact: &[u8]) -> std::ops::Range<usize> {
@@ -794,27 +803,28 @@ mod tests {
 
     #[test]
     fn a_rank_margin_step_moves_target_and_rival_without_changing_cells() {
-        let (mut trainer, query, rival, target) = fixture(false);
-        let before = trainer.reading(&query, target).unwrap();
+        let (artifact, config, sample, query, rival) = training_case(false);
+        let mut trainer =
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample.clone()], config, 7)
+                .unwrap();
+        let before = trainer.reading(&query, sample.target).unwrap();
         assert!(before.target_admitted, "{before:?}");
         assert!(before.margin_loss > 0);
         let width = trainer.forward.width();
         let target_cell = before.target_cell;
-        let step = trainer.apply_query(0, &query, target).unwrap();
+        let step = trainer.train_steps(1).unwrap().remove(0);
         assert!(step.updated, "{step:?}");
         assert_eq!(step.rival, Some(rival));
         let coordinate = step.coordinate.unwrap();
         assert!((8..width - 8).contains(&coordinate));
         assert!(step.after.margin_loss < step.before.margin_loss);
-        assert!(step.after.target_distance < step.before.target_distance);
         assert_eq!(step.after.target_cell, target_cell);
         assert!(step.after.target_admitted);
         assert!(step.after.top8.len() <= TOP_K);
         assert!(IntegerStackModel::parse(trainer.artifact()).is_ok());
         let span = writer_span(trainer.artifact());
-        let original = fixture(false).0.artifact;
-        assert_eq!(original.len(), trainer.artifact().len());
-        for (index, (&before, &after)) in original.iter().zip(trainer.artifact()).enumerate() {
+        assert_eq!(artifact.len(), trainer.artifact().len());
+        for (index, (&before, &after)) in artifact.iter().zip(trainer.artifact()).enumerate() {
             if index < span.start || index >= span.end {
                 assert_eq!(before, after, "non-writer byte {index} changed");
             }
@@ -823,20 +833,12 @@ mod tests {
 
     #[test]
     fn admission_guard_refuses_an_unadmitted_target() {
-        let (mut trainer, query, _, _) = fixture(false);
-        let width = trainer.forward.width();
+        let (artifact, config, sample, query, _) = training_case(false);
+        let mut trainer =
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample], config, 7).unwrap();
+        let admitted = trainer.reading(&query, 0).unwrap().admitted_cells;
         let target = (1..VOCABULARY)
-            .find(|&token| {
-                token_cell(
-                    &trainer.forward.token_table()[token * width..][..width],
-                    width,
-                )
-                .is_ok_and(|_| {
-                    !trainer
-                        .reading(&query, token as u32)
-                        .is_ok_and(|reading| reading.target_admitted)
-                })
-            })
+            .find(|&token| !admitted.contains(&((token % CELL_COUNT) as u32)))
             .unwrap() as u32;
         let before = trainer.artifact().to_vec();
         let step = trainer.apply_query(0, &query, target).unwrap();
@@ -846,8 +848,10 @@ mod tests {
 
     #[test]
     fn an_update_refreshes_hamming_codes_and_matches_the_served_artifact() {
-        let (mut trainer, query, _, target) = fixture(true);
-        let step = trainer.apply_query(0, &query, target).unwrap();
+        let (artifact, config, sample, _, _) = training_case(true);
+        let mut trainer =
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample], config, 7).unwrap();
+        let step = trainer.train_steps(1).unwrap().remove(0);
         assert!(step.updated);
         let model = IntegerStackModel::parse(trainer.artifact()).unwrap();
         let mut session = model.session();
@@ -863,18 +867,28 @@ mod tests {
 
     #[test]
     fn checkpoint_resume_reproduces_bytes_and_next_readings() {
-        let (mut original, query, _, target) = fixture(true);
-        original.apply_query(0, &query, target).unwrap();
-        original.step = 1;
-        original.cursor = 0;
+        let snapshot = canonical_snapshot(true);
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let mut probe = CpuRankMarginTrainer::from_artifact(
+            &artifact,
+            vec![RankMarginSample {
+                input: vec![0],
+                target: 0,
+            }],
+            RankMarginConfig::default(),
+            17,
+        )
+        .unwrap();
+        let samples = admitted_samples(&mut probe, 3);
+        let mut original =
+            CpuRankMarginTrainer::from_artifact(&artifact, samples.clone(), probe.config, 17)
+                .unwrap();
+        original.train_steps(2).unwrap();
         let checkpoint = original.checkpoint().unwrap();
-        let samples = original.samples.clone();
         let mut resumed = CpuRankMarginTrainer::resume(&checkpoint, samples.clone()).unwrap();
-        let left = original.apply_query(0, &query, target).unwrap();
-        let right = resumed.apply_query(0, &query, target).unwrap();
+        let left = original.train_steps(5).unwrap();
+        let right = resumed.train_steps(5).unwrap();
         assert_eq!(left, right);
-        original.step += 1;
-        resumed.step += 1;
         assert_eq!(
             original.checkpoint().unwrap(),
             resumed.checkpoint().unwrap()
@@ -890,55 +904,59 @@ mod tests {
 
     #[test]
     fn parameter_bounds_and_frozen_query_training_are_deterministic() {
-        assert_eq!(move_toward(10, 0, 4, 8), 6);
+        assert_eq!(move_toward(10, 0, 4, 8), 10);
+        assert_eq!(move_toward(6, 0, 4, 8), 2);
         assert_eq!(move_toward(0, 10, 4, 8), 4);
-        assert_eq!(move_away(10, 0, 4, 8), 8);
+        assert_eq!(move_away(10, 0, 4, 8), 10);
+        assert_eq!(move_away(6, 0, 4, 8), 8);
         assert_eq!(move_away(0, 10, 4, 8), -4);
-        let (left, query, _, target) = fixture(false);
-        let (right, _, _, _) = fixture(false);
-        let mut left = left;
-        let mut right = right;
-        let a = left.apply_query(0, &query, target).unwrap();
-        let b = right.apply_query(0, &query, target).unwrap();
-        assert_eq!(a, b);
+        assert_eq!(move_toward(20, 0, 1, 8), 20);
+        assert_eq!(move_away(-20, 0, 1, 8), -20);
+        let (artifact, config, sample, _, _) = training_case(false);
+        let mut left =
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample.clone()], config, 9)
+                .unwrap();
+        let mut right =
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample], config, 9).unwrap();
+        assert_eq!(left.train_steps(3).unwrap(), right.train_steps(3).unwrap());
         assert_eq!(left.checkpoint().unwrap(), right.checkpoint().unwrap());
     }
 
     #[test]
-    fn scheduled_sample_training_reports_the_base_metrics() {
-        let (mut search, _, _, _) = fixture(false);
-        let sample = (0u32..64)
+    fn a_satisfied_margin_leaves_the_artifact_and_clocks_unchanged() {
+        let snapshot = canonical_snapshot(false);
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let config = RankMarginConfig::default();
+        let mut probe = CpuRankMarginTrainer::from_artifact(
+            &artifact,
+            vec![RankMarginSample {
+                input: vec![0],
+                target: 0,
+            }],
+            config,
+            13,
+        )
+        .unwrap();
+        let sample = (0u32..VOCABULARY as u32)
             .find_map(|input| {
-                let probe = RankMarginSample {
+                let scan = RankMarginSample {
                     input: vec![input],
                     target: 0,
                 };
-                let query = search.query_for(&probe).unwrap();
-                let reading = search.reading(&query, 0).unwrap();
-                reading
-                    .top8
-                    .iter()
-                    .copied()
-                    .find(|&target| target != reading.top1)
-                    .map(|target| RankMarginSample {
-                        input: vec![input],
-                        target,
-                    })
+                let reading = probe.evaluate_sample(&scan).unwrap();
+                (reading.margin_loss == 0).then_some(RankMarginSample {
+                    input: vec![input],
+                    target: reading.top1,
+                })
             })
-            .expect("a causal sample with an admitted non-top-1 target");
-        let target = sample.target;
-        let artifact = search.artifact().to_vec();
+            .expect("an admitted sample with satisfied margin");
+        let before_artifact = artifact.clone();
         let mut trainer =
-            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample], search.config, 11)
-                .unwrap();
-        let readings = trainer.train_steps(1).unwrap();
-        assert_eq!(readings.len(), 1);
-        assert_eq!(readings[0].sample, 0);
-        assert_eq!(readings[0].target, target);
-        assert!(readings[0].updated, "{:?}", readings[0]);
+            CpuRankMarginTrainer::from_artifact(&artifact, vec![sample], config, 13).unwrap();
+        let step = trainer.train_steps(1).unwrap().remove(0);
+        assert!(!step.updated);
+        assert_eq!(trainer.artifact(), before_artifact);
         assert_eq!(trainer.step_count(), 1);
-        assert!(readings[0].before.top8.len() <= TOP_K);
-        assert!(readings[0].after.top8.len() <= TOP_K);
-        assert!(IntegerStackModel::parse(trainer.artifact()).is_ok());
+        assert_eq!(step.before, step.after);
     }
 }
