@@ -75,9 +75,9 @@ the panel is internal to the public DEV input.
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-cpu-train --lib`: 114 passed and four release benchmarks ignored,
-  using a fresh isolated target directory to avoid the known duplicate Cargo artifact race. The
-  `cpu_discrete` subset was 12/12.
+- `cargo test --locked -p uor-r4-cpu-train` in a fresh isolated target directory: 114 library
+  tests, 3 existing FBS-driver tests and 4 new discrete-driver tests passed; four release
+  benchmarks remained ignored. The `cpu_discrete` library subset was 12/12.
 - Exact cargo clippy: `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`:
   passed.
 - Targeted `rustfmt --check` on all changed Rust files: passed.
@@ -85,6 +85,7 @@ the panel is internal to the public DEV input.
 - `cargo run --locked -p xtask -- roadmap check`: 134 items OK.
 - `uor-harness loop gates --lab deepseek --full`: 11/11 green on retry. The first run hit the
   existing loop-drive mock-`gh` `ETXTBSY` race; the identical retry passed.
+- `uor-harness check`: zero errors and 40 pre-existing advisory warnings.
 - Public zero-update and four-step process runs on both four-table seeds: completed.
 - Public process resume from step 2 to step 4: final artifact and checkpoint bytes matched.
 - Evidence `sha256sum -c SHA256SUMS`: passed.
