@@ -4,7 +4,7 @@ Lab: deepseek. Item:
 [cpu-training-pilot](../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order:
 [deepseek-11](../../loop/tasks/cpu-training-pilot/deepseek-11/ORDER.md).
-Source: `29abf0d5f6c5cbb74199c0f4e9cfb6ae9c8cb188`.
+Source: `0325ccc07de9b651913fcf1bfcac850b5c2b93be`.
 
 TEST FITNESS: PENDING
 
