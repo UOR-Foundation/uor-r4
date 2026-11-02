@@ -100,7 +100,7 @@ The item's done-whens 1–5 above are the item's. This unit's done-whens are its
 4. **Tests on synthetic traces,** one per rule and per refusal, each non-trivial rule with a negative gate (the rule set aside, the test fails, restored).
 5. **A reading on real traces, outside Q5's set and not Q5:**
    - F's DEV s1 base trace against itself: no difference before any nearest, every pick equal;
-   - claude-253's one-forced window against the base's: the first difference is the bucket forced at step 49, entries 1 and 9, not a near tie, and none before step 49;
+   - claude-253's one-forced window against the base's: no difference before step 49, and the first difference is the bucket forced at step 49, entries 1 and 9. *Amended during the work:* this bullet first ended "not a near tie". But claude-253 forced entry 9 where both windows' score selects 1, a test of the forcing path and not a replay value. So done-when 2's refusals apply, and the grader stops there as an instrument fault instead of judging a near tie: without Φ, an entry its score does not select; with claude-253's Φ, I-Force (not the reference's value);
    - the deciles of F's base trace;
    - every table check on F's base trace (with F's table) and R's DEV s1 trace (with R's).
 6. **The host suite of `uor-r4-integer`, `loop gates --full`, `loop report --check` and `loop pr-check --local` pass.** A REPORT with the negatives first. The item stays `ready`: done-when 3 waits on Q5.
