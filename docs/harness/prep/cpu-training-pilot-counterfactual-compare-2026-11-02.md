@@ -6,7 +6,9 @@ Order:
 [deepseek-11](../../loop/tasks/cpu-training-pilot/deepseek-11/ORDER.md).
 Source: `0325ccc07de9b651913fcf1bfcac850b5c2b93be`.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
 
 ## Question
 
@@ -198,7 +200,7 @@ fresh-language behavior or correct for the public base model's exposure.
 ## Cost
 
 Local Ryzen 9 9950X, no GPU, pod or paid service. At registration the filesystem
-had `576,934,543,360` bytes available, above the required `30 GiB + 128 MiB`;
+had `574,318,002,176` bytes available, above the required `30 GiB + 128 MiB`;
 the build target is 255,811,474 bytes and expected evidence is under 1 GiB.
 The 10 sequential processes are projected below 45 minutes. No automatic retry.
 
@@ -220,4 +222,14 @@ victory or GPU qualification.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
+
+A fresh-context deepseek reviewer checked branch head `45edffe5d` after the
+preflight repair. Source commit `0325ccc07de9b651913fcf1bfcac850b5c2b93be` is
+reachable and its runner/trainer/corpus bytes match the pins. The reviewer
+expanded and ran the exact nine-line preflight independently: every source,
+executable, artifact, token, mask and manifest pin returned `OK`. The output
+root was absent, storage exceeded the floor, the runner test passed, and no
+public arm or model training had run.
