@@ -8,6 +8,7 @@ function sources() {
     const provider: ApiProvider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
     const list = (): ModelSourceList => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] });
     return {
+        catalog: vi.fn(() => ({ models: [] })),
         list: vi.fn(list),
         active: vi.fn(() => list().active),
         apiConfig: vi.fn((id?: string) => id && id !== provider.id ? null : provider),
@@ -125,7 +126,7 @@ describe('model source adapter', () => {
         adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old', file_name: 'a.lut', artifact_sha256: 'abc' } });
         expect(store.canRun()).toBe(false);
         await vi.waitFor(() => expect(transport.postMessage).toHaveBeenCalledTimes(2));
-        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'b.lut', artifact_sha256: 'abc', sha256_verified: true, engine_supported: true, can_generate: false, source: 'url' } });
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'b.lut', artifact_sha256: 'abc', sha256_verified: true, engine_supported: true, can_generate: false, can_predict: true, source: 'url' } });
         expect(store.getState().residentArtifact).toMatchObject({
             sourceId: 'url',
             schema: 'new',
@@ -134,6 +135,7 @@ describe('model source adapter', () => {
             verified: true,
             engineSupported: true,
             canGenerate: false,
+            canPredict: true,
             source: 'url',
         });
         expect(store.canRun()).toBe(true);

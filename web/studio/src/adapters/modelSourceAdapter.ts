@@ -15,6 +15,7 @@ export interface WorkerCapabilities {
     sha256_verified?: boolean | null;
     engine_supported?: boolean;
     can_generate?: boolean;
+    can_predict?: boolean;
     source?: string;
 }
 
@@ -207,6 +208,7 @@ export function createModelSourceAdapter(
                             verified: capabilities?.sha256_verified ?? null,
                             engineSupported: capabilities?.engine_supported,
                             canGenerate: capabilities?.can_generate,
+                            canPredict: capabilities?.can_predict,
                             source: capabilities?.source,
                         },
                     });

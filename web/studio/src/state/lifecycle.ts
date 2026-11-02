@@ -30,6 +30,7 @@ export interface ResidentArtifact {
     verified?: boolean | null;
     engineSupported?: boolean;
     canGenerate?: boolean;
+    canPredict?: boolean;
     source?: string;
 }
 
