@@ -6374,20 +6374,24 @@ pub fn score_rows(
                     let prompt = &window.input_ids[..=off];
                     // The prompt's own flags: an earlier reply in it is limited as in training.
                     let flags = window_input_mask(std::slice::from_ref(window), &split.mask)?;
-                    let DecodedReply { tokens: reply, admitted, stepped, .. } =
-                        decode_reply_with_mode(
-                            &model,
-                            PointObjective::Cell,
-                            prompt,
-                            reply_tokens,
-                            seed,
-                            rule,
-                            index,
-                            Some(eos),
-                            scope,
-                            &flags[..=off],
-                            trained_as_served,
-                        )?;
+                    let DecodedReply {
+                        tokens: reply,
+                        admitted,
+                        stepped,
+                        ..
+                    } = decode_reply_with_mode(
+                        &model,
+                        PointObjective::Cell,
+                        prompt,
+                        reply_tokens,
+                        seed,
+                        rule,
+                        index,
+                        Some(eos),
+                        scope,
+                        &flags[..=off],
+                        trained_as_served,
+                    )?;
                     let reference = reference_reply(window, reply_tokens);
                     let (reply_keys, reply_named) = reply_key_hits(prompt, cut_at_eos(&reply, eos), named);
                     let (reference_keys, reference_named) =
@@ -12218,8 +12222,20 @@ mod tests {
             let shift = sample as u32 * 101;
             let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
             let decode = |rule| {
-                decode_reply_with_mode(&model, PointObjective::Cell, &prompt, 32, 1, rule, sample, None, ReadScope::Full, &[], false)
-                    .unwrap()
+                decode_reply_with_mode(
+                    &model,
+                    PointObjective::Cell,
+                    &prompt,
+                    32,
+                    1,
+                    rule,
+                    sample,
+                    None,
+                    ReadScope::Full,
+                    &[],
+                    false,
+                )
+                .unwrap()
             };
             let greedy = decode(DecodeRule::Greedy).tokens;
             assert_eq!(decode(DecodeRule::CycleStep { k: 1, n: 4 }).tokens, greedy, "sample {sample}");
@@ -12267,7 +12283,20 @@ mod tests {
             crate::flock_read::points(&model, p, 1, p.len()).unwrap().narrow(0, p.len() - 1, 1).unwrap()
         };
         let decode = |p: &[u32], n: usize| {
-            decode_reply_with_mode(&model, PointObjective::Cell, p, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[], false).unwrap()
+            decode_reply_with_mode(
+                &model,
+                PointObjective::Cell,
+                p,
+                n,
+                1,
+                DecodeRule::Greedy,
+                0,
+                None,
+                ReadScope::Full,
+                &[],
+                false,
+            )
+            .unwrap()
         };
         // A memory whose table holds a's own turn key, with a zero weight, so it moves nothing.
         let slots = opening_slots(&a, 8, OpeningAnchor::Turn);
@@ -12302,9 +12331,21 @@ mod tests {
         let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
         let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37) % 4096).collect();
         let decode = |prompt: &[u32], n| {
-            decode_reply_with_mode(&model, PointObjective::Cell, prompt, n, 1, DecodeRule::Greedy, 0, None, ReadScope::Full, &[], false)
-                .unwrap()
-                .tokens
+            decode_reply_with_mode(
+                &model,
+                PointObjective::Cell,
+                prompt,
+                n,
+                1,
+                DecodeRule::Greedy,
+                0,
+                None,
+                ReadScope::Full,
+                &[],
+                false,
+            )
+            .unwrap()
+            .tokens
         };
         set_forced_opening(Some(77));
         let forced = decode(&prompt, 16);
@@ -13938,9 +13979,8 @@ mod tests {
         let device = Device::new_cuda(0).unwrap();
         let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device)?;
         let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37) % 4096).collect();
-        let hidden = hs::with_served_surrogate_training(1, 0, || {
-            model.hidden(&prompt, 1, prompt.len())
-        })?;
+        let hidden =
+            hs::with_served_surrogate_training(1, 0, || model.hidden(&prompt, 1, prompt.len()))?;
         let expected = native_writer_next_token(&model, &hidden, true)?;
         let decoded = decode_reply_with_mode(
             &model,
@@ -13980,7 +14020,20 @@ mod tests {
             let shift = sample as u32 * 101;
             let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37 + shift) % 4096).collect();
             let decode = |rule| {
-                decode_reply_with_mode(&model, PointObjective::Cell, &prompt, 16, 1, rule, sample, None, ReadScope::Full, &[], false).unwrap()
+                decode_reply_with_mode(
+                    &model,
+                    PointObjective::Cell,
+                    &prompt,
+                    16,
+                    1,
+                    rule,
+                    sample,
+                    None,
+                    ReadScope::Full,
+                    &[],
+                    false,
+                )
+                .unwrap()
             };
             let greedy = decode(DecodeRule::Greedy);
             assert!(greedy.admitted.is_empty(), "greedy records no counts");
