@@ -235,6 +235,7 @@ describe('actual page prediction hooks', () => {
         const { app, hooks, conversation, setMetrics } = pageHooks();
         app.conversations = [conversation];
         app.activeConversationId = conversation.id;
+        app.caps = { schema: 'uor-r4.lut-stack/1', shape: { vocab: 17, context: 64 } };
         app.worker.postMessage = vi.fn(() => { throw new Error('clone failed'); });
         expect(hooks.sendFromComposer('chat')).toBe(false);
         expect(conversation.messages).toHaveLength(0);
@@ -427,13 +428,14 @@ describe('actual page local fallback hook', () => {
         };
         const updatePrivacyStatus = vi.fn();
         const factory = new Function(
-            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
-            `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
+            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$', 'normalizeBaseUrl',
+            `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
+             ${section('function chatReadiness', '/* ------------------------------------------------------------ metrics */')}
              ${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
          ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
              return onModelSourceChanged;`,
         );
-        const onModelSourceChanged = factory(app, ModelSources, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;
+        const onModelSourceChanged = factory(app, ModelSources, vi.fn(), updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector), normalizeBaseUrl) as (event: Event) => void;
         document.addEventListener('uor-model-source-changed', onModelSourceChanged);
         const provider = ModelSources.addApi({ label: 'Remove me', baseUrl: 'https://old.example.com/v1', model: 'old' });
         ModelSources.setActive({ kind: 'api', id: provider.id });
@@ -460,13 +462,14 @@ describe('actual page local fallback hook', () => {
         const updatePrivacyStatus = vi.fn();
         const setModelStatus = vi.fn();
         const factory = new Function(
-            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$',
-            `${section('function updateComposerState', '/* ------------------------------------------------------------ metrics */')}
+            'app', 'ModelSources', 'setModelStatus', 'updatePrivacyStatus', 'renderMessages', 'setView', 'toast', 'window', '$', 'normalizeBaseUrl',
+            `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
+             ${section('function chatReadiness', '/* ------------------------------------------------------------ metrics */')}
              ${section('function abortApiForLocalSource', 'function onModelSourceChanged')}
          ${section('function onModelSourceChanged', 'function onApiConfigChanged')}
              return onModelSourceChanged;`,
         );
-        const onModelSourceChanged = factory(app, ModelSources, setModelStatus, updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector)) as (event: Event) => void;
+        const onModelSourceChanged = factory(app, ModelSources, setModelStatus, updatePrivacyStatus, vi.fn(), vi.fn(), vi.fn(), window, (selector: string) => document.querySelector(selector), normalizeBaseUrl) as (event: Event) => void;
         document.addEventListener('uor-model-source-changed', onModelSourceChanged);
         const provider = ModelSources.addApi({ label: 'Edit me', baseUrl: 'https://old.example.com/v1', model: 'old' });
         ModelSources.setActive({ kind: 'api', id: provider.id });

@@ -3814,4 +3814,3 @@ html[data-theme="light"] { --panel-shadow: 0 1px 2px rgba(61, 46, 30, 0.06), 0 1
     .empty-quick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .empty-quick-btn { min-height: 42px; }
 }
-

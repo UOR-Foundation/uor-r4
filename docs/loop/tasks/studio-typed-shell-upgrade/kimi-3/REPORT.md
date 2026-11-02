@@ -1,6 +1,6 @@
 # REPORT: deliver the live Studio IDE experience
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Design: [design](../../../superpowers/specs/2026-11-02-studio-ide-experience-design.md). Plan: [plan](../../../superpowers/plans/2026-11-02-studio-ide-experience.md). Base: `35d7d7b9e225cc97280d379c185d034b451151c2`. Exact delivery-head commit/tree evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Design: [design](../../../superpowers/specs/2026-11-02-studio-ide-experience-design.md). Plan: [plan](../../../superpowers/plans/2026-11-02-studio-ide-experience.md). Base: `aa2fa4da148439e2954ff004abe5d8c0301fd676`. Exact delivery-head commit/tree evidence is posted on the PR.
 
 ## What did not work
 
@@ -12,6 +12,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Policy initially reported only the required REPORT missing. Other checks were advisories; the report now exists.
 - **The first fresh review returned CHANGES.** API readiness accepted malformed/non-HTTP URLs and implied connectivity, demo-created tabs lost demo mode/tree state, mobile scrim/inert state missed breakpoint changes, quick actions left stale section state, and source edits were described as deployed. Seven focused regressions failed first. The page now reuses HTTP(S) validation, says API configured without a reachability claim, restores demo tabs/tree, synchronizes breakpoints and quick-action sections, and labels these as source changes.
 - A later full-suite fixture also needed the existing URL validator injected; that test-only binding was corrected without weakening readiness. An empty restored demo tab has explicit tree/content/mode coverage, while a real-browser reload preserved a non-empty demo buffer and seven-file tree.
+- Rebase onto merged #3541 initially exposed overlapping duplicated history. Reducing integration to the six visual-only commits left two live-page merges and two test-fixture merges. The production merge preserves both chat readiness and request-correlated rollback. Four combined-suite failures were fixture integration gaps: readiness helpers, current send state, API message extraction, and a chat-capable rollback artifact were added or corrected without changing assertions into approval of a regression.
+- Browser DOM snapshots missed the visible Settings modal during cleanup. A direct visual capture confirmed the real modal and its three demo tabs/one unsaved draft; Clear draft visibly restored “No open tabs.” This was an automation-reading limitation, not a product repair.
 - No real model, real API response, real user file, real disk access, production publish, or typed-library cutover is claimed. Real File System Access and full typed-library parity/migration remain later units.
 
 ## What changed
@@ -22,26 +24,25 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Added one labeled mobile scrim, synchronized `aria-expanded`, main-content inertness, scrim click, destination selection, and Escape dismissal.
 - Applied a restrained IDE visual system to the existing shell: clearer panel surfaces, readable type, stronger active states, useful welcome cards, editor tabs, model cards, dialogs, status fields, and responsive layouts in dark/light themes.
 
-No engine, worker, tokenizer, `studio_api.js`, model artifact, publisher, deployment, real browser-data migration, external asset, runtime dependency, or `.github/**` change was made. The typed library remains unmounted; this is a live legacy-page visual/non-model unit, not a typed cutover.
+No engine, worker, tokenizer, `studio_api.js`, model artifact, publisher, deployment, real browser-data migration, external asset, runtime dependency, or `.github/**` change was made. The typed library remains unmounted; this is a live legacy-page visual/non-model unit, not a typed cutover. The branch is rebased onto #3541 and preserves its generation, provider, and transactional-send safeguards.
 
 ## Measurements
 
-- **151 Vitest tests pass across 23 files**, including 8 live Agent readiness/empty-state tests, 5 actual demo workspace tests, and 2 actual mobile navigation tests. **9 Node model-source tests pass. 160 tests total, 0 failures.**
+- **211 Vitest tests pass across 25 files**, including 8 live Agent readiness/empty-state tests, 5 actual demo workspace tests, and 2 actual mobile navigation tests. **12 Node model-source tests pass. 223 tests total, 0 failures.**
 - `npm run typecheck`: PASS, no TypeScript errors.
-- `npm run build`: PASS; `dist/studio-foundation.js` 117.69 kB (gzip 32.31 kB) and `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
-- `node verify_studio_page.mjs --strict-router`: PASS, both legacy strict pages clean. Modified `studio_ui.js`, `studio_files.js`, and `model_sources.js` syntax checks pass.
-- Repository gates: 11/11 GREEN. Claim wording and local policy PASS with disclosed D76 scope/ORDER/FILEMAP advisories.
+- `npm run build`: PASS; `dist/studio-foundation.js` 123.07 kB (gzip 33.77 kB) and `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
+- `node verify_studio_page.mjs --strict-router`: PASS, both legacy strict pages clean. Modified `studio_ui.js`, `studio_files.js`, and `model_sources.js` syntax checks pass. `node verify_studio_page_load.mjs --strict-router`: PASS, including the planted external-request self-test; no external requests from either page.
+- Repository gates: 11/11 GREEN at the pre-integration visual head and rerun at the exact delivery head. Claim wording and local policy PASS with disclosed D76 scope/ORDER/FILEMAP advisories.
 
 ## Real browser evidence
 
-Built-in browser checks exercised the running source page, not only component fixtures or the deployed site:
+Built-in browser checks exercised the running source page after rebase onto #3541, not only component fixtures or the deployed site:
 
-- Desktop 1440×900: Agent welcome, Workspace, Models, Guide, demo tree, editor tabs, attachment state, and no-source Send disabled.
-- Mobile 393×852: all four quick actions fit above the composer; attachments remain full width; the drawer opens with a dimmed backdrop and closes via scrim and Escape. Desktop/mobile transitions end without a stale overlay; the media-change listener itself has module coverage.
-- Dark and light themes preserve readable contrast.
-- Demo workflow: Explore demo → open both tabs → edit `index.css` → switch to Agent → attach it. The inspector shows one context file and Send remains disabled. After creating a demo tab and entering an 11-character buffer, reload preserved the unsaved tab, demo labels, and seven-file tree including `untitled.md`.
-- Settings showed the demo-only open/unsaved tab counts, and Clear draft removed that test state before the clean demo workflow.
-- API-ready state: the existing dummy `https://example.invalid/v1` configuration renders “API configured — external baseline mode” and “Configuration does not prove reachability.” No Test or Send was invoked, so no endpoint was contacted.
+- Desktop 1440×900: Agent welcome, Workspace, Models, Guide, demo tree, both editor tabs, and no-source Send disabled. The six-file demo and saved state appeared without fabricated dirty edits.
+- Mobile 393×852: all four quick actions fit above the composer and controls remain full width. The drawer opens with a dimmed backdrop and closes via scrim, Escape, and destination selection.
+- Dark and light themes preserve readable contrast across the checked surfaces.
+- Demo reload: created `untitled.md`, entered a 10-character buffer, reloaded, and reopened Workspace. The unsaved tab/content, demo labels, and seven-file tree including `untitled.md` were preserved. The reload tool timed out while navigation settled; the new document generation and restored content were verified directly rather than inferred from the tool result.
+- The direct `#settings` route visibly opened Settings with three demo tabs and one unsaved draft. Clear draft visibly restored “No open tabs.” Browser DOM/element snapshots missed the visible modal; visual capture and the actual Clear draft result are the evidence. Earlier visual-head checks also covered demo attachment and a dummy API-configured state without contacting an endpoint.
 
 These are source-page visual/non-model checks, not model, API, real-disk, production-publish, accessibility-certification, or typed-library parity claims.
 

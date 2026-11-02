@@ -13,27 +13,40 @@ function section(start: string, end: string): string {
 function pageHooks() {
     const app = {
         mode: 'wasm',
+        worker: { postMessage: vi.fn() },
         caps: null as null | { schema: string },
         apiConfig: null as null | { baseUrl: string },
         activePredictionRequestId: null as string | null,
         activeGenerationId: 7 as number | null,
+        generationSerial: 7,
+        chatGenerationId: null as number | null,
+        activeChatRequestId: null as string | number | null,
+        chatRequests: {} as Record<string, number>,
+        activeGenerationKind: 'wasm',
         generating: false,
+        abortController: null as AbortController | null,
+        streamingBodyEl: null,
+        assistantBuffer: '',
+        conversations: [] as Array<{ id: string; messages: Array<Record<string, unknown>>; title: string; updatedAt: number; sourceKind: string }>,
+        activeConversationId: 'conversation',
     };
-    const conversation = { messages: [] as Array<Record<string, unknown>>, sourceKind: '' };
+    const conversation = { id: 'conversation', messages: [] as Array<Record<string, unknown>>, title: 'Conversation', updatedAt: 0, sourceKind: '' };
+    app.conversations = [conversation];
     const setView = vi.fn();
     const factory = new Function(
         'app', 'document', 'window', 'toast', 'setView', 'ensureConversation', 'touchConversation',
         'appendMessageElement', 'renderConversationList', 'scrollChat', 'sendViaWorker', 'sendViaApi',
-        'autoGrowTextarea', 'startNewChat', '$', 'normalizeBaseUrl',
+        'autoGrowTextarea', 'startNewChat', '$', 'normalizeBaseUrl', 'persistConversations', 'renderMessages', 'setMetrics',
         `${section('function isDiscreteCapabilities', 'function setPredictorMode')}
          ${section('function chatReadiness', '/* ------------------------------------------------------------ metrics */')}
          ${section('function renderEmptyState', 'function listItem')}
-         ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */')}
+         ${section('function apiMessages', 'async function sendViaApi')}
+         ${section('function sendFromComposer', '/* ------------------------------------------------------------ model sources */').replace('} catch (_error) {', '} catch (error) { throw error;')}
          return { updateComposerState, renderEmptyState, sendFromComposer };`,
     );
     const hooks = factory(
         app, document, window, vi.fn(), setView, () => conversation, vi.fn(), vi.fn(() => null), vi.fn(), vi.fn(),
-        vi.fn(() => true), vi.fn(() => true), vi.fn(), vi.fn(() => true), (selector: string) => document.querySelector(selector), normalizeBaseUrl,
+        vi.fn(() => true), vi.fn(() => true), vi.fn(), vi.fn(() => true), (selector: string) => document.querySelector(selector), normalizeBaseUrl, vi.fn(), vi.fn(), vi.fn(),
     ) as {
         updateComposerState(): void;
         renderEmptyState(container: HTMLElement): void;
