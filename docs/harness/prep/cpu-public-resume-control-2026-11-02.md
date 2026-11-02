@@ -66,7 +66,7 @@ A deterministic mismatch, admission loss or nonzero export mismatch stops the co
 - Finite tests compare uninterrupted and interval-resumed runs and mutate every sidecar identity field. Source artifact, token, mask, manifest, tokenizer, trainer seed, evaluation stride, evaluation cap, completed step, schema and checkpoint hash must all be refused on mismatch.
 - The resumed run must use a separate output directory and may not inherit live trainer state from the source process.
 - The final artifact must parse through `IntegerStackModel`, and the final checkpoint must reproduce the live trainer artifact before success.
-- The step-64 source checkpoint and its sidecar are copied into evidence with their exact hashes. The public runner captures source commit, binary hash, Rust/Cargo versions, kernel, CPU, RAM and filesystem identity.
+- The step-64 checkpoint remains in the ignored local run root because the charter forbids committing binaries. Its sidecar, exact checkpoint hash and the resumed receipt are copied into evidence. The public runner captures source commit, binary hash, Rust/Cargo versions, kernel, CPU, RAM and filesystem identity.
 - A pre-FIT comparison retained in this worktree is diagnostic only. It establishes that the commands are executable and is not the registered outcome.
 
 ## Minimum test power
@@ -94,10 +94,6 @@ A pass supports only hash-bound, process-separated continuation from this step-6
 
 ## Verdict
 
-TEST FITNESS: FIT — an independent fresh-context non-author review approved
-sheet SHA-256 `6fd2630cb2f874078ff897be3063bb412c14bda8e97fa5cf9e37f93547793ca8`
-for this bounded host determinism check at source head `fc488513b`.
-
-The reviewer required all six runs to be repeated after FIT against the reviewed
-source and binary. Existing results remain pre-FIT diagnostics and are not the
-registered outcome. The review is recorded in [FIT_REVIEW.md](../../loop/tasks/cpu-training-pilot/deepseek-3/FIT_REVIEW.md).
+The independent non-author review is recorded separately in
+[FIT_REVIEW.md](../../loop/tasks/cpu-training-pilot/deepseek-3/FIT_REVIEW.md).
+The sheet must remain byte-identical to the reviewed hash.
