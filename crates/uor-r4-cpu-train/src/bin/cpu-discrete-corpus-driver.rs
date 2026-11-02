@@ -643,6 +643,22 @@ mod tests {
         };
         assert_eq!(validate().unwrap().completed_steps, 2);
 
+        let mut wrong_step = binding.clone();
+        wrong_step.completed_steps = 3;
+        std::fs::write(
+            checkpoint_path.with_extension("binding.json"),
+            serde_json::to_vec(&wrong_step).unwrap(),
+        )
+        .unwrap();
+        assert!(validate()
+            .unwrap_err()
+            .contains("binding differs from the requested run"));
+        std::fs::write(
+            checkpoint_path.with_extension("binding.json"),
+            serde_json::to_vec(&binding).unwrap(),
+        )
+        .unwrap();
+
         std::fs::write(checkpoint_path.with_extension("uorlut"), b"changed").unwrap();
         assert!(validate().unwrap_err().contains("artifact bytes differ"));
         std::fs::remove_dir_all(root).unwrap();
