@@ -8,7 +8,7 @@ Base: `b44402e0c`.
 Measure what the current public integer FBS artifact actually emits through the
 product `uor-chat` path on a bounded public prompt panel. Record exact
 transcripts, reply ids, stop reasons and decode speed for two published model
-seeds, including one two-turn memory probe.
+seeds, including two multi-turn memory probes.
 
 This is an ungraded integration baseline. It does not qualify language
 capability and does not replace Claude's capacity or sealed-panel runs.
@@ -30,9 +30,9 @@ No model, serving-format, tokenizer or training code changes.
 
 ## Required design
 
-- Pin both public FBS artifact and tokenizer SHA-256 values.
-- Select eight categories from the public 160-prompt conversational panel
-  before seeing outputs.
+- Pin both public FBS artifacts and both tokenizers by SHA-256.
+- Select eight prompts across all six categories of the public 160-prompt
+  conversational panel before seeing outputs.
 - Use greedy decoding, 16 maximum response tokens and 16 worker threads.
 - Run one-turn prompts in one-shot `--say` mode. Run the memory category as two
   turns in one REPL process.
