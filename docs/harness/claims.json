@@ -1,8 +1,29 @@
 {
+  "deepseek/chat-auto-memory": {
+    "branch": "deepseek/chat-auto-memory",
+    "claimed_at": "2026-11-02T16:16:13-05:00",
+    "head": "8cf219d45",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/chat-memory-bridge": {
+    "branch": "deepseek/chat-memory-bridge",
+    "claimed_at": "2026-11-02T15:26:55-05:00",
+    "head": "e06473303",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/cpu-corpus-resume": {
     "branch": "deepseek/cpu-corpus-resume",
     "claimed_at": "2026-11-02T05:18:19-05:00",
     "head": "20422589a",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/cpu-counterfactual-compare": {
+    "branch": "deepseek/cpu-counterfactual-compare",
+    "claimed_at": "2026-11-02T17:28:58-05:00",
+    "head": "57ca99679",
     "lab": "deepseek",
     "note": ""
   },
@@ -27,10 +48,31 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/cpu-rank-step": {
+    "branch": "deepseek/cpu-rank-step",
+    "claimed_at": "2026-11-02T14:04:18-05:00",
+    "head": "9c9b712a4",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/harness-registry-reconcile": {
     "branch": "deepseek/harness-registry-reconcile",
     "claimed_at": "2026-11-02T04:56:29-05:00",
     "head": "050943645",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/public-chat-baseline": {
+    "branch": "deepseek/public-chat-baseline",
+    "claimed_at": "2026-11-02T14:45:17-05:00",
+    "head": "b44402e0c",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/trained-full-path-audit": {
+    "branch": "deepseek/trained-full-path-audit",
+    "claimed_at": "2026-11-02T16:56:17-05:00",
+    "head": "e6aad12b6",
     "lab": "deepseek",
     "note": ""
   },

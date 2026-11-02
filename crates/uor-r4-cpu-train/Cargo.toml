@@ -48,8 +48,16 @@ name = "cpu-public-fbs-parity"
 path = "src/bin/cpu-public-fbs-parity.rs"
 
 [[bin]]
+name = "cpu-served-forward-audit"
+path = "src/bin/cpu-served-forward-audit.rs"
+
+[[bin]]
 name = "cpu-corpus-driver"
 path = "src/bin/cpu-corpus-driver.rs"
+
+[[bin]]
+name = "cpu-counterfactual-corpus-driver"
+path = "src/bin/cpu-counterfactual-corpus-driver.rs"
 
 [[bin]]
 name = "cpu-discrete-corpus-driver"

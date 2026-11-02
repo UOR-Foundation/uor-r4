@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [turn-memory-reply]
 notebook: docs/research/notebook/float-training.md
-scope: [docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-training/examples/m-world.rs]
+scope: [docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-training/examples/m-world.rs]
 ---
 
 ## Why it matters
@@ -25,8 +25,34 @@ This item is the last part of the open owner direction's order: "`turn-memory-re
 
 So before the model the project ships is trained, the scoring must be able to tell recall of a template from reading the prompt.
 
+## Current public-artifact baseline
+
+On 2 November, the two published dual-c131 integer artifacts were run through
+the product `uor-chat` path under their trained protocol 2 on a fixed
+eight-entry public conversational panel, at seeds 1 and 2 with an exact seed-1
+repeat. The integration path passed: all 24 processes exited 0, all 33 replies
+stopped by EOS or the 16-token cap, every reply text decoded from its recorded
+ids, and the repeat matched all text, ids, stops and history depths. Both fixed
+multi-turn memory anchors failed on both seeds. Peak RSS was 11,592 KiB and
+observed reply rates were 144.47–350.35 ids/s on the local workstation.
+
+This is an ungraded product baseline, not a language or mechanism result. It
+establishes that the public artifact is connected and deterministic and is not
+ready for a useful-chat demonstration; it does not change this item's status or
+replace the served-training comparison above. Full transcripts and pins:
+[public-chat post-smoke baseline](../../labs/one-model-end-to-end/public-chat-post-smoke-2026-11-02/README.md).
+
 ## What is missing
 
+- **Served-surrogate training is wired; GPU validation remains open.** Q16
+  residuals and dynamic i16 recurrence/MLP activations now run in the real
+  geometric hidden path under `--train-as-served 1`, with D11 snaps, a Q12
+  scored query and D11 checkpoint evaluation. Training-only reply cuts are
+  refused because the artifact cannot carry them. The next unit must run the
+  matched four-arm comparison on CUDA; this host cannot execute the tensor
+  graph under D24/D29. A FIT-reviewed two-mode × two-seed comparison harness
+  and a scoring-only `--served-forward` override are ready; the four GPU runs
+  remain `NOT_RUN` while no CUDA device is available.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
   - a TRAIN reply index;
