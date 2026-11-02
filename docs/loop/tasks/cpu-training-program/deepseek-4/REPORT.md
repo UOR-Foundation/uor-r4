@@ -7,6 +7,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - **The program page still described statuses from before the CPU implementation PRs.** It called #3501 "not started", said #3502 still lacked a trained observation, called the quantization row downstream, and did not mention the public trained FBS pair or corpus driver.
 - **The pilot page still described the private artifact and discrete path as missing.** The remaining blocker is credentialed complete-reply/fresh-phrasing data and a FIT pre-registration, not CPU compatibility or admission controls.
 - **The claims ledger retained four DeepSeek branches after their work was already merged.** Those stale rows made `uor-harness check` report claims that could no longer be developed or released as live work.
+- **A merged Kimi performance sheet lacked D22-required headings and made the required harness test repository-wide red.** The durable claims and measurements were preserved; the six missing headings were added with summaries derived only from that sheet's existing contract.
 
 ## What changed
 
@@ -18,6 +19,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - Updated pilot readiness with the public trained FBS/corpus path and the HTTP 401 blocker for sealed panels.
 - Restored the roadmap parser's required `## What is missing` heading on the completed discrete path and regenerated `docs/roadmap/README.md`.
 - Removed only four stale DeepSeek branch claims that point at merged work; the Kimi claim was preserved.
+- Restored the six required D22 headings on the upstream Kimi CUDA performance sheet without changing its pinned heads, bars, rejected attempts or measurements.
 
 ## Measurements and evidence
 
