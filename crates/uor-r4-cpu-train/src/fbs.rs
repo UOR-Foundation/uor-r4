@@ -470,6 +470,13 @@ impl CpuFbsForward {
                 start > 0
                     && start <= payload.position.saturating_add(1)
                     && start <= self.context.saturating_add(1)
+                    && self.memory.as_ref().is_none_or(|memory| {
+                        if start <= payload.position {
+                            anchors == &memory.anchors_at(&payload.tokens, start)
+                        } else {
+                            anchors == &MemoryAnchors::default()
+                        }
+                    })
             }
         };
         if !anchor_tokens_valid || !anchor_limits_valid || !reply_valid {
@@ -1790,6 +1797,9 @@ mod tests {
             |value: &mut serde_json::Value| value["payload"]["tokens"][0] = serde_json::json!(9999),
             |value: &mut serde_json::Value| {
                 value["payload"]["memory_anchors"]["opening"] = serde_json::json!([9999])
+            },
+            |value: &mut serde_json::Value| {
+                value["payload"]["memory_anchors"]["opening"] = serde_json::json!([7])
             },
             |value: &mut serde_json::Value| {
                 value["payload"]["reply_start"] = serde_json::Value::Null

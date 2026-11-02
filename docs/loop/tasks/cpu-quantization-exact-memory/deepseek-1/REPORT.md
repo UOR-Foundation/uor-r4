@@ -15,7 +15,7 @@ Lab: deepseek. Item: [cpu-quantization-exact-memory](../../../../roadmap/items/c
 - The checkpoint binds the exact artifact SHA-256 to the complete dynamic state:
   recurrence state, convolution history, token history, Hamming payload caches,
   opening/reply memory anchors and reply-start position.
-- `resume` reparses the exact artifact, rejects schema/substrate/qualification or hash changes, validates state and history dimensions, tokens, Hamming-cache shapes, anchor inventories and reply position, then constructs no partial forward on refusal.
+- `resume` reparses the exact artifact, rejects schema/substrate/qualification or hash changes, validates state and history dimensions, tokens, Hamming-cache shapes, future-cache zeros, derived memory anchors and reply position, then constructs no partial forward on refusal.
 - Hamming cache shape validation uses the parsed read inventory rather than trusting serialized lengths.
 - Added a real child-process restore control on a combined Hamming-plus-turn-memory artifact with point-key fallback.
 - Added a reset control proving that restored and fresh sessions produce identical subsequent steps and checkpoint bytes.
@@ -33,7 +33,11 @@ Lab: deepseek. Item: [cpu-quantization-exact-memory](../../../../roadmap/items/c
 - `CARGO_TARGET_DIR=target/deepseek-hamming-memory CARGO_BUILD_JOBS=1 cargo test --release --locked -p uor-r4-cpu-train`: PASS after the known duplicate-artifact collision retry, 96 passed and 4 ignored benchmarks.
 - `CARGO_TARGET_DIR=target/deepseek-hamming-memory CARGO_BUILD_JOBS=1 cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`: PASS; dependency crates emitted pre-existing dead-code warnings.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: PASS.
-- D23/D25/D32 ratchets, local PR check and all loop gates are recorded after they run at the final exact head.
+- `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: PASS, including ORDER-first, scope, report, banned-presence, rule-source and read-path checks.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: PASS, all 11 gates green.
 
 ## Skills used
 

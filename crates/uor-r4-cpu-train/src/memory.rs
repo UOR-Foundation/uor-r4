@@ -188,6 +188,17 @@ impl CpuTurnMemory {
         (self.k, self.reply_turn.unwrap_or(0))
     }
 
+    pub(crate) fn anchors_at(&self, tokens: &[u32], reply_start: usize) -> MemoryAnchors {
+        let row = reply_start.saturating_sub(1);
+        MemoryAnchors {
+            opening: self.turn_ids(tokens, row, self.k),
+            reply: self
+                .reply_turn
+                .map(|turn| self.turn_ids(tokens, row, turn))
+                .unwrap_or_default(),
+        }
+    }
+
     fn block_start(&self, row: usize) -> usize {
         row / self.key_window * self.key_window
     }
