@@ -114,6 +114,13 @@
 //! On an evaluation copy rounded as exported (`fbs-snapshot --round-as-exported`, claude-252) the
 //! trace is side `T`, and a copy whose files are not the ones its marker names is refused.
 //!
+//! `--decision-force SPLIT=FORCE_JSON` (claude-253, Q5's forced replay), beside the same split's
+//! `--decision-trace`, forces the windows the `uor-r4.decision-force/1` file names, in the forward
+//! that traces them: each forced rate bucket replaces the entry its lane's score chooses, and each
+//! forced code the computed one, as `fbs-toks --forced --force` forces R's. The trace records them
+//! as used, and refuses a run in which one was not taken; that split's memory-pass rows are the
+//! forced forward's. Refused, before any forward: a position that is not traced and R's refusals.
+//!
 //! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
@@ -158,6 +165,7 @@ use uor_r4_float_train::in_space_long::{
     TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
+use uor_r4_integer::fbs_snapshot::DecisionForce;
 
 fn main() -> Result<()> {
     let mut data_root = None;
@@ -172,6 +180,7 @@ fn main() -> Result<()> {
     let mut fresh_v2 = None;
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
     let mut traces: Vec<(String, Vec<usize>)> = Vec::new();
+    let mut forces: Vec<(String, DecisionForce)> = Vec::new();
     let mut score = None;
     let mut overturn_on = false;
     let mut controls_on = false;
@@ -337,6 +346,7 @@ fn main() -> Result<()> {
             }
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
             "--decision-trace" => traces.push(decision_trace_arg(&value)?),
+            "--decision-force" => forces.push(decision_force_arg(&value)?),
             "--panel" => {
                 let panel = panel_arg(&value)?;
                 if extra_panels.iter().any(|(name, _)| *name == panel.0) {
@@ -632,6 +642,11 @@ fn main() -> Result<()> {
             "--decision-trace applies to --score-rows only".to_owned(),
         ));
     }
+    if !forces.is_empty() && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--decision-force applies to --score-rows only".to_owned(),
+        ));
+    }
     if cycle_grade_on {
         let runs = runs
             .ok_or_else(|| FloatTrainError::Invalid("--cycle-grade needs --runs DIR".to_owned()))?;
@@ -831,6 +846,7 @@ fn main() -> Result<()> {
             &keyed,
             served_on,
             &traces,
+            forces,
             &device,
         )? {
             println!("{}", serde_json::to_string(&file)?);
@@ -933,6 +949,25 @@ fn decision_trace_arg(value: &str) -> Result<(String, Vec<usize>)> {
         )));
     }
     Ok((split.to_owned(), positions))
+}
+
+/// `--decision-force SPLIT=FORCE_JSON` (claude-253): the split and the forced sets, a
+/// `uor-r4.decision-force/1` file, read from the file; its schema is checked by `score_rows`.
+fn decision_force_arg(value: &str) -> Result<(String, DecisionForce)> {
+    let Some((split, path)) = value
+        .split_once('=')
+        .filter(|(s, p)| !s.is_empty() && !p.is_empty())
+    else {
+        return Err(FloatTrainError::Invalid(
+            "--decision-force takes SPLIT=FORCE_JSON".to_owned(),
+        ));
+    };
+    let force: DecisionForce = serde_json::from_slice(&std::fs::read(path)?).map_err(|e| {
+        FloatTrainError::Invalid(format!(
+            "--decision-force {split}: {path} is not a forced set: {e}"
+        ))
+    })?;
+    Ok((split.to_owned(), force))
 }
 
 /// `--key-levels sign=L,hsign=L,point=L` (claude-218): each trunk key's level, 1–10 (q10 to q100).
