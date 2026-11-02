@@ -46,9 +46,9 @@ fn run() -> Result<(), String> {
             return Err(format!("{name}: expected a raw FBS artifact"));
         }
 
-        let prefix_started = std::time::Instant::now();
         let mut cpu = CpuFbsForward::from_artifact(&artifact).map_err(|error| error.to_string())?;
         let mut serving = model.session();
+        let prefix_started = std::time::Instant::now();
         let mut prefixes = 0u64;
         for position in 0..shape.context {
             let token = ((position * 1_103 + seed * 97 + 17) % shape.vocab) as u32;
@@ -101,6 +101,11 @@ fn run() -> Result<(), String> {
                 target,
             });
         }
+        let mut baseline_panel = CpuPanelEvaluator::from_artifact(&artifact, samples.clone(), 1)
+            .map_err(|error| error.to_string())?;
+        let baseline_panel = baseline_panel
+            .evaluate()
+            .map_err(|error| error.to_string())?;
         let mut trainer = CpuRankMarginTrainer::from_artifact(
             &artifact,
             samples.clone(),
@@ -112,10 +117,10 @@ fn run() -> Result<(), String> {
             .train_steps(samples.len())
             .map_err(|error| error.to_string())?;
         let updated_steps = training_steps.iter().filter(|step| step.updated).count();
-        let mut panel = CpuPanelEvaluator::from_artifact(&artifact, samples, 1)
+        let mut panel = CpuPanelEvaluator::from_artifact(trainer.artifact(), samples, 1)
             .map_err(|error| error.to_string())?;
-        let panel_reading = panel.evaluate().map_err(|error| error.to_string())?;
-        if !panel_reading.export.is_exact() {
+        let updated_panel = panel.evaluate().map_err(|error| error.to_string())?;
+        if !baseline_panel.export.is_exact() || !updated_panel.export.is_exact() {
             return Err(format!("{name}: CPU/serving panel export gap is nonzero"));
         }
 
@@ -129,11 +134,20 @@ fn run() -> Result<(), String> {
             "prefix_elapsed_ms": prefix_elapsed_ms,
             "training_steps": training_steps.len(),
             "training_steps_updated": updated_steps,
-            "panel_samples": panel_reading.samples,
-            "panel_target_admitted": panel_reading.target_admitted,
-            "panel_top1_correct": panel_reading.top1_correct,
-            "panel_top8_correct": panel_reading.top8_correct,
-            "panel_export_exact": panel_reading.export.is_exact(),
+            "panel_baseline": {
+                "samples": baseline_panel.samples,
+                "target_admitted": baseline_panel.target_admitted,
+                "top1_correct": baseline_panel.top1_correct,
+                "top8_correct": baseline_panel.top8_correct,
+                "export_exact": baseline_panel.export.is_exact(),
+            },
+            "panel_updated": {
+                "samples": updated_panel.samples,
+                "target_admitted": updated_panel.target_admitted,
+                "top1_correct": updated_panel.top1_correct,
+                "top8_correct": updated_panel.top8_correct,
+                "export_exact": updated_panel.export.is_exact(),
+            },
             "elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         }));
     }

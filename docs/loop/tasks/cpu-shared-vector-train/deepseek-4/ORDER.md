@@ -18,7 +18,7 @@ No serving edit, corpus-scale run, GPU run or language claim.
 ## Done when
 
 - CPU quaternion normalization reproduces the serving `stack_rotation` order: unsigned square root, truncating division, wrapping product and shift, with transition epsilon `4_295` and Hamilton-gate epsilon `0`.
-- Snapped and raw gate/transition modes compose in all four combinations while unsupported recurrence, pointer, nearest-head and read patterns remain refused.
+- Snapped and raw gate/transition modes compose in all four combinations while unsupported recurrence, pointer and read patterns remain refused.
 - Synthetic parity compares every complete Q12 query, top-1 token and kept-cell vector against `IntegerStackModel::session().step_native` in all four combinations.
 - Negative controls prove each raw flag changes at least one decision and neither flag is silently ignored.
 - Raw mode composes with merged Hamming and exact-memory state without changing their parity.

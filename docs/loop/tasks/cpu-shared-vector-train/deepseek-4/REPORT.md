@@ -24,8 +24,8 @@ Public dual-c131 on the Ryzen 9 9950X:
 
 | Seed | Artifact SHA-256 | Prefixes | Prefix time | Rank-margin controls | Panel |
 |---|---|---:|---:|---:|---:|
-| 1 | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` | 192 | 79.158 ms | 16/16 updated | 16/16 admitted, 16/16 top-8, exact export |
-| 2 | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` | 192 | 78.328 ms | 16/16 updated | 16/16 admitted, 16/16 top-8, exact export |
+| 1 | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` | 192 | 77.977 ms | 16/16 updated | baseline and updated: 16/16 admitted, 16/16 top-8, exact export |
+| 2 | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` | 192 | 74.940 ms | 16/16 updated | baseline and updated: 16/16 admitted, 16/16 top-8, exact export |
 
 The prefix timer includes both independent CPU stepping and the serving reference used for comparison. It is not a pure decode benchmark and does not establish corpus training throughput.
 
