@@ -1322,19 +1322,29 @@ impl FTrace {
                 continue;
             };
             let row = |step: usize| b * SHEET_CONTEXT + step;
-            rates.extend(force.buckets.iter().map(|f| crate::geometric_stack::ForcedRate {
-                layer: f.layer,
-                row: row(f.step),
-                lane: f.lane,
-                entry: f.entry,
-            }));
-            codes.extend(force.codes.iter().map(|f| crate::flock_read_hamming::ForcedRowCode {
-                depth: f.depth,
-                row: row(f.step),
-                head: f.head,
-                key: f.role == CodeRole::Key,
-                code: f.code,
-            }));
+            rates.extend(
+                force
+                    .buckets
+                    .iter()
+                    .map(|f| crate::geometric_stack::ForcedRate {
+                        layer: f.layer,
+                        row: row(f.step),
+                        lane: f.lane,
+                        entry: f.entry,
+                    }),
+            );
+            codes.extend(
+                force
+                    .codes
+                    .iter()
+                    .map(|f| crate::flock_read_hamming::ForcedRowCode {
+                        depth: f.depth,
+                        row: row(f.step),
+                        head: f.head,
+                        key: f.role == CodeRole::Key,
+                        code: f.code,
+                    }),
+            );
         }
         (rates, codes)
     }
@@ -1400,9 +1410,7 @@ impl FTrace {
         let Recorded { hamming, rates, lookups } = recorded;
         let lanes = rates.first().map_or(0, |r| r.dims.2);
         if rates.iter().enumerate().any(|(l, r)| {
-            r.layer != l
-                || r.dims != (windows.len(), time, lanes)
-                || r.entry.len() != r.score.len()
+            r.layer != l || r.dims != (windows.len(), time, lanes) || r.entry.len() != r.score.len()
         }) {
             return Err(invalid(
                 "the decision trace's rate scores are not one per layer in order (an instrument fault)",
@@ -1555,7 +1563,9 @@ fn check_forced(
     let mut buckets = std::collections::BTreeSet::new();
     for f in &window.buckets {
         if f.step >= SHEET_CONTEXT || f.layer >= layers || f.lane >= lanes || f.entry > 15 {
-            return Err("a forced bucket names a step, layer, lane or entry outside the model".to_owned());
+            return Err(
+                "a forced bucket names a step, layer, lane or entry outside the model".to_owned(),
+            );
         }
         if !buckets.insert((f.step, f.layer, f.lane)) {
             return Err("a bucket is forced twice".to_owned());
@@ -1598,9 +1608,16 @@ fn forced_within(force: &DecisionForce, windows: &[CausalWindow]) -> Result<()> 
             .find(|c| c.scored_corpus_positions.first() == Some(&w.position))
             .and_then(|c| c.scored_offsets.last())
             .ok_or_else(|| {
-                invalid(format!("--decision-force: position {} names no window of its split", w.position))
+                invalid(format!(
+                    "--decision-force: position {} names no window of its split",
+                    w.position
+                ))
             })?;
-        let steps = w.buckets.iter().map(|b| b.step).chain(w.codes.iter().map(|c| c.step));
+        let steps = w
+            .buckets
+            .iter()
+            .map(|b| b.step)
+            .chain(w.codes.iter().map(|c| c.step));
         if let Some(step) = steps.filter(|s| s > last).max() {
             return Err(invalid(format!(
                 "--decision-force: position {}: step {step} is past the window's traced steps (0 to {last})",
@@ -1620,7 +1637,10 @@ fn forced_taken(force: &DecisionForceWindow, steps: &[DecisionStep]) -> Result<(
         })
     };
     for f in &force.buckets {
-        let used = at(f.step)?.layers.get(f.layer).and_then(|l| l.entry.get(f.lane));
+        let used = at(f.step)?
+            .layers
+            .get(f.layer)
+            .and_then(|l| l.entry.get(f.lane));
         if used != Some(&f.entry) {
             return Err(invalid(format!(
                 "the bucket forced at step {}, layer {}, lane {} was not taken (an instrument fault)",
@@ -9850,8 +9870,16 @@ mod tests {
                 let score: Vec<f32> = (0..2 * time * 2)
                     .map(|i| (((i / 2 + 5 * (i % 2) + layer) % 17) as f32 / 16.0).min(1.0))
                     .collect();
-                let entry = score.iter().map(|&s| ((s * 16.0).floor() as u8).min(15)).collect();
-                RateScores { layer, dims: (2, time, 2), score, entry }
+                let entry = score
+                    .iter()
+                    .map(|&s| ((s * 16.0).floor() as u8).min(15))
+                    .collect();
+                RateScores {
+                    layer,
+                    dims: (2, time, 2),
+                    score,
+                    entry,
+                }
             })
             .collect();
         // One head; at row 5 it keeps 4, 2, 1 and 3, at distances 1, 1, 0 and 2.
@@ -9891,7 +9919,9 @@ mod tests {
             trace.table = Some(points.clone());
             trace.record(&refs, &traced, &ids, &scored, &best, &q, &s, recorded)
         };
-        let run = |trace: &mut FTrace, hamming: Vec<HammingTraceWindow>| run_with(trace, recorded(hamming));
+        let run = |trace: &mut FTrace, hamming: Vec<HammingTraceWindow>| {
+            run_with(trace, recorded(hamming))
+        };
         let mut trace = FTrace::new(&[500]).unwrap();
         run(&mut trace, both()).unwrap();
         let trace = trace.finish().unwrap();
@@ -9959,85 +9989,226 @@ mod tests {
         let shape = [(1, 1, 4), (2, 1, 4)];
         let forced = |buckets: Vec<ForcedBucket>, codes: Vec<ForcedCode>| DecisionForce {
             schema: DECISION_FORCE_SCHEMA.to_owned(),
-            windows: vec![DecisionForceWindow { position: 500, buckets, codes }],
+            windows: vec![DecisionForceWindow {
+                position: 500,
+                buckets,
+                codes,
+            }],
         };
-        let under = |force: DecisionForce| FTrace::new(&[500]).unwrap().with_force(force, 2, 2, &shape).unwrap();
+        let under = |force: DecisionForce| {
+            FTrace::new(&[500])
+                .unwrap()
+                .with_force(force, 2, 2, &shape)
+                .unwrap()
+        };
         let row = time + 3;
         let other = if rates[1].entry[row * 2] == 15 { 0 } else { 15 };
-        let bucket = ForcedBucket { step: 3, layer: 1, lane: 0, entry: other };
-        let query = ForcedCode { step: 4, depth: 1, head: 0, role: CodeRole::Query, code: 0b1111 };
+        let bucket = ForcedBucket {
+            step: 3,
+            layer: 1,
+            lane: 0,
+            entry: other,
+        };
+        let query = ForcedCode {
+            step: 4,
+            depth: 1,
+            head: 0,
+            role: CodeRole::Query,
+            code: 0b1111,
+        };
         // The fixture's key at step 2, forced to itself.
-        let key = ForcedCode { step: 2, depth: 2, head: 0, role: CodeRole::Key, code: 0b1011 };
+        let key = ForcedCode {
+            step: 2,
+            depth: 2,
+            head: 0,
+            role: CodeRole::Key,
+            code: 0b1011,
+        };
         // What a forward that took them recorded.
         let mut taken_rates = rates.clone();
         taken_rates[1].entry[row * 2] = other;
         let mut taken_hamming = both();
         taken_hamming[1].reads[0].heads[0].query[4] = 0b1111;
-        let taken = |rates: Vec<RateScores>, hamming| Recorded { hamming, rates, lookups: None };
-        let mut trace = under(forced(vec![bucket.clone()], vec![query.clone(), key.clone()]));
-        run_with(&mut trace, taken(taken_rates.clone(), taken_hamming.clone())).unwrap();
+        let taken = |rates: Vec<RateScores>, hamming| Recorded {
+            hamming,
+            rates,
+            lookups: None,
+        };
+        let mut trace = under(forced(
+            vec![bucket.clone()],
+            vec![query.clone(), key.clone()],
+        ));
+        run_with(
+            &mut trace,
+            taken(taken_rates.clone(), taken_hamming.clone()),
+        )
+        .unwrap();
         let trace = trace.finish().unwrap();
         let steps = &trace.windows[0].steps;
         assert_eq!(steps[3].layers[1].entry[0], other, "the entry used");
-        assert_eq!(steps[3].layers[1].score_f32[0], rates[1].score[row * 2].to_bits(), "the score as computed");
-        assert_eq!(steps[4].layers[0].read.as_ref().unwrap().heads[0].query, 0b1111);
+        assert_eq!(
+            steps[3].layers[1].score_f32[0],
+            rates[1].score[row * 2].to_bits(),
+            "the score as computed"
+        );
+        assert_eq!(
+            steps[4].layers[0].read.as_ref().unwrap().heads[0].query,
+            0b1111
+        );
         assert_eq!(steps[2].readout.as_ref().unwrap().heads[0].key, 0b1011);
         // Not taken: the bucket, then the query's code; and a step past the six traced.
-        assert!(run_with(&mut under(forced(vec![bucket.clone()], vec![])), taken(rates.clone(), taken_hamming.clone())).is_err());
-        assert!(run_with(&mut under(forced(vec![], vec![query.clone()])), taken(taken_rates.clone(), both())).is_err());
-        let late = ForcedBucket { step: 6, ..bucket.clone() };
-        assert!(run_with(&mut under(forced(vec![late], vec![])), taken(rates.clone(), both())).is_err());
+        assert!(run_with(
+            &mut under(forced(vec![bucket.clone()], vec![])),
+            taken(rates.clone(), taken_hamming.clone())
+        )
+        .is_err());
+        assert!(run_with(
+            &mut under(forced(vec![], vec![query.clone()])),
+            taken(taken_rates.clone(), both())
+        )
+        .is_err());
+        let late = ForcedBucket {
+            step: 6,
+            ..bucket.clone()
+        };
+        assert!(run_with(
+            &mut under(forced(vec![late], vec![])),
+            taken(rates.clone(), both())
+        )
+        .is_err());
         // The key forced to another code: taken where the key reads it (the query left as
         // computed), refused where it does not.
-        let other_key = ForcedCode { code: 0b0100, ..key.clone() };
+        let other_key = ForcedCode {
+            code: 0b0100,
+            ..key.clone()
+        };
         let mut key_taken = both();
         key_taken[1].reads[1].heads[0].key[2] = 0b0100;
         assert_ne!(key_taken[1].reads[1].heads[0].query[2], 0b0100);
-        assert!(run_with(&mut under(forced(vec![], vec![other_key.clone()])), taken(rates.clone(), key_taken)).is_ok());
-        assert!(run_with(&mut under(forced(vec![], vec![other_key])), taken(rates.clone(), both())).is_err());
+        assert!(run_with(
+            &mut under(forced(vec![], vec![other_key.clone()])),
+            taken(rates.clone(), key_taken)
+        )
+        .is_ok());
+        assert!(run_with(
+            &mut under(forced(vec![], vec![other_key])),
+            taken(rates.clone(), both())
+        )
+        .is_err());
         // Each forced decision at its window's row of the batch, `b · SHEET_CONTEXT + step`.
         let trace = under(forced(vec![bucket.clone()], vec![key.clone()]));
         assert_eq!(
             trace.batch_force(&refs, &[1]),
             (
-                vec![ForcedRate { layer: 1, row: SHEET_CONTEXT + 3, lane: 0, entry: other }],
-                vec![ForcedRowCode { depth: 2, row: SHEET_CONTEXT + 2, head: 0, key: true, code: 0b1011 }]
+                vec![ForcedRate {
+                    layer: 1,
+                    row: SHEET_CONTEXT + 3,
+                    lane: 0,
+                    entry: other
+                }],
+                vec![ForcedRowCode {
+                    depth: 2,
+                    row: SHEET_CONTEXT + 2,
+                    head: 0,
+                    key: true,
+                    code: 0b1011
+                }]
             )
         );
         assert_eq!(trace.batch_force(&refs, &[]), (vec![], vec![]));
-        assert_eq!(FTrace::new(&[500]).unwrap().batch_force(&refs, &[1]), (vec![], vec![]));
+        assert_eq!(
+            FTrace::new(&[500]).unwrap().batch_force(&refs, &[1]),
+            (vec![], vec![])
+        );
         // R's refusals, and a code with a bit past its head's 4.
         let refused = |buckets: Vec<ForcedBucket>, codes: Vec<ForcedCode>| {
-            FTrace::new(&[500]).unwrap().with_force(forced(buckets, codes), 2, 2, &shape).is_err()
+            FTrace::new(&[500])
+                .unwrap()
+                .with_force(forced(buckets, codes), 2, 2, &shape)
+                .is_err()
         };
-        let b = |step, layer, lane, entry| ForcedBucket { step, layer, lane, entry };
-        let c = |step, depth, head, role, code| ForcedCode { step, depth, head, role, code };
+        let b = |step, layer, lane, entry| ForcedBucket {
+            step,
+            layer,
+            lane,
+            entry,
+        };
+        let c = |step, depth, head, role, code| ForcedCode {
+            step,
+            depth,
+            head,
+            role,
+            code,
+        };
         let (q, k, last) = (CodeRole::Query, CodeRole::Key, SHEET_CONTEXT - 1);
-        assert!(!refused(vec![b(last, 1, 1, 15)], vec![c(last, 2, 0, k, 0b1111), c(last, 2, 0, q, 0)]));
-        for bad in [b(SHEET_CONTEXT, 0, 0, 0), b(0, 2, 0, 0), b(0, 0, 2, 0), b(0, 0, 0, 16)] {
+        assert!(!refused(
+            vec![b(last, 1, 1, 15)],
+            vec![c(last, 2, 0, k, 0b1111), c(last, 2, 0, q, 0)]
+        ));
+        for bad in [
+            b(SHEET_CONTEXT, 0, 0, 0),
+            b(0, 2, 0, 0),
+            b(0, 0, 2, 0),
+            b(0, 0, 0, 16),
+        ] {
             assert!(refused(vec![bad], vec![]));
         }
         assert!(refused(vec![b(1, 0, 0, 3), b(1, 0, 0, 4)], vec![]));
-        for bad in [c(1, 3, 0, q, 0), c(1, 1, 1, q, 0), c(SHEET_CONTEXT, 1, 0, q, 0), c(0, 1, 0, k, 0), c(1, 1, 0, q, 0b1_0000)] {
+        for bad in [
+            c(1, 3, 0, q, 0),
+            c(1, 1, 1, q, 0),
+            c(SHEET_CONTEXT, 1, 0, q, 0),
+            c(0, 1, 0, k, 0),
+            c(1, 1, 0, q, 0b1_0000),
+        ] {
             assert!(refused(vec![], vec![bad]));
         }
         assert!(refused(vec![], vec![c(1, 1, 0, q, 1), c(1, 1, 0, q, 2)]));
         // Another schema, an untraced position and a position named twice.
         let file = |schema: &str, positions: &[usize]| DecisionForce {
             schema: schema.to_owned(),
-            windows: positions.iter().map(|&position| DecisionForceWindow { position, ..Default::default() }).collect(),
+            windows: positions
+                .iter()
+                .map(|&position| DecisionForceWindow {
+                    position,
+                    ..Default::default()
+                })
+                .collect(),
         };
-        let with = |force| FTrace::new(&[500]).unwrap().with_force(force, 2, 2, &shape).is_err();
+        let with = |force| {
+            FTrace::new(&[500])
+                .unwrap()
+                .with_force(force, 2, 2, &shape)
+                .is_err()
+        };
         assert!(!with(file(DECISION_FORCE_SCHEMA, &[500])));
         assert!(with(file("uor-r4.decision-force/0", &[500])));
         assert!(with(file(DECISION_FORCE_SCHEMA, &[777])));
         assert!(with(file(DECISION_FORCE_SCHEMA, &[500, 500])));
         // A step past its window's traced steps (0 to 5 at position 500), and a position with no
         // window, refused before any forward.
-        let at = |step| forced(vec![ForcedBucket { step, ..bucket.clone() }], vec![]);
+        let at = |step| {
+            forced(
+                vec![ForcedBucket {
+                    step,
+                    ..bucket.clone()
+                }],
+                vec![],
+            )
+        };
         assert!(forced_within(&at(5), &windows).is_ok());
         assert!(forced_within(&at(6), &windows).is_err());
-        assert!(forced_within(&forced(vec![], vec![ForcedCode { step: 6, ..query.clone() }]), &windows).is_err());
+        assert!(forced_within(
+            &forced(
+                vec![],
+                vec![ForcedCode {
+                    step: 6,
+                    ..query.clone()
+                }]
+            ),
+            &windows
+        )
+        .is_err());
         assert!(forced_within(&file(DECISION_FORCE_SCHEMA, &[777]), &windows).is_err());
     }
 
@@ -11972,7 +12143,9 @@ mod tests {
         use uor_r4_integer::fbs_snapshot::{ForcedBucket, ForcedCode};
         let device = Device::new_cuda(0).unwrap();
         let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
-        set_hamming_reads(Some(HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap()));
+        set_hamming_reads(Some(
+            HammingReads::new(4, hs::SHEET_WIDTH, &device).unwrap(),
+        ));
         let (mut tokens, mut mask) = (Vec::new(), Vec::new());
         for doc in 0..2u32 {
             tokens.push(hs::SHEET_BOS_ID);
@@ -11991,24 +12164,57 @@ mod tests {
         let run = |force: Option<DecisionForceWindow>| {
             let mut trace = FTrace::new(&[position]).unwrap();
             if let Some(window) = force {
-                let file = DecisionForce { schema: DECISION_FORCE_SCHEMA.to_owned(), windows: vec![window] };
-                trace = trace.with_force(file, 6, lanes, &[(2, 4, head_width), (6, 4, head_width)]).unwrap();
+                let file = DecisionForce {
+                    schema: DECISION_FORCE_SCHEMA.to_owned(),
+                    windows: vec![window],
+                };
+                trace = trace
+                    .with_force(file, 6, lanes, &[(2, 4, head_width), (6, 4, head_width)])
+                    .unwrap();
             }
-            let picks = row_picks(&model, &windows, &mask, 1, 0, Some(&mut trace), |_, _| Ok(())).unwrap();
+            let picks = row_picks(&model, &windows, &mask, 1, 0, Some(&mut trace), |_, _| {
+                Ok(())
+            })
+            .unwrap();
             (picks, trace.finish().unwrap())
         };
         let (plain, base) = run(None);
         let w = base.windows[0].clone();
-        let reads = |s: &DecisionStep| s.layers.iter().filter_map(|l| l.read.clone()).chain(s.readout.clone()).collect::<Vec<_>>();
+        let reads = |s: &DecisionStep| {
+            s.layers
+                .iter()
+                .filter_map(|l| l.read.clone())
+                .chain(s.readout.clone())
+                .collect::<Vec<_>>()
+        };
         // Every one of the window's own decisions, forced.
-        let mut own = DecisionForceWindow { position, ..Default::default() };
+        let mut own = DecisionForceWindow {
+            position,
+            ..Default::default()
+        };
         for (step, s) in w.steps.iter().enumerate() {
             for (layer, l) in s.layers.iter().enumerate() {
-                own.buckets.extend(l.entry.iter().enumerate().map(|(lane, &entry)| ForcedBucket { step, layer, lane, entry }));
+                own.buckets.extend(
+                    l.entry
+                        .iter()
+                        .enumerate()
+                        .map(|(lane, &entry)| ForcedBucket {
+                            step,
+                            layer,
+                            lane,
+                            entry,
+                        }),
+                );
             }
             for read in reads(s) {
                 for (head, h) in read.heads.iter().enumerate() {
-                    let code = |role, code| ForcedCode { step, depth: read.depth, head, role, code };
+                    let code = |role, code| ForcedCode {
+                        step,
+                        depth: read.depth,
+                        head,
+                        role,
+                        code,
+                    };
                     own.codes.push(code(CodeRole::Query, h.query));
                     if step > 0 {
                         own.codes.push(code(CodeRole::Key, h.key));
@@ -12017,34 +12223,82 @@ mod tests {
             }
         }
         let (picks, again) = run(Some(own));
-        assert_eq!(picks, plain, "forced to its own decisions, the rows are the same");
-        assert_eq!(serde_json::to_vec(&again).unwrap(), serde_json::to_vec(&base).unwrap(), "and the trace, byte for byte");
+        assert_eq!(
+            picks, plain,
+            "forced to its own decisions, the rows are the same"
+        );
+        assert_eq!(
+            serde_json::to_vec(&again).unwrap(),
+            serde_json::to_vec(&base).unwrap(),
+            "and the trace, byte for byte"
+        );
         // One bucket, at layer 0 so the layers after it read it.
         let step = w.steps.len() / 2;
         let entry = w.steps[step].layers[0].entry[0];
         let other = (entry + 8) % 16;
-        let bucket = ForcedBucket { step, layer: 0, lane: 0, entry: other };
-        let (_, bucketed) = run(Some(DecisionForceWindow { position, buckets: vec![bucket], codes: vec![] }));
+        let bucket = ForcedBucket {
+            step,
+            layer: 0,
+            lane: 0,
+            entry: other,
+        };
+        let (_, bucketed) = run(Some(DecisionForceWindow {
+            position,
+            buckets: vec![bucket],
+            codes: vec![],
+        }));
         let at = &bucketed.windows[0].steps[step].layers[0];
-        assert_eq!((at.entry[0], at.score_f32[0]), (other, w.steps[step].layers[0].score_f32[0]));
+        assert_eq!(
+            (at.entry[0], at.score_f32[0]),
+            (other, w.steps[step].layers[0].score_f32[0])
+        );
         let mut unmoved = base.clone();
         unmoved.windows[0].steps[step].layers[0].entry[0] = other;
-        assert_ne!(bucketed, unmoved, "the forward after the forced bucket moves");
+        assert_ne!(
+            bucketed, unmoved,
+            "the forward after the forced bucket moves"
+        );
         // A query code at the last step in the stream read (depth 2), and a key code at an earlier
         // step in the readout read (depth 6), each with its first bit flipped.
         let (t, s) = (w.steps.len() - 1, w.steps.len() / 2);
         let query = reads(&w.steps[t])[0].heads[0].query ^ 1;
         let key = reads(&w.steps[s])[1].heads[1].key ^ 1;
         let codes = vec![
-            ForcedCode { step: t, depth: 2, head: 0, role: CodeRole::Query, code: query },
-            ForcedCode { step: s, depth: 6, head: 1, role: CodeRole::Key, code: key },
+            ForcedCode {
+                step: t,
+                depth: 2,
+                head: 0,
+                role: CodeRole::Query,
+                code: query,
+            },
+            ForcedCode {
+                step: s,
+                depth: 6,
+                head: 1,
+                role: CodeRole::Key,
+                code: key,
+            },
         ];
-        let (_, coded) = run(Some(DecisionForceWindow { position, buckets: vec![], codes }));
+        let (_, coded) = run(Some(DecisionForceWindow {
+            position,
+            buckets: vec![],
+            codes,
+        }));
         let cw = &coded.windows[0];
-        assert_eq!((reads(&cw.steps[t])[0].heads[0].query, reads(&cw.steps[s])[1].heads[1].key), (query, key));
+        assert_eq!(
+            (
+                reads(&cw.steps[t])[0].heads[0].query,
+                reads(&cw.steps[s])[1].heads[1].key
+            ),
+            (query, key)
+        );
         for r in 0..2 {
             for h in 0..4 {
-                let keys: Vec<u64> = cw.steps.iter().map(|st| reads(st)[r].heads[h].key).collect();
+                let keys: Vec<u64> = cw
+                    .steps
+                    .iter()
+                    .map(|st| reads(st)[r].heads[h].key)
+                    .collect();
                 for (row, st) in cw.steps.iter().enumerate() {
                     let head = &reads(st)[r].heads[h];
                     let mut nearest: Vec<u32> = (1..row as u32).collect();

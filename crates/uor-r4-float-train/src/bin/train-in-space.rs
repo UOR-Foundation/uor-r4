@@ -954,14 +954,18 @@ fn decision_trace_arg(value: &str) -> Result<(String, Vec<usize>)> {
 /// `--decision-force SPLIT=FORCE_JSON` (claude-253): the split and the forced sets, a
 /// `uor-r4.decision-force/1` file, read from the file; its schema is checked by `score_rows`.
 fn decision_force_arg(value: &str) -> Result<(String, DecisionForce)> {
-    let Some((split, path)) = value.split_once('=').filter(|(s, p)| !s.is_empty() && !p.is_empty())
+    let Some((split, path)) = value
+        .split_once('=')
+        .filter(|(s, p)| !s.is_empty() && !p.is_empty())
     else {
         return Err(FloatTrainError::Invalid(
             "--decision-force takes SPLIT=FORCE_JSON".to_owned(),
         ));
     };
     let force: DecisionForce = serde_json::from_slice(&std::fs::read(path)?).map_err(|e| {
-        FloatTrainError::Invalid(format!("--decision-force {split}: {path} is not a forced set: {e}"))
+        FloatTrainError::Invalid(format!(
+            "--decision-force {split}: {path} is not a forced set: {e}"
+        ))
     })?;
     Ok((split.to_owned(), force))
 }

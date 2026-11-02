@@ -106,6 +106,11 @@ fn force_codes(
     key: bool,
     head_width: usize,
 ) -> Result<Tensor> {
+    if head_width > 64 {
+        return Err(invalid(
+            "a forced code's head is wider than its 64-bit code (an instrument fault)",
+        ));
+    }
     let (rows, width) = codes.dims2()?;
     let mut signs = vec![0f32; rows * width];
     for f in forced.iter().filter(|f| f.key == key) {
@@ -344,7 +349,10 @@ fn trace_head(
             .collect()
     };
     let (query_f32, key_f32) = match coords {
-        Some((q, k)) => (bits(q, &query_words, forced.0)?, bits(k, &key_words, forced.1)?),
+        Some((q, k)) => (
+            bits(q, &query_words, forced.0)?,
+            bits(k, &key_words, forced.1)?,
+        ),
         None => (Vec::new(), Vec::new()),
     };
     Ok(HammingTraceHead { query: query_words, key: key_words, kept, query_f32, key_f32 })
@@ -737,11 +745,20 @@ impl HammingRead {
         let raw = (tracing && COORDS.with(|c| c.get())).then(|| (query.clone(), key.clone()));
         let (query, key) = (code(&query)?, code(&key)?);
         // The stream read is the first of `HAMMING_DEPTHS`; the readout read, the last.
-        let depth = if readout { HAMMING_READOUT_DEPTH } else { HAMMING_DEPTHS[0] };
+        let depth = if readout {
+            HAMMING_READOUT_DEPTH
+        } else {
+            HAMMING_DEPTHS[0]
+        };
         // claude-253: the codes forced in this read, in place of the computed ones; the
         // coordinates the trace records stay as computed.
-        let forced: Vec<ForcedRowCode> =
-            CODE_FORCE.with(|f| f.borrow().iter().filter(|f| f.depth == depth).copied().collect());
+        let forced: Vec<ForcedRowCode> = CODE_FORCE.with(|f| {
+            f.borrow()
+                .iter()
+                .filter(|f| f.depth == depth)
+                .copied()
+                .collect()
+        });
         if forced.iter().any(|f| f.head >= self.heads) {
             return Err(invalid(
                 "a forced code names a head its read does not serve (an instrument fault)",
@@ -872,7 +889,9 @@ impl HammingRead {
                             let rows = |key: bool| -> Vec<usize> {
                                 forced
                                     .iter()
-                                    .filter(|f| f.head == h && f.key == key && window.contains(&f.row))
+                                    .filter(|f| {
+                                        f.head == h && f.key == key && window.contains(&f.row)
+                                    })
                                     .map(|f| f.row - window.start)
                                     .collect()
                             };
@@ -1086,6 +1105,16 @@ pub(crate) fn hamming_bits(a: &Tensor, b: &Tensor) -> Result<Tensor> {
 mod tests {
     use super::*;
 
+    /// claude-253: a forced code's head wider than its 64-bit code is refused, before any tensor
+    /// op (so on the CPU), rather than shifted past 63.
+    #[test]
+    fn a_forced_code_wider_than_64_bits_is_refused() {
+        let codes = Tensor::zeros((1, 130), DType::F32, &Device::Cpu).unwrap();
+        let forced = [ForcedRowCode { depth: 2, row: 0, head: 0, key: false, code: 1 }];
+        let err = force_codes(&codes, &forced, false, 65).unwrap_err().to_string();
+        assert!(err.contains("wider than its 64-bit code"), "{err}");
+    }
+
     /// claude-235: the tie key orders candidates by bit distance and then by position, every key
     /// of a 64-coordinate head over the 192-token window is an exact `f32`, and a window past the
     /// bound is refused.
@@ -1129,7 +1158,15 @@ mod tests {
         let wide = vec![vec![1.0f32; 65]; 3];
         assert!(trace_head(&wide, &wide, &picks, &real, None, (&[], &[])).is_err());
         assert!(trace_head(&query, &key, &picks[..2], &real, None, (&[], &[])).is_err());
-        assert!(trace_head(&query, &key, &picks, &[vec![1], vec![1, 0], vec![1, 1]], None, (&[], &[])).is_err());
+        assert!(trace_head(
+            &query,
+            &key,
+            &picks,
+            &[vec![1], vec![1, 0], vec![1, 1]],
+            None,
+            (&[], &[])
+        )
+        .is_err());
     }
 
     /// claude-251: with coordinates, each row's query and key coordinates before the sign are
@@ -1147,10 +1184,23 @@ mod tests {
         let picks = vec![vec![0], vec![1]];
         let real = vec![vec![0], vec![1]];
         let plain = trace_head(&query_code, &key_code, &picks, &real, None, (&[], &[])).unwrap();
-        let head =
-            trace_head(&query_code, &key_code, &picks, &real, Some((&query, &key)), (&[], &[])).unwrap();
-        assert_eq!((&head.query, &head.key, &head.kept), (&plain.query, &plain.key, &plain.kept));
-        assert_eq!((head.query.as_slice(), head.key.as_slice()), (&[0b111, 0b110][..], &[0b101, 0b011][..]));
+        let head = trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&query, &key)),
+            (&[], &[]),
+        )
+        .unwrap();
+        assert_eq!(
+            (&head.query, &head.key, &head.kept),
+            (&plain.query, &plain.key, &plain.kept)
+        );
+        assert_eq!(
+            (head.query.as_slice(), head.key.as_slice()),
+            (&[0b111, 0b110][..], &[0b101, 0b011][..])
+        );
         let bits = |rows: &[Vec<f32>]| -> Vec<Vec<u32>> {
             rows.iter().map(|r| r.iter().map(|v| v.to_bits()).collect()).collect()
         };
@@ -1163,14 +1213,57 @@ mod tests {
         assert_eq!(back, head);
         // Coordinates of another sign than their code, or for too few rows, are refused.
         let flipped = vec![query[1].clone(), query[0].clone()];
-        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&flipped, &key)), (&[], &[])).is_err());
-        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&query[..1], &key)), (&[], &[])).is_err());
+        assert!(trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&flipped, &key)),
+            (&[], &[])
+        )
+        .is_err());
+        assert!(trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&query[..1], &key)),
+            (&[], &[])
+        )
+        .is_err());
         // claude-253: where a row's code was forced, its coordinates stay as computed and need
         // not sign to it; the exemption is that row's and that role's alone.
-        let forced = trace_head(&query_code, &key_code, &picks, &real, Some((&flipped, &key)), (&[0, 1], &[])).unwrap();
-        assert_eq!((forced.query.clone(), forced.query_f32), (plain.query.clone(), bits(&flipped)));
-        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&flipped, &key)), (&[0], &[])).is_err());
-        assert!(trace_head(&query_code, &key_code, &picks, &real, Some((&flipped, &key)), (&[], &[0, 1])).is_err());
+        let forced = trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&flipped, &key)),
+            (&[0, 1], &[]),
+        )
+        .unwrap();
+        assert_eq!(
+            (forced.query.clone(), forced.query_f32),
+            (plain.query.clone(), bits(&flipped))
+        );
+        assert!(trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&flipped, &key)),
+            (&[0], &[])
+        )
+        .is_err());
+        assert!(trace_head(
+            &query_code,
+            &key_code,
+            &picks,
+            &real,
+            Some((&flipped, &key)),
+            (&[], &[0, 1])
+        )
+        .is_err());
     }
 
     /// claude-235: a stream read opens one window per batch row, the readout read joins them,
