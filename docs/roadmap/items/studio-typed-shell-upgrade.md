@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [m7-studio-live-model-sources]
 done_class: host
-scope: [web/studio/src/**, web/studio/assets/js/model_sources.js, web/studio/assets/js/model_sources.d.ts, web/studio/assets/js/model_sources.test.mjs, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/legacy.html, web/studio/verify_*.mjs, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/superpowers/plans/2026-11-01-studio-foundation.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
+scope: [web/studio/src/**, web/studio/assets/js/model_sources.js, web/studio/assets/js/model_sources.d.ts, web/studio/assets/js/model_sources.test.mjs, web/studio/assets/js/studio_files.js, web/studio/assets/js/studio_ui.js, web/studio/package.json, web/studio/package-lock.json, web/studio/tsconfig*.json, web/studio/vite.config.*, web/studio/index.html, web/studio/legacy.html, web/studio/verify_*.mjs, web/studio/index.css, web/studio/README.md, docs/products/web-client.md, scripts/stage-studio-site.sh, scripts/studio/**, docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md, docs/superpowers/plans/2026-11-01-studio-foundation.md, docs/superpowers/plans/2026-11-02-studio-core-workflows.md, docs/loop/tasks/studio-typed-shell-upgrade/**, docs/roadmap/items/studio-typed-shell-upgrade.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -30,7 +30,7 @@ The foundation adds a typed lifecycle store, narrow model-source adapters, a fix
 
 ## How to start
 
-Read the rebased/rescoped design at `docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md`. Begin only with the foundation unit; do not replace `index.html`, invoke the publisher, install dependencies for design review alone, or migrate real browser data.
+Read the rebased/rescoped design at `docs/superpowers/specs/2026-10-31-studio-shell-upgrade-design.md`. The foundation merged in #3520; the current unit implements the core workflows in `docs/superpowers/plans/2026-11-02-studio-core-workflows.md`. Keep the legacy page live, do not invoke the publisher, and do not migrate real browser data.
 
 ## Rules that apply
 
