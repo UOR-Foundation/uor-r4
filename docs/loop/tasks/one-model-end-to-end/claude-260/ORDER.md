@@ -1,69 +1,42 @@
-# ORDER: one-model-end-to-end, claude-260 (the copy read's key: two tokens, trained as served)
+# ORDER: one-model-end-to-end, claude-260 (the item's scope, widened for the copy read's key)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `5e50f3e19`.
 
 ## Goal
 
-Casey, 2 Nov 2026: "your goal is to get us to a working chat model using the training and serving methods we have described - you need to figure out how to stitch all of that together". Asked "Trace the copy read on conv-a to confirm the cause before I build the new key?", Casey answered: "um yes I think so". The trace is done ([claude-259's REPORT](../claude-259/REPORT.md), "Also found"; the trace file is in `docs/labs/one-model-end-to-end/capacity-2026-11-02/trace/`).
+Casey, 2 Nov 2026: "your goal is to get us to a working chat model using the training and serving methods we have described - you need to figure out how to stitch all of that together". Asked "Trace the copy read on conv-a to confirm the cause before I build the new key?", Casey answered: "um yes I think so". The trace confirmed the cause ([claude-259's REPORT](../claude-259/REPORT.md), "Also found").
 
-**Plan step (the claim check):** path step 4 of the lab's order (`local/claude/onboarding/run-claude.txt`): one model trained with all of its parts, exported, served and scored end to end. The served chat answers "your friend is 47" because of a fault the trace confirmed. **What it changes in the model:** the copy heads' key, in training (`flock_read_hamming.rs`), in the artifact (`stack/format.rs`, `fbs_snapshot.rs`, `fbs_export.rs`) and in serving (`stack/hamming.rs`). It is the first change to what the read can find since the read was built (claude-146).
+**Plan step (the claim check):** this unit is bookkeeping. It unblocks path step 4 of the lab's order (`local/claude/onboarding/run-claude.txt`): one model trained with all of its parts, exported, served and scored end to end. **What it unblocks in the model:** the copy heads' key. The next unit (claude-261) changes it in training, in the artifact and in serving.
 
-**The fault, measured.**
-- A copy head's key at `s` names only the token before `s`. Its query at `t` names only `x_t` (`flock_read_hamming.rs`, module doc, points 1 and 5).
-- In conv-a turn 3, at the reply's " is" (position 80), both copy heads at both depths keep the five positions that follow an earlier " is" (8, 26, 37, 51, 64). They read the mean of what follows. Maya (64) is found but cannot be preferred. The served next id was the space before 47.
-- A key on (" friend", " is") matches only position 64.
+**Why a unit of its own.** The loop's guard reads an ORDER's scope from the item file on `main`. The item's scope holds the float read (`flock_read_hamming.rs`) and the trainer, but not the files the key also changes:
+- the float export (`fbs_export.rs`);
+- the snapshot (`fbs_snapshot.rs`);
+- the artifact format (`stack/format.rs`);
+- the integer read (`stack/hamming.rs`);
+- the synthetic fixtures and tests (`stack/synthetic.rs`, `stack/tests.rs`).
 
-**The change.** Copy key 2 (the ordered two-token key):
-- A copy head's 64-bit code holds two token codes. Its first half is from the token before `s`; its second half is from the token two before `s`, through the same key rotation.
-- The query takes its first half from `x_t` and its second half from `x_{t−1}`.
-- The distance is still one popcount, and it is exactly the sum of the two tokens' half-distances. So an exact two-token repeat is distance 0. Where only the last token repeats, the distance is about a quarter of the head's bits on average, which is the copy heads' starting margin.
-- Type heads, weights, margins, the payload and the tie rule are unchanged. An artifact with copy key 1 stays byte for byte as before.
-
-**My decisions (logged on #3407, reversible by Casey):**
-- **TRAIN stays the pinned corpus.** The REPORT's open item 1 also named memory lines in TRAIN (`recall=oracle`). Changing the corpus and the key in one run would leave either result unreadable. So the memory-line corpus is its own unit, and this run changes the key only.
-- **The slot key (gcd over a clause's content atoms) comes later.** It needs entity and attribute atoms that the trunk does not mark. The two-token key fixes the measured case with no new parameters. If the two-token key leaves the copy fault, the slot key is the next unit.
-- **DeepSeek's FIT four-run comparison folds in** ([sheet](../../../../harness/prep/one-model-end-to-end-served-comparison-2026-11-02.md), deepseek-5, `NOT_RUN` for lack of a GPU). It tests plain against served training, at two seeds and 256 steps each, for about $1.50. This run trains with that served form, so the comparison is its throughput probe. It runs on seed 1's pod first, read by its own sheet's bar.
+The guard refused the first edit to `fbs_export.rs` under the earlier form of this ORDER. So the scope merges first, and the key follows as claude-261.
 
 ## Cancel probe (run first; results)
 
-1. **A two-token copy key already?** `git grep -i -e "two-token key" -e copy_key -e "n-let key"` over `crates/`, `docs/mechanisms/` and the notebooks finds none for the Hamming read. `docs/mechanisms/exact-memory.md:86` lists "ordered n-let keys" as not built. The n-gram tables' two-token keys (`uor-r4-graph-format/src/ngram.rs`) belong to the old table model, not this read. Not cancelled.
-2. **Another lab on these files?** `gh pr list --state open` shows only this draft (#3578). DeepSeek's wide-export PR #3576, the one open PR on `format.rs` this session, merged as this unit's base. Not cancelled.
-3. **Inputs:** TRAIN, DEV, the tokenizer, p-w and p-v are in the HF store at the sheet `one-model-end-to-end-capacity-2026-11-02.md`'s paths and sums. The base recipe is that sheet's (b). Not cancelled.
+1. **Already in scope?** `docs/roadmap/items/one-model-end-to-end.md` at the base `5e50f3e19` lists none of the six files. Not cancelled.
+2. **Another lab's open order on them?** `gh pr list --state open` shows only this draft (#3578). DeepSeek's PR #3576, the last one on `stack/format.rs`, merged as this unit's base. Not cancelled.
 
 Classed instrument (no model ran).
 
 ## Files in scope
 
-- `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/labs/one-model-end-to-end/**`
-- `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md` (status, and the scope widened to the files below)
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
+- `docs/roadmap/items/one-model-end-to-end.md`
+- `docs/roadmap/README.md` (the render only)
 
 ## Done when
 
-1. **The key, end to end.** `--hamming-copy-key 1|2` (default 1) trains the key above. It is saved in `hamming_read.safetensors` and `config.json`, carried by `FbsHammingSnapshot` and `StackHamming` as `copy_key`, and served by `CopyHeads`. The tests show:
-   - (a) on a window holding two facts with the same last token, a copy-key-2 head keeps the right position at distance 0 and the others past it, in float and in the integer read; under copy key 1 they tie;
-   - (b) float and integer kept sets agree on a trained-shape copy-key-2 read;
-   - (c) a copy-key-1 artifact, snapshot and `config.json` are byte for byte as before;
-   - (d) a copy key other than 1 or 2, or copy key 2 on a head whose halves do not fall on whole lanes, is refused.
-2. **The sheet** `docs/harness/prep/one-model-end-to-end-copy-key-2026-11-02.md`, one page, with the shape the harness reads (Base artifact, Data split, Bar, Steps, Minimum test power), a fresh FIT, and a fresh pre-run review (D67) on #3407.
-3. **The run** on Vast RTX 5090s inside the caps. Arms (b) and (k2), at seeds 1–3, 8,192 steps each, trained as served. DeepSeek's four runs go first on seed 1's pod. The outputs are sealed in the HF store with `SHA256SUMS`.
-4. **Scored and served:** the sheet's readings and decision table. Each arm's seed-1 export is served on conv-a, conv-b and conv-c, with transcripts and decode tok/s.
-5. **The REPORT**, negatives first, with one notebook row. It also corrects claude-259's REPORT, which cites deepseek-3 under #3565 (it landed as #3563).
+1. The item's `scope:` adds the six files above, and nothing else in the item changes.
+2. `cargo run -p xtask -- roadmap render --check` is current.
+3. The REPORT says which unit uses the scope, and the item stays open.
 
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
-- **The run needs a new instrument, trace or audit.** That is outside the track's bound: bring it to Casey.
-- **An arm's smoke fails in the trainer or the exporter.** If (k2) fails, the code is repaired in this unit before any long run. If (b) fails, the served form itself is broken: stop the pod and record it.
-- **The projected cost passes the caps**, or an arm projects past about an hour of training: cut its steps equally for both arms, and record why.
+- **The widened scope overlaps another lab's open order.** Narrow it to the files the key needs, and record why.
