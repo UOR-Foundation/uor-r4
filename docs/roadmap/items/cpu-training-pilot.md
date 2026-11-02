@@ -16,6 +16,20 @@ scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/harness/prep/cp
 
 Component speed does not show whether CPU training can improve a model at useful scale. The workstation must be measured under a bounded, pre-registered pilot with the same evaluator as the GPU path.
 
+## Readiness as of 2 November 2026
+
+`NOT_ADMITTED`; no pilot compute or pre-registration is claimed.
+
+| Prerequisite | Current state |
+|---|---|
+| Shared-vector forward and exact serving arithmetic | Supported for the snapped/rotated/decay-rate/recurrence-only/no-pointer FBS mode; synthetic CPU/serving panel mismatches are zero. |
+| Tied-table and lawful parameter-group trainer | Tied-token and BVG-K normalization/bias/decay/route groups delivered on finite fixtures. |
+| Matched admission and exact checkpoint export control | Panel evaluator and gate delivered on finite fixtures. |
+| Trained artifact plus query panel | Not bound; the private stored artifact remains unavailable without credentials. |
+| Discrete reads/proposals | #3501 remains downstream of the #3502 stored-observation blocker. |
+| Quantization-aware updates and float-shadow comparison | Not delivered; #3503 remains downstream. |
+| FIT pre-registration and pre-run review | Not authored. |
+
 ## What is missing
 
 Write a pre-registration with a non-author FIT and pre-run review; run at least two seeds or 200 fresh rows; record context-tokens/s, target visits/s, step time, peak RSS, wall time and resume determinism; grade both complete replies and fresh phrasing against headline-preserving controls.
