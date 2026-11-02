@@ -52,7 +52,7 @@ replies.
 
 Exact reply text, ids, stops, histories, timings and rates are in the evidence
 record linked above. Raw transcripts and `verification.json`
-(`d1b03c3882cc9fb683a41ee1c57246f12f4922f7ec7cff60c9475e0b9dfcbfcf`) are
+(`5d95c4e763abfceff77a1b78930c631a5db36d1f748ee91892c007229d799c3b`) are
 under `local/deepseek/public-chat-post-smoke-2026-11-02/`.
 
 ## Checks run at the head

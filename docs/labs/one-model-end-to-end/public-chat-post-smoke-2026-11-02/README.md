@@ -39,7 +39,7 @@ This timing-precision limitation does not affect the memory classification.
   `verification.json` are under
   `local/deepseek/public-chat-post-smoke-2026-11-02/`.
   `verification.json` SHA-256:
-  `d1b03c3882cc9fb683a41ee1c57246f12f4922f7ec7cff60c9475e0b9dfcbfcf`.
+  `5d95c4e763abfceff77a1b78930c631a5db36d1f748ee91892c007229d799c3b`.
 - `uor-chat` reported a residual contract notice: the retained bundle contract
   says 256 context positions while these artifacts declare 192. No turn in this
   panel reached that limit.
