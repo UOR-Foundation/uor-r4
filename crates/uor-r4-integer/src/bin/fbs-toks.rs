@@ -88,10 +88,10 @@ use serde_json::json;
 use uor_r4_integer::fbs_snapshot::{
     check_decision_trace, compare_hamming_traces, copy_code_check, copy_code_reads,
     decision_deciles, grade_pass, write_new_file, DecisionDeciles, DecisionForce,
-    DecisionForceWindow, DecisionNearest, DecisionStep, DecisionTrace, DecisionWindow,
-    FbsFloatReadout, FbsReadoutMode, GradeSide, HammingTrace, NearestTable, PassOutcome,
-    COPY_CODES_SCHEMA, DECISION_CHECK_SCHEMA, DECISION_DECILES_SCHEMA, DECISION_FORCE_SCHEMA,
-    DECISION_GRADE_SCHEMA, DECISION_TRACE_SCHEMA, HAMMING_TRACE_SCHEMA,
+    DecisionForceWindow, DecisionNearest, DecisionSource, DecisionStep, DecisionTrace,
+    DecisionWindow, FbsFloatReadout, FbsReadoutMode, GradeSide, HammingTrace, NearestTable,
+    PassOutcome, COPY_CODES_SCHEMA, DECISION_CHECK_SCHEMA, DECISION_DECILES_SCHEMA,
+    DECISION_FORCE_SCHEMA, DECISION_GRADE_SCHEMA, DECISION_TRACE_SCHEMA, HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
     hamming_trace_window, panel_reply, read_hamming_uorlut01, served_copy_codes_uorlut01,
@@ -248,7 +248,7 @@ fn load_table(side: &str, path: &str) -> Result<(OwnedTable, String), String> {
         }
         match side {
             "R" => OwnedTable::Q12(served.table, served.width),
-            _ => OwnedTable::F32(
+            "T" => OwnedTable::F32(
                 served
                     .table
                     .iter()
@@ -256,6 +256,7 @@ fn load_table(side: &str, path: &str) -> Result<(OwnedTable, String), String> {
                     .collect(),
                 served.width,
             ),
+            _ => return Err(format!("{path}: side {side} has no table; F, R and T do")),
         }
     };
     Ok((table, sha))
@@ -265,7 +266,11 @@ fn load_table(side: &str, path: &str) -> Result<(OwnedTable, String), String> {
 /// unforced trace at `trace`, written new to `out`; it prints the trace's and the file's sha256.
 fn decision_deciles_out(trace: &str, out: &str) -> Result<(), String> {
     let (decisions, sha) = read_decision_trace(trace)?;
-    let deciles = decision_deciles(&decisions)?;
+    let mut deciles = decision_deciles(&decisions)?;
+    deciles.trace = Some(DecisionSource {
+        path: trace.to_owned(),
+        sha256: sha.clone(),
+    });
     let text = serde_json::to_vec_pretty(&deciles).map_err(|e| e.to_string())?;
     write_new_file(std::path::Path::new(out), &text).map_err(|e| format!("{out}: {e}"))?;
     println!(
@@ -339,6 +344,11 @@ fn decision_grade_out(args: &[String]) -> Result<(), String> {
     else {
         return Err(USAGE.to_owned());
     };
+    let mut named = at.clone();
+    named.sort_unstable();
+    if let Some(p) = named.windows(2).find(|p| p[0] == p[1]) {
+        return Err(format!("--at {}:{} is named twice", p[0].0, p[0].1));
+    }
     let g10: i64 = g10.parse().map_err(|e| format!("--g10 {g10}: {e}"))?;
     let (rt, reference_sha) = read_decision_trace(reference)?;
     let (ot, other_sha) = read_decision_trace(other)?;
@@ -403,7 +413,11 @@ fn decision_grade_out(args: &[String]) -> Result<(), String> {
             .iter()
             .find(|w| w.position == position)
             .ok_or_else(|| format!("{place}: the other trace has no such window"))?;
-        let step = window.reply_start + offset;
+        let step = window
+            .reply_start
+            .checked_add(offset)
+            .filter(|&s| s < window.steps.len())
+            .ok_or_else(|| format!("{place}: past the window's {} steps", window.steps.len()))?;
         let none = DecisionForceWindow {
             position,
             ..Default::default()
@@ -444,7 +458,8 @@ fn decision_grade_out(args: &[String]) -> Result<(), String> {
         "other": { "path": other, "sha256": other_sha, "side": ot.side },
         "reference_table": { "path": reference_table, "sha256": rtab_sha },
         "other_table": { "path": other_table, "sha256": otab_sha },
-        "deciles": { "path": deciles_path, "sha256": sha256_hex(&deciles_text) },
+        // The cell's whole trace the deciles were read from, which may be more than `reference`.
+        "deciles": { "path": deciles_path, "sha256": sha256_hex(&deciles_text), "trace": deciles.trace },
         "force": force_record,
         "g10": g10,
         "passes": passes.len(),
@@ -1277,6 +1292,9 @@ fn run() -> Result<(), String> {
             if flag == "--decision-check" && t == "--table" && o == "--out" =>
         {
             return decision_check_out(trace, table, out);
+        }
+        [flag, ..] if flag == "--decision-deciles" || flag == "--decision-check" => {
+            return Err(USAGE.to_owned());
         }
         [path, flag, readout, out] if flag == "--hamming-trace" => {
             let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;

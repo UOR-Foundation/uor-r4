@@ -936,6 +936,14 @@ pub struct FamilyDecile {
     pub g10: f64,
 }
 
+/// The file a reading was taken from, and its sha256.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecisionSource {
+    pub path: String,
+    pub sha256: String,
+}
+
 /// Every family's G₁₀(φ, P) on one side's unforced trace of a cell ([`decision_deciles`]).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -944,6 +952,9 @@ pub struct DecisionDeciles {
     pub schema: String,
     /// The trace's side, `F` or `T`.
     pub side: String,
+    /// The trace file the deciles were read from, which the CLI names; none in memory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<DecisionSource>,
     /// In family order.
     pub families: Vec<FamilyDecile>,
 }
@@ -967,7 +978,7 @@ pub fn bucket_distance(score: f32) -> f64 {
         .fold(f64::INFINITY, f64::min)
 }
 
-/// A trace's schema, side and head count, before anything in it is read.
+/// A trace's schema, side and layer, lane and head counts, before anything in it is read.
 fn check_decision_header(trace: &DecisionTrace) -> Result<(), String> {
     if trace.schema != DECISION_TRACE_SCHEMA {
         return Err(format!(
@@ -977,6 +988,12 @@ fn check_decision_header(trace: &DecisionTrace) -> Result<(), String> {
     }
     if !["R", "F", "T"].contains(&trace.side.as_str()) {
         return Err(format!("a trace's side is R, F or T, not {}", trace.side));
+    }
+    if trace.layers == 0 || trace.lanes == 0 {
+        return Err(format!(
+            "the {} trace has {} layers and {} lanes: neither is 0",
+            trace.side, trace.layers, trace.lanes
+        ));
     }
     if trace.heads == 0 || !trace.heads.is_multiple_of(2) {
         return Err(format!(
@@ -990,8 +1007,9 @@ fn check_decision_header(trace: &DecisionTrace) -> Result<(), String> {
 /// G₁₀(φ, P) for every family of `trace`, a reference side's unforced trace of a whole cell
 /// (claude-247): over every value the trace records, zeros counted, in the side's own f32
 /// values, except a key's coordinates at step 0, which name no candidate (claude-254). It
-/// refuses a side other than F and T, a value that is not a number, and a trace without the
-/// values (a float side records each lane's score and each code's 64 coordinates).
+/// refuses a side other than F and T, a value that is not a number, a rate score outside
+/// [0, 1], a step without the trace's layer count, and a trace without the values (a float
+/// side records each lane's score and each code's 64 coordinates).
 pub fn decision_deciles(trace: &DecisionTrace) -> Result<DecisionDeciles, String> {
     check_decision_header(trace)?;
     if trace.side != "F" && trace.side != "T" {
@@ -1005,6 +1023,14 @@ pub fn decision_deciles(trace: &DecisionTrace) -> Result<DecisionDeciles, String
     for window in &trace.windows {
         for (t, step) in window.steps.iter().enumerate() {
             let place = || format!("position {}, step {t}", window.position);
+            if step.layers.len() != trace.layers {
+                return Err(format!(
+                    "{}: {} layers, not {}",
+                    place(),
+                    step.layers.len(),
+                    trace.layers
+                ));
+            }
             for (l, layer) in step.layers.iter().enumerate() {
                 if layer.score_f32.len() != trace.lanes {
                     return Err(format!(
@@ -1015,6 +1041,12 @@ pub fn decision_deciles(trace: &DecisionTrace) -> Result<DecisionDeciles, String
                     ));
                 }
                 let scores = layer.score_f32.iter().map(|&s| f32::from_bits(s));
+                if let Some(s) = scores.clone().find(|s| !(0.0..=1.0).contains(s)) {
+                    return Err(format!(
+                        "{}, layer {l}: rate score {s} lies outside [0, 1]",
+                        place()
+                    ));
+                }
                 values
                     .entry(DecisionFamily::Bucket { layer: l })
                     .or_default()
@@ -1079,6 +1111,7 @@ pub fn decision_deciles(trace: &DecisionTrace) -> Result<DecisionDeciles, String
     Ok(DecisionDeciles {
         schema: DECISION_DECILES_SCHEMA.to_owned(),
         side: trace.side.clone(),
+        trace: None,
         families,
     })
 }
@@ -1151,7 +1184,9 @@ impl NearestTable<'_> {
     }
 
     /// Whether `side`'s recorded pick and runner-up scores are this table's, bit for bit, and
-    /// the pick is the better of the two (on R, a tie goes to the smaller id).
+    /// two different tokens. On R the pick is the better of the two (a tie goes to the smaller
+    /// id). A float side picks on the GPU's f32 scores, which these f64 scores recompute, so at
+    /// a near tie its pick may score below its runner-up here; that is not refused.
     fn check_nearest(&self, side: &str, nearest: &DecisionNearest) -> Result<(), String> {
         let recorded = match (self, side) {
             (NearestTable::Q12 { .. }, "R") => (
@@ -1179,7 +1214,7 @@ impl NearestTable<'_> {
         }
         let ordered = match side {
             "R" => pick > runner || (pick == runner && nearest.pick < nearest.runner_up),
-            _ => pick >= runner,
+            _ => true,
         };
         if nearest.pick == nearest.runner_up || !ordered {
             return Err(format!(
@@ -1535,18 +1570,19 @@ fn aligned_read(
 ///
 /// The walk follows the forward's order, step by step from the window's start to p: each layer's
 /// rate buckets in lane order, then the stream read after it, each head's query code, key code
-/// (from step 1) and kept set; then the readout read's key codes (from step 1), and at p also
-/// its query codes and kept sets, query, key and kept set per head; then the turn memory's
-/// lookup; and at p last the nearest. The first difference ends the pass, judged by
-/// claude-247's near-tie rules with the families' G₁₀ from `deciles` (P's) and the pick's from
-/// `g10`, the cell's sealed number.
+/// (from step 1) and kept set; then the readout read's key codes (from step 1), and at p, per
+/// head, its query code, key code and kept set; then the turn memory's lookup; and at p last
+/// the nearest. The first difference ends the pass, judged by claude-247's near-tie rules with
+/// the families' G₁₀ from `deciles` (P's) and the pick's from `g10`, the cell's sealed number.
 ///
 /// It refuses, as an instrument fault: traces that do not line up (their headers, windows,
 /// tokens up to p, reads, readouts or memory lookups, I-Align); a decision of Φ not P's value,
-/// not taken by Q, or not met before the pass's end (I-Force); a code that is not its
-/// coordinates' signs and an entry its score does not select, on either side unless forced;
-/// and a table that does not reproduce a side's recorded pick and runner-up scores, or a pick
-/// that scores below the other side's.
+/// not taken by Q, or not met before the pass's end (I-Force); a code on a float side that is
+/// not its coordinates' signs, and an entry its score does not select, on either side unless
+/// forced; and a table that does not reproduce a side's recorded pick and runner-up scores, or
+/// on side R a pick that scores below the other side's. A float side's pick may score below
+/// the other's in f64 (it picked on the GPU's f32 scores); its margin is then negative, and the
+/// card's rule, both margins at most G₁₀, judges it.
 pub fn grade_pass(
     reference: GradeSide<'_>,
     other: GradeSide<'_>,
@@ -1703,9 +1739,11 @@ pub fn grade_pass(
             other.table.score(nq, w)? - other.table.score(nq, u)?,
         )
     };
-    if reference_margin < 0.0 || other_margin < 0.0 {
+    // R picks the best of its integer scores; a float side picked on the GPU's f32 scores.
+    if ot.side == "R" && other_margin < 0.0 {
         return Err(format!(
-            "position {position}, step {step}: a side's pick scores below the other's ({reference_margin}, {other_margin}): it is not its best"
+            "position {position}, step {step}: side R's pick {w} scores {} below the reference's {u}: it is not its best",
+            -other_margin
         ));
     }
     let near_tie = u == w || (reference_margin <= g10 as f64 && other_margin <= g10 as f64);
@@ -1740,9 +1778,14 @@ pub fn replay_accounts(passes: &[PassOutcome]) -> Result<bool, String> {
                 ))
             }
         };
+        // The same decision is the same place, whatever value either pass forced there.
         let same = |a: &PassOutcome, b: &PassOutcome| match (a, b) {
-            (PassOutcome::Bucket { force: x, .. }, PassOutcome::Bucket { force: y, .. }) => x == y,
-            (PassOutcome::Code { force: x, .. }, PassOutcome::Code { force: y, .. }) => x == y,
+            (PassOutcome::Bucket { force: x, .. }, PassOutcome::Bucket { force: y, .. }) => {
+                (x.step, x.layer, x.lane) == (y.step, y.layer, y.lane)
+            }
+            (PassOutcome::Code { force: x, .. }, PassOutcome::Code { force: y, .. }) => {
+                (x.step, x.depth, x.head, x.role) == (y.step, y.depth, y.head, y.role)
+            }
             _ => false,
         };
         if seen.iter().any(|s| same(s, pass)) {
@@ -1776,8 +1819,9 @@ pub struct DecisionTraceCheck {
 }
 
 /// [`grade_pass`]'s checks of one side, over a whole unforced trace and its own table: each
-/// entry is the one its score selects, each float code is its coordinates' signs, and each
-/// nearest's pick and runner-up scores are the table's, the pick ahead.
+/// step has the trace's layers and each layer its lanes' entries and scores, each entry is the
+/// one its score selects, each float code is its coordinates' signs, and each nearest's pick
+/// and runner-up scores are the table's (on R, the pick ahead).
 pub fn check_decision_trace(
     trace: &DecisionTrace,
     table: NearestTable<'_>,
@@ -1791,7 +1835,27 @@ pub fn check_decision_trace(
         for (t, step) in window.steps.iter().enumerate() {
             let place = || format!("position {}, step {t}", window.position);
             check.steps += 1;
+            if step.layers.len() != trace.layers {
+                return Err(format!(
+                    "{}: {} layers, not {}",
+                    place(),
+                    step.layers.len(),
+                    trace.layers
+                ));
+            }
             for (l, layer) in step.layers.iter().enumerate() {
+                let scores = match trace.side.as_str() {
+                    "R" => layer.score_q16.len(),
+                    _ => layer.score_f32.len(),
+                };
+                if (layer.entry.len(), scores) != (trace.lanes, trace.lanes) {
+                    return Err(format!(
+                        "{}, layer {l}: {} entries and {scores} rate scores, not {} of each",
+                        place(),
+                        layer.entry.len(),
+                        trace.lanes
+                    ));
+                }
                 for (lane, &entry) in layer.entry.iter().enumerate() {
                     let selected = selected_entry(&trace.side, layer, lane)
                         .map_err(|e| format!("{}, layer {l}, lane {lane}: {e}", place()))?;
@@ -2958,7 +3022,12 @@ mod tests {
     /// R's trace of the window: the same decisions, its scores at Q16 and Q12, no coordinates,
     /// and its key at step 0 a 0.
     fn g_r() -> DecisionTrace {
-        let mut r = g_float("R");
+        g_as_r(g_float("R"))
+    }
+
+    /// A float trace's decisions as R records them.
+    fn g_as_r(mut r: DecisionTrace) -> DecisionTrace {
+        r.side = "R".to_owned();
         for (t, step) in r.windows[0].steps.iter_mut().enumerate() {
             let reads = step.layers.iter_mut().filter_map(|l| l.read.as_mut());
             for read in reads.chain(step.readout.as_mut()) {
@@ -3148,11 +3217,26 @@ mod tests {
             .heads[0]
             .query_f32[3] = f32::NAN.to_bits();
         assert!(decision_deciles(&nan).unwrap_err().contains("not a number"));
-        let mut short = trace;
+        let mut short = trace.clone();
         short.windows[0].steps[0].layers[0].score_f32.pop();
         assert!(decision_deciles(&short)
             .unwrap_err()
             .contains("rate scores"));
+        let mut nan_score = trace.clone();
+        nan_score.windows[0].steps[1].layers[0].score_f32[4] = f32::NAN.to_bits();
+        assert!(decision_deciles(&nan_score)
+            .unwrap_err()
+            .contains("lies outside [0, 1]"));
+        let mut layers = trace.clone();
+        layers.layers = 2;
+        assert!(decision_deciles(&layers)
+            .unwrap_err()
+            .contains("1 layers, not 2"));
+        let mut empty = trace;
+        empty.lanes = 0;
+        assert!(decision_deciles(&empty)
+            .unwrap_err()
+            .contains("neither is 0"));
     }
 
     /// A side graded against itself differs nowhere: every pass reaches the nearest with equal
@@ -3237,6 +3321,16 @@ mod tests {
             } => assert!((v - 0.0475).abs() < 1e-6, "{v}"),
             other => panic!("{other:?}"),
         }
+        // Q's 0.37 (entry 5), below P's: the boundary between them is 6/16, 0.015 away.
+        match graded(1, 1, 3, 0.37) {
+            PassOutcome::Bucket {
+                other_entry: 5,
+                value: Some(v),
+                near_tie: false,
+                ..
+            } => assert!((v - 0.015).abs() < 1e-6, "{v}"),
+            other => panic!("{other:?}"),
+        }
         // Entries two apart are never a near tie, however near the score.
         assert!(matches!(
             graded(1, 0, 0, 0.13),
@@ -3250,14 +3344,18 @@ mod tests {
     }
 
     /// A code that differs is a near tie when every bit that differs has |v_P| ≤ G₁₀: the value
-    /// is the largest such coordinate.
+    /// is the largest such coordinate, P's, whatever Q's is.
     #[test]
     fn a_code_is_a_near_tie_only_when_every_differing_bit_is_near_zero() {
         let p = g_float("F");
         let graded = |bits: &[usize]| {
             let mut q = p.clone();
             for &bit in bits {
-                g_flip(g_head_mut(&mut q, 1, 1, 0), CodeRole::Query, bit);
+                let head = g_head_mut(&mut q, 1, 1, 0);
+                g_flip(head, CodeRole::Query, bit);
+                // Q's coordinate fifty times P's in size, its sign kept.
+                let v = f32::from_bits(head.query_f32[bit]);
+                head.query_f32[bit] = (50.0 * v).to_bits();
             }
             g_grade(&p, &q, 3, &g_none(), 0).expect("a pass")
         };
@@ -3312,6 +3410,8 @@ mod tests {
     fn the_walk_follows_the_forwards_order() {
         let p = g_float("F");
         let mut q = p.clone();
+        // Two lanes of one layer differ: lane 0's comes first.
+        g_set_score(&mut q, 3, 1, 2, 0.75);
         g_set_score(&mut q, 3, 1, 0, 0.13);
         let kind = |q: &DecisionTrace| match g_grade(&p, q, 4, &g_none(), 0).expect("a pass") {
             PassOutcome::Bucket { force, .. } => {
@@ -3410,6 +3510,13 @@ mod tests {
             other: vec![2, 3],
         };
         assert_eq!(kept, want);
+        // A kept set with another member.
+        let mut q = p.clone();
+        g_head_mut(&mut q, 4, 1, 1).kept = vec![1, 3];
+        assert!(matches!(
+            g_grade(&p, &q, 4, &g_none(), 0).expect("a pass"),
+            PassOutcome::Kept { reference, other, .. } if (reference.as_slice(), other.as_slice()) == (&[3, 2][..], &[1, 3][..])
+        ));
         let mut q = p.clone();
         q.windows[0].steps[3]
             .memory
@@ -3445,6 +3552,30 @@ mod tests {
         assert_eq!(graded(255), want(255, false));
         assert_eq!(replay_accounts(&[graded(1280)]), Ok(true));
         assert_eq!(replay_accounts(&[graded(1279)]), Ok(false));
+        // With Q as the reference, its margin 1,280 is over a G₁₀ of 300 and P's 256 within.
+        assert_eq!(
+            g_grade(&q, &p, 3, &g_none(), 300).expect("a pass"),
+            PassOutcome::Nearest {
+                reference_pick: 2,
+                other_pick: 3,
+                reference_margin: 1280.0,
+                other_margin: 256.0,
+                g10: 300,
+                near_tie: false,
+            }
+        );
+        // A float side picks on the GPU's f32 scores: a pick behind in f64 is judged, not
+        // refused, its margin negative.
+        let mut behind = p.clone();
+        behind.windows[0].steps[3].nearest = Some(g_nearest(&g_query(3), 2, 3));
+        match g_grade(&p, &behind, 3, &g_none(), 1_000_000).expect("a pass") {
+            PassOutcome::Nearest {
+                other_margin,
+                near_tie: true,
+                ..
+            } => assert!(other_margin < 0.0, "{other_margin}"),
+            other => panic!("{other:?}"),
+        }
     }
 
     /// Φ's decisions are forced to P's value, taken by Q, and met in p's prefix before the
@@ -3529,7 +3660,10 @@ mod tests {
             f(&mut q);
             q
         };
-        refused(&changed(&|q| q.lanes = 4), "I-Align");
+        refused(
+            &changed(&|q| q.lanes = 4),
+            "layers, lanes, heads or kept counts differ (I-Align)",
+        );
         refused(
             &changed(&|q| q.windows[0].position = 8),
             "no window at position 7",
@@ -3538,7 +3672,14 @@ mod tests {
             &changed(&|q| q.windows.push(q.windows[0].clone())),
             "two windows",
         );
-        refused(&changed(&|q| q.windows[0].reply_start = 1), "I-Align");
+        refused(
+            &changed(&|q| q.windows[0].reply_start = 1),
+            "start their replies at steps 2 and 1",
+        );
+        refused(
+            &changed(&|q| q.windows[0].steps.truncate(3)),
+            "or do not reach step 3",
+        );
         refused(&changed(&|q| q.windows[0].ids[1] = 0), "different tokens");
         refused(
             &changed(&|q| q.windows[0].steps[1].layers[0].read = None),
@@ -3564,10 +3705,12 @@ mod tests {
             &changed(&|q| q.windows[0].steps[3].layers[0].score_f32[0] = 2f32.to_bits()),
             "outside [0, 1]",
         );
-        // Q's recorded pick is its third-best token, not its best.
+        // R's recorded pick is its third-best token, not its best.
         refused(
-            &changed(&|q| q.windows[0].steps[3].nearest = Some(g_nearest(&g_query(3), 2, 3))),
-            "not its best",
+            &g_as_r(changed(&|q| {
+                q.windows[0].steps[3].nearest = Some(g_nearest(&g_query(3), 2, 3))
+            })),
+            "side R's pick 4 scores 1280 below the reference's 3: it is not its best",
         );
         refused(
             &changed(&|q| {
@@ -3651,6 +3794,24 @@ mod tests {
         let mut f = g_float("F");
         g_head_mut(&mut f, 0, 2, 1).key ^= 1 << 60;
         assert!(side(&f).unwrap_err().contains("not its coordinates' signs"));
+        // A step without the trace's layers, or a layer without its lanes' entries and scores.
+        let mut f = g_float("F");
+        f.windows[0].steps[2].layers.pop();
+        assert!(side(&f).unwrap_err().contains("step 2: 1 layers, not 2"));
+        let mut f = g_float("F");
+        f.windows[0].steps[1].layers[0]
+            .score_f32
+            .push(0.5f32.to_bits());
+        assert!(side(&f)
+            .unwrap_err()
+            .contains("layer 0: 3 entries and 4 rate scores, not 3 of each"));
+        // A float pick behind its runner-up in f64 is the GPU's f32 order, not refused.
+        let mut f = g_float("F");
+        f.windows[0].steps[3].nearest = Some(g_nearest(&g_query(3), 2, 1));
+        assert_eq!(side(&f).map(|c| c.nearests), Ok(4));
+        assert!(side(&g_as_r(f))
+            .unwrap_err()
+            .contains("is not ahead of its runner-up"));
         let r = g_r();
         let mut skewed = q12.clone();
         skewed[0] -= 1;
@@ -3746,6 +3907,24 @@ mod tests {
         assert!(replay_accounts(&[nearest(true), nearest(true)])
             .unwrap_err()
             .contains("stops"));
+        let kept = PassOutcome::Kept {
+            step: 1,
+            depth: 1,
+            head: 0,
+            reference: vec![0],
+            other: vec![1],
+        };
+        assert!(replay_accounts(&[kept, nearest(true)])
+            .unwrap_err()
+            .contains("stops"));
+        // The same place forced twice, whatever its value, is refused.
+        let mut again = bucket(true, 0);
+        if let PassOutcome::Bucket { force, .. } = &mut again {
+            force.entry = 4;
+        }
+        assert!(replay_accounts(&[bucket(true, 0), again, nearest(true)])
+            .unwrap_err()
+            .contains("earlier pass"));
         let twice = [bucket(true, 0), bucket(true, 0), nearest(true)];
         assert!(replay_accounts(&twice)
             .unwrap_err()
