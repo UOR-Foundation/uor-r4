@@ -1,6 +1,6 @@
 # ORDER: reconcile harness registry-aware checks after current milestone status, deepseek-76
 
-Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `43809a41a`.
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 5 (registry-aware PR-check and status fixtures; no bar, result, hold or serving change). Base: `43809a41a`.
 
 ## Goal
 
