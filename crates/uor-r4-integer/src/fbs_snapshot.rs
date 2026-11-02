@@ -1128,7 +1128,8 @@ impl NearestTable<'_> {
                     .zip(row)
                     .map(|(&q, &e)| (i64::from(q) - i64::from(e)).abs())
                     .sum();
-                Ok(-(sum as f64))
+                // Negated as an integer, so a query on its row scores R's 0, not −0.
+                Ok((-sum) as f64)
             }
             NearestTable::F32 { table, width } => {
                 let row = table_row(table, width, u)?;
@@ -1172,8 +1173,8 @@ impl NearestTable<'_> {
         );
         if scores.0.to_bits() != pick.to_bits() || scores.1.to_bits() != runner.to_bits() {
             return Err(format!(
-                "side {side}'s table scores its pick {} and runner-up {} {} and {}, not the recorded {pick} and {runner}",
-                nearest.pick, nearest.runner_up, scores.0, scores.1
+                "side {side}'s table scores its pick {} at {} and its runner-up {} at {}, not the recorded {pick} and {runner}",
+                nearest.pick, scores.0, nearest.runner_up, scores.1
             ));
         }
         let ordered = match side {
@@ -3661,6 +3662,30 @@ mod tests {
             },
         );
         assert!(check.unwrap_err().contains("not the recorded"));
+        // R's query on its pick's row scores 0, as R records it, not −0 (DEV s1 position 41).
+        let mut exact = g_r();
+        let row = |u: usize| &q12[u * G_WIDTH..(u + 1) * G_WIDTH];
+        let n = exact.windows[0]
+            .steps
+            .iter_mut()
+            .find_map(|s| s.nearest.as_mut())
+            .unwrap();
+        n.query_q12 = row(2).iter().map(|&v| i32::from(v)).collect();
+        (n.pick, n.score_q12) = (2, Some(0));
+        let far: i64 = row(2)
+            .iter()
+            .zip(row(0))
+            .map(|(&q, &e)| (i64::from(q) - i64::from(e)).abs())
+            .sum();
+        (n.runner_up, n.runner_score_q12) = (0, Some(-far));
+        let table = NearestTable::Q12 {
+            table: &q12,
+            width: G_WIDTH,
+        };
+        assert_eq!(
+            check_decision_trace(&exact, table).map(|c| c.nearests > 0),
+            Ok(true)
+        );
     }
 
     /// A finished replay accounts for its step when every forced decision and the pick are near
