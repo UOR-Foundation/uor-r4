@@ -9,11 +9,16 @@ use std::collections::BTreeSet;
 
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
+mod counterfactual;
 mod fbs;
 mod hamming;
 mod memory;
 mod train;
 
+pub use counterfactual::{
+    CounterfactualBundle, CounterfactualCandidate, CounterfactualConfig, CounterfactualField,
+    CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
+};
 pub use fbs::{CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError};
 pub use train::{
     CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,

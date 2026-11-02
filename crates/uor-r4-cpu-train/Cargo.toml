@@ -24,3 +24,7 @@ path = "src/bin/cpu-fbs-forward-bench.rs"
 [[bin]]
 name = "cpu-rank-margin-bench"
 path = "src/bin/cpu-rank-margin-bench.rs"
+
+[[bin]]
+name = "cpu-counterfactual-bench"
+path = "src/bin/cpu-counterfactual-bench.rs"
