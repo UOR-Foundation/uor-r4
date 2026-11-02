@@ -34,7 +34,8 @@ The prefix timer includes both independent CPU stepping and the serving referenc
 - `cargo test --release --locked -p uor-r4-cpu-train`: PASS after the known duplicate-artifact retry, `98 passed`, `4 ignored`.
 - Focused FBS suite: `29 passed`.
 - `cpu-public-fbs-parity`: PASS on both public seeds with the readings above.
-- Full clippy, formatting, D23/D25/D32 ratchets, local PR check, loop gates and GitHub required checks are recorded after they run.
+- Strict clippy, formatting and D23/D25/D32 ratchets: PASS.
+- Local PR check and all 11 loop gates: PASS.
 
 ## Skills used
 
