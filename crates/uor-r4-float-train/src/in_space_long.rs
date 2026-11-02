@@ -9659,8 +9659,8 @@ mod tests {
         let (n2, n3, n5) = (nearest(2), nearest(3), nearest(5));
         assert_eq!((n2.pick, n2.runner_up, n3.pick, n3.runner_up, n5.runner_up), (1, 0, 2, 0, 0));
         // −2^12 · (|0.9f32 − 1| + |0.1f32|), summed in f64; an f32 sum rounds it.
-        assert_eq!(n2.score_f64.map(f64::from_bits), Some(-819.200103759765625));
-        assert_ne!((-4096.0 * ((0.9f32 - 1.0).abs() + 0.1f32)) as f64, -819.200103759765625);
+        assert_eq!(n2.score_f64.map(f64::from_bits), Some(-819.200_103_759_765_6));
+        assert_ne!((-4096.0 * ((0.9f32 - 1.0).abs() + 0.1f32)) as f64, -819.200_103_759_765_6);
         assert_eq!(n5.score_f64.map(f64::from_bits), Some(-3072.0));
         assert_eq!(n5.runner_score_f64.map(f64::from_bits), Some(-3072.0));
         assert_eq!(n3.query_f32, queries[3].map(f32::to_bits).to_vec());
@@ -11565,7 +11565,8 @@ mod tests {
         }
         assert!(unsigned, "the trace records the coordinates, not the codes");
         let mut distinct = entries.clone();
-        (distinct.sort(), distinct.dedup());
+        distinct.sort();
+        distinct.dedup();
         assert!(distinct.len() > 1, "the window's scores fall in more than one bucket");
         // Each kept set, as the kernel chose it, is the 16 positions 1 ≤ s < t nearest the row's
         // query word by Hamming distance to their key words, nearest first, ties to the earlier

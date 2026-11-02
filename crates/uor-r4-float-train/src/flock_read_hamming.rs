@@ -225,8 +225,12 @@ struct HeadChoice {
     key: Vec<Vec<f32>>,
     picks: Vec<Vec<u32>>,
     real: Vec<Vec<u8>>,
-    coords: Option<(Vec<Vec<f32>>, Vec<Vec<f32>>)>,
+    coords: Option<Coords>,
 }
+
+/// A head's query and key coordinates before the sign, row by row, and a window's view of them.
+type Coords = (Vec<Vec<f32>>, Vec<Vec<f32>>);
+type CoordsRef<'a> = (&'a [Vec<f32>], &'a [Vec<f32>]);
 
 /// One head's trace over one window's rows: each row's query and key code packed as
 /// [`pack_signs`] packs it, one word, so a head of at most 64 coordinates; and each row's real
@@ -237,7 +241,7 @@ fn trace_head(
     key: &[Vec<f32>],
     picks: &[Vec<u32>],
     real: &[Vec<u8>],
-    coords: Option<(&[Vec<f32>], &[Vec<f32>])>,
+    coords: Option<CoordsRef<'_>>,
 ) -> Result<HammingTraceHead> {
     let rows = query.len();
     if key.len() != rows || picks.len() != rows || real.len() != rows {
