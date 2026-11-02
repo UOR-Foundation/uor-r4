@@ -20,8 +20,11 @@ Order: [ORDER.md](ORDER.md). References #2859.
   D80/D81 exemption recognizes ARM general-register syntax and flags three
   existing x86 scalar multiply sites. Its self-test passes, but no full audit
   pass is claimed.
-- The trained-model probe is not yet run; it remains gated on FIT/PRE-RUN and
-  the fixed output root.
+- **The explicit memory line changes output but does not produce recall.** On
+  both seeds, every memory-on reply id list differed from its matched
+  no-memory control. Neither factual reply contained `Pickle` or tomatoes.
+  Within each seed, the positive and `Memory: none.` arms collapsed to the same
+  malformed reply, so the line perturbs the model without selecting an answer.
 
 ## What changed
 
@@ -33,16 +36,28 @@ successful turn, and reset clears it. Empty, multiline and literal-special
 values are refused before model state changes.
 
 The change touches three Rust files and the integer README. It adds no model,
-tokenizer, store, compiler, artifact-format or numeric kernel. The task record
-and pre-registration add the fixed two-seed product probe.
+tokenizer, store, compiler, artifact-format or numeric kernel. The task record,
+FIT registration and tracked two-seed evidence add the fixed product probe.
 
 ## Measurements
 
-No trained-model measurement has been taken. The pre-registered probe is
-defined in
-`docs/harness/prep/m4-export-uorlut01-cli-memory-bridge-2026-11-02.md` and uses
-the new debug executable SHA-256
+The new executable is
 `a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`.
+Fourteen fresh processes exited 0 with protocol 2. Stops were 11 `eos` and 3
+`max_new_tokens`. All 14 reply texts decoded from their ids. The two seed-1
+memory-on repeats matched text, ids, stop, history and system line exactly.
+
+| Seed | Factual memory-on changed from off | Requested value present |
+|---|---|---|
+| 1 | 2 / 2 | 0 / 2 |
+| 2 | 2 / 2 | 0 / 2 |
+
+Peak process RSS was 11,612 KiB. The 14 `/usr/bin/time` records sum to 1.52 s.
+The evidence root contains 44 files in 32,964 bytes; its sorted SHA-256
+manifest digest is
+`35e1f521ccc57cf250a288429e3c7a2e1c1ad1dc73e0e92382698cf988d868e7`.
+Exact transcripts and ids are in
+[the lab record](../../../labs/m4-export-uorlut01-cli/deepseek-1/README.md).
 
 ## Checks run at the head
 
@@ -55,8 +70,12 @@ the new debug executable SHA-256
 - `python3 scripts/audit_zero_matmul_serving.py --self-test`: passed.
 - Full x86 stack disassembly audit: not admissible; three existing scalar
   multiply sites are misclassified by the ARM-oriented exemption.
-- `uor-harness prep-check`: complete, pending FIT.
+- Fresh reviewer: `TEST FITNESS: FIT`, `PRE-RUN: PASS` at
+  `3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0`.
+- `uor-harness prep-check`: complete and FIT.
 - `git diff --check`: passed.
+- The registered 14-process command block: all statuses 0, no nonempty stderr,
+  exact repeat, and all output files retained.
 
 ## Skills used
 
@@ -66,8 +85,6 @@ directly.
 
 ## Still open
 
-- Obtain an independent FIT/PRE-RUN review, execute the 14 fixed product
-  prompts, and record exact transcript/evidence results.
 - Automatic statement extraction and store lookup remain unimplemented; this
   unit accepts only an explicit value.
 - ARM64/WebAssembly audit qualification and M4's held-out quality bar remain
@@ -77,6 +94,7 @@ directly.
 ## Plain summary
 
 The chat program can now place the exact memory line used by training between a
-question and the assistant response. This is the missing plumbing needed before
-an automatic fact finder can feed answers into the model. It does not yet find
-facts by itself, and it does not show that the model can answer correctly.
+question and the assistant response. The model sees that line and changes its
+tokens, but it still does not answer with the supplied value. This establishes
+that the missing serving format is now connected, while leaving automatic fact
+extraction and the trained model's answer quality as separate failures.
