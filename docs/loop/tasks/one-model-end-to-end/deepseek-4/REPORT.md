@@ -31,6 +31,8 @@ Base: `2f8f665c5`. Order: [ORDER.md](ORDER.md).
 - `--inspect`, `--decode-speed` and `--score-rows` now read
   `train_as_served` from the checkpoint's run config and use the same served
   forward, Q12 row/opening/decode paths when it is set.
+- The native-writer decode branch now rounds the final hidden point to Q12
+  before its writer call, matching the nearest branch and the training head.
 - The rounded-master guard now restores variables on `Drop` as well as the
   explicit success path, so a failed evaluation or training forward cannot
   leave the optimizer's float masters silently rounded.
@@ -48,8 +50,8 @@ Base: `2f8f665c5`. Order: [ORDER.md](ORDER.md).
   exact float value.
 - Full float crate library suite: 208 passed, 0 failed.
 
-The CUDA-only autograd/training control now exercises the same selector and
-activation helper but was `NOT_RUN` on this host.
+The CUDA-only autograd/training control and the served writer-step control now
+exercise the same graph but were `NOT_RUN` on this host.
 
 ## Checks run at the head
 

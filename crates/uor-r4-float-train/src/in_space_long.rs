@@ -4894,6 +4894,28 @@ fn greedy_reply_with_mode(
     .tokens)
 }
 
+/// The native writer's next token from the last row of `hidden`, rounded to the served Q12 grid
+/// when `served`.
+fn native_writer_next_token(model: &StackModel, hidden: &Tensor, served: bool) -> Result<u32> {
+    let (_, time, width) = hidden.dims3()?;
+    let rows = hidden.reshape((time, width))?;
+    let point = rows.narrow(0, time.saturating_sub(1), 1)?;
+    let point = if served {
+        hs::q12_query(&point)?
+    } else {
+        point
+    };
+    model
+        .native_vector_writer()?
+        .write(&point)?
+        .flatten_all()?
+        .to_dtype(DType::U32)?
+        .to_vec1::<u32>()?
+        .last()
+        .copied()
+        .ok_or_else(|| invalid("the writer returned no token"))
+}
+
 /// How a reply picks each next token (one-model-end-to-end protocol, "The decode rules").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DecodeRule {
@@ -5370,13 +5392,8 @@ fn decode_reply_with_mode(
                     }
                 }
             } else {
-                *model
-                    .native_next_token_ids(window, 1, window.len())?
-                    .flatten_all()?
-                    .to_dtype(DType::U32)?
-                    .to_vec1::<u32>()?
-                    .last()
-                    .ok_or_else(|| invalid("the writer returned no token"))?
+                let hidden = model.hidden(window, 1, window.len())?;
+                native_writer_next_token(model, &hidden, served_mode)?
             };
             if token == hs::SHEET_BOS_ID {
                 break;
@@ -13913,6 +13930,41 @@ mod tests {
         }
         crate::flock_read_hamming::set_hamming_reads(None);
         assert!(decoded > 0, "every reply was empty, so the check held vacuously");
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn served_writer_decode_rounds_the_hidden_point_to_q12() -> Result<()> {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device)?;
+        let prompt: Vec<u32> = (1..=24u32).map(|i| (i * 37) % 4096).collect();
+        let hidden = hs::with_served_surrogate_training(1, 0, || {
+            model.hidden(&prompt, 1, prompt.len())
+        })?;
+        let expected = native_writer_next_token(&model, &hidden, true)?;
+        let decoded = decode_reply_with_mode(
+            &model,
+            PointObjective::Sheet,
+            &prompt,
+            1,
+            1,
+            DecodeRule::Greedy,
+            0,
+            None,
+            ReadScope::Full,
+            &[],
+            true,
+        )?;
+        if expected == hs::SHEET_BOS_ID {
+            assert!(decoded.tokens.is_empty(), "BOS ends the reply");
+        } else {
+            assert_eq!(
+                decoded.tokens.first(),
+                Some(&expected),
+                "the served writer takes the Q12 point"
+            );
+        }
+        Ok(())
     }
 
     /// claude-213 (its GPU half): on a model, the cell rule at margin 0 decodes exactly as
