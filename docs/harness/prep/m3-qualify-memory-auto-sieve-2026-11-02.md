@@ -8,7 +8,9 @@ Reviewed code base: `fb24b48dce5e175fbc8e84eca9a8735a6e7a2c22`.
 The source pins below bind that commit; the prep-sheet wording and report may
 advance without changing the executable or model inputs.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
 
 ## Question and prior evidence
 
@@ -197,7 +199,7 @@ quality.
 ## Cost
 
 Local Ryzen 9 9950X, 16 threads, one process at a time, no GPU and `$0.00`
-external spend. At FIT time the host had `590,433,398,784` bytes available,
+external spend. At FIT time the host had `589,721,354,240` bytes available,
 above the required `30 GiB + 128 MiB`; the isolated build target is
 1,785,321,921 bytes and new evidence is under 1 MiB. The shared training ledger
 path is absent; this serving-only run creates no model and charges no
@@ -219,4 +221,20 @@ transfer, M3 qualification or M4 readiness.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
+
+A fresh-context deepseek reviewer read the code at
+`fb24b48dce5e175fbc8e84eca9a8735a6e7a2c22`, the full branch diff and all source
+pins above at branch head `57b212b0e`. It found no blockers. It independently
+passed the 5 dialogue-memory tests, 5 `uor-chat` tests, 12 stack-chat tests,
+the source/executable/model/lockfile/toolchain pins, the tokenizer-to-artifact
+bindings, `git diff --check` and `prep-check` block completeness.
+
+The reviewer recorded three nonblocking limits for later hardening: the
+in-memory fact log is unbounded while automatic mode is off, any recognized
+question without a lexical match requests `Memory: none.`, and an automatic
+fact log survives the CLI's internal context-overflow reset. These do not
+change this fixed two-conversation smoke's registered question, but the report
+must not generalize beyond it.
