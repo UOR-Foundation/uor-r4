@@ -986,6 +986,7 @@ mod tests {
         );
         for report in [&untrained, &trained] {
             assert!(!report.parity.instrument_fault);
+            assert_eq!(report.head, "native_vector");
             assert_eq!(report.parity.query_coordinate_mismatches, 0);
             assert_eq!(report.parity.token_mismatches, 0);
             assert_eq!(report.parity.kept_cell_mismatches, 0);
@@ -998,6 +999,10 @@ mod tests {
             assert_eq!(hamming.heads, 4);
             assert!(hamming.copy_heads > 0);
             assert!(hamming.type_heads > 0);
+            assert!(
+                hamming.reads.iter().any(|read| read.depth == 2),
+                "the readout-depth Hamming read is not active"
+            );
             let memory = report.manifest.memory.as_ref().unwrap();
             assert_eq!(memory.opening_rows, 1);
             assert_eq!(memory.reply_rows, 2);
@@ -1011,6 +1016,10 @@ mod tests {
                 .modelled_sequence_cost
                 .iter()
                 .any(|stage| stage.hamming_candidate_comparisons > 0));
+            assert!(report
+                .modelled_sequence_cost
+                .iter()
+                .any(|stage| stage.stage == "readout" && stage.readout_candidate_tokens > 0));
         }
         assert_ne!(
             trained.parity.cpu_decision_sha256, untrained.parity.cpu_decision_sha256,
