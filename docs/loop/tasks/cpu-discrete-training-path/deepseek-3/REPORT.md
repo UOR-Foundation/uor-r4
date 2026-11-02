@@ -26,6 +26,8 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 - `UOR_LAB=deepseek uor-harness ratchet d23`: PASS, 4,451 sites, baseline unchanged.
 - `UOR_LAB=deepseek uor-harness ratchet d25`: PASS, 93 sites, baseline unchanged.
 - `UOR_LAB=deepseek uor-harness ratchet d32`: PASS, 31 sites, baseline unchanged.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: PASS.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: PASS, 11 gates green.
 
 ## Skills used
 
