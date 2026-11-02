@@ -82,7 +82,7 @@ Local synthetic diagnostics on the Ryzen 9 9950X recorded:
 - exact BVG-K parameter candidates: 758.970 to 790.051 candidate evaluations/s on width 64, across normalization, bias, decay and route groups.
 - matched panel evaluator: 10,802.874 synthetic rows/s with zero CPU/serving query, token or kept-cell mismatches and 6,320 KiB peak RSS.
 - pre-registered public CPU pilot: 59.654/62.827 target visits/s, 4,824.742/5,081.373 context-tokens/s, 16.763/15.917 ms mean update, 66.024/64.993 s wall and 52,060/51,956 KiB peak RSS on seeds 1/2.
-- registered public restart: the resumed 192-step tails ran at 4,785.321/5,029.280 context-tokens/s and produced the same final artifact and checkpoint bytes as the uninterrupted arms on seeds 1/2.
+- registered public restart: the resumed 192-step tails ran at 4,790.191/5,029.959 context-tokens/s and produced the same final artifact and checkpoint bytes as the uninterrupted arms on seeds 1/2.
 
 These are unsealed component ceilings, not corpus training rates or language evidence. They justify building the CPU path; they do not qualify it.
 

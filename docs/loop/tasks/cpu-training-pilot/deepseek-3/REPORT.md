@@ -1,12 +1,12 @@
 # REPORT: make public CPU corpus training restartable, deepseek-3
 
-Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `20422589a`. Registered test head: `3baaf5a36`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `20422589a`. Registered test head: `a12f1a577`.
 
 ## What did not work, first
 
 - **The earlier ranking negative is unchanged.** This unit adds no new training configuration and does not reinterpret the unchanged 278/384/396 and 224/285/292 panels as a capability gain.
 - **The restart control does not close #3506.** The sealed complete-reply and genuinely fresh-phrasing inputs still require credentials and remain `NOT_RUN`. A configuration that clears a registered capability bar is also still missing.
-- **The first six-process comparison was pre-FIT.** It was byte-identical, but it is preserved only as an executable diagnostic under [evidence/prefit-diagnostic](evidence/prefit-diagnostic/). It is not the registered outcome.
+- **The two earlier six-process comparisons are diagnostic.** The first predates FIT and is under [evidence/prefit-diagnostic](evidence/prefit-diagnostic/); the second used the superseded `6fd2630c…` sheet and is under [evidence/superseded-sheet-control](evidence/superseded-sheet-control/). Neither is the registered outcome.
 
 ## What changed
 
@@ -21,7 +21,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 The registered post-FIT six-process comparison is retained under
 [evidence/post-fit](evidence/post-fit/). The reviewed sheet is
 `docs/harness/prep/cpu-public-resume-control-2026-11-02.md` at SHA-256
-`6fd2630cb2f874078ff897be3063bb412c14bda8e97fa5cf9e37f93547793ca8`.
+`275450b83d1b85904bee5043b3e29555f39e84efd6ff348cfa802e94d5cc83a9`.
 
 The same pinned public inputs from the earlier pilot were used: both raw dual-c131 artifacts, public tokens and mask, trainer seed `1`, evaluation stride `2`, cap `1024`, and checkpoint interval `64`. For each artifact seed, a separate process ran 256 uninterrupted attempts; another process stopped at 64 and exited; a third process resumed that bound checkpoint to total step 256.
 
@@ -32,8 +32,8 @@ Filesystem hashes from the six run receipts were compared directly. `resume-comp
 | 1 | 64 / 192 | `db58f4efb3f4279e9c06f1667e1b014b70edf62ba43f0faaf37869c04886e50c` | `db58f4efb3f4279e9c06f1667e1b014b70edf62ba43f0faaf37869c04886e50c` | yes: `d9e0f9d7…` | yes: `278/384/396` | yes |
 | 2 | 64 / 192 | `6781fe807a1a1e47d386b50a78d7f0367e405da58c2cc5038b6b9967e0d23570` | `6781fe807a1a1e47d386b50a78d7f0367e405da58c2cc5038b6b9967e0d23570` | yes: `85235546…` | yes: `224/285/292` | yes |
 
-- Seed 1 interval checkpoint: `1ba0d8febe534d6f933b150a45a48c1ca8a87cfc6ba1bd4036debb504690f314`; resume finished 24 accepted / 168 refused remaining steps at 4,785.321 context-tokens/s.
-- Seed 2 interval checkpoint: `de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf`; resume finished 17 accepted / 175 refused remaining steps at 5,021.598 context-tokens/s.
+- Seed 1 interval checkpoint: `1ba0d8febe534d6f933b150a45a48c1ca8a87cfc6ba1bd4036debb504690f314`; resume finished 24 accepted / 168 refused remaining steps at 4,790.191 context-tokens/s.
+- Seed 2 interval checkpoint: `de9deb91e32e85cdcbbc07d45114ad73d6708a0b922a2ec0afeed26b4ccfa5bf`; resume finished 17 accepted / 175 refused remaining steps at 5,029.959 context-tokens/s.
 - Every uninterrupted and resumed arm had zero CPU/serving mismatches over 262,144 query coordinates, 1,024 tokens and 8,192 kept cells.
 - Binary SHA-256: `200b5166172b10a70f05aae274caf5a1d371e0b682740cda4329a24a871c1241`.
 - Machine: AMD Ryzen 9 9950X, 16 cores / 32 threads; Rust/Cargo 1.97.1; Ubuntu kernel 7.0.0-42-generic.
