@@ -86,9 +86,15 @@ impl CpuDiscreteRoute {
             .map_err(|_| invalid("context"))?;
         let stages = usize::try_from(shape["stages"].as_u64().unwrap_or(0))
             .map_err(|_| invalid("stages"))?;
+        let kept_cells = usize::try_from(shape["kept_cells"].as_u64().unwrap_or(0))
+            .map_err(|_| invalid("kept_cells"))?;
         if !(2..=8192).contains(&vocab)
             || !(2..=16).contains(&blocks)
             || !(1..=243).contains(&context)
+            || !(1..=16).contains(&kept_cells)
+            || kept_cells > vocab
+            || shape["read_kept"].as_u64() != Some(0)
+            || shape["read_sweeps"].as_u64() != Some(0)
             || expected_stages(context) != Some(stages)
         {
             return Err(invalid("Route shape differs"));
@@ -503,34 +509,109 @@ mod tests {
         assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
             "relation",
             vec![1, 2, 3, 4],
+            2,
+            1,
+            2,
+            None,
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "flock",
+            vec![1, 2, 3, 4],
+            2,
+            0,
+            2,
+            None,
             false
         ))
         .is_err());
         assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
             "route",
             vec![64, 2, 3, 4],
+            0,
+            0,
+            2,
+            None,
             false
         ))
         .is_err());
         assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
             "route",
             vec![1, 2, 3],
+            0,
+            0,
+            2,
+            None,
             false
         ))
         .is_err());
         assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
             "route",
             vec![1, 2, 3, 4],
+            0,
+            0,
+            2,
+            Some(vec![1; 3 * 2 * 8]),
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3, 4],
+            1,
+            0,
+            2,
+            None,
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3, 4],
+            0,
+            1,
+            2,
+            None,
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3, 4],
+            0,
+            0,
+            0,
+            None,
+            false
+        ))
+        .is_err());
+        assert!(CpuDiscreteRoute::from_bytes(&serialized_route_with(
+            "route",
+            vec![1, 2, 3, 4],
+            0,
+            0,
+            2,
+            None,
             true
         ))
         .is_err());
     }
 
     fn serialized_route() -> Vec<u8> {
-        serialized_route_with("route", vec![1, 2, 3, 4], false)
+        serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false)
     }
 
-    fn serialized_route_with(mode: &str, routes: Vec<u32>, short_span: bool) -> Vec<u8> {
+    #[allow(clippy::too_many_arguments)]
+    fn serialized_route_with(
+        mode: &str,
+        routes: Vec<u32>,
+        read_kept: u32,
+        read_sweeps: u32,
+        kept_cells: u32,
+        table_override: Option<Vec<i32>>,
+        short_span: bool,
+    ) -> Vec<u8> {
         let roots = [[0u8, 1], [2, 3], [4, 5]];
         let mut table = Vec::new();
         let mut cells = Vec::new();
@@ -539,6 +620,9 @@ mod tests {
                 table.extend_from_slice(&orbit_root_coords(root).unwrap());
             }
             cells.push(u32::from(blocks[0] << 4 | blocks[1]));
+        }
+        if let Some(table_override) = table_override {
+            table = table_override;
         }
         let gates = vec![0i32; 4];
         let mut blob = Vec::new();
@@ -552,9 +636,9 @@ mod tests {
         let header = json!({
             "schema": "uor-r4.lut-discrete/1",
             "shape": {
-                "vocabulary": 3, "blocks": 2, "context": 3, "kept_cells": 2,
-                "stages": 2, "read_mode": mode, "read_kept": 0,
-                "read_sweeps": 0, "objective_policy": "nearest_address_margin_v1",
+                "vocabulary": 3, "blocks": 2, "context": 3, "kept_cells": kept_cells,
+                "stages": 2, "read_mode": mode, "read_kept": read_kept,
+                "read_sweeps": read_sweeps, "objective_policy": "nearest_address_margin_v1",
                 "read_initialization": "zero_gates_v1", "seed": 1, "epoch": 0
             },
             "matrices": [],
