@@ -26,7 +26,7 @@ The bounded public internal-development pilot has executed and failed its regist
 | Tied-table and lawful parameter-group trainer | Tied-token and BVG-K normalization/bias/decay/route groups delivered on finite fixtures. |
 | Matched admission and exact checkpoint export control | Panel evaluator and gate delivered on finite fixtures. |
 | Trained artifact plus internal query panel | Bound: public dual-c131 seeds 1 and 2 have exact CPU/serving parity; the strict corpus driver creates document-disjoint public development samples. |
-| Public interval-checkpoint restart | Complete. Authenticated step-64 checkpoints resumed in fresh processes to step 256 and produced byte-identical final artifact/checkpoint state on both public seeds. |
+| Public interval-checkpoint restart | Complete. A FIT-reviewed post-FIT control resumed hash-bound step-64 checkpoints in fresh processes to step 256 and produced byte-identical final artifact/checkpoint state on both public seeds. |
 | Sealed complete-reply and fresh-phrasing panels | Unavailable without credentials; `m2-fresh256` returns HTTP 401. A public 160-prompt panel supports only qualitative generation output, not correctness scoring. |
 | Discrete reads/proposals | #3501 is done with finite parity and restart controls. |
 | Quantization-aware updates and trained float shadow | Finite integer/float shadow controls are delivered; a genuine trained FBS float snapshot is not published, so the trained comparison remains `NOT_RUN`. |

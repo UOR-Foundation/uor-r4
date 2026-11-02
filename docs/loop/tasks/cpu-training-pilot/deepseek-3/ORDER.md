@@ -4,7 +4,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 ## Goal
 
-Close the public-run interval-restart gap without changing the completed rank-margin pilot, its negative result or any serving code. A driver run must be able to continue from an authenticated interval checkpoint and produce the same final artifact and checkpoint bytes as the uninterrupted run.
+Close the public-run interval-restart gap without changing the completed rank-margin pilot, its negative result or any serving code. A driver run must be able to continue from a hash-bound interval checkpoint and produce the same final artifact and checkpoint bytes as the uninterrupted run.
 
 ## Scope
 
