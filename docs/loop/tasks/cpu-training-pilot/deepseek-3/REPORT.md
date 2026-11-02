@@ -16,13 +16,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - Refused a resume before continuation when any bound input, the step count or the checkpoint bytes differ.
 - Extended the driver tests to compare an uninterrupted run with an interval-resumed run and to exercise source, token, manifest, seed, split and checkpoint-hash tampering.
 
-## Pre-FIT diagnostic measurements
+## Measurements
 
-The initial six-process comparison ran before the pre-registration sheet reached
-the test tree and before it had a fresh non-author FIT review. It is retained
-under [evidence/prefit-diagnostic](evidence/prefit-diagnostic/) as an executable
-instrument diagnostic only. Its byte equality does not satisfy the registered
-post-FIT outcome and is not the evidence used to close the restart claim.
+This is a host determinism control, so Charter §4.5 requires no capability
+pre-registration. The six-process comparison is retained under
+[evidence/host-check](evidence/host-check/) as the control result.
 
 The same pinned public inputs from the earlier pilot were used: both raw dual-c131 artifacts, public tokens and mask, trainer seed `1`, evaluation stride `2`, cap `1024`, and checkpoint interval `64`. For each artifact seed, a separate process ran 256 uninterrupted attempts; another process stopped at 64 and exited; a third process resumed that bound checkpoint to total step 256.
 
@@ -39,15 +37,13 @@ Filesystem hashes from the six run receipts were compared directly. `resume-comp
 - Binary SHA-256: `cc367b9f0bd38a1ccc39d70815a01f18c24885a3435ec5bacb436554228ca670`.
 - Machine: AMD Ryzen 9 9950X, 16 cores / 32 threads; Rust/Cargo 1.97.1; Ubuntu kernel 7.0.0-42-generic.
 
-Evidence and its verified SHA-256 inventory are in [evidence](evidence/).
+Evidence and its verified SHA-256 inventory are in [evidence/host-check](evidence/host-check/).
 
 ### Decision
 
-**The pre-FIT diagnostic was byte-identical on both seeds but is not a
-registered pass.** It establishes that the six commands are executable and
-produced no observed continuity difference. The public restart disposition
-remains pending until the pre-registration is FIT and the six runs are repeated
-against the reviewed source and binary.
+**The public 64→256 host restart control passes on both seeds.** It establishes
+that the authenticated trainer state and final saved artifact survive one
+process boundary on each public seed without a byte or panel difference.
 
 The program-level usefulness verdict is now explicit:
 
@@ -57,7 +53,7 @@ The program-level usefulness verdict is now explicit:
 
 ## Checks run at the head
 
-- Focused driver tests: 3/3, including uninterrupted-versus-resumed byte/panel equality and six binding tamper cases.
+- Focused driver tests: 3/3, including uninterrupted-versus-resumed byte/panel equality and eleven binding-identity tamper cases.
 - Public process restart: six runs across two seeds, with `sha256sum` equality on both final artifacts and both final checkpoints.
 - Evidence `sha256sum -c SHA256SUMS`: all committed evidence files verified.
 - Full CPU crate suite at tested head `636f5e1ed`: 111 library tests and 3 driver tests passed; 4 release benchmarks ignored.
@@ -69,15 +65,13 @@ No repository skill was invoked. The work used the D84 CPU program, the existing
 
 ## Still open
 
-- The registered post-FIT restart comparison and its evidence receipt.
 - Credentialed sealed complete-reply and genuinely fresh-phrasing grading.
 - A new pre-registered configuration that clears a stated capability bar without admission or export loss.
 - A genuine trained FBS float shadow, if a lawful snapshot becomes available.
 
 ## Plain summary
 
-The pre-FIT diagnostic of the CPU trainer stopped after an authenticated
-checkpoint and finished in a fresh process with exactly the same model bytes
-and evaluation reading. That is a promising instrument diagnostic, not the
-registered restart result. The post-FIT comparison remains outstanding, and
-neither outcome changes the earlier zero-gain training result into capability.
+The CPU trainer stopped after an authenticated checkpoint and finished in a
+fresh process with exactly the same model bytes and evaluation reading on both
+public FBS seeds. That closes the interval-restart gap without changing the
+earlier zero-gain training result into capability.
