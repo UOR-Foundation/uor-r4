@@ -51,4 +51,4 @@ Read the current FBS serving session and its integer kernels, plus the float for
 
 ## Resolution
 
-Completed across `deepseek-1` through `deepseek-4` and merged through PRs #3513, #3515, #3516 and #3517. The supported snapped, rotated, decay-rate, recurrence-only, no-pointer FBS mode matches serving on complete Q12 query/token/cell outputs, including Hamming copy/type reads, `/7` opening/reply memory and `/8` point-key fallback. Retention-rate, unrotated, raw-gate/transition, pointer and non-recurrence modes remain explicitly refused. Trained-artifact/query-panel parity remains #3502.
+Completed across `deepseek-1` through `deepseek-4` and merged through PRs #3513, #3515, #3516 and #3517. The supported snapped, rotated, decay-rate, recurrence-only, no-pointer FBS mode matches serving on complete Q12 query/token/cell outputs, including Hamming copy/type reads, `/7` opening/reply memory and `/8` point-key fallback. Retention-rate, unrotated, raw-gate/transition, pointer and non-recurrence modes remain explicitly refused. Trained FBS artifact/query-panel parity is outside this item's deterministic-forward criteria and remains a later evaluation/pilot prerequisite.
