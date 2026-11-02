@@ -64,6 +64,18 @@
         window.dispatchEvent(new CustomEvent('uor-settings-changed', { detail: Object.assign({}, settings) }));
     }
     function setThemeChoice(theme) { settings.theme = theme === 'light' ? 'light' : (theme === 'system' ? 'system' : 'dark'); saveSettings(); applySettings(); updateThemeButton(); }
+    function updateSettings(patch) {
+        if (!patch || typeof patch !== 'object') return;
+        if (patch.theme !== undefined) settings.theme = patch.theme === 'light' ? 'light' : (patch.theme === 'system' ? 'system' : 'dark');
+        if (patch.reduceMotion !== undefined) settings.reduceMotion = Boolean(patch.reduceMotion);
+        if (patch.fontSize !== undefined) settings.fontSize = Math.max(10, Math.min(24, Number(patch.fontSize) || defaults.fontSize));
+        if (patch.tabSize !== undefined) settings.tabSize = Math.max(1, Math.min(8, Number(patch.tabSize) || defaults.tabSize));
+        if (patch.wordWrap !== undefined) settings.wordWrap = Boolean(patch.wordWrap);
+        saveSettings();
+        applySettings();
+        updateThemeButton();
+    }
+
     function updateThemeButton() {
         var label = effectiveTheme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme';
         ['btnTheme', 'railTheme'].forEach(function (id) { var node = document.getElementById(id); if (node) node.setAttribute('title', label); });
@@ -980,10 +992,14 @@
             toggleTheme: toggleTheme,
             setTheme: setThemeChoice,
             getSettings: function () { return Object.assign({}, settings); },
+            updateSettings: updateSettings,
             updateStatus: updateStatus,
             getAttachments: function () { return attachments.slice(); },
             addAttachment: addAttachment,
-            clearAttachments: clearAttachments
+            clearAttachments: clearAttachments,
+            templatePrompt: templatePrompt,
+            clearSessions: clearSessions,
+            clearEditor: clearEditor
         });
         window.dispatchEvent(new CustomEvent('uor-studio-v2-ready'));
     }

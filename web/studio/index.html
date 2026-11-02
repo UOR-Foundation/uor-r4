@@ -1303,6 +1303,7 @@
             requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete' } }));
         }
 
         function finishGenerationWithError(errorText) {
@@ -1332,6 +1333,7 @@
             setMetrics('Error');
             toast(String(errorText), 'error');
             scrollChat(true);
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error' } }));
         }
 
         function generationTokenLimit() {
@@ -1401,6 +1403,7 @@
                         setMetrics('API response · ' + text.length + ' chars');
                         renderConversationList();
                         scrollChat(false);
+                        document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: result && result.stopped ? 'stopped' : 'complete' } }));
                     },
                     onError: function (error) {
                         finishApiWithError(error);
@@ -1960,7 +1963,15 @@
                 input.focus();
                 try { input.setSelectionRange(input.value.length, input.value.length); } catch (error) { /* optional */ }
                 return true;
-            }
+            },
+            sendPrompt: function (text) {
+                var input = $('#chatInput');
+                if (!input) return false;
+                input.value = String(text || '');
+                sendFromComposer();
+                return app.generating;
+            },
+            stopGeneration: stopGeneration
         };
 
         if (document.readyState === 'loading') {

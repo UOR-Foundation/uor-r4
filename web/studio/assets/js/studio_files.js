@@ -623,6 +623,19 @@
         return { path: tab.path, name: tab.name, content: text ? text.value : tab.content, mode: tab.mode };
     }
 
+    function setActiveContent(content) {
+        var tab = tabFor(state.activePath);
+        if (!tab) return false;
+        tab.content = String(content);
+        tab.dirty = true;
+        updateEditorHeader(tab);
+        updateStats(tab.content);
+        renderTabs();
+        persistTabs();
+        emit();
+        return true;
+    }
+
     function insertText(text, name) {
         var tabName = name || 'agent-snippet.md';
         var existing = state.tabs.find(function (tab) { return tab.path === tabName; });
@@ -776,6 +789,7 @@
             closeTab: closeTab,
             closeAll: closeAll,
             insertText: insertText,
+            setActiveContent: setActiveContent,
             activeFile: activeFile,
             workspaceName: function () { return state.rootName; },
             mode: function () { return state.mode; },

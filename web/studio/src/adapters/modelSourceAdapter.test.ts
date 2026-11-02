@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
 import { createModelSourceAdapter, LOAD_PROGRESS_EVENT } from './modelSourceAdapter.js';
+import type { ApiProvider, ModelSourceList } from '../../assets/js/model_sources.js';
 
 function sources() {
     const result = { bytes: new Uint8Array(), fileName: 'model.lut', expectedSha256: 'abc', meta: { schema: 'uor-r4.lut-stack/1' } };
+    const provider: ApiProvider = { id: 'api-a', label: 'API A', preset: 'custom', baseUrl: 'https://api.example.com/v1', model: 'model-a', apiKey: '' };
+    const list = (): ModelSourceList => ({ active: { kind: 'wasm', id: 'bundled-demo' }, wasm: {}, api: [provider] });
     return {
+        list: vi.fn(list),
+        active: vi.fn(() => list().active),
+        apiConfig: vi.fn((id?: string) => id && id !== provider.id ? null : provider),
+        addApi: vi.fn((input: Partial<ApiProvider>) => ({ ...provider, ...input, id: input.id || 'api-new' })),
+        updateApi: vi.fn((id: string, patch: Partial<ApiProvider>) => ({ ...provider, ...patch, id })),
+        removeApi: vi.fn(() => list()),
         loadPublished: vi.fn(async () => result),
         loadFromUrl: vi.fn(async (url: string) => ({ ...result, fileName: url.split('/').pop() || 'downloaded-stack.lut' })),
         loadLocalFile: vi.fn(async () => result),

@@ -1,0 +1,110 @@
+export interface StudioFile {
+    path: string;
+    name: string;
+    content: string;
+    mode: string;
+}
+
+export interface WorkspaceTab {
+    path: string;
+    dirty: boolean;
+    mode: string;
+}
+
+export interface WorkspaceSummary {
+    mode: string;
+    rootName: string;
+    fileCount: number;
+    tabs: Array<Pick<WorkspaceTab, 'path' | 'dirty'>>;
+    activePath: string | null;
+}
+
+export interface WorkspaceApi {
+    openFolder(): Promise<void>;
+    importFiles(reason?: string): void;
+    openDemo(): void;
+    openFile(path: string): Promise<void>;
+    newFile(): void;
+    closeTab(path: string): void;
+    closeAll(): void;
+    saveActive(): Promise<boolean>;
+    saveAsCopy(): boolean;
+    insertText(text: string, name?: string): boolean;
+    setActiveContent(content: string): void;
+    activeFile(): StudioFile | null;
+    workspaceName(): string;
+    mode(): string;
+    tabs(): WorkspaceTab[];
+    treeSummary(): WorkspaceSummary;
+}
+
+export interface SessionSummary {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    messageCount: number;
+    preview: string;
+}
+
+export interface ChatMessage {
+    role: string;
+    content: string;
+}
+
+export interface SessionApi {
+    getMode(): 'wasm' | 'api';
+    listSessions(): SessionSummary[];
+    activeSessionId(): string | null;
+    selectSession(id: string): boolean;
+    newSession(): boolean;
+    renameSession(id: string, title: string): boolean;
+    duplicateSession(id: string): string | null;
+    exportSession(id?: string): string | null;
+    deleteSession(id: string): boolean;
+    getConversationMessages(id?: string): ChatMessage[];
+    setComposerText(text: string): boolean;
+    sendPrompt(prompt: string): boolean;
+    stopGeneration(): void;
+}
+
+export interface Attachment {
+    name: string;
+    content: string;
+    source?: string;
+}
+
+export interface StudioSettings {
+    theme: 'dark' | 'light' | 'system';
+    reduceMotion: boolean;
+    fontSize: number;
+    tabSize: number;
+    wordWrap: boolean;
+}
+
+export interface StudioUiApi {
+    setView(view: string): void;
+    toast(text: string, tone?: string): void;
+    getSettings(): StudioSettings;
+    updateSettings(patch: Partial<StudioSettings>): void;
+    getAttachments(): Attachment[];
+    addAttachment(entry: Attachment): void;
+    clearAttachments(): void;
+    templatePrompt(kind: string): string;
+    clearSessions(): void;
+    clearEditor(): void;
+}
+
+export interface LegacyWorkflowApis {
+    files: WorkspaceApi;
+    sessions: SessionApi;
+    ui: StudioUiApi;
+}
+
+export function createLegacyWorkflowApis(root: Window = window): LegacyWorkflowApis {
+    const legacy = root as unknown as {
+        __studioFiles: WorkspaceApi;
+        __studioUi: SessionApi & StudioUiApi;
+    };
+    return { files: legacy.__studioFiles, sessions: legacy.__studioUi, ui: legacy.__studioUi };
+}
