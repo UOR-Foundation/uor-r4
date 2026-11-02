@@ -1,6 +1,6 @@
 # REPORT: migrate Studio core workflows to typed components, kimi-2
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `d62ecdc3928e282b3001f523666441c8e5fd8085`. This report follows. Exact delivery-head commit/tree evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `22fecde5a9f4e486bec8c0b3d8757dc7a907ec3a`. This report follows. Exact delivery-head commit/tree evidence is posted on the PR.
 
 ## What did not work
 
