@@ -44,9 +44,13 @@ test automatic extraction.
 - Host architecture: `x86_64`. This test is a product-path integration check,
   not an ARM64 or WebAssembly D11 audit. The current x86 stack audit is not
   admissible as a clean numeric-kernel proof because the script's D80/D81
-  scalar multiply/divide exemption recognises ARM register syntax and
-  misclassifies three existing x86 scalar `mul` sites. The audit self-test
-  passes. No audit pass or portable serving qualification is claimed here.
+  scalar multiply/divide exemption recognises ARM register syntax. On the
+  release binary SHA-256
+  `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`,
+  it reports three flagged symbols containing four existing scalar `mul`
+  instructions; the evidence debug binary reports ten instructions. The audit
+  self-test passes. No audit pass or portable serving qualification is claimed
+  here.
 - Build:
 
 ```sh

@@ -80,6 +80,9 @@ chat.
 
 The host is x86_64. The D11 zero-multiplier audit is specified for ARM64 and
 its stack-mode scalar multiply/divide exemption recognizes ARM register syntax;
-the current x86 build reports three existing scalar `mul` sites as
-misclassified. The audit self-test passes, but no full native or WebAssembly
-audit claim is made for this x86 run.
+the release binary
+`b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
+reports three flagged symbols containing four existing scalar `mul`
+instructions; the debug binary used for the product run reports ten. The audit
+self-test passes, but no full native or WebAssembly audit claim is made for
+this x86 run.

@@ -17,9 +17,11 @@ Order: [ORDER.md](ORDER.md). References #2859.
   literal `Memory:` layout. The test tokenizer now includes that text, and the
   assertion checks `User: a\nSystem: Memory: b.\nAssistant:` directly.
 - The x86 native disassembly audit cannot certify the D11 ARM64 rule: its
-  D80/D81 exemption recognizes ARM general-register syntax and flags three
-  existing x86 scalar multiply sites. Its self-test passes, but no full audit
-  pass is claimed.
+  D80/D81 exemption recognizes ARM general-register syntax. On release binary
+  `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
+  it flags three symbols containing four scalar `mul` instructions; the
+  evidence debug binary yields ten such instructions. Its self-test passes, but
+  no full audit pass is claimed.
 - **The explicit memory line changes output but does not produce recall.** On
   both seeds, every memory-on reply id list differed from its matched
   no-memory control. Neither factual reply contained `Pickle` or tomatoes.
@@ -68,8 +70,11 @@ Exact transcripts and ids are in
   uor-chat`: 4 passed, including one-turn pending-memory behavior.
 - Targeted `rustfmt --check` for the changed production files: passed.
 - `python3 scripts/audit_zero_matmul_serving.py --self-test`: passed.
-- Full x86 stack disassembly audit: not admissible; three existing scalar
-  multiply sites are misclassified by the ARM-oriented exemption.
+- Full x86 stack disassembly audit: not admissible. Release binary
+  `b1be73742c75d429ef4690334393a36fc95da1bc4b4d4de21a3521f06986c487`
+  reports three flagged symbols with four scalar `mul` instructions, and the
+  debug evidence binary reports ten. Both are misclassified by the ARM-oriented
+  exemption.
 - Fresh reviewer: `TEST FITNESS: FIT`, `PRE-RUN: PASS` at
   `3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0`.
 - `uor-harness prep-check`: complete and FIT.
