@@ -89,13 +89,19 @@ For every run:
 - `fbs-snapshot --round-as-exported`: the set of saved files whose bytes change.
 
 The served-forward override is for evaluation only and must not change the
-training objective. Before inspection, every checkpoint is copied through
-`fbs-snapshot --round-as-exported` into a separate evaluation run:
-`EVAL/config.json` names the source run, and `EVAL/models/step-000256` is the
-rounded copy. The source and copy file hashes are recorded. This is required
-for the plain arm, whose unrounded files `evaluate_dev_panel_d11` correctly
-refuses. The served arm receives the same copy step to keep the evaluation path
-identical.
+training objective. Before inspection, create each separate evaluation run as:
+
+```text
+mkdir -p EVAL/models
+cp RUN/config.json EVAL/config.json
+fbs-snapshot --round-as-exported RUN/models/step-000256 EVAL/models/step-000256
+```
+
+The copied run config preserves the source arm, seed, architecture, reads,
+rounding flags and arm setting; all later scoring flags are identical. The
+source and copy file hashes are recorded. This is required for the plain arm,
+whose unrounded files `evaluate_dev_panel_d11` correctly refuses. The served arm
+receives the same copy step to keep the evaluation path identical.
 
 ## Steps
 
@@ -115,6 +121,19 @@ identical.
 One RTX 5090 for at most one GPU-hour, ceiling `$1.50`, one pod, inside the
 project-wide 4-pod/$8-per-hour caps. Build and tests are projected at 20
 minutes; four 256-step runs at 10 minutes; all evaluation at 20 minutes.
+
+The allocation command is:
+
+```text
+scripts/pod/uor-pod up --lab deepseek --session served-comparison-1 \
+  --count 1 --gpu 5090 --hours 1 \
+  --purpose "matched served-surrogate training comparison" \
+  --card https://github.com/UOR-Foundation/uor-r4/pull/3567
+```
+
+The lease is renewed at least every 30 minutes. It is released and the pod is
+destroyed only after `/workspace` results are archived, uploaded, read back and
+checked against `SHA256SUMS`.
 
 ## Minimum test power
 
