@@ -1,8 +1,6 @@
 # ORDER: m4-export-uorlut01-cli, deepseek-1
 
-Lab: deepseek. Item:
-[m4-export-uorlut01-cli](../../../../roadmap/items/m4-export-uorlut01-cli.md).
-Base: `e0647330314841ddf84ba3bd7cfd57e57c03680e`.
+Lab: deepseek. Item: [m4-export-uorlut01-cli](../../../../roadmap/items/m4-export-uorlut01-cli.md). Base: `e0647330314841ddf84ba3bd7cfd57e57c03680e`.
 
 ## Goal
 
