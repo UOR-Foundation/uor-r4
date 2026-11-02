@@ -64,6 +64,9 @@ under `local/deepseek/public-chat-post-smoke-2026-11-02/`.
   panel, executable, source, lockfile and toolchain hash.
 - Independent extraction and verification: 33 of 33 reply texts matched their
   ids; the repeat was exact; the memory anchors failed as reported.
+- `git diff --check` passed for this docs-only change.
+- `cargo fmt --all -- --check` reports pre-existing formatting drift in
+  untouched crates on this base; it is not a source gate for this branch.
 
 ## Skills used
 
