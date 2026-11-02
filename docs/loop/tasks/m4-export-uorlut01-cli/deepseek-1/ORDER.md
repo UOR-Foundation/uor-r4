@@ -22,7 +22,9 @@ uses the line.
 - `crates/uor-r4-integer/src/stack/chat.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
 - `crates/uor-r4-integer/src/bin/uor-chat.rs`
+- `crates/uor-r4-integer/README.md`
 - `docs/harness/prep/m4-export-uorlut01-cli-memory-bridge-*`
+- `docs/harness/claims.json`
 - `docs/labs/m4-export-uorlut01-cli/deepseek-1/**`
 - `docs/loop/tasks/m4-export-uorlut01-cli/deepseek-1/**`
 - `docs/research/notebook/m4-serving.md`

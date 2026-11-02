@@ -41,6 +41,12 @@ test automatic extraction.
 - Executable:
   `/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/chat-memory-target/debug/uor-chat`,
   SHA-256 `a7ad4b83547943bd8902bd13b64596cd8699d6bf2c367347ee9c59d13b02f23c`.
+- Host architecture: `x86_64`. This test is a product-path integration check,
+  not an ARM64 or WebAssembly D11 audit. The current x86 stack audit is not
+  admissible as a clean numeric-kernel proof because the script's D80/D81
+  scalar multiply/divide exemption recognises ARM register syntax and
+  misclassifies three existing x86 scalar `mul` sites. The audit self-test
+  passes. No audit pass or portable serving qualification is claimed here.
 - Build:
 
 ```sh
@@ -84,7 +90,7 @@ Every invocation uses `--protocol 2 --threads 16 --temperature 0
 Each prompt runs under two arms:
 
 - `off`: omit `--memory`;
-- `on`: pass `--memory PICKLE` with the value in the table.
+- `on`: pass `--memory <value>` with the value in the table.
 
 Both artifacts run both arms. Seed 1 repeats both factual `on` arms from fresh
 processes. The CLI's bridge wraps a value as `System: Memory: VALUE.` through
@@ -195,11 +201,25 @@ quality.
 ## Cost
 
 Local Ryzen 9 9950X only, one process at a time, 16 threads, no GPU and `$0.00`
-external spend. The panel is projected below one minute and 1 MiB. Before
-execution, verify at least `30 GiB + 128 MiB` free disk and read the live model
-ledger and active storage receipt; record the observed free space, current
-charge and `$0.00` external charge. No checkpoint or dataset is retained; only
-the transcript directory is new.
+external spend. Preparation, the warm build and checks are projected below five
+minutes; the 14-process panel below two minutes; report, review and delivery
+below 20 minutes. Peak RSS is projected below 256 MiB and is measured per
+process. There is no automatic retry; a fresh sibling output root is created
+only for a recorded repair.
+
+At preflight on 2 November 2026:
+
+- free disk: `593,570,574,336` bytes, above the required
+  `30 GiB + 128 MiB`;
+- retained build: `729,942,000` bytes in the ignored target directory;
+- new transcripts and reports: projected below 1 MiB;
+- external charge: `$0.00`;
+- the shared live model ledger
+  `/home/callard/projects/codex-playground/uor-r4/.uor-models/native-joint-learning-2026-09-04/model-time.json`
+  is absent, and no active storage receipt exists. This serving-only run trains
+  no model and produces no checkpoint, so no model-time charge or prior training
+  balance is claimed; the observed filesystem space and retained build size
+  above are the complete local admission record.
 
 ## Stop rule
 
@@ -211,7 +231,8 @@ other than 2, peak RSS over 1 GiB or non-exact seed-1 repeat.
 This test can show that an explicit `System: Memory:` turn is encoded and can
 change deterministic integer outputs. It cannot show that facts are
 automatically extracted, that a reply is correct, that the model generalizes,
-or that the artifact is ready for useful chat.
+that the artifact is ready for useful chat, or that the path passes an ARM64 or
+WebAssembly zero-multiplier audit. It changes no numeric kernel.
 
 ## Non-author TEST FITNESS review
 
