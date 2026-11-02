@@ -1415,6 +1415,9 @@ impl CpuDiscreteProposalScorer {
         artifact: &[u8],
         samples: &[CpuDiscreteProposalSample],
     ) -> Result<CpuDiscretePanelExportReading> {
+        if samples.is_empty() {
+            return Err(invalid("discrete export parity requires rows"));
+        }
         let model = uor_r4_integer::discrete_d11::IntegerDiscreteModel::from_bytes(artifact)
             .map_err(|error| invalid(format!("discrete serving artifact: {error}")))?;
         let mut reading = CpuDiscretePanelExportReading {
@@ -3699,6 +3702,7 @@ mod tests {
         let scorer = CpuDiscreteProposalScorer::from_bytes(&rewritten).unwrap();
         let parity = scorer.export_parity(&rewritten, &samples).unwrap();
         assert!(parity.is_exact(), "{parity:?}");
+        assert!(scorer.export_parity(&rewritten, &[]).is_err());
         let header = header(&rewritten).unwrap();
         assert_eq!(header["shape"]["epoch"], json!(source_epoch + 1));
         let serving = IntegerDiscreteModel::from_bytes(&rewritten).unwrap();
