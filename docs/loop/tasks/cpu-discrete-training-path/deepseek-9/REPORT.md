@@ -9,15 +9,16 @@ Lab: deepseek. Item: [cpu-discrete-training-path](../../../../roadmap/items/cpu-
 
 ## What changed
 
-- The ORDER reserves exact epoch, mode, inventory and strict-improvement apply.
+- Added `CpuDiscreteProposalApplier` with epoch, mode, inventory and strict-improvement checks plus typed apply receipts.
+- Lane 0 is a state-preserving no-op; Route/Gate/Table lane moves mutate one coordinate and increment epoch.
 
 ## Measurements
 
-- Pending implementation and verification.
+- Focused apply tests: 2 passed. Exact Gate/Table/Route mutation and status order/no-op controls are pinned.
 
 ## Checks run at the head
 
-- Pending implementation and verification.
+- Focused release apply tests passed. Full-suite and gate verification remain pending.
 
 ## Skills used
 

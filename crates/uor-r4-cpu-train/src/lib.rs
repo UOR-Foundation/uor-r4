@@ -22,7 +22,8 @@ pub use counterfactual::{
     CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
 };
 pub use discrete_route::{
-    CpuDiscreteFlock, CpuDiscreteProposal, CpuDiscreteProposalChooser, CpuDiscreteProposalKind,
+    CpuDiscreteApplyError, CpuDiscreteApplyReceipt, CpuDiscreteFlock, CpuDiscreteProposal,
+    CpuDiscreteProposalApplier, CpuDiscreteProposalChooser, CpuDiscreteProposalKind,
     CpuDiscreteProposalMode, CpuDiscreteProposalSample, CpuDiscreteProposalScorer,
     CpuDiscreteProposalScoring, CpuDiscreteRelation, CpuDiscreteRoute, CpuDiscreteScoreError,
 };
