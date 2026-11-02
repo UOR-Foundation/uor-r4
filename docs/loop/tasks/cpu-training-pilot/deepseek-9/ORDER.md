@@ -24,7 +24,7 @@ settings, reuse it and do not duplicate them.
 ## Scope
 
 - `crates/uor-r4-cpu-train/src/bin/cpu-corpus-driver.rs`
-- `docs/harness/prep/cpu-training-pilot-equivalent-step-2026-11-02.md`
+- `docs/harness/prep/cpu-training-pilot-rank-step-2026-11-02.md`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-9/**`
 - `docs/research/notebook/cpu-training.md`
 - `docs/roadmap/items/cpu-training-pilot.md`
