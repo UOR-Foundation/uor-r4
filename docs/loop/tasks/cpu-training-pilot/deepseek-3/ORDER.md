@@ -11,7 +11,6 @@ Close the public-run interval-restart gap without changing the completed rank-ma
 - `crates/uor-r4-cpu-train/src/bin/cpu-corpus-driver.rs`
 - `crates/uor-r4-cpu-train/README.md`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-3/**`
-- `docs/harness/prep/cpu-public-resume-control-2026-11-02.md`
 - `docs/roadmap/items/cpu-training-pilot.md`
 - `docs/research/cpu-training-program.md`
 - `docs/research/notebook/cpu-training.md`
@@ -25,13 +24,13 @@ No serving edit, trainer-algorithm change, GPU run, rewrite of the sealed pilot 
 - Write a checkpoint binding beside every interval and final checkpoint. Bind the source artifact, token, mask and manifest hashes, tokenizer, trainer seed, split controls, completed step and checkpoint hash.
 - Refuse a resume when the binding, pinned input, checkpoint hash or step count differs.
 - Report the resumed-from step, executed-step count and verified checkpoint identity.
-- Write a new FIT pre-registration before any public restart comparison; the earlier sealed sheet remains unchanged as history.
+- Classify the public restart comparison as a host determinism check under CHARTER §4.5; do not fabricate a FIT clearance or present it as a pre-registered capability run.
 
 ## Done when
 
 - A finite interval checkpoint resumed through the driver produces byte-identical final artifact and final checkpoint hashes to the uninterrupted run.
 - Tampered source, corpus, seed, split or checkpoint identity is refused before training continues.
-- A public two-seed restart comparison is executed from the same pinned inputs under the new FIT sheet and records byte equality or an explicit instrument failure.
+- A two-seed host restart comparison is executed from the same pinned inputs and records byte equality or an explicit instrument failure.
 - Focused tests, the CPU crate suite, Clippy, formatting, roadmap checks and harness checks pass at the reviewed head.
 
 ## Stop
