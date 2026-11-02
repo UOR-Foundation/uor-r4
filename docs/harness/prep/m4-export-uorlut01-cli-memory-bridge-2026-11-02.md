@@ -6,7 +6,7 @@ Order:
 [deepseek-1](../../loop/tasks/m4-export-uorlut01-cli/deepseek-1/ORDER.md).
 Source base: `e0647330314841ddf84ba3bd7cfd57e57c03680e`.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question and prior evidence
 
@@ -236,4 +236,15 @@ WebAssembly zero-multiplier audit. It changes no numeric kernel.
 
 ## Non-author TEST FITNESS review
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
+
+PRE-RUN: PASS
+
+Reviewed at exact head
+`3c8b0506032d96c55fa94fafc4f50d7dc9e1c6c0` by a fresh-context, read-only
+`codex` reviewer using the configured `deepseek-flash` provider in ephemeral
+session `01a19dff-36c0-7991-9b9c-3072fbd66d50`. The reviewer confirmed the
+non-tautological no-memory control, literal protocol layout, exact 14-process
+shell block, all pins, the 192-token context margin, the x86 audit limitation,
+the serving-only ledger/storage statement, stop rule and claim boundary. It ran
+no trained-model inference.
