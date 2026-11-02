@@ -22,6 +22,7 @@ fn run() -> Result<(), String> {
     }
     let report = evaluate(
         &config.artifact,
+        &config.tokenizer,
         &config.panel,
         config.train.as_ref(),
         config.train_role,
@@ -52,6 +53,7 @@ fn report_sha256(bytes: &[u8]) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Config {
     artifact: PathBuf,
+    tokenizer: PathBuf,
     panel: CorpusFiles,
     train: Option<CorpusFiles>,
     train_role: Option<ReferenceRole>,
@@ -72,8 +74,9 @@ fn parse_args(values: impl IntoIterator<Item = String>) -> Result<Config, String
             return Err(format!("argument {key:?} is named twice"));
         }
     }
-    const ALLOWED: [&str; 10] = [
+    const ALLOWED: [&str; 11] = [
         "artifact",
+        "tokenizer",
         "panel-tokens",
         "panel-mask",
         "panel-manifest",
@@ -134,6 +137,7 @@ fn parse_args(values: impl IntoIterator<Item = String>) -> Result<Config, String
     }
     Ok(Config {
         artifact: PathBuf::from(required("artifact")?),
+        tokenizer: PathBuf::from(required("tokenizer")?),
         panel,
         train,
         train_role,
@@ -154,7 +158,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: m2-evidence artifact=FILE panel-tokens=FILE panel-mask=FILE \
+    "usage: m2-evidence artifact=FILE tokenizer=FILE panel-tokens=FILE panel-mask=FILE \
      panel-manifest=FILE [train-tokens=FILE train-mask=FILE train-manifest=FILE \
      train-role=canonical_train|generated_control] [max-targets=N] out=NEW_JSON"
         .into()
@@ -175,6 +179,7 @@ mod tests {
         PANEL
             .iter()
             .chain(extra.iter())
+            .chain(std::iter::once(&"tokenizer=t.json"))
             .map(|value| (*value).to_owned())
             .collect()
     }
@@ -194,6 +199,7 @@ mod tests {
 
         let incomplete = vec![
             "artifact=a.lut".to_owned(),
+            "tokenizer=t.json".to_owned(),
             "panel-tokens=p.u16".to_owned(),
             "out=r.json".to_owned(),
         ];

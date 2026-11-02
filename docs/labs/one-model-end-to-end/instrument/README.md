@@ -22,6 +22,7 @@ is canonical TRAIN or a generated control:
 ```sh
 cargo run --release --offline --bin m2-evidence -- \
   artifact=MODEL.d11 \
+  tokenizer=TOKENIZER.json \
   panel-tokens=PANEL/tokens.u16 \
   panel-mask=PANEL/response_mask.u8 \
   panel-manifest=PANEL/manifest.json \
@@ -38,15 +39,22 @@ The report contains:
 - artifact schema, table count, hashes and shape;
 - panel and reference manifest, tokenizer, content hashes and corpus identity;
 - target admission, top-1 and top-8 overall;
-- opening versus continuation and prompt-overlap, first-8-key and reference-reply strata;
+- opening versus continuation and prompt-overlap, value-masked prompt-template, first-8-key and
+  reference-reply strata;
 - reference prompt/reply exact overlap and reply 4-/8-gram novelty;
+- value-masked prompt and reply template overlap at K = 256 and 1,024;
 - an independent `CpuWriterCore` comparison against the integer serving writer;
 - explicit `unavailable` entries for data or controls not supplied.
 
-The input UORT, manifest hashes, vocabulary, BOS, conversation count and response inventory are
-checked before scoring. Empty corpora, zero response runs, `max-targets=0`, malformed artifacts,
-unknown or duplicate arguments and an existing output path are refused. An output is created with
-`create_new` and never replaced.
+The input UORT, tokenizer hash, manifest hashes, vocabulary, BOS, conversation count and response
+inventory are checked before scoring. Empty corpora, zero response runs, `max-targets=0`, malformed
+artifacts, unknown or duplicate arguments and an existing output path are refused. An output is
+created with `create_new` and never replaced.
+
+The template census follows `train-in-space --census`: TRAIN's K most frequent tokens are kept, all
+single-digit tokenizer pieces are masked, every other token is replaced by one mask sentinel, and
+adjacent sentinels collapse. A panel is reported as holding new prompt templates when its K = 1,024
+masked-prompt share is at most 0.5.
 
 ### Parity boundary
 
@@ -60,7 +68,6 @@ independent trunk evaluation.
 
 - Generated complete-reply correctness and loops need a model-generated reply file.
 - Generated-reply novelty needs those generated replies.
-- Value-masked prompt templates need generator value spans or a precomputed census.
 - Count-table, memory-off and no-read comparisons need corresponding exported arms.
 
 The public smoke result is recorded in the

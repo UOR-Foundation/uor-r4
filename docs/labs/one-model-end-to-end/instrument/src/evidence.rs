@@ -8,7 +8,7 @@
 //! call generated text "complete" and does not infer generated-reply novelty
 //! when no generated-reply file is supplied.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,9 @@ type Result<T> = std::result::Result<T, String>;
 
 const SCHEMA: &str = "uor-r4.m2-evidence/1";
 const OPENING_KEY_TOKENS: usize = 8;
+const CENSUS_MASK_KS: [usize; 2] = [256, 1_024];
+const SHARE_PARTS_PER_MILLION: u64 = 1_000_000;
+const CENSUS_MASK: u32 = u32::MAX;
 
 #[derive(Clone, Debug, Serialize, Default, PartialEq, Eq)]
 pub struct Reading {
@@ -165,15 +168,65 @@ impl WriterParity {
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct TokenizerIdentity {
+    pub path: String,
+    pub sha256: String,
+    pub vocabulary: usize,
+    pub digit_tokens: usize,
+    pub mask_ks: Vec<usize>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct TemplateShare {
+    pub k: usize,
+    pub runs: u64,
+    pub seen: u64,
+    pub share_parts_per_million: u32,
+}
+
+impl TemplateShare {
+    fn new(k: usize, runs: u64, seen: u64) -> Self {
+        let share_parts_per_million = if runs == 0 {
+            0
+        } else {
+            u32::try_from(
+                u128::from(seen)
+                    .saturating_mul(u128::from(SHARE_PARTS_PER_MILLION))
+                    .checked_div(u128::from(runs))
+                    .unwrap_or(0),
+            )
+            .unwrap_or(u32::MAX)
+        };
+        Self {
+            k,
+            runs,
+            seen,
+            share_parts_per_million,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct TemplateOverlap {
+    pub prompts: u64,
+    pub replies: u64,
+    pub prompt_template: Vec<TemplateShare>,
+    pub reply_template: Vec<TemplateShare>,
+    pub new_prompt_templates_at_1024: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct EvidenceReport {
     pub schema: String,
     pub artifact: ArtifactIdentity,
+    pub tokenizer: TokenizerIdentity,
     pub panel: CorpusIdentity,
     pub train: Option<CorpusIdentity>,
     pub measured_targets: usize,
     pub overall: Reading,
     pub strata: BTreeMap<String, Reading>,
     pub reply_overlap: Option<ReplyOverlap>,
+    pub template_overlap: Option<TemplateOverlap>,
     pub writer_parity: WriterParity,
     pub unavailable: BTreeMap<String, String>,
 }
@@ -210,7 +263,22 @@ struct Metadata {
     prompt_seen: Option<bool>,
     keyed: Option<bool>,
     reply_seen: Option<bool>,
+    prompt_template_seen: Option<bool>,
     opening: bool,
+}
+
+#[derive(Clone, Debug)]
+struct TokenizerCensus {
+    identity: TokenizerIdentity,
+    digits: HashSet<u32>,
+}
+
+#[derive(Clone, Debug)]
+struct TemplateIndex {
+    k: usize,
+    keep: HashSet<u32>,
+    prompts: RunIndex,
+    replies: RunIndex,
 }
 
 #[derive(Clone, Debug)]
@@ -223,6 +291,7 @@ struct Target {
 
 /// A compact index of variable-length token runs. Records point into one
 /// contiguous arena and are sorted by the run's token sequence.
+#[derive(Clone, Debug)]
 struct RunIndex {
     data: Vec<u32>,
     records: Vec<(usize, usize)>,
@@ -437,6 +506,44 @@ fn valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+fn read_tokenizer(path: &Path) -> Result<TokenizerCensus> {
+    let bytes = fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).map_err(|error| format!("tokenizer: {error}"))?;
+    let vocab = value["model"]["vocab"]
+        .as_object()
+        .ok_or_else(|| "tokenizer JSON has no model.vocab".to_owned())?;
+    let digits: HashSet<u32> = vocab
+        .iter()
+        .filter(|(piece, _)| {
+            let bare = piece.strip_prefix('\u{120}').unwrap_or(piece);
+            bare.len() == 1 && bare.as_bytes()[0].is_ascii_digit()
+        })
+        .filter_map(|(_, id)| id.as_u64().and_then(|id| u32::try_from(id).ok()))
+        .collect();
+    Ok(TokenizerCensus {
+        identity: TokenizerIdentity {
+            path: path.display().to_string(),
+            sha256: sha256(&bytes),
+            vocabulary: vocab.len(),
+            digit_tokens: digits.len(),
+            mask_ks: CENSUS_MASK_KS.to_vec(),
+        },
+        digits,
+    })
+}
+
+fn bind_tokenizer(corpus: &Corpus, tokenizer: &TokenizerCensus) -> Result<()> {
+    if corpus.tokenizer_sha256 != tokenizer.identity.sha256 {
+        return Err(format!(
+            "{}: manifest tokenizer sha256 differs from {}",
+            corpus.path.display(),
+            tokenizer.identity.path
+        ));
+    }
+    Ok(())
+}
+
 fn read_corpus(files: &CorpusFiles, context: usize, vocabulary: usize, bos: u32) -> Result<Corpus> {
     let token_bytes =
         fs::read(&files.tokens).map_err(|e| format!("{}: {e}", files.tokens.display()))?;
@@ -595,12 +702,137 @@ fn run_index(corpus: &Corpus, mask: u8) -> RunIndex {
     index
 }
 
+fn top_tokens(corpus: &Corpus, k: usize) -> HashSet<u32> {
+    let mut counts = HashMap::<u32, usize>::new();
+    for &token in corpus.tokens.iter().filter(|&&token| token != 0) {
+        *counts.entry(token).or_default() += 1;
+    }
+    let mut ranked: Vec<(u32, usize)> = counts.into_iter().collect();
+    ranked.sort_unstable_by(|left, right| right.1.cmp(&left.1).then(left.0.cmp(&right.0)));
+    ranked.into_iter().take(k).map(|(token, _)| token).collect()
+}
+
+fn value_mask(run: &[u32], keep: &HashSet<u32>, digits: &HashSet<u32>) -> Vec<u32> {
+    let mut masked = Vec::with_capacity(run.len());
+    for &token in run {
+        let id = if keep.contains(&token) && !digits.contains(&token) {
+            token
+        } else {
+            CENSUS_MASK
+        };
+        if id != CENSUS_MASK || masked.last() != Some(&CENSUS_MASK) {
+            masked.push(id);
+        }
+    }
+    masked
+}
+
+fn masked_template_seen(
+    index: &RunIndex,
+    tokenizer: &TokenizerCensus,
+    tokens: &[u32],
+    keep: &HashSet<u32>,
+) -> bool {
+    index.contains(&value_mask(tokens, keep, &tokenizer.digits))
+}
+
+fn template_indexes(corpus: &Corpus, tokenizer: &TokenizerCensus) -> Vec<TemplateIndex> {
+    CENSUS_MASK_KS
+        .into_iter()
+        .map(|k| {
+            let keep = top_tokens(corpus, k);
+            let build = |mask: u8| {
+                let mut index = RunIndex::new();
+                for run in corpus.runs.iter().filter(|run| run.mask == mask) {
+                    index.push(&value_mask(
+                        run_tokens(corpus, run),
+                        &keep,
+                        &tokenizer.digits,
+                    ));
+                }
+                index.finish();
+                index
+            };
+            let prompts = build(0);
+            let replies = build(1);
+            TemplateIndex {
+                k,
+                keep,
+                prompts,
+                replies,
+            }
+        })
+        .collect()
+}
+
+fn template_overlap(
+    panel: &Corpus,
+    templates: &[TemplateIndex],
+    tokenizer: &TokenizerCensus,
+) -> TemplateOverlap {
+    let prompt_runs: Vec<&Run> = panel.runs.iter().filter(|run| run.mask == 0).collect();
+    let reply_runs: Vec<&Run> = panel.runs.iter().filter(|run| run.mask == 1).collect();
+    let mut prompt_template = Vec::with_capacity(templates.len());
+    let mut reply_template = Vec::with_capacity(templates.len());
+    for template in templates {
+        let prompts_seen = prompt_runs
+            .iter()
+            .filter(|run| {
+                masked_template_seen(
+                    &template.prompts,
+                    tokenizer,
+                    run_tokens(panel, run),
+                    &template.keep,
+                )
+            })
+            .count();
+        let replies_seen = reply_runs
+            .iter()
+            .filter(|run| {
+                masked_template_seen(
+                    &template.replies,
+                    tokenizer,
+                    run_tokens(panel, run),
+                    &template.keep,
+                )
+            })
+            .count();
+        prompt_template.push(TemplateShare::new(
+            template.k,
+            prompt_runs.len() as u64,
+            prompts_seen as u64,
+        ));
+        reply_template.push(TemplateShare::new(
+            template.k,
+            reply_runs.len() as u64,
+            replies_seen as u64,
+        ));
+    }
+    let new_prompt_templates_at_1024 = prompt_template
+        .iter()
+        .find(|reading| reading.k == 1_024)
+        .is_some_and(|reading| {
+            reading
+                .seen
+                .checked_mul(2)
+                .is_some_and(|seen_twice| seen_twice <= reading.runs)
+        });
+    TemplateOverlap {
+        prompts: prompt_runs.len() as u64,
+        replies: reply_runs.len() as u64,
+        prompt_template,
+        reply_template,
+        new_prompt_templates_at_1024,
+    }
+}
+
 fn metadata_for(
     panel: &Corpus,
     reply: &Run,
     prompts: Option<&RunIndex>,
     keys: Option<&RunIndex>,
     replies: Option<&RunIndex>,
+    templates: Option<(&TemplateIndex, &TokenizerCensus)>,
 ) -> Metadata {
     let prompt = prompt_run_before(panel, reply.ordinal);
     let prompt_tokens = prompt.map(|run| run_tokens(panel, run));
@@ -615,6 +847,11 @@ fn metadata_for(
             .zip(prompt_tokens)
             .map(|(index, tokens)| index.contains(&tokens[..key_len])),
         reply_seen: replies.map(|index| index.contains(run_tokens(panel, reply))),
+        prompt_template_seen: templates
+            .zip(prompt_tokens)
+            .map(|((index, tokenizer), tokens)| {
+                masked_template_seen(&index.prompts, tokenizer, tokens, &index.keep)
+            }),
         opening: true,
     }
 }
@@ -726,6 +963,7 @@ where
         );
         for (name, value) in [
             ("prompt-overlap", sample.metadata.prompt_seen),
+            ("prompt-template", sample.metadata.prompt_template_seen),
             ("memory-key", sample.metadata.keyed),
             ("reference-reply-overlap", sample.metadata.reply_seen),
         ] {
@@ -750,12 +988,14 @@ where
     Ok((overall, strata))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn evaluate_model(
     artifact_bytes: &[u8],
     artifact: &ArtifactIdentity,
     model: &IntegerDiscreteModel,
     corpus: &Corpus,
     train: Option<&Corpus>,
+    tokenizer: &TokenizerCensus,
     reference_role: Option<ReferenceRole>,
     max_targets: Option<usize>,
 ) -> Result<EvidenceReport> {
@@ -774,6 +1014,10 @@ fn evaluate_model(
         index.finish();
         index
     });
+    let templates = train.map(|train| template_indexes(train, tokenizer));
+    let template_1024 = templates
+        .as_ref()
+        .and_then(|templates| templates.iter().find(|template| template.k == 1_024));
 
     let reply_runs: Vec<&Run> = corpus.runs.iter().filter(|run| run.mask == 1).collect();
     let metadata: Vec<Metadata> = reply_runs
@@ -785,6 +1029,7 @@ fn evaluate_model(
                 prompt_index.as_ref(),
                 key_index.as_ref(),
                 reply_index.as_ref(),
+                template_1024.map(|template| (template, tokenizer)),
             )
         })
         .collect();
@@ -836,10 +1081,6 @@ fn evaluate_model(
             .to_owned(),
     );
     unavailable.insert(
-        "value_masked_prompt_template".to_owned(),
-        "requires the generator's value spans or a precomputed masked-template census".to_owned(),
-    );
-    unavailable.insert(
         "independent_cpu_trunk_query".to_owned(),
         writer_parity.full_cpu_trunk_parity.clone(),
     );
@@ -856,15 +1097,20 @@ fn evaluate_model(
         "no model read-ablation arm is supplied to this evidence pass".to_owned(),
     );
     let reply_overlap = train.map(|train| reply_overlap(corpus, train));
+    let template_overlap = train
+        .zip(templates.as_ref())
+        .map(|(_, templates)| template_overlap(corpus, templates, tokenizer));
     Ok(EvidenceReport {
         schema: SCHEMA.to_owned(),
         artifact: artifact.clone(),
+        tokenizer: tokenizer.identity.clone(),
         panel: corpus_identity(corpus, None),
         train: train.map(|train| corpus_identity(train, reference_role)),
         measured_targets: targets.len(),
         overall,
         strata,
         reply_overlap,
+        template_overlap,
         writer_parity,
         unavailable,
     })
@@ -876,6 +1122,7 @@ fn evaluate_model(
 /// TRAIN from a generated control.
 pub fn evaluate(
     artifact_path: &Path,
+    tokenizer_path: &Path,
     panel: &CorpusFiles,
     train: Option<&CorpusFiles>,
     reference_role: Option<ReferenceRole>,
@@ -891,6 +1138,13 @@ pub fn evaluate(
         fs::read(artifact_path).map_err(|e| format!("{}: {e}", artifact_path.display()))?;
     let model = IntegerDiscreteModel::from_bytes(&artifact_bytes).map_err(|e| e.to_string())?;
     let shape = model.shape();
+    let tokenizer = read_tokenizer(tokenizer_path)?;
+    if tokenizer.identity.vocabulary != shape.vocabulary as usize {
+        return Err(format!(
+            "tokenizer vocabulary {} differs from artifact vocabulary {}",
+            tokenizer.identity.vocabulary, shape.vocabulary
+        ));
+    }
     let manifest =
         fs::read(&panel.manifest).map_err(|e| format!("{}: {e}", panel.manifest.display()))?;
     let parsed: serde_json::Value =
@@ -905,6 +1159,7 @@ pub fn evaluate(
         shape.vocabulary as usize,
         bos,
     )?;
+    bind_tokenizer(&corpus, &tokenizer)?;
     let identity = artifact_identity(artifact_path, &artifact_bytes, &model)?;
     let train = train
         .map(|files| {
@@ -916,12 +1171,16 @@ pub fn evaluate(
             )
         })
         .transpose()?;
+    if let Some(train) = &train {
+        bind_tokenizer(train, &tokenizer)?;
+    }
     let report = evaluate_model(
         &artifact_bytes,
         &identity,
         &model,
         &corpus,
         train.as_ref(),
+        &tokenizer,
         reference_role,
         max_targets,
     )?;
@@ -1063,6 +1322,26 @@ mod tests {
         (directory, files)
     }
 
+    fn written_tokenizer(name: &str) -> (TempDir, TokenizerCensus) {
+        let directory = TempDir::new(name);
+        let path = directory.0.join("tokenizer.json");
+        let tokenizer = serde_json::json!({
+            "model": {
+                "vocab": {
+                    "<|bos|>": 0,
+                    "a": 10,
+                    "b": 20,
+                    "0": 30,
+                    "\u{120}1": 31,
+                    "hello": 32
+                }
+            }
+        });
+        fs::write(&path, serde_json::to_vec(&tokenizer).unwrap()).unwrap();
+        let census = read_tokenizer(&path).unwrap();
+        (directory, census)
+    }
+
     fn corpus(tokens: &[u32], mask: &[u8]) -> Corpus {
         let documents: Vec<Range<usize>> = tokens
             .iter()
@@ -1127,6 +1406,7 @@ mod tests {
             Some(&prompts),
             Some(&prompts),
             Some(&replies),
+            None,
         );
         assert_eq!(metadata.prompt_seen, Some(true));
         assert_eq!(metadata.keyed, Some(true));
@@ -1156,6 +1436,62 @@ mod tests {
         assert_eq!(reading.reference_reply_new_4grams, 0);
         assert_eq!(reading.reference_reply_new_8grams, 0);
         assert_eq!(reading.reference_prompts_keyed_in_reference, 1);
+    }
+
+    #[test]
+    fn value_masks_follow_the_census_rule_and_collapse_adjacent_values() {
+        let (_directory, tokenizer) = written_tokenizer("value-mask");
+        assert_eq!(tokenizer.digits, HashSet::from([30, 31]));
+        assert_eq!(
+            value_mask(
+                &[10, 30, 31, 20, 40, 41, 10],
+                &HashSet::from([10, 20]),
+                &tokenizer.digits,
+            ),
+            vec![10, CENSUS_MASK, 20, CENSUS_MASK, 10]
+        );
+    }
+
+    #[test]
+    fn value_masked_templates_match_reworded_values_but_not_other_orders() {
+        let (_directory, tokenizer) = written_tokenizer("template-mask");
+        let keep = HashSet::from([10, 20]);
+        let mut prompts = RunIndex::new();
+        prompts.push(&value_mask(&[10, 100, 20], &keep, &tokenizer.digits));
+        prompts.finish();
+        assert!(masked_template_seen(
+            &prompts,
+            &tokenizer,
+            &[10, 999, 20],
+            &keep
+        ));
+        assert!(!masked_template_seen(
+            &prompts,
+            &tokenizer,
+            &[10, 20, 999],
+            &keep
+        ));
+    }
+
+    #[test]
+    fn tokenizer_must_exist_be_bpe_style_and_match_both_manifests() {
+        let missing = std::env::temp_dir().join(format!(
+            "missing-tokenizer-{}-{}",
+            std::process::id(),
+            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(read_tokenizer(&missing).is_err());
+
+        let directory = TempDir::new("tokenizer-no-vocab");
+        let path = directory.0.join("tokenizer.json");
+        fs::write(&path, br#"{"model":{}}"#).unwrap();
+        assert!(read_tokenizer(&path).unwrap_err().contains("model.vocab"));
+
+        let (_directory, tokenizer) = written_tokenizer("tokenizer-binding");
+        let mut panel = corpus(&[0, 10, 11, 20, 21], &[0, 0, 0, 1, 1]);
+        assert!(bind_tokenizer(&panel, &tokenizer).is_err());
+        panel.tokenizer_sha256 = tokenizer.identity.sha256.clone();
+        bind_tokenizer(&panel, &tokenizer).unwrap();
     }
 
     #[test]
@@ -1196,7 +1532,7 @@ mod tests {
     fn absent_reference_fields_become_explicit_unavailable_strata() {
         let panel = corpus(&[0, 10, 11, 20, 21], &[0, 0, 0, 1, 1]);
         let reply = panel.runs.iter().find(|run| run.mask == 1).unwrap();
-        let metadata = metadata_for(&panel, reply, None, None, None);
+        let metadata = metadata_for(&panel, reply, None, None, None, None);
         assert_eq!(metadata.prompt_seen, None);
         assert_eq!(metadata.keyed, None);
         assert_eq!(metadata.reply_seen, None);
@@ -1273,6 +1609,13 @@ mod tests {
                 kept_cells: 8,
                 read_mode: "relation".to_owned(),
             },
+            tokenizer: TokenizerIdentity {
+                path: "t".to_owned(),
+                sha256: "22".repeat(32),
+                vocabulary: 4096,
+                digit_tokens: 10,
+                mask_ks: CENSUS_MASK_KS.to_vec(),
+            },
             panel: corpus_identity(
                 &corpus(&[0, 10, 20], &[0, 0, 1]),
                 Some(ReferenceRole::GeneratedControl),
@@ -1295,6 +1638,7 @@ mod tests {
                 },
             )]),
             reply_overlap: None,
+            template_overlap: None,
             writer_parity: WriterParity::from_serving_query(),
             unavailable: BTreeMap::new(),
         };

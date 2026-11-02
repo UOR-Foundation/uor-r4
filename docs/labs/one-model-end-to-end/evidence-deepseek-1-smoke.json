@@ -12,8 +12,18 @@
     "kept_cells": 8,
     "read_mode": "relation"
   },
+  "tokenizer": {
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/tokenizer-seed-1.json",
+    "sha256": "a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377",
+    "vocabulary": 4096,
+    "digit_tokens": 11,
+    "mask_ks": [
+      256,
+      1024
+    ]
+  },
   "panel": {
-    "path": "/tmp/uor-m2-evidence-repair.rDjbGg/panel",
+    "path": "/tmp/uor-m2-template-smoke.LMCveg/panel",
     "manifest_sha256": "ce489b38e91b2514f302560e65ac8bf7c337ca8a15b2aedba428e312bb003949",
     "split": "dev",
     "cell_phrasing": "dev",
@@ -32,7 +42,7 @@
     "reference_role": null
   },
   "train": {
-    "path": "/tmp/uor-m2-evidence-repair.rDjbGg/train",
+    "path": "/tmp/uor-m2-template-smoke.LMCveg/train-control",
     "manifest_sha256": "980b91b33946457350151c1044b33eaeabb2034bb8137dcbc49b324f29c26672",
     "split": "train",
     "cell_phrasing": "train",
@@ -65,6 +75,12 @@
       "top8": 306
     },
     "prompt-overlap:absent": {
+      "targets": 616,
+      "admitted": 365,
+      "top1": 293,
+      "top8": 306
+    },
+    "prompt-template:absent": {
       "targets": 616,
       "admitted": 365,
       "top1": 293,
@@ -105,6 +121,39 @@
     "reference_reply_new_8grams": 158,
     "reference_reply_total_8grams": 234
   },
+  "template_overlap": {
+    "prompts": 58,
+    "replies": 58,
+    "prompt_template": [
+      {
+        "k": 256,
+        "runs": 58,
+        "seen": 0,
+        "share_parts_per_million": 0
+      },
+      {
+        "k": 1024,
+        "runs": 58,
+        "seen": 0,
+        "share_parts_per_million": 0
+      }
+    ],
+    "reply_template": [
+      {
+        "k": 256,
+        "runs": 58,
+        "seen": 30,
+        "share_parts_per_million": 517241
+      },
+      {
+        "k": 1024,
+        "runs": 58,
+        "seen": 24,
+        "share_parts_per_million": 413793
+      }
+    ],
+    "new_prompt_templates_at_1024": true
+  },
   "writer_parity": {
     "rows": 616,
     "admitted_cell_mismatches": 0,
@@ -119,7 +168,6 @@
     "generated_reply_novelty": "requires model-generated replies; the report measures reference and panel overlap only",
     "independent_cpu_trunk_query": "unavailable: the independent CPU writer consumes the serving trunk's Q12 query; the 19-table M1 trunk is not duplicated by the CPU research path",
     "memory_off_control": "no serving-session memory-off arm is supplied to this evidence pass",
-    "no_read_control": "no model read-ablation arm is supplied to this evidence pass",
-    "value_masked_prompt_template": "requires the generator's value spans or a precomputed masked-template census"
+    "no_read_control": "no model read-ablation arm is supplied to this evidence pass"
   }
 }
