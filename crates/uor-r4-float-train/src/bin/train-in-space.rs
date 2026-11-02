@@ -121,20 +121,6 @@
 //! as used, and refuses a run in which one was not taken; that split's memory-pass rows are the
 //! forced forward's. Refused, before any forward: a position that is not traced and R's refusals.
 //!
-//! `train-in-space --data-root DIR --decision-replay CHECKPOINT --reference F_TRACE --other-trace
-//! T_TRACE --deciles F_DECILES --g10 N --reference-table F_SNAPSHOT --out DIR [--replay-split
-//! dev|NAME] [--panel NAME=DIR ...] [--at POSITION:OFFSET ...]`, with the run's arm flags
-//! (claude-257, Q5's forced replay of the structure step (F, T)): Q is T, the evaluation copy at
-//! `CHECKPOINT` rounded as exported, loaded once; P is F's trace of the split's windows, with
-//! F's deciles and F's own table (its snapshot's embed); T_TRACE is T's trace of the same windows
-//! (claude-252). Without `--at`, it replays every reply offset at which the two traces' picks
-//! differ. Each pass runs the replayed window's own eval batch, with that window traced under Φ;
-//! pass 0 must reproduce T's sealed window byte for byte (I-Rerun). Each replay is appended to
-//! `replay-{split}.lines.jsonl` as it ends, and the `uor-r4.decision-replay/1` record is written
-//! as `replay-{split}.json`; one JSON line is printed (`in_space_long::decision_replay`). Every
-//! input is read and checked before the GPU is touched (`in_space_long::read_replay_inputs`). It
-//! is a mode of its own: given beside any other mode, or `--recall`, it is refused.
-//!
 //! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
@@ -173,12 +159,10 @@ use candle_core::Device;
 use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
-    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decision_replay,
-    decode_speed, fbs_arm_named, grade, gradient_norms, inspect_run, integer_grade, key_grade,
-    keyed_grade, opening_bound, overturn, panel_prompts, read_grade, read_replay_inputs,
-    reply_bound, root_separation, run_long, run_recall, scopes_ok, score_rows, served_grade,
-    DecodeRule, LongConfig, PointObjective, ReadScope, TrainSplit, DEFAULT_REGISTER_PICKS,
-    MEMORY_DROPOUT_MAX,
+    cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, integer_grade, panel_prompts, fbs_arm_named, grade,
+    gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
+    run_long, run_recall, score_rows, scopes_ok, DecodeRule, LongConfig, PointObjective, ReadScope,
+    TrainSplit, DEFAULT_REGISTER_PICKS, MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
 use uor_r4_integer::fbs_snapshot::DecisionForce;
@@ -197,16 +181,6 @@ fn main() -> Result<()> {
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
     let mut traces: Vec<(String, Vec<usize>)> = Vec::new();
     let mut forces: Vec<(String, DecisionForce)> = Vec::new();
-    let mut replay: Option<PathBuf> = None;
-    let mut replay_split: Option<String> = None;
-    let (mut replay_reference, mut replay_other, mut replay_deciles, mut replay_table) = (
-        None::<String>,
-        None::<String>,
-        None::<String>,
-        None::<String>,
-    );
-    let mut replay_g10: Option<i64> = None;
-    let mut replay_at: Vec<(usize, usize)> = Vec::new();
     let mut score = None;
     let mut overturn_on = false;
     let mut controls_on = false;
@@ -373,18 +347,6 @@ fn main() -> Result<()> {
             "--fresh-v2" => fresh_v2 = Some(PathBuf::from(&value)),
             "--decision-trace" => traces.push(decision_trace_arg(&value)?),
             "--decision-force" => forces.push(decision_force_arg(&value)?),
-            "--decision-replay" => replay = Some(PathBuf::from(&value)),
-            "--replay-split" => replay_split = Some(value.clone()),
-            "--reference" => replay_reference = Some(value.clone()),
-            "--other-trace" => replay_other = Some(value.clone()),
-            "--deciles" => replay_deciles = Some(value.clone()),
-            "--reference-table" => replay_table = Some(value.clone()),
-            "--g10" => {
-                replay_g10 = Some(value.parse().map_err(|_| {
-                    FloatTrainError::Invalid("--g10 wants a whole number".to_owned())
-                })?)
-            }
-            "--at" => replay_at.push(at_arg(&value)?),
             "--panel" => {
                 let panel = panel_arg(&value)?;
                 if extra_panels.iter().any(|(name, _)| *name == panel.0) {
@@ -568,11 +530,9 @@ fn main() -> Result<()> {
         bound,
         reply,
         census_on,
-        // `--score-rows`, `--decision-replay`, `--controls` and `--panel-prompts` write to `--out`
-        // without training.
-        out.is_some() && score.is_none() && replay.is_none() && !controls_on && !panel_prompts_on,
+        // `--score-rows`, `--controls` and `--panel-prompts` write to `--out` without training.
+        out.is_some() && score.is_none() && !controls_on && !panel_prompts_on,
         score.is_some(),
-        replay.is_some(),
         overturn_on,
         controls_on,
         grade_on,
@@ -588,7 +548,7 @@ fn main() -> Result<()> {
     ];
     if modes.iter().filter(|&&m| m).count() > 1 {
         return Err(FloatTrainError::Invalid(
-            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --decision-replay, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1, --keyed-grade 1, --served-grade 1, --panel-prompts 1 or --integer-grade 1"
+            "give one of --out, --inspect, --reach, --grad-norms 1, --decode-speed, --opening-bound 1, --reply-bound 1, --census 1, --score-rows, --overturn 1, --controls 1, --grade 1, --cell-grade 1, --read-grade 1, --cut-grade 1, --cycle-grade 1, --key-grade 1, --keyed-grade 1, --served-grade 1, --panel-prompts 1 or --integer-grade 1"
                 .to_owned(),
         ));
     }
@@ -614,7 +574,6 @@ fn main() -> Result<()> {
         let out = out.ok_or_else(|| FloatTrainError::Invalid("--recall needs --out".to_owned()))?;
         if modes[..5].iter().any(|&m| m)
             || score.is_some()
-            || replay.is_some()
             || overturn_on
             || controls_on
             || grade_on
@@ -687,54 +646,6 @@ fn main() -> Result<()> {
         return Err(FloatTrainError::Invalid(
             "--decision-force applies to --score-rows only".to_owned(),
         ));
-    }
-    let replay_flags = replay_split.is_some()
-        || replay_reference.is_some()
-        || replay_other.is_some()
-        || replay_deciles.is_some()
-        || replay_table.is_some()
-        || replay_g10.is_some()
-        || !replay_at.is_empty();
-    if replay.is_none() && replay_flags {
-        return Err(FloatTrainError::Invalid(
-            "--replay-split, --reference, --other-trace, --deciles, --reference-table, --g10 and --at are --decision-replay's".to_owned(),
-        ));
-    }
-    if let Some(checkpoint) = replay {
-        let needed = |value: Option<String>, flag: &str| {
-            value.ok_or_else(|| FloatTrainError::Invalid(format!("--decision-replay needs {flag}")))
-        };
-        let out = out.ok_or_else(|| {
-            FloatTrainError::Invalid("--decision-replay needs --out DIR".to_owned())
-        })?;
-        let g10 = replay_g10.ok_or_else(|| {
-            FloatTrainError::Invalid("--decision-replay needs --g10 N".to_owned())
-        })?;
-        // Every input is read and checked before the GPU is touched.
-        let inputs = read_replay_inputs(
-            &needed(replay_reference, "--reference F_TRACE")?,
-            &needed(replay_other, "--other-trace T_TRACE")?,
-            &needed(replay_deciles, "--deciles F_DECILES")?,
-            &needed(replay_table, "--reference-table F_SNAPSHOT")?,
-            g10,
-            &replay_at,
-        )?;
-        let device = Device::new_cuda(0)?;
-        decision_replay(
-            &data_root,
-            &checkpoint,
-            &out,
-            replay_split.as_deref().unwrap_or("dev"),
-            &extra_panels,
-            &inputs,
-            config.retain_rates,
-            config.fold_scores,
-            config.reflect_floor,
-            config.seed,
-            config.fbs_arm,
-            &device,
-        )?;
-        return Ok(());
     }
     if cycle_grade_on {
         let runs = runs
@@ -1018,14 +929,6 @@ fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
             "--panel takes NAME=DIR".to_owned(),
         )),
     }
-}
-
-/// `--at POSITION:OFFSET` (claude-257): one offset of `--decision-replay` to replay.
-fn at_arg(value: &str) -> Result<(usize, usize)> {
-    value
-        .split_once(':')
-        .and_then(|(p, o)| Some((p.parse().ok()?, o.parse().ok()?)))
-        .ok_or_else(|| FloatTrainError::Invalid(format!("--at {value}: not POSITION:OFFSET")))
 }
 
 /// `--decision-trace SPLIT=POSITIONS_JSON` (claude-251): the split and the positions, a JSON array
