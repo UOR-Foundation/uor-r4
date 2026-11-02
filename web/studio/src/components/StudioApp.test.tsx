@@ -51,4 +51,14 @@ describe('StudioApp', () => {
         expect(host.textContent).toContain('Appearance');
         expect(host.querySelector('dialog')).not.toBeNull();
     });
+
+    it('does not label an API selection without an endpoint as local execution', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: undefined as unknown as string });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('Invalid API endpoint');
+        expect(host.querySelector('[role="status"]')?.textContent).not.toContain('localWASM');
+    });
 });

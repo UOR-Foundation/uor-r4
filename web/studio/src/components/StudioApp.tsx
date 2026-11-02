@@ -53,7 +53,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const activeGeneration = state.session.activeGeneration || state.session.lastGeneration;
     let privacy: string = activeGeneration?.privacy || 'localWASM';
     if (!activeGeneration && selected?.kind === 'api') {
-        try { privacy = classifyEndpoint(selected.endpoint); } catch { privacy = 'Invalid API endpoint'; }
+        if (!selected.endpoint) privacy = 'Invalid API endpoint';
+        else {
+            try { privacy = classifyEndpoint(selected.endpoint); } catch { privacy = 'Invalid API endpoint'; }
+        }
     }
     const status: ShellStatus = {
         source: selected ? `${selected.kind}: ${selected.id}` : 'No source selected',
