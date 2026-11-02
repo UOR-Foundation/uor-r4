@@ -28,11 +28,11 @@ Every arm is claude-211's (r-drop) recipe, trained as served (claude-258), with 
 
 ## Readings
 
-Every reading is from `samples-{panel}-greedy-memory.json` and is computed by `local/claude/claude-259-capacity/grade.sh` with `jq`.
+R1, R2, R3 and R5 are read from `samples-{panel}-greedy-memory.json` by `local/claude/claude-259-capacity/grade.sh` with `jq`; R4 from each arm's `progress.jsonl` with `jq`; R6 on the laptop. M2's panels are left out: `m2-fresh256` is sealed behind credentials (HTTP 401, `docs/roadmap/items/cpu-training-pilot.md`), and `m2-reply512` is graded by the old native learner's own evaluator (`docs/roadmap/items/m2-fresh-heldout-panel.md`), which does not read this model.
 - **R1 (decides): the right prefix on p-w.** For each prompt, the number of leading reply tokens equal to the reference's, its end mark included. An arm X is paired with (b) at the same seed on the same prompts: b = prompts where X's prefix is longer, c = where (b)'s is longer.
   - **Power:** on claude-220's two decodes of p-w, R1 pairs 339–384 prompts a seed against a floor of 37–39. So R1 detects a net shift of about 3% of the 1,202 prompts, where exact replies (12 of 1,202 for (r-drop) s1) could not decide.
 - **R2 and R3 (reported, same pairing):** exact replies (the reply opens with the whole reference) and right openings (the first token).
-- **R4 (reported): DEV strata.** Openings, copies and the rest, from `progress.jsonl`'s `dev_nearest` at every eval. An arm is **still rising** if its last eval's DEV nearest hits exceed those at the eval half its steps earlier by more than 143 (1% of 14,287 rows).
+- **R4 (reported): DEV strata.** Openings, copies and the rest, from `progress.jsonl`'s `dev_nearest` at every eval. An arm is **still rising** if its last eval's DEV nearest hits exceed those at the eval half its steps earlier by more than 143 (1% of 14,287 rows). Under a cut, that earlier eval is the last one at or before half the cut's steps.
 - **R5 (confirms): R1 on p-v.** Used for row 1's chosen arm against (b).
 - **R6 (reported): served.** Each arm's seed-1 export (`fbs-export --raw-gates --raw-transition --run-config CONFIG SNAPSHOT OUT.uorlut`) is served on the laptop.
   - Conversations: conv-a, conv-b and conv-c from `m4-export-uorlut01-cli/claude-259`, through `uor-chat`, with transcripts.
@@ -51,8 +51,8 @@ X **carries** when it is better at all three seeds. The rows are read in order; 
 | Row | Outcome | What it changes |
 |---|---|---|
 | 1 | Some arm carries, and the chosen arm passes R5 | **Choosing it:** start at the cheapest arm that carries, in cost order (h), (w), (W). Move to the next costlier carrying arm only if it is better than the current arm at every seed (R1, paired on those two). Stop when none is. **R5:** the chosen arm's p-v b − c against (b) is above 0 at every seed. **Unlocks:** that arm becomes the base. The next unit trains it to its plateau and ships it, with R6's tok/s cost stated. `scale-probe` gets this curve. |
-| 2 | No arm carries, every arm is level or worse at every seed, no seed was cut (I-2), and no arm is still rising (R4) | Size is not the ceiling at this data. Width stays 256 with 4 heads. The next lever is the reply itself (path step 4: copies and the reply's continuation, fixed with geometry), as claude-155 read it. This closes these four configurations only (CHARTER §4.1). |
-| 3 | Anything else: an arm better at some seeds only, a seed cut, an arm still rising, or row 1's R5 failing | Keep and iterate. The candidate is the arm with the largest R1 b − c summed over seeds. The next unit runs it to its plateau at 3 more seeds before anything ships. |
+| 2 | No arm carries, every arm is level or worse at every seed, every arm was measured at every seed (none dropped at I-1 or stopped by a fault), no seed was cut (I-2), and no arm is still rising (R4) | Size is not the ceiling at this data. Width stays 256 with 4 heads. The next lever is the reply itself (path step 4: copies and the reply's continuation, fixed with geometry), as claude-155 read it. This closes these four configurations only (CHARTER §4.1). |
+| 3 | Anything else: an arm better at some seeds only, an arm absent at a seed, a seed cut, an arm still rising, or row 1's R5 failing | Keep and iterate. The candidate is the arm with the largest R1 b − c summed over seeds, if that sum is above 0; else the still-rising arm with the largest sum, if any; else (b). The next unit runs it to its plateau at 3 more seeds before anything ships. An absent arm is reported as absent, never as level. |
 
 ## Instrument checks
 
@@ -66,7 +66,7 @@ X **carries** when it is better at all three seeds. The rows are read in order; 
   - If any arm passes 90 minutes, every arm at that seed is cut to the most whole thousands of steps the slowest arm fits, and `steps.txt` records `CUT`.
   - A cut bars row 2. Under 2,048 steps, the pod stops.
 - **I-3 parity:** on the laptop, each arm's seed-1 export through `fbs-toks ARTIFACT --replies PROMPTS --out FILE --reply-tokens 64`, on DEV's prompts taken with `jq` from the arm's own `samples-memory.json`.
-  - At most 9 of 310 first tokens may disagree with the float file (claude-243's bar).
+  - At most 9 of 310 first tokens may disagree with the float file (claude-243's bar), scaled to the prompts the file holds: at most 2.9%, its count recorded.
   - Past that, or if the export refuses, the arm's R6 is an instrument fault, not a reading. R1 to R5 stand: they are read from the GPU's files, which score the served values.
 - **I-4 pairing:** every arm at a seed decodes the same prompts in the same order. `grade.sh` stops on a mismatch of `position` and `prompt` taken index by index.
 
@@ -89,7 +89,7 @@ X **carries** when it is better at all three seeds. The rows are read in order; 
 
 ## Cost and stop rule
 
-- **Cost:** three 2 × RTX 5090 pods on Vast, at about $0.70–1.40/h each, for at most 3 h. That is at most $4.20/h and $12.60 in total, inside 4 pods and $8/h with what other labs hold at launch (`uor-pod status`).
+- **Cost:** three 2 × RTX 5090 pods on Vast, at about $0.70–1.40/h each, for about 3 h. That is at most $4.20/h and about $12.60 in total, inside 4 pods and $8/h with what other labs hold at launch (`uor-pod status`, with the Vast adapter built). The 90-minute projection bounds training only; the build and the scoring are logged, each lease is taken for 4 h and renewed, and a healthy run is extended, never cancelled.
 - **Stop rule:**
   - A diverged loss (non-finite) or an export refusal is an instrument fault: that arm stops, and the fault is repaired in its own unit, never counted.
   - Outputs go to `results/claude/one-model-end-to-end-capacity-2026-11-02/sN/` with `SHA256SUMS`, read back, before any pod goes down.
