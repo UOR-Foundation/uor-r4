@@ -190,6 +190,10 @@ Pods: $28.00 (seed 1: 5.99 h at $2.33/h; seed 2: 3.49 h at $1.775/h; seed 3: 3.6
   - no dense matrix product in the served FBS step;
   - the whole-table L1 nearest is 64% of a served token;
   - in training, the launch-bound backward is 62% of a step, and the table search writes 256 MiB intermediates.
+- **Main's `--train-as-served 1` grew while these runs ran.**
+  - These runs trained under claude-258's form: the export's own rounding of the trunk tables, the Hamming reads and the turn-memory weights before each step, with float master values kept for the optimizers.
+  - deepseek-3 and deepseek-4 (#3565, merged 18:44Z on 2 Nov) added served surrogates in the forward pass: D11 snaps, Q16 residuals, dynamic i16 activations and the Q12 scored query ([deepseek-4 REPORT](../deepseek-4/REPORT.md)). Neither is in this unit's history.
+  - So "trained as served" in this REPORT means claude-258's form, and the I-3 parity above is that form's. The next round trains with main's.
 
 ## Checks run at the head
 
