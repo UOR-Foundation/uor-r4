@@ -1,6 +1,6 @@
 # ORDER: CPU training program status refresh, deepseek-3
 
-Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-training-program.md) (#3501 program registration). Base: `7b7534567` from fresh `origin/main`.
+Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-training-program.md) (#3507 program registration). Base: `7b7534567` from fresh `origin/main`.
 
 ## Goal
 

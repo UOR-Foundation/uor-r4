@@ -14,7 +14,7 @@ Lab: deepseek. Item: [cpu-training-program](../../../../roadmap/items/cpu-traini
 - Recorded the exact CPU/serving checkpoint export evaluator under the quantization family while keeping quantization-aware updates and float-shadow comparison open.
 - Added component performance readings for BVG-K candidate evaluation and matched panel evaluation.
 - Updated the shared-vector item with a Progress section that names #3518, #3522 and #3523 and preserves the synthetic-only limit.
-- Added a pilot readiness matrix with five delivered prerequisites and four explicit missing ones; the pilot remains `NOT_ADMITTED`.
+- Added a pilot readiness matrix with three delivered prerequisites and four explicit missing ones; the pilot remains `NOT_ADMITTED`.
 - Preserved every existing dependency, bar, hold and negative disposition.
 
 ## Measurements
