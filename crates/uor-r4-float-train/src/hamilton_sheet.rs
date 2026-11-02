@@ -456,7 +456,7 @@ impl HamiltonArm {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct GateHookState {
     active_arm: Option<HamiltonArm>,
     seed: u64,
@@ -581,7 +581,8 @@ pub const Q16_SCALE: f32 = 65536.0;
 
 /// Runs `f` with the trunk's residual stream rounded to 2^-16 after the embedding and after each
 /// sublayer add, where the integer session holds it (claude-133, the Q16 control). It restores
-/// the flag as it was. An evaluation control: it has no backward bridge.
+/// the flag as it was. Called directly, it is an evaluation control with no backward bridge;
+/// [`with_served_surrogate_training`] enables the Q16 straight-through bridge.
 pub fn with_q16_residual<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
     /// Restores the flag on every exit, a panic included (claude-133 code review).
     struct Restore(bool);
@@ -632,7 +633,7 @@ fn q16_residual_scalar(value: f32) -> f32 {
 fn activation_scale_scalar(max: f64) -> f64 {
     let mut scale = 1.0;
     let mut threshold = 32768.0;
-    for _ in 15..63 {
+    for _ in 15..64 {
         if max >= threshold {
             scale *= 0.5;
         }
@@ -649,7 +650,7 @@ pub(crate) fn activation_quantize16(x: &Tensor) -> Result<Tensor> {
     let max = x.abs()?.max_keepdim(candle_core::D::Minus1)?;
     let device = x.device();
     let mut scale = Tensor::ones_like(&max)?;
-    for bit in 15..63 {
+    for bit in 15..64 {
         let threshold = 2f64.powi(bit);
         let factor = max.ge(threshold)?.where_cond(
             &Tensor::full(0.5, max.shape(), device)?,
@@ -684,16 +685,7 @@ pub fn with_served_surrogate_training<T>(
         round: bool,
         q16: bool,
         activation: bool,
-        hook: (
-            Option<HamiltonArm>,
-            u64,
-            usize,
-            usize,
-            bool,
-            bool,
-            bool,
-            bool,
-        ),
+        hook: GateHookState,
     }
     impl Drop for Restore {
         fn drop(&mut self) {
@@ -701,33 +693,11 @@ pub fn with_served_surrogate_training<T>(
             BRIDGE_Q16_RESIDUAL.with(|value| value.set(self.q16));
             BRIDGE_ACTIVATION_I16.with(|value| value.set(self.activation));
             GATE_HOOK.with(|cell| {
-                let mut hook = cell.borrow_mut();
-                (
-                    hook.active_arm,
-                    hook.seed,
-                    hook.step,
-                    hook.fwd_call_idx,
-                    hook.icosian_export_mode,
-                    hook.snap_transition,
-                    hook.bridge_d11,
-                    hook.capture_telemetry,
-                ) = self.hook;
+                *cell.borrow_mut() = self.hook.clone();
             });
         }
     }
-    let hook = GATE_HOOK.with(|cell| {
-        let hook = cell.borrow();
-        (
-            hook.active_arm,
-            hook.seed,
-            hook.step,
-            hook.fwd_call_idx,
-            hook.icosian_export_mode,
-            hook.snap_transition,
-            hook.bridge_d11,
-            hook.capture_telemetry,
-        )
-    });
+    let hook = GATE_HOOK.with(|cell| cell.borrow().clone());
     let _restore = Restore {
         round: ROUND_RESIDUAL_Q16.with(|value| value.replace(true)),
         q16: BRIDGE_Q16_RESIDUAL.with(|value| value.replace(true)),
@@ -3089,9 +3059,47 @@ mod tests {
         assert_eq!(q16_residual_scalar(32768.0), i32::MAX as f32 / Q16_SCALE);
         assert_eq!(activation_scale_scalar(40_000.0), 0.5);
         assert_eq!(activation_scale_scalar(70_000.0), 0.25);
+        assert_eq!(activation_scale_scalar(2f64.powi(63)), 2f64.powi(-49));
+        let integer_scale = |max: u64| {
+            let shift = (64 - max.leading_zeros()) as i32 - 15;
+            2f64.powi(-shift.max(0))
+        };
+        for max in [
+            0,
+            1,
+            (1 << 15) - 1,
+            1 << 15,
+            (1 << 16) - 1,
+            u32::MAX as u64,
+            1 << 47,
+            (1 << 63) - 1,
+            1 << 63,
+            u64::MAX,
+        ] {
+            assert_eq!(activation_scale_scalar(max as f64), integer_scale(max));
+        }
         let huge_scale = activation_scale_scalar(1e30) as f32;
         assert!(!(-32767.0..=32767.0).contains(&(1e30 * huge_scale)));
         assert!((-32767.0..=32767.0).contains(&(1.0 * huge_scale)));
+
+        GATE_HOOK.with(|cell| {
+            let mut hook = cell.borrow_mut();
+            hook.active_arm = Some(HamiltonArm::RandomGateNull);
+            hook.seed = 77;
+            hook.step = 9;
+            hook.fwd_call_idx = 11;
+            hook.bwd_call_idx = 13;
+            hook.icosian_export_mode = true;
+            hook.snap_transition = true;
+            hook.bridge_d11 = true;
+            hook.capture_telemetry = true;
+            hook.cuda_error_checks_passed = 17;
+            hook.total_blocks_observed = 19;
+            hook.g_norm_samples = vec![1.0, 2.0];
+            hook.icosian_histogram[7] = 3;
+            hook.downstream_gain_samples = vec![0.25, 0.5];
+        });
+        let original_hook = GATE_HOOK.with(|cell| cell.borrow().clone());
 
         let row = [40_000.0f32, -12_001.0, 3.0, -1.0];
         let scale = activation_scale_scalar(40_000.0) as f32;
@@ -3106,25 +3114,28 @@ mod tests {
                 && BRIDGE_ACTIVATION_I16.with(|bridge| bridge.get()))
         })?);
         assert!(!is_rounding_residual_q16());
-        assert!(!is_bridging_d11());
+        assert_eq!(is_bridging_d11(), original_hook.bridge_d11);
         assert!(!BRIDGE_Q16_RESIDUAL.with(|bridge| bridge.get()));
         assert!(!BRIDGE_ACTIVATION_I16.with(|bridge| bridge.get()));
+        GATE_HOOK.with(|cell| assert_eq!(*cell.borrow(), original_hook));
         assert!(
             with_served_surrogate_training(1, 0, || -> Result<()> { Err(invalid("inside")) })
                 .is_err()
         );
         assert!(!is_rounding_residual_q16());
-        assert!(!is_bridging_d11());
+        assert_eq!(is_bridging_d11(), original_hook.bridge_d11);
         assert!(!BRIDGE_Q16_RESIDUAL.with(|bridge| bridge.get()));
         assert!(!BRIDGE_ACTIVATION_I16.with(|bridge| bridge.get()));
+        GATE_HOOK.with(|cell| assert_eq!(*cell.borrow(), original_hook));
         let panicked = std::panic::catch_unwind(|| {
             let _ = with_served_surrogate_training(1, 0, || -> Result<()> { panic!("inside") });
         });
         assert!(panicked.is_err());
         assert!(!is_rounding_residual_q16());
-        assert!(!is_bridging_d11());
+        assert_eq!(is_bridging_d11(), original_hook.bridge_d11);
         assert!(!BRIDGE_Q16_RESIDUAL.with(|bridge| bridge.get()));
         assert!(!BRIDGE_ACTIVATION_I16.with(|bridge| bridge.get()));
+        GATE_HOOK.with(|cell| assert_eq!(*cell.borrow(), original_hook));
         Ok(())
     }
 

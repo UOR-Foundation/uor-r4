@@ -35,9 +35,12 @@ Finite scalar controls:
 - Q16: `1.4/65536 -> 1/65536`, `-2.6/65536 -> -3/65536`, and `32768`
   saturates to `i32::MAX/65536`.
 - Dynamic scale: row maxima `40,000` and `70,000` select `1/2` and `1/4`.
+- The full f32 exponent range is covered: maximum `2^63` selects `2^-49`.
 - A row `[40000, -12001, 3, -1]` at scale `1/2` quantizes/dequantizes to
   `[40000, -12000, 4, 0]`, pinning half-up and precision loss.
 - Saturated scaled values are outside the `[-32767,32767]` gradient mask.
+- Wrapper tests seed every gate-hook field, then verify exact restoration after
+  success, error and panic.
 
 The CUDA autograd test pins identity gradients inside the clamp and zero at
 Q16 saturation; it is compiled only with `cuda` and was `NOT_RUN` locally.
