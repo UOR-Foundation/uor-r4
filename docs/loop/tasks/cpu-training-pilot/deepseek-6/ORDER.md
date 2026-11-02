@@ -23,7 +23,8 @@ Read the float `is_candidate`, integer and CPU `nearest`, their callers, and the
 - `docs/research/notebook/m4-serving.md`
 - `docs/roadmap/items/cpu-training-pilot.md`
 
-No float training or serving kernel change is expected. No Claude-owned training file is changed.
+No float training or serving kernel logic is expected to change. The float
+file receives one predicate regression test only.
 
 ## Done when
 
@@ -32,4 +33,4 @@ No float training or serving kernel change is expected. No Claude-owned training
 - The exact-FBS contract no longer describes the Hamming range as defective.
 - Modelled Hamming candidate counts still match the proven range and tests cover copy-only and typed heads.
 - Corrected evidence is added without rewriting the already-merged evidence files; the new REPORT explains the superseded narrative.
-- Focused tests and formatting pass; CPU-crate Clippy passes. If integer/float crate-wide Clippy still reports pre-existing lint debt outside the changed Hamming tests, record those sites rather than rewriting unrelated code. If a shared kernel defect is found instead, stop before changing it and request an integer-serving decision.
+- Focused tests pass, changed lines follow their files' existing style, the CPU crate's formatter check passes, and CPU-crate Clippy passes. If integer/float crate-wide formatting or Clippy still reports pre-existing debt outside the changed Hamming tests, record it rather than rewriting unrelated code. If a shared kernel defect is found instead, stop before changing it and request an integer-serving decision.
