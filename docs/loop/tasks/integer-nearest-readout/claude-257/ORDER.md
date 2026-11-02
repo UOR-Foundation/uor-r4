@@ -38,7 +38,13 @@ Q5 chain step 6, part 2, under claude-247's [decision card](../claude-247/DECISI
 
 Cancel if origin/main can already replay the structure step in one process, if `--decision-force` passes would fit the run anyway, or if an open PR touches this unit's files.
 
-**Result:** in the next commit.
+**Result, 2 Nov (`local/claude/probe.txt`): nothing replays the structure step, and whole-run passes do not fit, so the unit goes ahead.**
+- **Code:** on origin/main at `5cf66a98d`, the float crate holds no `decision-replay`, `decision_replay` or `replay_step`. `--decision-force` runs one forced set through a whole `score_rows` run.
+- **Cost:** that run took 204 s on F's s1 (claude-253, `base.wall`).
+  - On DEV s1, T's pick equals R's on 4,380 of 4,382 offsets of R's range and F's on 4,298 (claude-252), so F and T differ on at least 82 of them.
+  - At one pass each, that is at least 82 × 204 s ≈ 4.6 h for one cell's smoke, and drift makes a replay several passes. The card's GPU budget is under an hour for the whole Q5 run.
+- **Open PRs:** DeepSeek's #3543 and Kimi's #3541 touch none of this unit's files.
+- **Class: the instrument** (the trace tooling), not a mechanism.
 
 ## Files in scope
 
