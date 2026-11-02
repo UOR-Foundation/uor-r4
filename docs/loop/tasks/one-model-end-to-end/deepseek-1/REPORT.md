@@ -70,6 +70,16 @@ heldout-panel out=.../train-control tokenizer=.../tokenizer-seed-1.json \
   cell=train,train conversations=64 seed=4101 protocol=2
 ```
 
+## What this decides for M2
+
+Read a complete-reply or fresh-phrasing gain by strata. A gain confined to
+`prompt-template:present` or `reference-reply-overlap:present` is recall and cannot qualify the
+generalization route. The next useful M2 panel must retain separate readings on
+`prompt-template:absent` and `reference-reply-overlap:absent` rows; the latter requires an
+honest reference index and, once generated outputs are supplied, the same stratum over model
+replies. This instrument does not itself qualify M2 because the public smoke has a generated
+control rather than canonical TRAIN and has no generated replies.
+
 ## Checks run at the head
 
 - `cargo test --offline --all-targets`: 13 evidence tests, 1 panel-writer test and 3 CLI tests passed.
