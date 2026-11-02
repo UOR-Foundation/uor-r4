@@ -1397,6 +1397,19 @@ impl CpuDiscreteProposalApplier {
             .virtual_model(kind, index, proposal.lane)
             .map_err(|error| apply_error(4, error.to_string()))?;
         self.scorer.model = model;
+        match kind {
+            CpuDiscreteProposalKind::Route => {
+                let CpuDiscreteProposalModel::Route(route) = &self.scorer.model else {
+                    return Err(apply_error(4, "applied Route state changed mode"));
+                };
+                self.scorer.chooser.routes = route.routes.iter().flatten().copied().collect();
+            }
+            CpuDiscreteProposalKind::Table => {
+                let token_blocks = self.scorer.token_blocks(&self.scorer.model).to_vec();
+                self.scorer.chooser.token_blocks = token_blocks;
+            }
+            CpuDiscreteProposalKind::Gate => {}
+        }
         self.epoch += 1;
         Ok(CpuDiscreteApplyReceipt {
             kind,
@@ -3060,7 +3073,14 @@ mod tests {
             CpuDiscreteProposalModel::Active(active) => active.token_blocks[0][0],
             _ => unreachable!(),
         };
-        assert_ne!(before_table, after_table);
+        let expected_table = move_root(
+            &before_table,
+            table.scorer.chooser.move_actions[1],
+            &table.scorer.chooser.composition,
+        )
+        .unwrap();
+        assert_eq!(after_table, expected_table);
+        assert_eq!(table.scorer.chooser.token_blocks[0][0], expected_table);
 
         let route_artifact = serialized_route_with("route", vec![1, 2, 3, 4], 0, 0, 2, None, false);
         let mut route = CpuDiscreteProposalApplier::from_bytes(&route_artifact).unwrap();
@@ -3082,6 +3102,7 @@ mod tests {
             _ => unreachable!(),
         };
         assert_eq!(after_route, 16);
+        assert_eq!(route.scorer.chooser.routes[0], 16);
     }
 
     #[test]
@@ -3093,6 +3114,8 @@ mod tests {
             2,
         );
         let mut applier = CpuDiscreteProposalApplier::from_bytes(&artifact).unwrap();
+        let prefix = [0u32, 1, 2, 3, 4, 1];
+        let initial_read = applier.scorer.read(&applier.scorer.model, &prefix).unwrap();
         let proposal = |lane, current, selected, epoch| CpuDiscreteProposal {
             lane,
             current_loss: current,
@@ -3140,6 +3163,26 @@ mod tests {
             .unwrap();
         assert!(!noop.applied);
         assert_eq!(applier.epoch(), 0);
+        assert_eq!(
+            applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
+            initial_read
+        );
+        applier.epoch = u64::MAX;
+        assert_eq!(
+            applier
+                .apply(
+                    CpuDiscreteProposalKind::Gate,
+                    0,
+                    proposal(1, 2, 1, u64::MAX)
+                )
+                .unwrap_err()
+                .status,
+            5
+        );
+        assert_eq!(
+            applier.scorer.read(&applier.scorer.model, &prefix).unwrap(),
+            initial_read
+        );
     }
 
     #[test]
