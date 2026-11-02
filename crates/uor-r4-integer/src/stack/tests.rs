@@ -1541,7 +1541,7 @@ fn chat_tokenizer_json() -> Vec<u8> {
 /// every byte).
 fn chat_tokenizer_json_sized(vocab: usize) -> Vec<u8> {
     let table = alphabet();
-    let mut bytes: Vec<u8> = b"User: Assistant: System:\nHilmotwae".to_vec();
+    let mut bytes: Vec<u8> = b"User: Assistant: System: Memory: b.\nHilmotwae".to_vec();
     bytes.sort_unstable();
     bytes.dedup();
     for byte in 0u8..=255 {
@@ -1711,6 +1711,10 @@ fn stack_chat_encodes_system_memory_between_user_and_assistant() -> ChatTest {
             false,
         )
         .tokens;
+    assert_eq!(
+        chat.tokenizer().decode(&expected),
+        "User: a\nSystem: Memory: b.\nAssistant:"
+    );
     chat.seed(&[chat.protocol().bos_id])?;
     chat.reply_with_memory("a", Some("b"), 1)?;
     assert_eq!(&chat.tokens()[1..1 + expected.len()], expected);
@@ -1721,16 +1725,25 @@ fn stack_chat_encodes_system_memory_between_user_and_assistant() -> ChatTest {
 fn stack_chat_no_memory_is_the_existing_reply_path() -> ChatTest {
     let (model, json, _) = fbs_chat(31)?;
     let bos = 0;
-    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let mut reference = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let mut history = vec![bos];
+    history.extend(
+        reference
+            .protocol()
+            .bind(reference.tokenizer())?
+            .encode_user_prefix("Hi", false)
+            .tokens,
+    );
+    reference.seed(&[bos])?;
+    let expected = reference.reply_history(&history, 2)?;
+
     let mut explicit = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
-    plain.seed(&[bos])?;
     explicit.seed(&[bos])?;
-    let plain_reply = plain.reply("Hi", 2)?;
     let explicit_reply = explicit.reply_with_memory("Hi", None, 2)?;
-    assert_eq!(explicit_reply.ids, plain_reply.ids);
-    assert_eq!(explicit_reply.text, plain_reply.text);
-    assert_eq!(explicit_reply.stop, plain_reply.stop);
-    assert_eq!(explicit.tokens(), plain.tokens());
+    assert_eq!(explicit_reply.ids, expected.ids);
+    assert_eq!(explicit_reply.text, expected.text);
+    assert_eq!(explicit_reply.stop, expected.stop);
+    assert_eq!(explicit.tokens(), reference.tokens());
     Ok(())
 }
 

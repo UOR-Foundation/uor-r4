@@ -97,18 +97,61 @@ Use a new output root:
 `/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02/`
 
 If it exists, stop. Use fresh `seed-1/`, `seed-2/` and `seed-1-repeat/`
-subdirectories. For every invocation run:
+subdirectories. Run this exact block from the task worktree:
 
 ```sh
-/usr/bin/time -v -o OUT.time \
-  "$BIN" --stack "$ARTIFACT" --tokenizer "$TOKENIZER" --protocol 2 \
-    --threads 16 --temperature 0 --max-tokens 16 ${MEMORY_ARGS:-} \
-    --say "$PROMPT" >OUT.json 2>ERR.log
+set -eu
+ROOT=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/m4-memory-bridge-2026-11-02
+BIN=/home/callard/projects/codex-playground/uor-r4-chat-baseline/local/deepseek/chat-memory-target/debug/uor-chat
+ART1=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
+TOK1=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/tokenizer-seed-1.json
+ART2=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
+TOK2=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/tokenizer-seed-2.json
+test ! -e "$ROOT"
+mkdir -p "$ROOT/seed-1" "$ROOT/seed-2" "$ROOT/seed-1-repeat"
+printf 'pass\tau\tprompt\tstatus\n' >"$ROOT/status.tsv"
+run_off() {
+  out=$1 pass=$2 artifact=$3 tokenizer=$4 id=$5 prompt=$6
+  if /usr/bin/time -v -o "$out/off-$id.time" "$BIN" --stack "$artifact" \
+    --tokenizer "$tokenizer" --protocol 2 --threads 16 --temperature 0 \
+    --max-tokens 16 --say "$prompt" >"$out/off-$id.json" 2>"$out/off-$id.err"; then
+    status=0
+  else
+    status=$?
+  fi
+  printf '%s\toff\t%s\t%s\n' "$pass" "$id" "$status" >>"$ROOT/status.tsv"
+  test "$status" -eq 0
+}
+run_on() {
+  out=$1 pass=$2 artifact=$3 tokenizer=$4 id=$5 prompt=$6 value=$7
+  if /usr/bin/time -v -o "$out/on-$id.time" "$BIN" --stack "$artifact" \
+    --tokenizer "$tokenizer" --protocol 2 --threads 16 --temperature 0 \
+    --max-tokens 16 --memory "$value" --say "$prompt" \
+    >"$out/on-$id.json" 2>"$out/on-$id.err"; then
+    status=0
+  else
+    status=$?
+  fi
+  printf '%s\ton\t%s\t%s\n' "$pass" "$id" "$status" >>"$ROOT/status.tsv"
+  test "$status" -eq 0
+}
+run_pass() {
+  out=$1 pass=$2 artifact=$3 tokenizer=$4
+  run_off "$out" "$pass" "$artifact" "$tokenizer" recall-name 'What did we name the new puppy?'
+  run_on "$out" "$pass" "$artifact" "$tokenizer" recall-name 'What did we name the new puppy?' Pickle
+  run_off "$out" "$pass" "$artifact" "$tokenizer" recall-grow 'What does grandpa grow?'
+  run_on "$out" "$pass" "$artifact" "$tokenizer" recall-grow 'What does grandpa grow?' tomatoes
+  run_off "$out" "$pass" "$artifact" "$tokenizer" absent-breakfast 'What did I eat for breakfast yesterday?'
+  run_on "$out" "$pass" "$artifact" "$tokenizer" absent-breakfast 'What did I eat for breakfast yesterday?' none
+}
+run_pass "$ROOT/seed-1" seed-1 "$ART1" "$TOK1"
+run_pass "$ROOT/seed-2" seed-2 "$ART2" "$TOK2"
+run_on "$ROOT/seed-1-repeat" seed-1-repeat "$ART1" "$TOK1" recall-name 'What did we name the new puppy?' Pickle
+run_on "$ROOT/seed-1-repeat" seed-1-repeat "$ART1" "$TOK1" recall-grow 'What does grandpa grow?' tomatoes
+sha256sum "$BIN" >"$ROOT/postflight-binary.sha256"
 ```
 
-Do not reuse an output basename. Use `<arm>-<prompt-id>`. The `off` arms leave
-`MEMORY_ARGS` unset; the `on` arms set it to `--memory <value>`. The seed-1
-repeat runs only `on-recall-name` and `on-recall-grow` in fresh processes.
+The seed-1 repeat runs only the two factual `on` arms from fresh processes.
 
 ## Readings
 
@@ -152,7 +195,11 @@ quality.
 ## Cost
 
 Local Ryzen 9 9950X only, one process at a time, 16 threads, no GPU and `$0.00`
-external spend. The panel is projected below one minute and 1 MiB. Stop on any
+external spend. The panel is projected below one minute and 1 MiB. Before
+execution, verify at least `30 GiB + 128 MiB` free disk and read the live model
+ledger and active storage receipt; record the observed free space, current
+charge and `$0.00` external charge. No checkpoint or dataset is retained; only
+the transcript directory is new.
 
 ## Stop rule
 
