@@ -53,6 +53,7 @@ export function createModelSourceAdapter(
     worker: WorkerLike,
 ): ModelSourceAdapter {
     let pending: PendingLoad | null = null;
+    let finishLoad: (() => void) | null = null;
     let workerQueue: Promise<void> = Promise.resolve();
 
     function start(sourceId: string): LoadOperation {
@@ -86,10 +87,13 @@ export function createModelSourceAdapter(
 
     function postToWorker(result: LoadResult, operation: LoadOperation): LoadResult {
         if (result.stale || !isCurrent(operation)) return { ...result, stale: true };
-        workerQueue = workerQueue.then(() => {
+        workerQueue = workerQueue.then(async () => {
             if (!isCurrent(operation)) return;
             store.dispatch({ type: 'artifact/finalizing', operation });
             pending = { operation, result };
+            const completed = new Promise<void>((resolve) => {
+                finishLoad = resolve;
+            });
             worker.postMessage({
                 action: 'load_model',
                 id: operation.operationId,
@@ -103,6 +107,7 @@ export function createModelSourceAdapter(
                     operationId: operation.operationId,
                 },
             });
+            await completed;
         }, () => undefined);
         return result;
     }
@@ -157,14 +162,21 @@ export function createModelSourceAdapter(
             const selected = store.getState().selectedSource;
             const targetId = id ?? selected?.id;
             if (selected?.kind !== 'api' || !targetId || selected.id !== targetId) throw new Error('Cannot test a non-selected API source');
+            const endpoint = selected.endpoint;
+            const finish = (ok: boolean) => {
+                const current = store.getState().selectedSource;
+                if (current?.kind === 'api' && current.id === targetId && current.endpoint === endpoint) {
+                    store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok });
+                }
+            };
             sources.setActive({ kind: 'api', id: targetId });
             store.dispatch({ type: 'api/testStarted', sourceId: targetId });
             try {
                 const result = await sources.testApi(targetId);
-                store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok: result.ok });
+                finish(result.ok);
                 return result;
             } catch (error) {
-                store.dispatch({ type: 'api/testFinished', sourceId: targetId, ok: false });
+                finish(false);
                 throw error;
             }
         },
@@ -172,33 +184,37 @@ export function createModelSourceAdapter(
             const current = pending;
             if (!current) return;
             const operation = current.operation;
+            const complete = () => {
+                pending = null;
+                const finish = finishLoad;
+                finishLoad = null;
+                finish?.();
+            };
             if (message.action === 'model_loaded') {
                 const capabilities = message.capabilities;
-                if (!isCurrent(operation)) {
-                    pending = null;
-                    return;
-                }
                 if (capabilities?.file_name && capabilities.file_name !== current.result.fileName) return;
                 if (current.result.expectedSha256 && capabilities?.artifact_sha256 && capabilities.artifact_sha256 !== current.result.expectedSha256) return;
-                pending = null;
-                store.dispatch({
-                    type: 'artifact/ready',
-                    operation,
-                    artifact: {
-                        sourceId: operation.sourceId,
-                        schema: capabilities?.schema || '',
-                        fileName: capabilities?.file_name || current.result.fileName,
-                        sha256: capabilities?.artifact_sha256,
-                        verified: capabilities?.sha256_verified ?? null,
-                        engineSupported: capabilities?.engine_supported,
-                        canGenerate: capabilities?.can_generate,
-                        source: capabilities?.source,
-                    },
-                });
+                complete();
+                if (isCurrent(operation)) {
+                    store.dispatch({
+                        type: 'artifact/ready',
+                        operation,
+                        artifact: {
+                            sourceId: operation.sourceId,
+                            schema: capabilities?.schema || '',
+                            fileName: capabilities?.file_name || current.result.fileName,
+                            sha256: capabilities?.artifact_sha256,
+                            verified: capabilities?.sha256_verified ?? null,
+                            engineSupported: capabilities?.engine_supported,
+                            canGenerate: capabilities?.can_generate,
+                            source: capabilities?.source,
+                        },
+                    });
+                }
                 return;
             }
             if (message.action === 'operation_error' && message.id === operation.operationId) {
-                pending = null;
+                complete();
                 failCurrent(operation, message.error || 'Operation failed.');
             }
         },

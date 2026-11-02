@@ -109,11 +109,13 @@ describe('model source adapter', () => {
     });
 
     it('does not mark a newer operation ready from an older worker result', async () => {
-        const adapter = createModelSourceAdapter(store, sources(), worker());
+        const transport = worker();
+        const adapter = createModelSourceAdapter(store, sources(), transport);
         await adapter.loadFromUrl('https://example.com/a.lut');
         await adapter.loadFromUrl('https://example.com/b.lut');
-        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old', file_name: 'a.lut', artifact_sha256: 'a' } });
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old', file_name: 'a.lut', artifact_sha256: 'abc' } });
         expect(store.canRun()).toBe(false);
+        await vi.waitFor(() => expect(transport.postMessage).toHaveBeenCalledTimes(2));
         adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'b.lut', artifact_sha256: 'abc', sha256_verified: true, engine_supported: true, can_generate: false, source: 'url' } });
         expect(store.getState().residentArtifact).toMatchObject({
             sourceId: 'url',
@@ -126,6 +128,20 @@ describe('model source adapter', () => {
             source: 'url',
         });
         expect(store.canRun()).toBe(true);
+    });
+
+    it('waits for an older terminal result before sending a same-artifact replacement', async () => {
+        const transport = worker();
+        const adapter = createModelSourceAdapter(store, sources(), transport);
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        expect(transport.postMessage).toHaveBeenCalledTimes(1);
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: 'abc' } });
+        expect(store.canRun()).toBe(false);
+        await vi.waitFor(() => expect(transport.postMessage).toHaveBeenCalledTimes(2));
+        adapter.handleWorkerMessage({ action: 'operation_error', id: 2, error: 'replacement failed' });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.canRun()).toBe(false);
     });
 
     it('ignores non-load worker errors after readiness', async () => {
@@ -153,6 +169,21 @@ describe('model source adapter', () => {
         adapter.selectApi('api-a', 'https://api.example.com/v1');
         const pending = adapter.testApi('api-a');
         adapter.selectApi('api-b', 'https://other.example.com/v1');
+        await pending;
+        expect(store.getState().api.testStatus).toBe('untested');
+    });
+
+    it('does not attribute an API test to a changed endpoint with the same id', async () => {
+        const api = sources();
+        let finish!: () => void;
+        api.testApi.mockReturnValueOnce(new Promise((resolve) => {
+            finish = () => resolve({ ok: true, detail: 'ok', models: [] });
+        }));
+        const adapter = createModelSourceAdapter(store, api, worker());
+        adapter.selectApi('api-a', 'https://old.example.com/v1');
+        const pending = adapter.testApi('api-a');
+        adapter.selectApi('api-a', 'https://new.example.com/v1');
+        finish();
         await pending;
         expect(store.getState().api.testStatus).toBe('untested');
     });
