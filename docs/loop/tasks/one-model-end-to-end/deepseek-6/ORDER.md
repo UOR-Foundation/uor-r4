@@ -22,6 +22,7 @@ panel. If so, reuse it and stop.
 ## Scope
 
 - `docs/harness/prep/one-model-end-to-end-public-chat-baseline-2026-11-02.md`
+- `docs/harness/prep/one-model-end-to-end-public-chat-post-smoke-2026-11-02.md`
 - `docs/labs/one-model-end-to-end/**`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-6/**`
 - `docs/roadmap/items/one-model-end-to-end.md`
@@ -31,9 +32,11 @@ No model, serving-format, tokenizer or training code changes.
 ## Required design
 
 - Pin both public FBS artifacts and both tokenizers by SHA-256.
+- Pin the public panel, executable and executable source by SHA-256.
 - Select eight prompts across all six categories of the public 160-prompt
   conversational panel before seeing outputs.
-- Use greedy decoding, 16 maximum response tokens and 16 worker threads.
+- Use the trained dialogue protocol 2, greedy decoding, 16 maximum response
+  tokens and 16 worker threads.
 - Run one-turn prompts in one-shot `--say` mode. Run the memory category as two
   turns in one REPL process.
 - Repeat one seed to confirm deterministic transcripts.
@@ -42,8 +45,8 @@ No model, serving-format, tokenizer or training code changes.
 
 ## Done when
 
-- The FIT-reviewed prep sheet and exact commands are committed before outputs
-  are read.
+- The post-smoke FIT-reviewed prep sheet and exact commands are committed
+  before protocol-2 outputs are read.
 - Both seeds complete every selected prompt without a crash or protocol error.
 - The report shows the exact transcripts and timing and classifies whether this
   public artifact is ready to demonstrate useful conversational behaviour.

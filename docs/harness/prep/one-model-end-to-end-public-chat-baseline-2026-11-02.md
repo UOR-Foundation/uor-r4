@@ -159,3 +159,8 @@ pin the panel file by SHA-256 as well as both artifacts and tokenizers, name the
 exact worktree-built `uor-chat` binary and output root, and explicitly disclose
 the observations above. It cannot claim that its selected inputs or outputs
 were unread before design.
+
+The follow-up is
+[`one-model-end-to-end-public-chat-post-smoke-2026-11-02.md`](one-model-end-to-end-public-chat-post-smoke-2026-11-02.md).
+It also selects protocol 2 after the project found that the original smoke's
+default protocol-1 tokenization was the wrong training protocol.
