@@ -1014,8 +1014,14 @@ impl ReplayRun<'_> {
     /// The forced replay (`replay_step`) of the step at `offset` of `row`'s reply, and that
     /// step. Each pass steps the prompt and the reference up to the offset under Φ
     /// (`forced_picks`): the forward is causal, so a pass cut at p reads p's prefix as the whole
-    /// window does.
-    fn replay(&self, row: &PanelPrompt, offset: usize) -> Result<(usize, StepReplay), String> {
+    /// window does. Pass 0, with Φ empty, must pick `unforced`, R's unforced pick there
+    /// (I-Rerun).
+    fn replay(
+        &self,
+        row: &PanelPrompt,
+        offset: usize,
+        unforced: u32,
+    ) -> Result<(usize, StepReplay), String> {
         let position = row.position;
         let window = self
             .reference
@@ -1040,6 +1046,13 @@ impl ReplayRun<'_> {
             self.g10,
             |phi| {
                 let forced = forced_picks(self.model, &row.prompt, cut, Some(phi))?;
+                let rerun = phi.buckets.is_empty() && phi.codes.is_empty();
+                if rerun && forced.picks.last() != Some(&unforced) {
+                    return Err(format!(
+                        "unforced, R picks {:?} at offset {offset}, not its unforced {unforced} (I-Rerun)",
+                        forced.picks.last()
+                    ));
+                }
                 let window = forced_window(position, &row.prompt, cut, forced)
                     .ok_or("the decision trace is off")?;
                 Ok(DecisionTrace {
@@ -1099,7 +1112,10 @@ fn differing_offsets(
 /// which counts the reference's picks past R's window); written new
 /// as `uor-r4.decision-replay/1`. `args` follow `--decision-replay` on the command line. It
 /// prints one JSON line: the offsets compared and equal, the replays, their counts and the file's
-/// sha256.
+/// sha256. Before any replay it refuses a reference that is not T's trace, holds two windows at
+/// one position, or is not the trace the deciles were read from; a `--reference-table` that is
+/// not the artifact itself; and a named offset past its window, its reference or R's offsets. A
+/// refused replay is recorded with its refusal, the rest still run, and the command then fails.
 fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
     let [reference, rest @ ..] = args else {
         return Err(USAGE.to_owned());
@@ -1124,11 +1140,37 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
     let model = IntegerStackModel::parse(&bytes).map_err(|e| format!("parse: {e}"))?;
     forced_artifact(&model)?;
     let (rt, reference_sha) = read_decision_trace(reference)?;
+    if rt.side != "T" {
+        return Err(format!(
+            "{reference}: side {}, but --decision-replay replays the arithmetic step (T, R)",
+            rt.side
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    if let Some(w) = rt.windows.iter().find(|w| !seen.insert(w.position)) {
+        return Err(format!(
+            "{reference}: two windows at position {}",
+            w.position
+        ));
+    }
     let deciles_text = std::fs::read(deciles_path).map_err(|e| format!("{deciles_path}: {e}"))?;
     let deciles = parse_deciles(deciles_path, &deciles_text)?;
+    if deciles.trace.as_ref().map(|t| t.sha256.as_str()) != Some(reference_sha.as_str()) {
+        return Err(format!(
+            "{deciles_path}: the deciles were read from another trace than {reference}"
+        ));
+    }
     let prompts_text = std::fs::read(prompts).map_err(|e| format!("{prompts}: {e}"))?;
     let rows: Vec<PanelPrompt> =
         serde_json::from_slice(&prompts_text).map_err(|e| format!("{prompts}: {e}"))?;
+    // T's table is R's writer table divided by 4096, so its file is R's artifact.
+    let table_bytes =
+        std::fs::read(reference_table).map_err(|e| format!("{reference_table}: {e}"))?;
+    if table_bytes != bytes {
+        return Err(format!(
+            "{reference_table}: T's table is R's artifact divided by 4096, and this is not {path}"
+        ));
+    }
     let (rtab, rtab_sha) = load_table(&rt.side, reference_table)?;
     // R's own table: the writer table its nearest scans.
     let writer = model
@@ -1155,7 +1197,8 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
             .ok_or_else(|| format!("position {position}: {prompts} has no such row"))
     };
     // The offsets named, or every one of the reference's inside R's window where R's unforced
-    // pick differs, and the reference's picks past R's window.
+    // pick differs, each with R's unforced pick there, and the reference's picks past R's
+    // window.
     let (chosen, compared, beyond) = if at.is_empty() {
         let (mut chosen, mut compared, mut beyond) = (Vec::new(), 0usize, 0usize);
         for window in &rt.windows {
@@ -1165,15 +1208,46 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
             let (differ, past) = differing_offsets(window, row, &unforced.picks)?;
             compared += unforced.picks.len();
             beyond += past;
-            chosen.extend(differ.into_iter().map(|offset| (window.position, offset)));
+            chosen.extend(
+                differ
+                    .into_iter()
+                    .map(|offset| (window.position, offset, unforced.picks[offset])),
+            );
         }
         (chosen, Some(compared), Some(beyond))
     } else {
-        (at, None, None)
+        // Each named offset is checked before any replay runs.
+        let mut chosen = Vec::with_capacity(at.len());
+        for (position, offset) in at {
+            let row = row_at(position)?;
+            let window = rt
+                .windows
+                .iter()
+                .find(|w| w.position == position)
+                .ok_or_else(|| format!("position {position}: the reference has no such window"))?;
+            offset_step(window, offset)?;
+            let cut = row.reference.get(..=offset).ok_or_else(|| {
+                format!(
+                    "position {position}, offset {offset}: past the reference's {} tokens",
+                    row.reference.len()
+                )
+            })?;
+            let unforced = forced_picks(&model, &row.prompt, cut, None)
+                .map_err(|e| format!("position {position}: {e}"))?;
+            let pick = unforced.picks.get(offset).copied().ok_or_else(|| {
+                format!(
+                    "position {position}, offset {offset}: past R's {} offsets",
+                    unforced.picks.len()
+                )
+            })?;
+            chosen.push((position, offset, pick));
+        }
+        (chosen, None, None)
     };
     let kinds = [
         "accounted",
         "unaccounted",
+        "refused",
         "ended_kept",
         "ended_memory",
         "ended_nearest",
@@ -1183,10 +1257,21 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         kinds.into_iter().map(|k| (k, 0)).collect();
     let mut replayed = Vec::with_capacity(chosen.len());
     let started = Instant::now();
-    for (position, offset) in chosen {
-        let (step, replay) = run
-            .replay(row_at(position)?, offset)
-            .map_err(|e| format!("position {position}, offset {offset}: {e}"))?;
+    // Each replay is recorded as it ends; a refused one is recorded with its refusal, and the
+    // run goes on.
+    for (position, offset, unforced) in chosen {
+        let (step, replay) = match run.replay(row_at(position)?, offset, unforced) {
+            Ok(done) => done,
+            Err(refused) => {
+                *counts.entry("refused").or_default() += 1;
+                replayed.push(json!({
+                    "position": position,
+                    "offset": offset,
+                    "refused": refused,
+                }));
+                continue;
+            }
+        };
         let end = match replay.passes.last() {
             Some(PassOutcome::Kept { .. }) => "ended_kept",
             Some(PassOutcome::Memory { .. }) => "ended_memory",
@@ -1232,7 +1317,13 @@ fn decision_replay_out(path: &str, args: &[String]) -> Result<(), String> {
         "{}",
         json!({ "schema": DECISION_REPLAY_SCHEMA, "offsets_compared": record["offsets_compared"], "picks_beyond_r": record["picks_beyond_r"], "equal": record["equal"], "replays": record["replays"], "counts": record["counts"], "replay_ms": elapsed_ms, "out": out, "sha256": sha256_hex(&text) })
     );
-    Ok(())
+    match counts["refused"] {
+        0 => Ok(()),
+        refused => Err(format!(
+            "{refused} of {} replays were refused; each is recorded in {out}",
+            replayed.len()
+        )),
+    }
 }
 
 const PREFILL: usize = 128;
@@ -2205,8 +2296,9 @@ mod tests {
 
         /// claude-256: a pass cut at p reads the picks and decisions up to p as the whole window
         /// does; `--decision-replay`'s replay of R against R's own trace as T is one pass at each
-        /// offset; and a T rate bucket moved into the next entry ends pass 0 there and joins Φ,
-        /// which R takes in pass 1 (else the grade refuses it, I-Force).
+        /// offset; a pass 0 that does not pick R's unforced pick is refused (I-Rerun); and a T
+        /// rate bucket moved into the next entry ends pass 0 there and joins Φ, which R takes in
+        /// pass 1 (else the grade refuses it, I-Force).
         #[test]
         fn a_replay_on_r_cuts_its_window_at_p_and_forces_r() {
             use uor_r4_integer::fbs_snapshot::ForcedBucket;
@@ -2228,6 +2320,7 @@ mod tests {
             let reference = [3u32, 5, 7];
             let whole = forced_picks(&model, &prompt, &reference, Some(&none)).expect("whole");
             let whole_steps = whole.steps.clone().expect("a trace");
+            let picks = whole.picks.clone();
             for offset in 0..reference.len() {
                 let cut = forced_picks(&model, &prompt, &reference[..=offset], Some(&none))
                     .expect("cut at p");
@@ -2249,7 +2342,7 @@ mod tests {
             let r = r_decision_trace(&model, &bytes, vec![window]).expect("R's trace");
             let t = as_t(&r, t_view);
             check_decision_trace(&t, t_view).expect("T's trace checks");
-            let replay = |t: &DecisionTrace, offset| {
+            let replay_from = |t: &DecisionTrace, offset: usize, unforced: u32| {
                 let deciles = decision_deciles(t).expect("deciles");
                 let run = ReplayRun {
                     model: &model,
@@ -2262,13 +2355,17 @@ mod tests {
                     deciles: &deciles,
                     g10: 0,
                 };
-                run.replay(&row, offset)
+                run.replay(&row, offset, unforced)
             };
+            let replay = |t: &DecisionTrace, offset: usize| replay_from(t, offset, picks[offset]);
             for offset in 0..reference.len() {
                 let (step, same) = replay(&t, offset).expect("a replay");
                 assert_eq!(step, prompt.len() - 1 + offset);
                 assert_eq!((same.passes.len(), same.accounted), (1, true), "{same:?}");
             }
+            let vocab = model.shape().vocab as u32;
+            let rerun = replay_from(&t, 1, (picks[1] + 1) % vocab).expect_err("not R's pick");
+            assert!(rerun.contains("(I-Rerun)"), "{rerun}");
             let mut moved = t.clone();
             let layer = &mut moved.windows[0].steps[0].layers[0];
             let entry = layer.entry[0];
@@ -2338,6 +2435,176 @@ mod tests {
             let mut moved = longer;
             moved.reply_start -= 1;
             refused(&moved);
+        }
+
+        /// claude-256, round 2: `--decision-replay` on files. T's and R's tables load from R's
+        /// artifact; T's check is not circular (a T score off its table's is refused); R's reads
+        /// have four heads. A clean run compares R's window and replays nothing; a refused
+        /// replay is recorded with its refusal, and the command fails after writing its file.
+        /// Refused before any replay, writing nothing: R's trace as the reference, two windows at
+        /// one position, deciles read from another trace, a table that is not the artifact, and
+        /// a named offset past the window.
+        #[test]
+        fn the_replay_command_records_each_replay_and_refuses_what_it_cannot_replay() {
+            /// The test's own folder, removed when the test ends, a failing one too.
+            struct Scratch(std::path::PathBuf);
+            impl Drop for Scratch {
+                fn drop(&mut self) {
+                    let _ = std::fs::remove_dir_all(&self.0);
+                }
+            }
+            let scratch = Scratch(
+                std::env::temp_dir().join(format!("uor_fbs_toks_replay_{}", std::process::id())),
+            );
+            let dir = &scratch.0;
+            let _ = std::fs::remove_dir_all(dir);
+            std::fs::create_dir_all(dir).expect("a scratch folder");
+            let path = |name: &str| dir.join(name).to_string_lossy().into_owned();
+            let put = |name: &str, bytes: &[u8]| std::fs::write(path(name), bytes).expect("write");
+            let bytes = raw_bytes(true);
+            put("r.uorlut", &bytes);
+            put("plain.uorlut", &raw_bytes(false));
+            let model = IntegerStackModel::parse(&bytes).expect("parse");
+            let writer = model.fbs_writer_table().expect("the FBS trunk");
+            let width = writer.len() / model.shape().vocab;
+            let t_table: Vec<f32> = writer.iter().map(|&v| f32::from(v) / 4096.0).collect();
+            let (r_owned, _) = load_table("R", &path("r.uorlut")).expect("R's table");
+            let (t_owned, _) = load_table("T", &path("r.uorlut")).expect("T's table");
+            assert!(
+                matches!(&r_owned, OwnedTable::Q12(t, w) if t[..] == writer[..] && *w == width)
+            );
+            assert!(matches!(&t_owned, OwnedTable::F32(t, w) if *t == t_table && *w == width));
+            let t_view = t_owned.view();
+            let none = DecisionForceWindow::default();
+            let prompt = prompts(model.shape().vocab)[2].clone();
+            let reference = [3u32, 5, 7];
+            let whole = forced_picks(&model, &prompt, &reference, Some(&none)).expect("whole");
+            let window = forced_window(4, &prompt, &reference, whole).expect("window");
+            let r = r_decision_trace(&model, &bytes, vec![window]).expect("R's trace");
+            let t = as_t(&r, t_view);
+            check_decision_trace(&t, t_view).expect("T's trace checks");
+            let reads: Vec<_> = t.windows[0]
+                .steps
+                .iter()
+                .flat_map(|s| s.layers.iter().filter_map(|l| l.read.as_ref()))
+                .collect();
+            assert!(!reads.is_empty() && reads.iter().all(|read| read.heads.len() == 4));
+            let mut tampered = t.clone();
+            let nearest = tampered.windows[0]
+                .steps
+                .iter_mut()
+                .find_map(|s| s.nearest.as_mut())
+                .expect("a nearest");
+            let score = f64::from_bits(nearest.score_f64.expect("a score"));
+            nearest.score_f64 = Some((score + 1.0).to_bits());
+            assert!(check_decision_trace(&tampered, t_view).is_err());
+            let json_of = |trace: &DecisionTrace| serde_json::to_vec(trace).expect("json");
+            let deciles_of = |trace: &DecisionTrace, name: &str| {
+                let mut deciles = decision_deciles(trace).expect("deciles");
+                deciles.trace = Some(DecisionSource {
+                    path: path(name),
+                    sha256: sha256_hex(&json_of(trace)),
+                });
+                serde_json::to_vec(&deciles).expect("json")
+            };
+            let mut twice = t.clone();
+            twice.windows.push(t.windows[0].clone());
+            let mut moved = t.clone();
+            let start = moved.windows[0].reply_start;
+            let nearest = moved.windows[0].steps[start + 2]
+                .nearest
+                .as_mut()
+                .expect("a nearest");
+            nearest.pick = (nearest.pick + 1) % model.shape().vocab as u32;
+            // R's trace has no deciles of its own: G₁₀ is read on the reference side.
+            put("r.json", &json_of(&r));
+            for (name, trace) in [("t", &t), ("twice", &twice), ("moved", &moved)] {
+                put(&format!("{name}.json"), &json_of(trace));
+                put(
+                    &format!("d-{name}.json"),
+                    &deciles_of(trace, &format!("{name}.json")),
+                );
+            }
+            let rows = json!([{ "position": 4, "prompt": prompt, "reference": reference }]);
+            put("prompts.json", &serde_json::to_vec(&rows).expect("json"));
+            let run = |trace: &str, deciles: &str, table: &str, out: &str, at: &[&str]| {
+                let mut args = vec![path(trace)];
+                for (flag, value) in [
+                    ("--prompts", path("prompts.json")),
+                    ("--deciles", path(deciles)),
+                    ("--g10", "0".to_owned()),
+                    ("--reference-table", path(table)),
+                    ("--out", path(out)),
+                ] {
+                    args.extend([flag.to_owned(), value]);
+                }
+                for a in at {
+                    args.extend(["--at".to_owned(), (*a).to_owned()]);
+                }
+                decision_replay_out(&path("r.uorlut"), &args)
+            };
+            let read = |name: &str| -> serde_json::Value {
+                serde_json::from_slice(&std::fs::read(path(name)).expect("read")).expect("json")
+            };
+            run("t.json", "d-t.json", "r.uorlut", "same.json", &[]).expect("a clean run");
+            let same = read("same.json");
+            assert_eq!(
+                [&same["offsets_compared"], &same["equal"], &same["replays"]],
+                [&json!(3), &json!(3), &json!(0)]
+            );
+            let refused = run(
+                "moved.json",
+                "d-moved.json",
+                "r.uorlut",
+                "moved-out.json",
+                &[],
+            )
+            .expect_err("one replay refused");
+            assert_eq!(
+                refused,
+                format!(
+                    "1 of 1 replays were refused; each is recorded in {}",
+                    path("moved-out.json")
+                )
+            );
+            let moved_out = read("moved-out.json");
+            assert_eq!(moved_out["counts"]["refused"], 1);
+            assert_eq!(moved_out["replayed"][0]["offset"], 2);
+            assert!(
+                moved_out["replayed"][0]["refused"].is_string(),
+                "{moved_out}"
+            );
+            let refusal = |trace: &str, deciles: &str, table: &str, at: &[&str]| {
+                run(trace, deciles, table, "never.json", at).expect_err("refused")
+            };
+            for (got, want) in [
+                (
+                    refusal("r.json", "d-t.json", "r.uorlut", &[]),
+                    "side R, but --decision-replay replays the arithmetic step (T, R)",
+                ),
+                (
+                    refusal("twice.json", "d-twice.json", "r.uorlut", &[]),
+                    "two windows at position 4",
+                ),
+                (
+                    refusal("t.json", "d-moved.json", "r.uorlut", &[]),
+                    "the deciles were read from another trace than",
+                ),
+                (
+                    refusal("t.json", "d-t.json", "plain.uorlut", &[]),
+                    "T's table is R's artifact divided by 4096, and this is not",
+                ),
+            ] {
+                assert!(got.contains(want), "{got}");
+            }
+            assert_eq!(
+                refusal("t.json", "d-t.json", "r.uorlut", &["4:3"]),
+                format!(
+                    "position 4, offset 3: past the window's {} steps",
+                    t.windows[0].steps.len()
+                )
+            );
+            assert!(!std::path::Path::new(&path("never.json")).exists());
         }
 
         /// claude-249: under the decision trace each row is the untraced row; the trace holds a
@@ -2507,6 +2774,10 @@ mod tests {
         let flags = |s: &[&str]| decision_flags(&args(s), &names).map(|(_, at)| at);
         assert_eq!(
             flags(&["--at", "3:1", "--deciles", "d", "--at", "3:1"]),
+            Err("--at 3:1 is named twice".to_owned())
+        );
+        assert_eq!(
+            flags(&["--at", "3:1", "--at", "3:2", "--at", "3:1"]),
             Err("--at 3:1 is named twice".to_owned())
         );
         assert!(flags(&["--at", "3"])
