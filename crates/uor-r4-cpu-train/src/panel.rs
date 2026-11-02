@@ -3,7 +3,8 @@
 use uor_r4_integer::stack::IntegerStackModel;
 
 use crate::train::{
-    validate_training_model, CpuRankMarginTrainer, RankMarginConfig, RankMarginSample,
+    sample_fingerprint, validate_training_model, CpuRankMarginTrainer, RankMarginConfig,
+    RankMarginSample,
 };
 use crate::CpuTrainError;
 
@@ -33,6 +34,7 @@ impl PanelExportReading {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PanelReading {
     pub artifact_digest: [u8; 32],
+    pub sample_fingerprint: [u8; 32],
     pub samples: usize,
     pub target_admitted: usize,
     pub top1_correct: usize,
@@ -64,6 +66,14 @@ impl PanelDelta {
     pub fn between(before: &PanelReading, after: &PanelReading) -> Result<Self> {
         if before.samples != after.samples {
             return Err(invalid("panel comparison sample counts differ"));
+        }
+        if before.sample_fingerprint != after.sample_fingerprint {
+            return Err(invalid("panel comparison sample sets differ"));
+        }
+        if before.export.query_coordinates_checked != after.export.query_coordinates_checked
+            || before.export.kept_cells_checked != after.export.kept_cells_checked
+        {
+            return Err(invalid("panel comparison export shapes differ"));
         }
         let difference = |left: usize, right: usize| -> i64 {
             i64::try_from(right)
@@ -157,6 +167,7 @@ impl CpuPanelEvaluator {
     pub fn evaluate(&mut self) -> Result<PanelReading> {
         let mut reading = PanelReading {
             artifact_digest: *blake3::hash(&self.artifact).as_bytes(),
+            sample_fingerprint: sample_fingerprint(&self.samples),
             samples: self.samples.len(),
             target_admitted: 0,
             top1_correct: 0,
@@ -236,6 +247,10 @@ mod tests {
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     fn artifact() -> Vec<u8> {
+        artifact_with_nearest(false)
+    }
+
+    fn artifact_with_nearest(nearest: bool) -> Vec<u8> {
         let mut snapshot = synthetic_fbs_trunk_with(
             307,
             FbsSynth {
@@ -251,6 +266,7 @@ mod tests {
                 decay_step: 0.0625,
             },
         );
+        snapshot.readout_nearest = nearest;
         snapshot.embed.clear();
         for token in 0..snapshot.vocab {
             for block in 0..snapshot.width / 8 {
@@ -385,6 +401,12 @@ mod tests {
             panel_admission_gate(&before, &export_gap).unwrap(),
             PanelGateDecision::RejectExportGap(_)
         ));
+
+        let mut different = samples();
+        different[0].target = 1;
+        let mut different_evaluator =
+            CpuPanelEvaluator::from_artifact(&artifact, different, 1).unwrap();
+        assert!(PanelDelta::between(&before, &different_evaluator.evaluate().unwrap()).is_err());
     }
 
     #[test]
@@ -412,5 +434,8 @@ mod tests {
         let mut truncated = artifact;
         truncated.truncate(truncated.len() - 1);
         assert!(CpuPanelEvaluator::from_artifact(&truncated, samples(), 1).is_err());
+        assert!(
+            CpuPanelEvaluator::from_artifact(&artifact_with_nearest(true), samples(), 1,).is_err()
+        );
     }
 }
