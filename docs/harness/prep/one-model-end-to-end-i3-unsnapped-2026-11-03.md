@@ -193,9 +193,9 @@ Recorded after the run, 3 Nov 2026. The sections above are unchanged from the FI
 - **The pod:** `vast-58968294`, one RTX 5090, 13:45–14:31Z, about $0.43. The job ran at `C` and exited 0 with `DONE`.
 - **I-0:** the CUDA library suite gave 299 passed, 0 failed, 7 ignored. All four named tests passed.
 - **Training:** 74 s wall per seed, and the trainer's own clock read 30 s for 256 steps. Step-256 DEV lines `[top-1, nearest, openings, admitted]`: seed 1 `[46, 362, 48, 459]`, seed 2 `[61, 335, 19, 515]`.
-- **Scoring:** 705 s, 647 s and 704 s (seed 1 rescored). The float scorer decoded at 73.9–75.1 tok/s.
+- **Scoring:** 705 s, 647 s and 704 s (seed 1 rescored). The float scorer decoded at 74.0–75.2 tok/s.
 - **The seal:** `claude-265.tar` SHA-256 `92203f2775993e1b31127ab3d4077453268c61adb62128161d7eba5b4a5ae4ac`, stored at `results/claude/one-model-end-to-end-i3-unsnapped-2026-11-03/` and read back OK. The pod is down.
-- **The serve (`serve-265.sh`, laptop):**
+- **The serve (`serve-265.sh`, laptop):** from this worktree at `99d2d4bd3`, not `C` as "Base artifact" says. The commits between are documents only, and the script confirmed the integer and tokenizer crates and `Cargo.lock` equal `74e6cf369`'s.
 
   | Seed | I-6 header | I-5 | Laptop tok/s | Order mismatches | First tokens differ (bar 8) | Whole replies differ |
   |---:|---|---|---:|---:|---:|---:|

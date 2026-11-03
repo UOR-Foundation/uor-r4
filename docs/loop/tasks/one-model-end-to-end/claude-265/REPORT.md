@@ -9,7 +9,7 @@ Sheet: [one-model-end-to-end-i3-unsnapped-2026-11-03](../../../../harness/prep/o
 
 - **The integer model, laptop, `fbs-toks`, prefill included:** 759.0 tok/s (seed 1, 18,203 reply tokens in 24.0 s) and 767.7 tok/s (seed 2, 17,581 in 22.9 s).
 - **Training, GPU, served:** 74 s wall per 256-step run, and the trainer's own clock read 30 s. That is 256 × 16 windows × 192 tokens in 30 s, about 26,000 context tokens/s (the clock prints whole seconds). claude-262's served runs, snapped, took 93–94 s wall and 18,282 / 18,243 context tokens/s.
-- **The float scorer, GPU, serial decode** (the `decode` records `score_rows` prints): 73.9–75.1 tok/s over the three scores. claude-263 read 88–89.5 and claude-264 30.7–42.5, on other hosts. These time the instrument, not the served model.
+- **The float scorer, GPU, serial decode** (the `decode` records `score_rows` prints): 74.0–75.2 tok/s over the three scores. claude-263 read 88–89.5 and claude-264 30.7–42.5, on other hosts. These time the instrument, not the served model.
 
 ## What did not work
 
@@ -23,9 +23,9 @@ Sheet: [one-model-end-to-end-i3-unsnapped-2026-11-03](../../../../harness/prep/o
    Both seeds are above 8, so neither is a pass. The full-length served run, which the sheet opens only on a pass, did not start.
 2. **Whole replies still differ on 287 and 240 of 310.** The first token matches more often, but later tokens still drift apart. Some float-versus-integer difference other than the snap compounds over a reply. This unit does not say which.
 3. **The models are new, so the comparison is not paired.** Both seeds were trained under the changed contract. claude-264's 100 and 131 came from snap-trained models served snapped. So the fall from 100 / 131 to 32 / 14 mixes two things: the snap's removal from serving, and different trained weights. The smoke (item 3 under Measurements) shows the second can matter: snap-trained weights served raw miss on 307 and 298.
-4. **Done-when 1 holds in part.** The new flag (`BRIDGE_ACTIVATION_I16`) and the snap selection are restored on `Ok`, `Err` and a panic. `with_d11_training_snaps` restores `bridge_d11` on `Ok` and `Err` but not on a panic. `with_d11_training` on main had the same gap, so it is not new, and no caller catches a panic and goes on training.
+4. **A panic gap outside the served bridge.** Done-when 1 is met under the served bridge: its `Restore` guard (`hamilton_sheet.rs:774-794`) puts the residual flags, `BRIDGE_ACTIVATION_I16` and the whole `GATE_HOOK` back on `Ok`, `Err` and a panic, `bridge_d11` included, and the existing test pins it with `catch_unwind` (`:3300-3307`). Called on its own, `with_d11_training_snaps` restores `bridge_d11` on `Ok` and `Err` but not on a panic. `with_d11_training` at the base had the same gap, so it is not new.
 5. **No guard in `fbs-export`.** The exporter still defaults to snapped and does not read how a run trained. `crates/uor-r4-integer/src/bin/` is outside the item's scope, so the I-3 serve step does the check instead (I-6 below). A user who exports one of these checkpoints without `--raw-gates --raw-transition` gets a snapped artifact the model was not trained for.
-6. **The step-256 DEV lines are lower than claude-262's**, which is descriptive only (the contract changed): seed 1 `[46, 362, 48, 459]` and seed 2 `[61, 335, 19, 515]` (top-1, nearest, openings, admitted), against `[53, 305, 9, 491]` and `[67, 357, 17, 490]`. Top-1 is lower at both seeds, and seed 2's nearest is lower; seed 1's nearest and both openings counts are higher. 256 steps at two seeds cannot say whether the contract costs quality.
+6. **The step-256 DEV lines differ from claude-262's**, which is descriptive only (the contract changed): seed 1 `[46, 362, 48, 459]` and seed 2 `[61, 335, 19, 515]` (top-1, nearest, openings, admitted), against `[53, 305, 9, 491]` and `[67, 357, 17, 490]`. Top-1 is lower at both seeds, and seed 2's nearest is lower; seed 1's nearest and both openings counts are higher. 256 steps at two seeds cannot say whether the contract costs quality.
 
 ## What changed
 
@@ -41,12 +41,12 @@ Sheet: [one-model-end-to-end-i3-unsnapped-2026-11-03](../../../../harness/prep/o
 
 1. **I-0, on the pod at `C`:** the CUDA library suite gave 299 passed, 0 failed, 7 ignored. All four named tests passed: the new test, `the_training_forward_selects_and_restores_the_served_bridges`, `a_step_as_served_reaches_every_projection_after_a_requantized_activation` and `served_surrogate_gradients_are_exact_on_cuda`.
 2. **The run:** `vast-58968294`, one RTX 5090, 13:45–14:31Z, about $0.43 of the sheet's $2.00. Binaries `train-in-space` `d0d69ea6…3d95` and `fbs-snapshot` `a83dab66…3b82`. Training 74 s per seed, scores 705 s, 647 s and 704 s, snapshots ok, `EXIT 0` with `DONE`.
-3. **The laptop smoke (sheet step 0), before the pod:** claude-262's snap-trained snapshots, served raw, passed the header check and served at about 790 tok/s, with 307 and 298 first-token misses (155 and 137 distinct first tokens, so not degenerate). The comparison script reproduced claude-263's 112 and 137 from its stored files.
+3. **The laptop smoke (sheet step 0), before the pod:** claude-262's snap-trained snapshots, served raw, passed the header check and served, with 307 and 298 first-token misses (155 and 137 distinct first tokens, so not degenerate). The comparison script reproduced claude-263's 112 and 137 from its stored files.
 4. **I-3** (above), with:
    - **I-4:** 310 samples in each of the three float files.
    - **I-5:** no `copy_key` in either header.
    - **I-6:** both headers are `uor-r4.lut-stack/7`, with `shape.raw_gates: true`, `shape.raw_transition: true` and no `transport_snap`.
-   - **R2R:** seed 1's two float scores differ on 0 of 310 first tokens and 0 whole replies. The scorer is deterministic on one host, so the sheet's "not decidable" band does not apply.
+   - **R2R:** seed 1's two float scores differ on 0 of 310 first tokens and 0 whole replies. The scorer gave identical output twice on one host, so the sheet's "not decidable" band does not apply. One pair of runs shows no spread; it does not bound one.
 
 ## The scripts
 
@@ -91,7 +91,7 @@ None applied. The three scripts above are local and not committed as files.
 
 ## Still open
 
-1. **The remaining parity sites: the next unit.** With the snap gone and the scorer deterministic, the sites the float surrogate may still round differently from the integer session are:
+1. **The remaining parity sites: the next unit.** With the snap gone and the scorer giving identical output twice, the sites the float surrogate may still round differently from the integer session are:
    - the Hamming reads and the turn memory;
    - the writer's Q12 query;
    - the convolution;
@@ -99,13 +99,13 @@ None applied. The three scripts above are local and not committed as files.
    - the RMS norm and its shift, and the recurrence state and its decay;
    - `q16_residual`'s f32 edge on odd grid points with |x| in [128, 256).
 
-   The method is claude-263's still open 1, with the existing tools: `fbs-snapshot --dev` and `fbs-compare` attribute the gap per layer. The whole-reply count (287 and 240) says the gap compounds, so a value read per layer says more than a first-token count.
+   claude-263's still open 1 named `fbs-snapshot --dev` and `fbs-compare`, but they would mismeasure these models. `fbs-snapshot` builds its D11 readout through `with_d11_mode` outside the served bridge (`fbs-snapshot.rs:266`, `:585-592`; `fbs_export.rs:1108`, `:1136`), so for a raw-trained model that readout is snapped (`D11Snaps::ALL`). Comparing a raw export against it is the same mismatch that gave the smoke's 307 and 298. A readout on the served contract comes first. That is a change to an instrument, so it goes to Casey before it is built. The whole-reply count (287 and 240) says the gap compounds, so a value read per layer says more than a first-token count.
 2. **A guard in `fbs-export`** that refuses a snapped export of a checkpoint trained unsnapped. It needs `crates/uor-r4-integer/src/bin/` in the item's scope.
-3. **`with_d11_training_snaps` on a panic** (item 4): a drop guard like the one `with_d11_snaps` has.
+3. **`with_d11_training_snaps` on a panic, outside the served bridge** (item 4): a drop guard like the served bridge's `Restore`. `with_d11_snaps` has none either (`flock_read_hamming.rs:1048` notes that a panic skips its restore).
 4. **The full-length served run.** Its sheet (claude-263's part B) is FIT. It needs re-pinning to `C` and the raw export. Whether it waits for a pass at 8, or runs with I-3 reported beside it, is a decision for the next unit's own decision review.
 
 ## Plain summary
 
-The model trained on the GPU and the integer copy served on the laptop now agree on the first word of a reply for 278 and 296 of 310 test prompts, up from 210 and 179. The change was to stop rounding the model's rotation gates to the 120 fixed icosian points, in training and in the served copy alike. The trained model is also faster to train (74 s against 93 s for the same 256 steps). The agreement is still short of the bar of 302, and whole replies still drift apart, so other, smaller rounding differences remain. The next unit looks for them layer by layer.
+The model trained on the GPU and the integer copy served on the laptop now agree on the first word of a reply for 278 and 296 of 310 test prompts, up from 210 and 179. The change was to stop rounding the model's rotation gates to the 120 fixed icosian points, in training and in the served copy alike. Training took 74 s for the same 256 steps that took 93 s before, though on a different machine, so the change is not shown to be the cause. The agreement is still short of the bar of 302, and whole replies still drift apart, so other, smaller rounding differences remain. The next unit looks for them layer by layer.
 
 References #3407.
