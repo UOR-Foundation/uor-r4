@@ -1193,7 +1193,8 @@ mod tests {
     use super::*;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::{
-        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, MEMORY_PAD,
+        add_point_key_uorlut01, export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot,
+        FbsReplyTable, PointKeyImage, MEMORY_PAD,
     };
 
     const WIDTH: usize = 64;
@@ -1265,6 +1266,47 @@ mod tests {
             prompt: vec![10, 11, 12],
             reply: vec![42, 77, 99],
         }]
+    }
+
+    fn point_fixture() -> Vec<u8> {
+        let artifact = fixture(0.0, 1.0);
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let mut query = None;
+        for (index, token) in [30, 31, 32].into_iter().enumerate() {
+            if index + 1 == 3 {
+                forward.mark_reply_start();
+            }
+            let step = forward.step(token, CpuFbsHead::Writer).unwrap();
+            if index + 1 == 3 {
+                query = Some(step.query_q12);
+            }
+        }
+        add_point_key_uorlut01(
+            &artifact,
+            &PointKeyImage {
+                width: WIDTH,
+                points: query
+                    .expect("the prompt has a final query")
+                    .into_iter()
+                    .map(|value| i16::try_from(value).expect("the query is Q12-clamped"))
+                    .collect(),
+                targets: vec![40],
+            },
+        )
+        .unwrap()
+    }
+
+    fn hit_miss_point_samples() -> Vec<MemoryWeightSample> {
+        let mut edge_samples = samples();
+        edge_samples.push(MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, 77, 49],
+        });
+        edge_samples.push(MemoryWeightSample {
+            prompt: vec![30, 31, 32],
+            reply: vec![40],
+        });
+        edge_samples
     }
 
     fn assert_audit(artifact: &[u8]) {
@@ -1378,7 +1420,7 @@ mod tests {
 
     #[test]
     fn cached_trajectory_matches_single_table_and_saturation_edges() {
-        for (table, config) in [
+        for (table, config, expect_accepted) in [
             (
                 MemoryWeightTable::Opening,
                 MemoryWeightConfig {
@@ -1386,6 +1428,7 @@ mod tests {
                     train_reply: false,
                     ..MemoryWeightConfig::default()
                 },
+                true,
             ),
             (
                 MemoryWeightTable::Reply,
@@ -1394,6 +1437,7 @@ mod tests {
                     train_reply: true,
                     ..MemoryWeightConfig::default()
                 },
+                false,
             ),
             (
                 MemoryWeightTable::Opening,
@@ -1403,6 +1447,7 @@ mod tests {
                     train_opening: true,
                     train_reply: false,
                 },
+                true,
             ),
         ] {
             let artifact = fixture(0.0, 1.0);
@@ -1410,6 +1455,7 @@ mod tests {
                 CpuMemoryWeightTrainer::from_artifact(&artifact, samples(), config).unwrap();
             let mut cached =
                 CpuMemoryWeightTrainer::from_artifact_cached(&artifact, samples(), config).unwrap();
+            let mut accepted = 0;
             for _ in 0..2 {
                 let expected = full.train_step().unwrap();
                 let actual = cached.train_step().unwrap();
@@ -1417,9 +1463,75 @@ mod tests {
                 if let Some(selected) = actual.table {
                     assert_eq!(selected, table);
                 }
+                if actual.updated {
+                    accepted += 1;
+                    if config.parameter_limit_q24 == 1 << 20 {
+                        assert_eq!(
+                            actual
+                                .after_weight_q24
+                                .expect("an accepted step has its new weight")
+                                .abs(),
+                            1 << 20
+                        );
+                    }
+                }
             }
+            assert_eq!(accepted > 0, expect_accepted);
             assert_eq!(cached.artifact(), full.artifact());
         }
+    }
+
+    #[test]
+    fn cached_trajectory_matches_hit_miss_and_point_fallback() {
+        let artifact = point_fixture();
+        let mut point = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let mut token = None;
+        for (index, input) in [30, 31, 32].into_iter().enumerate() {
+            if index + 1 == 3 {
+                point.mark_reply_start();
+            }
+            token = Some(point.step(input, CpuFbsHead::Writer).unwrap().token);
+        }
+        assert_eq!(token, Some(40));
+
+        let config = MemoryWeightConfig::default();
+        let mut full =
+            CpuMemoryWeightTrainer::from_artifact(&artifact, hit_miss_point_samples(), config)
+                .unwrap();
+        let mut cached = CpuMemoryWeightTrainer::from_artifact_cached(
+            &artifact,
+            hit_miss_point_samples(),
+            config,
+        )
+        .unwrap();
+        for _ in 0..3 {
+            let expected = full.train_step().unwrap();
+            let actual = cached.train_step().unwrap();
+            assert_eq!(actual, expected);
+        }
+        assert_eq!(cached.artifact(), full.artifact());
+    }
+
+    #[test]
+    fn cached_parallel_constructions_are_byte_identical() {
+        let artifact = point_fixture();
+        let config = MemoryWeightConfig::default();
+        let mut first = CpuMemoryWeightTrainer::from_artifact_cached(
+            &artifact,
+            hit_miss_point_samples(),
+            config,
+        )
+        .unwrap();
+        let mut second = CpuMemoryWeightTrainer::from_artifact_cached(
+            &artifact,
+            hit_miss_point_samples(),
+            config,
+        )
+        .unwrap();
+        for _ in 0..3 {
+            assert_eq!(first.train_step().unwrap(), second.train_step().unwrap());
+        }
+        assert_eq!(first.artifact(), second.artifact());
     }
 
     #[test]

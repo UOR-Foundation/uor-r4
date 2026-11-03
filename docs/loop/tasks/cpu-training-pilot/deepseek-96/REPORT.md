@@ -57,10 +57,13 @@ pre-registered 16 Rayon workers with `RAYON_NUM_THREADS=16`.
 | 1 | 415.370 s | **9.961 s** | **41.70x** | 1,345% | 265,772 KiB |
 | 2 | 414.121 s | **9.826 s** | **42.14x** | 1,374% | 271,844 KiB |
 
-Each seed accepted all eight updates. Removing only wall and peak-RSS fields
-from the old and new JSON produces byte-identical normalized reports: accepted
-step receipts, held-out readings and parity are therefore exact, not merely
-equivalent. Final artifacts remain:
+Each seed accepted all eight updates. Removing wall, peak RSS and the newly
+reported `training.search_mode` field from the old and new JSON produces
+byte-identical normalized reports: accepted step receipts, held-out readings
+and parity are therefore exact, not merely equivalent. The reference run did
+not retain its artifact bytes, so artifact identity is established by the
+pinned SHA-256 values rather than a repeated `cmp` against the old file. Final
+artifact hashes remain:
 
 - seed 1:
   `3ad89c7b80df52f9e1e4d878c072982e9fb613b8453ded0dd50c3ee905e0ee44`;
@@ -86,10 +89,11 @@ changes the file hash without changing its bar, inputs or claim boundary.
 
 - Focused cached/full-forward suite:
   `cargo test --package uor-r4-cpu-train --release --lib memory_train`:
-  **9 passed**, including three-step full/optimized equality, opening-only,
-  reply-only, saturation-bound and unseen-key no-hit controls.
+  **11 passed**, including three-step full/optimized equality, opening-only,
+  reply-only, parameter-bound, deterministic repeated construction,
+  opening/reply hit and miss, point fallback, and unseen-key no-hit controls.
 - Full package release suite:
-  `cargo test --package uor-r4-cpu-train --release`: **148 library tests
+  `cargo test --package uor-r4-cpu-train --release`: **150 library tests
   passed, 4 release benchmarks ignored**, plus driver suites **6, 1 and 5
   passed**; every listed test target was green after the known Cargo collision
   retry.

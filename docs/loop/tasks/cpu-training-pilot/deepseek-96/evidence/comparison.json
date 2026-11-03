@@ -28,12 +28,14 @@
     "normalized_report_equal_seed_2": true,
     "comparison_excludes": [
       "wall_elapsed_ms",
-      "peak_rss_kib"
+      "peak_rss_kib",
+      "training.search_mode"
     ],
     "accepted_step_receipts_equal": true,
     "held_out_readings_equal": true,
     "parity_readings_equal": true,
-    "trained_artifact_bytes_equal": true
+    "trained_artifact_sha256_equal": true,
+    "reference_artifact_bytes_retained": false
   },
   "seeds": {
     "1": {
