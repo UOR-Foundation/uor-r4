@@ -71,6 +71,11 @@ preprocessing timings, not model or visual-quality results.
 - `uor-harness loop gates --full` passed all 11 gates on the immediate rerun.
   The first attempt hit the known fake-gh `ETXTBSY` flake in `loop-drive`; both
   records are retained.
+- `cargo check --locked --workspace --all-targets` is red on this branch and on
+  exact `origin/main` at the base: `uor-r4-workbench` requests
+  `uor-r4-api/learned-reference`, which activates the intentionally excluded
+  `uor-r4-core` historical surface. The base reproduction is retained; this
+  branch does not claim that workspace check passed.
 - No GPU was present and no GPU result is claimed.
 
 ## Skills used
