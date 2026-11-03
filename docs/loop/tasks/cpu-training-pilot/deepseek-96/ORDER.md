@@ -43,6 +43,9 @@ work.
    negative and do not claim acceleration.
 6. Focused and full CPU tests, strict Clippy, formatting, evidence, report,
    roadmap and loop checks pass.
+7. Independent trace samples, matched evaluation arms and parity audits use the
+   same bounded Rayon pool; ordered integer reduction preserves the serial tie
+   and saturation behavior.
 
 ## Stop if
 
