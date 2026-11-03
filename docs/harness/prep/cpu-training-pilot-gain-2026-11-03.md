@@ -42,10 +42,10 @@ when the final-query-dependent Hamming readout is present.
 
 ## Source and binary
 
-- source commit: `89c3363d7`;
+- source commit: `ef75026b4`;
 - driver:
   `local/deepseek/served-gain-target/release/cpu-gain-panel-driver`, SHA-256
-  `99c218d87f920a1fe02911287d3a3cee9f93d75706a2e367f14be3e9cd4c2ad4`;
+  `f115b3d49d5bc9b709128e8d7ca0c67aa9c8fa2cb8c81a2e3cf8ca9b738ff553`;
 - Rust/Cargo: `1.97.1`;
 - host: AMD Ryzen 9 9950X, Ubuntu 24.04.3 LTS, 16 physical cores and 32
   logical CPUs; the registered runs use 16 workers, one per physical core.
@@ -88,10 +88,10 @@ At each teacher-forced position the cached path stores:
 - the fixed memory hit, table identity and stored token;
 - the fixed source sample boundary for checked aggregation.
 
-A candidate applies the same gain grid to the cached normalization, converts
-to Q12, applies the fixed Q24 memory movement, runs the writer and recomputes
-point fallback when an opening key misses. The input token sequence and
-recurrent state never change.
+A candidate applies the same gain grid to the cached normalization, applies
+the fixed Q24 memory movement in the normalization-fine domain, converts to
+Q12, runs the writer and recomputes point fallback when an opening key misses.
+The input token sequence and recurrent state never change.
 
 The full-forward trainer remains available behind `--reference`.
 
@@ -114,7 +114,9 @@ RAYON_NUM_THREADS=16 cpu-gain-panel-driver ARTIFACT TOKENS MASK MANIFEST OUT \
 
 The driver must refuse any selection other than eight keys, 58 training
 samples and 56 evaluation samples. It reports a pass or negative verdict and
-checks the elapsed/RSS stops after each candidate sweep.
+checks the elapsed/RSS stops after each candidate sweep. It claims a fresh
+output directory before reading the model, writes no existing output leaf, and
+seals and verifies a complete success or failure receipt.
 
 ## Minimum test power
 
