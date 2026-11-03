@@ -19,7 +19,7 @@ No model ran in this unit, so there is no model tok/s. The count is an instrumen
 ## What changed
 
 - `crates/uor-r4-float-train/src/flock_read_hamming.rs`: `slot_boundary_flags` (boundary tokens from the pinned tokenizer: `.` `!` `?` and the byte-level newline and carriage return, added tokens, unassigned ids), `slot_rank_table` (one `u16` per token by TRAIN count, rarer lower, ties by id, boundaries 0), `slot_atoms`, and the diagnostics' `slot_atom_pairs` and `window_atoms`. Five tests.
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`: `--copy-key-oracle TOKENS MASK`, a mode that reads an unpinned UORT pair, cuts it into DEV scoring's windows, prints the count and exits. It takes TRAIN and the tokenizer from `--data-root` at their pins, and refuses every training and panel flag.
+- `crates/uor-r4-float-train/src/bin/train-in-space.rs`: `--copy-key-oracle TOKENS MASK`, a mode that reads an unpinned UORT pair, cuts it into DEV scoring's windows, prints the count and exits. It takes TRAIN and the tokenizer from `--data-root` at their pins. It refuses every other mode flag and `--recall`. Other training and panel flags given with it are ignored, not refused, because the mode returns before they are read.
 - No change to the read, the export or the serve: step 2 did not run, so copy keys 1 and 2 are untouched.
 - This REPORT, the ORDER's amendment, one notebook row in `docs/research/notebook/float-training.md`, and the item's line.
 
@@ -52,6 +52,7 @@ Copyable positions (the next token occurs earlier in the window): 8,243 on DEV, 
 ## Checks run at the head
 
 - `cargo test -p uor-r4-float-train --lib slot --no-fail-fast`: 6 passed (the four slot tests and two older tests whose names hold "slot"). `--lib flock_read_hamming`: 21 passed, including the diagnostics' test.
+- The boundary test pins every boundary byte. With `!` and the carriage return dropped from the boundary set, `slot_boundaries_are_sentence_ends_newlines_added_and_unassigned_ids` fails; restored, it passes.
 - `cargo build -p uor-r4-float-train --bin train-in-space`: ok.
 - `cargo clippy -p uor-r4-float-train --all-targets`: nothing in this unit's two files; with `-D warnings` it stops on `uor-r4-integer` (What did not work, item 5).
 - The count on DEV and p-w, twice each (once with the slot key only, once with the diagnostics), with the same k1, k2 and slot numbers both times. The input SHA-256s were read with `shasum -a 256`.

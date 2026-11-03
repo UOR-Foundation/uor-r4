@@ -988,7 +988,6 @@ fn main() -> Result<()> {
     run_long(&data_root, &out, &config, &device)
 }
 
-/// `--panel NAME=DIR` (claude-204): an extra UORT split for the census, counted unpinned.
 /// `--copy-key-oracle` (claude-267): exact-match copy-key purity on an unpinned UORT pair, with
 /// slot ranks from the pinned TRAIN split and boundaries from the pinned tokenizer.
 fn copy_key_oracle(data_root: &Path, tokens_path: &Path, mask_path: &Path) -> Result<()> {
@@ -1111,6 +1110,7 @@ fn read_uort_pair(tokens_path: &Path, mask_path: &Path) -> Result<(Vec<u32>, Vec
     Ok((tokens, mask))
 }
 
+/// `--panel NAME=DIR` (claude-204): an extra UORT split for the census, counted unpinned.
 fn panel_arg(value: &str) -> Result<(String, PathBuf)> {
     match value.split_once('=') {
         Some((name, dir)) if !name.is_empty() && !dir.is_empty() => {

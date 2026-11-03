@@ -1368,9 +1368,9 @@ mod tests {
     #[test]
     fn slot_boundaries_are_sentence_ends_newlines_added_and_unassigned_ids() {
         let json = r#"{"added_tokens":[{"id":0,"content":"<|bos|>"}],
-            "model":{"vocab":{"a":1,"Ċ":2,"b.":3,"ĉ":4,"?":5,"z":7}}}"#;
+            "model":{"vocab":{"a":1,"Ċ":2,"b.":3,"ĉ":4,"?":5,"z":7,"!":8,"č":9}}}"#;
         let flags = slot_boundary_flags(json.as_bytes()).unwrap();
-        assert_eq!(flags, [true, false, true, true, false, true, true, false]);
+        assert_eq!(flags, [true, false, true, true, false, true, true, false, true, true]);
     }
 
     /// claude-267: the atom resets at a boundary token, which is its own atom.
