@@ -24,8 +24,10 @@ Lab: deepseek. Item:
 - The same review found that an image-only turn persisted empty content and the
   next API request after reload included an invalid blank user message. History
   reconstruction now substitutes the bounded marker `[Image patch input]` for
-  a historical empty user turn; the live image-only request still sends no
-  empty text part.
+  a historical empty user turn. The first repair incorrectly applied that
+  marker to the current turn too, causing a text part in the live image-only
+  request. A second exact-head review caught it. The final rule leaves the
+  final turn empty and replaces only earlier empty user turns.
 - The first Studio test run after merging current `main` exited 1 on an
   unhandled teardown exception from the unchanged `Inspector.tsx` after all 266
   tests had passed. An isolated immediate rerun exited 0. The transient output
@@ -68,9 +70,12 @@ development context, while four images overflow it and return 413.
   it.
 - After the review repair, the real-browser flow performed an image-only Send
   with no text part, reloaded, reattached the removed image and sent again.
-  Both generations completed. The two-turn run reported
-  **42 prompt / 16 completion / 58 total tokens**, 824.5 tok/s, TTFT 13.226 ms
-  and 19.406 ms elapsed for the retained final reading.
+  Both generations completed. The retained final reading was
+  **31 prompt / 6 completion / 37 total tokens**, 534.9 tok/s, TTFT 9.472 ms
+  and 11.217 ms elapsed. The verifier inspected the actual request bodies: the
+  live final turn contained exactly one `uor_r4_image` part and no text part,
+  while the reloaded request contained the historical
+  `[Image patch input]` marker followed by another image-only final turn.
 - The review repair was reverified with 14 focused Node tests, all 266 Studio
   tests and the static/load/worker/browser checks. Raw output is in
   [review-repair.txt](evidence/review-repair.txt).

@@ -174,6 +174,20 @@ async function main() {
             if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'browser evaluation failed');
             return result.result.value;
         };
+        const captureChatRequests = async () => evaluate(`(() => {
+            if (window.__imageFlowFetchWrapped) return true;
+            const originalFetch = window.fetch.bind(window);
+            window.__imageFlowChatBodies = [];
+            window.fetch = async function (resource, options) {
+                const url = typeof resource === 'string' ? resource : resource && resource.url;
+                if (String(url || '').includes('/v1/chat/completions') && options && typeof options.body === 'string') {
+                    window.__imageFlowChatBodies.push(JSON.parse(options.body));
+                }
+                return originalFetch(resource, options);
+            };
+            window.__imageFlowFetchWrapped = true;
+            return true;
+        })()`);
         const waitFor = async (expression, timeout = 15000) => {
             const deadline = Date.now() + timeout;
             while (Date.now() < deadline) {
@@ -209,8 +223,14 @@ async function main() {
         }
         assert(await evaluate("document.querySelector('#composerContextNote').textContent.includes('R4 patch input - experimental; not visual understanding')"), 'experimental label missing');
         assert(await evaluate("!document.querySelector('.msg[data-role=assistant]')"), 'file selection sent without explicit Send');
+        await captureChatRequests();
         await evaluate("document.querySelector('#btnSend').click(); true");
         await waitFor("document.querySelector('.msg[data-role=assistant] .msg-body') && document.querySelector('.msg[data-role=assistant] .msg-body').textContent.length > 0", 25000);
+        assert(await evaluate(`(() => {
+            const body = window.__imageFlowChatBodies[0];
+            const content = body && body.messages && body.messages[body.messages.length - 1].content;
+            return Array.isArray(content) && content.length === 1 && content[0].type === 'uor_r4_image';
+        })()`), 'live image-only request contained a text part or an incorrect native image part');
         const metrics = await evaluate("document.querySelector('.msg[data-role=assistant] .msg-meta').textContent");
         assert(/\d+\/\d+\/\d+/.test(metrics) && !/usage unavailable/.test(metrics), 'exact prompt/completion/total usage missing: ' + metrics);
         assert(await evaluate("document.querySelectorAll('.msg[data-role=assistant]').length === 1"), 'unexpected extra generation');
@@ -220,10 +240,24 @@ async function main() {
         await waitFor("document.querySelector('#composerContextNote') && document.querySelector('#composerContextNote').textContent.includes('memory-only')");
         await waitFor("document.querySelector('#chatSourceBadge').textContent.includes('Native uor-chat')", 25000);
         assert(await evaluate("document.querySelectorAll('.attachment-chip-preview').length === 0"), 'image attachment restored from storage');
+        await captureChatRequests();
         await evaluate(attachImage);
         await waitFor("document.querySelectorAll('.attachment-chip-preview').length === 1");
         await evaluate("document.querySelector('#btnSend').click(); true");
         await waitFor("document.querySelectorAll('.msg[data-role=assistant]').length === 2", 25000);
+        const reloadedRequest = await evaluate(`(() => {
+            const body = window.__imageFlowChatBodies[0];
+            const messages = body && Array.isArray(body.messages) ? body.messages : [];
+            const users = messages.filter((message) => message.role === 'user');
+            const content = users.length ? users[users.length - 1].content : null;
+            return JSON.stringify({
+                valid: users.length === 2 && users[0].content === '[Image patch input]' &&
+                    Array.isArray(content) && content.length === 1 && content[0].type === 'uor_r4_image',
+                body,
+            });
+        })()`);
+        const reloadedState = JSON.parse(reloadedRequest);
+        assert(reloadedState.valid, 'reloaded history did not preserve the image marker or sent a non-image-only final turn: ' + reloadedRequest);
         await evaluate(attachImage);
         await waitFor("document.querySelectorAll('.attachment-chip-preview').length === 1");
         await evaluate("document.querySelector('.attachment-chip-remove').click(); true");

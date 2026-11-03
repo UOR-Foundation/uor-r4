@@ -8,8 +8,10 @@ cases now fail closed.
 
 Finding 2: an image-only user turn persisted empty content, so after reload the
 next native request included a blank historical message that the server rejects.
-Fix: reconstruct historical empty user turns as the bounded text marker
-`[Image patch input]`; live image-only requests still omit an empty text part.
+The first repair also normalized the current turn and therefore incorrectly
+added a text part to a live image-only request. Final fix: reconstruct only
+historical empty user turns as the bounded text marker
+`[Image patch input]`; the final live image-only turn remains text-free.
 
 Commands and results
 --------------------
@@ -43,12 +45,18 @@ exit 0
 $ CARGO_TARGET_DIR=target/claude-image-placeholder node web/studio/assets/js/verify_studio_image_input.mjs
 {
   "verdict": "NATIVE IMAGE BROWSER FLOW PASSED",
-  "metrics": "16 tokens · 824.5 tok/s · TTFT 13.226 ms · 19.406 ms · 42/16/58 · length",
+  "metrics": "6 tokens · 534.9 tok/s · TTFT 9.472 ms · 11.217 ms · 31/6/37 · stop",
   "label": "R4 patch input - experimental; not visual understanding",
   "imageOnlySend": true,
   "memoryOnlyReload": true,
   "reloadedHistoryResend": true
 }
+
+The verifier wraps the page fetch transport and inspects the actual chat request
+bodies. It asserts that the live image-only message content is exactly one
+`uor_r4_image` part with no text part. After reload and reattachment, it asserts
+that the earlier empty turn becomes `[Image patch input]` and the final message
+is again exactly one `uor_r4_image` part.
 
 $ node web/studio/verify_studio_page.mjs
 PAGE-LOAD CHECKS PASSED

@@ -1497,14 +1497,17 @@
         }
 
         function apiMessages(conversation) {
-            var messages = conversation.messages
-                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
-                .map(function (message) {
+            var visibleMessages = conversation.messages
+                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; });
+            var lastIndex = visibleMessages.length - 1;
+            var messages = visibleMessages
+                .map(function (message, index) {
                     var content = message.content;
                     // Image bytes are intentionally memory-only. Preserve a truthful,
                     // non-empty history marker after reload instead of sending a blank
-                    // user turn that the native API rejects.
-                    if (message.role === 'user' && content === '') content = '[Image patch input]';
+                    // historical user turn that the native API rejects. The final turn
+                    // remains empty so a live image-only request has no text part.
+                    if (message.role === 'user' && content === '' && index !== lastIndex) content = '[Image patch input]';
                     return { role: message.role, content: content };
                 });
             var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function'
