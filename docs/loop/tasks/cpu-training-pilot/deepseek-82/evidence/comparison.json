@@ -31,6 +31,7 @@
         "margin_loss_sum": 11739473,
         "rank_sum": 319318
       },
+      "process_exit": 0,
       "gate": "accept",
       "artifact_sha256": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd"
     },
@@ -47,6 +48,7 @@
         "margin_loss_sum": 11747984,
         "rank_sum": 319147
       },
+      "process_exit": 0,
       "gate": "reject_admission",
       "artifact_sha256": "9d59da8d4241ed6eb81917cc4af22698c948ca95ae4eaa0f02a4040e0239f807",
       "checkpoint_sha256": "626e7290b6f5ac29f225eab00ceb681241421860b0bd7b1433f829c8d4725d79"
@@ -70,6 +72,7 @@
         "margin_loss_sum": 11731518,
         "rank_sum": 318759
       },
+      "process_exit": 2,
       "gate": "reject_admission",
       "artifact_sha256": "349e0f154a72f2e3d4eba200ecca8306952619d425993ca50060dacabf8830ff",
       "checkpoint_sha256": "c2338ce3e8cb7399f9fc9ed89828b9685877623b6bac237e62ba7b0b4865bf50"
@@ -85,6 +88,7 @@
         "margin_loss_sum": 29717075,
         "rank_sum": 342478
       },
+      "process_exit": 0,
       "gate": "accept",
       "artifact_sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1"
     },
@@ -101,6 +105,7 @@
         "margin_loss_sum": 29603785,
         "rank_sum": 342464
       },
+      "process_exit": 0,
       "gate": "accept",
       "artifact_sha256": "554d7ad817db681c6c1fc3ec49dfe197ddef883eceae55d770e048917cf5e730",
       "checkpoint_sha256": "f8d44d3021c96bba67d4b3a0d0f06e496f66ef0bb4c6a9c3ac1e8c7c7ecd1a7b"
@@ -124,6 +129,7 @@
         "margin_loss_sum": 29602710,
         "rank_sum": 342483
       },
+      "process_exit": 0,
       "gate": "accept",
       "artifact_sha256": "c9a5859a4750d8f8e39fae550d4b6d2d80970b992abf8e16b063c203ee031fef",
       "checkpoint_sha256": "914bb04574a1c9b7d5215df9c7ac54609ad6fe07b40dbac684ea41cbab34198b"
@@ -131,7 +137,8 @@
   ],
   "instrument": {
     "processes": 6,
-    "nonzero_exit": 0,
+    "expected_nonzero_exits": 1,
+    "unexpected_nonzero_exits": 0,
     "evaluated_rows_per_arm": 1024,
     "query_coordinates_checked_per_arm": 262144,
     "kept_cells_checked_per_arm": 8192,

@@ -55,10 +55,11 @@ internal-development panel.
 | 2 | pivot-k4 | 225 | 225 | 224 | 285 | 292 | `c9a5859a...` |
 
 K4 moved 1,748 coordinates on seed 1 and 900 on seed 2; every accepted K4 block
-contained four distinct coordinates. All six processes exited zero. Every arm
-evaluated 1,024 rows and checked 262,144 Q12 query coordinates and 8,192 kept
-cells with zero query, token or kept-cell mismatches. Final artifacts reloaded
-and checkpoint/export controls passed.
+contained four distinct coordinates. Five runs exited zero; seed-1 K4 wrote its
+complete receipt and then exited 2 at the required admission gate, as
+pre-registered. Every arm evaluated 1,024 rows and checked 262,144 Q12 query
+coordinates and 8,192 kept cells with zero query, token or kept-cell
+mismatches. Final artifacts reloaded and checkpoint/export controls passed.
 
 Total wall time was 621.691 seconds on the Ryzen 9 9950X. Peak RSS was
 52,436 KiB. The release driver SHA-256 was

@@ -251,7 +251,6 @@ impl CpuRankMarginTrainer {
             },
         };
         config.validate()?;
-        config.validate()?;
         if input.u32()? != 0 {
             return Err(invalid("rank-margin checkpoint reserved field is nonzero"));
         }
