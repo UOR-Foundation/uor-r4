@@ -1,6 +1,6 @@
 # REPORT: Mac-inspired Studio IDE and simplified UOR/API connections
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d`, `b6ebf7002745f1c9ec5c7de236bc9f9ae66009e3`, and `498e3657498aea4cc722dce96d89f9276b8e9378` before final delivery checks; the earlier review base was `de9cfc84a`. Exact delivery-head evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d`, `b6ebf7002745f1c9ec5c7de236bc9f9ae66009e3`, and `e2470ec4d09e873352df128133116f73d3ababda` before final delivery checks; the earlier review base was `de9cfc84a`. Exact delivery-head evidence is posted on the PR.
 
 ## What did not work
 
@@ -76,7 +76,7 @@ Recovery and working discipline, isolated worktrees, plan execution, test-driven
 
 ## Exact delivery head
 
-The authoritative delivery head is the clean commit created after these repairs and its evidence delta. The PR records its 40-character SHA, tree, clean status, base `498e3657498aea4cc722dce96d89f9276b8e9378`, actual checks, and fresh exact-head review. Earlier commits and gate logs remain labeled lineage rather than being presented as final-head evidence. The lineage receipt records the earlier verified tree `13f9452cca6611fcebbfbfbe0f218fe2cdf945c2` and the actual `db222246d..dd58c76a` REPORT/receipts-only delta; newer source/test repairs are not mislabeled as docs-only. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
+The authoritative delivery head is the clean commit created after these repairs and its evidence delta. The PR records its 40-character SHA, tree, clean status, base `e2470ec4d09e873352df128133116f73d3ababda`, actual checks, and fresh exact-head review. Earlier commits and gate logs remain labeled lineage rather than being presented as final-head evidence. The lineage receipt records the earlier verified tree `13f9452cca6611fcebbfbfbe0f218fe2cdf945c2` and the actual `db222246d..dd58c76a` REPORT/receipts-only delta; newer source/test repairs are not mislabeled as docs-only. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
 
 ## Still open
 
