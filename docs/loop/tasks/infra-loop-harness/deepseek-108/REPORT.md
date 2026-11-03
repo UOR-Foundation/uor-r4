@@ -22,7 +22,7 @@ Corrected the base line in every task ORDER and REPORT from deepseek-104 through
 deepseek-107, and created this active record with the verified base. The image
 item, requirements, scope, implementation plan and evidence are unchanged.
 
-The exact PR diff size is recorded before the closing receipt commit.
+The exact PR diff is 18 files: 653 insertions and no deletions.
 
 ## Measurements
 
@@ -36,6 +36,8 @@ No model or serving measurement applies. The verified facts are:
 ## Checks run at the head
 
 - `git merge-base HEAD origin/main` and commit-object validation: PASS.
+- Full gates ran at content commit
+  `76a4c4e241650a38d56dfdaf0d6559a7f7485f24`.
 - `cargo run -q -p xtask -- roadmap check`: PASS.
 - `git diff --check`, `loop report --check`, `loop pr-check --local` and
   `loop gates --full`: PASS.
