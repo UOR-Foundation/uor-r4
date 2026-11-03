@@ -1,34 +1,34 @@
 {
   "checkpoints": [
     {
-      "artifact": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000064.uorlut",
+      "artifact": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000064.uorlut",
       "artifact_sha256": "09cc2dd5297bd0b63a21641bcb3aada273fdd4bb35ccf0cd58e6498231461b89",
-      "binding": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000064.binding.json",
-      "checkpoint": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000064.ckpt",
+      "binding": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000064.binding.json",
+      "checkpoint": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000064.ckpt",
       "checkpoint_sha256": "b0944f0ff157da79b3cf69371a809cc2f429cbb9dbabf880e67431a3f31596dd",
       "step": 64
     },
     {
-      "artifact": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000128.uorlut",
+      "artifact": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000128.uorlut",
       "artifact_sha256": "b5bcb2c3c3b208a680c07a493203df2f9fe3d96ec05820a2e07d6afcddf05cb2",
-      "binding": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000128.binding.json",
-      "checkpoint": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000128.ckpt",
+      "binding": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000128.binding.json",
+      "checkpoint": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000128.ckpt",
       "checkpoint_sha256": "bb8991e611ccbd81a517956f8060b48724d6f41a972dc3c3e41e9e9a7571f745",
       "step": 128
     },
     {
-      "artifact": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000192.uorlut",
+      "artifact": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000192.uorlut",
       "artifact_sha256": "4f5c91710c8e4e95758214a2690daab4e762282e2fe63e981254c30acae156d3",
-      "binding": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000192.binding.json",
-      "checkpoint": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000192.ckpt",
+      "binding": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000192.binding.json",
+      "checkpoint": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000192.ckpt",
       "checkpoint_sha256": "380da958c3f69bd408b27d47a439231df1d4f44dab13dc337942673f5b3cbf79",
       "step": 192
     },
     {
-      "artifact": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.uorlut",
+      "artifact": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.uorlut",
       "artifact_sha256": "00c5aa52d2dc7d2573000bb5627787169db265ec2d0703d8914eb17e44c573a0",
-      "binding": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.binding.json",
-      "checkpoint": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.ckpt",
+      "binding": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.binding.json",
+      "checkpoint": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.ckpt",
       "checkpoint_sha256": "5764d5d770a6989a8a73aabe345c87070189d3e4806f93c7a406d04e319939be",
       "step": 256
     }
@@ -53,10 +53,10 @@
   },
   "final_artifact_sha256": "00c5aa52d2dc7d2573000bb5627787169db265ec2d0703d8914eb17e44c573a0",
   "final_checkpoint": {
-    "artifact": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.uorlut",
+    "artifact": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.uorlut",
     "artifact_sha256": "00c5aa52d2dc7d2573000bb5627787169db265ec2d0703d8914eb17e44c573a0",
-    "binding": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.binding.json",
-    "checkpoint": "local/deepseek/discrete-k1-k4-corrected-2026-11-03/seed-2-k4/step-000000000256.ckpt",
+    "binding": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.binding.json",
+    "checkpoint": "local/deepseek/discrete-k1-k4-final-2026-11-03/seed-2-k4/step-000000000256.ckpt",
     "checkpoint_sha256": "5764d5d770a6989a8a73aabe345c87070189d3e4806f93c7a406d04e319939be",
     "step": 256
   },
@@ -108,7 +108,7 @@
     "top1_correct": -25,
     "top8_correct": -45
   },
-  "peak_rss_kib": 19756,
+  "peak_rss_kib": 19876,
   "qualification": "gpu-required",
   "resume": null,
   "schedule": {
@@ -262,15 +262,15 @@
     "committed_moves": 71,
     "committed_moves_this_invocation": 71,
     "completed_steps": 256,
-    "context_tokens_per_second_this_invocation": 6707.766980336666,
+    "context_tokens_per_second_this_invocation": 6804.185426552862,
     "context_tokens_this_invocation": 1254214,
     "executed_steps_this_invocation": 256,
     "refused_updates": 210,
     "refused_updates_this_invocation": 210,
     "resumed_from_step": 0,
-    "step_seconds_this_invocation": 186.979363427,
-    "target_visits_per_second_this_invocation": 87.36793034584193,
+    "step_seconds_this_invocation": 184.329779595,
+    "target_visits_per_second_this_invocation": 88.62377004894503,
     "target_visits_this_invocation": 16336
   },
-  "wall_seconds": 188.966176708
+  "wall_seconds": 186.090855944
 }

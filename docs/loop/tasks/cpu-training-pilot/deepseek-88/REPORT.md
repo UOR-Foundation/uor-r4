@@ -2,7 +2,7 @@
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Base: `498e36574`. Source commit:
-`a4821664d`.
+`5b9e304d1`.
 
 ## What did not work
 
@@ -52,15 +52,15 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 | 2 | pivot-k4 | 46 | 71 | 13 | 63 | 256 | reject admission | 2 |
 
 All six CPU/serving exports had zero query-coordinate, admitted-cell, top-8 or
-token mismatches. Total wall time was 474.602 seconds; peak RSS was 20,380 KiB.
+token mismatches. Total wall time was 460.986 seconds; peak RSS was 20,312 KiB.
 The release driver SHA-256 was
-`ddfb994a78d8512983ee142e184474094fc068d995d24859299694c23ce6edf9`.
+`27fc53895fc4cd81e96b446eb84c31909661e2e2eaedf6c8995260d43fe7810d`.
 The comparison and all six receipts are under
 [evidence](evidence/comparison.json).
 
 ## Checks run at the head
 
-- CPU all-target suite: 132 library tests passed, 4 ignored; the discrete
+- CPU all-target suite: 133 library tests passed, 4 ignored; the discrete
   driver and all auxiliary binaries passed.
 - Strict package Clippy with `--all-targets --no-deps -- -D warnings`: passed.
 - Package formatting, `git diff --check` and the local PR gate: passed.
