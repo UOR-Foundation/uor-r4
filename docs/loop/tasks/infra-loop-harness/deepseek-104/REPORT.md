@@ -1,5 +1,9 @@
 # REPORT: recover the image-decomposition item, deepseek-104
 
+> **Superseded by [deepseek-105](../deepseek-105/REPORT.md).** A fresh review
+> found the registered item scope incomplete, one relative link wrong, and this
+> report's gate wording ambiguous about the later receipt-only commit.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
@@ -45,8 +49,10 @@ No model or serving measurement was made. Registration coverage is:
 
 - `cargo run -q -p xtask -- roadmap check`: PASS.
 - `git diff --check`: PASS.
-- `uor-harness loop report --check`, `loop pr-check --local` and
-  `loop gates --full`: PASS.
+- At implementation head `42f228e5b`, `uor-harness loop report --check`,
+  `loop pr-check --local` and `loop gates --full` passed. Head `0f92abc70`
+  then added only this task's receipts and branch claim, so the retained gate
+  receipts intentionally predate that receipt-only commit.
 
 ## Skills used
 

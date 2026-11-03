@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [studio-conversational-composer]
 done_class: host
 notebook: docs/research/notebook/m4-serving.md
-scope: [Cargo.toml, Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/assets/js/**, web/studio/src/**, docs/products/web-client.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
+scope: [Cargo.toml, Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/assets/js/**, web/studio/src/**, docs/products/web-client.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
 ---
 
 ## Why it matters
@@ -83,7 +83,7 @@ failure or the no-visual-understanding boundary.
 
 - The owner's conversational Studio request in `PLAN.md` and the approved
   Task 4 image-decomposition plan.
-- [Studio conversational composer](../loop/tasks/studio-conversational-composer/kimi-1/REPORT.md)
+- [Studio conversational composer](../../loop/tasks/studio-conversational-composer/kimi-1/REPORT.md)
   and native service #3606 / #3595.
 - `crates/uor-r4-integer/src/openai.rs`, `loopback.rs`,
   `web/studio/assets/js/composer_input.js` and `studio_api.js`.
