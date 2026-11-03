@@ -52,6 +52,7 @@ syntax checks and diff checks are generated evidence.
 - `node --check web/studio/assets/js/composer_input.js`: PASS.
 - `node --check web/studio/assets/js/composer_input.test.mjs`: PASS.
 - `git diff --check`: PASS.
+- `uor-harness loop gates --full`: 11 of 11 gates green.
 
 ## Skills used
 

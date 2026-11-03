@@ -2,12 +2,12 @@ TAP version 13
 # Subtest: mixed clipboard paste attaches the file and leaves its text native
 ok 1 - mixed clipboard paste attaches the file and leaves its text native
   ---
-  duration_ms: 1.577215
+  duration_ms: 1.495239
   ...
 # Subtest: file-only paste remains prevented while text-only paste stays native
 ok 2 - file-only paste remains prevented while text-only paste stays native
   ---
-  duration_ms: 0.232092
+  duration_ms: 0.229648
   ...
 1..2
 # tests 2
@@ -17,4 +17,4 @@ ok 2 - file-only paste remains prevented while text-only paste stays native
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 81.811175
+# duration_ms 84.242686
