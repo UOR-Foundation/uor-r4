@@ -54,6 +54,9 @@ describe('URL artifact diagnostics after source regrouping', () => {
         const input = document.getElementById('modelFileInput') as HTMLInputElement;
         expect(input.className).toBe('sr-only');
         expect(getComputedStyle(input).display).not.toBe('none');
+        const label = input.nextElementSibling;
+        expect(label?.tagName).toBe('LABEL');
+        expect(label).toHaveProperty('htmlFor', 'modelFileInput');
         input.focus();
         expect(document.activeElement).toBe(input);
     });

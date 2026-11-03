@@ -3358,6 +3358,9 @@ html[data-theme="light"] { --text-faint: #7a6753; }
 .tree-row:hover .tree-attach, .tree-row:focus-within .tree-attach, .tree-attach:focus-visible { opacity: 1; }
 @media (hover: none), (pointer: coarse) { .tree-attach { opacity: 1; } }
 .sr-only { position: absolute; clip-path: inset(50%); overflow: hidden; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; white-space: nowrap; }
+#artifactDiagnostics > summary { min-block-size: 24px; min-inline-size: 24px; padding-block: 3px; }
+#artifactDiagnostics > summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; }
+#modelFileInput:focus-visible + label { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 
 /* workspace merged view */
 body[data-view="workspace"] #workspaceView { display: flex; }

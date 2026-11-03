@@ -7,7 +7,7 @@ beforeEach(() => {
     window.localStorage.clear();
     window.location.hash = '';
     window.matchMedia = vi.fn(() => ({ matches: false, addEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
-    document.body.innerHTML = '<div id="app" data-nav="collapsed"><button id="btnMobileNav">Menu</button><aside><button id="navAgent" data-section="agent">Agent</button><button id="navModels" data-section="models">Models</button></aside><main id="mainColumn"><button id="viewBtnModel">Models</button><section id="modelView"><div id="modelSourcesPanel"><div class="providers-head"></div><div id="modelSourceMount"><section class="source-group" id="localGroup"><h3>Local WASM engine</h3><article class="source-card" id="bundledCard"><button data-action="load-bundled">Load bundled demo</button></article><article class="source-card" id="localFileCard"><input type="file"></article><article class="source-card" id="urlCard"><button data-action="load-url">Load URL</button></article></section><section class="source-group" id="trainedGroup"><h3>Trained M1 model</h3><article class="source-card">M1</article></section><section class="source-group" id="researchGroup"><h3>Research artifacts (experimental)</h3><article class="source-card">FBS</article></section><section class="source-group" id="apiGroup"><h3>OpenAI-compatible API</h3><article class="source-card">Custom endpoint</article></section></div></div></section></main><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div></div>';
+    document.body.innerHTML = '<div id="app" data-nav="collapsed"><button id="btnMobileNav">Menu</button><aside><button id="navAgent" data-section="agent">Agent</button><button id="navModels" data-section="models">Models</button></aside><main id="mainColumn"><button id="viewBtnModel">Models</button><section id="modelView"><div id="modelSourcesPanel"><div class="providers-head"></div><div id="modelSourceMount"><section class="source-group" id="localGroup"><h3>Local WASM engine</h3><article class="source-card" id="bundledCard"><button data-action="load-bundled">Load bundled demo</button></article><article class="source-card" id="localFileCard"><input type="file"></article><article class="source-card" id="urlCard"><button data-action="load-url">Load URL</button></article></section><section class="source-group" id="trainedGroup"><h3>Trained M1 model</h3><article class="source-card">M1</article></section><section class="source-group" id="researchGroup"><h3>Research artifacts (experimental)</h3><article class="source-card">FBS</article></section><section class="source-group" id="apiGroup"><h3>OpenAI-compatible API</h3><article class="source-card">Custom endpoint<button id="addApiButton" data-action="add-api" type="button">Add provider</button></article></section></div></div></section></main><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div></div>';
     vi.resetModules();
 });
 
@@ -28,6 +28,7 @@ describe('simplified Studio connections', () => {
         const urlCard = document.getElementById('urlCard')!;
         const trained = document.getElementById('trainedGroup')!;
         const research = document.getElementById('researchGroup')!;
+        const addApi = document.getElementById('addApiButton')!;
         const clicked = vi.fn();
         bundled.addEventListener('click', clicked);
         await import(studioUiModule);
@@ -39,6 +40,8 @@ describe('simplified Studio connections', () => {
         const diagnostics = document.querySelector<HTMLDetailsElement>('#artifactDiagnostics')!;
         expect(local.textContent).toContain('UOR Chat — experimental');
         expect(api.textContent).toContain('Custom API providers');
+        expect(api.contains(addApi)).toBe(true);
+        expect(addApi.tagName).toBe('BUTTON');
         expect(diagnostics.open).toBe(false);
         expect(diagnostics.contains(trained)).toBe(true);
         expect(diagnostics.contains(research)).toBe(true);

@@ -82,4 +82,21 @@ describe('Mac-inspired Studio visual system', () => {
         expect(files).toContain("document.createElement('button')");
         expect(files).not.toContain("document.createElement('span'); // attach");
     });
+
+    it('gives the diagnostics summary a 24px target and an unclipped focus ring', () => {
+        const style = installTheme('dark');
+        document.body.innerHTML += '<details id="artifactDiagnostics" class="models-section"><summary>Artifact diagnostics</summary></details>';
+        const summary = document.querySelector<HTMLElement>('#artifactDiagnostics > summary')!;
+        expect(parseFloat(getComputedStyle(summary).minBlockSize)).toBeGreaterThanOrEqual(24);
+        expect(parseFloat(declaration(style, '#artifactDiagnostics > summary:focus-visible').outline)).toBeGreaterThanOrEqual(2);
+        expect(parseFloat(declaration(style, '#artifactDiagnostics > summary:focus-visible').outlineOffset)).toBeLessThanOrEqual(0);
+    });
+
+    it('draws model-file keyboard focus on the visible picker label', () => {
+        const style = installTheme('dark');
+        document.body.innerHTML += '<input id="modelFileInput" class="sr-only" type="file"><label for="modelFileInput" class="btn btn-secondary btn-small">Choose model file</label>';
+        const label = document.querySelector<HTMLLabelElement>('label[for="modelFileInput"]')!;
+        expect(parseFloat(getComputedStyle(label).minBlockSize)).toBeGreaterThanOrEqual(24);
+        expect(parseFloat(declaration(style, '#modelFileInput:focus-visible + label').outline)).toBeGreaterThanOrEqual(2);
+    });
 });

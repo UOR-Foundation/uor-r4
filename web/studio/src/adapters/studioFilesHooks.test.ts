@@ -31,8 +31,16 @@ describe('legacy editor content hook', () => {
         expect(files.openDemo()).toBe(true);
         const controls = Array.from(document.querySelectorAll<HTMLButtonElement>('.tree-attach'));
         expect(controls.length).toBeGreaterThan(0);
+        expect(controls[0].tagName).toBe('BUTTON');
         expect(controls[0].getAttribute('aria-label')).toContain('crates/uor-r4-integer/src/lib.rs');
         const names = controls.map((control) => control.getAttribute('aria-label'));
         expect(new Set(names).size).toBe(names.length);
+        const attached = vi.fn();
+        document.addEventListener('uor-attach-file', attached);
+        controls[0].click();
+        await vi.waitFor(() => expect(attached).toHaveBeenCalledOnce());
+        expect(attached.mock.calls[0][0]).toMatchObject({
+            detail: { name: 'crates/uor-r4-integer/src/lib.rs', source: 'workspace' },
+        });
     });
 });

@@ -14,7 +14,7 @@ Make the existing Studio source page feel like a professional Mac desktop IDE an
 
 - `web/studio/index.html`, `web/studio/index.css`, and `web/studio/README.md`.
 - Narrow source/navigation presentation in `web/studio/assets/js/studio_ui.js` and focused actual-page tests under `web/studio/src/adapters/**`.
-- Fresh-review repairs only: the moved URL input lookup in `web/studio/assets/js/model_sources.js` and the native tree attachment in `web/studio/assets/js/studio_files.js`, with focused actual-module tests. Overlay/accessibility state remains in the already scoped HTML/CSS/`studio_ui.js`. No provider behavior or network call may change.
+- Fresh-review repairs only: the moved URL input lookup and the local-file input's keyboard-focus class in `web/studio/assets/js/model_sources.js`, plus the native tree attachment in `web/studio/assets/js/studio_files.js`, with focused actual-module tests. The local-file change keeps the control keyboard-focusable while its visible label receives the focus outline; overlay/accessibility state otherwise remains in the already scoped HTML/CSS/`studio_ui.js`. No provider behavior or network call may change.
 - This task folder, the design, an implementation plan if needed, `docs/products/web-client.md`, and the owning roadmap item/generated issue data if the normal generator permits it.
 
 ## Done when

@@ -239,4 +239,87 @@ describe('overlay and view-state coordination', () => {
         expect(document.activeElement).toBe(trigger);
         expect(trigger.getAttribute('aria-expanded')).toBe('false');
     });
+
+    it('keeps Tab inside a session menu when the mobile drawer is expanded', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        document.getElementById('btnMobileNav')!.click();
+        document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!.click();
+        const items = Array.from(document.querySelectorAll<HTMLButtonElement>('.session-popover-item'));
+        expect(document.activeElement).toBe(items[0]);
+        items[items.length - 1].focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(items[0]);
+        items[0].focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(items[items.length - 1]);
+    });
+
+    it('preserves the clicked composer focus after dismissing a session menu outside', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const trigger = document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!;
+        trigger.click();
+        await vi.advanceTimersByTimeAsync(0);
+        const composer = document.getElementById('chatInput')!;
+        composer.focus();
+        composer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(document.querySelector('.session-popover')).toBeNull();
+        expect(document.activeElement).toBe(composer);
+        expect(document.activeElement).not.toBe(trigger);
+    });
+
+    it('preserves the clicked composer focus after dismissing the template menu outside', async () => {
+        const build = document.createElement('button');
+        build.id = 'btnBuildTask';
+        document.body.appendChild(build);
+        const templates = document.createElement('div');
+        templates.id = 'templateMenu';
+        templates.hidden = true;
+        templates.innerHTML = '<button type="button">Template</button>';
+        document.body.appendChild(templates);
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        build.click();
+        await vi.advanceTimersByTimeAsync(0);
+        const composer = document.getElementById('chatInput')!;
+        composer.focus();
+        composer.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(templates.hidden).toBe(true);
+        expect(document.activeElement).toBe(composer);
+        expect(document.activeElement).not.toBe(build);
+    });
+
+    it('opens only the rename input when F2 is pressed on a session', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const main = document.querySelector<HTMLButtonElement>('.session-main')!;
+        main.focus();
+        main.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }));
+        expect(document.querySelector('.session-popover')).toBeNull();
+        expect(document.activeElement).toBe(document.querySelector('.conv-rename'));
+        expect(document.querySelectorAll('.conv-rename')).toHaveLength(1);
+    });
 });
