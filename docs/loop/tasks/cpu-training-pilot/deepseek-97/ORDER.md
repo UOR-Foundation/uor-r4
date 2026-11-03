@@ -15,6 +15,17 @@ Run a materially new bounded CPU comparison on both public FBS seeds against
 matched frozen and equal-move random controls. This is distance training, not
 the failed rank-margin objective.
 
+## Cancel probe (run first)
+
+At base `c4c267c53`, `git grep` found the generic normalization group's
+`final_norm_gain` candidate path in `counterfactual.rs`, but no
+`CpuServedGainTrainer`, final-gain replay or gain-panel driver. The existing
+normalization comparison was the failed rank-margin/selection configuration in
+[deepseek-11](../deepseek-11/REPORT.md), so it does not test a distance
+objective over the complete served writer decision. The task therefore stands
+as a distinct mechanism/objective comparison and does not repeat that
+configuration.
+
 ## Files in scope
 
 - `crates/uor-r4-cpu-train/**`

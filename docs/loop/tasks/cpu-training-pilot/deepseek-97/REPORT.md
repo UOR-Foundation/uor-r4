@@ -20,6 +20,11 @@ Base: `c4c267c534d7160ac6d544c420c90249a1cddeba`.
   every parity counter, creates each attempt root exclusively before model
   work, seals and verifies both success and ordinary failure attempts, and
   documents memory movement in the normalization-fine domain.
+- **The first exact-head review returned CHANGES.** The ORDER omitted its
+  charter-required cancel probe, and the provisional line-count statement was
+  stale. The base probe now records the earlier rank-margin normalization
+  configuration and why this complete-distance objective is distinct; the size
+  statement below is recomputed from a named, stable file set.
 - **The repeated keys are not unseen-key evidence.** Evaluation documents are
   disjoint from training documents but intentionally reuse their opening keys.
   Nothing here establishes transfer to a new key, complete replies or fresh
@@ -51,11 +56,12 @@ All attempt outputs use exclusive creation. The complete attempt, including
 ordinary failures, is sealed with a BLAKE3 manifest and verified before the
 driver returns.
 
-The implementation diff from the base is 1,903 added and 46 removed lines
-across code, tests, sheet, ORDER and evidence. This is above the initial
-600-line estimate because the out-of-sample gain path, driver, four mechanism
-controls, fail-closed evidence handling and adversarial coverage are in one
-bounded unit.
+The implementation and registration diff from the base, excluding this REPORT
+and generated run evidence, is 1,916 added and 46 removed lines across the CPU
+crate, registered sheet, ORDER and preserved pre-fit sheet. This is above the
+initial 600-line estimate because the out-of-sample gain path, driver, four
+mechanism controls, fail-closed evidence handling and adversarial coverage are
+in one bounded unit.
 
 ## Measurements
 
