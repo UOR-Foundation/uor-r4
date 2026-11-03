@@ -88,3 +88,12 @@ This is a key-quality reading of the data, not a model result. The trained read 
 
 - If a structure outside this scope must change to compile (`crates/uor-r4-cpu-train` builds Hamming records), add the field so that existing struct literals keep compiling. If that is impossible, record it and decide with a decision card. Never edit another lab's crate without one.
 - If the rank table cannot be computed identically on the pod and the laptop, the table is computed once and pinned as an input instead.
+
+## Amendment (after step 1's slot counts; my decision, reversible)
+
+The slot key failed the rule on DEV and on p-w. Three diagnostic rows were then added to the same count, because each costs about two seconds to measure, and a unit of its own would cost a PR round:
+- `atom2`, the next rule this ORDER names (the clause's two rarest tokens, unordered);
+- `win4`, a suffix-local atom (the rarest of the four tokens ending at the position);
+- `k2>k1`, copy key 2's candidate where it has one and copy key 1's elsewhere.
+
+They are diagnostics, outside the rule above. They do not change step 1's decision, and step 2 does not run for any of them in this unit. They choose the next copy-key unit, whose own sheet and FIT decide it.
