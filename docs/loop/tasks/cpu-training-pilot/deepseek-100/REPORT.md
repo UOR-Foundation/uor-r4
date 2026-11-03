@@ -103,6 +103,7 @@ The full stage table, commands and raw links are in
 - `cargo fmt --package uor-r4-cpu-train -- --check`: passed.
 - `git diff --check`: passed.
 - Evidence `SHA256SUMS`: passed.
+- `uor-harness loop gates --full`: 11 of 11 gates green.
 
 ## Skills used
 
