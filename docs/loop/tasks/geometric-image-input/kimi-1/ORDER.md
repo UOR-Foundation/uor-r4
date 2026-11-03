@@ -8,7 +8,7 @@ Accept pictures in the live Studio only through deterministic integer RGBA decom
 
 ## Design
 
-[DESIGN.md](DESIGN.md). One internal vision crate owns checked integer decomposition and canonical serialization. The existing native OpenAI service owns admission, context preflight, and generation. One browser image-input module owns Canvas decoding/downsampling; existing Studio attachment and generation state remain authoritative.
+[DESIGN.md](DESIGN.md). One internal vision crate owns decomposition and canonical serialization. The native OpenAI service owns admission, context preflight, and generation. One browser module owns Canvas; existing Studio state remains authoritative.
 
 ## Files in scope
 
