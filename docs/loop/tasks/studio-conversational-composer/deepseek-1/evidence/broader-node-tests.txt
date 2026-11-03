@@ -1,0 +1,180 @@
+TAP version 13
+# Subtest: mixed clipboard paste attaches the file and leaves its text native
+ok 1 - mixed clipboard paste attaches the file and leaves its text native
+  ---
+  duration_ms: 1.304646
+  ...
+# Subtest: file-only paste remains prevented while text-only paste stays native
+ok 2 - file-only paste remains prevented while text-only paste stays native
+  ---
+  duration_ms: 0.196785
+  ...
+# Subtest: loadFromUrl emits real byte progress and one finalization
+ok 3 - loadFromUrl emits real byte progress and one finalization
+  ---
+  duration_ms: 29.557356
+  ...
+# Subtest: unknown totals never acquire a percentage
+ok 4 - unknown totals never acquire a percentage
+  ---
+  duration_ms: 2.567762
+  ...
+# Subtest: a stale completion cannot select or emit a source change
+ok 5 - a stale completion cannot select or emit a source change
+  ---
+  duration_ms: 3.015065
+  ...
+# Subtest: an explicit API selection supersedes an in-flight metadata load
+ok 6 - an explicit API selection supersedes an in-flight metadata load
+  ---
+  duration_ms: 2.433026
+  ...
+# Subtest: legacy calls without metadata retain their behavior
+ok 7 - legacy calls without metadata retain their behavior
+  ---
+  duration_ms: 2.053964
+  ...
+# Subtest: published loads forward operation metadata
+not ok 8 - published loads forward operation metadata
+  ---
+  duration_ms: 1.772838
+  location: 'file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/model_sources.test.mjs:118:1'
+  failureType: 'testCodeFailure'
+  error: 'crypto is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    sha256Hex (file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/uor_tokenizer_artifact.js:87:5)
+    loadPublished (file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/model_sources.js?test=6:593:29)
+    async TestContext.<anonymous> (file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/model_sources.test.mjs:122:20)
+    async Test.run (node:internal/test_runner/test:632:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:374:7)
+  ...
+# Subtest: local files finalize without fabricated byte stages
+not ok 9 - local files finalize without fabricated byte stages
+  ---
+  duration_ms: 1.818776
+  location: 'file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/model_sources.test.mjs:127:1'
+  failureType: 'testCodeFailure'
+  error: 'File is not defined'
+  code: 'ERR_TEST_FAILURE'
+  name: 'ReferenceError'
+  stack: |-
+    TestContext.<anonymous> (file:///home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-mixed-paste-fix/web/studio/assets/js/model_sources.test.mjs:130:18)
+    async Test.run (node:internal/test_runner/test:632:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:374:7)
+  ...
+# Subtest: bundled loads accept operation metadata and finalize
+ok 10 - bundled loads accept operation metadata and finalize
+  ---
+  duration_ms: 2.530121
+  ...
+# Subtest: model catalog loading emits the actual catalog change
+ok 11 - model catalog loading emits the actual catalog change
+  ---
+  duration_ms: 1.95278
+  ...
+# Subtest: non-HTTP API sources cannot be selected or persisted
+ok 12 - non-HTTP API sources cannot be selected or persisted
+  ---
+  duration_ms: 1.711221
+  ...
+# Subtest: a persisted active non-HTTP API source falls back to the local selection
+ok 13 - a persisted active non-HTTP API source falls back to the local selection
+  ---
+  duration_ms: 1.512612
+  ...
+# Subtest: API provider writes roll back when browser storage fails
+ok 14 - API provider writes roll back when browser storage fails
+  ---
+  duration_ms: 1.816311
+  ...
+# Subtest: native bootstrap selects an in-memory temperature-zero source without persisting its token or id
+ok 15 - native bootstrap selects an in-memory temperature-zero source without persisting its token or id
+  ---
+  duration_ms: 5.535296
+  ...
+# Subtest: native bootstrap rejects cross-origin and non-ephemeral credentials
+ok 16 - native bootstrap rejects cross-origin and non-ephemeral credentials
+  ---
+  duration_ms: 1.702974
+  ...
+# Subtest: native bootstrap works when persistent storage is unavailable
+ok 17 - native bootstrap works when persistent storage is unavailable
+  ---
+  duration_ms: 2.220911
+  ...
+# Subtest: live native token IDs and client nanoseconds produce exact measured rates
+ok 18 - live native token IDs and client nanoseconds produce exact measured rates
+  ---
+  duration_ms: 1.114734
+  ...
+# Subtest: final native usage and server timing remain exact and include the finish reason
+ok 19 - final native usage and server timing remain exact and include the finish reason
+  ---
+  duration_ms: 0.126071
+  ...
+# Subtest: empty token arrays and empty usage objects stay character-only
+ok 20 - empty token arrays and empty usage objects stay character-only
+  ---
+  duration_ms: 0.110792
+  ...
+# Subtest: partial usage and rate-only payloads never produce null or fabricated exact usage
+ok 21 - partial usage and rate-only payloads never produce null or fabricated exact usage
+  ---
+  duration_ms: 0.186285
+  ...
+# Subtest: exact live completion keeps partial final prompt and total usage explicitly unavailable
+ok 22 - exact live completion keeps partial final prompt and total usage explicitly unavailable
+  ---
+  duration_ms: 0.074582
+  ...
+# Subtest: final usage recomputes a stale client rate when no server rate exists
+ok 23 - final usage recomputes a stale client rate when no server rate exists
+  ---
+  duration_ms: 0.049534
+  ...
+# Subtest: character-only and unavailable metrics never masquerade as token usage
+ok 24 - character-only and unavailable metrics never masquerade as token usage
+  ---
+  duration_ms: 0.048092
+  ...
+# Subtest: split CRLF SSE events preserve text, final usage, native timing, and finish reason
+ok 25 - split CRLF SSE events preserve text, final usage, native timing, and finish reason
+  ---
+  duration_ms: 25.430252
+  ...
+# Subtest: a non-stream JSON fallback returns exact usage and native timing
+ok 26 - a non-stream JSON fallback returns exact usage and native timing
+  ---
+  duration_ms: 0.789034
+  ...
+# Subtest: mid-stream abort returns the partial text without raising a second error
+ok 27 - mid-stream abort returns the partial text without raising a second error
+  ---
+  duration_ms: 0.451661
+  ...
+# Subtest: OpenAI error envelopes retain status and message
+ok 28 - OpenAI error envelopes retain status and message
+  ---
+  duration_ms: 0.626303
+  ...
+# Subtest: malformed SSE data and in-band OpenAI errors fail instead of completing successfully
+ok 29 - malformed SSE data and in-band OpenAI errors fail instead of completing successfully
+  ---
+  duration_ms: 0.631493
+  ...
+# Subtest: a successful non-JSON response fails loudly instead of inventing a reply
+ok 30 - a successful non-JSON response fails loudly instead of inventing a reply
+  ---
+  duration_ms: 0.338034
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 28
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 121.380926
