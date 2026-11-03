@@ -1,5 +1,9 @@
 # REPORT: final image-registration accounting, deepseek-109
 
+> **Superseded by [deepseek-110](../deepseek-110/REPORT.md).** A final review
+> found the source item was present but its generated roadmap view had not been
+> refreshed.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
