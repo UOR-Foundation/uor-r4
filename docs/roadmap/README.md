@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 25 |
+| ready | 24 |
 | held | 11 |
 | decision | 1 |
-| done | 101 |
+| done | 102 |
 | total | 138 |
 
 ## Start here
@@ -127,10 +127,10 @@ These items are ready and open to anyone.
 | [Give Studio a conversational composer, text attachments, and native metrics](items/studio-conversational-composer.md) | ready | a lab | no | [uor-chat-openai-loopback](items/uor-chat-openai-loopback.md) | [#3608](https://github.com/UOR-Foundation/uor-r4/issues/3608) |
 | [Deliver the native-style Studio IDE harness and real connection workflows](items/studio-ide-harness.md) | ready | a lab | no | [studio-typed-shell-upgrade](items/studio-typed-shell-upgrade.md) | [#3569](https://github.com/UOR-Foundation/uor-r4/issues/3569) |
 | [Migrate the Studio to a typed lifecycle shell without changing its engine](items/studio-typed-shell-upgrade.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md) | [#3500](https://github.com/UOR-Foundation/uor-r4/issues/3500) |
-| [Serve the native uor-chat engine through a secure OpenAI-compatible loopback API](items/uor-chat-openai-loopback.md) | ready | a lab | no | none | [#3595](https://github.com/UOR-Foundation/uor-r4/issues/3595) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Publish the fixed Studio with working WASM and selectable model sources](items/m7-studio-live-model-sources.md) | done | a lab | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m7-studio-self-host-page-assets](items/m7-studio-self-host-page-assets.md) | [#3440](https://github.com/UOR-Foundation/uor-r4/issues/3440) |
 | [Verify the Studio's offline claim, retire the demo CDNs, bundle tokenizer](items/m7-studio-self-host-page-assets.md) | done | anyone | no | none | [#3075](https://github.com/UOR-Foundation/uor-r4/issues/3075) |
+| [Serve the native uor-chat engine through a secure OpenAI-compatible loopback API](items/uor-chat-openai-loopback.md) | done | a lab | no | none | [#3595](https://github.com/UOR-Foundation/uor-r4/issues/3595) |
 
 ## M8
 
