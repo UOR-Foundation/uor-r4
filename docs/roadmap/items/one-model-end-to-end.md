@@ -62,9 +62,10 @@ replace the served-training comparison above. Full transcripts and pins:
   exported claude-262's served step-256 checkpoints snapped and served them in
   integers. Their first tokens differ from the model's own float first tokens
   on 112 and 137 of DEV's 310 prompts, against I-3's bar of 8. That is down
-  from claude-261's 295–305 before the repair. The turn memory is not
-  involved: float first tokens with and without memory differ on 3 and 0
-  prompts. The fault must be localized to one layer and repaired before the
+  from claude-261's 295–305 before the repair. The float side's turn memory
+  is not needed to explain the gap: float first tokens with and without
+  memory differ on 3 and 0 prompts. The integer memory path is unchecked.
+  The fault must be localized to one layer and repaired before the
   full-length served run, whose sheet is FIT and whose pre-run review passed.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
