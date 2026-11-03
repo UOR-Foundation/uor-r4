@@ -79,6 +79,14 @@ impl ImageDecomposition {
             &values,
         )
     }
+
+    pub fn canonical_sha256(&self) -> String {
+        canonical_sha256(&self.canonical_prompt())
+    }
+}
+
+pub fn canonical_sha256(prompt: &str) -> String {
+    hex::encode(Sha256::digest(prompt.as_bytes()))
 }
 
 fn canonical_from_values(
@@ -404,6 +412,7 @@ mod tests {
         assert_eq!((patch.horizontal_edge, patch.vertical_edge), (0, 0));
         assert_eq!(patch.q12, [304, -128, 144, 0]);
         assert_eq!(image.canonical_prompt(), ONE_CANONICAL);
+        assert_eq!(image.canonical_sha256(), "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa");
     }
 
     #[test]

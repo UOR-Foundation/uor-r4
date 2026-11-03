@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [studio-conversational-composer]
 done_class: host
-scope: [Cargo.toml, Cargo.lock, src-tauri/Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/**, web/studio/src/adapters/**, docs/products/web-client.md, docs/start/FILEMAP.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md, docs/roadmap/issues.json, PLAN.md]
+scope: [Cargo.toml, Cargo.lock, src-tauri/Cargo.lock, xtask/src/main.rs, xtask/src/roadmap_sync.rs, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/**, web/studio/src/adapters/**, docs/products/web-client.md, docs/start/FILEMAP.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md, docs/roadmap/issues.json, PLAN.md]
 ---
 
 ## Why it matters

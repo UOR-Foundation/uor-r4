@@ -261,7 +261,9 @@ impl OpenAiServing {
         let image = uor_r4_vision::decompose_rgba(width, height, rgba, grid)
             .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("image"))?;
         let mut response = json!(image);
-        response["canonical_prompt"] = json!(image.canonical_prompt());
+        let canonical = image.canonical_prompt();
+        response["canonical_prompt"] = json!(&canonical);
+        response["canonical_sha256"] = json!(uor_r4_vision::canonical_sha256(&canonical));
         response["visual_understanding"] = json!(false);
         Ok(response)
     }
@@ -416,7 +418,7 @@ impl OpenAiServing {
                         .with_param("messages"),
                 );
             }
-            let content = text_content(&input.content)?;
+            let content = text_content(&input.content, &input.role)?;
             if input.role != "assistant" && content.trim().is_empty() {
                 return Err(
                     OpenAiError::new(400, "user and system content must not be blank")
@@ -721,7 +723,7 @@ struct InputMessage {
     content: Value,
 }
 
-fn text_content(value: &Value) -> Result<String, OpenAiError> {
+fn text_content(value: &Value, role: &str) -> Result<String, OpenAiError> {
     match value {
         Value::String(text) if !text.is_empty() => Ok(text.clone()),
         Value::Array(parts) if !parts.is_empty() => {
@@ -729,6 +731,9 @@ fn text_content(value: &Value) -> Result<String, OpenAiError> {
             for part in parts {
                 let kind = part.get("type").and_then(Value::as_str).unwrap_or_default();
                 if kind == "uor_r4_image" {
+                    if role != "user" {
+                        return Err(OpenAiError::new(400, "R4 image parts are accepted only in user turns").with_param("messages"));
+                    }
                     let piece = r4_image_content(part)?;
                     if !text.is_empty() && !text.ends_with('\n') {
                         text.push('\n');
@@ -782,10 +787,10 @@ fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
         .get("uor_r4_image")
         .and_then(Value::as_object)
         .ok_or_else(|| OpenAiError::new(400, "uor_r4_image requires an object"))?;
-    if image.len() != 3 {
+    if image.len() != 4 {
         return Err(OpenAiError::new(
             400,
-            "uor_r4_image accepts only schema, source_sha256, and canonical_prompt",
+            "uor_r4_image accepts only schema, source_sha256, canonical_sha256, and canonical_prompt",
         ));
     }
     let schema = image.get("schema").and_then(Value::as_str).ok_or_else(|| {
@@ -797,9 +802,15 @@ fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
     let hash = image.get("source_sha256").and_then(Value::as_str).ok_or_else(|| {
         OpenAiError::new(400, "uor_r4_image requires a string source_sha256")
     })?;
+    let canonical_hash = image.get("canonical_sha256").and_then(Value::as_str).ok_or_else(|| {
+        OpenAiError::new(400, "uor_r4_image requires a string canonical_sha256")
+    })?;
     let canonical = image.get("canonical_prompt").and_then(Value::as_str).ok_or_else(|| {
         OpenAiError::new(400, "uor_r4_image requires a string canonical_prompt")
     })?;
+    if uor_r4_vision::canonical_sha256(canonical) != canonical_hash {
+        return Err(OpenAiError::new(400, "canonical prompt hash does not match").with_param("uor_r4_image.canonical_sha256"));
+    }
     uor_r4_vision::validate_canonical_prompt(canonical, hash)
         .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("uor_r4_image"))?;
     Ok(canonical.to_owned())

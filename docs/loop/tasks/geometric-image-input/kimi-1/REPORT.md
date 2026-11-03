@@ -16,16 +16,16 @@ Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-ima
 ## What changed
 
 - New internal `uor-r4-vision` crate: checked integer RGBA alpha composition over black, luma, rounded patch means, two chroma axes, directional edges, signed Q12 features, odd-dimension partitions, source SHA-256, and strict versioned canonical prompts. Dimensions are bounded to 256 and grids to 16. No float, matmul, learned captioner, external vision model, or semantic label exists.
-- Native `/v1/images/decompose` enforces octet-stream, authenticated loopback, explicit `X-UOR-Width`/`Height`/`Grid`, exact body length, and the same limits. Capabilities distinguish decomposition from visual understanding. `uor_r4_image` accepts only schema `uor-r4.image/1`, matching hash, and exact canonical prompt before ordinary context preflight. Ordinary native `image_url` and other unsupported families remain 501.
+- Native `/v1/images/decompose` enforces octet-stream, authenticated loopback, explicit `X-UOR-Width`/`Height`/`Grid`, exact body length, and the same limits. Capabilities distinguish decomposition from visual understanding. `uor_r4_image` accepts only schema `uor-r4.image/1`, matching source hash, matching canonical-prompt SHA-256, and exact canonical prompt before ordinary context preflight. Image parts are accepted only in user turns. Ordinary native `image_url` and other unsupported families remain 501.
 - Browser `image_input.js` supports raster paste/drop/picker through Canvas, proportional 256×256 downsampling, RGBA transport, object-URL/bitmap cleanup, and visible decode errors. The composer shows previews, names/sizes, removal, and `R4 patch input — experimental; not visual understanding`.
-- Native preparation occurs only on explicit Send inside the guarded async lifecycle. Custom providers use ordinary `image_url`; local WASM refuses images. Image bytes/previews stay in memory, only a reattach marker persists, and reload produces an explicit reattach-required placeholder and error rather than a pretend image.
+- Native preparation occurs only on explicit Send inside the guarded async lifecycle, with the abort signal passed through decomposition and between images. Aborts finish as stopped rather than errors. Custom providers use ordinary `image_url`; local WASM refuses images. Image bytes/previews stay in memory, only a reattach marker persists, and reload produces an explicit reattach-required placeholder and error rather than a pretend image.
 - `src-tauri/Cargo.lock` and the shared `Attachment` type record only the new internal dependency/data shape. The typed library remains unmounted; #3500 and #3569 remain open.
 
 ## Measurements and checks
 
 - Vision: **9/9 unit + doc tests PASS**, formatting and Clippy `-D warnings` PASS. Fixtures cover exact 1×1 bytes/hash, uniform/asymmetric/odd/horizontal/vertical/alpha values, Q12 signs, deterministic repeat, controlled pixel changes, strict canonical validation, and bounds/overflow.
-- Native: **14/14 OpenAI integration tests PASS** and **451 library/binary tests PASS, 1 ignored**. Exact decomposition, changed hashes, capabilities, strict extension errors, context overflow, and all previous routes/admission are covered.
-- Studio: **33 files / 276 Vitest tests PASS**, **33 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime page checks and desktop checks PASS with zero unexpected external requests. Custom `image_url` and native R4 content parts survive normalization; provider errors remain verbatim.
+- Native: **15/15 OpenAI integration tests PASS** and **451 library/binary tests PASS, 1 ignored**. Exact decomposition, changed hashes, canonical-tamper and non-user rejection, capabilities, strict extension errors, context overflow, CORS headers, and all previous routes/admission are covered.
+- Studio: **33 files / 278 Vitest tests PASS**, **33 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime page checks and desktop checks PASS with zero unexpected external requests. Custom `image_url` and native R4 content parts survive normalization; provider errors remain verbatim.
 - Native serving audit: **FULL PASS**, 96 symbol ranges and 239 reachable functions, zero forbidden instructions; integer multiply/divide remains within D80/D81. Updated release SHA-256 `197bd998525dcd7b0aed49a9a04f0935fae897e6d526ae280263649bdd506b76`.
 - Updated WASM: **7/7 serving audit PASS**, zero floats; 675,518 bytes, SHA-256 `3439aa1023e6b9346bc29fdc3d4b92153d40415e2fa5c7009df15b98cd91df09`. Studio worker passes against this exact bundle.
 
@@ -41,7 +41,7 @@ Used the existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f7
 
 ## Roadmap and delivery notes
 
-- The global roadmap sync dry run proposed one intended create plus unrelated updates to #3506, #3407, #3392 and the M7 checklist. Only #3619 was created, with normal labels/milestone and an adoption marker; no unrelated issue or generated mapping was edited. A maintainer-scoped sync remains necessary.
+- The global roadmap sync dry run proposed unrelated updates, so a tested `--only` scope was added to the existing Rust sync command. `roadmap sync --only geometric-image-input --apply` updated and closed only #3619 and its M7 checklist, then generated `issues.json` and the 139-item roadmap with the new row. No unrelated issue was edited.
 - Final repository gates, local policy, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external records and will be posted only after they exist.
 - Modern Web Guidance `accessibility` informed decorative preview alt text and dynamic error semantics. No Canvas-specific guide matched; existing native Canvas/fetch patterns and live error regions were retained.
 
@@ -56,7 +56,7 @@ Isolated worktrees, plan execution, test-driven development, systematic debuggin
 ## Still open
 
 - Browser Stop was not retested here. No production publish or visual-understanding/useful-chat claim is made. A future trained multimodal artifact and registered evaluation are required for image question answering.
-- #3500 and #3569 remain open. The generated roadmap issue mapping still needs a maintainer-scoped sync. Unrelated whole-crate Clippy findings remain outside this unit.
+- #3500 and #3569 remain open. The generated roadmap mapping and 139-item view are current. Unrelated whole-crate Clippy findings remain outside this unit.
 
 ## Plain summary
 

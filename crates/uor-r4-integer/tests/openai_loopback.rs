@@ -591,6 +591,7 @@ fn sse_matches_json_and_supports_all_generation_families() {
 fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
     const HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
     const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
+    const CANONICAL_HASH: &str = "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa";
     let server = LoopbackServer::spawn(config()).unwrap();
     let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
     let (status, _, body) = request_bytes(
@@ -629,6 +630,7 @@ fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
                 {"type": "uor_r4_image", "uor_r4_image": {
                     "schema": "uor-r4.image/1",
                     "source_sha256": HASH,
+                    "canonical_sha256": CANONICAL_HASH,
                     "canonical_prompt": CANONICAL
                 }}
             ]}],
@@ -654,6 +656,44 @@ fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
         .unwrap()
         .iter()
         .any(|route| route["path"] == "/v1/images/decompose"));
+    server.shutdown().unwrap();
+}
+
+#[test]
+fn canonical_tamper_and_non_user_image_parts_are_refused() {
+    const HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
+    const CANONICAL_HASH: &str = "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa";
+    const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
+    let server = LoopbackServer::spawn(config()).unwrap();
+    let tampered = CANONICAL.replace("144,0", "144,16");
+    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
+        "model": "uor-chat",
+        "messages": [{"role": "user", "content": [{"type": "uor_r4_image", "uor_r4_image": {
+            "schema": "uor-r4.image/1",
+            "source_sha256": HASH,
+            "canonical_sha256": CANONICAL_HASH,
+            "canonical_prompt": tampered
+        }}]}],
+        "max_tokens": 2
+    }));
+    assert_eq!(status, 400, "{response}");
+    assert!(response["error"]["message"].as_str().unwrap().contains("canonical prompt hash does not match"), "{response}");
+
+    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
+        "model": "uor-chat",
+        "messages": [
+            {"role": "system", "content": [{"type": "uor_r4_image", "uor_r4_image": {
+                "schema": "uor-r4.image/1",
+                "source_sha256": HASH,
+                "canonical_sha256": CANONICAL_HASH,
+                "canonical_prompt": CANONICAL
+            }}]},
+            {"role": "user", "content": "Hi"}
+        ],
+        "max_tokens": 2
+    }));
+    assert_eq!(status, 400, "{response}");
+    assert!(response["error"]["message"].as_str().unwrap().contains("user turns"), "{response}");
     server.shutdown().unwrap();
 }
 
@@ -738,6 +778,7 @@ fn image_route_and_extension_reject_bad_inputs_and_context_overflow() {
         let part = json!({"type": "uor_r4_image", "uor_r4_image": {
             "schema": schema,
             "source_sha256": hash,
+            "canonical_sha256": big["canonical_sha256"].as_str().unwrap(),
             "canonical_prompt": canonical
         }});
         let content = if expected == 413 {
@@ -1084,6 +1125,9 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
     );
     assert_eq!(status, 204, "CORS preflight needs no API credential");
     assert!(headers.contains("Access-Control-Allow-Origin: https://studio.test"));
+    for image_header in ["X-UOR-Width", "X-UOR-Height", "X-UOR-Grid"] {
+        assert!(headers.contains(image_header), "missing CORS header {image_header}");
+    }
 
     let mut oversized = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
     let header = format!(

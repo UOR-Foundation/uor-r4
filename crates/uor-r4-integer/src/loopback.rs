@@ -704,7 +704,7 @@ pub(crate) fn write_response(
 }
 
 fn cors_headers(config: &LoopbackConfig) -> String {
-    config.origin.as_ref().map(|origin| format!("Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Headers: Authorization, Content-Type, X-UOR-Studio-Token\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\n")).unwrap_or_default()
+    config.origin.as_ref().map(|origin| format!("Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Headers: Authorization, Content-Type, X-UOR-Studio-Token, X-UOR-Width, X-UOR-Height, X-UOR-Grid\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\n")).unwrap_or_default()
 }
 
 fn serve_static(

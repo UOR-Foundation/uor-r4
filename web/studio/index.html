@@ -788,7 +788,7 @@
             head.className = 'msg-head';
             var roleLabel = document.createElement('span');
             roleLabel.className = 'msg-role';
-            roleLabel.textContent = role === 'assistant' ? (app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true ? 'Native uor-chat' : (app.mode === 'api' ? 'API' : 'Local model')) : role;
+            roleLabel.textContent = role === 'assistant' ? (isNativeLoopback(app.apiConfig) ? 'Native uor-chat' : (app.mode === 'api' ? 'API' : 'Local model')) : role;
             head.appendChild(roleLabel);
             if (meta) {
                 var metaNode = document.createElement('span');
@@ -815,7 +815,7 @@
             mark.className = 'empty-mark';
             mark.textContent = '◈';
             mark.setAttribute('aria-hidden', 'true');
-            var native = app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true;
+            var native = isNativeLoopback(app.apiConfig);
             var headline = document.createElement('h2');
             headline.className = 'empty-headline';
             headline.textContent = native && ready
@@ -1114,7 +1114,7 @@
         }
 
         function updatePrivacyStatus() {
-            var native = app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true;
+            var native = isNativeLoopback(app.apiConfig);
             if (native) {
                 setChip('#privacyStatus', 'ok', 'Native loopback', 'Native uor-chat on this device: prompts and replies stay local.');
             } else if (app.mode === 'api' || (app.generating && app.activeGenerationKind === 'api')) {
@@ -1495,6 +1495,10 @@
             return true;
         }
 
+        function isNativeLoopback(config) {
+            return Boolean(config && config.id === 'native-loopback' && config.ephemeral === true);
+        }
+
         function apiMessages(conversation) {
             var messages = conversation.messages
                 .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
@@ -1516,17 +1520,18 @@
                 if (target < 0) throw new Error('An image requires a user prompt.');
                 var content = messages[target].content;
                 var parts = typeof content === 'string' ? [{ type: 'text', text: content }] : (Array.isArray(content) ? content.slice() : []);
-                var native = app.apiConfig && app.apiConfig.id === 'native-loopback';
+                var native = isNativeLoopback(app.apiConfig);
                 images.forEach(function (item) {
                     if (item.reattachRequired) throw new Error('Reattach ' + String(item.name || 'the image') + ' after reload; image bytes are not persisted.');
                     if (native) {
                         var decomposition = item.decomposition;
-                        if (!decomposition || decomposition.schema !== 'uor-r4.image/1' || !decomposition.source_sha256 || !decomposition.canonical_prompt) {
+                        if (!decomposition || decomposition.schema !== 'uor-r4.image/1' || !decomposition.source_sha256 || !decomposition.canonical_sha256 || !decomposition.canonical_prompt) {
                             throw new Error('Reattach ' + String(item.name || 'the image') + '; its native R4 decomposition is unavailable.');
                         }
                         parts.push({ type: 'uor_r4_image', uor_r4_image: {
                             schema: decomposition.schema,
                             source_sha256: decomposition.source_sha256,
+                            canonical_sha256: decomposition.canonical_sha256,
                             canonical_prompt: decomposition.canonical_prompt,
                         } });
                     } else {
@@ -1540,11 +1545,12 @@
         }
 
         async function prepareApiMessages(conversation) {
-            if (app.apiConfig && app.apiConfig.id === 'native-loopback') {
+            if (isNativeLoopback(app.apiConfig)) {
                 var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
                 for (const image of attachments.filter(function (item) { return item.kind === 'image' && !item.decomposition; })) {
+                    if (app.abortController && app.abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
                     if (image.reattachRequired || !image.rgba) throw new Error('Reattach ' + String(image.name || 'the image') + ' after reload; image bytes are not persisted.');
-                    image.decomposition = await decomposeNativeImage({ config: app.apiConfig || configFromSources(), image: image });
+                    image.decomposition = await decomposeNativeImage({ config: app.apiConfig || configFromSources(), image: image, signal: app.abortController && app.abortController.signal });
                     image.content = image.decomposition.canonical_prompt;
                     image.rgba = null;
                     document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: image }));
@@ -1559,7 +1565,7 @@
             var apiGenerationId = app.chatGenerationId;
             app.abortController = new AbortController();
             try {
-                var messages = preparedMessages || (app.apiConfig && app.apiConfig.id === 'native-loopback' ? await prepareApiMessages(conversation) : apiMessages(conversation));
+                var messages = preparedMessages || (isNativeLoopback(app.apiConfig) ? await prepareApiMessages(conversation) : apiMessages(conversation));
                 await streamChatCompletions({
                     config: app.apiConfig || configFromSources(),
                     messages: messages,
@@ -1626,7 +1632,50 @@
             }
         }
 
+        function finishApiStopped(requestId, generationId) {
+            if (!chatRequestMatches(requestId, generationId)) return false;
+            var conversation = activeConversation();
+            var text = app.assistantBuffer;
+            var nowNs = Math.round(window.performance.now() * 1000000);
+            app.apiMetrics.update({
+                elapsedNs: Math.max(0, nowNs - app.apiStartedNs),
+                firstTokenNs: app.apiFirstTokenNs,
+                finishReason: 'stopped',
+                chars: text.length,
+            });
+            var finalMetrics = app.apiMetrics.text();
+            var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
+            if (placeholder) {
+                placeholder.dataset.streaming = 'false';
+                var body = placeholder.querySelector('.msg-body');
+                if (body) body.textContent = text || '[stopped]';
+                var metaNode = placeholder.querySelector('.msg-meta');
+                if (metaNode) metaNode.textContent = finalMetrics;
+            }
+            if (conversation) {
+                conversation.messages.push({ role: 'assistant', content: text, meta: finalMetrics });
+                conversation.sourceKind = 'api';
+                touchConversation(conversation);
+            }
+            app.generating = false;
+            app.streamingBodyEl = null;
+            app.abortController = null;
+            updatePrivacyStatus();
+            updateComposerState();
+            setMetrics(finalMetrics);
+            renderConversationList();
+            scrollChat(false);
+            clearChatRequest(requestId);
+            app.chatGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'stopped', generationId: generationId } }));
+            return true;
+        }
+
         function finishApiWithError(error, requestId, generationId) {
+            if (error && error.name === 'AbortError') {
+                finishApiStopped(requestId, generationId);
+                return;
+            }
             var finished = finishGenerationWithError(error && error.message ? error.message : String(error), requestId, generationId);
             if (finished) app.abortController = null;
         }
@@ -1733,7 +1782,7 @@
                 }
                 renderConversationList();
                 scrollChat(true);
-                var preparedMessages = app.mode === 'api' && (!app.apiConfig || app.apiConfig.id !== 'native-loopback') ? apiMessages(conversation) : null;
+                var preparedMessages = app.mode === 'api' && (!app.apiConfig || !isNativeLoopback(app.apiConfig)) ? apiMessages(conversation) : null;
                 var started = app.mode === 'api' ? sendViaApi(prompt, conversation, preparedMessages) : sendViaWorker(prompt, conversation);
                 if (started === false) { rollbackStart(); return false; }
                 if (app.composerInput) app.composerInput.recordSubmitted(inputValue);
@@ -1789,7 +1838,7 @@
                 updateComposerState();
                 renderMessages();
                 setView('chat');
-                if (detail.apiConfig.id === 'native-loopback' && detail.apiConfig.ephemeral === true) {
+                if (isNativeLoopback(detail.apiConfig)) {
                     toast('Native uor-chat loopback active. Prompts stay on this device.', 'success');
                 } else {
                     toast('API mode active. Prompts now go to ' + (detail.apiConfig.baseUrl || 'the configured endpoint') + '.', 'warn');

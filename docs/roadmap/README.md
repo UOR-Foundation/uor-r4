@@ -23,8 +23,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 | ready | 23 |
 | held | 11 |
 | decision | 1 |
-| done | 103 |
-| total | 138 |
+| done | 104 |
+| total | 139 |
 
 ## Start here
 
@@ -126,6 +126,7 @@ These items are ready and open to anyone.
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Deliver the native-style Studio IDE harness and real connection workflows](items/studio-ide-harness.md) | ready | a lab | no | [studio-typed-shell-upgrade](items/studio-typed-shell-upgrade.md) | [#3569](https://github.com/UOR-Foundation/uor-r4/issues/3569) |
 | [Migrate the Studio to a typed lifecycle shell without changing its engine](items/studio-typed-shell-upgrade.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md) | [#3500](https://github.com/UOR-Foundation/uor-r4/issues/3500) |
+| [Decompose images into bounded integer R4 patches for native Studio input](items/geometric-image-input.md) | done | a lab | no | [studio-conversational-composer](items/studio-conversational-composer.md) | [#3619](https://github.com/UOR-Foundation/uor-r4/issues/3619) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Publish the fixed Studio with working WASM and selectable model sources](items/m7-studio-live-model-sources.md) | done | a lab | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m7-studio-self-host-page-assets](items/m7-studio-self-host-page-assets.md) | [#3440](https://github.com/UOR-Foundation/uor-r4/issues/3440) |
 | [Verify the Studio's offline claim, retire the demo CDNs, bundle tokenizer](items/m7-studio-self-host-page-assets.md) | done | anyone | no | none | [#3075](https://github.com/UOR-Foundation/uor-r4/issues/3075) |
@@ -255,6 +256,7 @@ flowchart LR
   n_fbs_serving_vector_kernel["fbs-serving-vector-kernel"]
   n_fbs_snap_sort["fbs-snap-sort"]
   n_float_training_module["float-training-module"]
+  n_geometric_image_input["geometric-image-input"]
   n_hamilton_gate_offline_float_sheet["hamilton-gate-offline-float-sheet"]
   n_in_space_trunk_to_text["in-space-trunk-to-text"]
   n_infra_desktop_client_tauri["infra-desktop-client-tauri"]
@@ -491,6 +493,7 @@ flowchart LR
   n_route_plus_memory --> n_turn_memory_reply
   n_spiralcore_fbs_offline_float_sheet --> n_in_space_trunk_to_text
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
+  n_studio_conversational_composer --> n_geometric_image_input
   n_studio_typed_shell_upgrade --> n_studio_ide_harness
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end

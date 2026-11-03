@@ -12,7 +12,7 @@ Accept pictures in the live Studio only through deterministic integer RGBA decom
 
 ## Files in scope
 
-- `Cargo.toml`, `Cargo.lock`, `src-tauri/Cargo.lock`, new `crates/uor-r4-vision/**`, and narrow `crates/uor-r4-integer/{Cargo.toml,src/openai.rs,src/loopback.rs,tests/openai_loopback.rs}` changes.
+- `Cargo.toml`, `Cargo.lock`, `src-tauri/Cargo.lock`, `xtask/src/{main.rs,roadmap_sync.rs}`, new `crates/uor-r4-vision/**`, and narrow `crates/uor-r4-integer/{Cargo.toml,src/openai.rs,src/loopback.rs,tests/openai_loopback.rs}` changes.
 - `web/studio/index.html`, `index.css`, `README.md`, `assets/js/**`, and focused `src/adapters/**` tests, including new `image_input.js` and its tests.
 - This task folder, `docs/roadmap/items/geometric-image-input.md`, `docs/start/FILEMAP.md`, generated roadmap data when produced by a safe sync, and narrow `docs/products/web-client.md` updates.
 
