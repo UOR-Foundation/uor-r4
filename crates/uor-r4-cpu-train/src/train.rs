@@ -1396,6 +1396,34 @@ mod tests {
             "point-off did not remove the point fallback"
         );
 
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.final_artifact)
+                .unwrap()
+                .is_some()
+        );
+        let full_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.final_artifact)
+            .unwrap()
+            .unwrap();
+        assert!(full_memory.point.is_some());
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            uor_r4_integer::stack::read_memory_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.with_memory)
+                .unwrap()
+                .is_some()
+        );
+        let point_off_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.with_memory)
+            .unwrap()
+            .unwrap();
+        assert!(point_off_memory.point.is_none());
         let stripped_model = IntegerStackModel::parse(&parts.stripped).unwrap();
         assert!(stripped_model.turn_memory().is_none());
         assert!(
