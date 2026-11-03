@@ -9,7 +9,12 @@ TEST FITNESS: FIT - fresh non-author adversarial review, round 2, of this sheet 
 
 All are fixed. Round 2's three minors are fixed in this text: a pass is read as first tokens only, R6 runs on the raw export, and the crate is named for I-0's names. No bar moved.
 
-PRE-RUN: PENDING - a fresh D67 review of `job-266.sh`, `watch-266.sh` and this sheet.
+PRE-RUN: PASS - fresh D67 review, round 3, of this sheet at `a283d74d8`, `job-266.sh` (SHA-256 `3e5f9a744860612568e752427132840186fc94e68f17901ff979723ba67186b9`) and `watch-266.sh` (SHA-256 `1f20f745a64c01be15a52572129a03b014831e8fcf973c99524a463c4077d9fc`).
+- Round 1 failed on I-0's module path, the FIT blocker above, since fixed. Round 2 found no defect but left checks unread.
+- Round 3 read the chain, the store inputs, the Bar's outcomes, the caps, the panel file names and both hashes.
+- Its one major was that `uor-pod status` run without the Vast adapter shows Runpod only. With the adapter, 0 pods run on either provider, so it is cleared.
+- Its two minors are fixed in the any-fail branch: an absent arm, and the readout the next unit needs.
+- Launch: three 1 × RTX 5090 Vast pods, session claude-266, watched with `MAXSEC=25200 BUDGET=24 STALL=90`.
 
 **What this run measures.** The object is the float model, trained as served on the unsnapped D11 contract for 8,192 steps, and its raw integer export. At 256 steps on this contract the export did not match the float model (I-3 missed on 32 and 14 of 310 against a bar of 8, [claude-265](../../loop/tasks/one-model-end-to-end/claude-265/REPORT.md)). While I-3 fails, the integer artifact is not the float model. So while any export fails I-3, every float reading here describes the float model only, and no reading is a served result or a step-4 claim. Even a pass supports only "first tokens match on DEV": I-3 does not test whole replies, which it reports beside its count.
 
@@ -59,13 +64,14 @@ Unchanged: (b) has copy key 1, (k2) `--hamming-copy-key 2`, both on part B's com
 - **R1 to R5 are graded and reported** with their numbers and per-seed verdicts, each marked "float; served parity open".
   - They compare (b) and (k2) as float models, both through the same float forward.
   - No served ranking is inferred from the float ranking. An arm's I-3 count can differ from the other's, so the served models may not order as the float ones do.
+  - A seed with an arm absent (it diverged, or ran out of memory alone on its card) has no per-seed verdict and is reported absent. It makes no export, and so no I-3 count.
 - **R6 and R7** are read on each seed-1 raw export, each labelled by that export's own I-3 result:
   - an export that fails I-3: R6 "served tok/s of a raw export that fails I-3 (n/310); not the trained model's speed as trained", R7 "integer transcript, I-3 FAIL n/310; no capability claim";
   - an export that passes I-3 while another fails: R6 "served tok/s, I-3 PASS n/310; the table is unread", R7 "integer transcript, I-3 PASS n/310; the table is unread".
 
   Whether R7 names Maya is reported only. The float scorer reads DEV and the panels, not conv-a, so no float reply exists to print beside it.
 - **The six I-3 counts** are the parity reading at full length, set beside claude-265's 32 and 14 at 256 steps.
-- **The next unit localizes the fault.** Part B's two branches hold, unchanged:
+- **The next unit localizes the fault.** Localizing needs the served-contract readout, which is with Casey ([#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6607309869)). So the next unit on this line starts only once the readout is settled; other work goes on meanwhile. Part B's two branches hold, unchanged:
   - **Integer side only:** that unit repairs the integer side at a commit it names. It re-exports every arm at every seed from the sealed snapshots, with the repaired `fbs-export` and `fbs-toks` and the laptop pin moved to that commit, and runs I-3 on each. If every one passes, it reads R6 and R7 again on the re-exports, and reads this table in full with the R1 to R5 graded here, now unmarked. The labelled R6 and R7 read here are void for the table.
   - **Float side, or not localized:** R1 to R5 are void as served results; their float label stays. The unit after the localization re-trains both arms under this sheet at the repaired forward's commit, which replaces the pin, and runs I-0 again there.
 
@@ -115,7 +121,7 @@ Re-estimated, since part B's scoring figure came from the broken forward. Each p
 
 - about 20 minutes for the two snapshots, the seal, and the pull off the pod before it goes down.
 
-That is about 3.8 to 6.1 hours a pod. At 15:05Z the cheapest verified 5090 offer was $0.975 an hour, so at $0.98–1.10 an hour that is about $11–21 in all, at most $3.30 an hour. At 15:05Z no pod was running, so this is inside 4 pods and $8 an hour; `uor-pod status` is read again at launch. The watcher's wall limit is 7 hours (`MAXSEC=25200`) and its spend limit $24. Each lease is taken for 6 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
+That is about 3.8 to 6.1 hours a pod. At 15:05Z the cheapest verified 5090 offer was $0.975 an hour, so at $0.98–1.10 an hour a pod that is about $11–21 in all, and at most $3.30 an hour for the three pods together. At 15:05Z no pod was running, so this is inside 4 pods and $8 an hour; `uor-pod status` is read again at launch. The watcher's wall limit is 7 hours (`MAXSEC=25200`) and its spend limit $24. Each lease is taken for 6 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
 
 ## Stop rule
 
