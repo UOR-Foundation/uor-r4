@@ -163,3 +163,24 @@ test('structured content survives chat normalization and custom images use image
     const result = await streamChatCompletions({ config, messages });
     assert.equal(result.ok, true);
 });
+
+test('an image-only promised native part is sent without an empty text part', async () => {
+    const nativePart = {
+        type: 'uor_r4_image',
+        schema: 'uor-r4.image-decomposition/1',
+        canonical_hex: '5234',
+        source_blake3: 'ab'.repeat(32),
+        width: 1,
+        height: 1,
+        grid: { columns: 1, rows: 1 },
+    };
+    globalThis.fetch = async (_url, init) => {
+        assert.deepEqual(JSON.parse(init.body).messages, [{ role: 'user', content: [nativePart] }]);
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const result = await streamChatCompletions({
+        config,
+        messages: [{ role: 'user', content: Promise.resolve([nativePart]) }],
+    });
+    assert.equal(result.ok, true);
+});

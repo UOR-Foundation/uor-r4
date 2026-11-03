@@ -3,13 +3,13 @@ id: geometric-image-input
 title: Decompose images into bounded integer R4 patches for native Studio input
 milestone: M7
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [studio-conversational-composer]
 done_class: host
 notebook: docs/research/notebook/m4-serving.md
-scope: [Cargo.toml, Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/assets/js/**, web/studio/src/**, web/studio/verify_studio_page_load.mjs, docs/products/web-client.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
+scope: [Cargo.toml, Cargo.lock, src-tauri/Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/**, web/studio/src/**, web/studio/verify_studio_page_load.mjs, web/studio/verify_studio_image_input.mjs, web/studio/verify_studio_worker.mjs, docs/products/web-client.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
 ---
 
 ## Why it matters
@@ -26,11 +26,9 @@ source to `main`.
 
 ## What is missing
 
-The bounded RGBA-to-R4 primitive, native decomposition route and validated
-image content-part extension are delivered. The browser Canvas input path is
-still missing. Text attachments and native OpenAI streaming are delivered,
-ordinary native `image_url` correctly returns 501, and the composer currently
-refuses binary files.
+All bounded image-input stages are delivered. Text attachments and native
+OpenAI streaming remain unchanged; ordinary native `image_url` and image
+generation/edit families still return truthful 501 responses.
 
 ## Delivered child: integer decomposition primitive
 
@@ -52,7 +50,18 @@ the native `uor_r4_image` content part. Its positioned signed Q12 R4 vectors
 enter the ordinary prompt and context preflight; the representation can
 therefore consume context or produce a truthful 413, but it is not a trained
 visual reader. Ordinary `image_url` and image generation/edit families remain
-501. The Studio Canvas and issue #3619 remain open.
+501. At that stage the Studio Canvas and issue #3619 remained open.
+
+## Delivered child: Studio Canvas input
+
+[deepseek-3](../../loop/tasks/geometric-image-input/deepseek-3/REPORT.md)
+delivered browser decode/downsample, memory-only previews, paste/drop/picker
+selection, removal and reload reattachment handling. Native Send decomposes the
+bounded image after the explicit action and sends a canonical `uor_r4_image`;
+custom providers receive an ordinary `image_url`. A real headless-Chromium run
+against native `uor-chat` produced exact `34/6/40` prompt/completion/total usage
+and displayed the required experimental label. This is input plumbing, not
+visual understanding.
 
 ## Done when
 

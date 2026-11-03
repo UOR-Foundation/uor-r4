@@ -1,0 +1,4 @@
+    Checking arrayref v0.3.9 (/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-image-studio-canvas/third_party/arrayref)
+    Checking blake3 v1.5.0
+    Checking uor-r4-vision v0.1.0 (/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-image-studio-canvas/crates/uor-r4-vision)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
