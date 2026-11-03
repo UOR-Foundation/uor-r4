@@ -1,0 +1,34 @@
+# ORDER: infra-loop-harness, deepseek-105 (repair image-item registration)
+
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
+Base: `9e0403b13e72cdc9cb840e9b62898ec33e0d614d`.
+
+## Goal
+
+Repair the fresh-context CHANGES review of PR #3622 at
+`0f92abc70bc96f4a92407f4abe4d1a477cdfa613`.
+
+The item's requirements were correct, but its implementation scope omitted
+`crates/uor-r4-integer/Cargo.toml`, one internal relative link was wrong, and the
+report did not distinguish gate execution at the implementation head from the
+later receipt commit. The PR body also needs exact final sizing.
+
+## Files in scope
+
+- `docs/roadmap/items/geometric-image-input.md`
+- `docs/loop/tasks/infra-loop-harness/deepseek-104/**`
+- `docs/loop/tasks/infra-loop-harness/deepseek-105/**`
+
+## Done when
+
+1. The item scope includes `crates/uor-r4-integer/Cargo.toml`.
+2. Every internal source link resolves.
+3. The superseded report identifies the implementation head and the later
+   receipt-only commit accurately.
+4. The active report records exact PR sizing and the final checks.
+5. Roadmap, link, report, exact-diff, local PR and full gates pass.
+6. A fresh exact-head review approves the repaired registration.
+
+## Stop and ask
+
+Do not implement image decomposition or alter its acceptance criteria.
