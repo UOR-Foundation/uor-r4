@@ -54,6 +54,14 @@ Prove finite forward parity against the current integer artifact before adding g
 
 The component trainer is complete: rank-margin learning without softmax or dense matrix multiplication, deterministic update order, checkpoint identity, admission preservation, exact-integer panel evaluation and a strict masked-corpus driver. Final promotion now requires a complete served-forward audit and retains its receipt; a public zero-step smoke passed 64 positions and 16,384 Q12 coordinates exactly. The pre-registered public pilot then ran and produced a configuration negative: no top-1/top-8 gain on either seed, with admission and exact export preserved. The follow-up step-size and same-amplitude coordinate-breadth comparisons were also negative. K4 reduced the margin objective on both seeds but produced no top-1 gain and, on seed 1, lost one admitted target and one top-8 row.
 
+A separate finite-difference surrogate now updates opening and reply memory
+weights after the exported artifact applies the complete served full path.
+One Q24 coordinate per step is written into its named table, the artifact is
+reparsed, and the candidate is accepted only on non-falling training top-1 and
+lower complete-query target distance. The finite fixture reduced distance in
+both arms with exact CPU/serving parity, but top-1 stayed unchanged. It is a
+mechanism result, not corpus training or capability evidence.
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.

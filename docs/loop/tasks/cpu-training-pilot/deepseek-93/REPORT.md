@@ -90,6 +90,8 @@ matched frozen-weight, random-move and no-memory controls.
 - Strict package Clippy with `--all-targets --no-deps -- -D warnings`: passed.
 - `cargo fmt --package uor-r4-cpu-train -- --check` and `git diff --check`:
   passed.
+- The existing planted query-mismatch test remains in the full suite and still
+  classifies the injected difference as an instrument fault.
 
 ## Skills used
 
