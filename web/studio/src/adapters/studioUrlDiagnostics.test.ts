@@ -47,4 +47,14 @@ describe('URL artifact diagnostics after source regrouping', () => {
         expect(status.textContent).toContain('Enter a model file URL.');
         expect(document.getElementById('modelsVerifyNote')!.textContent).toContain('Downloads, sizes, hashes and tokenizer bindings');
     });
+
+    it('keeps the local model file control keyboard focusable', async () => {
+        const { mountModelSources } = await import(modelSourcesModule);
+        unmount = mountModelSources(document.getElementById('modelSourceMount')!).unmount;
+        const input = document.getElementById('modelFileInput') as HTMLInputElement;
+        expect(input.className).toBe('sr-only');
+        expect(getComputedStyle(input).display).not.toBe('none');
+        input.focus();
+        expect(document.activeElement).toBe(input);
+    });
 });

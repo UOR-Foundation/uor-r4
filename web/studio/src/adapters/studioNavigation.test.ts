@@ -18,7 +18,7 @@ beforeEach(() => {
     mobileMedia = { matches: true, addEventListener: vi.fn() };
     window.matchMedia = vi.fn((query: string) => query === '(max-width: 900px)' ? mobileMedia : { matches: false, addEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
     vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(() => [new DOMRect()] as unknown as DOMRectList);
-    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button class="nav-item" id="navAgent" data-section="agent">Agent</button><button class="nav-item" id="navWorkspace" data-section="workspace">Workspace</button><button class="nav-item" id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Connections</button><button id="viewBtnEditor">Workspace</button><section id="modelView" data-view="model" aria-label="Connections"></section></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
+    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button class="nav-item" id="navAgent" data-section="agent">Agent</button><button class="nav-item" id="navWorkspace" data-section="workspace">Workspace</button><button class="nav-item" id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Connections</button><button id="viewBtnEditor">Workspace</button><section id="modelView" data-view="model" aria-label="Connections"></section></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden><button id="btnCloseSettings">Close</button></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
     vi.resetModules();
 });
 
@@ -177,5 +177,36 @@ describe('actual mobile navigation dismissal', () => {
         expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
         expect(document.activeElement?.id).toBe('btnMobileNav');
         expect(document.getElementById('navModels')!.getAttribute('aria-current')).toBe('page');
+    });
+
+    it('does not steal focus from an open modal during a live breakpoint change', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const ui = (window as unknown as { __studioUi: { openSettings(): void } }).__studioUi;
+        ui.openSettings();
+        const registration = mobileMedia.addEventListener.mock.calls.find(([name]) => name === 'change');
+        const synchronize = registration?.[1] as (() => void) | undefined;
+        mobileMedia.matches = false;
+        synchronize!();
+        mobileMedia.matches = true;
+        synchronize!();
+        expect(document.activeElement?.id).toBe('btnCloseSettings');
+        expect(document.activeElement?.id).not.toBe('navAgent');
+    });
+
+    it('synchronizes the top inspector toggle with the actual inspector state', async () => {
+        const toggle = document.createElement('button');
+        toggle.id = 'btnToggleInspectorTop';
+        toggle.setAttribute('aria-expanded', 'true');
+        document.body.appendChild(toggle);
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
+        toggle.click();
+        expect(toggle.getAttribute('aria-expanded')).toBe('true');
+        toggle.click();
+        expect(toggle.getAttribute('aria-expanded')).toBe('false');
     });
 });

@@ -140,7 +140,8 @@ describe('overlay and view-state coordination', () => {
         opener.id = 'btnSettings';
         document.body.appendChild(opener);
         opener.focus();
-        document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!.click();
+        const sessionTrigger = document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!;
+        sessionTrigger.click();
         expect(document.querySelector('.session-popover')).not.toBeNull();
         const templates = document.createElement('div');
         templates.id = 'templateMenu';
@@ -150,11 +151,92 @@ describe('overlay and view-state coordination', () => {
         expect(document.querySelector('.session-popover')).toBeNull();
         expect(templates.hidden).toBe(true);
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-        expect(document.activeElement).toBe(opener);
+        expect(document.activeElement).toBe(sessionTrigger);
         opener.focus();
         ui.openSettings();
         ui.openHelp();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         expect(document.activeElement).toBe(opener);
+    });
+
+    it('preserves return focus when reopening the same modal', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const ui = (window as unknown as { __studioUi: { openSettings(): void; openHelp(): void } }).__studioUi;
+        const opener = document.createElement('button');
+        opener.id = 'btnSettings';
+        document.body.appendChild(opener);
+        opener.focus();
+        ui.openSettings();
+        ui.openSettings();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(opener);
+        opener.focus();
+        ui.openHelp();
+        ui.openHelp();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(opener);
+    });
+
+    it('restores the session trigger and removes delete confirmation on Escape', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const trigger = document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!;
+        const deleteItem = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.session-popover-item')).find((button) => button.textContent === 'Delete')!;
+        const cancel = () => document.querySelector<HTMLButtonElement>('.modal-backdrop .ghost-btn')!;
+        trigger.click();
+        deleteItem().click();
+        expect(document.getElementById('confirmDeleteTitle')).not.toBeNull();
+        expect(document.activeElement).toBe(cancel());
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.getElementById('confirmDeleteTitle')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+        trigger.click();
+        deleteItem().click();
+        cancel().click();
+        expect(document.getElementById('confirmDeleteTitle')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('makes session and template menus exclusive and keyboard-dismissible', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        const build = document.createElement('button');
+        build.id = 'btnBuildTask';
+        document.body.appendChild(build);
+        const templates = document.createElement('div');
+        templates.id = 'templateMenu';
+        templates.hidden = true;
+        document.body.appendChild(templates);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const trigger = document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!;
+        trigger.click();
+        build.click();
+        expect(document.querySelector('.session-popover')).toBeNull();
+        expect(templates.hidden).toBe(false);
+        expect(build.getAttribute('aria-expanded')).toBe('true');
+        trigger.click();
+        expect(templates.hidden).toBe(true);
+        expect(build.getAttribute('aria-expanded')).toBe('false');
+        expect(document.querySelector('.session-popover')).not.toBeNull();
+        expect(trigger.getAttribute('aria-expanded')).toBe('true');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.querySelector('.session-popover')).toBeNull();
+        expect(document.activeElement).toBe(trigger);
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
     });
 });

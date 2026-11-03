@@ -906,7 +906,7 @@ function localFileCard() {
     input.type = 'file';
     input.accept = '.lut,.bin,application/octet-stream';
     input.id = 'modelFileInput';
-    input.className = 'visually-hidden';
+    input.className = 'sr-only';
     input.dataset.role = 'model-file';
     const label = el('label', 'btn btn-secondary btn-small', 'Choose model file');
     label.htmlFor = 'modelFileInput';

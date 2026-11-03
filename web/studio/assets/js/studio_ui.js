@@ -120,7 +120,7 @@
         if (scrim) scrim.hidden = !(expanded && mobile);
         var main = document.getElementById('mainColumn');
         if (main) main.inert = expanded && mobile;
-        if (expanded && mobile) {
+        if (expanded && mobile && !paletteOpen && !document.querySelector('.modal-backdrop:not([hidden])')) {
             var sidebar = document.getElementById('navSidebar');
             if (sidebar && !sidebar.contains(document.activeElement)) {
                 var firstDestination = sidebar.querySelector('button[data-section]');
@@ -133,7 +133,7 @@
         var wasExpanded = app.getAttribute('data-nav') === 'expanded';
         app.setAttribute('data-' + name, value);
         var expanded = value === 'expanded';
-        var map = { nav: ['btnToggleNav', 'btnNavCollapse', 'btnMobileNav'], inspector: ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4'] };
+        var map = { nav: ['btnToggleNav', 'btnNavCollapse', 'btnMobileNav'], inspector: ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4', 'btnToggleInspectorTop'] };
         (map[name] || []).forEach(function (id) { var node = document.getElementById(id); if (node) node.setAttribute('aria-expanded', expanded ? 'true' : 'false'); });
         if (persist) { var patch = {}; patch[name] = value; writeUi(patch); }
         if (name === 'nav') {
@@ -273,7 +273,16 @@
         item.appendChild(button);
     }
     var sessionPopover = null;
-    function closeSessionPopover() { if (sessionPopover) { sessionPopover.remove(); sessionPopover = null; } }
+    var sessionMenuTrigger = null;
+    function closeSessionPopover(restoreFocus) {
+        if (sessionPopover) sessionPopover.remove();
+        sessionPopover = null;
+        if (sessionMenuTrigger) {
+            sessionMenuTrigger.setAttribute('aria-expanded', 'false');
+            if (restoreFocus !== false) sessionMenuTrigger.focus();
+            sessionMenuTrigger = null;
+        }
+    }
     function openSessionMenu(trigger, item) {
         closeSessionPopover();
         var id = item.getAttribute('data-id') || item.getAttribute('data-conversation-id') || '';
@@ -394,19 +403,23 @@
         });
     }
     function openSessionMenu(trigger, rowOrItem, id, title) {
-        closeSessionPopover();
+        closeOtherModals(null, false);
+        sessionMenuTrigger = trigger;
+        trigger.setAttribute('aria-expanded', 'true');
         var sessionId = id || rowOrItem.getAttribute('data-id') || '';
         var sessionTitle = title || 'Untitled session';
         sessionPopover = document.createElement('div');
         sessionPopover.className = 'session-popover';
         sessionPopover.setAttribute('role', 'menu');
-        [['Rename', function () { renameInline(rowOrItem, sessionId, sessionTitle); }], ['Duplicate', function () { duplicateSession(sessionId); }], ['Export JSON', function () { exportSession(sessionId, sessionTitle); }], ['Delete', function () { confirmDeleteSession(sessionId); }]].forEach(function (pair) {
+        [['Rename', function () { renameInline(rowOrItem, sessionId, sessionTitle); }], ['Duplicate', function () { duplicateSession(sessionId); }], ['Export JSON', function () { exportSession(sessionId, sessionTitle); }], ['Delete', function () { confirmDeleteSession(sessionId, trigger); }]].forEach(function (pair) {
             var button = document.createElement('button');
             button.type = 'button'; button.className = 'session-popover-item'; button.setAttribute('role', 'menuitem'); button.textContent = pair[0];
             button.addEventListener('click', function () { closeSessionPopover(); pair[1](); });
             sessionPopover.appendChild(button);
         });
         document.body.appendChild(sessionPopover);
+        var firstItem = sessionPopover.querySelector('button');
+        if (firstItem) firstItem.focus();
         var rect = trigger.getBoundingClientRect();
         sessionPopover.style.top = Math.round(rect.bottom + 4) + 'px';
         sessionPopover.style.left = Math.round(Math.max(8, Math.min(rect.left, window.innerWidth - 200))) + 'px';
@@ -414,9 +427,11 @@
             document.addEventListener('click', function outside(event) { if (sessionPopover && !sessionPopover.contains(event.target)) { closeSessionPopover(); document.removeEventListener('click', outside); } });
         }, 0);
     }
-    function confirmDeleteSession(id) {
+    function confirmDeleteSession(id, trigger) {
         var dialog = document.createElement('div');
         dialog.className = 'modal-backdrop';
+        dialog.dataset.dynamic = 'true';
+        dialog.hidden = true;
         dialog.setAttribute('role', 'dialog');
         dialog.setAttribute('aria-modal', 'true');
         dialog.setAttribute('aria-labelledby', 'confirmDeleteTitle');
@@ -441,16 +456,16 @@
         box.appendChild(head); box.appendChild(body); box.appendChild(footer);
         dialog.appendChild(box);
         document.body.appendChild(dialog);
-        function close() { dialog.remove(); }
-        cancel.addEventListener('click', close);
-        dialog.addEventListener('click', function (event) { if (event.target === dialog) close(); });
+        if (trigger) trigger.focus();
+        openModal(dialog);
+        cancel.addEventListener('click', function () { closeModal(dialog); });
+        dialog.addEventListener('click', function (event) { if (event.target === dialog) closeModal(dialog); });
         del.addEventListener('click', function () {
             var fn = hook('deleteSession'); if (fn) fn(id);
-            close();
+            closeModal(dialog);
             window.setTimeout(renderSessionRows, 40);
             toast('Session deleted.', 'success');
         });
-        del.focus();
     }
     function newSessionAction() { var fn = hook('newSession'); if (fn) fn(); activateSection('agent'); window.setTimeout(renderSessionRows, 40); }
     function renderSessionEnhancements() { renderSessionRows(); updateStatus(); }
@@ -518,12 +533,14 @@
     function openTemplates(anchor) {
         var menu = document.getElementById('templateMenu');
         if (!menu) return;
-        menu.hidden = !menu.hidden;
-        if (anchor) anchor.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
-        if (!menu.hidden) {
-            var close = function (event) { if (!menu.contains(event.target) && event.target !== anchor) { menu.hidden = true; if (anchor) anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', close); } };
-            window.setTimeout(function () { document.addEventListener('click', close); }, 0);
-        }
+        if (!menu.hidden) { closeTemplateMenu(); return; }
+        closeOtherModals(null, false);
+        menu.hidden = false;
+        if (anchor) anchor.setAttribute('aria-expanded', 'true');
+        var first = menu.querySelector('button');
+        if (first) first.focus();
+        var close = function (event) { if (!menu.contains(event.target) && event.target !== anchor) { closeTemplateMenu(); document.removeEventListener('click', close); } };
+        window.setTimeout(function () { document.addEventListener('click', close); }, 0);
     }
     function activeFileLabel() { var files = window.__studioFiles; var active = files && files.activeFile ? files.activeFile() : null; return active ? active.path : 'no file open'; }
     function templatePrompt(kind) {
@@ -541,8 +558,7 @@
     function useTemplate(kind) {
         var setText = hook('setComposerText');
         if (setText) setText(templatePrompt(kind));
-        var menu = document.getElementById('templateMenu');
-        if (menu) menu.hidden = true;
+        closeTemplateMenu();
         toast('Inserted a build-task template. Fill in the <placeholders>.', 'success');
     }
 
@@ -664,17 +680,18 @@
     function openPalette() {
         var backdrop = document.getElementById('commandPalette');
         if (!backdrop || paletteOpen) return;
-        closeOtherModals(null);
-        paletteOpen = true; lastFocus = document.activeElement; backdrop.hidden = false;
+        var returnFocus = overlayReturnFocus();
+        closeOtherModals(null, false);
+        paletteOpen = true; lastFocus = returnFocus; backdrop.hidden = false;
         var input = document.getElementById('paletteInput');
         if (input) { input.value = ''; input.focus(); }
         paletteIndex = 0; buildPalette('');
     }
-    function closePalette() {
+    function closePalette(restoreFocus) {
         var backdrop = document.getElementById('commandPalette');
         if (!backdrop || !paletteOpen) return;
         paletteOpen = false; backdrop.hidden = true;
-        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+        if (restoreFocus !== false && lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
         lastFocus = null;
     }
     function filtered(query) {
@@ -732,27 +749,45 @@
     function modalFocusables(dialog) {
         return Array.prototype.slice.call(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(function (node) { return !node.disabled && node.getClientRects().length; });
     }
-    function closeOtherModals(except) {
-        closeSessionPopover();
-        var templateMenu = document.getElementById('templateMenu');
-        if (templateMenu) templateMenu.hidden = true;
-        var templateAnchor = document.getElementById('btnBuildTask');
-        if (templateAnchor) templateAnchor.setAttribute('aria-expanded', 'false');
-        $all('.modal-backdrop:not([hidden])').forEach(function (other) { if (other !== except) closeModal(other); });
+    function closeTemplateMenu(restoreFocus) {
+        var menu = document.getElementById('templateMenu');
+        var wasOpen = menu && !menu.hidden;
+        if (menu) menu.hidden = true;
+        var anchor = document.getElementById('btnBuildTask');
+        if (anchor) {
+            anchor.setAttribute('aria-expanded', 'false');
+            if (restoreFocus !== false && wasOpen) anchor.focus();
+        }
+    }
+    function closeOtherModals(except, restoreFocus) {
+        closeSessionPopover(restoreFocus);
+        closeTemplateMenu(restoreFocus);
+        $all('.modal-backdrop:not([hidden])').forEach(function (other) { if (other !== except) closeModal(other, restoreFocus); });
+    }
+    function overlayReturnFocus() {
+        if (document.querySelector('.modal-backdrop:not([hidden])')) return modalReturnFocus || document.activeElement;
+        if (paletteOpen) return lastFocus || document.activeElement;
+        if (sessionMenuTrigger) return sessionMenuTrigger;
+        var menu = document.getElementById('templateMenu');
+        if (menu && !menu.hidden) return document.getElementById('btnBuildTask') || document.activeElement;
+        return document.activeElement;
     }
     function openModal(dialog) {
-        if (!dialog) return;
-        closeOtherModals(dialog);
-        closePalette();
-        modalReturnFocus = document.activeElement;
+        if (!dialog || !dialog.hidden) return;
+        var returnFocus = overlayReturnFocus();
+        closeOtherModals(dialog, false);
+        closePalette(false);
+        modalReturnFocus = returnFocus;
         dialog.hidden = false;
-        window.setTimeout(function () { var first = modalFocusables(dialog)[0]; if (first) first.focus(); }, 20);
+        var first = modalFocusables(dialog)[0];
+        if (first) first.focus();
     }
-    function closeModal(dialog) {
+    function closeModal(dialog, restoreFocus) {
         if (!dialog) return;
         dialog.hidden = true;
-        if (modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus();
+        if (restoreFocus !== false && modalReturnFocus && modalReturnFocus.focus) modalReturnFocus.focus();
         modalReturnFocus = null;
+        if (dialog.dataset.dynamic === 'true') dialog.remove();
     }
     function trapModalTab(event, dialog) {
         var nodes = modalFocusables(dialog);
@@ -976,7 +1011,10 @@
             if (event.key === 'Tab' && openModalDialog) { trapModalTab(event, openModalDialog); return; }
             if (event.key === 'Tab' && paletteOpen) { trapModalTab(event, document.getElementById('commandPalette')); return; }
             if (event.key === 'Tab' && app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) { trapNavTab(event); return; }
+            if (event.key === 'Escape' && sessionPopover) { event.preventDefault(); event.stopPropagation(); closeSessionPopover(); return; }
             if (event.key === 'Escape') {
+                var openTemplateMenu = document.getElementById('templateMenu');
+                if (openTemplateMenu && !openTemplateMenu.hidden) { event.preventDefault(); event.stopPropagation(); closeTemplateMenu(); return; }
                 if (openModalDialog) { event.preventDefault(); event.stopPropagation(); closeModal(openModalDialog); return; }
                 if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
                 if (app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) {
