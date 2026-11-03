@@ -15,12 +15,16 @@ mod discrete_route;
 mod fbs;
 mod hamming;
 mod memory;
+mod memory_train;
 mod panel;
 mod quant_shadow;
 mod served_forward;
 mod train;
 
-pub use corpus::{validate_corpus_manifest, CpuCorpusIdentity, CpuCorpusSplit, CpuMaskedCorpus};
+pub use corpus::{
+    validate_corpus_manifest, CpuConversationSample, CpuCorpusIdentity, CpuCorpusSplit,
+    CpuMaskedCorpus,
+};
 pub use counterfactual::{
     CounterfactualBundle, CounterfactualCandidate, CounterfactualConfig, CounterfactualField,
     CounterfactualGroup, CounterfactualStep, CpuCounterfactualTrainer,
@@ -37,6 +41,12 @@ pub use discrete_route::{
 };
 pub use fbs::{
     CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError, CPU_FBS_SESSION_CHECKPOINT_SCHEMA,
+};
+pub use memory_train::{
+    add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
+    evaluate_memory_weight_samples, replace_memory_weight_table, CpuMemoryWeightTrainer,
+    MemoryWeightConfig, MemoryWeightParityReading, MemoryWeightReading, MemoryWeightSample,
+    MemoryWeightStep, MemoryWeightTable, CPU_MEMORY_WEIGHT_TRAINER_SCHEMA,
 };
 pub use panel::{
     panel_admission_gate, CpuPanelEvaluator, PanelDelta, PanelExportReading, PanelGateDecision,

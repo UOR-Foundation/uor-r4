@@ -132,6 +132,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/full-path-memory-trainer": {
+    "branch": "deepseek/full-path-memory-trainer",
+    "claimed_at": "2026-11-03T10:10:44-05:00",
+    "head": "58470eb32",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/full-path-records": {
     "branch": "deepseek/full-path-records",
     "claimed_at": "2026-11-03T09:23:45-05:00",
@@ -167,6 +174,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/memory-heldout-comparison": {
+    "branch": "deepseek/memory-heldout-comparison",
+    "claimed_at": "2026-11-03T10:40:52-05:00",
+    "head": "5e5c2590e",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/oracle-corpus-support": {
     "branch": "deepseek/oracle-corpus-support",
     "claimed_at": "2026-11-02T22:00:48-05:00",
@@ -178,6 +192,13 @@
     "branch": "deepseek/public-chat-baseline",
     "claimed_at": "2026-11-02T14:45:17-05:00",
     "head": "b44402e0c",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/served-audit-release": {
+    "branch": "deepseek/served-audit-release",
+    "claimed_at": "2026-11-03T10:27:44-05:00",
+    "head": "c1b0c4178",
     "lab": "deepseek",
     "note": ""
   },
