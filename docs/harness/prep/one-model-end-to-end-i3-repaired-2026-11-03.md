@@ -1,5 +1,9 @@
 # Prep sheet: does a model trained as served now serve as trained? I-3 at the repaired head (one-model-end-to-end, claude-263, 3 Nov 2026)
 
+TEST FITNESS: FIT - fresh non-author adversarial review (round 2) of this sheet and `serve-i3.sh`, after round 1's seven findings (round 1 was NOT FIT) were fixed. Round 2's four minor findings are fixed in this text: I-1 names #3579's nine files and how each hunk was read; the laptop tree must equal `0073cd07b` in its integer and tokenizer crates and Cargo.lock; I-5 and the score and snapshot exit codes are in the pass condition; and step 2 spells out the unpack mapping. No bar moved.
+
+PRE-RUN: PASS - fresh D67 review of `job-i3.sh`, `serve-i3.sh` and this sheet. Its one fix (E could read "files differ: 0" when both E runs failed) is in `job-i3.sh` SHA-256 `d350e94af43a8b3e71a2e593b83da2b8d295149390ce84c27497b75e38f4ed64`, the file launched. E does not run in this unit, since #3583 was not merged at claim time.
+
 ## Question
 
 claude-261 found that its served-trained checkpoints and their integer exports gave different first tokens on 295–305 of DEV's 310 prompts, against a bar of 8. claude-262 (`fac0131bc`) then repaired the main defect in the float forward, a missing `PRODUCT_EXP`. It never ran the float-against-integer check on a trained export. This unit runs that check on claude-262's own served checkpoints. No new training.
