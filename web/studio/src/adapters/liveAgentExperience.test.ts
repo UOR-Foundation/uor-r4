@@ -14,7 +14,7 @@ function pageHooks() {
     const app = {
         mode: 'wasm',
         worker: { postMessage: vi.fn() },
-        caps: null as null | { schema: string },
+        caps: null as null | { schema: string; synthetic?: boolean; engine_supported?: boolean; can_generate?: boolean },
         apiConfig: null as null | { baseUrl: string },
         activePredictionRequestId: null as string | null,
         activeGenerationId: 7 as number | null,
@@ -82,10 +82,22 @@ describe('live Agent source readiness', () => {
 
     it('enables labeled synthetic continuation for a supported non-discrete stack', () => {
         const { app, hooks } = pageHooks();
-        app.caps = { schema: 'uor-r4.lut-stack/7' };
+        app.caps = { schema: 'uor-r4.lut-stack/7', synthetic: true };
         hooks.updateComposerState();
         expect(sendButton().disabled).toBe(false);
         expect(hooks.sendFromComposer('hello')).toBe(7);
+    });
+
+    it('does not offer generation for a research-only FBS stack', () => {
+        const { app, hooks } = pageHooks();
+        app.caps = { schema: 'uor-r4.lut-stack/5', synthetic: false, engine_supported: true };
+        hooks.updateComposerState();
+        expect(sendButton().disabled).toBe(true);
+        expect(hooks.sendFromComposer('hello')).toBe(false);
+        const container = document.querySelector<HTMLElement>('#chatMessages')!;
+        hooks.renderEmptyState(container);
+        expect(container.textContent).toContain('No conversational model is configured');
+        expect(container.textContent).not.toContain('Local synthetic continuation ready');
     });
 
     it('enables API chat from an HTTP(S) config without a reachability claim', () => {
@@ -137,7 +149,7 @@ describe('live Agent source readiness', () => {
         expect(container.textContent).not.toContain('No conversational model is configured');
         container.innerHTML = '';
         app.mode = 'wasm';
-        app.caps = { schema: 'uor-r4.lut-stack/7' };
+        app.caps = { schema: 'uor-r4.lut-stack/7', synthetic: true };
         hooks.renderEmptyState(container);
         expect(container.textContent).toContain('Local synthetic continuation ready.');
         expect(container.textContent).not.toContain('No conversational model is configured');

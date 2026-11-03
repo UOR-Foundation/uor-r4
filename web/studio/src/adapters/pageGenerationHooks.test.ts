@@ -16,7 +16,7 @@ function pageHooks() {
     const app = {
         worker: { postMessage: vi.fn() },
         workerState: 'ready',
-        caps: { schema: 'uor-r4.lut-discrete-trunk/1', shape: { vocab: 17, context: 64 } },
+        caps: { schema: 'uor-r4.lut-discrete-trunk/1', shape: { vocab: 17, context: 64 }, synthetic: false },
         tokenizerArtifact: { sentinel: true },
         generationSerial: 0,
         conversations: [] as Array<{ id: string; messages: Array<Record<string, unknown>>; sourceKind: string }>,
@@ -235,7 +235,7 @@ describe('actual page prediction hooks', () => {
         const { app, hooks, conversation, setMetrics } = pageHooks();
         app.conversations = [conversation];
         app.activeConversationId = conversation.id;
-        app.caps = { schema: 'uor-r4.lut-stack/1', shape: { vocab: 17, context: 64 } };
+        app.caps = { schema: 'uor-r4.lut-stack/1', shape: { vocab: 17, context: 64 }, synthetic: true };
         app.worker.postMessage = vi.fn(() => { throw new Error('clone failed'); });
         expect(hooks.sendFromComposer('chat')).toBe(false);
         expect(conversation.messages).toHaveLength(0);

@@ -8,8 +8,8 @@ Refine the existing live Studio into a coherent, readable IDE experience. Make s
 
 ## Design and plan
 
-- [Design](../../../superpowers/specs/2026-11-02-studio-ide-experience-design.md)
-- [Implementation plan](../../../superpowers/plans/2026-11-02-studio-ide-experience.md)
+- [Design](../../../../superpowers/specs/2026-11-02-studio-ide-experience-design.md)
+- [Implementation plan](../../../../superpowers/plans/2026-11-02-studio-ide-experience.md)
 
 The owner directed the goal and told the lead to proceed. The chosen approach is to refine the live shell rather than cut over the typed library or add a framework.
 
@@ -24,7 +24,7 @@ Approximate implementation budget: 800 lines across production and focused tests
 
 ## Done when
 
-- No-source and discrete-M1 chat are disabled consistently in the button and shared send path; supported non-discrete continuation and valid HTTP(S) API configuration remain available with honest labels.
+- No-source, research-only, and discrete-M1 chat are disabled consistently in the button and shared send path; positively synthetic non-discrete continuation and valid HTTP(S) API configuration remain available with honest labels.
 - Unavailable, API-ready, and local-ready empty states are distinct and useful, with quick actions including Explore demo workspace.
 - Demo loading never discards dirty work, restores/labels demo state coherently, and does not fabricate dirty edits.
 - The existing shell has a polished IDE visual hierarchy in dark/light themes and desktop/mobile layouts. Mobile navigation closes via scrim, section selection, and Escape.

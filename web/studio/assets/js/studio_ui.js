@@ -103,7 +103,7 @@
         var sessions = document.getElementById('sessionSection');
         if (sessions) sessions.classList.remove('is-hidden');
         if (!options || !options.silent) {
-            if (window.matchMedia('(max-width: 900px)').matches) setChrome('nav', 'collapsed', false);
+            if (window.matchMedia('(max-width: 900px)').matches) setChrome('nav', 'collapsed', true);
             updateStatus();
         }
     }
@@ -894,11 +894,6 @@
             var meta = event.metaKey || event.ctrlKey;
             var target = event.target;
             var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
-            if (event.key === 'Escape' && app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) {
-                event.preventDefault();
-                setChrome('nav', 'collapsed', true);
-                return;
-            }
             if (meta && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); if (paletteOpen) closePalette(); else openPalette(); return; }
             if (meta && event.key === ',') { event.preventDefault(); openSettings(); return; }
             if (meta && ['1', '2', '3', '4'].indexOf(event.key) >= 0 && !event.shiftKey && !event.altKey) { event.preventDefault(); activateSection({ '1': 'agent', '2': 'workspace', '3': 'models', '4': 'guide' }[event.key]); return; }
@@ -915,10 +910,12 @@
             if (event.key === 'Tab' && openModalDialog) { trapModalTab(event, openModalDialog); return; }
             if (event.key === 'Escape') {
                 if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
-                var settingsDialog = document.getElementById('settingsDialog');
-                var help = document.getElementById('helpDialog');
-                if (settingsDialog && !settingsDialog.hidden) { event.preventDefault(); event.stopPropagation(); closeSettings(); return; }
-                if (help && !help.hidden) { event.preventDefault(); event.stopPropagation(); closeHelp(); }
+                if (openModalDialog) { event.preventDefault(); event.stopPropagation(); closeModal(openModalDialog); return; }
+                if (app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) {
+                    event.preventDefault();
+                    setChrome('nav', 'collapsed', true);
+                    return;
+                }
             }
         }, true);
         var navMedia = window.matchMedia('(max-width: 900px)');

@@ -1107,7 +1107,7 @@
                 if (!app.apiConfig) return false;
                 try { return Boolean(normalizeBaseUrl(app.apiConfig.baseUrl)); } catch (_error) { return false; }
             }
-            return Boolean(app.caps) && app.caps.engine_supported !== false && app.caps.can_generate !== false && !isDiscreteCapabilities(app.caps);
+            return Boolean(app.caps) && app.caps.synthetic === true && app.caps.engine_supported !== false && app.caps.can_generate !== false && !isDiscreteCapabilities(app.caps);
         }
 
         function updateComposerState() {
