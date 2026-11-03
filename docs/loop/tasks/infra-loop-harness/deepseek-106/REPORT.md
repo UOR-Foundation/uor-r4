@@ -27,7 +27,7 @@ The superseded deepseek-105 report now records the exact cumulative size and
 the runnable `cargo run -q -p xtask -- links` command. This active report uses
 repository-absolute links where the PR body needs them.
 
-The exact PR diff is 11 files: 435 insertions and no deletions.
+The exact PR diff is 12 files: 446 insertions and no deletions.
 
 ## Measurements
 
