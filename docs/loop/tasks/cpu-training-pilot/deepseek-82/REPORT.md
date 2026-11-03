@@ -35,8 +35,10 @@ preserved. Checkpoints bind the coordinate count, and the corpus driver records
 accepted-coordinate counts and a 1-64 histogram.
 
 The FIT-reviewed design fixed baseline, K1-step-1 and K4-step-1 on both public
-artifact seeds before any result in this unit was observed. No post-result
-metric or configuration switch was made.
+artifact seeds before any result in this unit was observed. No metric or
+outcome-driven configuration search followed the result. The later seed-2
+rerun corrected a preregistration deviation: the first seed-2 batch used
+trainer seed 2 instead of the registered trainer seed 1.
 
 ## Measurements
 
