@@ -113,8 +113,9 @@ mismatches.
 - `cargo fmt -p uor-r4-cpu-train --check`, `git diff --check`, evidence
   checksums, loop report validation and `xtask roadmap check` with 139 items:
   passed.
-- `uor-harness loop gates --full` and `loop pr-check --local` are recorded
-  after the report is committed.
+- `uor-harness loop gates --full`: all 11 gates passed.
+- `uor-harness loop pr-check --local`: PASS with only the existing FILEMAP
+  advisory.
 
 ## Skills used
 
