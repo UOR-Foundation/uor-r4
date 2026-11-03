@@ -24,7 +24,7 @@ The deepseek-100 report now records the raw repaired ranges:
 The deepseek-102 report points to this active record. No timing evidence, code,
 artifact, panel reading, worker recommendation or model result changed.
 
-The exact PR diff is 54 files: 5,580 insertions and 17 deletions.
+The exact PR diff is 55 files: 5,591 insertions and 17 deletions.
 
 ## Measurements
 
