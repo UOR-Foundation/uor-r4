@@ -4218,7 +4218,8 @@ fn the_copy_key_is_recorded_only_when_two() {
 }
 
 /// claude-268: mixed copy keys in the snapshot and the artifact. Uniform keys leave `copy_keys`
-/// out of both; mixed keys are held by both, and the parsed record and the session carry them;
+/// out of both; mixed keys are held by both, and the parsed record and the session carry them,
+/// while the public readers refuse them until their callers take a key per head (claude-269);
 /// the exporter, the loader and the session refuse a list that is the wrong length, names 3, is
 /// all equal, or comes with copy key 2.
 #[test]
@@ -4240,8 +4241,14 @@ fn mixed_copy_keys_are_recorded_only_when_they_differ() {
     for keys in [vec![2usize, 1], vec![1, 2]] {
         snap.hamming = Some(keyed(1, Some(keys.clone())));
         let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
-        let image = super::read_hamming_uorlut01(&bytes).expect("parse").expect("the reads");
+        let container = super::format::Container::parse(&bytes).expect("parse");
+        let image = super::hamming::hamming_image(&container).expect("sections").expect("the reads");
         assert_eq!(image.record.copy_keys.as_deref(), Some(&keys[..]));
+        // The public readers, whose callers take one key for every head, refuse it (claude-269
+        // lifts this).
+        let one_key = |e: Option<StackError>| e.is_some_and(|e| e.to_string().contains("one copy key for every head"));
+        assert!(one_key(super::read_hamming_uorlut01(&bytes).err()), "read_hamming refuses {keys:?}");
+        assert!(one_key(super::served_copy_codes_uorlut01(&bytes).err()), "served codes refuse {keys:?}");
         let _ = with_header(&bytes, |h| {
             assert_eq!(h["hamming"]["copy_keys"], serde_json::json!(keys), "keys {keys:?}");
             assert!(h["hamming"].get("copy_key").is_none(), "copy_key stays at 1");

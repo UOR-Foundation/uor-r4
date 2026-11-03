@@ -39,9 +39,27 @@ pub struct HammingImage {
 }
 
 /// The Hamming reads of a `UORLUT01` stack artifact, with every section at the length its shape
-/// and record imply, or `None` for a stack without them.
+/// and record imply, or `None` for a stack without them. It refuses mixed copy keys
+/// ([`one_copy_key`]).
 pub fn read_hamming_uorlut01(bytes: &[u8]) -> Result<Option<HammingImage>, StackError> {
-    hamming_image(&Container::parse(bytes)?)
+    let image = hamming_image(&Container::parse(bytes)?)?;
+    if let Some(image) = &image {
+        one_copy_key(&image.record)?;
+    }
+    Ok(image)
+}
+
+/// claude-268: the public readers' callers (cpu-train's served forward and `fbs-toks`) build one
+/// pair mask from `copy_key` for every copy head, so they would read a mixed record as copy key 1.
+/// Until claude-269 gives them a key per head, these readers refuse one; the session serves it.
+fn one_copy_key(record: &StackHamming) -> Result<(), StackError> {
+    match record.copy_keys {
+        None => Ok(()),
+        Some(_) => Err(StackError::Shape(
+            "the record names a copy key per head (copy_keys), and this reader takes one copy key \
+             for every head; IntegerStackModel serves it, and this reader follows in claude-269",
+        )),
+    }
 }
 
 /// The Hamming reads of a parsed container, as [`read_hamming_uorlut01`].
@@ -98,12 +116,14 @@ pub struct ServedCopyCodes {
 
 /// The [`ServedCopyCodes`] of a `UORLUT01` stack artifact, or `None` for a stack without Hamming
 /// reads. The session's view of the trunk (`fbs_image`) leaves out an artifact with a read, so
-/// this reads the writer table itself, at the length the session checks.
+/// this reads the writer table itself, at the length the session checks. It refuses mixed copy
+/// keys ([`one_copy_key`]).
 pub fn served_copy_codes_uorlut01(bytes: &[u8]) -> Result<Option<ServedCopyCodes>, StackError> {
     let artifact = Container::parse(bytes)?;
     let Some(image) = hamming_image(&artifact)? else {
         return Ok(None);
     };
+    one_copy_key(&image.record)?;
     let (vocab, width) = (artifact.shape.vocab, artifact.shape.width);
     let table = artifact.table_i16("writer.table")?;
     if table.len() != vocab * width {

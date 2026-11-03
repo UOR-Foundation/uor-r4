@@ -631,13 +631,20 @@ fn start_hamming(
         }
         return Ok(None);
     }
-    let mut reads =
-        crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?
-            .with_copy_key(config.hamming_copy_key)?;
     if let Some(keys) = &config.hamming_copy_keys {
         if config.hamming_copy_key != 1 {
             return Err(invalid("--hamming-copy-keys names every copy head's key; leave --hamming-copy-key out"));
         }
+        // One key for every head is `--hamming-copy-key`, so `config.json` and the checkpoint,
+        // which records a uniform key as `copy_key`, name it the same way.
+        if keys.windows(2).all(|w| w[0] == w[1]) {
+            return Err(invalid("--hamming-copy-keys gives the copy heads different keys; when every head takes the same key, use --hamming-copy-key"));
+        }
+    }
+    let mut reads =
+        crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?
+            .with_copy_key(config.hamming_copy_key)?;
+    if let Some(keys) = &config.hamming_copy_keys {
         reads = reads.with_copy_keys(keys)?;
     }
     if config.type_spin {
@@ -11436,6 +11443,28 @@ mod tests {
             mixed.contains("\"type_spin\": false,\n  \"hamming_copy_keys\": [\n    2,\n    1\n  ],\n  \"fix_input_table\": false,"),
             "{mixed}"
         );
+    }
+
+    /// claude-268: the trainer refuses per-head keys that name one key for every head, keys
+    /// without the read, and keys together with `--hamming-copy-key`, before it builds the read.
+    #[test]
+    fn the_trainer_refuses_copy_keys_it_would_record_two_ways() {
+        let refused = |config: LongConfig, needle: &str| {
+            let err = start_hamming(&config, &Device::Cpu).err().map(|e| e.to_string());
+            assert!(err.as_deref().is_some_and(|e| e.contains(needle)), "{needle}: {err:?}");
+        };
+        for keys in [vec![2, 2], vec![1, 1], vec![2]] {
+            let config = LongConfig { hamming_read: 4, hamming_copy_keys: Some(keys), ..config(0, None) };
+            refused(config, "when every head takes the same key");
+        }
+        let both = LongConfig {
+            hamming_read: 4,
+            hamming_copy_key: 2,
+            hamming_copy_keys: Some(vec![2, 1]),
+            ..config(0, None)
+        };
+        refused(both, "leave --hamming-copy-key out");
+        refused(LongConfig { hamming_copy_keys: Some(vec![2, 1]), ..config(0, None) }, "--hamming-read");
     }
 
     #[test]

@@ -858,6 +858,11 @@ impl HammingReads {
             )),
             Some(tensor) => {
                 let keys: Vec<usize> = tensor.to_vec1::<u32>()?.into_iter().map(|k| k as usize).collect();
+                if keys.windows(2).all(|w| w[0] == w[1]) {
+                    return Err(invalid(
+                        "the saved Hamming read records per-head copy keys that are all the same; one key is saved as copy_key",
+                    ));
+                }
                 Ok(Some(reads.with_copy_keys(&keys)?))
             }
         }
@@ -1606,6 +1611,13 @@ mod tests {
             let loaded = HammingReads::load(&dir, &Device::Cpu)?.expect("saved reads");
             assert_eq!(loaded.copy_keys(), keys.to_vec());
         }
+        // A saved list that names one key for every head is refused: that key is `copy_key`.
+        let dir = root.join("mixed-12");
+        let mut tensors = candle_core::safetensors::load(dir.join(FILE), &Device::Cpu)?;
+        tensors.insert("copy_keys".to_owned(), Tensor::new(&[2u32, 2], &Device::Cpu)?);
+        candle_core::safetensors::save(&tensors, dir.join(FILE))?;
+        let same = HammingReads::load(&dir, &Device::Cpu).err().map(|e| e.to_string());
+        assert!(same.is_some_and(|e| e.contains("all the same")), "an all-equal list is refused");
         std::fs::remove_dir_all(&root)?;
         Ok(())
     }

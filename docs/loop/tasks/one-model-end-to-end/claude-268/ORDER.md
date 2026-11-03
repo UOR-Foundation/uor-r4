@@ -52,7 +52,7 @@ The loop guard reads an ORDER's scope from the item file on `main`, as claude-26
 
 **My decision (top session, reversible).** This unit lands the float and integer sides, which are in scope. It also widens the item's scope by those four files. The `fbs-toks --copy-codes` refusal and cpu-train's per-head change become claude-269, the next unit, before any GPU run.
 
-**Why the gap is safe.** Only a training run with `--hamming-copy-keys` writes a mixed artifact, and that run waits for its own sheet after claude-269. Until then no mixed artifact exists for `fbs-toks` or cpu-train to misread.
+**The gap fails closed (corrected after the first review).** The first draft said the gap was safe because no mixed artifact exists yet. The fresh review refuted that. `StackHamming` now declares `copy_keys`, so a header carrying it no longer fails `deny_unknown_fields`, and cpu-train, which builds one pair mask from `copy_key`, would read a mixed record as copy key 1. So the two public integer readers, `read_hamming_uorlut01` and `served_copy_codes_uorlut01`, refuse a record with `copy_keys` ("this reader takes one copy key for every head"). They are in this unit's scope (`stack/hamming.rs`), and they are the only ways cpu-train and `fbs-toks` reach the record. The session, `IntegerStackModel`, still serves mixed keys through the crate's own path. claude-269 lifts the refusal when it gives those callers a key per head.
 
 **Tests.** Test (a)'s cpu-train half and test (d)'s cpu-train clause move to claude-269. This unit still runs the cpu-train suite, to show the integer change leaves it green.
 
