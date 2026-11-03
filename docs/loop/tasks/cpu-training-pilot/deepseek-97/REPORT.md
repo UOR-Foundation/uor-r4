@@ -133,6 +133,16 @@ ranking.
 - Both registered runs exited 0, were sealed by the driver, and had 16 reported
   Rayon threads. One known duplicate `uor-r4-integer` Cargo artifact collision
   occurred on the first build attempt and the immediate locked retry passed.
+- `uor-harness loop gates --full`: **11/11 GREEN**.
+- `uor-harness loop report --check --order …/deepseek-97/ORDER.md`: **PASS**.
+- `uor-harness check --only prep`: **0 errors** (21 pre-existing warnings).
+- `uor-harness loop pr-check --local`: **PASS**, with advisory D76 warnings for
+  the claims-file scope, the repaired ORDER metadata line and pre-existing
+  FILEMAP gaps.
+- `xtask roadmap check`: **137 items OK**. `xtask docs-catalog --check`: **1,175
+  records, 0 paths not found**. A changed-source link scan found no broken link
+  in this unit after the REPORT sheet path was corrected.
+- Evidence `SHA256SUMS`: all 12 tracked evidence files passed.
 
 ## Skills used
 
