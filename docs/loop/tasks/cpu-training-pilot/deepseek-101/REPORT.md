@@ -1,5 +1,10 @@
 # REPORT: worker-budget evidence repair, deepseek-101
 
+> **Superseded by [deepseek-102](../deepseek-102/REPORT.md).** A second fresh
+> review accepted the timing implementation and test but found two retained
+> record errors: the comparison command included a worker-specific audit path,
+> and this report's audit-time range covered only forward-order runs.
+
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Base:
@@ -58,8 +63,9 @@ attempts, evaluation stride 2, a 1,024-row panel cap and checkpoint interval 16.
 | 16 | 4.640 s | 4.630 s | 13.372x / 13.446x |
 | 32 | 3.534 s | 3.522 s | 17.557x / 17.676x |
 
-The two runs average 17.62x at 32 workers. The training stage stayed at
-283-288 ms, audit computation at 34.9-35.3 ms, and publication/reload at
+The two runs average 17.62x at 32 workers. Across all eight single-artifact
+runs, the training stage stayed at 283-288 ms, audit computation at
+34.7-35.6 ms, and publication/reload at
 7.0-16.6 ms. The two exact panels dominate wall time.
 
 Every run produced final artifact

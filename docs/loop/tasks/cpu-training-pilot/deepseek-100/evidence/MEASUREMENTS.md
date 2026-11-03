@@ -63,7 +63,7 @@ The state comparison is reproducible with the retained reports:
 for workers in 1 8 16 32; do
   jq -cS '{panel_baseline,panel_final,accepted:.run.accepted_updates,
     artifact:.final_artifact.sha256,checkpoint:.final_checkpoint.sha256,
-    audit:.served_forward_audit}' "w${workers}.json"
+    audit:(.served_forward_audit | del(.path))}' "w${workers}.json"
 done | sort -u | wc -l
 ```
 
