@@ -53,7 +53,7 @@ All at code head `6b8add630` (the commits after it change only docs):
   - `cargo test -p uor-r4-integer --features serving-wasm`: the library 452 passed, 0 failed, 1 ignored, and the `fbs-toks` bin 7 passed. The eight targets in What did not work, item 2, fail; every other target passes.
   - `cargo fmt -p uor-r4-cpu-train -p uor-r4-integer --check`: clean.
 - **Negative gate** for (a): with cpu-train's per-head mask replaced by the shared `record.copy_key == 2`, `mixed_copy_key_heads_match_serving_at_both_hooks` and `mixed_copy_keys_audit_matches_serving_exactly` both fail, while the two key-2 parity tests and the two-facts test pass. Restored byte for byte (`cmp`), rebuilt, and the five tests pass.
-- **Review:** a fresh-context review of the diff at the exact head, recorded on PR #3627 by `loop review`.
+- **Review:** a fresh-context review at `5180ce531` approved, with three docs-only findings in this REPORT (a wrong cross-reference, the loopback flake missing from Still open, and an overstated audit claim), fixed in the next commit; a second fresh-context review read that commit, recorded on PR #3627 by `loop review`.
 
 ## Skills used
 
@@ -62,9 +62,10 @@ None applied.
 ## Still open
 
 1. **The mixed pair's trained result** is unknown. It averages the two heads where both find a candidate, so it is not `k2>k1`; only the run can show which is better.
-2. **No test compares the float read with the integer serve on the same trained weights.** cpu-train's audit now can, on a mixed artifact; the training run is where it does.
+2. **No test compares the float read with the integer serve on the same trained weights.** cpu-train's audit compares its own integer copy of the serve with the session, which now holds on a mixed artifact; a float-against-integer check of a mixed pair comes with the training run's export.
 3. **The seven integration targets** that read `/Users/casey.allard/uor-r4-investigations/` fail on this laptop, outside this ORDER's scope.
-4. **The build-cache rebuild** of `uor-r4-integer` on every run (What did not work, item 2) is not explained.
+4. **`openai_loopback`'s busy test** (#3606) is a timing flake: it failed once in the full suite and passed three times alone (What did not work, item 2). It is Kimi's to make deterministic; Kimi gets a note.
+5. **The cpu-train build race** (What did not work, item 1) is not fixed: it needs a `Cargo.toml` change outside this scope. DeepSeek gets a note.
 
 ## Plain summary
 
