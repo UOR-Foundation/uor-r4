@@ -72,7 +72,7 @@ Recovery and working discipline, isolated worktrees, plan execution, test-driven
 
 ## Exact delivery head
 
-Pending this REPORT commit, fresh exact-head review, protected PR checks, and merge-queue delivery. This section is updated with those results; an open PR is not reported as merged.
+Repair commit `a5f78692e9e82c3262695a1599d4e308c087a63e` contains the recovered implementation, scoped review repairs, and generated roadmap mapping. At that head: 28 files/223 Vitest plus 12 model-source tests passed; typecheck/build/syntax passed; static and runtime page-load traps passed with zero external requests; full repository gates were 11/11 GREEN; `loop pr-check --local` passed with only the disclosed D76 scope/commit-order/FILEMAP advisories; claim wording and `git diff --check` passed. Real desktop/mobile Connections, stored-expanded reload, and palette diagnostics were exercised in the built-in browser. This REPORT commit updates only the receipt; the subsequent exact SHA is the review/PR head. Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
 
 ## Still open
 
