@@ -8,6 +8,7 @@
     var SETTINGS_KEY = 'uor.studio.settings.v1';
     var UI_KEY = 'uor.studio.ui.v2';
     var ATTACH_KEY = 'uor.studio.attachments.v1';
+    var MAX_ATTACHMENT_TOTAL_BYTES = 4 * 1024 * 1024;
     var THEME_KEY = 'uor.studio.theme';
 
     var app = document.getElementById('app');
@@ -154,7 +155,7 @@
     var MODELS_SECTIONS = [
         { key: 'local', title: 'UOR Chat — experimental', desc: 'Synthetic continuation through the existing local WASM worker; not a trained conversational model.', match: /local wasm engine/i },
         { key: 'trained', title: 'Published models', desc: 'Trained 19-table M1 trunk exports; next-token prediction only, not a chat assistant.', match: /trained m1/i },
-        { key: 'api', title: 'Custom API providers', desc: 'OpenAI-compatible endpoints. Selection does not prove reachability; prompts leave this device only when sent.', match: /openai-compatible api/i },
+        { key: 'api', title: 'Custom API providers', desc: 'Custom OpenAI-compatible endpoints send prompts to the configured provider; native loopback stays on this device.', match: /openai-compatible api/i },
         { key: 'research', title: 'Research artifacts (experimental)', desc: 'Earlier exports kept for inspection; not generation-capable in this Studio.', match: /research|experimental/i }
     ];
     function regroupModels() {
@@ -483,8 +484,12 @@
         if (!entry || !entry.content) { toast('No file content to attach.', 'info'); return; }
         var name = String(entry.name || 'attachment.txt');
         var content = String(entry.content);
-        attachments = attachments.filter(function (item) { return item.name !== name; });
-        attachments.push({ name: name, kind: entry.kind || 'text', content: content, source: entry.source || 'file', size: Number.isFinite(entry.size) ? entry.size : content.length });
+        var size = Number.isFinite(entry.size) ? entry.size : new TextEncoder().encode(content).byteLength;
+        var next = attachments.filter(function (item) { return item.name !== name; });
+        var total = next.reduce(function (sum, item) { return sum + (Number.isFinite(item.size) ? item.size : new TextEncoder().encode(String(item.content || '')).byteLength); }, size);
+        if (total > MAX_ATTACHMENT_TOTAL_BYTES) { toast('Attachments exceed the 4 MiB total limit; remove a file first.', 'error'); return; }
+        attachments = next;
+        attachments.push({ name: name, kind: entry.kind || 'text', content: content, source: entry.source || 'file', size: size });
         saveAttachments(); renderAttachments();
         toast('Attached ' + name + ' (' + Math.max(1, Math.round(String(entry.content).length / 1024)) + ' KB).', 'success');
     }
@@ -855,7 +860,7 @@
         var api = mode === 'api';
         var native = privacy === 'Native loopback' || textOf('#chatSourceBadge') === 'Native uor-chat';
         var attachmentCount = hook('getAttachments') ? hook('getAttachments')().length : 0;
-        setText('#engineStatusText', 'local WASM · ' + engine);
+        setText('#engineStatusText', native ? 'native uor-chat' : 'local WASM · ' + engine);
         var modelShort = /no model/i.test(model) ? 'none' : model.split(' · ')[0];
         if (modelShort.length > 42) modelShort = modelShort.slice(0, 41) + '…';
         setText('#modelStatusText', modelShort);
@@ -871,7 +876,7 @@
         setText('#envTokenizer', tokenizer || 'awaiting model');
         setText('#ctxEngine', engine);
         setText('#ctxTokenizer', tokenizer || 'awaiting model');
-        setText('#ctxPrivacy', api ? 'api (leaves device)' : 'local only');
+        setText('#ctxPrivacy', native ? 'native loopback' : (api ? 'api (leaves device)' : 'local only'));
         setText('#ctxStorage', storage || 'unknown');
         var sessions = sessionList();
         var active = sessions.find(function (session) { return session.id === activeSessionId(); });

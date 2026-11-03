@@ -3,7 +3,7 @@ id: studio-conversational-composer
 title: Give Studio a conversational composer, text attachments, and native metrics
 milestone: M7
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [uor-chat-openai-loopback]

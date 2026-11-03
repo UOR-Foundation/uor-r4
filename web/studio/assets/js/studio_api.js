@@ -216,7 +216,7 @@ function parseSseBlock(block) {
     try {
         return { chunk: JSON.parse(payload) };
     } catch (_error) {
-        return null;
+        return { error: failure('The API returned malformed SSE JSON.') };
     }
 }
 
@@ -256,6 +256,18 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         if (typeof onDelta === 'function') onDelta(delta, { ...meta, text });
     };
     const applyChunk = (chunk) => {
+        if (chunk && chunk.error) {
+            const detail = chunk.error;
+            const message = typeof detail === 'string' ? detail : (detail.message || detail.code || 'unknown API error');
+            const error = failure('The API returned an error event: ' + message, {
+                status: Number.isFinite(Number(detail.status)) ? Number(detail.status) : 500,
+                code: detail.code,
+                param: detail.param,
+                errorType: detail.type,
+            });
+            if (typeof onError === 'function') onError(error);
+            throw error;
+        }
         if (chunk && chunk.usage && typeof chunk.usage === 'object') usage = chunk.usage;
         if (chunk && chunk.uor && typeof chunk.uor === 'object' && !Array.isArray(chunk.uor.token_id)) uor = chunk.uor;
         const choice = chunk && chunk.choices && chunk.choices[0];
@@ -329,6 +341,10 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
                 buffer = buffer.slice(boundary.index + boundary.length);
                 const parsed = parseSseBlock(block);
                 if (parsed && parsed.done) return complete(false);
+                if (parsed && parsed.error) {
+                    if (typeof onError === 'function') onError(parsed.error);
+                    throw parsed.error;
+                }
                 if (parsed && parsed.chunk) applyChunk(parsed.chunk);
                 boundary = nextBoundary();
             }
@@ -336,6 +352,10 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         buffer += decoder.decode();
         if (buffer.trim()) {
             const parsed = parseSseBlock(buffer.trim());
+            if (parsed && parsed.error) {
+                if (typeof onError === 'function') onError(parsed.error);
+                throw parsed.error;
+            }
             if (parsed && parsed.chunk) applyChunk(parsed.chunk);
         }
         return complete(false);

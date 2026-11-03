@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 let counter = 0;
-async function fresh() {
+async function fresh(failStorage = false) {
     const values = new Map();
     const listeners = new Map();
     globalThis.localStorage = {
         getItem: (key) => values.get(key) ?? null,
-        setItem: (key, value) => values.set(key, value),
+        setItem: (key, value) => { if (failStorage) throw new Error('storage denied'); values.set(key, value); },
         removeItem: (key) => values.delete(key),
     };
     globalThis.document = {
@@ -42,4 +42,11 @@ test('native bootstrap rejects cross-origin and non-ephemeral credentials', asyn
     const { api } = await fresh();
     assert.throws(() => api.registerNativeBootstrap({ baseUrl: 'https://example.com/v1', model: 'uor-chat', token: 'secret', protocol: 'openai', temperature: 0, ephemeral: true }), /same-origin/);
     assert.throws(() => api.registerNativeBootstrap({ baseUrl: '/v1', model: 'uor-chat', token: 'secret', protocol: 'openai', temperature: 0, ephemeral: false }), /ephemeral/);
+});
+
+test('native bootstrap works when persistent storage is unavailable', async () => {
+    const { api } = await fresh(true);
+    const entry = api.registerNativeBootstrap({ baseUrl: '/v1', model: 'uor-chat', token: 'secret', protocol: 'openai', temperature: 0, ephemeral: true });
+    assert.equal(entry.ephemeral, true);
+    assert.deepEqual(api.active(), { kind: 'api', id: 'native-loopback' });
 });

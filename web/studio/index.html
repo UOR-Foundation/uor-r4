@@ -599,6 +599,7 @@
                     lastToken: typeof conversation.lastToken === 'number' ? conversation.lastToken : null,
                     sourceKind: conversation.sourceKind === 'api' ? 'api' : 'wasm',
                     promptHistory: Array.isArray(conversation.promptHistory) ? conversation.promptHistory.filter(function (prompt) { return typeof prompt === 'string'; }) : [],
+                    draft: typeof conversation.draft === 'string' ? conversation.draft : '',
                 };
             });
             var storedActive = readJson('uor.studio.activeConversation.v1', null);
@@ -629,11 +630,12 @@
                 lastToken: null,
                 sourceKind: app.mode,
                 promptHistory: [],
+                draft: '',
             };
             app.conversations.unshift(conversation);
             if (switchTo !== false) {
                 app.activeConversationId = conversation.id;
-                if (app.composerInput) app.composerInput.reset();
+                if (app.composerInput) app.composerInput.reset(conversation.draft);
                 if (app.mode === 'wasm' && app.caps && app.worker) {
                     app.worker.postMessage({ action: 'close_session', payload: { conversationId: conversation.id } });
                 }
@@ -694,7 +696,7 @@
             }
             if (!app.conversations.some(function (conversation) { return conversation.id === id; })) return false;
             app.activeConversationId = id;
-            if (app.composerInput) app.composerInput.reset();
+            if (app.composerInput) app.composerInput.reset(activeConversation().draft || '');
             persistConversations();
             renderConversationList();
             renderMessages();
@@ -785,7 +787,7 @@
             head.className = 'msg-head';
             var roleLabel = document.createElement('span');
             roleLabel.className = 'msg-role';
-            roleLabel.textContent = role === 'assistant' ? (app.mode === 'api' ? 'API' : 'Local model') : role;
+            roleLabel.textContent = role === 'assistant' ? (app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true ? 'Native uor-chat' : (app.mode === 'api' ? 'API' : 'Local model')) : role;
             head.appendChild(roleLabel);
             if (meta) {
                 var metaNode = document.createElement('span');
@@ -1527,7 +1529,7 @@
                         var nowNs = Math.round(window.performance.now() * 1000000);
                         if (app.apiFirstTokenNs === null) app.apiFirstTokenNs = Math.max(0, nowNs - app.apiStartedNs);
                         app.apiMetrics.update({
-                            uor: { completion_ids: app.apiCompletionIds },
+                            uor: app.apiCompletionIds.length ? { completion_ids: app.apiCompletionIds } : undefined,
                             elapsedNs: Math.max(0, nowNs - app.apiStartedNs),
                             firstTokenNs: app.apiFirstTokenNs,
                             chars: app.assistantBuffer.length,
@@ -1980,7 +1982,8 @@
                     picker: picker,
                     onSend: function () { sendFromComposer(); },
                     onFiles: function (files) {
-                        readTextFiles(files).then(function (result) {
+                        var retained = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
+                        readTextFiles(files, { existingAttachments: retained }).then(function (result) {
                             result.errors.forEach(function (error) { toast(error, 'error'); });
                             result.attachments.forEach(function (entry) {
                                 document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: entry }));
@@ -1995,6 +1998,12 @@
                         var conversation = activeConversation();
                         if (!conversation) return;
                         conversation.promptHistory = history;
+                        persistConversations();
+                    },
+                    onDraftChange: function (draft) {
+                        var conversation = activeConversation();
+                        if (!conversation) return;
+                        conversation.draft = draft;
                         persistConversations();
                     },
                 });

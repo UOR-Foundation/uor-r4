@@ -263,9 +263,10 @@ function setActive(next) {
     }
     if (next.kind === 'api') requireApiBaseUrl(findApi(next.id).baseUrl);
     const previous = clone(state.active);
+    const activeEntry = next.kind === 'api' ? findApi(next.id) : null;
     selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
-    if (!persist()) {
+    if (!persist() && !(activeEntry && activeEntry.ephemeral)) {
         state.active = previous;
         selectionEpoch -= 1;
         throw new Error(message.text);
@@ -686,7 +687,7 @@ const api = {
         if (!entry.baseUrl) throw new Error('An API base URL is required.');
         requireApiBaseUrl(entry.baseUrl);
         state.api.push(entry);
-        if (!persist()) {
+        if (!persist() && !entry.ephemeral) {
             state.api.pop();
             throw new Error(message.text);
         }
@@ -872,7 +873,7 @@ function renderAll(container) {
 
     const remote = el('section', 'source-group');
     remote.appendChild(el('h3', null, 'OpenAI-compatible API'));
-    remote.appendChild(el('p', 'hint', 'Optional. When an API source is active, prompts are sent to that endpoint and leave this device. Keys are stored only in this browser and are never committed.'));
+    remote.appendChild(el('p', 'hint', 'Optional. Custom API sources send prompts to their configured endpoint; native loopback stays on this device. Ordinary keys are stored only in this browser and are never committed.'));
     for (const entry of state.api) remote.appendChild(apiCard(entry));
     if (state.api.length === 0) remote.appendChild(el('p', 'empty-note', 'No API endpoints configured.'));
     remote.appendChild(button('Add API endpoint', 'add-api', { className: 'btn-primary btn-small' }));

@@ -40,6 +40,7 @@ function pageHooks() {
     };
     interface CapturedApiRequest {
         messages?: Array<{ role: string; content: string }>;
+        onDelta(text: string, meta: { uor?: { token_id?: number } }): void;
         onDone(result: { stopped?: boolean; usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; uor?: { completion_ids: number[]; elapsed_ns: number; first_token_ns: number; tokens_per_second_milli: number; stop: string }; finishReason?: string }): void;
         onError(error: Error): void;
     }
@@ -516,5 +517,19 @@ describe('actual page native API metrics', () => {
         expect(document.querySelector('#privacyStatus')!.textContent).toContain('Native loopback');
         expect(document.querySelector('#privacyStatus')!.textContent).not.toContain('leave this device');
         expect(document.querySelector('#chatSourceBadge')!.textContent).toBe('Native uor-chat');
+    });
+
+    it('keeps non-native empty-ID streams character-only', async () => {
+        const { app, hooks, conversation, apiRequests, setMetrics } = pageHooks();
+        app.mode = 'api';
+        app.apiConfig = { baseUrl: 'https://api.example.com/v1' };
+        document.body.innerHTML = '<span id="privacyStatus"></span><span id="chatSourceBadge"></span><button id="btnSend"></button><button id="btnStop"></button>';
+        await hooks.sendViaApi('prompt', conversation);
+        apiRequests[0].onDelta('x', { uor: {} });
+        apiRequests[0].onDone({ stopped: false });
+        const rendered = setMetrics.mock.calls.at(-1)?.[0] as string;
+        expect(rendered).toContain('1 chars');
+        expect(rendered).toContain('usage unavailable');
+        expect(rendered).not.toContain('0 tokens');
     });
 });

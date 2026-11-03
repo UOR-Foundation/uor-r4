@@ -25,11 +25,12 @@ export function createStreamMetrics() {
         exact: false,
     };
     let chars = null;
+    let serverRateProvided = false;
 
     function update(input = {}) {
         const usage = input.usage && typeof input.usage === 'object' ? input.usage : null;
         const uor = input.uor && typeof input.uor === 'object' ? input.uor : null;
-        if (Array.isArray(uor && uor.completion_ids)) {
+        if (Array.isArray(uor && uor.completion_ids) && uor.completion_ids.length > 0) {
             state.completionTokens = uor.completion_ids.length;
             state.exact = true;
         }
@@ -38,12 +39,13 @@ export function createStreamMetrics() {
             if (completion !== null) state.completionTokens = completion;
             state.promptTokens = finite(usage.prompt_tokens);
             state.totalTokens = finite(usage.total_tokens);
-            state.exact = true;
+            if (completion !== null || state.promptTokens !== null || state.totalTokens !== null) state.exact = true;
         }
         const serverRate = finite(uor && uor.tokens_per_second_milli);
         if (serverRate !== null) {
             state.tokensPerSecondMilli = serverRate;
             state.exact = true;
+            serverRateProvided = true;
         }
         const first = finite(uor && uor.first_token_ns) ?? finite(input.firstTokenNs);
         if (first !== null) state.firstTokenNs = first;
@@ -51,7 +53,7 @@ export function createStreamMetrics() {
         if (elapsed !== null) state.elapsedNs = elapsed;
         if (typeof input.finishReason === 'string') state.finishReason = input.finishReason;
         else if (typeof (uor && uor.stop) === 'string') state.finishReason = uor.stop;
-        if (state.tokensPerSecondMilli === null && state.completionTokens !== null && state.elapsedNs > 0) {
+        if (!serverRateProvided && state.completionTokens !== null && state.elapsedNs > 0) {
             state.tokensPerSecondMilli = Math.floor(state.completionTokens * 1000000000000 / state.elapsedNs);
         }
         if (Number.isFinite(Number(input.chars))) chars = Number(input.chars);

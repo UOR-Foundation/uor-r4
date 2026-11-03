@@ -36,8 +36,8 @@ describe('conversational composer keyboard and history', () => {
         textarea.value = 'hello';
         expect(key(textarea, 'Enter').defaultPrevented).toBe(true);
         expect(key(textarea, 'Enter', { shiftKey: true }).defaultPrevented).toBe(false);
-        expect(key(textarea, 'Enter', { isComposing: true }).defaultPrevented).toBe(true);
-        expect(key(textarea, 'Enter', { keyCode: 229 }).defaultPrevented).toBe(true);
+        expect(key(textarea, 'Enter', { isComposing: true }).defaultPrevented).toBe(false);
+        expect(key(textarea, 'Enter', { keyCode: 229 }).defaultPrevented).toBe(false);
         expect(onSend).toHaveBeenCalledTimes(1);
     });
 
@@ -75,6 +75,22 @@ describe('conversational composer keyboard and history', () => {
         expect(textarea.value).toBe('two\nsecond');
         expect(onHistoryChange).not.toHaveBeenCalled();
         controller.destroy();
+    });
+
+    it('does not swallow native caret keys with empty or exhausted history', () => {
+        const { textarea } = setup();
+        textarea.value = 'draft';
+        expect(key(textarea, 'ArrowUp').defaultPrevented).toBe(false);
+        expect(key(textarea, 'ArrowDown').defaultPrevented).toBe(false);
+    });
+
+    it('clears and restores the visible draft on reset', () => {
+        const { textarea, controller } = setup();
+        textarea.value = 'first draft';
+        controller.reset('other session');
+        expect(textarea.value).toBe('other session');
+        controller.reset('first draft');
+        expect(textarea.value).toBe('first draft');
     });
 });
 
@@ -132,6 +148,16 @@ describe('text attachment reading', () => {
         const total = await readTextFiles([new File(['1234'], 'a.txt'), new File(['5678'], 'b.txt')], { maxFileBytes: 5, maxTotalBytes: 5 });
         expect(total.attachments.map((item: { name: string }) => item.name)).toEqual(['a.txt']);
         expect(total.errors[0]).toMatch(/b.txt.*total/i);
+    });
+
+    it('counts retained attachments and permits bounded duplicate replacement', async () => {
+        const existingAttachments = [{ name: 'old.txt', size: 4 }];
+        const replaced = await readTextFiles([new File(['1234'], 'old.txt')], { existingAttachments, maxFileBytes: 5, maxTotalBytes: 5 });
+        expect(replaced.errors).toEqual([]);
+        expect(replaced.attachments).toHaveLength(1);
+        const overflow = await readTextFiles([new File(['5678'], 'new.txt')], { existingAttachments, maxFileBytes: 5, maxTotalBytes: 5 });
+        expect(overflow.attachments).toEqual([]);
+        expect(overflow.errors[0]).toMatch(/total/i);
     });
 
     it('refuses binary files and text with NUL bytes loudly', async () => {

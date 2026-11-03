@@ -39,6 +39,21 @@ test('final native usage and server timing remain exact and include the finish r
     assert.equal(metrics.text(), '3 tokens · 600.0 tok/s · TTFT 2.000 ms · 5.000 ms · 12/3/15 · stop');
 });
 
+test('empty token arrays and empty usage objects stay character-only', () => {
+    const metrics = createStreamMetrics();
+    metrics.update({ uor: { completion_ids: [] }, usage: {}, chars: 17 });
+    assert.equal(metrics.snapshot().exact, false);
+    assert.equal(metrics.text(), '17 chars · usage unavailable');
+});
+
+test('final usage recomputes a stale client rate when no server rate exists', () => {
+    const metrics = createStreamMetrics();
+    metrics.update({ uor: { completion_ids: [1] }, elapsedNs: 2000000, chars: 1 });
+    assert.equal(metrics.snapshot().tokensPerSecondMilli, 500000);
+    metrics.update({ usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 }, uor: { completion_ids: [1, 2], elapsed_ns: 10000000 }, chars: 2 });
+    assert.equal(metrics.snapshot().tokensPerSecondMilli, 200000);
+});
+
 test('character-only and unavailable metrics never masquerade as token usage', () => {
     const metrics = createStreamMetrics();
     metrics.update({ chars: 1234 });

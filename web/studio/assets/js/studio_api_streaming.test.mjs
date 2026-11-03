@@ -97,6 +97,13 @@ test('OpenAI error envelopes retain status and message', async () => {
     assert.equal(reported.status, 501);
 });
 
+test('malformed SSE data and in-band OpenAI errors fail instead of completing successfully', async () => {
+    globalThis.fetch = async () => responseFromChunks(['data: {not-json}\r\n\r\n']);
+    await assert.rejects(streamChatCompletions({ config, messages: [{ role: 'user', content: 'Hi' }] }), /malformed SSE JSON/);
+    globalThis.fetch = async () => responseFromChunks([`data: ${JSON.stringify({ error: { code: 'busy', message: 'one generation is already in flight', type: 'rate_limit_error' } })}\r\n\r\n`]);
+    await assert.rejects(streamChatCompletions({ config, messages: [{ role: 'user', content: 'Hi' }] }), /error event.*one generation is already in flight/);
+});
+
 test('a successful non-JSON response fails loudly instead of inventing a reply', async () => {
     globalThis.fetch = async () => new Response('plain text', { status: 200, headers: { 'content-type': 'text/plain' } });
     await assert.rejects(streamChatCompletions({ config, messages: [{ role: 'user', content: 'Hi' }] }), /non-JSON chat completion/);

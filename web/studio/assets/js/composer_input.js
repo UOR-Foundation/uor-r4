@@ -23,7 +23,12 @@ export async function readTextFiles(files, options = {}) {
     const maxTotalBytes = limit(options.maxTotalBytes, DEFAULT_MAX_TOTAL_BYTES);
     const attachments = [];
     const errors = [];
-    let totalBytes = 0;
+    const retained = new Map();
+    for (const entry of options.existingAttachments || []) {
+        const size = Number.isFinite(Number(entry.size)) ? Number(entry.size) : String(entry.content || '').length;
+        retained.set(String(entry.name || 'attachment.txt'), size);
+    }
+    let totalBytes = Array.from(retained.values()).reduce((sum, size) => sum + size, 0);
     for (const file of Array.from(files || [])) {
         const name = String(file && file.name || 'attachment.txt');
         const size = Number(file && file.size || 0);
@@ -35,7 +40,8 @@ export async function readTextFiles(files, options = {}) {
             errors.push(name + ' exceeds the ' + maxFileBytes + '-byte per-file limit (' + size + ' bytes).');
             continue;
         }
-        if (totalBytes + size > maxTotalBytes) {
+        const nextTotal = totalBytes - (retained.get(name) || 0) + size;
+        if (nextTotal > maxTotalBytes) {
             errors.push(name + ' exceeds the total attachment limit (' + maxTotalBytes + ' bytes).');
             continue;
         }
@@ -55,17 +61,19 @@ export async function readTextFiles(files, options = {}) {
             continue;
         }
         attachments.push({ name, kind: 'text', content, source: 'file', size });
-        totalBytes += size;
+        totalBytes = nextTotal;
+        retained.set(name, size);
     }
     return { attachments, errors };
 }
 
-export function createComposerInput({ textarea, picker, onSend, onFiles, getHistory, onHistoryChange } = {}) {
+export function createComposerInput({ textarea, picker, onSend, onFiles, getHistory, onHistoryChange, onDraftChange } = {}) {
     if (!textarea) throw new Error('A composer textarea is required.');
     const send = typeof onSend === 'function' ? onSend : () => {};
     const filesCallback = typeof onFiles === 'function' ? onFiles : () => {};
     const historyCallback = typeof getHistory === 'function' ? getHistory : () => [];
     const historyChanged = typeof onHistoryChange === 'function' ? onHistoryChange : () => {};
+    const draftChanged = typeof onDraftChange === 'function' ? onDraftChange : () => {};
     let submittedHistory = historyCallback().slice();
     let historyIndex = submittedHistory.length;
     let draft = '';
@@ -119,17 +127,17 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
 
     function keydown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
             if (event.isComposing || event.keyCode === 229) return;
+            event.preventDefault();
             send();
             historyIndex = submittedHistory.length;
             draft = '';
             return;
         }
-        if (event.key === 'ArrowUp' && (historyIndex < submittedHistory.length || firstLine())) {
+        if (event.key === 'ArrowUp' && (historyIndex > 0 || (submittedHistory.length > 0 && firstLine()))) {
             event.preventDefault();
             older();
-        } else if (event.key === 'ArrowDown' && lastLine()) {
+        } else if (event.key === 'ArrowDown' && historyIndex < submittedHistory.length && lastLine()) {
             event.preventDefault();
             newer();
         }
@@ -137,7 +145,8 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
 
     function input() {
         if (settingValue) return;
-        if (historyIndex >= submittedHistory.length) draft = textarea.value;
+        draft = textarea.value;
+        draftChanged(draft);
     }
 
     function paste(event) {
@@ -167,10 +176,11 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
 
     return {
         recordSubmitted,
-        reset() {
+        reset(nextDraft = '') {
             submittedHistory = historyCallback().slice();
             historyIndex = submittedHistory.length;
-            draft = '';
+            draft = String(nextDraft || '');
+            setValue(draft);
         },
         destroy() {
             if (destroyed) return;
