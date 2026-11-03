@@ -185,3 +185,22 @@ There are 310 paired prompts per seed. The pass bar (≤ 8) and claude-264's cou
   - A healthy run that outlasts the lease is extended, never cancelled.
   - The pod goes down only after step 6's read-back matches.
   - Work past one pod, 2.5 GPU-hours or $2.00 is a new ORDER.
+
+## Run result
+
+Recorded after the run, 3 Nov 2026. The sections above are unchanged from the FIT text.
+
+- **The pod:** `vast-58968294`, one RTX 5090, 13:45–14:31Z, about $0.43. The job ran at `C` and exited 0 with `DONE`.
+- **I-0:** the CUDA library suite gave 299 passed, 0 failed, 7 ignored. All four named tests passed.
+- **Training:** 74 s wall per seed, and the trainer's own clock read 30 s for 256 steps. Step-256 DEV lines `[top-1, nearest, openings, admitted]`: seed 1 `[46, 362, 48, 459]`, seed 2 `[61, 335, 19, 515]`.
+- **Scoring:** 705 s, 647 s and 704 s (seed 1 rescored). The float scorer decoded at 73.9–75.1 tok/s.
+- **The seal:** `claude-265.tar` SHA-256 `92203f2775993e1b31127ab3d4077453268c61adb62128161d7eba5b4a5ae4ac`, stored at `results/claude/one-model-end-to-end-i3-unsnapped-2026-11-03/` and read back OK. The pod is down.
+- **The serve (`serve-265.sh`, laptop):**
+
+  | Seed | I-6 header | I-5 | Laptop tok/s | Order mismatches | First tokens differ (bar 8) | Whole replies differ |
+  |---:|---|---|---:|---:|---:|---:|
+  | 1 | `/7`, raw gates, raw transition, no `transport_snap` | `[]` | 759.0 | 0 | 32 / 310 | 287 |
+  | 2 | the same | `[]` | 767.7 | 0 | 14 / 310 | 240 |
+
+- **R2R:** seed 1's two float scores differ on 0 of 310 first tokens and 0 whole replies.
+- **The reading, by the bar's order:** read, and decidable (R2R 0). Not a pass at either seed. **Partial**: 32 is at most 50, and 14 is at most 65. The snap was the main part of the gap. The next unit reads the remaining sites.
