@@ -33,12 +33,15 @@ This registration unit adds one roadmap item, two ORDERs, this REPORT, and the
 shared claim entry that records the branch. It does not change serving code, an
 artifact, a model, an acceptance bar, or Claude's active copy-key branch.
 
-The item's first implementation scope is the integer snapshot quantizer. That
-path runs on every `--train-as-served 1` step but does not overlap PR #3583's
-batched-scorer files.
+The initial proposed implementation scope was the integer snapshot quantizer,
+which runs on every `--train-as-served 1` step without overlapping PR #3583's
+batched-scorer files. deepseek-79 extends the final item scope to the float
+activation, export-rounding and served-loop sources that its profile can
+select.
 
-Size: 6 changed files, 339 insertions, 0 deletions at the repair head; five
-documentation records and one shared claim entry. No code or tests changed.
+Size at the record-repair head: 8 changed files, 431 insertions, 0 deletions;
+seven documentation records and one shared claim entry. No code or tests
+changed.
 
 ## Measurements
 
@@ -59,7 +62,8 @@ stage attribution or an operational-door pass.
 - `cargo run --locked -p xtask -- roadmap check`: 135 items OK.
 - `git diff --check origin/main...HEAD`: passed.
 - Host Rust/Candle probe: forward and straight-through controls passed.
-- Remote CI: 10 checks passed; 13 path-appropriate checks skipped.
+- Remote CI at pre-repair head `6e3ce8da7`: 10 checks passed; 13
+  path-appropriate checks skipped.
 - `uor-harness check`: exit 0 with no errors; repository-wide advisory warnings
   did not name the changed files.
 - Full CUDA profile and four-job rerun: `NOT_RUN` on this host.

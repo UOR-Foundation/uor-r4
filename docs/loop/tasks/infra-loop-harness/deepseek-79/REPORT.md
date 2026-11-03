@@ -15,6 +15,9 @@ Order: [ORDER.md](ORDER.md). Base: `a9d0461e2`.
 - **The first report accounting was stale.** It counted partial commits rather
   than the exact PR diff. The deepseek-78 REPORT now names the final file and
   line totals.
+- **The second review found two stale report sentences.** deepseek-80 qualifies
+  the initial scope and removes the already-completed push from this report's
+  open list.
 
 ## What changed
 
@@ -48,8 +51,7 @@ concrete findings and the repository loop records.
 
 ## Still open
 
-- Push the repaired head and rerun remote checks.
-- Obtain a fresh exact-head review.
+- Obtain a fresh exact-head review and green required checks at the final head.
 - Merge and verify the new item on fresh `main`.
 
 ## Plain summary
