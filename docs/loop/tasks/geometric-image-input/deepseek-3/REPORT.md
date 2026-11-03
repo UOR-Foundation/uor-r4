@@ -63,7 +63,7 @@ development context, while four images overflow it and return 413.
   and `git diff --check`: passed.
 - Strict Clippy on `uor-r4-vision`: passed. Integer Clippy has the 51
   pre-existing diagnostics reproduced on base and no changed-file diagnostic.
-- `uor-harness loop gates --full`: recorded below after the final head.
+- `uor-harness loop gates --full`: all 11 gates passed on the first attempt.
 
 ## Skills used
 
