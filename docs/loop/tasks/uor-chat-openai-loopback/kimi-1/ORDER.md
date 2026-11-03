@@ -12,8 +12,9 @@ Serve the existing non-discrete `IntegerStackModel` + `StackChat` path through a
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/openai.rs`, `src/loopback.rs`, `src/native_geometry.rs`, `src/stack/chat.rs`, `src/stack/tests.rs`, `src/bin/uor-chat.rs`, `tests/openai_loopback.rs`, and `README.md`.
+- `crates/uor-r4-integer/src/openai.rs`, `src/loopback.rs`, `src/serving_root.rs`, `src/stack/chat.rs`, `src/stack/tests.rs`, `src/bin/uor-chat.rs`, `tests/openai_loopback.rs`, and `README.md`.
 - This task folder, `docs/roadmap/items/uor-chat-openai-loopback.md`, generated roadmap data, `PLAN.md`, and narrowly scoped `docs/products/web-client.md` updates if the delivered behavior requires them.
+- Test-only `web/studio/verify_studio_worker.mjs`: accept the already-shipped `normalizeBaseUrl` API import so the native/WASM worker verification can run; no Studio runtime edit.
 
 ## Done when
 

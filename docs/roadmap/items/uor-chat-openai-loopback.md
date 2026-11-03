@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: []
 done_class: host
-scope: [crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/src/native_geometry.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/README.md, docs/loop/tasks/uor-chat-openai-loopback/**, docs/products/web-client.md, docs/roadmap/items/uor-chat-openai-loopback.md, docs/roadmap/issues.json, PLAN.md]
+scope: [crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/src/serving_root.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/README.md, web/studio/verify_studio_worker.mjs, docs/loop/tasks/uor-chat-openai-loopback/**, docs/products/web-client.md, docs/roadmap/items/uor-chat-openai-loopback.md, docs/roadmap/issues.json, PLAN.md]
 ---
 
 ## Why it matters
