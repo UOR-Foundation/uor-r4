@@ -44,8 +44,8 @@ pub use fbs::{
     CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError, CPU_FBS_SESSION_CHECKPOINT_SCHEMA,
 };
 pub use gain_train::{
-    read_gain, replace_final_gain, CpuServedGainTrainer, ServedGainConfig, ServedGainStep,
-    CPU_SERVED_GAIN_TRAINER_SCHEMA,
+    random_gain_control, read_gain, replace_final_gain, CpuServedGainTrainer, ServedGainConfig,
+    ServedGainMove, ServedGainStep, CPU_SERVED_GAIN_TRAINER_SCHEMA,
 };
 pub use memory_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,

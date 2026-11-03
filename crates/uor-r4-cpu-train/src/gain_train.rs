@@ -44,6 +44,14 @@ pub struct ServedGainStep {
     pub parity: Option<MemoryWeightParityReading>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ServedGainMove {
+    pub coordinate: usize,
+    pub before_code: i16,
+    pub after_code: i16,
+}
+
 #[derive(Clone)]
 pub struct CpuServedGainTrainer {
     initial_artifact: Vec<u8>,
@@ -343,8 +351,12 @@ impl CpuGainTrajectory {
                             .fold(0u64, |sum, (&query, &point)| {
                                 sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
                             });
-                    sample_top1 += u64::from(token == decision.target);
-                    sample_distance = sample_distance.saturating_add(distance);
+                    sample_top1 = sample_top1
+                        .checked_add(u64::from(token == decision.target))
+                        .ok_or_else(|| invalid("served-gain top-1 count overflows"))?;
+                    sample_distance = sample_distance
+                        .checked_add(distance)
+                        .ok_or_else(|| invalid("served-gain distance sum overflows"))?;
                     sample_decisions = sample_decisions
                         .checked_add(1)
                         .ok_or_else(|| invalid("served-gain decision count overflows"))?;
@@ -368,9 +380,9 @@ fn evaluate(artifact: &[u8], samples: &[MemoryWeightSample]) -> Result<MemoryWei
 }
 
 fn strict_improvement(after: &MemoryWeightReading, before: &MemoryWeightReading) -> bool {
-    after.top1_correct > before.top1_correct
-        || (after.top1_correct == before.top1_correct
-            && after.target_distance_sum < before.target_distance_sum)
+    after.target_distance_sum < before.target_distance_sum
+        || (after.target_distance_sum == before.target_distance_sum
+            && after.top1_correct > before.top1_correct)
 }
 
 fn validate_artifact(artifact: &[u8]) -> Result<()> {
@@ -402,6 +414,46 @@ pub fn read_gain(artifact: &[u8]) -> Result<Vec<i16>> {
 
 pub fn replace_final_gain(artifact: &[u8], gain: &[i16]) -> Result<Vec<u8>> {
     patch_gain(artifact, gain)
+}
+
+pub fn random_gain_control(
+    artifact: &[u8],
+    moves: usize,
+    seed: u64,
+) -> Result<(Vec<u8>, Vec<ServedGainMove>)> {
+    let mut gain = read_gain(artifact)?;
+    if gain.is_empty() {
+        return Err(invalid("final gain is empty"));
+    }
+    let mut state = seed.max(1);
+    let mut records = Vec::with_capacity(moves);
+    for _ in 0..moves {
+        let mut moved = None;
+        for _ in 0..gain.len().saturating_mul(2).max(1) {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let coordinate = (state as usize) % gain.len();
+            let delta = if state >> 63 == 0 { 1i16 } else { -1i16 };
+            let before = gain[coordinate];
+            let after = before.checked_add(delta);
+            if let Some(after) = after {
+                if after != before {
+                    gain[coordinate] = after;
+                    moved = Some(ServedGainMove {
+                        coordinate,
+                        before_code: before,
+                        after_code: after,
+                    });
+                    break;
+                }
+            }
+        }
+        records.push(
+            moved.ok_or_else(|| invalid("random served-gain control found no movable code"))?,
+        );
+    }
+    Ok((patch_gain(artifact, &gain)?, records))
 }
 
 fn patch_gain(artifact: &[u8], gain: &[i16]) -> Result<Vec<u8>> {
@@ -634,13 +686,12 @@ mod tests {
     #[test]
     fn random_gain_control_moves_exactly_the_requested_count() {
         let artifact = fixture();
-        let mut gain = read_gain(&artifact).unwrap();
-        let original = gain.clone();
-        for coordinate in [1usize, 7, 31] {
-            gain[coordinate] = gain[coordinate].saturating_add(1);
-        }
-        let patched = replace_final_gain(&artifact, &gain).unwrap();
-        assert_eq!(read_gain(&patched).unwrap(), gain);
+        let original = read_gain(&artifact).unwrap();
+        let (patched, moves) = random_gain_control(&artifact, 8, 1).unwrap();
+        assert_eq!(moves.len(), 8);
+        assert!(moves
+            .iter()
+            .all(|movement| movement.before_code != movement.after_code));
         assert_ne!(read_gain(&patched).unwrap(), original);
     }
 

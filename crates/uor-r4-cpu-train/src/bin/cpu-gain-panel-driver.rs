@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, read_gain, replace_final_gain, validate_corpus_manifest,
+    evaluate_memory_weight_samples, random_gain_control, read_gain, validate_corpus_manifest,
     CpuConversationSample, CpuFbsForward, CpuFbsHead, CpuMaskedCorpus, CpuMemoryWeightTrainer,
     CpuServedGainTrainer, MemoryWeightConfig, MemoryWeightSample, ServedGainConfig,
 };
@@ -123,14 +123,14 @@ fn parse_args() -> Result<Config, String> {
             return Err(format!("--expected-{name}-sha256 is required"));
         }
     }
-    if config.steps == 0
-        || config.memory_steps == 0
+    if config.steps != 8
+        || config.memory_steps != 8
         || config.key_count == 0
         || config.per_key == 0
         || !(2..=16).contains(&config.key_tokens)
         || !(1..=16).contains(&config.reply_turn)
     {
-        return Err("training and group dimensions must be positive and bounded".to_owned());
+        return Err("registered training requires eight memory and eight gain steps".to_owned());
     }
     Ok(config)
 }
@@ -351,6 +351,7 @@ fn run() -> Result<serde_json::Value, String> {
     let activity_pass = !accepted.is_empty() && random_moves.len() == accepted.len();
     let instrument_pass = parity.values().all(|reading| reading.is_exact());
     let pass = instrument_pass && activity_pass && distance_pass && top1_nonfall && ranking_pass;
+    check_stop(started, 20 * 60, "registered run")?;
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-gain-panel-run/1",
         "substrate": "cpu-development-research",
@@ -485,38 +486,6 @@ fn select_groups(examples: &[CpuConversationSample], config: &Config) -> Vec<Key
     });
     groups.truncate(config.key_count);
     groups
-}
-
-fn random_gain_control(
-    artifact: &[u8],
-    moves: usize,
-    seed: u64,
-) -> Result<(Vec<u8>, Vec<serde_json::Value>), String> {
-    let mut gain = read_gain(artifact).map_err(|error| error.to_string())?;
-    if gain.is_empty() {
-        return Err("final gain is empty".to_owned());
-    }
-    let mut state = seed.max(1);
-    let mut records = Vec::with_capacity(moves);
-    for _ in 0..moves {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        let coordinate = (state as usize) % gain.len();
-        let delta = if state >> 63 == 0 { 1i16 } else { -1i16 };
-        let before = gain[coordinate];
-        let after = before.saturating_add(delta);
-        gain[coordinate] = after;
-        records.push(serde_json::json!({
-            "coordinate": coordinate,
-            "before_code": before,
-            "after_code": after,
-        }));
-    }
-    Ok((
-        replace_final_gain(artifact, &gain).map_err(|error| error.to_string())?,
-        records,
-    ))
 }
 
 fn decision_correctness(
