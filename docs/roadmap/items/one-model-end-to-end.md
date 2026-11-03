@@ -50,6 +50,27 @@ closes the earlier full-CPU-trunk query gap in the evidence instrument; it is
 not a training, complete-reply, fresh-phrasing or GPU-qualification result.
 See [deepseek-11](../../loop/tasks/one-model-end-to-end/deepseek-11/REPORT.md).
 
+The same instrument now supports bounded greedy complete-reply generation.
+On the public M1 panel, 51 of 58 prompts reached EOS within 16 new tokens;
+three reached the token limit and four had no remaining context. None matched
+its reference reply, only 11 distinct non-empty texts appeared across 58
+prompts, and four context-limit rows were empty. Two replies repeated a 4-gram.
+Generated 4-/8-gram novelty against the generated control was 57/411 and
+195/195. This is a useful complete-reply instrument and a public-model
+readiness negative, not a fresh-phrasing or chat verdict. See
+[deepseek-12](../../loop/tasks/one-model-end-to-end/deepseek-12/REPORT.md).
+
+The complete-reply grader was then rerun on an unused-seed 218-prompt
+held-out-phrasing panel. None of its prompt templates occur in the same-seed
+generated control at K = 256 or 1,024, and both the panel and decode reproduce
+byte for byte. The public M1 model still produced only 22 distinct non-empty
+texts across 199 non-empty replies and matched no reference reply. Every
+generated 8-gram was new, while only 201 of 1,517 generated 4-grams were new.
+Teacher-forced and CPU trunk parity remained exact. This confirms the
+public-model readiness negative under a genuinely new-template draw; it is not
+semantic-correctness, fresh-reply-wording or GPU evidence. See
+[deepseek-13](../../loop/tasks/one-model-end-to-end/deepseek-13/REPORT.md).
+
 ## What is missing
 
 - **Served-surrogate training is repaired; it now passes the operational
