@@ -32,6 +32,11 @@ bridge (`SERVED_SNAPS`), so a true value must require both raw export flags.
 Runs without the flag keep their existing behaviour: the caller may choose
 either contract for comparison.
 
+Pre-claude-265 checkpoints used the same flag for the snapped contract. Their
+correct export therefore requires their matching historical source binary;
+the current exporter will refuse to reinterpret those configs under the new
+contract.
+
 ## Done when
 
 - A run config with `train_as_served: true` is refused unless both
