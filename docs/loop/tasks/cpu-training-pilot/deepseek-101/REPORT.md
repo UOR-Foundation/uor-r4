@@ -42,7 +42,7 @@ from repaired driver SHA-256
 The retained text logs are whitespace-normalized for the repository gate, and
 the state-comparison recipe is now written beside the reports.
 
-The exact PR diff is 48 files: 5,306 insertions and 17 deletions, with generated
+The exact PR diff is 49 files: 5,317 insertions and 17 deletions, with generated
 and retained evidence accounting for most of the lines.
 
 ## Measurements
