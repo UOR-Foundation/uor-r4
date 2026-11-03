@@ -14,7 +14,7 @@ use uor_r4_integer::stack::{
     StackTurnMemory, MEMORY_PAD, MEMORY_WEIGHT_EXP, STACK_FBS_MEMORY_SCHEMA,
 };
 
-use crate::fbs::CpuMemoryTrace;
+use crate::fbs::CpuServedTrace;
 use crate::memory::move_point_with_weight;
 use crate::{
     audit_served_forward, invalid, CpuFbsForward, CpuFbsHead, CpuTrainError,
@@ -429,12 +429,13 @@ impl CpuMemoryTrajectory {
                     }
                     let (
                         step,
-                        CpuMemoryTrace {
+                        CpuServedTrace {
+                            norm_before_final_gain: _,
                             norm_before_memory,
                             memory,
                         },
                     ) = forward
-                        .step_with_memory_trace(tokens[index], CpuFbsHead::Writer)
+                        .step_with_trace(tokens[index], CpuFbsHead::Writer)
                         .map_err(|error| invalid(format!("memory trajectory forward: {error}")))?;
                     decisions.push(CachedDecision {
                         target: tokens[index + 1],
@@ -546,7 +547,7 @@ impl CpuMemoryTrajectory {
     }
 }
 
-fn checked_sample_totals(
+pub(crate) fn checked_sample_totals(
     readings: impl IntoIterator<Item = (u64, u64, u64)>,
 ) -> Result<(u64, u64, u64)> {
     let mut top1_correct = 0u64;
@@ -592,7 +593,7 @@ fn validate_memory_weights(
     Ok(())
 }
 
-fn validate_samples(artifact: &[u8], samples: &[MemoryWeightSample]) -> Result<()> {
+pub(crate) fn validate_samples(artifact: &[u8], samples: &[MemoryWeightSample]) -> Result<()> {
     if samples.is_empty() {
         return Err(invalid("memory-weight training needs at least one sample"));
     }
