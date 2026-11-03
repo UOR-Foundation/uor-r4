@@ -1,6 +1,6 @@
 # REPORT: Native uor-chat OpenAI-compatible loopback service
 
-Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Base: `de21884d104391b3dfc29e569ca9c33e85f61057`; current-main integration through `45fad9191` was merged without conflicts. Implementation/report head: `f371e05d51ebec597c6128a29a741119e9040c6d`.
+Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Base: `de21884d104391b3dfc29e569ca9c33e85f61057`; current-main integration through `45fad9191` was merged without conflicts. Implementation head: `f371e05d51ebec597c6128a29a741119e9040c6d`; the final delivery head is recorded on the PR after the evidence commit.
 
 ## What did not work
 
