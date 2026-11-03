@@ -67,4 +67,4 @@ Classed instrument (no model ran).
 Each of these is decided in the unit, never waited on:
 - **The run needs a new instrument, trace or audit.** That is outside the track's bound: bring it to Casey.
 - **An arm's smoke fails in the trainer or the exporter.** If (k2) fails, the code is repaired in this unit before any long run. If (b) fails, the served form itself is broken: stop the pod and record it.
-- **The projected cost passes the caps**, or an arm projects past about an hour of training: cut its steps equally for both arms, and record why.
+- **The projected cost passes the caps**, or an arm projects past about an hour of training: cut its steps equally for both arms, and record why. (Amended at the sheet's FIT: past 90 minutes, claude-259's limit for this recipe, since its (b) and (h) took 33–52 minutes sharing a GPU.)
