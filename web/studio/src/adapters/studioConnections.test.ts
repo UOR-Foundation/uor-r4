@@ -18,6 +18,7 @@ afterEach(() => {
     document.body.innerHTML = '';
     window.localStorage.clear();
     delete (window as unknown as { __studioUi?: unknown }).__studioUi;
+    delete (Element.prototype as Partial<Element>).scrollIntoView;
 });
 
 describe('simplified Studio connections', () => {
@@ -49,5 +50,36 @@ describe('simplified Studio connections', () => {
         expect(local.contains(bundled)).toBe(true);
         bundled.click();
         expect(clicked).toHaveBeenCalledOnce();
+    });
+
+    it('opens artifact diagnostics before focusing the URL input', async () => {
+        const input = document.createElement('input');
+        input.id = 'modelUrlInput';
+        document.getElementById('urlCard')!.appendChild(input);
+        const palette = document.createElement('div');
+        palette.id = 'commandPalette';
+        palette.innerHTML = '<input id="paletteInput"><div id="paletteList"></div>';
+        document.body.appendChild(palette);
+        Element.prototype.scrollIntoView = vi.fn();
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(400);
+        const diagnostics = document.querySelector<HTMLDetailsElement>('#artifactDiagnostics')!;
+        expect(diagnostics.open).toBe(false);
+        const ui = (window as unknown as { __studioUi: { promptUrl(): boolean; openPalette(): void } }).__studioUi;
+        expect(ui.promptUrl()).toBe(true);
+        expect(diagnostics.open).toBe(true);
+        expect(document.activeElement).toBe(input);
+        diagnostics.open = false;
+        ui.openPalette();
+        const paletteInput = document.getElementById('paletteInput') as HTMLInputElement;
+        paletteInput.value = 'Load model from URL';
+        paletteInput.dispatchEvent(new Event('input', { bubbles: true }));
+        expect(paletteInput.getAttribute('aria-activedescendant')).toBe('palette-item-0');
+        expect(document.getElementById('palette-item-0')!.textContent).toContain('Load model from URL');
+        document.getElementById('palette-item-0')!.click();
+        await vi.advanceTimersByTimeAsync(20);
+        expect(diagnostics.open).toBe(true);
+        expect(document.activeElement).toBe(input);
     });
 });

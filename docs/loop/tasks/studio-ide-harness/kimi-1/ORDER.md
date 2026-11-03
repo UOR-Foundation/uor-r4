@@ -14,6 +14,7 @@ Make the existing Studio source page feel like a professional Mac desktop IDE an
 
 - `web/studio/index.html`, `web/studio/index.css`, and `web/studio/README.md`.
 - Narrow source/navigation presentation in `web/studio/assets/js/studio_ui.js` and focused actual-page tests under `web/studio/src/adapters/**`.
+- Fresh-review repair only: the moved URL input lookup in `web/studio/assets/js/model_sources.js`, with its focused actual-module test. No provider behavior or network call may change.
 - This task folder, the design, an implementation plan if needed, `docs/products/web-client.md`, and the owning roadmap item/generated issue data if the normal generator permits it.
 
 ## Done when

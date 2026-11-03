@@ -17,7 +17,8 @@ beforeEach(() => {
     window.location.hash = '';
     mobileMedia = { matches: true, addEventListener: vi.fn() };
     window.matchMedia = vi.fn((query: string) => query === '(max-width: 900px)' ? mobileMedia : { matches: false, addEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
-    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button id="navAgent" data-section="agent">Agent</button><button id="navWorkspace" data-section="workspace">Workspace</button><button id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Connections</button><button id="viewBtnEditor">Workspace</button><section id="modelView" data-view="model" aria-label="Connections"></section></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
+    vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(() => [new DOMRect()] as unknown as DOMRectList);
+    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button class="nav-item" id="navAgent" data-section="agent">Agent</button><button class="nav-item" id="navWorkspace" data-section="workspace">Workspace</button><button class="nav-item" id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Connections</button><button id="viewBtnEditor">Workspace</button><section id="modelView" data-view="model" aria-label="Connections"></section></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
     vi.resetModules();
 });
 
@@ -122,5 +123,57 @@ describe('actual mobile navigation dismissal', () => {
         synchronize!();
         expect(scrim.hidden).toBe(false);
         expect(main.inert).toBe(true);
+    });
+
+    it('keeps the wired model id on the actual Connections navigation control', async () => {
+        // @ts-expect-error Node's filesystem API is available in the Vitest runtime.
+        const { readFileSync } = await import('node:fs');
+        const html = readFileSync('index.html', 'utf8');
+        expect(html).toMatch(/id="navModels"[^>]*data-section="models"|data-section="models"[^>]*id="navModels"/);
+        expect(html).not.toContain('id="navConnections"');
+    });
+
+    it('starts closed on mobile after a stored desktop expansion', async () => {
+        window.localStorage.setItem('uor.studio.ui.v2', JSON.stringify({ nav: 'expanded' }));
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
+        expect(document.getElementById('btnMobileNav')!.getAttribute('aria-expanded')).toBe('false');
+        expect(document.getElementById('btnNavScrim')!.hidden).toBe(true);
+        expect(document.getElementById('mainColumn')!.inert).toBe(false);
+        expect(document.activeElement?.id).not.toBe('navAgent');
+    });
+
+    it('contains Tab inside the mobile drawer and restores Menu on Escape', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const menu = document.getElementById('btnMobileNav')!;
+        const first = document.getElementById('navAgent')!;
+        const last = document.getElementById('navModels')!;
+        menu.click();
+        last.focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        expect(document.activeElement?.id).toBe('navAgent');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        expect(document.activeElement?.id).toBe('navModels');
+        menu.focus();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.activeElement?.id).toBe('btnMobileNav');
+        expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
+        expect(first).not.toBe(document.activeElement);
+    });
+
+    it('closes the drawer and restores Menu on a Connections destination', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const menu = document.getElementById('btnMobileNav')!;
+        menu.click();
+        document.getElementById('navModels')!.click();
+        expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
+        expect(document.activeElement?.id).toBe('btnMobileNav');
+        expect(document.getElementById('navModels')!.getAttribute('aria-current')).toBe('page');
     });
 });

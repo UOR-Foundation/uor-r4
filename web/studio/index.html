@@ -73,7 +73,7 @@
                     <span class="nav-section-title">WORKSPACE</span>
                     <button class="nav-item" id="navAgent" type="button" data-section="agent" aria-current="page"><span class="nav-item-icon" aria-hidden="true">◈</span><span class="nav-item-text"><span class="nav-item-label">Agent <kbd class="nav-kbd">⌘1</kbd></span><span class="nav-item-desc">Chat, context and build tasks</span></span></button>
                     <button class="nav-item" id="navWorkspace" type="button" data-section="workspace"><span class="nav-item-icon" aria-hidden="true">▤</span><span class="nav-item-text"><span class="nav-item-label">Workspace <kbd class="nav-kbd">⌘2</kbd></span><span class="nav-item-desc">File tree, editor tabs, save</span></span></button>
-                    <button class="nav-item" id="navConnections" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">UOR Chat, custom providers, diagnostics</span></span></button>
+                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">UOR Chat, custom providers, diagnostics</span></span></button>
                     <button class="nav-item" id="navGuide" type="button" data-section="guide"><span class="nav-item-icon" aria-hidden="true">▸</span><span class="nav-item-text"><span class="nav-item-label">Guide <kbd class="nav-kbd">⌘4</kbd></span><span class="nav-item-desc">Workflows, shortcuts, limits</span></span></button>
                 </nav>
                 <section class="nav-sessions" id="sessionSection" aria-label="Sessions">
@@ -2057,12 +2057,6 @@
             openLocalFile: function () {
                 var input = document.querySelector('[data-role="model-file"]') || document.querySelector('#modelFileInput');
                 if (input) { input.click(); return true; }
-                return false;
-            },
-            promptUrl: function () {
-                setView('model');
-                var input = document.querySelector('#modelUrlInput');
-                if (input) { input.focus(); return true; }
                 return false;
             },
             addApi: function () {

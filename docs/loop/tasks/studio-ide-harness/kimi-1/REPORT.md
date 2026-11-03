@@ -7,7 +7,9 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - The frozen session ended after the three implementation/documentation commits and before the REPORT, browser delivery evidence, exact-head review, or PR. Those five commits (including the two planning commits) were intact and clean; no uncommitted source needed reconstruction.
 - `origin/main` advanced by DeepSeek's #3581 before verification. The branch merged that commit forward without force-push; no Studio files conflicted.
 - The checkout had no generated `web/studio/pkg`, so the page truthfully reported the engine unavailable. This visual/source unit did not build a model bundle or invoke a model, API provider, Test, Send, or real file.
-- Browser automation needed a fresh element snapshot after DOM changes, and the responsive device setup required explicit orientation/dimensions. One Connections click was not treated as evidence; the actual ⌘3 destination was then verified directly. These were automation adjustments, not product changes or claimed failures.
+- Browser automation needed fresh element snapshots and explicit responsive orientation/dimensions. More importantly, the first fresh exact-head review returned **CHANGES_REQUIRED** and proved the visible Connections click was genuinely unwired (`navConnections` vs the wired `navModels`); the original test fixture had hidden this by using `navModels`. The actual markup now restores `navModels` and has a direct file-based regression plus desktop/mobile click checks.
+- The same review found that stored desktop expansion reopened the mobile drawer on reload, Tab could leave the drawer, close-focus restoration was conditional, regrouping stranded the URL input outside its manager's mount, the palette used a separate focus-only path, and three control classes were below 24px. Mobile hydration now starts collapsed, a drawer-local Tab trap and unconditional close-focus restoration are tested, URL lookup/palette/diagnostic behavior share one helper, and the controls meet the minimum. The URL manager received a declared narrow lookup repair, not a provider/network behavior change.
+- Roadmap rendering initially rejected the new item's invalid `issue` key and missing Sources section. Those metadata defects were corrected; a stale `xtask` binary then falsely proposed creating a duplicate of #3569 until a clean rebuild proved the live marker/labels were valid. Sync updated #3569 and the generated 135-item views with zero creates.
 - No real model/API trajectory, MCP connectivity, desktop stdio bridge, real disk access, typed-library cutover, production publish, or trained-chat capability was exercised or is claimed. #3569 and #3500 remain open for their broader units.
 
 ## What changed
@@ -19,20 +21,21 @@ The recovered five-commit unit:
 - Renames user-facing Models navigation to Connections while preserving internal `models`/`model` keys and compatibility IDs. No engine, worker, tokenizer, `studio_api.js`, model artifact, MCP behavior, dependency, publisher, deployment, `.github/**`, or typed-library cutover was added.
 - Includes the ORDER, roadmap item, design, implementation plan, and focused actual-page tests for computed visual treatment, source regrouping/listener preservation, readiness, and navigation labels.
 
-During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and returns it to Menu on scrim, destination, or Escape close. All 216 tests and the real-browser open/close check pass after that narrow repair. The recovered commits, merge-forward, ORDER/REPORT, and this focus repair form the delivery.
+During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and restores Menu on every mobile close, while a drawer-local Tab trap contains focus and mobile hydration starts collapsed. All 223 tests and the real-browser open/close, Connections, stored-expanded reload, and palette checks pass after these repairs. The recovered commits, merge-forward, ORDER/REPORT, and these scoped repairs form the delivery.
 
 ## Measurements and checks
 
-At the merged verification head before this REPORT commit:
+At the repaired verification head before the final REPORT commit:
 
-- `npm test`: **27 test files, 216 tests passed, 0 failures**.
+- `npm test`: **28 test files, 223 tests passed, 0 failures**.
 - `npm run typecheck`: PASS, no TypeScript errors.
-- `npm run build`: PASS; `dist/studio-foundation.js` 123.07 kB (gzip 33.77 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
+- `npm run build`: PASS; `dist/studio-foundation.js` 123.06 kB (gzip 33.77 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
 - `node --test assets/js/model_sources.test.mjs`: **12 tests passed, 0 failures**.
-- `node --check assets/js/studio_files.js` and `node --check assets/js/studio_ui.js`: PASS.
+- `node --check assets/js/studio_ui.js` and `node --check assets/js/model_sources.js`: PASS; `studio_files.js` also passed the earlier syntax check.
 - `node verify_studio_page.mjs --strict-router`: PASS for `index.html` and `geometric_prime_router_webapp.html`; `legacyResidual: []`, `failures: []`.
 - `node verify_studio_page_load.mjs --strict-router`: PASS. Studio: 12 page-load requests, 0 external; router: 2 requests, 0 external. Planted external detection passed on inline, blob-worker, and late channels.
-- Combined executed unit/model-source tests: **228 passed, 0 failures**.
+- Combined executed unit/model-source tests: **235 passed, 0 failures**.
+- `cargo xtask roadmap render` and `roadmap check`: **135 items OK**. A fresh `xtask` build was required after the stale binary first proposed a duplicate issue; the refreshed sync then updated #3569 with zero creates and wrote `issues.json`/the 135-item roadmap README.
 
 Repository gates, claim wording, local policy, exact-head review, and GitHub checks are recorded at the exact delivery head below after this REPORT is committed.
 

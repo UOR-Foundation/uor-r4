@@ -54,4 +54,14 @@ describe('Mac-inspired Studio visual system', () => {
         expect(declaration(lightStyle, 'html[data-theme="light"]').getPropertyValue('--surface-1')).not.toBe(darkSurface);
         expect(declaration(lightStyle, '.view-head').background).not.toBe('');
     });
+
+    it('keeps tab, attachment, and message action targets at least 24 pixels', () => {
+        installTheme('dark');
+        document.body.innerHTML += '<button class="editor-tab-close" type="button">×</button><button class="attachment-chip-remove" type="button">×</button><button class="msg-action" type="button">Copy</button>';
+        for (const selector of ['.editor-tab-close', '.attachment-chip-remove', '.msg-action']) {
+            const control = document.querySelector<HTMLButtonElement>(selector)!;
+            expect(parseFloat(getComputedStyle(control).minBlockSize), selector).toBeGreaterThanOrEqual(24);
+            expect(parseFloat(getComputedStyle(control).minInlineSize), selector).toBeGreaterThanOrEqual(24);
+        }
+    });
 });

@@ -1050,7 +1050,7 @@ async function onClick(event) {
                 target.removeAttribute('aria-busy');
             }
         } else if (action === 'load-url') {
-            const input = mounted.container.querySelector('#modelUrlInput');
+            const input = document.querySelector('#modelUrlInput');
             await api.loadFromUrl(input.value);
         } else if (action === 'add-api') {
             editing = { id: null, values: { preset: 'local-uor', label: API_PRESETS[0].label, baseUrl: API_PRESETS[0].baseUrl, model: API_PRESETS[0].model, apiKey: '' } };

@@ -133,11 +133,8 @@
                 var firstDestination = document.querySelector('#navSidebar button[data-section]');
                 if (firstDestination) firstDestination.focus();
             } else if (!expanded && mobile && wasExpanded) {
-                var active = document.activeElement;
-                var sidebar = document.getElementById('navSidebar');
-                var scrim = document.getElementById('btnNavScrim');
                 var trigger = document.getElementById('btnMobileNav');
-                if (trigger && ((sidebar && sidebar.contains(active)) || active === scrim)) trigger.focus();
+                if (trigger) trigger.focus();
             }
         }
     }
@@ -611,7 +608,7 @@
             cmd('MODELS', 'Load synthetic demo', 'Exercise the local WASM serving path.', '', function () { activateSection('models'); var button = document.querySelector('[data-action="load-bundled"]'); if (button) button.click(); }),
             cmd('MODELS', 'Load M1 model (seed 1)', 'Top-8 next-token prediction from the 19-table trunk.', '', function () { activateSection('models'); var button = document.querySelector('[data-action="load-published"]'); if (button) button.click(); }),
             cmd('MODELS', 'Load local model file…', 'Choose a .lut / .bin stack artifact from this device.', '', function () { activateSection('models'); var button = document.querySelector('[data-role="model-file"], #modelFileInput'); if (button) button.click(); }),
-            cmd('MODELS', 'Load model from URL…', 'User-initiated download of a stack artifact.', '', function () { activateSection('models'); var input = document.getElementById('modelUrlInput'); if (input) input.focus(); }),
+            cmd('MODELS', 'Load model from URL…', 'User-initiated download of a stack artifact.', '', function () { promptUrl(); }),
             cmd('MODELS', 'Add API provider…', 'Configure an OpenAI-compatible endpoint.', '', function () { activateSection('models'); var button = document.querySelector('[data-action="add-api"]'); if (button) button.click(); }),
 
             cmd('BUILD', 'Studio UX improvement brief', 'Insert the UX brief template.', '', function () { activateSection('agent'); useTemplate('ux'); }),
@@ -737,6 +734,17 @@
         var last = nodes[nodes.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    function trapNavTab(event) {
+        var sidebar = document.getElementById('navSidebar');
+        if (!sidebar) return;
+        var nodes = modalFocusables(sidebar);
+        if (!nodes.length) return;
+        var first = nodes[0];
+        var last = nodes[nodes.length - 1];
+        var active = document.activeElement;
+        if (event.shiftKey && (active === first || !sidebar.contains(active))) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (active === last || !sidebar.contains(active))) { event.preventDefault(); first.focus(); }
     }
     function openSettings() { var dialog = document.getElementById('settingsDialog'); if (!dialog) return; openModal(dialog); updateSettingsInfo(); }
     function closeSettings() { closeModal(document.getElementById('settingsDialog')); }
@@ -936,6 +944,7 @@
             }
             var openModalDialog = document.querySelector('.modal-backdrop:not([hidden])');
             if (event.key === 'Tab' && openModalDialog) { trapModalTab(event, openModalDialog); return; }
+            if (event.key === 'Tab' && app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) { trapNavTab(event); return; }
             if (event.key === 'Escape') {
                 if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
                 if (openModalDialog) { event.preventDefault(); event.stopPropagation(); closeModal(openModalDialog); return; }
@@ -1004,10 +1013,20 @@
         }
     }
 
+    function promptUrl() {
+        activateSection('models');
+        var diagnostics = document.getElementById('artifactDiagnostics');
+        if (diagnostics) diagnostics.open = true;
+        var input = document.querySelector('#modelUrlInput');
+        if (input) { input.focus(); return true; }
+        return false;
+    }
+
     function initialChrome() {
         var wide = window.matchMedia('(min-width: 1181px)').matches;
+        var mobile = window.matchMedia('(max-width: 900px)').matches;
         var medium = window.matchMedia('(min-width: 901px)').matches;
-        setChrome('nav', chromeValue('nav', medium ? 'expanded' : 'collapsed'), false);
+        setChrome('nav', mobile ? 'collapsed' : chromeValue('nav', medium ? 'expanded' : 'collapsed'), false);
         var inspectorValue = wide ? chromeValue('inspector', 'expanded') : 'collapsed';
         setChrome('inspector', inspectorValue, false);
     }
@@ -1033,6 +1052,7 @@
         if (systemMedia && systemMedia.addEventListener) systemMedia.addEventListener('change', function () { if (settings.theme === 'system') applySettings(); });
         window.__studioUi = Object.assign(window.__studioUi || {}, {
             activateSection: activateSection,
+            promptUrl: promptUrl,
             openPalette: openPalette,
             closePalette: closePalette,
             openSettings: openSettings,

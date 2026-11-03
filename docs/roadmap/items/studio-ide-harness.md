@@ -8,8 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [studio-typed-shell-upgrade]
 done_class: host
-scope: [web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/studio_ui.js, web/studio/assets/js/mcp_client.js, web/studio/assets/js/mcp_client.test.mjs, web/studio/src/adapters/**, docs/products/web-client.md, docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md, docs/superpowers/plans/2026-11-02-studio-ide-harness.md, docs/loop/tasks/studio-ide-harness/**, docs/roadmap/items/studio-ide-harness.md, docs/roadmap/issues.json]
-issue: 3569
+scope: [web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/studio_ui.js, web/studio/assets/js/model_sources.js, web/studio/assets/js/mcp_client.js, web/studio/assets/js/mcp_client.test.mjs, web/studio/src/adapters/**, docs/products/web-client.md, docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md, docs/superpowers/plans/2026-11-02-studio-ide-harness.md, docs/loop/tasks/studio-ide-harness/**, docs/roadmap/items/studio-ide-harness.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters
@@ -38,3 +37,9 @@ Use `docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md` and `docs/l
 - No new runtime dependency is needed for the visual/source unit or the small remote JSON-RPC client. Do not invent a UOR HTTP API or claim the native CLI is one.
 - Keep remote HTTP MCP separate from desktop stdio. Do not execute arbitrary commands or weaken host-owned approval and folder boundaries.
 - #3500 stays open for typed-library parity/migration/cutover. This item references it without changing its acceptance scope.
+
+## Sources
+
+- #3500, #3569, and #3440
+- `web/studio/README.md` and `docs/products/web-client.md`
+- `docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md` and `docs/loop/tasks/studio-ide-harness/kimi-1/ORDER.md`

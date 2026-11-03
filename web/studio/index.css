@@ -3353,6 +3353,7 @@ html[data-theme="light"] { --text-faint: #7a6753; }
 /* editor tabs target sizes */
 .editor-tab { min-height: 30px; }
 .editor-tab-close { width: 22px; height: 22px; }
+.editor-tab-close, .attachment-chip-remove, .msg-action { min-block-size: 24px; min-inline-size: 24px; }
 
 /* workspace merged view */
 body[data-view="workspace"] #workspaceView { display: flex; }

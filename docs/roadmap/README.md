@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 21 |
+| ready | 22 |
 | held | 11 |
 | decision | 1 |
 | done | 101 |
-| total | 134 |
+| total | 135 |
 
 ## Start here
 
@@ -123,6 +123,7 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
+| [Deliver the native-style Studio IDE harness and real connection workflows](items/studio-ide-harness.md) | ready | a lab | no | [studio-typed-shell-upgrade](items/studio-typed-shell-upgrade.md) | [#3569](https://github.com/UOR-Foundation/uor-r4/issues/3569) |
 | [Migrate the Studio to a typed lifecycle shell without changing its engine](items/studio-typed-shell-upgrade.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md) | [#3500](https://github.com/UOR-Foundation/uor-r4/issues/3500) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Publish the fixed Studio with working WASM and selectable model sources](items/m7-studio-live-model-sources.md) | done | a lab | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m7-studio-self-host-page-assets](items/m7-studio-self-host-page-assets.md) | [#3440](https://github.com/UOR-Foundation/uor-r4/issues/3440) |
@@ -336,6 +337,7 @@ flowchart LR
   n_route_plus_memory["route-plus-memory"]
   n_scale_probe["scale-probe"]
   n_spiralcore_fbs_offline_float_sheet["spiralcore-fbs-offline-float-sheet"]
+  n_studio_ide_harness["studio-ide-harness"]
   n_studio_typed_shell_upgrade["studio-typed-shell-upgrade"]
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
@@ -484,6 +486,7 @@ flowchart LR
   n_route_plus_memory --> n_turn_memory_reply
   n_spiralcore_fbs_offline_float_sheet --> n_in_space_trunk_to_text
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
+  n_studio_typed_shell_upgrade --> n_studio_ide_harness
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end
   n_uor_cuda_inverted_file --> n_uor_community_evidence_releases
