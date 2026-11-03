@@ -203,13 +203,14 @@ one GPU block per output value, with `next_power_of_two(min(1024, values summed)
 sum launched one block of four threads per score: 35.4 million blocks for a batch-16 MLP gate
 (294,912 4-blocks × 120 roots), in every forward snap and again in the backward. The cost follows
 the scores, not the passes, as step P at `3980925d1` showed. It is read from the launch shape, not
-timed on its own; step P at the new head tests it.
+timed on its own; step P at the new head tests it. The repair replaces the `(len, 120, 4)` product
+and its sum together, so step P can confirm the scoring as the cost, not the sum's launches alone.
 
 **Repair, in the ORDER's files.** `4465685531` (`icosian_scores`) adds the four products as
 `(q0 r0 + q2 r2) + (q1 r1 + q3 r3)` in four elementwise products and three additions. That is the
 order `fast_sum` adds them in with four threads (each thread loads `0 + p_t`, then halving at
 `s = 2` and `s = 1`), so every score keeps its f32 value; only a −0 score can come out −0 where the
-sum gave +0, which compares equal and changes no argmax. The pass size returns to 2^16 blocks, which
+sum gave +0, which compares equal and changes no argmax. The pass size becomes 2^16 blocks, which
 only bounds each pass's `(blocks, 120)` tensors to 32 MB. The test
 `icosian_scores_are_the_four_axis_sum_on_cuda` replaces the pass-size test. Over two passes of a gate
 it checks that no score differs from the old 4-axis sum, and that every snapped root is bit for bit
@@ -256,7 +257,7 @@ Each added I-0 and P takes about 15 minutes, inside the two GPU-hour and $1.50 c
 
 ## Verdict
 
-TEST FITNESS: FIT [claude] — two fresh non-author review rounds.
+TEST FITNESS: FIT [claude] — three fresh non-author review rounds; round 3 covers Amendment 1.
 
 - **Round 1** (sheet SHA-256 `a67d1555…6896c6`): NOT FIT, on one BLOCKER. The negative gate set aside
   the old tensor body, whose f64 constants fail on f32 input with a dtype error before any assertion,
@@ -269,6 +270,24 @@ TEST FITNESS: FIT [claude] — two fresh non-author review rounds.
   model-level test fails is decided on the pod, and a pass there stops the run at I-0, so it cannot
   give a false pass. If a repair touches lines 669–712 of `hamilton_sheet.rs`, the patch is made
   again and its hash pinned again before I-0 reruns.
+- **Round 3** (Amendment 1, sheet SHA-256 `e17e2e2d…67ca` at `07dd38a03`): FIT, no blocker.
+  - *Values:* the old score was `(p0+p2)+(p1+p3)` (`cuda_backend/mod.rs:322`, `reduce.cu:79–97`).
+    Each product and each add is its own kernel, built with `-ftz=false`, so no fused multiply-add
+    can change a value. `fast_argmax` compares with a strict `>`, so ±0 changes no root.
+  - *The test:* it covers two passes, the exact four-way golden tie and the ±0 blocks. About
+    10 million random scores would expose another pairing. It does not exercise the forced-call or
+    capture paths, which R does not use.
+  - *The cause:* the 5% drop at 2^18 is a per-pass overhead of about 30 µs, consistent across the
+    MLP, recurrence and backward. What remains scales with blocks. Step P at the new head decides it,
+    and a cost repair needs no negative gate when a value-identity test pins its values.
+  - *The commands and the order:* the evaluation flags are confirmed in both binaries, and the
+    instrument check can fail. R's head differs from the repair head in docs only.
+  - *Charter:* no new product. These are the same 4-term inner products against the 120 fixed
+    icosians, the nearest-root search inside the Hamilton gate (§3.3).
+  - *Notes applied:* the cause is claimed for the scoring, the `(len, 120, 4)` product with its sum,
+    not for the sum alone; "returns to 2^16" now reads "becomes". Note 5 is taken in the REPORT:
+    each R run's `--inspect` is also compared with its own step-256 DEV line. Note 3: in capture
+    mode, a zero block's margin can now be written as −0.0.
 
 PRE-RUN: PASS [claude] — fresh adversarial review under D67 at `43ca02940`:
 - *chain:* Casey's 2 Nov chat-model goal, every path model trains as served, and deepseek-10's
@@ -288,3 +307,19 @@ Two notes were taken:
   the 49-pass loop, so the operational door may fail again at this head. Step P's GPU profile is that
   item's first deliverable. A repair of `fbs_export` is that item's unit, not this lease's, and the
   REPORT records the overlap.
+
+PRE-RUN: PASS [claude] — fresh adversarial review under D67 at `07dd38a03`, with I-0's binaries from
+`4465685531` (`train-in-space` `443f9764…0586`, `fbs-snapshot` `f031c7ce…8083`), conditional on
+round 3, which then passed:
+- *chain:* unchanged from the review at `43ca02940`. A longer served run first would measure the fault,
+  not the mechanism;
+- *tools and inputs:* every flag in R's commands parses at `4465685531`, the data pins and the store
+  route are present, and there is no checkpoint input;
+- *outcomes:* a pass opens longer served runs; served still materially below plain starts the
+  surrogate isolation; an operational fail comes with P's stage profile;
+- *caps:* 2 pods, $1.12/h. The pod came up about 05:02Z, so the unit's two GPU-hours end at about
+  07:02Z, before the lease's 07:15:57Z. No further repair cycle fits: had step P found another stage,
+  the stop rule would outrank the amendment's repair step.
+
+Its condition that the dry run be redone at the repair head was met by step P there: the inspect of
+the rounded copy read [8, 16, 0, 476], the run's own step-40 line.
