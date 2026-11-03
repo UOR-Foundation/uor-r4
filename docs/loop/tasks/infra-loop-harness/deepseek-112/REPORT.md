@@ -20,7 +20,7 @@ deepseek-112. Each records the reproduced condition at its starting head and
 why the unit stands. The image item, generated roadmap, requirements, scope,
 mapping and implementation plan are unchanged.
 
-The exact PR diff is recorded before the closing receipt commit.
+The exact PR diff is 31 files: 1129 insertions and 2 deletions.
 
 ## Measurements
 
@@ -33,7 +33,10 @@ image-input item mapped to issue #3619.
   probe.
 - `roadmap render --check`, `roadmap check`, `git diff --check`,
   `loop report --check`, `loop pr-check --local` and `loop gates --full`: PASS.
-- Full gates run at the content commit named by the closing accounting update.
+- Full gates ran at content commit
+  `e2c5d69145d68208dd55a96c7bbfcfa8007abe2e`.
+- The following accounting commit adds its receipts file, records that tested
+  content commit here and updates this report's exact-size line.
 
 ## Skills used
 
