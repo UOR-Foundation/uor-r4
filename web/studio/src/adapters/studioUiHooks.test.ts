@@ -52,6 +52,37 @@ describe('actual studio UI attachment preservation', () => {
     });
 });
 
+describe('actual studio UI image attachments', () => {
+    it('renders an accessible preview and label without persisting image bytes', () => {
+        document.body.insertAdjacentHTML('beforeend', '<div id="attachmentChips"></div><div id="attachmentBar" hidden></div><div id="inspectorAttachments"></div><div id="attachmentCountBadge"></div><div id="attachmentTokenHint"></div><div id="composerContextNote"></div>');
+        ui.addAttachment({
+            name: 'pixel.png',
+            kind: 'image',
+            content: '',
+            size: 4,
+            previewUrl: 'data:image/png;base64,preview',
+            imageUrl: 'data:image/png;base64,preview',
+            rgba: new Uint8Array([1, 2, 3, 255]),
+        } as never);
+        const preview = document.querySelector<HTMLImageElement>('#attachmentChips img')!;
+        expect(preview).not.toBeNull();
+        expect(preview.alt).toBe('');
+        expect(document.querySelector('#attachmentChips')!.textContent).toContain('pixel.png');
+        expect(document.querySelector('#attachmentChips')!.textContent).toContain('R4 patch input — experimental; not visual understanding');
+        expect(JSON.parse(window.localStorage.getItem('uor.studio.attachments.v1') || '[]')).toEqual([]);
+        expect(window.localStorage.getItem('uor.studio.imagesReattach.v1')).toBe('1');
+        expect(ui.getAttachments()[0].rgba).toBeDefined();
+        ui.clearAttachments();
+        expect(window.localStorage.getItem('uor.studio.imagesReattach.v1')).toBe('0');
+        document.querySelector('#attachmentChips')!.remove();
+        document.querySelector('#attachmentBar')!.remove();
+        document.querySelector('#inspectorAttachments')!.remove();
+        document.querySelector('#attachmentCountBadge')!.remove();
+        document.querySelector('#attachmentTokenHint')!.remove();
+        document.querySelector('#composerContextNote')!.remove();
+    });
+});
+
 describe('actual studio UI native source labels', () => {
     it('keeps native loopback privacy and attachment notes local', () => {
         document.body.insertAdjacentHTML('beforeend', '<span id="privacyStatus">Native loopback</span><span id="chatSourceBadge">Native uor-chat</span><span id="privacyStatusText"></span><span id="composerModeNote"></span><span id="composerContextNote"></span><span id="ctxPrivacy"></span><span id="engineStatusText"></span><span id="envEngine"></span><span id="envModel">none</span><span id="envTokenizer">awaiting model</span><span id="ctxEngine"></span><span id="ctxTokenizer">awaiting model</span><span id="ctxModelLabel">No model loaded</span><span id="ctxModelMeta">Load the synthetic demo or the M1 trunk in Connections.</span><span id="modelStatusText"></span>');

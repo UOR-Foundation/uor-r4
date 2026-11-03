@@ -77,6 +77,18 @@ export interface Attachment {
     source?: string;
     kind?: string;
     size?: number;
+    previewUrl?: string;
+    imageUrl?: string;
+    rgba?: Uint8Array | null;
+    width?: number;
+    height?: number;
+    grid?: number;
+    reattachRequired?: boolean;
+    decomposition?: {
+        schema: string;
+        source_sha256: string;
+        canonical_prompt: string;
+    } | null;
 }
 
 export interface StudioSettings {

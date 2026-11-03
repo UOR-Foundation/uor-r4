@@ -338,6 +338,22 @@ describe('actual page prediction hooks', () => {
         }
     });
 
+    it('finishes native image preparation errors with correlated request cleanup', async () => {
+        const { app, hooks, conversation } = pageHooks();
+        app.mode = 'api';
+        app.apiConfig = { id: 'native-loopback', baseUrl: 'http://127.0.0.1:8765/v1' } as { baseUrl: string };
+        const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<Record<string, unknown>> } };
+        legacy.__studioUi = { getAttachments: () => [{ name: 'old.png', kind: 'image', content: '', reattachRequired: true }] };
+        try {
+            await hooks.sendViaApi('Hi', conversation);
+            expect(app.generating).toBe(false);
+            expect(app.activeChatRequestId).toBeNull();
+            expect(conversation.messages.some((message) => message.role === 'error' && String(message.content).toLowerCase().includes('reattach'))).toBe(true);
+        } finally {
+            delete legacy.__studioUi;
+        }
+    });
+
     it('does not offer or send cancellation for synchronous prediction', () => {
         const { app, hooks } = pageHooks();
         app.activeGenerationKind = 'api';

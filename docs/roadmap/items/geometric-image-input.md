@@ -3,12 +3,12 @@ id: geometric-image-input
 title: Decompose images into bounded integer R4 patches for native Studio input
 milestone: M7
 area: serving
-status: ready
+status: done
 open_to: lab
 needs_gpu: false
 depends_on: [studio-conversational-composer]
 done_class: host
-scope: [Cargo.toml, Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/**, web/studio/src/adapters/**, docs/products/web-client.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md, docs/roadmap/issues.json, PLAN.md]
+scope: [Cargo.toml, Cargo.lock, src-tauri/Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/**, web/studio/src/adapters/**, docs/products/web-client.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md, docs/roadmap/issues.json, PLAN.md]
 ---
 
 ## Why it matters

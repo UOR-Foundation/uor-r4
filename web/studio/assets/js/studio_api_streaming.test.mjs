@@ -64,6 +64,36 @@ test('a non-stream JSON fallback returns exact usage and native timing', async (
     assert.deepEqual(done.usage, payload.usage);
 });
 
+test('text and native image content parts survive request normalization unchanged', async () => {
+    const payload = { choices: [{ index: 0, message: { role: 'assistant', content: 'I.' }, finish_reason: 'stop' }] };
+    const messages = [{ role: 'user', content: [
+        { type: 'text', text: 'Hi' },
+        { type: 'uor_r4_image', uor_r4_image: { schema: 'uor-r4.image/1', source_sha256: 'a'.repeat(64), canonical_prompt: 'R4IMG1;sha256=' + 'a'.repeat(64) + ';size=1x1;grid=1;q12=304,-128,144,0' } },
+    ] }];
+    let request;
+    globalThis.fetch = async (url, init) => {
+        request = init;
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const result = await streamChatCompletions({ config, messages });
+    assert.equal(result.text, 'I.');
+    assert.deepEqual(JSON.parse(request.body).messages, messages);
+});
+
+test('custom image_url parts and provider errors remain verbatim', async () => {
+    const messages = [{ role: 'user', content: [
+        { type: 'text', text: 'Hi' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,preview' } },
+    ] }];
+    let request;
+    globalThis.fetch = async (url, init) => {
+        request = init;
+        return new Response(JSON.stringify({ error: { message: 'images are not supported by this provider' } }), { status: 501, headers: { 'content-type': 'application/json' } });
+    };
+    await assert.rejects(streamChatCompletions({ config, messages }), /501.*images are not supported by this provider/);
+    assert.deepEqual(JSON.parse(request.body).messages, messages);
+});
+
 test('mid-stream abort returns the partial text without raising a second error', async () => {
     const stream = new ReadableStream({
         pull(controller) {

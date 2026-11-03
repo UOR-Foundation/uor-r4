@@ -78,6 +78,12 @@ The live plain-JS Studio now serves the native `uor-chat` engine through the mer
 
 The native same-origin source uses temperature zero and an ephemeral launch token. That token and its provider ID are not written to localStorage or exported sessions. Native JSON/SSE responses display live completion tokens and measured tok/s, then exact prompt/completion/total usage, TTFT, elapsed time, and finish reason; other providers show character-only or unavailable usage honestly. `uor-chat --stack … --tokenizer … --serve 127.0.0.1:8765 --studio-root web/studio` starts the local service. This is protocol and UX evidence, not useful conversation, production deployment, or visual understanding. R4 image decomposition is a separate follow-up; standard `image_url` and embeddings return 501.
 
+### Deterministic R4 image input (3 November 2026)
+
+Raster images can be attached by paste, drop, or the multiple-file picker. Browser Canvas downsamples proportionally to at most 256×256 and sends raw RGBA to `POST /v1/images/decompose` only when the user sends. The internal `uor-r4-vision` crate uses checked integer math to produce positioned mean-RGB/luma/chroma/edge patches and signed Q12 R4 features with a versioned canonical prompt and source hash. Native chat accepts only the `uor_r4_image` extension with schema `uor-r4.image/1`; ordinary native `image_url`, embeddings, and image generation remain unimplemented.
+
+Image attachments show previews, names/sizes, removal, and `R4 patch input — experimental; not visual understanding`. Custom OpenAI providers may use ordinary `image_url` content parts with provider errors shown verbatim; local WASM refuses image context. Image bytes and previews remain memory-only, and reload shows a reattach-required placeholder instead of pretending the image persisted. Context overflow is rejected without truncation. This is deterministic decomposition and protocol evidence only, not captioning, recognition, visual question answering, or a trained multimodal artifact.
+
 ### Typed workflow components (development library)
 
 The `src/` library now contains the lifecycle store and all eight approved core components:

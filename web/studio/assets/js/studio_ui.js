@@ -479,19 +479,36 @@
     /* attachments */
     var attachments = readJson(ATTACH_KEY, []);
     if (!Array.isArray(attachments)) attachments = [];
-    function saveAttachments() { writeJson(ATTACH_KEY, attachments); }
+    if (readJson('uor.studio.imagesReattach.v1', 0) === 1) {
+        attachments.push({ name: 'Previous image — reattach required', kind: 'image', content: '', source: 'reload', size: 0, reattachRequired: true });
+    }
+    function saveAttachments() {
+        writeJson(ATTACH_KEY, attachments.filter(function (item) { return item.kind !== 'image'; }));
+        writeJson('uor.studio.imagesReattach.v1', attachments.some(function (item) { return item.kind === 'image'; }) ? 1 : 0);
+    }
     function addAttachment(entry) {
-        if (!entry || !entry.content) { toast('No file content to attach.', 'info'); return; }
+        if (!entry || (entry.kind !== 'image' && !entry.content)) { toast('No file content to attach.', 'info'); return; }
         var name = String(entry.name || 'attachment.txt');
-        var content = String(entry.content);
+        var content = String(entry.content || '');
         var size = Number.isFinite(entry.size) ? entry.size : new TextEncoder().encode(content).byteLength;
         var next = attachments.filter(function (item) { return item.name !== name; });
         var total = next.reduce(function (sum, item) { return sum + (Number.isFinite(item.size) ? item.size : new TextEncoder().encode(String(item.content || '')).byteLength); }, size);
         if (total > MAX_ATTACHMENT_TOTAL_BYTES) { toast('Attachments exceed the 4 MiB total limit; remove a file first.', 'error'); return; }
         attachments = next;
-        attachments.push({ name: name, kind: entry.kind || 'text', content: content, source: entry.source || 'file', size: size });
+        var stored = { name: name, kind: entry.kind || 'text', content: content, source: entry.source || 'file', size: size };
+        if (stored.kind === 'image') {
+            stored.previewUrl = entry.previewUrl || '';
+            stored.imageUrl = entry.imageUrl || '';
+            stored.decomposition = entry.decomposition || null;
+            stored.rgba = entry.rgba || null;
+            stored.width = entry.width || 0;
+            stored.height = entry.height || 0;
+            stored.grid = entry.grid || 0;
+            stored.reattachRequired = Boolean(entry.reattachRequired);
+        }
+        attachments.push(stored);
         saveAttachments(); renderAttachments();
-        toast('Attached ' + name + ' (' + Math.max(1, Math.round(String(entry.content).length / 1024)) + ' KB).', 'success');
+        toast('Attached ' + name + ' (' + Math.max(1, Math.round(size / 1024)) + ' KB).', 'success');
     }
     function renderAttachments() {
         var chips = document.getElementById('attachmentChips');
@@ -518,13 +535,21 @@
             var chip = document.createElement('span');
             chip.className = 'attachment-chip';
             chip.title = item.name;
+            if (item.kind === 'image' && item.previewUrl) {
+                var preview = document.createElement('img');
+                preview.className = 'attachment-chip-preview';
+                preview.src = item.previewUrl;
+                preview.alt = '';
+                chip.appendChild(preview);
+            }
             var name = document.createElement('span'); name.className = 'attachment-chip-name'; name.textContent = item.name;
-            var size = document.createElement('span'); size.className = 'attachment-chip-meta'; size.textContent = Math.max(1, Math.round(item.content.length / 1024)) + ' KB';
+            var size = document.createElement('span'); size.className = 'attachment-chip-meta';
+            size.textContent = item.kind === 'image' ? (item.reattachRequired ? 'Reattach required after reload · R4 patch input — experimental; not visual understanding' : Math.max(1, Math.round((Number(item.size) || 0) / 1024)) + ' KB · R4 patch input — experimental; not visual understanding') : Math.max(1, Math.round(item.content.length / 1024)) + ' KB';
             var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'attachment-chip-remove'; remove.setAttribute('aria-label', 'Remove ' + item.name); remove.textContent = '×';
             remove.addEventListener('click', function () { attachments.splice(index, 1); saveAttachments(); renderAttachments(); });
             chip.appendChild(name); chip.appendChild(size); chip.appendChild(remove);
             if (chips) chips.appendChild(chip);
-            if (inspector) { var row = document.createElement('li'); row.className = 'attachment-row'; row.textContent = item.name; inspector.appendChild(row); }
+            if (inspector) { var row = document.createElement('li'); row.className = 'attachment-row'; row.textContent = item.name + (item.reattachRequired ? ' — reattach required after reload' : ''); inspector.appendChild(row); }
         });
         document.dispatchEvent(new CustomEvent('uor-attachments-changed', { detail: { count: attachments.length } }));
     }

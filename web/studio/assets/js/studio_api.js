@@ -200,7 +200,7 @@ export async function testConnection(config) {
 function normaliseMessages(messages) {
     if (!Array.isArray(messages) || messages.length === 0) throw failure('At least one chat message is required.');
     return messages
-        .filter((message) => message && typeof message.content === 'string' && message.content.length > 0)
+        .filter((message) => message && ((typeof message.content === 'string' && message.content.length > 0) || (Array.isArray(message.content) && message.content.length > 0)))
         .map((message) => ({ role: ['system', 'user', 'assistant'].includes(message.role) ? message.role : 'user', content: message.content }));
 }
 
