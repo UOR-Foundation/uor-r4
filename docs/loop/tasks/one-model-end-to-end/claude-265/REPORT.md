@@ -35,7 +35,7 @@ Sheet: [one-model-end-to-end-i3-unsnapped-2026-11-03](../../../../harness/prep/o
   - `with_d11_mode` takes `SERVED_SNAPS` while the served bridge's `BRIDGE_ACTIVATION_I16` is set, and `D11Snaps::ALL` otherwise. So the served checkpoint's DEV panel (`evaluate_dev_panel_d11`) and loss (`panel_loss_d11`) follow the contract with no edit of their own.
   - The new test `served_bridge_takes_the_unsnapped_d11_contract` fails at named assertions with either line set aside (`:3331` "the served bridge", `:3336` "the D11 mode under the served bridge") and passes once restored.
 - **`in_space_long.rs`:** one assertion of `the_training_forward_selects_and_restores_the_served_bridges`, the transition flag the served contract turns off.
-- **Unchanged:** the D11 trainer, and the plain and Export forwards. `git diff --stat C HEAD -- crates Cargo.lock` is empty: every later commit is documents only.
+- **Unchanged:** the D11 trainer, and the plain and Export forwards. `git diff --stat C HEAD -- crates/uor-r4-float-train Cargo.lock` is empty: every later commit of this branch is documents only, and the merge of main brings one crate file, `crates/uor-r4-cpu-train/src/train.rs` (#3603), which the float trainer does not build.
 
 ## Measurements
 
@@ -80,7 +80,7 @@ The raw exports and the integer replies are not stored: `serve-265.sh` rebuilds 
 - **On the laptop:**
   - the four named tests' host parts, and the crate's 214 host lib tests, at `C`;
   - the new test with each line of the fix set aside (fails at the named assertions), then restored (passes);
-  - `git diff --stat C HEAD -- crates Cargo.lock` is empty;
+  - `git diff --stat C HEAD -- crates/uor-r4-float-train Cargo.lock` is empty (the merge of main adds only `crates/uor-r4-cpu-train/src/train.rs`);
   - `cargo test --locked -p uor-r4-harness the_real_sheets`;
   - `uor-harness loop report --check` and `uor-harness loop pr-check --local` on this REPORT.
 - **Before every push**, the no-overlap check against #3583 and #3599.
