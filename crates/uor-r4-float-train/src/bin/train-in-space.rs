@@ -13,6 +13,8 @@
 //! `--served-forward 0|1` overrides the saved run mode only for `--inspect`, `--decode-speed` and
 //! `--score-rows`, so different training modes can be scored through the same served graph.
 //!
+//! `--score-rows` additionally accepts `[--batched-decode 0|1]`.
+//!
 //! `--batched-decode 1` lets `--score-rows` decode equal-length prompts together on the
 //! full-scope nearest arms. It defaults to 0 while GPU parity is being qualified.
 //!

@@ -20,12 +20,12 @@ Terminated rows receive a BOS placeholder for tensor shape only and are never re
 
 - Pinned DEV produced 310 prompts over 75 distinct lengths.
 - Exact-length grouping reduces them to 75 groups; the largest has 32 prompts and the mean is 4.13.
-- Host grouping controls: **2 passed**. Every prompt appears once, all members of a group have the same length, grouping is deterministic, and wide groups respect the `16 × 192` evaluation-token budget.
-- The complete float-train library suite passed: **210 passed, 0 failed**.
+- Host grouping/fallback controls: **3 passed**. Every prompt appears once, all members of a group have the same length, grouping is deterministic, wide groups respect the `16 × 192` evaluation-token budget, and every unsupported branch stays serial.
+- The complete float-train library suite passed: **211 passed, 0 failed**.
 
 ## Checks run at the head
 
-- `CARGO_TARGET_DIR=target cargo test --locked -p uor-r4-float-train --lib`: 210 passed.
+- `CARGO_TARGET_DIR=target cargo test --locked -p uor-r4-float-train --lib`: 211 passed.
 - `cargo check --locked -p uor-r4-float-train --bin train-in-space`: passed.
 - `git diff --check`: passed.
 - CUDA test `exact_length_batches_match_one_at_a_time_decodes` is defined but **NOT_RUN** on this host. It compares complete `DecodedReply` fields under all four rules with Hamming reads and opening/reply memory rows active, and requires a non-empty reply.

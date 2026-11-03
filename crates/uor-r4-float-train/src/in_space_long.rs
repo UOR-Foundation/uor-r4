@@ -5442,6 +5442,18 @@ fn exact_length_batches(prompts: &[Vec<u32>]) -> Vec<Vec<usize>> {
     groups
 }
 
+/// Whether a decode may take the batched path. The caller supplies the two per-thread controls,
+/// so a forced opening or served key always keeps the serial path.
+fn can_batch_decode(
+    enabled: bool,
+    objective: PointObjective,
+    scope: ReadScope,
+    forced: bool,
+    served_key: bool,
+) -> bool {
+    enabled && objective.decodes_nearest() && scope == ReadScope::Full && !forced && !served_key
+}
+
 struct BatchReply {
     index: usize,
     ids: Vec<u32>,
@@ -5483,11 +5495,13 @@ fn decode_replies_with_mode(
             "the Flock rank rule draws for replies of at most {FLOCK_MAX_REPLY} tokens"
         )));
     }
-    let can_batch = batched_decode
-        && objective.decodes_nearest()
-        && scope == ReadScope::Full
-        && forced_opening().is_none()
-        && SERVED_KEY.with(|key| key.borrow().is_none());
+    let can_batch = can_batch_decode(
+        batched_decode,
+        objective,
+        scope,
+        forced_opening().is_some(),
+        SERVED_KEY.with(|key| key.borrow().is_some()),
+    );
     if !can_batch {
         return prompts
             .iter()
@@ -5592,7 +5606,11 @@ fn decode_replies_with_mode(
                     point
                 };
                 let scores = nearest_scores(&point, &table)?;
-                let greedy = scores.argmax(1)?.to_vec1::<u32>()?;
+                let greedy = if rule == DecodeRule::Greedy {
+                    Some(scores.argmax(1)?.to_vec1::<u32>()?)
+                } else {
+                    None
+                };
                 let flock_rows = match rule {
                     DecodeRule::Greedy => None,
                     DecodeRule::FlockRank { k, .. }
@@ -5612,7 +5630,8 @@ fn decode_replies_with_mode(
                         continue;
                     }
                     let token = match &flock_rows {
-                        None => greedy[b],
+                        None => greedy.as_ref().and_then(|tokens| tokens.get(b)).copied()
+                            .ok_or_else(|| invalid("the batched greedy readout returned no token"))?,
                         Some((ids_k, picked)) => {
                             let scored = rank_order(
                                 ids_k[b]
@@ -10459,6 +10478,52 @@ mod tests {
     }
 
     #[test]
+    fn batched_decode_is_opt_in_and_falls_back_for_every_unsupported_case() {
+        assert!(can_batch_decode(
+            true,
+            PointObjective::Cell,
+            ReadScope::Full,
+            false,
+            false
+        ));
+        assert!(!can_batch_decode(
+            false,
+            PointObjective::Cell,
+            ReadScope::Full,
+            false,
+            false
+        ));
+        assert!(!can_batch_decode(
+            true,
+            PointObjective::Sheet,
+            ReadScope::Full,
+            false,
+            false
+        ));
+        assert!(!can_batch_decode(
+            true,
+            PointObjective::Cell,
+            ReadScope::Copy,
+            false,
+            false
+        ));
+        assert!(!can_batch_decode(
+            true,
+            PointObjective::Cell,
+            ReadScope::Full,
+            true,
+            false
+        ));
+        assert!(!can_batch_decode(
+            true,
+            PointObjective::Cell,
+            ReadScope::Full,
+            false,
+            true
+        ));
+    }
+
+    #[test]
     fn root_separation_reads_the_sixteen_roots() {
         let (nearest, farthest) = root_separation().unwrap();
         println!("address roots: nearest {nearest}, farthest {farthest}");
@@ -14380,6 +14445,85 @@ mod tests {
                 decoded += batched.tokens.len();
             }
         }
+        let firsts: Vec<u32> = prompts
+            .iter()
+            .zip(&masks)
+            .enumerate()
+            .map(|(sample, (prompt, mask))| {
+                decode_reply_with_mode(
+                    &model,
+                    PointObjective::Cell,
+                    prompt,
+                    1,
+                    17,
+                    DecodeRule::Greedy,
+                    sample,
+                    None,
+                    ReadScope::Full,
+                    mask,
+                    false,
+                )
+                .and_then(|reply| {
+                    reply.tokens.first().copied().ok_or_else(|| {
+                        invalid("an early-termination control decoded no first token")
+                    })
+                })
+            })
+            .collect::<Result<_>>()?;
+        let pair = (0..prompts.len())
+            .find_map(|first| {
+                (first + 1..prompts.len())
+                    .find(|&other| {
+                        prompts[other].len() == prompts[first].len()
+                            && firsts[other] != firsts[first]
+                    })
+                    .map(|other| (first, other))
+            })
+            .ok_or_else(|| invalid("no equal-length pair has different first tokens"))?;
+        let selected = vec![prompts[pair.0].clone(), prompts[pair.1].clone()];
+        let selected_masks = vec![masks[pair.0].clone(), masks[pair.1].clone()];
+        let early = DecodeRule::FlockRank { k: 1, keep_end: true };
+        let serial: Vec<DecodedReply> = selected
+            .iter()
+            .zip(&selected_masks)
+            .enumerate()
+            .map(|(sample, (prompt, mask))| {
+                decode_reply_with_mode(
+                    &model,
+                    PointObjective::Cell,
+                    prompt,
+                    16,
+                    17,
+                    early,
+                    sample,
+                    Some(firsts[pair.0]),
+                    ReadScope::Full,
+                    mask,
+                    false,
+                )
+            })
+            .collect::<Result<_>>()?;
+        let batched = decode_replies_with_mode(
+            &model,
+            PointObjective::Cell,
+            &selected,
+            &selected_masks,
+            16,
+            17,
+            early,
+            Some(firsts[pair.0]),
+            ReadScope::Full,
+            false,
+            true,
+        )?;
+        assert_eq!(serial[0].tokens, batched[0].tokens);
+        assert_eq!(serial[1].tokens, batched[1].tokens);
+        assert_eq!(serial[0].tokens.first(), Some(&firsts[pair.0]));
+        assert!(serial[0].tokens.len() < 16, "the first row must stop early");
+        assert!(
+            serial[1].tokens.len() > 1,
+            "the second row must continue after the first stops"
+        );
         crate::flock_read_hamming::set_hamming_reads(None);
         crate::flock_read_memory::set_turn_memory(None);
         assert!(decoded > 0, "every reply was empty, so the parity check was vacuous");
