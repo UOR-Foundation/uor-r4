@@ -30,7 +30,7 @@ The rounding stays: the code review found it is the integer session's own conver
 
    The sheet's partial wants both seeds to fall by more than 10, and seed 2 fell by 6. Its not-the-part wants both within 10, and seed 1 fell by 12. So it has no outcome for this split, and the table reads each seed alone. Both outcomes say the same next step: keep the rounding and read the remaining sites. So the split between the seeds does not change what follows.
 
-2. **The rounding moves first tokens both ways.** Split of the prompts whose float first token moved, read from the stored files with the `jq` text below:
+2. **First tokens moved both ways.** Split of the prompts whose float first token moved, read from the stored files with the `jq` text below:
 
    | Seed | Moved | Miss → match | Match → miss | Miss → another miss | Misses not moved |
    |---:|---:|---:|---:|---:|---:|
@@ -40,7 +40,7 @@ The rounding stays: the code review found it is the integer session's own conver
    - If the projection rounding were the only difference, matched exactly and scored deterministically, it could only turn misses into matches. It also broke 15 and 17 prompts that the unrounded float had matched.
    - Neither net change is separated from moves going both ways at random. A two-sided sign test gives p ≈ 0.09 for 27 against 15, and p ≈ 0.43 for 23 against 17.
    - Three explanations fit, and this unit does not separate them:
-     - **Other roundings.** Roundings the surrogate does not yet copy decide many near-tie first tokens, which a few 2^-16 steps can flip either way.
+     - **Other roundings.** Roundings the surrogate does not yet copy may decide many near-tie first tokens, which a few 2^-16 steps can flip either way.
      - **This rounding is inexact.** It does not match the integer on some inputs. One edge is known: `q16_residual` in f32 is one step high on odd grid points with |x| in [128, 256). That is the sheet's FIT note, narrowed by the code review. Whether any projection output here reaches 128 was not read.
      - **Run-to-run variation.** The GPU float scorer may not give the same first token run to run. This unit had no same-host repeat, and claude-263 and this unit scored on different hosts.
    - If the first is the cause, matching one site at a time will move the count both ways until the last site is matched. A count of first-token misses is then a weak guide to which site matters.
@@ -237,6 +237,6 @@ None applied. The scripts are `job-264.sh`, `compare-264.sh` and `watch-264.sh`.
 
 ## Plain summary
 
-The laptop's integer model still gives a different first word from the trained model on about a third of 310 test prompts. This unit found one difference in how the two round numbers inside each layer and made the trained model round the same way. Mismatches fell from 112 to 100 at one seed and from 137 to 131 at the other, far from the bar of 8. The change also turned some matching prompts into mismatches. That fits other rounding differences still in place, or scoring that varies from run to run, and this unit cannot tell which. The fix is kept, because it copies what the integer model does; the next unit finds the remaining differences. The scoring also ran about two to three times slower, for a reason not yet separated. GPU cost: one pod, about an hour, about $0.97.
+The laptop's integer model still gives a different first word from the trained model on about a third of 310 test prompts. This unit found one difference in how the two round numbers inside each layer and made the trained model round the same way. Mismatches fell from 112 to 100 at one seed and from 137 to 131 at the other, far from the bar of 8. Some matching prompts also became mismatches. That fits other rounding differences still in place, this rounding not matching exactly on some inputs, or scoring that varies from run to run, and this unit cannot tell which. The fix is kept, because it copies what the integer model does; the next unit finds the remaining differences. The scoring also ran about two to three times slower, for a reason not yet separated. GPU cost: one pod, about an hour, about $0.97.
 
 References #3407.

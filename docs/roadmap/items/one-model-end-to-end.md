@@ -68,8 +68,8 @@ replace the served-training comparison above. Full transcripts and pins:
   memory differ on 3 and 0 prompts. The integer memory path is unchecked.
   [claude-264](../../loop/tasks/one-model-end-to-end/claude-264/REPORT.md)
   made the float served forward round every FBS projection to 2^-16, as the
-  integer session does. The misses fell only to 100 and 131. The rounding broke
-  some matches as well as making others. That fits other unmatched roundings,
+  integer session does. The misses fell only to 100 and 131. Some matches broke
+  as well as others being made. That fits other unmatched roundings,
   an inexact match of this one, or run-to-run variation in the scorer, and the
   unit does not separate them. The remaining sites must be matched before the
   full-length served run, whose sheet is FIT and whose pre-run review passed.
