@@ -91,6 +91,8 @@ While two arms share the card, their memory together climbs through training, by
 
 Owner decision, 3 Nov 2026 at about 02:40Z. Asked "Which fix should the next runs use?", Casey answered, verbatim: "Arms in turn". From the next unit, every pod job trains (and scores) its arms one after the other, never two on one card, and I-2 projects each arm's steps from its own throughput alone. No memory trace is run to find why sharing climbs. This run keeps its design: seed 3's shared arms stand, and every rerun trains alone.
 
+Owner decision, 3 Nov 2026 at about 02:50Z, on the scorer's speed. Scoring one arm took over an hour on each pod: one CPU core at 100%, the GPU 57–97% busy (mean 71%). The greedy decode runs one sample at a time and runs the forward over the whole window for each reply token. Asked "Should a batched scorer be the next unit after this run?", Casey answered, verbatim: "Yes, scorer next". So the unit after this one decodes a panel's samples together, with one batched forward a token, and must match the one-at-a-time decode exactly.
+
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
