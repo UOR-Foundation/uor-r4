@@ -46,7 +46,9 @@ before the two public runs. The bar requires:
 - instrument: exact parity, no evaluation exact-key hit, identical selected
   inputs across seeds;
 - on both seeds, point-on opening top-1 strictly above point-off and random;
-- on both seeds, point-on opening distance strictly below both controls;
+- point fallback changes only the served token, so opening distance must be
+  identical across point-off, point and random; a difference is an instrument
+  fault;
 - report the paired three-sigma opening-ranking threshold separately.
 
 ## Done when
