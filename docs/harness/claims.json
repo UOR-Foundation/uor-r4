@@ -20,6 +20,20 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/chat-protocol2-default": {
+    "branch": "deepseek/chat-protocol2-default",
+    "claimed_at": "2026-11-02T22:19:36-05:00",
+    "head": "7394c344d",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/copy-codes-key2-guard": {
+    "branch": "deepseek/copy-codes-key2-guard",
+    "claimed_at": "2026-11-02T23:04:45-05:00",
+    "head": "b6ebf7002",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/cpu-corpus-resume": {
     "branch": "deepseek/cpu-corpus-resume",
     "claimed_at": "2026-11-02T05:18:19-05:00",
@@ -76,10 +90,31 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/oracle-corpus-support": {
+    "branch": "deepseek/oracle-corpus-support",
+    "claimed_at": "2026-11-02T22:00:48-05:00",
+    "head": "a4ef288d9",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/public-chat-baseline": {
     "branch": "deepseek/public-chat-baseline",
     "claimed_at": "2026-11-02T14:45:17-05:00",
     "head": "b44402e0c",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/served-comparison-result": {
+    "branch": "deepseek/served-comparison-result",
+    "claimed_at": "2026-11-02T23:16:08-05:00",
+    "head": "75086c1d3",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/served-rounding-item": {
+    "branch": "deepseek/served-rounding-item",
+    "claimed_at": "2026-11-02T23:38:15-05:00",
+    "head": "a9d0461e2",
     "lab": "deepseek",
     "note": ""
   },
