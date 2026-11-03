@@ -34,7 +34,7 @@ SHA-256 `738457b26af18e9176bd0e3ece76f0502d4505cdf0a3f249381fc0ccf574ad1d`.
 - Arithmetic checked: 355/51 = 6.9608×; 355/52 = 6.8269×; both exceed 2×.
 - Quality band checked: `max(24, |−55 − (−25)|) = 30`; seed 1's 25-row gap is inside.
 - `git diff --check`: passed.
-- `uor-harness claim-wording`: passed.
+- `cargo run -q --locked -p uor-r4-claim-wording -- .`: passed.
 - `uor-harness prep-check`: the executed sheet remains complete and FIT.
 - Fresh exact-head review: APPROVE.
 
