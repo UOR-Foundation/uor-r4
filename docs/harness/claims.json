@@ -6,6 +6,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/batched-scorer": {
+    "branch": "deepseek/batched-scorer",
+    "claimed_at": "2026-11-02T22:48:16-05:00",
+    "head": "b6ebf7002",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/capacity-sheet-shape": {
     "branch": "deepseek/capacity-sheet-shape",
     "claimed_at": "2026-11-02T17:50:54-05:00",
@@ -104,6 +111,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/export-contract-guard": {
+    "branch": "deepseek/export-contract-guard",
+    "claimed_at": "2026-11-03T13:42:31-05:00",
+    "head": "66c50fa19",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/fbs-wide-export": {
     "branch": "deepseek/fbs-wide-export",
     "claimed_at": "2026-11-02T17:45:05-05:00",
@@ -115,6 +129,20 @@
     "branch": "deepseek/fresh-replies",
     "claimed_at": "2026-11-03T08:43:04-05:00",
     "head": "686d9c872",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/full-path-controls": {
+    "branch": "deepseek/full-path-controls",
+    "claimed_at": "2026-11-03T09:43:17-05:00",
+    "head": "1fa3d1724",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/full-path-memory-trainer": {
+    "branch": "deepseek/full-path-memory-trainer",
+    "claimed_at": "2026-11-03T10:10:44-05:00",
+    "head": "58470eb32",
     "lab": "deepseek",
     "note": ""
   },
@@ -153,10 +181,31 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/memory-heldout-comparison": {
+    "branch": "deepseek/memory-heldout-comparison",
+    "claimed_at": "2026-11-03T10:40:52-05:00",
+    "head": "5e5c2590e",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/memory-trace-reuse": {
+    "branch": "deepseek/memory-trace-reuse",
+    "claimed_at": "2026-11-03T11:26:38-05:00",
+    "head": "3b893ddc0",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/oracle-corpus-support": {
     "branch": "deepseek/oracle-corpus-support",
     "claimed_at": "2026-11-02T22:00:48-05:00",
     "head": "a4ef288d9",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/parallel-public-budget": {
+    "branch": "deepseek/parallel-public-budget",
+    "claimed_at": "2026-11-03T15:02:22-05:00",
+    "head": "c040c7f73",
     "lab": "deepseek",
     "note": ""
   },
@@ -167,12 +216,26 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/served-audit-release": {
+    "branch": "deepseek/served-audit-release",
+    "claimed_at": "2026-11-03T10:27:44-05:00",
+    "head": "c1b0c4178",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/served-comparison-result": {
     "branch": "deepseek/served-comparison-result",
     "claimed_at": "2026-11-02T23:16:08-05:00",
     "head": "75086c1d3",
     "lab": "deepseek",
     "note": ""
+  },
+  "deepseek/served-gain-training": {
+    "branch": "deepseek/served-gain-training",
+    "claimed_at": "2026-11-03T12:28:16-05:00",
+    "head": "c4c267c53",
+    "lab": "deepseek",
+    "note": "final served gain distance training through exact CPU/serving replay"
   },
   "deepseek/served-rounding-item": {
     "branch": "deepseek/served-rounding-item",

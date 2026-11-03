@@ -108,6 +108,12 @@ pub struct CpuRankMarginTrainer {
     order: Vec<usize>,
 }
 
+#[derive(Clone)]
+pub(crate) struct CpuRankMarginEvaluator {
+    forward: CpuFbsForward,
+    config: RankMarginConfig,
+}
+
 impl CpuRankMarginTrainer {
     pub fn from_artifact(
         artifact: &[u8],
@@ -317,17 +323,14 @@ impl CpuRankMarginTrainer {
     }
 
     pub(crate) fn query_for(&mut self, sample: &RankMarginSample) -> Result<Vec<i32>> {
-        self.forward.reset();
-        let mut step = None;
-        for &token in &sample.input {
-            step = Some(
-                self.forward
-                    .step(token, CpuFbsHead::Writer)
-                    .map_err(|error| invalid(format!("rank-margin forward: {error}")))?,
-            );
+        query_for_forward(&mut self.forward, sample)
+    }
+
+    pub(crate) fn evaluator(&self) -> CpuRankMarginEvaluator {
+        CpuRankMarginEvaluator {
+            forward: self.forward.clone(),
+            config: self.config,
         }
-        step.map(|step| step.query_q12)
-            .ok_or_else(|| invalid("training sample input is empty"))
     }
 
     fn apply_query(
@@ -490,88 +493,122 @@ impl CpuRankMarginTrainer {
     }
 
     pub(crate) fn reading(&self, query: &[i32], target: u32) -> Result<RankMarginReading> {
-        if query.len() != self.forward.width() {
-            return Err(invalid("rank-margin query width differs from the table"));
-        }
-        if target as usize >= self.forward.vocabulary() {
-            return Err(invalid("rank-margin target is outside the vocabulary"));
-        }
-        let width = query.len();
-        let table = self.forward.token_table();
-        let vocab = self.forward.vocabulary();
-        let mut distances = Vec::with_capacity(vocab);
-        for token in 0..vocab {
-            let row = &table[token * width..][..width];
-            let distance = query.iter().zip(row).fold(0i64, |sum, (&value, &point)| {
-                sum.wrapping_add(i64::from(value.abs_diff(i32::from(point))))
-            });
-            distances.push(distance);
-        }
-        let target_distance = distances[target as usize];
-        let target_rank = 1 + distances
-            .iter()
-            .enumerate()
-            .filter(|&(token, &distance)| {
-                distance < target_distance
-                    || (distance == target_distance && token < target as usize)
-            })
-            .count();
-
-        let mut cells = Vec::with_capacity(CELL_COUNT);
-        for cell in 0..CELL_COUNT {
-            let first = ((query[..8]
-                .iter()
-                .zip(&self.forward.writer_roots()[cell / 16]))
-            .fold(0i64, |sum, (&value, &point)| {
-                sum.wrapping_add(i64::from(value.abs_diff(point)))
-            }))
-            .wrapping_neg();
-            let last = ((query[width - 8..]
-                .iter()
-                .zip(&self.forward.writer_roots()[cell % 16]))
-            .fold(0i64, |sum, (&value, &point)| {
-                sum.wrapping_add(i64::from(value.abs_diff(point)))
-            }))
-            .wrapping_neg();
-            cells.push((first.wrapping_add(last), cell));
-        }
-        cells.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
-        let admitted: Vec<u32> = cells
-            .iter()
-            .take(self.forward.kept_cell_count())
-            .map(|&(_, cell)| cell as u32)
-            .collect();
-        let target_cell = (target % CELL_COUNT as u32) as u16;
-        let target_admitted = admitted.contains(&u32::from(target_cell));
-
-        let mut ranked: Vec<(i64, u32)> = (0..vocab)
-            .filter(|&token| admitted.contains(&((token % CELL_COUNT) as u32)))
-            .map(|token| (distances[token], token as u32))
-            .collect();
-        ranked.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
-        let top8: Vec<u32> = ranked.iter().take(TOP_K).map(|&(_, token)| token).collect();
-        let top1 = top8
-            .first()
-            .copied()
-            .ok_or_else(|| invalid("writer admitted no token"))?;
-        let rival_distance = ranked
-            .iter()
-            .find(|&&(_, token)| token != target)
-            .map_or(target_distance, |&(distance, _)| distance);
-        let margin = i64::from(self.config.margin_q12)
-            .checked_mul(width as i64)
-            .ok_or_else(|| invalid("rank margin overflows i64"))?;
-        Ok(RankMarginReading {
-            target_distance,
-            target_rank,
-            margin_loss: (margin + target_distance - rival_distance).max(0),
-            top1,
-            top8,
-            target_admitted,
-            target_cell,
-            admitted_cells: admitted,
-        })
+        reading_from_forward(&self.forward, self.config, query, target)
     }
+}
+
+impl CpuRankMarginEvaluator {
+    pub(crate) fn config(&self) -> RankMarginConfig {
+        self.config
+    }
+
+    pub(crate) fn query_for(&mut self, sample: &RankMarginSample) -> Result<Vec<i32>> {
+        query_for_forward(&mut self.forward, sample)
+    }
+
+    pub(crate) fn reading(&self, query: &[i32], target: u32) -> Result<RankMarginReading> {
+        reading_from_forward(&self.forward, self.config, query, target)
+    }
+}
+
+fn query_for_forward(forward: &mut CpuFbsForward, sample: &RankMarginSample) -> Result<Vec<i32>> {
+    forward.reset();
+    let mut step = None;
+    for &token in &sample.input {
+        step = Some(
+            forward
+                .step(token, CpuFbsHead::Writer)
+                .map_err(|error| invalid(format!("rank-margin forward: {error}")))?,
+        );
+    }
+    step.map(|step| step.query_q12)
+        .ok_or_else(|| invalid("training sample input is empty"))
+}
+
+fn reading_from_forward(
+    forward: &CpuFbsForward,
+    config: RankMarginConfig,
+    query: &[i32],
+    target: u32,
+) -> Result<RankMarginReading> {
+    if query.len() != forward.width() {
+        return Err(invalid("rank-margin query width differs from the table"));
+    }
+    if target as usize >= forward.vocabulary() {
+        return Err(invalid("rank-margin target is outside the vocabulary"));
+    }
+    let width = query.len();
+    let table = forward.token_table();
+    let vocab = forward.vocabulary();
+    let mut distances = Vec::with_capacity(vocab);
+    for token in 0..vocab {
+        let row = &table[token * width..][..width];
+        let distance = query.iter().zip(row).fold(0i64, |sum, (&value, &point)| {
+            sum.wrapping_add(i64::from(value.abs_diff(i32::from(point))))
+        });
+        distances.push(distance);
+    }
+    let target_distance = distances[target as usize];
+    let target_rank = 1 + distances
+        .iter()
+        .enumerate()
+        .filter(|&(token, &distance)| {
+            distance < target_distance || (distance == target_distance && token < target as usize)
+        })
+        .count();
+
+    let mut cells = Vec::with_capacity(CELL_COUNT);
+    for cell in 0..CELL_COUNT {
+        let first = ((query[..8].iter().zip(&forward.writer_roots()[cell / 16]))
+            .fold(0i64, |sum, (&value, &point)| {
+                sum.wrapping_add(i64::from(value.abs_diff(point)))
+            }))
+        .wrapping_neg();
+        let last = ((query[width - 8..]
+            .iter()
+            .zip(&forward.writer_roots()[cell % 16]))
+        .fold(0i64, |sum, (&value, &point)| {
+            sum.wrapping_add(i64::from(value.abs_diff(point)))
+        }))
+        .wrapping_neg();
+        cells.push((first.wrapping_add(last), cell));
+    }
+    cells.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    let admitted: Vec<u32> = cells
+        .iter()
+        .take(forward.kept_cell_count())
+        .map(|&(_, cell)| cell as u32)
+        .collect();
+    let target_cell = (target % CELL_COUNT as u32) as u16;
+    let target_admitted = admitted.contains(&u32::from(target_cell));
+
+    let mut ranked: Vec<(i64, u32)> = (0..vocab)
+        .filter(|&token| admitted.contains(&((token % CELL_COUNT) as u32)))
+        .map(|token| (distances[token], token as u32))
+        .collect();
+    ranked.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    let top8: Vec<u32> = ranked.iter().take(TOP_K).map(|&(_, token)| token).collect();
+    let top1 = top8
+        .first()
+        .copied()
+        .ok_or_else(|| invalid("writer admitted no token"))?;
+    let rival_distance = ranked
+        .iter()
+        .find(|&&(_, token)| token != target)
+        .map_or(target_distance, |&(distance, _)| distance);
+    let margin = i64::from(config.margin_q12)
+        .checked_mul(width as i64)
+        .ok_or_else(|| invalid("rank margin overflows i64"))?;
+    Ok(RankMarginReading {
+        target_distance,
+        target_rank,
+        margin_loss: (margin + target_distance - rival_distance).max(0),
+        top1,
+        top8,
+        target_admitted,
+        target_cell,
+        admitted_cells: admitted,
+    })
 }
 
 pub(crate) fn validate_training_model(artifact: &[u8]) -> Result<()> {
@@ -908,6 +945,17 @@ mod tests {
         reply: Vec<u32>,
     }
 
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct FullPathParts {
+        initial: Vec<u8>,
+        after_writer: Vec<u8>,
+        after_hamming: Vec<u8>,
+        with_memory: Vec<u8>,
+        hamming_off: Vec<u8>,
+        stripped: Vec<u8>,
+        final_artifact: Vec<u8>,
+    }
+
     fn commonest_target(counts: &BTreeMap<u32, usize>) -> u32 {
         counts
             .iter()
@@ -1006,7 +1054,7 @@ mod tests {
         }
     }
 
-    fn trained_full_path_parts() -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+    fn trained_full_path_parts() -> FullPathParts {
         let mut snapshot = canonical_snapshot(true);
         let initial = export_fbs_trunk_uorlut01(&snapshot).unwrap();
         assert!(IntegerStackModel::parse(&initial)
@@ -1142,6 +1190,20 @@ mod tests {
             .iter()
             .map(|&value| i16::try_from(value).unwrap())
             .collect::<Vec<_>>();
+        let mut no_hamming = snapshot.clone();
+        no_hamming.hamming = None;
+        let no_hamming_memory = export_fbs_trunk_uorlut01(&no_hamming).unwrap();
+        let hamming_off = add_point_key_uorlut01(
+            &no_hamming_memory,
+            &PointKeyImage {
+                width: snapshot.width,
+                points: point_values.clone(),
+                targets: vec![40],
+            },
+        )
+        .unwrap();
+        no_hamming.memory = None;
+        let stripped = export_fbs_trunk_uorlut01(&no_hamming).unwrap();
         let final_artifact = add_point_key_uorlut01(
             &with_memory,
             &PointKeyImage {
@@ -1170,6 +1232,8 @@ mod tests {
                 "initial_sha256": uor_r4_discrete::corpus::sha256(&initial),
                 "writer_sha256": uor_r4_discrete::corpus::sha256(&after_writer),
                 "hamming_sha256": uor_r4_discrete::corpus::sha256(&after_hamming),
+                "hamming_off_sha256": uor_r4_discrete::corpus::sha256(&hamming_off),
+                "stripped_sha256": uor_r4_discrete::corpus::sha256(&stripped),
                 "final_sha256": uor_r4_discrete::corpus::sha256(&final_artifact),
                 "margins_changed": margins_changed,
                 "opening_rows": memory.record.opening,
@@ -1177,7 +1241,15 @@ mod tests {
                 "final_bytes": final_artifact.len(),
             })
         );
-        (initial, after_writer, after_hamming, final_artifact)
+        FullPathParts {
+            initial,
+            after_writer,
+            after_hamming,
+            with_memory,
+            hamming_off,
+            stripped,
+            final_artifact,
+        }
     }
 
     fn trace(
@@ -1201,33 +1273,46 @@ mod tests {
         Ok(out)
     }
 
+    fn first_query_divergence(
+        left: &[crate::CpuFbsStep],
+        right: &[crate::CpuFbsStep],
+    ) -> Option<usize> {
+        left.iter()
+            .zip(right)
+            .position(|(left, right)| left.query_q12 != right.query_q12)
+    }
+
     #[test]
     fn data_derived_records_train_and_audit_the_full_path() -> Result<()> {
-        let (initial, after_writer, after_hamming, final_artifact) = trained_full_path_parts();
+        let parts = trained_full_path_parts();
         assert_eq!(
-            (
-                initial.clone(),
-                after_writer.clone(),
-                after_hamming.clone(),
-                final_artifact.clone()
-            ),
+            parts,
             trained_full_path_parts(),
             "the full-path construction is not deterministic"
         );
-        assert_ne!(after_writer, initial, "the writer did not train");
-        assert_ne!(after_hamming, after_writer, "Hamming margins did not train");
-        assert_ne!(final_artifact, after_hamming, "records did not attach");
+        assert_ne!(
+            parts.after_writer, parts.initial,
+            "the writer did not train"
+        );
+        assert_ne!(
+            parts.after_hamming, parts.after_writer,
+            "Hamming margins did not train"
+        );
+        assert_ne!(
+            parts.final_artifact, parts.after_hamming,
+            "records did not attach"
+        );
 
-        let base = trace(&after_writer, &[10, 11, 12], 2)?;
-        let hamming = trace(&after_hamming, &[10, 11, 12], 2)?;
+        let base = trace(&parts.after_writer, &[10, 11, 12], 2)?;
+        let hamming = trace(&parts.after_hamming, &[10, 11, 12], 2)?;
         assert_ne!(
             base.last().unwrap().query_q12,
             hamming.last().unwrap().query_q12,
             "trained Hamming margins did not change the served query"
         );
 
-        let full_reply = trace(&final_artifact, &[10, 11, 12, 20, 21, 22, 23], 2)?;
-        let without_memory = trace(&after_hamming, &[10, 11, 12, 20, 21, 22, 23], 2)?;
+        let full_reply = trace(&parts.final_artifact, &[10, 11, 12, 20, 21, 22, 23], 2)?;
+        let without_memory = trace(&parts.after_hamming, &[10, 11, 12, 20, 21, 22, 23], 2)?;
         for (row, name) in [
             (2, "opening"),
             (4, "first reply row"),
@@ -1250,8 +1335,8 @@ mod tests {
             "the opening memory changed a row before its lookup"
         );
 
-        let point_reply = trace(&final_artifact, &[30, 31, 32, 40], 2)?;
-        let no_point = trace(&after_hamming, &[30, 31, 32, 40], 2)?;
+        let point_reply = trace(&parts.final_artifact, &[30, 31, 32, 40], 2)?;
+        let no_point = trace(&parts.after_hamming, &[30, 31, 32, 40], 2)?;
         assert_eq!(
             point_reply[2].token, 40,
             "the point key did not name its target"
@@ -1267,7 +1352,7 @@ mod tests {
             (vec![30, 31, 32, 40], Some(2)),
         ] {
             let audit = audit_served_forward(
-                &final_artifact,
+                &parts.final_artifact,
                 &ServedForwardAuditConfig {
                     tokens,
                     token_source: None,
@@ -1303,12 +1388,149 @@ mod tests {
             std::env::temp_dir().join(format!("uor-full-path-records-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("trained-full-path.uorlut");
-        std::fs::write(&path, &final_artifact).unwrap();
-        assert_eq!(std::fs::read(&path).unwrap(), final_artifact);
+        std::fs::write(&path, &parts.final_artifact).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), parts.final_artifact);
         std::fs::remove_dir_all(root).unwrap();
         if let Some(out) = std::env::var_os("UOR_FULL_PATH_ARTIFACT") {
-            std::fs::write(out, &final_artifact).unwrap();
+            std::fs::write(out, &parts.final_artifact).unwrap();
         }
+        Ok(())
+    }
+
+    #[test]
+    fn full_path_record_controls_are_matched_and_exact() -> Result<()> {
+        let parts = trained_full_path_parts();
+        let first = [10, 11, 12, 20, 21, 22, 23];
+        let point = [30, 31, 32, 40];
+
+        let full_first = trace(&parts.final_artifact, &first, 2)?;
+        let memory_off = trace(&parts.after_hamming, &first, 2)?;
+        let hamming_off = trace(&parts.hamming_off, &first, 2)?;
+        let stripped = trace(&parts.stripped, &first, 2)?;
+        for (row, name) in [(2, "opening"), (4, "reply 1"), (5, "reply 2")] {
+            assert_ne!(
+                full_first[row].query_q12, memory_off[row].query_q12,
+                "memory-off did not remove the {name} move"
+            );
+        }
+        assert_ne!(
+            memory_off[2].query_q12, stripped[2].query_q12,
+            "Hamming-off did not remove the Hamming query contribution"
+        );
+        assert_ne!(
+            full_first[2].query_q12, stripped[2].query_q12,
+            "the fully stripped arm retained the full query"
+        );
+
+        let point_full = trace(&parts.final_artifact, &point, 2)?;
+        let point_off = trace(&parts.with_memory, &point, 2)?;
+        let hamming_off_point = trace(&parts.hamming_off, &point, 2)?;
+        let memory_off_point = trace(&parts.after_hamming, &point, 2)?;
+        let stripped_point = trace(&parts.stripped, &point, 2)?;
+        assert_eq!(point_full[2].token, 40);
+        assert_ne!(
+            point_full[2].token, point_off[2].token,
+            "point-off did not remove the point fallback"
+        );
+
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.final_artifact)
+                .unwrap()
+                .is_some()
+        );
+        let full_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.final_artifact)
+            .unwrap()
+            .unwrap();
+        assert!(full_memory.point.is_some());
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            uor_r4_integer::stack::read_memory_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.with_memory)
+                .unwrap()
+                .is_some()
+        );
+        let point_off_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.with_memory)
+            .unwrap()
+            .unwrap();
+        assert!(point_off_memory.point.is_none());
+        let stripped_model = IntegerStackModel::parse(&parts.stripped).unwrap();
+        assert!(stripped_model.turn_memory().is_none());
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.stripped)
+                .unwrap()
+                .is_none()
+        );
+        let hamming_off_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.hamming_off)
+            .unwrap()
+            .unwrap();
+        assert_eq!(hamming_off_memory.record.opening, 1);
+        assert_eq!(hamming_off_memory.record.reply, Some(2));
+        assert_eq!(hamming_off_memory.point.as_ref().unwrap().targets, [40]);
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.hamming_off)
+                .unwrap()
+                .is_none()
+        );
+
+        let arms = [
+            ("full", parts.final_artifact.as_slice()),
+            ("memory_off", parts.after_hamming.as_slice()),
+            ("point_off", parts.with_memory.as_slice()),
+            ("hamming_off", parts.hamming_off.as_slice()),
+            ("stripped", parts.stripped.as_slice()),
+        ];
+        for (name, artifact) in arms {
+            for (tokens, reply_start) in [(first.as_slice(), Some(2)), (point.as_slice(), Some(2))]
+            {
+                let audit = audit_served_forward(
+                    artifact,
+                    &ServedForwardAuditConfig {
+                        tokens: tokens.to_vec(),
+                        token_source: None,
+                        expected_artifact_sha256: None,
+                        reply_start,
+                        measure_timing: false,
+                    },
+                )
+                .unwrap();
+                assert!(!audit.parity.instrument_fault, "{name}");
+                assert_eq!(audit.parity.query_coordinate_mismatches, 0, "{name}");
+                assert_eq!(audit.parity.token_mismatches, 0, "{name}");
+                assert_eq!(audit.parity.kept_cell_mismatches, 0, "{name}");
+            }
+        }
+        assert_eq!(
+            parts,
+            trained_full_path_parts(),
+            "the control arms are not deterministic"
+        );
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "full_sha256": uor_r4_discrete::corpus::sha256(&parts.final_artifact),
+                "memory_off_sha256": uor_r4_discrete::corpus::sha256(&parts.after_hamming),
+                "point_off_sha256": uor_r4_discrete::corpus::sha256(&parts.with_memory),
+                "hamming_off_sha256": uor_r4_discrete::corpus::sha256(&parts.hamming_off),
+                "stripped_sha256": uor_r4_discrete::corpus::sha256(&parts.stripped),
+                "full_point_decision": point_full[2].token,
+                "point_off_decision": point_off[2].token,
+                "memory_off_point_decision": memory_off_point[2].token,
+                "hamming_off_point_decision": hamming_off_point[2].token,
+                "stripped_point_decision": stripped_point[2].token,
+                "first_memory_divergence": first_query_divergence(&full_first, &memory_off),
+                "first_hamming_off_divergence": first_query_divergence(&full_first, &hamming_off),
+                "first_stripped_divergence": first_query_divergence(&full_first, &stripped),
+                "point_hamming_off_divergence": first_query_divergence(&point_full, &hamming_off_point),
+            })
+        );
         Ok(())
     }
 
