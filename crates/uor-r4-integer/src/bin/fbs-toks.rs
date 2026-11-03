@@ -617,7 +617,8 @@ fn artifact_copy_key(bytes: &[u8]) -> Result<usize, String> {
         bytes[8..16]
             .try_into()
             .map_err(|_| "the artifact header length is truncated")?,
-    ) as usize;
+    );
+    let len = usize::try_from(len).map_err(|_| "the artifact header is too large")?;
     let end = 16usize
         .checked_add(len)
         .filter(|&end| end <= bytes.len())
