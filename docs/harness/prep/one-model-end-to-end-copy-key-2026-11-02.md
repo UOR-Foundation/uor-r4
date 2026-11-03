@@ -17,7 +17,7 @@ The measured fault (claude-259, `docs/labs/one-model-end-to-end/capacity-2026-11
 
 ## Base artifact
 
-This is a training comparison: the candidates are the checkpoints each arm produces. Both arms start from claude-259's (b) recipe, trained as served through main's current `--train-as-served 1`, which carries deepseek-4's forward surrogates (#3565). `train-in-space` and `fbs-snapshot` are built `--locked --features cuda` on every pod from this unit's pushed head (the key is commit `987cc3fe1` on base `eac5c1d90`), and the head and the binaries' SHA-256 values are recorded before the smoke. Outputs go under `results/claude/one-model-end-to-end-copy-key-2026-11-02/sN/`.
+This is a training comparison: the candidates are the checkpoints each arm produces. Both arms start from claude-259's (b) recipe, trained as served through main's current `--train-as-served 1`, which carries deepseek-4's forward surrogates (#3565). `train-in-space` and `fbs-snapshot` are built `--locked --features cuda` on every pod from this unit's pushed head (the key is commit `987cc3fe1` on base `eac5c1d90`), and the head and the binaries' SHA-256 values are recorded before the smoke. (Recorded after the pre-run: I-0 on seed 1's first pod, head `af7154c00`, found #3565's activation quantizer refusing on CUDA, F32 times F64. It is repaired in this unit's head, with the values unchanged, and I-0 runs again on every pod. See the ORDER, "Found at I-0".) Outputs go under `results/claude/one-model-end-to-end-copy-key-2026-11-02/sN/`.
 
 ## Arms
 

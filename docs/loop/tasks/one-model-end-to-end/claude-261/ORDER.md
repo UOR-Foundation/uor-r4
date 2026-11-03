@@ -41,6 +41,7 @@ Classed instrument (no model ran).
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
 - `crates/uor-r4-float-train/src/flock_read_hamming.rs`
+- `crates/uor-r4-float-train/src/hamilton_sheet.rs` (added at I-0: the served activation quantizer's dtype repair, below)
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
 - `crates/uor-r4-float-train/src/fbs_export.rs`
@@ -61,6 +62,14 @@ Classed instrument (no model ran).
 3. **The run** on Vast RTX 5090s inside the caps. Arms (b) and (k2), at seeds 1–3, 8,192 steps each, trained as served. DeepSeek's four runs go first on seed 1's pod. The outputs are sealed in the HF store with `SHA256SUMS`.
 4. **Scored and served:** the sheet's readings and decision table. Each arm's seed-1 export is served on conv-a, conv-b and conv-c, with transcripts and decode tok/s.
 5. **The REPORT**, negatives first, with one notebook row. It also corrects claude-259's REPORT, which cites deepseek-3 under #3565 (it landed as #3563).
+
+## Found at I-0 (seed 1's pod, head `af7154c00`)
+
+The whole CUDA library suite failed 2 of 291. Both failures are in #3563 and #3565's served quantization, which had not run on a GPU before.
+- `activation_quantize16` (`hamilton_sheet.rs`) built its two scale factors from untyped `0.5` and `1.0`, which are F64 tensors. Multiplying them into the F32 scale refuses: "dtype mismatch in mul, lhs: F32, rhs: F64". Every forward under `--train-as-served 1` runs through it, so both arms would have failed their smoke. The function is compiled only with `cuda`, so laptop tests never reached it.
+- Its CUDA test built its activations from untyped literals too (F64).
+
+Classed instrument: a fault in the served path both arms share, not a reading of either. It is repaired in this unit (the factors take the activation's dtype; the test's literals are `f32`). The values are unchanged: 0.5 and 1.0 are exact in both types. No training had started. The two tests are the repair's own check: they failed at `af7154c00` and run again as I-0 on every pod.
 
 ## Stop and ask if
 

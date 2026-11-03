@@ -687,12 +687,13 @@ pub(crate) fn activation_quantize16(x: &Tensor) -> Result<Tensor> {
     let max = x.abs()?.max_keepdim(candle_core::D::Minus1)?;
     let device = x.device();
     let mut scale = Tensor::ones_like(&max)?;
+    // claude-261: the factors take the activation's dtype (an untyped `0.5` is an F64 tensor, and
+    // F32 times F64 refuses).
+    let half = Tensor::full(0.5, max.shape(), device)?.to_dtype(max.dtype())?;
+    let one = Tensor::ones_like(&max)?;
     for bit in 15..64 {
         let threshold = 2f64.powi(bit);
-        let factor = max.ge(threshold)?.where_cond(
-            &Tensor::full(0.5, max.shape(), device)?,
-            &Tensor::full(1.0, max.shape(), device)?,
-        )?;
+        let factor = max.ge(threshold)?.where_cond(&half, &one)?;
         scale = scale.broadcast_mul(&factor)?;
     }
     let scaled = x.broadcast_mul(&scale)?;
@@ -3260,7 +3261,7 @@ mod tests {
         );
 
         let activation = Var::from_vec(
-            vec![40_000.0, -12_001.0, 3.0, -1.0, 70_001.0, 7.0, -3.0, 3.0],
+            vec![40_000.0f32, -12_001.0, 3.0, -1.0, 70_001.0, 7.0, -3.0, 3.0],
             (2, 4),
             &device,
         )?;
@@ -3292,7 +3293,7 @@ mod tests {
             vec![vec![1.0; 4]; 2]
         );
 
-        let clamped = Var::from_vec(vec![1e30, 1.0], (1, 2), &device)?;
+        let clamped = Var::from_vec(vec![1e30f32, 1.0], (1, 2), &device)?;
         let output = with_served_surrogate_training(1, 0, || {
             served_activation_quantize16(clamped.as_tensor())
         })?;
