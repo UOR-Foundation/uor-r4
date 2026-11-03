@@ -11,6 +11,12 @@ Resolve the final CHANGES finding on PR #3622 at
 the source set, but the generated roadmap view still reports 23 ready/138 total
 and omits the item and dependency edge.
 
+## Cancel probe (run first)
+
+At head `39f5cd992`, `roadmap render --check` fails because the view reports
+23 ready/138 total, while the source set contains 24 ready/139 items including
+the image item. The repair stands.
+
 ## Files in scope
 
 - `docs/roadmap/README.md`

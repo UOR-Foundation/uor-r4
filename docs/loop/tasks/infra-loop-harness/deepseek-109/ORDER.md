@@ -13,6 +13,11 @@ The tested content commit and receipt hashes were correct, but the following
 commit's description omitted its update to the content-commit line, and the PR
 body linked an ORDER path that does not exist on `main` before merge.
 
+## Cancel probe (run first)
+
+At head `4101aeb61`, the closing-commit description omits the content-commit
+line, and the PR-body ORDER URL returns 404 before merge. The repair stands.
+
 ## Files in scope
 
 - `docs/loop/tasks/infra-loop-harness/deepseek-108/REPORT.md`

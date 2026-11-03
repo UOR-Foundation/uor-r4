@@ -14,6 +14,12 @@ The item's requirements were correct, but its implementation scope omitted
 report did not distinguish gate execution at the implementation head from the
 later receipt commit. The PR body also needs exact final sizing.
 
+## Cancel probe (run first)
+
+At head `0f92abc70`, the item omits the integer manifest from scope, the source
+link has the wrong depth, and `pr-check` reports the stale size. The repair
+stands.
+
 ## Files in scope
 
 - `docs/roadmap/items/geometric-image-input.md`

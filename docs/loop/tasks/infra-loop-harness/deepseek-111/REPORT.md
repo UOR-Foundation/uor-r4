@@ -1,5 +1,8 @@
 # REPORT: setup-row chain repair, deepseek-111
 
+> **Superseded by [deepseek-112](../deepseek-112/REPORT.md).** A final review
+> found the ORDER chain still omitted the charter-required cancel probe.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Setup row: 2 (item-file maintenance).

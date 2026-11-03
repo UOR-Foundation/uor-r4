@@ -10,6 +10,13 @@ Repair the final CHANGES finding on PR #3622 at
 `674d471c13a8a1dc24fe2f946573e7cead5f40c7`: every new task record and the PR
 body named a non-existent base commit with transposed trailing digits.
 
+## Cancel probe (run first)
+
+At head `674d471c`, the recorded base
+`9e0403b13e72cdc9cb840e9b62898ec33e0d614d` is absent from the object database,
+while `git merge-base HEAD origin/main` is
+`9e0403b132da34752499c657def95dfce3235538`. The repair stands.
+
 ## Files in scope
 
 - `docs/loop/tasks/infra-loop-harness/deepseek-104/**`

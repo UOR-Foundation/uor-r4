@@ -10,6 +10,11 @@ Repair the review-record refusal on PR #3622 at
 `83011dc666648cf4931513969b855573a94bd550`. The manually written
 maintenance ORDER chain omitted the required `Setup row: 2` field.
 
+## Cancel probe (run first)
+
+At head `83011dc66`, `loop review` refuses the exact-head record because the
+active ORDER and its predecessors name no setup row. The repair stands.
+
 ## Files in scope
 
 - `docs/loop/tasks/infra-loop-harness/deepseek-104/ORDER.md`

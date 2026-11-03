@@ -14,6 +14,12 @@ the active report's diff size is stale, its gate-head wording is ambiguous, two
 issue work-card requirements were generalized away, and copied relative links
 in the PR body do not resolve outside the repository.
 
+## Cancel probe (run first)
+
+At head `d9a646718`, the report's size and head accounting are stale, two issue
+requirements are generalized, and copied PR-body links fail outside the
+repository. The repair stands.
+
 ## Files in scope
 
 - `docs/roadmap/items/geometric-image-input.md`

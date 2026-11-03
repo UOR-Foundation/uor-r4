@@ -11,6 +11,12 @@ Repair the final CHANGES finding on PR #3622 at
 commit added only receipts, but that commit also changed the report's size
 line.
 
+## Cancel probe (run first)
+
+At head `d9a646718`, comparing that commit with its parent shows both
+`REPORT.md` and `receipts.jsonl` changed. The receipts-only description is
+therefore still wrong and the repair stands.
+
 ## Files in scope
 
 - `docs/loop/tasks/infra-loop-harness/deepseek-106/**`
