@@ -2,7 +2,12 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). Path step 4: one model trained as served, exported, served and scored end to end, with tok/s.
 
-TEST FITNESS: PENDING - a fresh non-author adversarial review of this sheet and its scripts.
+TEST FITNESS: FIT - fresh non-author adversarial review, round 2, of this sheet at `bde52c3cf`. Round 1, at `e4a352873`, was NOT FIT, with:
+- a blocker: I-0 named a test by its file, `geometric_stack_native`, where cargo prints the module, `geometric_stack`;
+- two majors: R6 could be reused from a failing export, and part B's absent-arm clause was dropped;
+- six minors.
+
+All are fixed. Round 2's three minors are fixed in this text: a pass is read as first tokens only, R6 runs on the raw export, and the crate is named for I-0's names. No bar moved.
 
 PRE-RUN: PENDING - a fresh D67 review of `job-266.sh`, `watch-266.sh` and this sheet.
 
@@ -38,13 +43,13 @@ Unchanged: (b) has copy key 1, (k2) `--hamming-copy-key 2`, both on part B's com
 ## Readings
 
 - **R1 to R5:** claude-261's grade, unchanged (`grade.sh`, SHA-256 `3cd7663c93d2d5b8b4f59b8b4425a832d3f3be9505a91ad6af222a2fc2796e29`), p-w deciding and p-v confirming. They grade the float scores, so they describe the float model.
-- **R6:** claude-261's timing protocol and speed condition, unchanged (`timing.sh`), on each arm's seed-1 raw export.
+- **R6:** claude-261's timing protocol and speed condition (`timing.sh`), unchanged except that it runs on each arm's seed-1 raw export.
 - **R7:** conv-a turn 3 under each arm's seed-1 raw export, and whether it names Maya. Reported only: the whole conv-a, conv-b and conv-c transcripts through `uor-chat --protocol 2`.
 - **I-3** on all six raw exports, reported per arm and per seed: first tokens, whole replies and order mismatches against that arm's own `samples-memory.json`.
 
 ## Bar
 
-**If every export made passes I-3** (exit 0, no order mismatch, at most 8 of 310 first tokens differing, and I-5 and I-6 hold), part B's table is read in order, unchanged: rows 1–4, with row 1's I-3 condition. An arm absent at a seed (it diverged, or ran out of memory alone on its card) makes no export there, and its seed goes to row 4, as part B's step 6 says.
+**If every export made passes I-3** (exit 0, no order mismatch, at most 8 of 310 first tokens differing, and I-5 and I-6 hold), part B's table is read in order, unchanged: rows 1–4, with row 1's I-3 condition. That condition is read as "first tokens match on DEV", not as part B's "serves exactly as it was trained". An arm absent at a seed (it diverged, or ran out of memory alone on its card) makes no export there, and its seed goes to row 4, as part B's step 6 says.
 
 **If any export made fails I-3:**
 - **Nothing closes, nothing is named, no status moves** (§4.1, §4.2, L-007).
@@ -75,7 +80,7 @@ Unchanged: (b) has copy key 1, (k2) `--hamming-copy-key 2`, both on part B's com
   - claude-264's `served_fbs_projections_round_to_the_residual_grid_on_cuda` and `served_projection_rounding_is_the_integer_gather_on_cuda`;
   - claude-265's four: `served_bridge_takes_the_unsnapped_d11_contract`, `the_training_forward_selects_and_restores_the_served_bridges`, `a_step_as_served_reaches_every_projection_after_a_requantized_activation` and `served_surrogate_gradients_are_exact_on_cuda`.
 
-  Each name is defined once in the crate at the pin, so each is matched as the last segment of cargo's whole line, `test <module path>::<name> ... ok`, whatever the module path. A file's module can differ from its name: `geometric_stack_native.rs` is `mod geometric_stack`.
+  Each name is defined once in `uor-r4-float-train` at the pin, and I-0 runs that crate's library only (`-p uor-r4-float-train --lib`), so each is matched as the last segment of cargo's whole line, `test <module path>::<name> ... ok`, whatever the module path. A file's module can differ from its name: `geometric_stack_native.rs` is `mod geometric_stack`.
 - **I-1 (the smoke)** is unchanged.
 - **I-2 (the projection)** is unchanged. claude-265's trainer clock read 30 s for 256 served steps on this contract (about 26,000 context tok/s), so 8,192 steps take about 16 minutes before evals, and no cut is expected.
 - **I-3** is part B's, on raw exports: `fbs-export --raw-gates --raw-transition --run-config CONFIG SNAPSHOT OUT`, then `fbs-toks ARTIFACT --replies PROMPTS --out FILE --reply-tokens 64` on DEV's prompts from the arm's own `samples-memory.json`.
