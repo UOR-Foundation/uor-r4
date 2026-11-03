@@ -89,6 +89,8 @@ Seed 1's (b) ran out the same way on `vast-58894902`, at 01:52Z, 3,210 s in, aft
 
 While two arms share the card, their memory together climbs through training, by about 1,000 to 1,300 MiB a minute, and falls back at times. Trained alone, (k2) at seed 2 held 5,040–7,216 MiB through its whole 2,048 steps (9,424 MiB at the final eval), and trained in 1,565 s, against 3,182–3,284 s for each shared arm. So sharing caused the climb, and it bought no speed: two arms trained one after the other on one pod take about the same time. The REPORT names this for the next unit: arms train one after the other, and I-2 projects each arm alone (6,144 steps fit in 90 minutes alone, against 2,048 shared).
 
+Owner decision, 3 Nov 2026 at about 02:40Z. Asked "Which fix should the next runs use?", Casey answered, verbatim: "Arms in turn". From the next unit, every pod job trains (and scores) its arms one after the other, never two on one card, and I-2 projects each arm's steps from its own throughput alone. No memory trace is run to find why sharing climbs. This run keeps its design: seed 3's shared arms stand, and every rerun trains alone.
+
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
