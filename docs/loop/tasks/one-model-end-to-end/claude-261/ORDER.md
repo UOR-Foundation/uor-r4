@@ -93,6 +93,17 @@ Owner decision, 3 Nov 2026 at about 02:40Z. Asked "Which fix should the next run
 
 Owner decision, 3 Nov 2026 at about 02:50Z, on the scorer's speed. Scoring one arm took over an hour on each pod: one CPU core at 100%, the GPU 57–97% busy (mean 71%). The greedy decode runs one sample at a time and runs the forward over the whole window for each reply token. Asked "Should a batched scorer be the next unit after this run?", Casey answered, verbatim: "Yes, scorer next". So the unit after this one decodes a panel's samples together, with one batched forward a token, and must match the one-at-a-time decode exactly.
 
+Found at seed 2's grade (04:11Z): under main's `--train-as-served 1` (#3565's forward surrogates), both arms learn far less per step than claude-259's runs did before #3565.
+- At step 2,048, DEV nearest is 921–2,314 of 14,287 here, against claude-259's 11,357 and up at the same step.
+- deepseek-5's 256-step runs at this head isolate it to the served form: 20–23 nearest hits served against 225–229 plain, and 355 s against 51–52 s to train.
+
+Owner decision, 3 Nov 2026 at about 04:30Z, on the order of work after this finding. Claude recommended:
+1. Fix the served-training fault now, in its own session (claude's session "Fix why trained-as-served learns 10x less per step", which Casey started).
+2. Close this unit, then the batched scorer, in this session.
+3. Then the served quantizer's speed, and the full-length one-model run.
+
+Casey answered, verbatim: "Yes, please proceed on your recommended path, trying to fix these problems".
+
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
