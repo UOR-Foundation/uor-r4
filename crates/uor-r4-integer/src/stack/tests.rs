@@ -1738,21 +1738,56 @@ fn loopback_error_after_headers_does_not_duplicate_http_response() -> ChatTest {
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
     let port = listener.local_addr()?.port();
     let mut writer = std::net::TcpStream::connect(("127.0.0.1", port))?;
-    let _reader = listener.accept()?.0;
+    let mut reader = listener.accept()?.0;
     crate::loopback::write_connection_error(
         &mut writer,
         &crate::openai::OpenAiError::new(500, "post-header failure"),
         &config,
         true,
     )?;
-    writer.set_read_timeout(Some(std::time::Duration::from_millis(20)))?;
+    reader.set_read_timeout(Some(std::time::Duration::from_millis(20)))?;
     let mut byte = [0u8; 1];
-    let result = writer.read(&mut byte);
+    let result = reader.read(&mut byte);
     match result {
         Ok(0) => {}
         Err(ref error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
         other => panic!("an SSE error must close, not append a second HTTP response: {other:?}"),
     }
+    Ok(())
+}
+
+#[test]
+fn loopback_json_error_after_headers_does_not_duplicate_http_response() -> ChatTest {
+    use std::io::Read as _;
+
+    let (model, json) = chat(5)?;
+    let serving = crate::openai::OpenAiServing::new(model, json, 1)?;
+    let config = crate::loopback::LoopbackConfig::new(serving)?;
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
+    let mut writer = std::net::TcpStream::connect(("127.0.0.1", port))?;
+    let mut reader = listener.accept()?.0;
+    let mut response_started = false;
+    crate::loopback::write_response(
+        &mut writer,
+        200,
+        "application/json; charset=utf-8",
+        b"{}",
+        &config,
+        &mut response_started,
+    )?;
+    assert!(response_started);
+    crate::loopback::write_connection_error(
+        &mut writer,
+        &crate::openai::OpenAiError::new(500, "post-header failure"),
+        &config,
+        response_started,
+    )?;
+    writer.shutdown(std::net::Shutdown::Both)?;
+    let mut response = String::new();
+    reader.read_to_string(&mut response)?;
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert_eq!(response.matches("HTTP/1.1").count(), 1, "{response}");
     Ok(())
 }
 

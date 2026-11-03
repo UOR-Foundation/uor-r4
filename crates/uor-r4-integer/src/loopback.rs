@@ -178,7 +178,13 @@ fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(
         let request = read_request(&mut stream, config.max_body_bytes)?;
         validate_host_origin(&request, config)?;
         if request.target == "/healthz" && request.method == "GET" {
-            return write_json(&mut stream, 200, &config.serving.health_json(), config);
+            return write_json(
+                &mut stream,
+                200,
+                &config.serving.health_json(),
+                config,
+                &mut response_started,
+            );
         }
         if request.target.starts_with("/v1/") {
             if request.method == "OPTIONS" {
@@ -188,7 +194,7 @@ fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(
             return route_api(&mut stream, request, config, &mut response_started);
         }
         if request.method == "GET" && config.studio_root.is_some() {
-            return serve_static(&mut stream, &request, config);
+            return serve_static(&mut stream, &request, config, &mut response_started);
         }
         Err(OpenAiError::unsupported("route is not implemented").with_code("not_implemented"))
     })();
@@ -207,7 +213,14 @@ pub(crate) fn write_connection_error(
     if response_started {
         return Ok(());
     }
-    write_json(stream, error.status, &error.to_json(), config)
+    let mut error_response_started = false;
+    write_json(
+        stream,
+        error.status,
+        &error.to_json(),
+        config,
+        &mut error_response_started,
+    )
 }
 
 fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, OpenAiError> {
@@ -391,16 +404,39 @@ fn route_api(
     response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     if request.method == "OPTIONS" {
-        return write_response(stream, 204, "application/json; charset=utf-8", &[], config);
+        return write_response(
+            stream,
+            204,
+            "application/json; charset=utf-8",
+            &[],
+            config,
+            response_started,
+        );
     }
     match (request.method.as_str(), request.target.as_str()) {
-        ("GET", "/v1/models") => write_json(stream, 200, &config.serving.models_json(), config),
-        ("GET", "/v1/capabilities") => {
-            write_json(stream, 200, &config.serving.capabilities_json(), config)
-        }
+        ("GET", "/v1/models") => write_json(
+            stream,
+            200,
+            &config.serving.models_json(),
+            config,
+            response_started,
+        ),
+        ("GET", "/v1/capabilities") => write_json(
+            stream,
+            200,
+            &config.serving.capabilities_json(),
+            config,
+            response_started,
+        ),
         ("GET", path) if path.starts_with("/v1/models/") => {
             if path == "/v1/models/uor-chat" {
-                write_json(stream, 200, &config.serving.model_card(), config)
+                write_json(
+                    stream,
+                    200,
+                    &config.serving.model_card(),
+                    config,
+                    response_started,
+                )
             } else {
                 Err(OpenAiError::new(404, "model does not exist").with_code("model_not_found"))
             }
@@ -463,6 +499,7 @@ fn generate_api(
             200,
             &config.serving.response_json(family, &outcome),
             config,
+            response_started,
         )
     }
 }
@@ -583,6 +620,7 @@ fn write_json(
     status: u16,
     value: &Value,
     config: &LoopbackConfig,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     let body =
         serde_json::to_vec(value).map_err(|error| OpenAiError::new(500, error.to_string()))?;
@@ -592,15 +630,17 @@ fn write_json(
         "application/json; charset=utf-8",
         &body,
         config,
+        response_started,
     )
 }
 
-fn write_response(
+pub(crate) fn write_response(
     stream: &mut TcpStream,
     status: u16,
     content_type: &str,
     body: &[u8],
     config: &LoopbackConfig,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     let reason = match status {
         200 => "OK",
@@ -617,6 +657,7 @@ fn write_response(
         _ => "Error",
     };
     let headers = format!("HTTP/1.1 {status} {reason}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n{}\r\n", body.len(), cors_headers(config));
+    *response_started = true;
     stream
         .write_all(headers.as_bytes())
         .map_err(|_| OpenAiError::new(500, "client disconnected"))?;
@@ -636,6 +677,7 @@ fn serve_static(
     stream: &mut TcpStream,
     request: &Request,
     config: &LoopbackConfig,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     let root = config
         .studio_root
@@ -706,7 +748,7 @@ fn serve_static(
         std::fs::read(&candidate)
             .map_err(|_| OpenAiError::new(404, "static file is unavailable"))?
     };
-    write_response(stream, 200, mime, &body, config)
+    write_response(stream, 200, mime, &body, config, response_started)
 }
 
 fn percent_decode(target: &str) -> Result<String, OpenAiError> {
