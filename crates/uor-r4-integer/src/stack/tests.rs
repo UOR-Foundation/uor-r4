@@ -4057,6 +4057,14 @@ fn the_copy_key_is_recorded_only_when_two() {
         });
         IntegerStackModel::parse(&bytes).expect("the session serves it");
     }
+    // The loader and the session refuse copy key 3 as well, not only the exporter.
+    snap.hamming = Some(crate::fbs_snapshot::FbsHammingSnapshot { copy_key: 2, ..read.clone() });
+    let two = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let three = with_header(&two, |h| {
+        h["hamming"]["copy_key"] = serde_json::json!(3);
+    });
+    assert!(super::read_hamming_uorlut01(&three).is_err(), "the loader refuses copy key 3");
+    assert!(IntegerStackModel::parse(&three).is_err(), "the session refuses copy key 3");
     snap.hamming = Some(crate::fbs_snapshot::FbsHammingSnapshot { copy_key: 3, ..read });
     assert!(super::export_fbs_trunk_uorlut01(&snap).is_err(), "copy key 3 is refused");
 }

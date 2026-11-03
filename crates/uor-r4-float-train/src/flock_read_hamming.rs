@@ -448,9 +448,10 @@ fn check_copy_key(copy_key: usize, heads: usize, width: usize) -> Result<()> {
             "a copy key names 1 or 2 tokens, not {copy_key}"
         )));
     }
-    if copy_key == 2 && (heads == 0 || !(width / heads).is_multiple_of(8)) {
+    // claude-261 review: one head is a type head only, so copy key 2 would key nothing.
+    if copy_key == 2 && (heads < 2 || !(width / heads).is_multiple_of(8)) {
         return Err(invalid(
-            "copy key 2 needs heads of whole 8-coordinate blocks, so each half is whole lanes",
+            "copy key 2 needs a copy head (2 heads or more) of whole 8-coordinate blocks, so each half is whole lanes",
         ));
     }
     Ok(())
@@ -1236,6 +1237,33 @@ mod tests {
         assert_eq!(two_back(&ids, 4), vec![10, 10, 10, 11, 20, 20, 20, 21]);
     }
 
+    /// claude-261: copy key 2 puts `first` (`x_t` in the query, `x_{s−1}` in the key) in each
+    /// copy head's low half and `second` in its high half, and leaves the columns past the copy
+    /// heads as `first`'s. The integer `CopyHeads::joined` packs the same way (bit `c` is
+    /// coordinate `c`), which `copy_heads_match_the_f64_reference` pins on that side. CPU tensor
+    /// compute is refused (D24/D29), so this runs on the GPU, at every pod's I-0.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn pair_halves_puts_the_first_token_in_each_copy_heads_low_half() {
+        let device = Device::new_cuda(0).unwrap();
+        let (heads, head_width, width) = (2, 16, 40);
+        let first = Tensor::full(1f32, (3, width), &device).unwrap();
+        let second = Tensor::full(2f32, (3, width), &device).unwrap();
+        let paired = pair_halves(&first, &second, heads, head_width)
+            .unwrap()
+            .to_vec2::<f32>()
+            .unwrap();
+        let want: Vec<f32> = (0..width)
+            .map(|c| {
+                let high = c < heads * head_width && c % head_width >= head_width / 2;
+                if high { 2.0 } else { 1.0 }
+            })
+            .collect();
+        for row in paired {
+            assert_eq!(row, want);
+        }
+    }
+
     /// claude-261: a copy key names 1 or 2 tokens, and copy key 2 halves each head on whole
     /// lanes; anything else is refused.
     #[test]
@@ -1249,6 +1277,7 @@ mod tests {
         }
         // Heads of 12 coordinates have halves of 6, which split a lane.
         assert!(check_copy_key(2, 4, 48).is_err());
+        assert!(check_copy_key(2, 1, 64).is_err(), "one head has no copy head to key");
         assert!(check_copy_key(1, 4, 48).is_ok());
         assert!(check_copy_key(2, 4, 256).is_ok());
     }
