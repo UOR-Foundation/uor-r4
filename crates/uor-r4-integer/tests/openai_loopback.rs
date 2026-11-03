@@ -329,6 +329,25 @@ fn request(
     )
 }
 
+fn request_bytes(port: u16, target: &str, body: &[u8], extra: &str) -> (u16, String, String) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let wire = format!(
+        "POST {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n",
+        body.len()
+    );
+    stream.write_all(wire.as_bytes()).unwrap();
+    stream.write_all(body).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    let status = response.split_whitespace().nth(1).unwrap().parse().unwrap();
+    let split = response.find("\r\n\r\n").unwrap();
+    (
+        status,
+        response[..split].to_string(),
+        response[split + 4..].to_string(),
+    )
+}
+
 fn post_json(port: u16, target: &str, value: Value) -> (u16, Value) {
     let (status, _, body) = request(port, "POST", target, &value.to_string(), "test-token", "");
     (status, serde_json::from_str(&body).unwrap())
@@ -388,7 +407,8 @@ fn models_health_and_json_generation_routes() {
         "",
     );
     let capabilities: Value = serde_json::from_str(&capabilities).unwrap();
-    assert_eq!(capabilities["vision"], false);
+    assert_eq!(capabilities["vision"]["decomposition"], true);
+    assert_eq!(capabilities["vision"]["visual_understanding"], false);
     assert_eq!(capabilities["inflight_limit"], 1);
     assert_eq!(capabilities["context"], 64);
 
@@ -564,6 +584,178 @@ fn sse_matches_json_and_supports_all_generation_families() {
         item_ids.into_iter().next().unwrap(),
         completed["response"]["output"][0]["id"].as_str().unwrap()
     );
+    server.shutdown().unwrap();
+}
+
+#[test]
+fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
+    const HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
+    const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
+    let server = LoopbackServer::spawn(config()).unwrap();
+    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
+    let (status, _, body) = request_bytes(
+        server.port(),
+        "/v1/images/decompose",
+        &[12, 20, 28, 255],
+        headers,
+    );
+    assert_eq!(status, 200, "{body}");
+    let image: Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(image["schema"], "uor-r4.image/1");
+    assert_eq!(image["source_sha256"], HASH);
+    assert_eq!(image["canonical_prompt"], CANONICAL);
+    assert_eq!(image["patches"][0]["q12"], json!([304, -128, 144, 0]));
+    assert_eq!(image["patches"][0]["mean_rgb"], json!([12, 20, 28]));
+    assert_eq!(image["visual_understanding"], false);
+
+    let (changed_status, _, changed_body) = request_bytes(
+        server.port(),
+        "/v1/images/decompose",
+        &[13, 20, 28, 255],
+        headers,
+    );
+    assert_eq!(changed_status, 200);
+    let changed: Value = serde_json::from_str(&changed_body).unwrap();
+    assert_ne!(changed["source_sha256"], image["source_sha256"]);
+    assert_ne!(changed["canonical_prompt"], image["canonical_prompt"]);
+
+    let (status, chat) = post_json(
+        server.port(),
+        "/v1/chat/completions",
+        json!({
+            "model": "uor-chat",
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "Hi\n"},
+                {"type": "uor_r4_image", "uor_r4_image": {
+                    "schema": "uor-r4.image/1",
+                    "source_sha256": HASH,
+                    "canonical_prompt": CANONICAL
+                }}
+            ]}],
+            "max_tokens": 2
+        }),
+    );
+    assert_eq!(status, 200, "{chat}");
+    assert_usage(&chat);
+
+    let (_, _, capabilities) = request(
+        server.port(),
+        "GET",
+        "/v1/capabilities",
+        "",
+        "test-token",
+        "",
+    );
+    let capabilities: Value = serde_json::from_str(&capabilities).unwrap();
+    assert_eq!(capabilities["vision"]["decomposition"], true);
+    assert_eq!(capabilities["vision"]["visual_understanding"], false);
+    assert!(capabilities["routes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|route| route["path"] == "/v1/images/decompose"));
+    server.shutdown().unwrap();
+}
+
+#[test]
+fn image_route_and_extension_reject_bad_inputs_and_context_overflow() {
+    let server = LoopbackServer::spawn(config()).unwrap();
+    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
+    for (body, extra, expected) in [
+        (&b"\0\0\0"[..], headers, 400),
+        (
+            &b""[..],
+            "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
+            400,
+        ),
+        (
+            &b""[..],
+            "X-UOR-Width: 0\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
+            400,
+        ),
+        (
+            &b""[..],
+            "X-UOR-Width: 257\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
+            400,
+        ),
+        (
+            &b""[..],
+            "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 2\r\n",
+            400,
+        ),
+        (&b"\0\0\0"[..], headers, 400),
+    ] {
+        let (status, _, response) =
+            request_bytes(server.port(), "/v1/images/decompose", body, extra);
+        assert_eq!(status, expected, "{response}");
+        assert!(response.contains("\"error\""));
+    }
+    let (status, _, _) = request(
+        server.port(),
+        "POST",
+        "/v1/images/decompose",
+        "x",
+        "test-token",
+        headers,
+    );
+    assert_eq!(status, 400);
+
+    let big_headers = "X-UOR-Width: 16\r\nX-UOR-Height: 16\r\nX-UOR-Grid: 16\r\n";
+    let (status, _, body) = request_bytes(
+        server.port(),
+        "/v1/images/decompose",
+        &vec![0; 16 * 16 * 4],
+        big_headers,
+    );
+    assert_eq!(status, 200, "{body}");
+    let big: Value = serde_json::from_str(&body).unwrap();
+    for (schema, hash, canonical, expected) in [
+        (
+            "wrong",
+            big["source_sha256"].as_str().unwrap(),
+            big["canonical_prompt"].as_str().unwrap(),
+            400,
+        ),
+        (
+            "uor-r4.image/1",
+            &"0".repeat(64),
+            big["canonical_prompt"].as_str().unwrap(),
+            400,
+        ),
+        (
+            "uor-r4.image/1",
+            big["source_sha256"].as_str().unwrap(),
+            "a caption, not R4",
+            400,
+        ),
+        (
+            "uor-r4.image/1",
+            big["source_sha256"].as_str().unwrap(),
+            big["canonical_prompt"].as_str().unwrap(),
+            413,
+        ),
+    ] {
+        let part = json!({"type": "uor_r4_image", "uor_r4_image": {
+            "schema": schema,
+            "source_sha256": hash,
+            "canonical_prompt": canonical
+        }});
+        let content = if expected == 413 {
+            vec![part.clone(), part.clone(), part.clone(), part]
+        } else {
+            vec![part]
+        };
+        let (status, response) = post_json(
+            server.port(),
+            "/v1/chat/completions",
+            json!({
+                "model": "uor-chat",
+                "messages": [{"role": "user", "content": content}],
+                "max_tokens": 2
+            }),
+        );
+        assert_eq!(status, expected, "{response}");
+    }
     server.shutdown().unwrap();
 }
 
@@ -823,16 +1015,13 @@ fn stop_mapping_text_parts_and_exact_prompt_counts() {
 fn http_busy_preflight_disconnect_and_header_bounds() {
     let mut config = config_with_long_generation();
     config.origin = Some("https://studio.test".into());
+    let serving = config.serving.clone();
     let server = LoopbackServer::spawn(config).unwrap();
     let body = json!({"model": "uor-chat", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 40, "stream": true, "stream_options": {"include_usage": true}}).to_string();
     let wire = |port: u16| {
         format!("POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     };
-    let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
-    first.write_all(wire(server.port()).as_bytes()).unwrap();
-    let mut role = [0u8; 1];
-    let read = first.read(&mut role).unwrap();
-    assert!(read > 0);
+    let busy_permit = serving.try_start_generation().unwrap();
     let (status, _, second) = request(
         server.port(),
         "POST",
@@ -843,8 +1032,14 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
     );
     assert_eq!(
         status, 429,
-        "a second stream is rejected before any 200/SSE bytes: {second}"
+        "a held generation permit rejects the HTTP stream before any 200/SSE bytes: {second}"
     );
+    drop(busy_permit);
+    let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    first.write_all(wire(server.port()).as_bytes()).unwrap();
+    let mut role = [0u8; 1];
+    let read = first.read(&mut role).unwrap();
+    assert!(read > 0);
     let mut remainder = String::new();
     first.read_to_string(&mut remainder).unwrap();
     assert!(remainder.contains("data: [DONE]"));

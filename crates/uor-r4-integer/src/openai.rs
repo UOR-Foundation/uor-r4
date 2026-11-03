@@ -234,7 +234,7 @@ impl OpenAiServing {
             "context": self.model.shape().context,
             "decoding": "greedy",
             "inflight_limit": 1,
-            "vision": false,
+            "vision": {"decomposition": true, "visual_understanding": false, "content_part": "uor_r4_image", "schema": "uor-r4.image/1", "max_dimension": 256, "max_grid": 16},
             "body_limits": {"headers_bytes": 32_768, "default_body_bytes": 1_048_576},
             "routes": [
                 {"path": "/healthz", "methods": ["GET"], "streaming": false},
@@ -243,11 +243,27 @@ impl OpenAiServing {
                 {"path": "/v1/chat/completions", "methods": ["POST"], "streaming": true},
                 {"path": "/v1/completions", "methods": ["POST"], "streaming": true},
                 {"path": "/v1/responses", "methods": ["POST"], "streaming": true},
+                {"path": "/v1/images/decompose", "methods": ["POST"], "streaming": false},
                 {"path": "/v1/capabilities", "methods": ["GET"], "streaming": false}
             ],
-            "accepted": ["text strings", "text content parts", "max_tokens", "max_completion_tokens", "max_output_tokens (Responses)", "stream", "stream_options.include_usage", "temperature: 0", "n: 1"],
-            "unsupported_families": ["embeddings", "files", "uploads", "batches", "fine_tuning", "assistants", "threads", "moderations", "audio", "images", "realtime", "vector_stores"]
+            "accepted": ["text strings", "text content parts", "uor_r4_image content parts", "max_tokens", "max_completion_tokens", "max_output_tokens (Responses)", "stream", "stream_options.include_usage", "temperature: 0", "n: 1"],
+            "unsupported_families": ["embeddings", "files", "uploads", "batches", "fine_tuning", "assistants", "threads", "moderations", "audio", "image_generation", "realtime", "vector_stores"]
         })
+    }
+
+    pub fn decompose_image(
+        &self,
+        width: usize,
+        height: usize,
+        rgba: &[u8],
+        grid: usize,
+    ) -> Result<Value, OpenAiError> {
+        let image = uor_r4_vision::decompose_rgba(width, height, rgba, grid)
+            .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("image"))?;
+        let mut response = json!(image);
+        response["canonical_prompt"] = json!(image.canonical_prompt());
+        response["visual_understanding"] = json!(false);
+        Ok(response)
     }
 
     pub fn validate_request(
@@ -712,8 +728,16 @@ fn text_content(value: &Value) -> Result<String, OpenAiError> {
             let mut text = String::new();
             for part in parts {
                 let kind = part.get("type").and_then(Value::as_str).unwrap_or_default();
+                if kind == "uor_r4_image" {
+                    let piece = r4_image_content(part)?;
+                    if !text.is_empty() && !text.ends_with('\n') {
+                        text.push('\n');
+                    }
+                    text.push_str(&piece);
+                    continue;
+                }
                 if matches!(kind, "image" | "image_url" | "input_image") {
-                    return Err(OpenAiError::unsupported("image content parts are not implemented; deterministic R4 image decomposition is a separate unit"));
+                    return Err(OpenAiError::unsupported("ordinary image content parts are not implemented; use deterministic uor_r4_image decomposition"));
                 }
                 if !matches!(kind, "text" | "input_text") {
                     return Err(OpenAiError::unsupported(format!(
@@ -742,9 +766,43 @@ fn text_content(value: &Value) -> Result<String, OpenAiError> {
         }
         _ => Err(OpenAiError::new(
             400,
-            "message content must be a nonempty string or text-part array",
+            "message content must be a nonempty string or supported content-part array",
         )),
     }
+}
+
+fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
+    if part.as_object().map(|object| object.len() != 2).unwrap_or(true) {
+        return Err(OpenAiError::new(
+            400,
+            "a uor_r4_image part accepts only type and uor_r4_image",
+        ));
+    }
+    let image = part
+        .get("uor_r4_image")
+        .and_then(Value::as_object)
+        .ok_or_else(|| OpenAiError::new(400, "uor_r4_image requires an object"))?;
+    if image.len() != 3 {
+        return Err(OpenAiError::new(
+            400,
+            "uor_r4_image accepts only schema, source_sha256, and canonical_prompt",
+        ));
+    }
+    let schema = image.get("schema").and_then(Value::as_str).ok_or_else(|| {
+        OpenAiError::new(400, "uor_r4_image requires a string schema")
+    })?;
+    if schema != "uor-r4.image/1" {
+        return Err(OpenAiError::new(400, "unsupported R4 image schema").with_param("uor_r4_image.schema"));
+    }
+    let hash = image.get("source_sha256").and_then(Value::as_str).ok_or_else(|| {
+        OpenAiError::new(400, "uor_r4_image requires a string source_sha256")
+    })?;
+    let canonical = image.get("canonical_prompt").and_then(Value::as_str).ok_or_else(|| {
+        OpenAiError::new(400, "uor_r4_image requires a string canonical_prompt")
+    })?;
+    uor_r4_vision::validate_canonical_prompt(canonical, hash)
+        .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("uor_r4_image"))?;
+    Ok(canonical.to_owned())
 }
 
 fn chat_error(error: StackChatError) -> OpenAiError {

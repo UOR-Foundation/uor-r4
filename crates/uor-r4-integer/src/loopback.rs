@@ -268,6 +268,9 @@ fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, Open
         "content-type",
         "authorization",
         "x-uor-studio-token",
+        "x-uor-width",
+        "x-uor-height",
+        "x-uor-grid",
         "origin",
     ] {
         if headers
@@ -462,11 +465,42 @@ fn route_api(
             GenerationFamily::Responses,
             response_started,
         ),
+        ("POST", "/v1/images/decompose") => {
+            decompose_api(stream, &request, config, response_started)
+        }
         _ => Err(
             OpenAiError::unsupported("this OpenAI endpoint family is not implemented")
                 .with_code("not_implemented"),
         ),
     }
+}
+
+fn decompose_api(
+    stream: &mut TcpStream,
+    request: &Request,
+    config: &LoopbackConfig,
+    response_started: &mut bool,
+) -> Result<(), OpenAiError> {
+    if request.header("content-type") != Some("application/octet-stream") {
+        return Err(OpenAiError::new(
+            400,
+            "Content-Type must be application/octet-stream",
+        ));
+    }
+    fn dimension(request: &Request, name: &str) -> Result<usize, OpenAiError> {
+        request
+            .header(name)
+            .ok_or_else(|| OpenAiError::new(400, format!("missing {name} header")))?
+            .parse::<usize>()
+            .map_err(|_| OpenAiError::new(400, format!("invalid {name} header")))
+    }
+    let width = dimension(request, "x-uor-width")?;
+    let height = dimension(request, "x-uor-height")?;
+    let grid = dimension(request, "x-uor-grid")?;
+    let image = config
+        .serving
+        .decompose_image(width, height, &request.body, grid)?;
+    write_json(stream, 200, &image, config, response_started)
 }
 
 fn generate_api(
