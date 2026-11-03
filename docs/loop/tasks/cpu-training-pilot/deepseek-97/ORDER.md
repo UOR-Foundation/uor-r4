@@ -1,7 +1,6 @@
 # ORDER: exact final served-gain distance training, deepseek-97
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `c4c267c534d7160ac6d544c420c90249a1cddeba`.
 
 ## Goal

@@ -3,7 +3,7 @@
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Sheet:
-[cpu-training-pilot-gain-2026-11-03.md](../../../harness/prep/cpu-training-pilot-gain-2026-11-03.md).
+[cpu-training-pilot-gain-2026-11-03.md](../../../../harness/prep/cpu-training-pilot-gain-2026-11-03.md).
 Base: `c4c267c534d7160ac6d544c420c90249a1cddeba`.
 
 ## What did not work
