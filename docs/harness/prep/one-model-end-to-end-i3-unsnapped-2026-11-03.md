@@ -1,8 +1,21 @@
 # Prep sheet: does training and serving on the unsnapped D11 contract close I-3? (one-model-end-to-end, claude-265, 3 Nov 2026)
 
-TEST FITNESS: PENDING - a fresh non-author review.
+TEST FITNESS: FIT - a fresh non-author adversarial review of this sheet (SHA-256 `1a278234…1bd2` at `6a3e98081`), the crates diff from `74e6cf369` to `C`, and the three scripts. No blocker.
+- It confirmed the change: `BRIDGE_ACTIVATION_I16` is written only inside the served bridge and its guard's restore, so `with_d11_mode`'s dispatch cannot reach a non-served path, and it is restored on `Err` and on panic. The D11 trainer, plain and Export forwards are unchanged. Training and scoring both take the served forward.
+- Its one MAJOR is fixed: the bands now have a stated order, so a seed at 8 or fewer misses with R2R above 8 reads Not decidable.
+- Its two MINORs are fixed in `serve-265.sh`: a failed `fbs-toks` is refused per seed, and the integer file must hold 310 rows. The script's hash below is the fixed one, and the smoke reran with the same counts.
+- Its note on the watcher's $15 stop is answered under "Cost".
+- One existing gap is noted: `with_d11_training_snaps` restores `bridge_d11` on `Ok` and `Err`, not on a panic, as `with_d11_training` did before.
 
-PRE-RUN: PENDING - a fresh D67 review.
+PRE-RUN: PASS - the same fresh D67 review, conditional on three items it could not read, all checked by the session at `C`:
+- every flag of the train and score commands is parsed by `train-in-space.rs`, which is unchanged since claude-264's `5ce220ebc`, where the score command ran. `fbs-snapshot MODEL_DIR OUT_JSON` is its first usage line;
+- all four named tests are in each file's one `mod tests`: `hamilton_sheet.rs:3317` and `:3459`, `in_space_long.rs:14587` and `:14694`;
+- a default `hamming_copy_key` is left out of `config.json` (`skip_serializing_if = "is_one"`), so the job's `null` check holds.
+
+The raw export's fidelity rests on claude-182, claude-259 and step 0's smoke. If it falls short, a miss reads as an instrument fault (§4.2).
+- *Chain:* plan step 4, with I-3 as the door to the full-length served run.
+- *Outcomes:* a pass opens that run; partial and not the part each name the next sites; not decidable fixes the scorer first.
+- *Caps:* no pod was running at registration; one 5090, 2.5 h, at most $2.
 
 ## Question
 
@@ -118,6 +131,8 @@ Beside them:
 
 ## Bar
 
+The readings are taken in this order, and the first that applies is the unit's reading: **Not read**, then **Not decidable**, then **Pass**, then **Partial**, then **Not the part**. So a seed at 8 or fewer misses with R2R above 8 reads Not decidable, not Pass.
+
 - **Pass, at both seeds:**
   - order and prompt mismatches 0;
   - first-token misses at most 8 of 310 (`310 · 29 / 1000`, claude-261's bar);
@@ -126,8 +141,8 @@ Beside them:
   I-3 is then closed on the unsnapped contract. The full-length served run (claude-263's part B sheet) runs next, re-pinned to `C` and to the raw export.
 - **Partial:** not a pass, but misses at most 50 at seed 1 and 65 at seed 2, half of claude-264's 100 and 131. The snap was the main part. The next unit reads the remaining sites (the Hamming reads, the turn memory, the writer's Q12 query, the convolution, the embedding) with the R2R count in hand.
 - **Not the part:** misses above half of claude-264's at either seed. The snap was not the main gap. The next unit reads those sites first.
-- **Not decidable at this bar:** R2R's first-token count is above 8. The float model then differs from itself by more than the bar allows, so no integer session can pass. The REPORT gives every count anyway. The next unit makes the scorer deterministic, or registers the bar against R2R, before the full-length run.
-- **Not read:** any order or prompt mismatch, a sample count other than 310, an I-6 refusal, or a failed train, score or snapshot.
+- **Not decidable at this bar:** R2R's first-token count is above 8. The float model then differs from itself by more than the bar allows, so a miss count against one score cannot tell parity from the float's own spread, whether it is above or below 8. The REPORT gives every count anyway. The next unit makes the scorer deterministic, or registers the bar against R2R, before the full-length run.
+- **Not read:** any order or prompt mismatch, a sample count other than 310 in a float or an integer file, an I-6 refusal, a failed `fbs-toks`, or a failed train, score or snapshot.
 
 A miss is classed instrument (§4.2), as in claude-263 and claude-264. The two models here are new, trained under the changed contract, so claude-264's counts are a reference, not a paired control.
 
@@ -144,7 +159,7 @@ A miss is classed instrument (§4.2), as in claude-263 and claude-264. The two m
   |---|---|
   | `job-265.sh` | `07f24d5f720d06634bc92df913b851b57658959265b47f677247823295900230` |
   | `watch-265.sh` | `294e493fa3bf1458a98e11549deb7ce74db4f197aceaf3434a793db0c804561a` |
-  | `serve-265.sh` | `8138ac2f9d2444a98e6c69ab7cb563d403099ca862cf4ef47f842a5bac6581e7` |
+  | `serve-265.sh` | `205f0af47459c627d2766f3e892e97d3f423a499ef4c203685e88b0aa4081ef6` |
 
   All three are in `~/uor-r4/local/claude/i3-265/`. The REPORT quotes them.
 
@@ -163,7 +178,7 @@ There are 310 paired prompts per seed. The pass bar (≤ 8) and claude-264's cou
     --card https://github.com/UOR-Foundation/uor-r4/pull/3600
   ```
 
-- **The watcher.** `watch-265.sh` checks every minute. It renews the lease every 25 minutes, and stops on a lost pod, a 90-minute stall, $15 spent or 4.5 h.
+- **The watcher.** `watch-265.sh` checks every minute. It renews the lease every 25 minutes, and stops on a lost pod, a 90-minute stall, $15 spent or 4.5 h. Its $15 stop is a backstop for the whole project, not this sheet's ceiling: the session enforces the $2.00 and 2.5 h below, and the watcher only wakes it.
 - **Stop rule.**
   - A build, I-0, training, scoring or snapshot failure stops that step, and is classed instrument against mechanism before any retry.
   - A resource fault is rerun once, on a new pod.
