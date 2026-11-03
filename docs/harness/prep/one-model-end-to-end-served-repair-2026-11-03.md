@@ -1,6 +1,6 @@
 # Served-training repair: CUDA gate, profile and the matched rerun
 
-**Status:** REGISTERED (claude-262, [ORDER](../../loop/tasks/one-model-end-to-end/claude-262/ORDER.md), PR #3587).
+**Status:** REGISTERED (claude-262, [ORDER](../../loop/tasks/one-model-end-to-end/claude-262/ORDER.md), PR #3587); amended after step P, before step R ([Amendment 1](#amendment-1-after-step-p-before-step-r)).
 
 TEST FITNESS: FIT (see Verdict)
 
@@ -97,11 +97,15 @@ evaluation step, `EVAL` absent before each command and `fbs-snapshot` creating i
 
 ```text
 fbs-snapshot --round-as-exported RUN/models/step-000256 EVAL/models/step-000256
-train-in-space --inspect EVAL --data-root DATA --served-forward 1
-train-in-space --decode-speed EVAL --data-root DATA --served-forward 1
+train-in-space --inspect EVAL --data-root DATA --served-forward 1 --retain-rates 1 --seed SEED
+train-in-space --decode-speed EVAL/models/step-000256 --data-root DATA --served-forward 1 \
+  --objective cell --retain-rates 1 --seed SEED
 ```
 
-A wrapper checks every command's exit status and writes `DONE` only after all of them succeed.
+`--inspect` and `--decode-speed` take the run's rate flag and seed from the command line, and
+`--decode-speed` takes the checkpoint folder; `--objective cell` makes it time the nearest decode
+these runs train for (Amendment 1). A wrapper checks every command's exit status and writes `DONE`
+only after all of them succeed.
 
 **S. Seal.** Logs, progress, configs, `profile.json` files, source, binary, data and copy hashes,
 reports and `SHA256SUMS`, in one tar under `results/claude/one-model-end-to-end-served-repair-2026-11-03/`;
@@ -123,7 +127,7 @@ upload, read back and check against `SHA256SUMS` before `down`.
   below plain. DEV nearest hits are reported beside top-1, against deepseek-5's 23/20 served and
   225/229 plain.
 
-Decode tokens/s (`--decode-speed --served-forward 1`, contexts as the command reports) are reported
+Decode tokens/s (the `--decode-speed` command above, contexts as it reports them) are reported
 first in the REPORT.
 
 ## Minimum test power
@@ -158,6 +162,74 @@ scripts/pod/uor-pod up --lab claude --session claude-262 --count 1 --gpu 5090 --
 A completion watcher is armed on every detached job. The lease is renewed at least every 30 minutes
 and released, and the pod destroyed, only after the sealed tar is uploaded, read back and checked.
 claude-261's pods (`vast-58896165`, `vast-58912154`) are not touched.
+
+## Amendment 1 (after step P, before step R)
+
+Step P ran at `753e08d7b`, where I-0 passed, on `vast-58920706`. It found two things that change
+what runs next. Neither changes the question, the data, R's training recipe, the bar or the stop
+rule.
+
+**Step P's profile.** 16 profiled steps of 40; each run's stages sum to its unprofiled median within
+0.2%.
+
+| Stage (median) | plain, seed 1 | served, seed 1 |
+|---|---:|---:|
+| Step, unprofiled | 90.2 ms | 682.9 ms (7.57×) |
+| `served.round` | — | 14.5 ms |
+| Each layer's recurrence | 0.57 ms | 26.9 ms |
+| Each layer's MLP | 0.18 ms | 20.0 ms |
+| `backward` | 53.6 ms | 353.2 ms |
+| `layer1.hamming_read`, `readout.hamming`, `objective.table_search` | 8.1, 8.1, 12.8 ms | 8.6, 8.5, 12.8 ms |
+
+The backward alone adds 299.6 ms, 3.3 plain steps; the six recurrence and six MLP stages add 277 ms
+together. Export rounding (`served.round`, 0.16 of a plain step) is not the cost, so this is not the
+host-copy cause that `served-rounding-cost` (#3586) probed.
+
+**Named cause.** In the D11 mode every Hamilton gate runs the icosian-hard arm, which snaps each
+4-block to its nearest icosian (`icosian_snap_cuda_tensor` in `hamilton_sheet.rs`) in passes of
+8,192 blocks, about ten candle operations a pass. At batch 16 a recurrence makes two snaps (the
+transition and the output gate, 24 + 24 passes) and an MLP one (36 passes), and the icosian-hard
+backward snaps each gate again. The stage times follow the pass counts: 26.9 / 20.0 = 1.35 against
+48 / 36 = 1.33, about 0.56 ms a pass. The cause is read from these proportions, not timed on its
+own; step P at the new head tests it.
+
+**Repair, in the ORDER's files.** `3980925d1` snaps in passes of 2^18 blocks (`SNAP_PASS_BLOCKS`,
+about 0.5 GB a pass). Every step of the snap is per block, so no root changes. A new CUDA test,
+`icosian_snap_pass_size_changes_only_its_cost_on_cuda`, holds the roots bit for bit against
+8,192-block passes on a batch-16 gate (spread, zero, −0.0 and exactly tied blocks), and fails at
+8,192, where that gate takes 36 passes. The repair does not touch lines 669–712, so
+`setaside-exponent.patch` applies unchanged (`git apply --check`; its hash is unchanged).
+
+**Evaluation commands.** Step P's evaluation dry run found two faults in the registered commands,
+which this sheet copied from deepseek-5's:
+- `--decode-speed EVAL` exited 1 (`unknown variant cell, expected ce or margin_hinge`). It takes
+  the checkpoint folder, `EVAL/models/step-000256`, and read the run folder's `config.json` as a
+  model config. Without `--objective` it also decodes with the writer (`sheet`), not the nearest
+  decode these runs train for.
+- `--inspect` takes the rate, fold and floor flags from the command line; the binary's usage says
+  they "must be the checkpoint's run's". Without `--retain-rates 1` it read the served profile run's
+  rounded step-40 copy as top-1 13, nearest 1, admitted 421; the run's own evaluation at step 40
+  reads top-1 8, nearest 16, admitted 476.
+
+The amended commands in step R add `--retain-rates 1 --seed SEED` to both, add `--objective cell`
+to the decode, and pass the decode the checkpoint folder. The fold and floor flags stay at their
+defaults, which the runs train with. deepseek-10's REPORT does not record whether the earlier run of
+deepseek-5's sheet passed these flags, so its top-1 and nearest figures are cited only as reported.
+
+**What runs, in order, at the amended head** (the head that carries this amendment and its FIT;
+its source differs from `3980925d1` in docs only):
+1. I-0 as registered, with the new test also required by name.
+2. Step P again, same command. The served step is read against 2× plain, stage by stage. If it is
+   still past 2× and a stage in the ORDER's files adds more than one plain step, that stage is
+   repaired the same way before R (a new head, I-0 again). If the stage is outside the ORDER's
+   files, it is named and R runs.
+3. The evaluation dry run on P's served checkpoint with the amended commands. Instrument check: on
+   the rounded copy, byte-identical to the served run's checkpoint, `--inspect` must reproduce the
+   run's own step-40 DEV line (top-1, nearest hits, openings, admitted rows). A mismatch stops the
+   work before R.
+4. R and S as registered, with the amended evaluation commands.
+
+The added I-0 and P take about 10 minutes, inside the two GPU-hour and $1.50 cap.
 
 ## Verdict
 
