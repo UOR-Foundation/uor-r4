@@ -47,6 +47,7 @@ Local, not committed: `~/uor-r4/local/claude/claude-270/` (job and watcher scrip
 2. **A negative gate:** with the flip set aside, the default test fails. Restore, and it passes.
 3. **GPU parity at the code head.** One RTX 5090 pod per checkpoint, (b) seed 1 and (k2) seed 2, running claude-266's exact scoring command (`--samples 1536 --reply-tokens 64 --retain-rates 1 --panel p-w=… --panel p-v=… --seed S`) twice: with `--batched-decode 0` and with `1`.
    - **Pass:** the sha256 of every output file matches between the two runs. Wall seconds for each run are recorded.
+   - **Why bytes suffice:** the scored files hold no timing. Each decode's wall seconds go to the `ScoredFile` manifest the scorer prints to stdout. claude-266's 15 stored files, from this same command, contain no `decode` or `search` field. The pre-run review's round 1 (BLOCK) read the manifest's timing as part of the files; the stored files disprove that. The two stdout manifests are also compared with the seconds dropped (descriptive), and their seconds give the speed reading.
    - **Also compared, descriptive only:** the serial run against claude-266's stored scored files for the same checkpoint. That shows whether claude-267 to claude-269 changed the decode at all.
 4. **The CUDA float library suite** passes on each pod at the code head before scoring, including `exact_length_batches_match_one_at_a_time_decodes`.
 5. **A REPORT, negatives first,** leading with the decode's tokens per second, serial against batched. Plus one notebook row and the item paragraph.
