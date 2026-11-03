@@ -74,6 +74,8 @@ describe('Mac-inspired Studio visual system', () => {
             expect(parseFloat(getComputedStyle(control).minInlineSize), selector).toBeGreaterThanOrEqual(24);
         }
         expect(parseFloat(declaration(style, '.switch input:focus-visible + .switch-track').outline)).toBeGreaterThanOrEqual(2);
+        expect(declaration(style, '.tree-row:hover .tree-attach, .tree-row:focus-within .tree-attach, .tree-attach:focus-visible').opacity).toBe('1');
+        expect(stylesheet).toContain('@media (hover: none), (pointer: coarse)');
         // @ts-expect-error Node's filesystem API is available in the Vitest runtime.
         const { readFileSync } = await import('node:fs');
         const files = readFileSync('assets/js/studio_files.js', 'utf8');

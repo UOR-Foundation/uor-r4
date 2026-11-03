@@ -31,7 +31,9 @@ describe('URL artifact diagnostics after source regrouping', () => {
         unmount = mountModelSources(document.getElementById('modelSourceMount')!).unmount;
         await import(studioUiModule);
         document.dispatchEvent(new CustomEvent('uor-studio-ready'));
-        await vi.advanceTimersByTimeAsync(450);
+        await vi.advanceTimersByTimeAsync(0);
+        const ui = (window as unknown as { __studioUi: { promptUrl(): boolean } }).__studioUi;
+        expect(ui.promptUrl()).toBe(true);
         const input = document.getElementById('modelUrlInput') as HTMLInputElement | null;
         expect(input).not.toBeNull();
         expect(document.querySelector('#artifactDiagnostics')!.contains(input)).toBe(true);

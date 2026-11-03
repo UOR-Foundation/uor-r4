@@ -3355,6 +3355,8 @@ html[data-theme="light"] { --text-faint: #7a6753; }
 .editor-tab-close { width: 22px; height: 22px; }
 .editor-tab-close, .attachment-chip-remove, .msg-action, #btnCommandPaletteNav, .switch-track, .tree-attach { min-block-size: 24px; min-inline-size: 24px; }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tree-row:hover .tree-attach, .tree-row:focus-within .tree-attach, .tree-attach:focus-visible { opacity: 1; }
+@media (hover: none), (pointer: coarse) { .tree-attach { opacity: 1; } }
 .sr-only { position: absolute; clip-path: inset(50%); overflow: hidden; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; white-space: nowrap; }
 
 /* workspace merged view */

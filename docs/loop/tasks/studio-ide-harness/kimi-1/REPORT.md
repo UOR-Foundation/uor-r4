@@ -1,6 +1,6 @@
 # REPORT: Mac-inspired Studio IDE and simplified UOR/API connections
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d` and `b6ebf7002745f1c9ec5c7de227bc9f9ae66009e3` before final delivery checks; exact delivery-head evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d` and `b6ebf7002745f1c9ec5c7de228bc9f9ae66009e3` before final delivery checks; exact delivery-head evidence is posted on the PR.
 
 ## What did not work
 
@@ -20,21 +20,22 @@ The recovered five-commit unit:
 - Simplifies Connections around **UOR Chat — experimental** through the existing supported non-discrete stack/WASM path, **Custom API providers**, and a closed **Artifact diagnostics** region. Original buttons, listeners, `data-action` values, readiness checks, storage, and truthful capability labels are preserved.
 - Renames user-facing Models navigation to Connections while preserving internal `models`/`model` keys and compatibility IDs. No engine, worker, tokenizer, `studio_api.js`, model artifact, MCP behavior, dependency, publisher, deployment, `.github/**`, or typed-library cutover was added.
 - Includes the ORDER, roadmap item, design, implementation plan, and focused actual-page tests for computed visual treatment, source regrouping/listener preservation, readiness, and navigation labels.
+- Fresh-review scope now explicitly includes `studio_files.js`: the tree attachment is a separate native button with visible row hover/focus and coarse-pointer states. Overlay exclusivity, early diagnostics, remaining controls, and live status/aria-current behavior have focused tests in `studioOverlayState.test.ts`, `studioNativeTheme.test.ts`, and `studioUrlDiagnostics.test.ts`.
 
-During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and restores Menu on every mobile close, while a drawer-local Tab trap contains focus and mobile hydration starts collapsed. All 227 tests and the real-browser open/close, Connections, stored-expanded reload, and palette checks pass after these repairs. The recovered commits, merge-forward, ORDER/REPORT, and these scoped repairs form the delivery.
+During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and restores Menu on every mobile close, while a drawer-local Tab trap contains focus and mobile hydration starts collapsed. All 228 tests and the real-browser open/close, Connections, stored-expanded reload, and palette checks pass after these repairs. The recovered commits, merge-forward, ORDER/REPORT, and these scoped repairs form the delivery.
 
 ## Measurements and checks
 
 At the repaired verification head before the final REPORT commit:
 
-- `npm test`: **28 test files, 227 tests passed, 0 failures**.
+- `npm test`: **29 test files, 228 tests passed, 0 failures**.
 - `npm run typecheck`: PASS, no TypeScript errors.
 - `npm run build`: PASS; `dist/studio-foundation.js` 123.06 kB (gzip 33.77 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
 - `node --test assets/js/model_sources.test.mjs`: **12 tests passed, 0 failures**.
 - `node --check assets/js/studio_ui.js` and `node --check assets/js/model_sources.js`: PASS; `studio_files.js` also passed the earlier syntax check.
 - `node verify_studio_page.mjs --strict-router`: PASS for `index.html` and `geometric_prime_router_webapp.html`; `legacyResidual: []`, `failures: []`.
 - `node verify_studio_page_load.mjs --strict-router`: PASS. Studio: 12 page-load requests, 0 external; router: 2 requests, 0 external. Planted external detection passed on inline, blob-worker, and late channels.
-- Combined executed unit/model-source tests: **239 passed, 0 failures**.
+- Combined executed unit/model-source tests: **240 passed, 0 failures**.
 - `cargo xtask roadmap render` and `roadmap check`: **136 items OK**. A fresh `xtask` build was required after the stale binary first proposed a duplicate issue; the refreshed sync then updated #3569 with zero creates and wrote `issues.json`/the 136-item roadmap README.
 
 Repository gates, claim wording, local policy, exact-head review, and GitHub checks are recorded at the exact delivery head below after this REPORT is committed.
@@ -59,7 +60,7 @@ The built-in browser exercised the actual local page, with no real credentials/f
 - `UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop gates --full`: **11/11 GREEN**.
 - `uor-harness loop pr-check --local`: the first run identified the new-item merge-base anchor and two missing REPORT headings. The ORDER now names the existing parent #3500 plus the new follow-up #3569 without hiding scope, and the required headings are present. The corrected rerun is recorded in the final PR receipts.
 - `cargo run -q --locked -p uor-r4-claim-wording -- .` and `git diff --check`: final results are recorded in the PR receipts.
-- The final 239 Studio/model-source checks and both page-load layers listed above ran at the repaired head. After the focus/overlay/navigation regressions, the focused tests and complete 227-test suite, typecheck, and syntax checks all passed again; the real-browser focus, Connections, stored-expanded reload, and palette diagnostics were also rechecked.
+- The final 240 Studio/model-source checks and both page-load layers listed above ran at the repaired head. After the focus/overlay/navigation regressions, the focused tests and complete 228-test suite, typecheck, and syntax checks all passed again; the real-browser focus, Connections, stored-expanded reload, and palette diagnostics were also rechecked.
 
 ## Skills used
 
@@ -72,7 +73,7 @@ Recovery and working discipline, isolated worktrees, plan execution, test-driven
 
 ## Exact delivery head
 
-Verification commit `f5b1779e2fa35a56d7edae6e571666feeea4c7b0` (tree `1d8b583a7a987880a38b1eb4212560753c71fd8f`) contains the recovered implementation, all scoped review repairs, current-main integration, and generated roadmap mapping. At that exact head: 29 files/227 Vitest plus 12 model-source tests passed (239 total); typecheck/build/syntax passed; static and runtime page-load traps passed with zero external requests; full repository gates were 11/11 GREEN; `loop pr-check --local` passed with only the disclosed D76 scope/commit-order/FILEMAP advisories; claim wording and `git diff --check` passed. The roadmap has 136 items and #3569 is mapped with zero duplicate creates. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). The subsequent receipt commit is the review/PR head. Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
+Verification commit `f5b1779e2fa35a56d7edae6e571666feeea4c7b0` (tree `1d8b583a7a987880a38b1eb4212560753c71fd8f`) contains the recovered implementation, all scoped review repairs, current-main integration, and generated roadmap mapping. At that exact head: 29 files/228 Vitest plus 12 model-source tests passed (240 total); typecheck/build/syntax passed; static and runtime page-load traps passed with zero external requests; full repository gates were 11/11 GREEN; `loop pr-check --local` passed with only the disclosed D76 scope/commit-order/FILEMAP advisories; claim wording and `git diff --check` passed. The roadmap has 136 items and #3569 is mapped with zero duplicate creates. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). The subsequent receipt commit is the review/PR head. Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
 
 ## Still open
 

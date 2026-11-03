@@ -16,7 +16,7 @@ beforeEach(() => {
     window.matchMedia = vi.fn((query: string) => query === '(max-width: 900px)' ? { matches: true, addEventListener: vi.fn() } : { matches: false, addEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
     vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(() => [new DOMRect()] as unknown as DOMRectList);
     Element.prototype.scrollIntoView = vi.fn();
-    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><aside id="navSidebar"><button class="nav-item" id="navAgent" data-section="agent">Agent</button><button class="nav-item" id="navWorkspace" data-section="workspace">Workspace</button><button class="nav-item" id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" hidden></button><main id="mainColumn"><section id="modelView" data-view="model"></section></main></div><div id="settingsDialog" class="modal-backdrop" hidden><button id="btnCloseSettings">Close</button></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div>';
+    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><aside id="navSidebar"><button class="nav-item" id="navAgent" data-section="agent">Agent</button><button class="nav-item" id="navWorkspace" data-section="workspace">Workspace</button><button class="nav-item" id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" hidden></button><main id="mainColumn"><input id="chatInput"><section id="modelView" data-view="model"></section></main></div><div id="settingsDialog" class="modal-backdrop" hidden><button id="btnCloseSettings">Close</button></div><div id="helpDialog" class="modal-backdrop" hidden><button id="btnCloseHelp">Close help</button></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div>';
     vi.resetModules();
 });
 
@@ -89,5 +89,35 @@ describe('overlay and view-state coordination', () => {
         expect(html).toMatch(/class="sr-only" for="chatInput"/);
         expect(html).toMatch(/class="sr-only" for="paletteInput"/);
         expect(html).toContain("setView('chat', { focus: false })");
+    });
+
+    it('closes other modals and blocks background navigation shortcuts', async () => {
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const ui = (window as unknown as { __studioUi: { openSettings(): void; openHelp(): void } }).__studioUi;
+        const settings = document.getElementById('settingsDialog')!;
+        const help = document.getElementById('helpDialog')!;
+        ui.openSettings();
+        ui.openHelp();
+        expect(settings.hidden).toBe(true);
+        expect(help.hidden).toBe(false);
+        ui.openSettings();
+        expect(help.hidden).toBe(true);
+        expect(settings.hidden).toBe(false);
+        await vi.advanceTimersByTimeAsync(20);
+        expect(document.activeElement?.id).toBe('btnCloseSettings');
+        document.body.dataset.view = 'model';
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', metaKey: true, bubbles: true, cancelable: true }));
+        expect(document.body.dataset.view).toBe('model');
+        expect(document.activeElement?.id).not.toBe('chatInput');
+        ui.openHelp();
+        expect(settings.hidden).toBe(true);
+        expect(help.hidden).toBe(false);
+        await vi.advanceTimersByTimeAsync(20);
+        expect(document.activeElement?.id).toBe('btnCloseHelp');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(help.hidden).toBe(true);
+        expect(document.querySelectorAll('.modal-backdrop:not([hidden])')).toHaveLength(0);
     });
 });

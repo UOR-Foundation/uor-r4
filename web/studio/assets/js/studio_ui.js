@@ -657,8 +657,7 @@
     function openPalette() {
         var backdrop = document.getElementById('commandPalette');
         if (!backdrop || paletteOpen) return;
-        var openModalDialog = document.querySelector('.modal-backdrop:not([hidden])');
-        if (openModalDialog) closeModal(openModalDialog);
+        closeOtherModals(null);
         paletteOpen = true; lastFocus = document.activeElement; backdrop.hidden = false;
         var input = document.getElementById('paletteInput');
         if (input) { input.value = ''; input.focus(); }
@@ -726,8 +725,12 @@
     function modalFocusables(dialog) {
         return Array.prototype.slice.call(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(function (node) { return !node.disabled && node.getClientRects().length; });
     }
+    function closeOtherModals(except) {
+        $all('.modal-backdrop:not([hidden])').forEach(function (other) { if (other !== except) other.hidden = true; });
+    }
     function openModal(dialog) {
         if (!dialog) return;
+        closeOtherModals(dialog);
         closePalette();
         modalReturnFocus = document.activeElement;
         dialog.hidden = false;
@@ -943,6 +946,8 @@
             var meta = event.metaKey || event.ctrlKey;
             var target = event.target;
             var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+            var overlayActive = paletteOpen || document.querySelector('.modal-backdrop:not([hidden])');
+            if (overlayActive && meta && ['1', '2', '3', '4', 'b', 'B', 'i', 'I'].indexOf(event.key) >= 0) { event.preventDefault(); return; }
             if (meta && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); if (paletteOpen) closePalette(); else openPalette(); return; }
             if (meta && event.key === ',') { event.preventDefault(); openSettings(); return; }
             if (meta && ['1', '2', '3', '4'].indexOf(event.key) >= 0 && !event.shiftKey && !event.altKey) { event.preventDefault(); activateSection({ '1': 'agent', '2': 'workspace', '3': 'models', '4': 'guide' }[event.key]); return; }
@@ -1029,6 +1034,7 @@
 
     function promptUrl() {
         activateSection('models');
+        regroupModels();
         var diagnostics = document.getElementById('artifactDiagnostics');
         if (diagnostics) diagnostics.open = true;
         var input = document.querySelector('#modelUrlInput');
