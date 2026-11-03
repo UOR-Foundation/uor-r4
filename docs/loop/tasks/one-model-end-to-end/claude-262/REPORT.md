@@ -87,7 +87,7 @@ This is a 256-step smoke at two seeds, not a capability or training-law claim.
    256 steps, not a claim.
 9. **This contradicts `served-rounding-cost` (#3586).** Its host probe put most of the served step's
    cost in per-step `grid_code` and host table copies (`fbs_export`). The GPU profile puts export
-   rounding (`served.round`) at 14.5 ms, 0.16 of a plain step, at every head. The cost was in the D11
+   rounding (`served.round`) at 14.5–14.6 ms, 0.16 of a plain step, at every head. The cost was in the D11
    snaps.
 
 ## What changed
@@ -126,7 +126,9 @@ All on `vast-58920706` (RTX 5090, $0.563/h, about 57 minutes from 05:02Z). Binar
 `4465685531`: `train-in-space` `443f9764…0586`, `fbs-snapshot` `f031c7ce…8083`.
 
 **I-0 at `4465685531`: PASS.**
-- 290 CUDA library tests passed (7 ignored), with the four named tests.
+- 290 CUDA library tests passed (7 ignored), with the four named tests. Among them,
+  `a_step_as_served_reaches_every_projection_after_a_requantized_activation` holds every layer's
+  `mlp.down` and `rec.out` gradient norm within 4× of plain and above 0 (done-when 2(b)).
 - The pinned exponent patch failed the first and third named tests on their named assertions.
 - Restored, all three passed, the binaries were byte-identical, and the data pins matched.
 
@@ -180,7 +182,7 @@ None applied. The candle reduce kernel and its launch were read in the vendored 
 1. **The served step is inside the bar, but close: 1.85× plain.** What remains:
    - the backward, +30.4 ms;
    - `served.round`, 14.6 ms;
-   - the snaps in each recurrence and MLP, about 3 ms a layer.
+   - the snaps, about 5.2 ms a layer beyond plain (2.9 ms in each recurrence, 2.3 ms in each MLP).
 
    `served-rounding-cost` (#3586) registered a 2× repair whose premise, host copies in `fbs_export`,
    step P does not show. That unit should start from P's GPU profile, in the seal.
@@ -202,9 +204,9 @@ References #3407.
 
 ## Plain summary
 
-The model trained "as served" rounded its internal activations to whole numbers, so it learned about
-ten times less per step than plain training, and each training step spent most of its time launching tiny GPU jobs, 35 million
+The model trained "as served" rounded its internal activations to whole numbers, so its training
+signal was distorted (one layer's gradient came out 8.6× the plain one), and each training step spent most of its time launching tiny GPU jobs, 35 million
 for one gate, to pick the nearest of 120 fixed rotations. Both are fixed. A served training step now costs 1.85× a plain
-one, and on two seeds the served model reads at least as well as the plain model through the served
-evaluator. Its saved files stay byte-identical through export, and decode at a 192-token context runs
+one. On two seeds the served model scored above plain on the served evaluator's top-1 and nearest
+readings but below it on reply openings, so the 256-step smoke is inconclusive. Its saved files stay byte-identical through export, and decode at a 192-token context runs
 at 86 tokens per second, three times deepseek-5's 28.7.

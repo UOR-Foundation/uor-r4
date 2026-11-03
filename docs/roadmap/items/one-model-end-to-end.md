@@ -55,8 +55,8 @@ replace the served-training comparison above. Full transcripts and pins:
   one GPU block per score. It repaired both, each pinned by a CUDA test, and
   reran the same sheet. Served training then took 1.79–1.84× plain, and both
   checkpoints survived export rounding unchanged. The quality smoke stayed
-  inconclusive, but served was above plain (DEV nearest 305 / 357 against
-  239 / 248). The step's 1.85× margin to the 2× ceiling and served-run
+  inconclusive, with served above plain on the bar's evaluator top-1 (53 / 67
+  against 40 / 43, band 24) and on DEV nearest (305 / 357 against 239 / 248). The step's 1.85× margin to the 2× ceiling and served-run
   openings are still open before a longer run.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
