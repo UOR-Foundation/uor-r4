@@ -21,7 +21,7 @@ historical-runtime = []
 # facade gate in src/native_geometry.rs). On wasm32 `dep:rayon` is not pulled:
 # the worker pool is a native-only path, cfg'd out there (steps are
 # single-threaded; the integers do not depend on threading).
-serving-wasm = ["dep:wasm-bindgen", "dep:uor-r4-tokenizer", "dep:uor-r4-vision", "dep:rayon"]
+serving-wasm = ["dep:wasm-bindgen", "dep:uor-r4-tokenizer", "dep:rayon", "dep:uor-r4-vision"]
 # The synthetic SpiralCore/FBS controls (`stack::synthetic`) for an evaluator
 # outside this crate that must reproduce `step_native` on them (claude-128).
 fbs-synthetic = []

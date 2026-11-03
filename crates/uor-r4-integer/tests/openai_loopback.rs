@@ -6,6 +6,7 @@ use uor_r4_integer::loopback::{LoopbackConfig, LoopbackServer};
 use uor_r4_integer::openai::{GenerationFamily, OpenAiServing, Utf8Buffer};
 use uor_r4_integer::stack::{IntegerStackModel, StackChat, StackStop};
 use uor_r4_tokenizer::dialogue::Message;
+use uor_r4_vision::{decompose_rgba, Grid};
 
 struct Builder {
     matrices: Vec<Value>,
@@ -64,9 +65,13 @@ impl Builder {
 }
 
 fn artifact(seed: u64) -> Vec<u8> {
+    artifact_with_context(seed, 64)
+}
+
+fn artifact_with_context(seed: u64, context: usize) -> Vec<u8> {
     const VOCAB: usize = 40;
     const WIDTH: usize = 32;
-    const CONTEXT: usize = 64;
+    let context_size = context;
     let mut rng = seed;
     let mut b = Builder {
         matrices: Vec::new(),
@@ -116,7 +121,7 @@ fn artifact(seed: u64) -> Vec<u8> {
     b.i32s("l1.null_bias", &[4_000, -9_000]);
     b.i32s(
         "l1.age",
-        &(0..2 * CONTEXT)
+        &(0..2 * context_size)
             .map(|i| -((i as i32) << 12))
             .collect::<Vec<_>>(),
     );
@@ -145,7 +150,7 @@ fn artifact(seed: u64) -> Vec<u8> {
     );
     let header = json!({
         "schema": "uor-r4.lut-stack/1",
-        "shape": {"vocab": VOCAB, "width": WIDTH, "heads": 2, "mlp": WIDTH, "pattern": "ra", "read": "lorentz", "rotation": true, "context": CONTEXT},
+        "shape": {"vocab": VOCAB, "width": WIDTH, "heads": 2, "mlp": WIDTH, "pattern": "ra", "read": "lorentz", "rotation": true, "context": context_size},
         "group": 32,
         "numerics": {"rms_eps": {"mantissa": 2_814_749_767i64, "exp": -48}, "score_scale_q30": 268_435_456, "exp_step_log2": -8, "silu_step_log2": -8, "silu_range_log2": 4, "gelu_step_log2": -8, "gelu_range_log2": 4},
         "matrices": b.matrices, "tables": b.tables, "source": {"synthetic": true}
@@ -206,8 +211,20 @@ fn serving() -> OpenAiServing {
     OpenAiServing::new(model, tokenizer_json(), 2).unwrap()
 }
 
+fn serving_with_context(context: usize) -> OpenAiServing {
+    let model = IntegerStackModel::parse(&artifact_with_context(5, context)).unwrap();
+    OpenAiServing::new(model, tokenizer_json(), 2).unwrap()
+}
+
 fn config() -> LoopbackConfig {
     let mut config = LoopbackConfig::new(serving()).unwrap();
+    config.port = 0;
+    config.token = "test-token".into();
+    config
+}
+
+fn config_with_context(context: usize) -> LoopbackConfig {
+    let mut config = LoopbackConfig::new(serving_with_context(context)).unwrap();
     config.port = 0;
     config.token = "test-token".into();
     config
@@ -329,23 +346,62 @@ fn request(
     )
 }
 
-fn request_bytes(port: u16, target: &str, body: &[u8], extra: &str) -> (u16, String, String) {
+fn request_bytes(
+    port: u16,
+    method: &str,
+    target: &str,
+    body: &[u8],
+    content_type: &str,
+    token: &str,
+    extra: &str,
+) -> (u16, String, Vec<u8>) {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    let wire = format!(
-        "POST {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n{extra}\r\n",
-        body.len()
-    );
+    let auth = if token.is_empty() {
+        String::new()
+    } else {
+        format!("Authorization: Bearer {token}\r\n")
+    };
+    let content_type = if content_type.is_empty() {
+        String::new()
+    } else {
+        format!("Content-Type: {content_type}\r\n")
+    };
+    let wire = format!("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}{content_type}Content-Length: {}\r\nConnection: close\r\n{extra}\r\n", body.len());
     stream.write_all(wire.as_bytes()).unwrap();
     stream.write_all(body).unwrap();
-    let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
-    let status = response.split_whitespace().nth(1).unwrap().parse().unwrap();
-    let split = response.find("\r\n\r\n").unwrap();
-    (
-        status,
-        response[..split].to_string(),
-        response[split + 4..].to_string(),
-    )
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).unwrap();
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .unwrap();
+    let head = String::from_utf8(response[..split].to_vec()).unwrap();
+    let status = head.split_whitespace().nth(1).unwrap().parse().unwrap();
+    (status, head, response[split + 4..].to_vec())
+}
+
+fn image_part(width: u32, height: u32, grid: Grid, rgba: &[u8]) -> Value {
+    let decomposition = decompose_rgba(width, height, rgba, grid).unwrap();
+    json!({
+        "type": "uor_r4_image",
+        "schema": "uor-r4.image-decomposition/1",
+        "canonical_hex": hex::encode(decomposition.canonical_bytes()),
+        "source_blake3": decomposition.source_hash_hex(),
+        "width": width,
+        "height": height,
+        "grid": {"columns": grid.columns(), "rows": grid.rows()}
+    })
+}
+
+fn image_chat_request(part: Value, max_tokens: usize) -> Value {
+    json!({
+        "model": "uor-chat",
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": "Hi"},
+            part
+        ]}],
+        "max_tokens": max_tokens
+    })
 }
 
 fn post_json(port: u16, target: &str, value: Value) -> (u16, Value) {
@@ -407,8 +463,13 @@ fn models_health_and_json_generation_routes() {
         "",
     );
     let capabilities: Value = serde_json::from_str(&capabilities).unwrap();
-    assert_eq!(capabilities["vision"]["decomposition"], true);
-    assert_eq!(capabilities["vision"]["visual_understanding"], false);
+    assert_eq!(capabilities["vision"], false);
+    assert_eq!(
+        capabilities["image_input"]["native_content_part"],
+        "uor_r4_image"
+    );
+    assert_eq!(capabilities["image_input"]["decomposition"], true);
+    assert_eq!(capabilities["image_input"]["visual_understanding"], false);
     assert_eq!(capabilities["inflight_limit"], 1);
     assert_eq!(capabilities["context"], 64);
 
@@ -588,240 +649,235 @@ fn sse_matches_json_and_supports_all_generation_families() {
 }
 
 #[test]
-fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
-    const HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
-    const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
-    const CANONICAL_HASH: &str = "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa";
+fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
+    let rgba = [
+        255, 0, 0, 255, // red
+        0, 255, 0, 128, // green
+        0, 0, 255, 64, // blue
+        255, 255, 255, 0, // white
+    ];
+    let expected = decompose_rgba(2, 2, &rgba, Grid::new(1, 1)).unwrap();
+    let target = "/v1/images/decompose?width=2&height=2&columns=1&rows=1";
     let server = LoopbackServer::spawn(config()).unwrap();
-    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
-    let (status, _, body) = request_bytes(
-        server.port(),
-        "/v1/images/decompose",
-        &[12, 20, 28, 255],
-        headers,
-    );
-    assert_eq!(status, 200, "{body}");
-    let image: Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(image["schema"], "uor-r4.image/1");
-    assert_eq!(image["source_sha256"], HASH);
-    assert_eq!(image["canonical_prompt"], CANONICAL);
-    assert_eq!(image["patches"][0]["q12"], json!([304, -128, 144, 0]));
-    assert_eq!(image["patches"][0]["mean_rgb"], json!([12, 20, 28]));
-    assert_eq!(image["visual_understanding"], false);
 
-    let (changed_status, _, changed_body) = request_bytes(
-        server.port(),
-        "/v1/images/decompose",
-        &[13, 20, 28, 255],
-        headers,
-    );
-    assert_eq!(changed_status, 200);
-    let changed: Value = serde_json::from_str(&changed_body).unwrap();
-    assert_ne!(changed["source_sha256"], image["source_sha256"]);
-    assert_ne!(changed["canonical_prompt"], image["canonical_prompt"]);
-
-    let (status, chat) = post_json(
-        server.port(),
-        "/v1/chat/completions",
-        json!({
-            "model": "uor-chat",
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": "Hi\n"},
-                {"type": "uor_r4_image", "uor_r4_image": {
-                    "schema": "uor-r4.image/1",
-                    "source_sha256": HASH,
-                    "canonical_sha256": CANONICAL_HASH,
-                    "canonical_prompt": CANONICAL,
-                    "decomposition_id": image["decomposition_id"].as_str().unwrap()
-                }}
-            ]}],
-            "max_tokens": 2
-        }),
-    );
-    assert_eq!(status, 200, "{chat}");
-    assert_usage(&chat);
-
-    let (_, _, capabilities) = request(
-        server.port(),
-        "GET",
-        "/v1/capabilities",
-        "",
-        "test-token",
-        "",
-    );
-    let capabilities: Value = serde_json::from_str(&capabilities).unwrap();
-    assert_eq!(capabilities["vision"]["decomposition"], true);
-    assert_eq!(capabilities["vision"]["visual_understanding"], false);
-    assert!(capabilities["routes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|route| route["path"] == "/v1/images/decompose"));
-    server.shutdown().unwrap();
-}
-
-#[test]
-fn canonical_tamper_and_non_user_image_parts_are_refused() {
-    const HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
-    const CANONICAL_HASH: &str = "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa";
-    const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
-    let server = LoopbackServer::spawn(config()).unwrap();
-    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
-    let (status, _, body) = request_bytes(server.port(), "/v1/images/decompose", &[12, 20, 28, 255], headers);
-    assert_eq!(status, 200, "{body}");
-    let issued: Value = serde_json::from_str(&body).unwrap();
-    let tampered = CANONICAL.replace("144,0", "144,16");
-    let recomputed = uor_r4_vision::canonical_sha256(&tampered);
-    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
-        "model": "uor-chat",
-        "messages": [{"role": "user", "content": [{"type": "uor_r4_image", "uor_r4_image": {
-            "schema": "uor-r4.image/1",
-            "source_sha256": HASH,
-            "canonical_sha256": recomputed,
-            "canonical_prompt": tampered.clone(),
-            "decomposition_id": issued["decomposition_id"].as_str().unwrap()
-        }}]}],
-        "max_tokens": 2
-    }));
-    assert_eq!(status, 400, "{response}");
-    assert!(response["error"]["message"].as_str().unwrap().contains("decomposition"), "{response}");
-    assert!(response["error"]["message"].as_str().unwrap().contains("id"), "{response}");
-
-    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
-        "model": "uor-chat",
-        "messages": [{"role": "user", "content": [{"type": "uor_r4_image", "uor_r4_image": {
-            "schema": "uor-r4.image/1",
-            "source_sha256": HASH,
-            "canonical_sha256": CANONICAL_HASH,
-            "canonical_prompt": tampered,
-            "decomposition_id": issued["decomposition_id"].as_str().unwrap()
-        }}]}],
-        "max_tokens": 2
-    }));
-    assert_eq!(status, 400, "{response}");
-    assert!(response["error"]["message"].as_str().unwrap().contains("does not match the issued decomposition id"), "{response}");
-
-    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
-        "model": "uor-chat",
-        "messages": [
-            {"role": "system", "content": [{"type": "uor_r4_image", "uor_r4_image": {
-                "schema": "uor-r4.image/1",
-                "source_sha256": HASH,
-                "canonical_sha256": CANONICAL_HASH,
-                "canonical_prompt": CANONICAL,
-                "decomposition_id": "r4img-role"
-            }}]},
-            {"role": "user", "content": "Hi"}
-        ],
-        "max_tokens": 2
-    }));
-    assert_eq!(status, 400, "{response}");
-    assert!(response["error"]["message"].as_str().unwrap().contains("user turns"), "{response}");
-    server.shutdown().unwrap();
-}
-
-#[test]
-fn image_route_and_extension_reject_bad_inputs_and_context_overflow() {
-    let server = LoopbackServer::spawn(config()).unwrap();
-    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
-    for (body, extra, expected) in [
-        (&b"\0\0\0"[..], headers, 400),
-        (
-            &b""[..],
-            "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
-            400,
-        ),
-        (
-            &b""[..],
-            "X-UOR-Width: 0\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
-            400,
-        ),
-        (
-            &b""[..],
-            "X-UOR-Width: 257\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n",
-            400,
-        ),
-        (
-            &b""[..],
-            "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 2\r\n",
-            400,
-        ),
-        (&b"\0\0\0"[..], headers, 400),
-    ] {
-        let (status, _, response) =
-            request_bytes(server.port(), "/v1/images/decompose", body, extra);
-        assert_eq!(status, expected, "{response}");
-        assert!(response.contains("\"error\""));
-    }
-    let (status, _, _) = request(
+    let (status, headers, body) = request_bytes(
         server.port(),
         "POST",
-        "/v1/images/decompose",
-        "x",
+        target,
+        &rgba,
+        "application/octet-stream",
         "test-token",
-        headers,
+        "",
     );
-    assert_eq!(status, 400);
+    assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
+    assert_eq!(body, expected.canonical_bytes());
+    assert!(headers.contains("Content-Type: application/octet-stream"));
+    assert!(headers.contains("X-UOR-Image-Schema: uor-r4.image-decomposition/1"));
+    assert!(headers.contains(&format!(
+        "X-UOR-Source-Blake3: {}",
+        expected.source_hash_hex()
+    )));
+    assert!(headers.contains("X-UOR-Patch-Count: 1"));
 
-    let big_headers = "X-UOR-Width: 16\r\nX-UOR-Height: 16\r\nX-UOR-Grid: 16\r\n";
-    let (status, _, body) = request_bytes(
+    let (status, _, _) = request_bytes(
         server.port(),
-        "/v1/images/decompose",
-        &vec![0; 16 * 16 * 4],
-        big_headers,
+        "POST",
+        target,
+        &rgba,
+        "application/octet-stream",
+        "",
+        "",
     );
-    assert_eq!(status, 200, "{body}");
-    let big: Value = serde_json::from_str(&body).unwrap();
-    for (schema, hash, canonical, expected) in [
+    assert_eq!(status, 401);
+    let short = &rgba[..15];
+    let long = [0u8; 17];
+    for (case, body, content_type, expected_status) in [
         (
-            "wrong",
-            big["source_sha256"].as_str().unwrap(),
-            big["canonical_prompt"].as_str().unwrap(),
+            "wrong content type",
+            rgba.as_slice(),
+            "application/json",
             400,
         ),
+        ("short body", short, "application/octet-stream", 400),
         (
-            "uor-r4.image/1",
-            &"0".repeat(64),
-            big["canonical_prompt"].as_str().unwrap(),
+            "long body",
+            long.as_slice(),
+            "application/octet-stream",
             400,
-        ),
-        (
-            "uor-r4.image/1",
-            big["source_sha256"].as_str().unwrap(),
-            "a caption, not R4",
-            400,
-        ),
-        (
-            "uor-r4.image/1",
-            big["source_sha256"].as_str().unwrap(),
-            big["canonical_prompt"].as_str().unwrap(),
-            413,
         ),
     ] {
-        let part = json!({"type": "uor_r4_image", "uor_r4_image": {
-            "schema": schema,
-            "source_sha256": hash,
-            "canonical_sha256": big["canonical_sha256"].as_str().unwrap(),
-            "canonical_prompt": canonical,
-            "decomposition_id": big["decomposition_id"].as_str().unwrap()
-        }});
-        let content = if expected == 413 {
-            vec![part.clone(), part.clone(), part.clone(), part]
-        } else {
-            vec![part]
-        };
+        let (status, _, response) = request_bytes(
+            server.port(),
+            "POST",
+            target,
+            body,
+            content_type,
+            "test-token",
+            "",
+        );
+        assert_eq!(
+            status,
+            expected_status,
+            "{case}: {}",
+            String::from_utf8_lossy(&response)
+        );
+    }
+    for (target, expected_status) in [
+        (
+            "/v1/images/decompose?width=0&height=2&columns=1&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=257&height=2&columns=1&rows=1",
+            413,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=0&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=3&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=65536&rows=1",
+            413,
+        ),
+        ("/v1/images/decompose?width=2&height=2&columns=1", 400),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=1&rows=1&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=1&rows=1&extra=1",
+            400,
+        ),
+    ] {
+        let (status, _, response) = request_bytes(
+            server.port(),
+            "POST",
+            target,
+            &rgba,
+            "application/octet-stream",
+            "test-token",
+            "",
+        );
+        assert_eq!(
+            status,
+            expected_status,
+            "{target}: {}",
+            String::from_utf8_lossy(&response)
+        );
+    }
+    let mut bounded = config();
+    bounded.max_body_bytes = 16;
+    let bounded = LoopbackServer::spawn(bounded).unwrap();
+    let (status, _, response) = request_bytes(
+        bounded.port(),
+        "POST",
+        target,
+        &long,
+        "application/octet-stream",
+        "test-token",
+        "",
+    );
+    assert_eq!(status, 413, "{}", String::from_utf8_lossy(&response));
+    bounded.shutdown().unwrap();
+    let (status, _, _) = request_bytes(
+        server.port(),
+        "POST",
+        "/v1/images/generations",
+        &serde_json::to_vec(&json!({"model": "uor-chat", "prompt": "A cat"})).unwrap(),
+        "application/json",
+        "test-token",
+        "",
+    );
+    assert_eq!(status, 501);
+    server.shutdown().unwrap();
+}
+
+#[test]
+fn native_r4_image_parts_validate_and_pass_context_preflight() {
+    let rgba = [255, 0, 0, 255];
+    let part = image_part(1, 1, Grid::new(1, 1), &rgba);
+    let text_request = json!({
+        "model": "uor-chat",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 1
+    });
+    let image_request = image_chat_request(part.clone(), 1);
+
+    let server = LoopbackServer::spawn(config_with_context(512)).unwrap();
+    let (status, text) = post_json(server.port(), "/v1/chat/completions", text_request);
+    assert_eq!(status, 200, "{text}");
+    let (status, image) = post_json(server.port(), "/v1/chat/completions", image_request.clone());
+    assert_eq!(status, 200, "{image}");
+    assert!(
+        image["usage"]["prompt_tokens"].as_u64().unwrap()
+            > text["usage"]["prompt_tokens"].as_u64().unwrap(),
+        "the image R4 context must enter the encoded prompt"
+    );
+
+    let mut malformed = Vec::new();
+    let mut value = part.clone();
+    value["schema"] = json!("uor-r4.image-decomposition/2");
+    malformed.push(("schema", value));
+    let mut value = part.clone();
+    value["source_blake3"] = json!("0".repeat(64));
+    malformed.push(("source hash", value));
+    let mut value = part.clone();
+    value["canonical_hex"] = json!(value["canonical_hex"].as_str().unwrap().to_uppercase());
+    malformed.push(("canonical hex case", value));
+    let mut value = part.clone();
+    value["canonical_hex"] = json!("gg");
+    malformed.push(("canonical hex", value));
+    let mut value = part.clone();
+    value["width"] = json!(2);
+    malformed.push(("width", value));
+    let mut value = part.clone();
+    value["grid"]["columns"] = json!(2);
+    malformed.push(("grid", value));
+    let mut value = part.clone();
+    let mut canonical = hex::decode(value["canonical_hex"].as_str().unwrap()).unwrap();
+    canonical[52 + 26] ^= 1;
+    value["canonical_hex"] = json!(hex::encode(canonical));
+    malformed.push(("canonical redundancy", value));
+    let mut value = part.clone();
+    value["unexpected"] = json!(true);
+    malformed.push(("extra field", value));
+    let mut value = part.clone();
+    value.as_object_mut().unwrap().remove("source_blake3");
+    malformed.push(("missing field", value));
+    for (case, bad_part) in malformed {
         let (status, response) = post_json(
             server.port(),
             "/v1/chat/completions",
-            json!({
-                "model": "uor-chat",
-                "messages": [{"role": "user", "content": content}],
-                "max_tokens": 2
-            }),
+            image_chat_request(bad_part, 1),
         );
-        assert_eq!(status, expected, "{response}");
+        assert_eq!(status, 400, "{case}: {response}");
     }
+
+    let mut too_many = image_chat_request(part.clone(), 1);
+    too_many["messages"][0]["content"] = Value::Array(
+        (0..5)
+            .map(|_| {
+                json!({
+                    "type": "text",
+                    "text": "Hi"
+                })
+            })
+            .chain((0..5).map(|_| part.clone()))
+            .collect(),
+    );
+    let (status, response) = post_json(server.port(), "/v1/chat/completions", too_many);
+    assert_eq!(status, 413, "{response}");
     server.shutdown().unwrap();
+
+    let small = LoopbackServer::spawn(config()).unwrap();
+    let (status, response) = post_json(small.port(), "/v1/chat/completions", image_request);
+    assert_eq!(status, 413, "{response}");
+    assert_eq!(response["error"]["code"], "context_overflow");
+    small.shutdown().unwrap();
 }
 
 #[test]
@@ -866,6 +922,17 @@ fn truthful_validation_and_unsupported_family_errors() {
         "Content-Type: text/plain\r\n",
     );
     assert_eq!(status, 400);
+    let duplicate = "{\"model\":\"uor-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\",\"content\":\"Hi\"}]}";
+    let (status, _, body) = request(
+        server.port(),
+        "POST",
+        "/v1/chat/completions",
+        duplicate,
+        "test-token",
+        "",
+    );
+    assert_eq!(status, 400);
+    assert!(body.contains("duplicate JSON object key"), "{body}");
     server.shutdown().unwrap();
 }
 
@@ -1080,13 +1147,16 @@ fn stop_mapping_text_parts_and_exact_prompt_counts() {
 fn http_busy_preflight_disconnect_and_header_bounds() {
     let mut config = config_with_long_generation();
     config.origin = Some("https://studio.test".into());
-    let serving = config.serving.clone();
     let server = LoopbackServer::spawn(config).unwrap();
     let body = json!({"model": "uor-chat", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 40, "stream": true, "stream_options": {"include_usage": true}}).to_string();
     let wire = |port: u16| {
         format!("POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
     };
-    let busy_permit = serving.try_start_generation().unwrap();
+    let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    first.write_all(wire(server.port()).as_bytes()).unwrap();
+    let mut role = [0u8; 1];
+    let read = first.read(&mut role).unwrap();
+    assert!(read > 0);
     let (status, _, second) = request(
         server.port(),
         "POST",
@@ -1097,14 +1167,8 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
     );
     assert_eq!(
         status, 429,
-        "a held generation permit rejects the HTTP stream before any 200/SSE bytes: {second}"
+        "a second stream is rejected before any 200/SSE bytes: {second}"
     );
-    drop(busy_permit);
-    let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
-    first.write_all(wire(server.port()).as_bytes()).unwrap();
-    let mut role = [0u8; 1];
-    let read = first.read(&mut role).unwrap();
-    assert!(read > 0);
     let mut remainder = String::new();
     first.read_to_string(&mut remainder).unwrap();
     assert!(remainder.contains("data: [DONE]"));
@@ -1149,9 +1213,6 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
     );
     assert_eq!(status, 204, "CORS preflight needs no API credential");
     assert!(headers.contains("Access-Control-Allow-Origin: https://studio.test"));
-    for image_header in ["X-UOR-Width", "X-UOR-Height", "X-UOR-Grid"] {
-        assert!(headers.contains(image_header), "missing CORS header {image_header}");
-    }
 
     let mut oversized = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
     let header = format!(

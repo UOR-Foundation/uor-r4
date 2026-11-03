@@ -1,563 +1,644 @@
-use serde::Serialize;
-use sha2::{Digest, Sha256};
+//! Deterministic integer RGBA-to-R4 image decomposition.
+//!
+//! The primitive accepts one exact top-left-origin RGBA buffer, partitions it
+//! into non-empty rectangular patches, and computes signed fixed-point visual
+//! statistics. It does not decode images, infer semantics, invoke a model, or
+//! claim visual understanding.
+//!
+//! The default `parallel` feature evaluates independent patches through Rayon.
+//! Rayon's indexed collection preserves grid order, so canonical bytes do not
+//! depend on the worker count. Disable default features for a serial build.
+
+#![forbid(unsafe_code)]
+
 use std::fmt;
 
-pub const MAX_DIMENSION: usize = 256;
-pub const MAX_GRID: usize = 16;
-pub const Q12_SCALE: i32 = 16;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Maximum accepted width and height, in pixels.
+pub const MAX_DIMENSION: u32 = 256;
+/// Maximum accepted patch columns and rows.
+pub const MAX_GRID: u16 = 32;
+/// Canonical decomposition header magic and format version.
+pub const CANONICAL_MAGIC: &[u8; 8] = b"R4IMG001";
+
+/// Position of an out-of-range source dimension.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Axis {
+    Width,
+    Height,
+}
+
+/// A rectangular grid of patches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Grid {
+    columns: u16,
+    rows: u16,
+}
+
+impl Grid {
+    /// Constructs a grid. [`decompose_rgba`] validates its size and relation to
+    /// the source.
+    pub const fn new(columns: u16, rows: u16) -> Self {
+        Self { columns, rows }
+    }
+
+    /// Number of patch columns.
+    pub const fn columns(self) -> u16 {
+        self.columns
+    }
+
+    /// Number of patch rows.
+    pub const fn rows(self) -> u16 {
+        self.rows
+    }
+}
+
+/// A rejection before any patch can be published.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VisionError {
-    InvalidDimensions,
-    InvalidGrid,
-    LengthMismatch { expected: usize, actual: usize },
-    InvalidCanonical(&'static str),
-    HashMismatch,
+    /// A source dimension is zero or exceeds [`MAX_DIMENSION`].
+    DimensionOutOfRange { axis: Axis, value: u32, max: u32 },
+    /// The RGBA slice is not exactly `width * height * 4` bytes.
+    PixelBufferLength { expected: usize, actual: usize },
+    /// The grid has a zero axis.
+    EmptyGrid,
+    /// A grid axis exceeds [`MAX_GRID`].
+    GridOutOfRange { columns: u16, rows: u16, max: u16 },
+    /// A grid axis would create a zero-area patch.
+    GridLargerThanImage {
+        columns: u16,
+        rows: u16,
+        width: u32,
+        height: u32,
+    },
+    /// A bounded size or fixed-point calculation overflowed.
+    ArithmeticOverflow,
+    /// Canonical bytes do not form one internally consistent decomposition.
+    InvalidCanonical(String),
 }
 
 impl fmt::Display for VisionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidDimensions => {
-                write!(f, "dimensions must be between 1 and {MAX_DIMENSION}")
+            Self::DimensionOutOfRange { axis, value, max } => {
+                write!(f, "{axis:?} {value} is outside 1..={max}")
             }
-            Self::InvalidGrid => write!(
+            Self::PixelBufferLength { expected, actual } => {
+                write!(
+                    f,
+                    "RGBA buffer has {actual} bytes; expected exactly {expected}"
+                )
+            }
+            Self::EmptyGrid => f.write_str("grid columns and rows must both be non-zero"),
+            Self::GridOutOfRange { columns, rows, max } => {
+                write!(f, "grid {columns}x{rows} exceeds {max}x{max}")
+            }
+            Self::GridLargerThanImage {
+                columns,
+                rows,
+                width,
+                height,
+            } => write!(
                 f,
-                "grid must be between 1 and {MAX_GRID} and no larger than either dimension"
+                "grid {columns}x{rows} would create an empty patch in {width}x{height} source"
             ),
-            Self::LengthMismatch { expected, actual } => write!(
-                f,
-                "RGBA length mismatch: expected {expected} bytes, got {actual}"
-            ),
-            Self::InvalidCanonical(message) => write!(f, "invalid R4 image: {message}"),
-            Self::HashMismatch => write!(f, "R4 image source hash does not match"),
+            Self::ArithmeticOverflow => f.write_str("decomposition arithmetic overflow"),
+            Self::InvalidCanonical(message) => write!(f, "invalid canonical image: {message}"),
         }
     }
 }
 
 impl std::error::Error for VisionError {}
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ImagePatch {
-    pub row: usize,
-    pub column: usize,
-    pub x0: usize,
-    pub y0: usize,
-    pub x1: usize,
-    pub y1: usize,
-    pub mean_rgb: [u8; 3],
-    pub luma: u8,
-    pub chroma_rg: i16,
-    pub chroma_by: i16,
-    pub horizontal_edge: u8,
-    pub vertical_edge: u8,
-    pub q12: [i32; 4],
+/// One positioned patch with exact integer visual statistics.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Patch {
+    /// Zero-based patch column.
+    pub column: u16,
+    /// Zero-based patch row.
+    pub row: u16,
+    /// Inclusive left pixel coordinate.
+    pub x0: u16,
+    /// Inclusive top pixel coordinate.
+    pub y0: u16,
+    /// Exclusive right pixel coordinate.
+    pub x1: u16,
+    /// Exclusive bottom pixel coordinate.
+    pub y1: u16,
+    /// Rounded Q12 mean R, G and B, each in `0..=4096`.
+    pub mean_rgb_q12: [u16; 3],
+    /// Rec.601 luma at Q12 in `0..=4096`.
+    pub luma_q12: u16,
+    /// Signed Q12 `[R - luma, B - luma]`.
+    pub chroma_q12: [i16; 2],
+    /// Signed mean Q12 luma change `[horizontal, vertical]`.
+    pub edges_q12: [i16; 2],
+    /// Two signed Q12 R4 vectors: centered RGB plus centered luma, then
+    /// chroma axes plus horizontal and vertical edges.
+    pub r4_q12: [[i16; 4]; 2],
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ImageDecomposition {
-    pub schema: &'static str,
-    pub width: usize,
-    pub height: usize,
-    pub grid: usize,
-    pub source_sha256: String,
-    pub patches: Vec<ImagePatch>,
+/// A validated image decomposition.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Decomposition {
+    width: u16,
+    height: u16,
+    grid: Grid,
+    source_hash: [u8; 32],
+    patches: Vec<Patch>,
 }
 
-impl ImageDecomposition {
-    pub fn canonical_prompt(&self) -> String {
-        let values = self
-            .patches
-            .iter()
-            .flat_map(|patch| patch.q12)
-            .collect::<Vec<_>>();
-        canonical_from_values(
-            self.width,
-            self.height,
-            self.grid,
-            &self.source_sha256,
-            &values,
-        )
+impl Decomposition {
+    /// Source width in pixels.
+    pub const fn width(&self) -> u16 {
+        self.width
     }
 
-    pub fn canonical_sha256(&self) -> String {
-        canonical_sha256(&self.canonical_prompt())
+    /// Source height in pixels.
+    pub const fn height(&self) -> u16 {
+        self.height
     }
-}
 
-pub fn canonical_sha256(prompt: &str) -> String {
-    hex::encode(Sha256::digest(prompt.as_bytes()))
-}
+    /// Validated patch grid.
+    pub const fn grid(&self) -> Grid {
+        self.grid
+    }
 
-fn canonical_from_values(
-    width: usize,
-    height: usize,
-    grid: usize,
-    hash: &str,
-    values: &[i32],
-) -> String {
-    use std::fmt::Write;
-    let mut output = format!("R4IMG1;sha256={hash};size={width}x{height};grid={grid};q12=");
-    for (index, value) in values.iter().enumerate() {
-        if index != 0 {
-            output.push(',');
+    /// Patches in row-major grid order.
+    pub fn patches(&self) -> &[Patch] {
+        &self.patches
+    }
+
+    /// Blake3 digest of the exact RGBA input bytes.
+    pub const fn source_hash(&self) -> [u8; 32] {
+        self.source_hash
+    }
+
+    /// Lowercase hexadecimal source digest.
+    pub fn source_hash_hex(&self) -> String {
+        use fmt::Write as _;
+
+        let mut hex = String::with_capacity(64);
+        for byte in self.source_hash {
+            write!(&mut hex, "{byte:02x}").expect("writing to String cannot fail");
         }
-        let _ = write!(output, "{value}");
+        hex
     }
-    output
-}
 
-fn composite(channel: u8, alpha: u8) -> Result<u64, VisionError> {
-    let product = u64::from(channel)
-        .checked_mul(u64::from(alpha))
-        .ok_or(VisionError::InvalidDimensions)?;
-    product
-        .checked_add(127)
-        .map(|value| value / 255)
-        .ok_or(VisionError::InvalidDimensions)
-}
-
-fn pixel_luma(rgba: &[u8], width: usize, x: usize, y: usize) -> Result<u64, VisionError> {
-    let pixel = y
-        .checked_mul(width)
-        .and_then(|row| row.checked_add(x))
-        .ok_or(VisionError::InvalidDimensions)?;
-    let index = pixel.checked_mul(4).ok_or(VisionError::InvalidDimensions)?;
-    let alpha = *rgba.get(index + 3).ok_or(VisionError::LengthMismatch {
-        expected: index + 4,
-        actual: rgba.len(),
-    })?;
-    let r = composite(
-        *rgba.get(index).ok_or(VisionError::LengthMismatch {
-            expected: index + 4,
-            actual: rgba.len(),
-        })?,
-        alpha,
-    )?;
-    let g = composite(
-        *rgba.get(index + 1).ok_or(VisionError::LengthMismatch {
-            expected: index + 4,
-            actual: rgba.len(),
-        })?,
-        alpha,
-    )?;
-    let b = composite(
-        *rgba.get(index + 2).ok_or(VisionError::LengthMismatch {
-            expected: index + 4,
-            actual: rgba.len(),
-        })?,
-        alpha,
-    )?;
-    r.checked_mul(77)
-        .and_then(|value| g.checked_mul(150).and_then(|g| value.checked_add(g)))
-        .and_then(|value| b.checked_mul(29).and_then(|b| value.checked_add(b)))
-        .and_then(|value| value.checked_add(128))
-        .map(|value| value / 256)
-        .ok_or(VisionError::InvalidDimensions)
-}
-
-fn rounded_mean(sum: u64, count: u64) -> Result<u64, VisionError> {
-    if count == 0 {
-        return Err(VisionError::InvalidDimensions);
+    /// Versioned canonical bytes in row-major patch order.
+    pub fn canonical_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(52 + self.patches.len() * 40);
+        bytes.extend_from_slice(CANONICAL_MAGIC);
+        bytes.extend_from_slice(&self.width.to_be_bytes());
+        bytes.extend_from_slice(&self.height.to_be_bytes());
+        bytes.extend_from_slice(&self.grid.columns.to_be_bytes());
+        bytes.extend_from_slice(&self.grid.rows.to_be_bytes());
+        bytes.extend_from_slice(&(self.patches.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&self.source_hash);
+        for patch in &self.patches {
+            for value in [patch.x0, patch.y0, patch.x1, patch.y1] {
+                bytes.extend_from_slice(&value.to_be_bytes());
+            }
+            for value in patch.mean_rgb_q12.into_iter().chain([patch.luma_q12]) {
+                bytes.extend_from_slice(&value.to_be_bytes());
+            }
+            for value in patch
+                .chroma_q12
+                .into_iter()
+                .chain(patch.edges_q12)
+                .chain(patch.r4_q12[0])
+                .chain(patch.r4_q12[1])
+            {
+                bytes.extend_from_slice(&value.to_be_bytes());
+            }
+        }
+        bytes
     }
-    sum.checked_add(count / 2)
-        .map(|value| value / count)
-        .ok_or(VisionError::InvalidDimensions)
 }
 
-fn bounded_mul(left: usize, right: usize) -> Result<usize, VisionError> {
-    left.checked_mul(right)
-        .ok_or(VisionError::InvalidDimensions)
-}
+/// Parses and validates one exact canonical decomposition.
+///
+/// The source pixels are not present, so the returned digest is the bound
+/// header value. Every dimension, patch position, statistic and R4 field is
+/// checked for internal consistency and the encoding must be byte-exact.
+pub fn parse_canonical(bytes: &[u8]) -> Result<Decomposition, VisionError> {
+    if bytes.len() < 52 {
+        return Err(canonical_error("header is truncated"));
+    }
+    if bytes.get(..8) != Some(CANONICAL_MAGIC) {
+        return Err(canonical_error("magic or format version differs"));
+    }
+    let width = read_u16(bytes, 8);
+    let height = read_u16(bytes, 10);
+    let grid = Grid::new(read_u16(bytes, 12), read_u16(bytes, 14));
+    validate_dimension(Axis::Width, u32::from(width))
+        .map_err(|_| canonical_error("width is outside the accepted range"))?;
+    validate_dimension(Axis::Height, u32::from(height))
+        .map_err(|_| canonical_error("height is outside the accepted range"))?;
+    validate_grid(grid, u32::from(width), u32::from(height))
+        .map_err(|_| canonical_error("grid is outside the accepted range"))?;
 
-pub fn decompose_rgba(
-    width: usize,
-    height: usize,
-    rgba: &[u8],
-    grid: usize,
-) -> Result<ImageDecomposition, VisionError> {
-    if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
-        return Err(VisionError::InvalidDimensions);
+    let count = u32::from_be_bytes(
+        bytes[16..20]
+            .try_into()
+            .map_err(|_| canonical_error("patch count is truncated"))?,
+    );
+    let expected_count = u32::from(grid.columns)
+        .checked_mul(u32::from(grid.rows))
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    if count != expected_count {
+        return Err(canonical_error("patch count differs from the grid"));
     }
-    if grid == 0 || grid > MAX_GRID || grid > width || grid > height {
-        return Err(VisionError::InvalidGrid);
+    let count = usize::try_from(count).map_err(|_| VisionError::ArithmeticOverflow)?;
+    let expected_len = count
+        .checked_mul(40)
+        .and_then(|value| value.checked_add(52))
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    if bytes.len() != expected_len {
+        return Err(canonical_error("byte length differs from the patch count"));
     }
-    let expected = bounded_mul(bounded_mul(width, height)?, 4)?;
-    if rgba.len() != expected {
-        return Err(VisionError::LengthMismatch {
-            expected,
-            actual: rgba.len(),
+    let mut source_hash = [0; 32];
+    source_hash.copy_from_slice(&bytes[20..52]);
+
+    let mut patches = Vec::with_capacity(count);
+    for index in 0..count {
+        let column = u16::try_from(index % usize::from(grid.columns))
+            .map_err(|_| VisionError::ArithmeticOverflow)?;
+        let row = u16::try_from(index / usize::from(grid.columns))
+            .map_err(|_| VisionError::ArithmeticOverflow)?;
+        let expected_bounds = [
+            partition(column, grid.columns, u32::from(width))? as u16,
+            partition(row, grid.rows, u32::from(height))? as u16,
+            partition(column + 1, grid.columns, u32::from(width))? as u16,
+            partition(row + 1, grid.rows, u32::from(height))? as u16,
+        ];
+        let at = 52 + index * 40;
+        let bounds = [
+            read_u16(bytes, at),
+            read_u16(bytes, at + 2),
+            read_u16(bytes, at + 4),
+            read_u16(bytes, at + 6),
+        ];
+        if bounds != expected_bounds {
+            return Err(canonical_error(
+                "patch bounds differ from the grid partition",
+            ));
+        }
+        let mean_rgb_q12 = [
+            read_u16(bytes, at + 8),
+            read_u16(bytes, at + 10),
+            read_u16(bytes, at + 12),
+        ];
+        let luma_q12 = read_u16(bytes, at + 14);
+        if mean_rgb_q12.iter().any(|value| *value > 4096) || luma_q12 > 4096 {
+            return Err(canonical_error("mean or luma exceeds Q12 unity"));
+        }
+        if weighted_luma_q12(mean_rgb_q12)? != luma_q12 {
+            return Err(canonical_error(
+                "luma differs from the canonical RGB weighting",
+            ));
+        }
+        let chroma_q12 = [read_i16(bytes, at + 16), read_i16(bytes, at + 18)];
+        let edges_q12 = [read_i16(bytes, at + 20), read_i16(bytes, at + 22)];
+        let expected_chroma = [
+            signed_i16(i32::from(mean_rgb_q12[0]) - i32::from(luma_q12))?,
+            signed_i16(i32::from(mean_rgb_q12[2]) - i32::from(luma_q12))?,
+        ];
+        if chroma_q12 != expected_chroma {
+            return Err(canonical_error(
+                "chroma axes differ from mean RGB minus luma",
+            ));
+        }
+        if chroma_q12
+            .into_iter()
+            .chain(edges_q12)
+            .any(|value| !(-4096..=4096).contains(&value))
+        {
+            return Err(canonical_error(
+                "chroma or edge is outside signed Q12 unity",
+            ));
+        }
+        let r4_q12 = [
+            [
+                read_i16(bytes, at + 24),
+                read_i16(bytes, at + 26),
+                read_i16(bytes, at + 28),
+                read_i16(bytes, at + 30),
+            ],
+            [
+                read_i16(bytes, at + 32),
+                read_i16(bytes, at + 34),
+                read_i16(bytes, at + 36),
+                read_i16(bytes, at + 38),
+            ],
+        ];
+        let expected_r4 = [
+            [
+                centered(mean_rgb_q12[0])?,
+                centered(mean_rgb_q12[1])?,
+                centered(mean_rgb_q12[2])?,
+                centered(luma_q12)?,
+            ],
+            [chroma_q12[0], chroma_q12[1], edges_q12[0], edges_q12[1]],
+        ];
+        if r4_q12 != expected_r4 {
+            return Err(canonical_error(
+                "R4 vectors disagree with the named patch statistics",
+            ));
+        }
+        patches.push(Patch {
+            column,
+            row,
+            x0: bounds[0],
+            y0: bounds[1],
+            x1: bounds[2],
+            y1: bounds[3],
+            mean_rgb_q12,
+            luma_q12,
+            chroma_q12,
+            edges_q12,
+            r4_q12,
         });
     }
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"R4IMG1\0");
-    for value in [width, height, grid] {
-        let value = u32::try_from(value).map_err(|_| VisionError::InvalidDimensions)?;
-        hasher.update(value.to_le_bytes());
-    }
-    hasher.update(rgba);
-    let source_sha256 = hex::encode(hasher.finalize());
-    let mut patches = Vec::new();
-
-    for row in 0..grid {
-        let y0 = bounded_mul(row, height)? / grid;
-        let y1 = bounded_mul(row + 1, height)? / grid;
-        for column in 0..grid {
-            let x0 = bounded_mul(column, width)? / grid;
-            let x1 = bounded_mul(column + 1, width)? / grid;
-            let mut sums = [0_u64; 3];
-            let mut luma_sum = 0_u64;
-            let mut count = 0_u64;
-            let mut horizontal_sum = 0_u64;
-            let mut vertical_sum = 0_u64;
-            let mut horizontal_pairs = 0_u64;
-            let mut vertical_pairs = 0_u64;
-
-            for y in y0..y1 {
-                for x in x0..x1 {
-                    let pixel = y
-                        .checked_mul(width)
-                        .and_then(|value| value.checked_add(x))
-                        .ok_or(VisionError::InvalidDimensions)?;
-                    let index = bounded_mul(pixel, 4)?;
-                    let alpha = rgba[index + 3];
-                    for (channel, sum) in sums.iter_mut().enumerate() {
-                        let value = composite(rgba[index + channel], alpha)?;
-                        *sum = sum
-                            .checked_add(value)
-                            .ok_or(VisionError::InvalidDimensions)?;
-                    }
-                    let luma = pixel_luma(rgba, width, x, y)?;
-                    luma_sum = luma_sum
-                        .checked_add(luma)
-                        .ok_or(VisionError::InvalidDimensions)?;
-                    count = count.checked_add(1).ok_or(VisionError::InvalidDimensions)?;
-                    if x + 1 < x1 {
-                        let right = pixel_luma(rgba, width, x + 1, y)?;
-                        horizontal_sum = horizontal_sum
-                            .checked_add(luma.abs_diff(right))
-                            .ok_or(VisionError::InvalidDimensions)?;
-                        horizontal_pairs = horizontal_pairs
-                            .checked_add(1)
-                            .ok_or(VisionError::InvalidDimensions)?;
-                    }
-                    if y + 1 < y1 {
-                        let below = pixel_luma(rgba, width, x, y + 1)?;
-                        vertical_sum = vertical_sum
-                            .checked_add(luma.abs_diff(below))
-                            .ok_or(VisionError::InvalidDimensions)?;
-                        vertical_pairs = vertical_pairs
-                            .checked_add(1)
-                            .ok_or(VisionError::InvalidDimensions)?;
-                    }
-                }
-            }
-
-            let mean_rgb = [
-                u8::try_from(rounded_mean(sums[0], count)?)
-                    .map_err(|_| VisionError::InvalidDimensions)?,
-                u8::try_from(rounded_mean(sums[1], count)?)
-                    .map_err(|_| VisionError::InvalidDimensions)?,
-                u8::try_from(rounded_mean(sums[2], count)?)
-                    .map_err(|_| VisionError::InvalidDimensions)?,
-            ];
-            let luma = u8::try_from(rounded_mean(luma_sum, count)?)
-                .map_err(|_| VisionError::InvalidDimensions)?;
-            let horizontal_edge = if horizontal_pairs == 0 {
-                0
-            } else {
-                u8::try_from(rounded_mean(horizontal_sum, horizontal_pairs)?)
-                    .map_err(|_| VisionError::InvalidDimensions)?
-            };
-            let vertical_edge = if vertical_pairs == 0 {
-                0
-            } else {
-                u8::try_from(rounded_mean(vertical_sum, vertical_pairs)?)
-                    .map_err(|_| VisionError::InvalidDimensions)?
-            };
-            let chroma_rg = i16::from(mean_rgb[0]) - i16::from(mean_rgb[1]);
-            let chroma_by = i16::from(mean_rgb[2]) - i16::from(luma);
-            let edge_strength = horizontal_edge.max(vertical_edge);
-            let q12 = [
-                i32::from(luma)
-                    .checked_mul(Q12_SCALE)
-                    .ok_or(VisionError::InvalidDimensions)?,
-                i32::from(chroma_rg)
-                    .checked_mul(Q12_SCALE)
-                    .ok_or(VisionError::InvalidDimensions)?,
-                i32::from(chroma_by)
-                    .checked_mul(Q12_SCALE)
-                    .ok_or(VisionError::InvalidDimensions)?,
-                i32::from(edge_strength)
-                    .checked_mul(Q12_SCALE)
-                    .ok_or(VisionError::InvalidDimensions)?,
-            ];
-            patches.push(ImagePatch {
-                row,
-                column,
-                x0,
-                y0,
-                x1,
-                y1,
-                mean_rgb,
-                luma,
-                chroma_rg,
-                chroma_by,
-                horizontal_edge,
-                vertical_edge,
-                q12,
-            });
-        }
-    }
-
-    Ok(ImageDecomposition {
-        schema: "uor-r4.image/1",
+    Ok(Decomposition {
         width,
         height,
         grid,
-        source_sha256,
+        source_hash,
         patches,
     })
 }
 
-pub fn validate_canonical_prompt(prompt: &str, expected_sha256: &str) -> Result<(), VisionError> {
-    if expected_sha256.len() != 64
-        || !expected_sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-    {
-        return Err(VisionError::HashMismatch);
+/// Computes the exact RGBA byte count, rejecting arithmetic overflow.
+pub fn rgba_byte_len(width: u32, height: u32) -> Result<usize, VisionError> {
+    usize::try_from(width)
+        .ok()
+        .and_then(|w| usize::try_from(height).ok().and_then(|h| w.checked_mul(h)))
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or(VisionError::ArithmeticOverflow)
+}
+
+/// Validates one RGBA buffer and decomposes it into deterministic R4 patches.
+///
+/// Pixels are top-left origin. Every accepted source pixel belongs to exactly
+/// one patch. The alpha channel is covered by the source digest but does not
+/// contribute to the declared RGB visual statistics.
+pub fn decompose_rgba(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    grid: Grid,
+) -> Result<Decomposition, VisionError> {
+    validate_dimension(Axis::Width, width)?;
+    validate_dimension(Axis::Height, height)?;
+    let expected = rgba_byte_len(width, height)?;
+    if rgba.len() != expected {
+        return Err(VisionError::PixelBufferLength {
+            expected,
+            actual: rgba.len(),
+        });
     }
-    let (hash, rest) = prompt
-        .strip_prefix("R4IMG1;sha256=")
-        .ok_or(VisionError::InvalidCanonical("missing R4IMG1 header"))?
-        .split_once(";size=")
-        .ok_or(VisionError::InvalidCanonical("missing size"))?;
-    if hash != expected_sha256 {
-        return Err(VisionError::HashMismatch);
-    }
-    let (size, rest) = rest
-        .split_once(";grid=")
-        .ok_or(VisionError::InvalidCanonical("missing grid"))?;
-    let (grid, values) = rest
-        .split_once(";q12=")
-        .ok_or(VisionError::InvalidCanonical("missing Q12 values"))?;
-    let (width, height) = size
-        .split_once('x')
-        .ok_or(VisionError::InvalidCanonical("invalid dimensions"))?;
-    let width = width
-        .parse::<usize>()
-        .map_err(|_| VisionError::InvalidCanonical("invalid width"))?;
-    let height = height
-        .parse::<usize>()
-        .map_err(|_| VisionError::InvalidCanonical("invalid height"))?;
-    let grid = grid
-        .parse::<usize>()
-        .map_err(|_| VisionError::InvalidCanonical("invalid grid"))?;
-    if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
-        return Err(VisionError::InvalidCanonical("dimensions out of bounds"));
-    }
-    if grid == 0 || grid > MAX_GRID || grid > width || grid > height {
-        return Err(VisionError::InvalidCanonical("grid out of bounds"));
-    }
-    if values.is_empty() {
-        return Err(VisionError::InvalidCanonical("empty Q12 values"));
-    }
-    let values = values
-        .split(',')
-        .map(|value| {
-            value
-                .parse::<i32>()
-                .map_err(|_| VisionError::InvalidCanonical("invalid Q12 value"))
+    validate_grid(grid, width, height)?;
+
+    let positions: Vec<(u16, u16)> = (0..grid.rows)
+        .flat_map(|row| (0..grid.columns).map(move |column| (column, row)))
+        .collect();
+    let evaluate = |(column, row)| patch_for(width, height, rgba, grid, column, row);
+
+    #[cfg(feature = "parallel")]
+    let patches = {
+        let min_len = positions.len().div_ceil(rayon::current_num_threads());
+        positions
+            .into_par_iter()
+            .with_min_len(min_len)
+            .map(evaluate)
+            .collect::<Result<Vec<_>, VisionError>>()?
+    };
+    #[cfg(not(feature = "parallel"))]
+    let patches = positions
+        .into_iter()
+        .map(evaluate)
+        .collect::<Result<Vec<_>, VisionError>>()?;
+
+    Ok(Decomposition {
+        width: width as u16,
+        height: height as u16,
+        grid,
+        source_hash: *blake3::hash(rgba).as_bytes(),
+        patches,
+    })
+}
+
+fn validate_dimension(axis: Axis, value: u32) -> Result<(), VisionError> {
+    if (1..=MAX_DIMENSION).contains(&value) {
+        Ok(())
+    } else {
+        Err(VisionError::DimensionOutOfRange {
+            axis,
+            value,
+            max: MAX_DIMENSION,
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    let expected = bounded_mul(bounded_mul(grid, grid)?, 4)?;
-    if values.len() != expected {
-        return Err(VisionError::InvalidCanonical("wrong Q12 value count"));
     }
-    for (index, value) in values.iter().enumerate() {
-        let valid = match index % 4 {
-            0 | 3 => (0..=4080).contains(value),
-            _ => (-4080..=4080).contains(value),
-        };
-        if !valid {
-            return Err(VisionError::InvalidCanonical("Q12 value out of bounds"));
-        }
+}
+
+fn validate_grid(grid: Grid, width: u32, height: u32) -> Result<(), VisionError> {
+    if grid.columns == 0 || grid.rows == 0 {
+        return Err(VisionError::EmptyGrid);
     }
-    if canonical_from_values(width, height, grid, hash, &values) != prompt {
-        return Err(VisionError::InvalidCanonical("non-canonical serialization"));
+    if grid.columns > MAX_GRID || grid.rows > MAX_GRID {
+        return Err(VisionError::GridOutOfRange {
+            columns: grid.columns,
+            rows: grid.rows,
+            max: MAX_GRID,
+        });
+    }
+    if u32::from(grid.columns) > width || u32::from(grid.rows) > height {
+        return Err(VisionError::GridLargerThanImage {
+            columns: grid.columns,
+            rows: grid.rows,
+            width,
+            height,
+        });
     }
     Ok(())
+}
+
+fn canonical_error(message: impl Into<String>) -> VisionError {
+    VisionError::InvalidCanonical(message.into())
+}
+
+fn read_u16(bytes: &[u8], at: usize) -> u16 {
+    u16::from_be_bytes([bytes[at], bytes[at + 1]])
+}
+
+fn read_i16(bytes: &[u8], at: usize) -> i16 {
+    i16::from_be_bytes([bytes[at], bytes[at + 1]])
+}
+
+fn patch_for(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    grid: Grid,
+    column: u16,
+    row: u16,
+) -> Result<Patch, VisionError> {
+    let x0 = partition(column, grid.columns, width)?;
+    let x1 = partition(column + 1, grid.columns, width)?;
+    let y0 = partition(row, grid.rows, height)?;
+    let y1 = partition(row + 1, grid.rows, height)?;
+    let area = (x1 - x0)
+        .checked_mul(y1 - y0)
+        .ok_or(VisionError::ArithmeticOverflow)?;
+
+    let mut rgb_sum = [0u64; 3];
+    let mut edge_h_sum = 0i64;
+    let mut edge_h_pairs = 0u64;
+    let mut edge_v_sum = 0i64;
+    let mut edge_v_pairs = 0u64;
+    let mut luma = [0u16; MAX_DIMENSION as usize];
+    let mut next_luma = [0u16; MAX_DIMENSION as usize];
+    for y in y0..y1 {
+        let row_base = (y * width * 4) as usize;
+        for x in x0..x1 {
+            let at = row_base + (x * 4) as usize;
+            let source_pixel = [rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]];
+            for (sum, value) in rgb_sum.iter_mut().zip(&source_pixel[..3]) {
+                *sum += u64::from(*value);
+            }
+            luma[(x - x0) as usize] = raw_luma(source_pixel);
+        }
+        let patch_width = (x1 - x0) as usize;
+        for x in 0..patch_width.saturating_sub(1) {
+            edge_h_sum += i64::from(luma[x + 1]) - i64::from(luma[x]);
+            edge_h_pairs += 1;
+        }
+        if y + 1 < y1 {
+            let next_base = ((y + 1) * width * 4) as usize;
+            for (index, x) in (x0..x1).enumerate() {
+                let at = next_base + (x * 4) as usize;
+                next_luma[index] = raw_luma([rgba[at], rgba[at + 1], rgba[at + 2], rgba[at + 3]]);
+            }
+            for (current, below) in luma[..patch_width].iter().zip(&next_luma[..patch_width]) {
+                edge_v_sum += i64::from(*below) - i64::from(*current);
+                edge_v_pairs += 1;
+            }
+        }
+    }
+
+    let mean_rgb_q12 = [
+        mean_q12(rgb_sum[0], area)?,
+        mean_q12(rgb_sum[1], area)?,
+        mean_q12(rgb_sum[2], area)?,
+    ];
+    let luma_q12 = weighted_luma_q12(mean_rgb_q12)?;
+    let chroma_q12 = [
+        signed_i16(i32::from(mean_rgb_q12[0]) - i32::from(luma_q12))?,
+        signed_i16(i32::from(mean_rgb_q12[2]) - i32::from(luma_q12))?,
+    ];
+    let edges_q12 = [
+        edge_q12(edge_h_sum, edge_h_pairs)?,
+        edge_q12(edge_v_sum, edge_v_pairs)?,
+    ];
+    let r4_q12 = [
+        [
+            centered(mean_rgb_q12[0])?,
+            centered(mean_rgb_q12[1])?,
+            centered(mean_rgb_q12[2])?,
+            centered(luma_q12)?,
+        ],
+        [chroma_q12[0], chroma_q12[1], edges_q12[0], edges_q12[1]],
+    ];
+
+    Ok(Patch {
+        column,
+        row,
+        x0: x0 as u16,
+        y0: y0 as u16,
+        x1: x1 as u16,
+        y1: y1 as u16,
+        mean_rgb_q12,
+        luma_q12,
+        chroma_q12,
+        edges_q12,
+        r4_q12,
+    })
+}
+
+fn partition(index: u16, parts: u16, size: u32) -> Result<u32, VisionError> {
+    let numerator = u32::from(index)
+        .checked_mul(size)
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    Ok(numerator / u32::from(parts))
+}
+
+fn mean_q12(sum: u64, area: u32) -> Result<u16, VisionError> {
+    let denominator = u64::from(area)
+        .checked_mul(255)
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    let numerator = sum
+        .checked_mul(4096)
+        .and_then(|value| value.checked_add(denominator / 2))
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    u16::try_from(numerator / denominator).map_err(|_| VisionError::ArithmeticOverflow)
+}
+
+fn weighted_luma_q12(rgb: [u16; 3]) -> Result<u16, VisionError> {
+    let numerator = 299u64
+        .checked_mul(u64::from(rgb[0]))
+        .and_then(|value| value.checked_add(587 * u64::from(rgb[1])))
+        .and_then(|value| value.checked_add(114 * u64::from(rgb[2])))
+        .and_then(|value| value.checked_add(500))
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    u16::try_from(numerator / 1000).map_err(|_| VisionError::ArithmeticOverflow)
+}
+
+fn raw_luma(pixel: [u8; 4]) -> u16 {
+    ((299 * u32::from(pixel[0]) + 587 * u32::from(pixel[1]) + 114 * u32::from(pixel[2])) / 1000)
+        as u16
+}
+
+fn edge_q12(sum: i64, pairs: u64) -> Result<i16, VisionError> {
+    if pairs == 0 {
+        return Ok(0);
+    }
+    let denominator = i64::try_from(pairs).map_err(|_| VisionError::ArithmeticOverflow)? * 255;
+    let numerator = sum
+        .checked_mul(4096)
+        .ok_or(VisionError::ArithmeticOverflow)?;
+    let rounded = if numerator >= 0 {
+        numerator
+            .checked_add(denominator / 2)
+            .ok_or(VisionError::ArithmeticOverflow)?
+            / denominator
+    } else {
+        -((-numerator)
+            .checked_add(denominator / 2)
+            .ok_or(VisionError::ArithmeticOverflow)?
+            / denominator)
+    };
+    i16::try_from(rounded).map_err(|_| VisionError::ArithmeticOverflow)
+}
+
+fn centered(value: u16) -> Result<i16, VisionError> {
+    signed_i16(i32::from(value) - 2048)
+}
+
+fn signed_i16(value: i32) -> Result<i16, VisionError> {
+    i16::try_from(value).map_err(|_| VisionError::ArithmeticOverflow)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const ONE_HASH: &str = "78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59";
-    const ONE_CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
-
     #[test]
-    fn one_by_one_has_exact_patch_and_canonical_bytes() {
-        let image = decompose_rgba(1, 1, &[12, 20, 28, 255], 1).unwrap();
-        assert_eq!(image.source_sha256, ONE_HASH);
-        assert_eq!(image.patches.len(), 1);
-        let patch = &image.patches[0];
-        assert_eq!((patch.row, patch.column), (0, 0));
-        assert_eq!((patch.x0, patch.y0, patch.x1, patch.y1), (0, 0, 1, 1));
-        assert_eq!(patch.mean_rgb, [12, 20, 28]);
-        assert_eq!(patch.luma, 19);
-        assert_eq!((patch.chroma_rg, patch.chroma_by), (-8, 9));
-        assert_eq!((patch.horizontal_edge, patch.vertical_edge), (0, 0));
-        assert_eq!(patch.q12, [304, -128, 144, 0]);
-        assert_eq!(image.canonical_prompt(), ONE_CANONICAL);
-        assert_eq!(image.canonical_sha256(), "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa");
-    }
-
-    #[test]
-    fn uniform_odd_dimensions_have_complete_positioned_patches() {
-        let rgba = (0..9)
-            .flat_map(|_| [100, 150, 200, 255])
-            .collect::<Vec<_>>();
-        let image = decompose_rgba(3, 3, &rgba, 2).unwrap();
-        assert_eq!(image.patches.len(), 4);
-        let rectangles = image
-            .patches
-            .iter()
-            .map(|patch| {
-                (
-                    patch.row,
-                    patch.column,
-                    patch.x0,
-                    patch.y0,
-                    patch.x1,
-                    patch.y1,
-                )
-            })
-            .collect::<Vec<_>>();
+    fn byte_length_overflow_is_rejected() {
         assert_eq!(
-            rectangles,
-            vec![
-                (0, 0, 0, 0, 1, 1),
-                (0, 1, 1, 0, 3, 1),
-                (1, 0, 0, 1, 1, 3),
-                (1, 1, 1, 1, 3, 3),
-            ]
+            rgba_byte_len(u32::MAX, u32::MAX),
+            Err(VisionError::ArithmeticOverflow)
         );
-        for patch in &image.patches {
-            assert_eq!(patch.mean_rgb, [100, 150, 200]);
-            assert_eq!(patch.luma, 141);
-            assert_eq!((patch.chroma_rg, patch.chroma_by), (-50, 59));
-            assert_eq!(patch.q12, [2256, -800, 944, 0]);
-        }
-    }
-
-    #[test]
-    fn asymmetric_patch_has_rounded_means_chroma_and_edges() {
-        let image = decompose_rgba(
-            2,
-            2,
-            &[
-                0, 0, 0, 255, 255, 255, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255,
-            ],
-            1,
-        )
-        .unwrap();
-        let patch = &image.patches[0];
-        assert_eq!(patch.mean_rgb, [128, 128, 64]);
-        assert_eq!(patch.luma, 120);
-        assert_eq!((patch.chroma_rg, patch.chroma_by), (0, -56));
-        assert_eq!((patch.horizontal_edge, patch.vertical_edge), (164, 92));
-        assert_eq!(patch.q12, [1920, 0, -896, 2624]);
-    }
-
-    #[test]
-    fn horizontal_edge_is_directional() {
-        let image = decompose_rgba(
-            2,
-            2,
-            &[
-                0, 0, 0, 255, 255, 255, 255, 255, 0, 0, 0, 255, 255, 255, 255, 255,
-            ],
-            1,
-        )
-        .unwrap();
-        assert_eq!(
-            (
-                image.patches[0].horizontal_edge,
-                image.patches[0].vertical_edge
-            ),
-            (255, 0)
-        );
-    }
-
-    #[test]
-    fn vertical_edge_is_directional() {
-        let image = decompose_rgba(
-            2,
-            2,
-            &[
-                0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255,
-            ],
-            1,
-        )
-        .unwrap();
-        assert_eq!(
-            (
-                image.patches[0].horizontal_edge,
-                image.patches[0].vertical_edge
-            ),
-            (0, 255)
-        );
-    }
-
-    #[test]
-    fn alpha_is_composited_over_black_with_integer_rounding() {
-        let image = decompose_rgba(1, 1, &[200, 100, 50, 128], 1).unwrap();
-        let patch = &image.patches[0];
-        assert_eq!(patch.mean_rgb, [100, 50, 25]);
-        assert_eq!(patch.luma, 62);
-        assert_eq!((patch.chroma_rg, patch.chroma_by), (50, -37));
-        assert_eq!(patch.q12, [992, 800, -592, 0]);
-    }
-
-    #[test]
-    fn decomposition_is_deterministic_and_pixel_changes_change_hash_and_prompt() {
-        let first = decompose_rgba(1, 1, &[12, 20, 28, 255], 1).unwrap();
-        let repeated = decompose_rgba(1, 1, &[12, 20, 28, 255], 1).unwrap();
-        assert_eq!(first, repeated);
-        let changed = decompose_rgba(1, 1, &[13, 20, 28, 255], 1).unwrap();
-        assert_ne!(changed.source_sha256, first.source_sha256);
-        assert_ne!(changed.canonical_prompt(), first.canonical_prompt());
-    }
-
-    #[test]
-    fn canonical_validation_accepts_only_exact_bounded_serialization() {
-        validate_canonical_prompt(ONE_CANONICAL, ONE_HASH).unwrap();
-        for invalid in [
-            "a red square",
-            "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144",
-            "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=257x1;grid=1;q12=304,-128,144,0",
-        ] {
-            assert!(validate_canonical_prompt(invalid, ONE_HASH).is_err(), "{invalid}");
-        }
-        assert!(validate_canonical_prompt(&(ONE_CANONICAL.to_owned() + "\n"), ONE_HASH).is_err());
-        assert!(validate_canonical_prompt(ONE_CANONICAL, ONE_HASH).is_ok());
-        assert!(validate_canonical_prompt(ONE_CANONICAL, &"0".repeat(64)).is_err());
-    }
-
-    #[test]
-    fn invalid_dimensions_grid_lengths_and_overflow_are_refused() {
-        assert!(decompose_rgba(0, 1, &[], 1).is_err());
-        assert!(decompose_rgba(1, 0, &[], 1).is_err());
-        assert!(decompose_rgba(1, 1, &[0; 4], 0).is_err());
-        assert!(decompose_rgba(1, 1, &[0; 4], 2).is_err());
-        assert!(decompose_rgba(257, 1, &[], 1).is_err());
-        assert!(decompose_rgba(1, 257, &[], 1).is_err());
-        assert!(decompose_rgba(16, 16, &[0; 1024], 17).is_err());
-        assert!(decompose_rgba(1, 1, &[0; 3], 1).is_err());
-        assert!(decompose_rgba(1, 1, &[0; 5], 1).is_err());
-        assert!(decompose_rgba(usize::MAX, 2, &[], 1).is_err());
     }
 }

@@ -160,10 +160,31 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/geometric-image-registration": {
+    "branch": "deepseek/geometric-image-registration",
+    "claimed_at": "2026-11-03T15:58:05-05:00",
+    "head": "42f228e5b",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/harness-registry-reconcile": {
     "branch": "deepseek/harness-registry-reconcile",
     "claimed_at": "2026-11-02T04:56:29-05:00",
     "head": "050943645",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/image-native-ingestion": {
+    "branch": "deepseek/image-native-ingestion",
+    "claimed_at": "2026-11-03T17:09:42-05:00",
+    "head": "51b159bf9",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/image-r4-decomposition": {
+    "branch": "deepseek/image-r4-decomposition",
+    "claimed_at": "2026-11-03T16:53:28-05:00",
+    "head": "89e4942d3",
     "lab": "deepseek",
     "note": ""
   },
