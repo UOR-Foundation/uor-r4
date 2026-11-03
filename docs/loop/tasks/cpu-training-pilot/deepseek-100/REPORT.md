@@ -29,6 +29,9 @@ Order: [ORDER.md](ORDER.md). Base:
   workload improves through 32 hardware threads, while the earlier synthetic
   counterfactual candidate search remains faster at 16 physical workers. The
   worker budget is therefore workload-specific.
+- **One clean-head full gate run hit an `ETXTBSY` harness-test flake.** The
+  loop-drive fake `gh` executable could not be launched on that attempt. The
+  immediate full rerun was green on all 11 gates.
 
 ## What changed
 
