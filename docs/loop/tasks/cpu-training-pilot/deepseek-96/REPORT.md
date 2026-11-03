@@ -44,8 +44,9 @@ so saturation and tie behavior cannot depend on thread scheduling.
 The change is approximately 470 code/doc lines, larger than the initial
 candidate-search estimate because the reviewer-requested sample-level
 parallelism and its exactness tests were folded into the same unit. Evidence is
-generated data; the tracked evidence files are the two complete reports, the
-comparison and their checksum manifest.
+generated data; the tracked evidence files are the pre-FIT sheet snapshot, two
+complete reports, two raw timing receipts, the comparison and their checksum
+manifest.
 
 ## Measurements
 
@@ -105,7 +106,7 @@ sheet has a different hash without changing its bar, inputs or claim boundary.
 - `cargo fmt --package uor-r4-cpu-train -- --check`: passed.
 - `git diff --check`: passed.
 - JSON parsing for both seed reports, the comparison and the claims ledger: passed.
-- `sha256sum -c SHA256SUMS`: all three evidence files passed.
+- `sha256sum -c SHA256SUMS`: all six evidence files passed.
 - Both registered seeds exited zero with exact complete CPU/serving parity.
 - `uor-harness loop report --check --order …/deepseek-96/ORDER.md`: PASS.
 - `uor-harness loop pr-check --local`: PASS, with advisory D76 warnings only for
