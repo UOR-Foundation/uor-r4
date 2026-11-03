@@ -28,12 +28,14 @@ No model or serving measurement applies. The verified base remains
 
 ## Checks run at the head
 
-- Full gates ran at content commit `CONTENT_HEAD`.
+- Full gates ran at content commit
+  `34c1912e3f24156a14eef48f889b4e65bf3edad9`.
 - `cargo run -q -p xtask -- roadmap check`, `git diff --check`,
   `loop report --check`, `loop pr-check --local` and `loop gates --full` passed
   at that content commit.
 - The following accounting commit adds `receipts.jsonl`, records the tested
   content commit here and updates the exact-size line.
+- The final cumulative diff is 21 files: 753 insertions and no deletions.
 
 ## Skills used
 
