@@ -485,7 +485,7 @@ impl OpenAiServing {
         self.generate_with_permit(messages, max_tokens, emit)
     }
 
-    pub fn generate_with_permit<F>(
+    pub(crate) fn generate_with_permit<F>(
         &self,
         messages: &[Message<'_>],
         max_tokens: usize,

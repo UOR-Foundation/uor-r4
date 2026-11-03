@@ -677,6 +677,29 @@ fn studio_bootstrap_is_ephemeral_and_static_paths_are_bounded() {
 }
 
 #[test]
+fn studio_bootstrap_cannot_close_inline_script() {
+    let root = std::env::temp_dir().join(format!("uor-openai-script-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("index.html"),
+        "<html><head></head><body>Studio</body></html>",
+    )
+    .unwrap();
+    let mut config = config();
+    config.studio_root = Some(root.clone());
+    config.token = "</script><script>alert(1)</script>".into();
+    let server = LoopbackServer::spawn(config).unwrap();
+    let (status, _, index) = request(server.port(), "GET", "/", "", "", "");
+    assert_eq!(status, 200);
+    assert!(index.contains("\\u003c/script>"), "{index}");
+    assert!(!index.contains("</script><script>alert(1)</script>"));
+    assert_eq!(index.matches("<script>").count(), 1);
+    server.shutdown().unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn stop_mapping_text_parts_and_exact_prompt_counts() {
     let server = LoopbackServer::spawn(config()).unwrap();
     let (status, limited) = post_json(
@@ -747,7 +770,7 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
     };
     let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
     first.write_all(wire(server.port()).as_bytes()).unwrap();
-    let mut role = [0u8; 512];
+    let mut role = [0u8; 1];
     let read = first.read(&mut role).unwrap();
     assert!(read > 0);
     let (status, _, second) = request(
@@ -773,10 +796,27 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
         .unwrap();
     disconnect.read(&mut role).unwrap();
     disconnect.shutdown(std::net::Shutdown::Both).unwrap();
-    let (status, _, _) = request(server.port(), "GET", "/v1/models", "", "test-token", "");
+    let generation_request = json!({"model": "uor-chat", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 1});
+    let mut next = post_json(
+        server.port(),
+        "/v1/chat/completions",
+        generation_request.clone(),
+    );
+    for _ in 0..20 {
+        if next.0 == 200 {
+            break;
+        }
+        assert_eq!(next.0, 429, "{next:?}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        next = post_json(
+            server.port(),
+            "/v1/chat/completions",
+            generation_request.clone(),
+        );
+    }
     assert_eq!(
-        status, 200,
-        "the server remains healthy after a real client disconnect"
+        next.0, 200,
+        "disconnect releases the generation permit for a subsequent generation: {next:?}"
     );
 
     let (status, headers, _) = request(
@@ -891,11 +931,12 @@ fn cli_token_stdin_supports_headless_loopback() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
+    let token = "h".repeat(256);
     child
         .stdin
         .take()
         .unwrap()
-        .write_all(b"headless-token\n")
+        .write_all(format!("{token}\n").as_bytes())
         .unwrap();
     let mut stdout = BufReader::new(child.stdout.take().unwrap());
     let mut line = String::new();
@@ -910,9 +951,9 @@ fn cli_token_stdin_supports_headless_loopback() {
         })
         .and_then(|digits| digits.parse::<u16>().ok())
         .unwrap();
-    let (status, _, _) = request(port, "GET", "/v1/models", "", "headless-token", "");
+    let (status, _, _) = request(port, "GET", "/v1/models", "", &token, "");
     assert_eq!(status, 200);
-    assert!(!line.contains("headless-token"));
+    assert!(!line.contains(&token));
     child.kill().unwrap();
     child.wait().unwrap();
     let refused = Command::new(env!("CARGO_BIN_EXE_uor-chat"))

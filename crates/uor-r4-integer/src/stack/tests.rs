@@ -1729,6 +1729,34 @@ fn stack_chat_callback_error_aborts_before_another_model_step() -> ChatTest {
 }
 
 #[test]
+fn loopback_error_after_headers_does_not_duplicate_http_response() -> ChatTest {
+    use std::io::Read as _;
+
+    let (model, json) = chat(5)?;
+    let serving = crate::openai::OpenAiServing::new(model, json, 1)?;
+    let config = crate::loopback::LoopbackConfig::new(serving)?;
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+    let port = listener.local_addr()?.port();
+    let mut writer = std::net::TcpStream::connect(("127.0.0.1", port))?;
+    let _reader = listener.accept()?.0;
+    crate::loopback::write_connection_error(
+        &mut writer,
+        &crate::openai::OpenAiError::new(500, "post-header failure"),
+        &config,
+        true,
+    )?;
+    writer.set_read_timeout(Some(std::time::Duration::from_millis(20)))?;
+    let mut byte = [0u8; 1];
+    let result = writer.read(&mut byte);
+    match result {
+        Ok(0) => {}
+        Err(ref error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+        other => panic!("an SSE error must close, not append a second HTTP response: {other:?}"),
+    }
+    Ok(())
+}
+
+#[test]
 fn stack_chat_refuses_a_turn_that_does_not_fit_the_context() -> ChatTest {
     let (model, json) = chat(17)?;
     let mut chat = open_chat(&model, &json)?;

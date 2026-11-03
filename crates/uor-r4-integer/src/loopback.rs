@@ -173,6 +173,7 @@ impl Request {
 fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(), OpenAiError> {
     stream.set_read_timeout(Some(Duration::from_secs(30))).ok();
     stream.set_write_timeout(Some(Duration::from_secs(30))).ok();
+    let mut response_started = false;
     let outcome = (|| {
         let request = read_request(&mut stream, config.max_body_bytes)?;
         validate_host_origin(&request, config)?;
@@ -181,10 +182,10 @@ fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(
         }
         if request.target.starts_with("/v1/") {
             if request.method == "OPTIONS" {
-                return route_api(&mut stream, request, config);
+                return route_api(&mut stream, request, config, &mut response_started);
             }
             authenticate(&request, &config.token)?;
-            return route_api(&mut stream, request, config);
+            return route_api(&mut stream, request, config, &mut response_started);
         }
         if request.method == "GET" && config.studio_root.is_some() {
             return serve_static(&mut stream, &request, config);
@@ -192,9 +193,21 @@ fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(
         Err(OpenAiError::unsupported("route is not implemented").with_code("not_implemented"))
     })();
     if let Err(error) = outcome {
-        write_json(&mut stream, error.status, &error.to_json(), config)?;
+        write_connection_error(&mut stream, &error, config, response_started)?;
     }
     Ok(())
+}
+
+pub(crate) fn write_connection_error(
+    stream: &mut TcpStream,
+    error: &OpenAiError,
+    config: &LoopbackConfig,
+    response_started: bool,
+) -> Result<(), OpenAiError> {
+    if response_started {
+        return Ok(());
+    }
+    write_json(stream, error.status, &error.to_json(), config)
 }
 
 fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, OpenAiError> {
@@ -375,6 +388,7 @@ fn route_api(
     stream: &mut TcpStream,
     request: Request,
     config: &LoopbackConfig,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     if request.method == "OPTIONS" {
         return write_response(stream, 204, "application/json; charset=utf-8", &[], config);
@@ -391,15 +405,27 @@ fn route_api(
                 Err(OpenAiError::new(404, "model does not exist").with_code("model_not_found"))
             }
         }
-        ("POST", "/v1/chat/completions") => {
-            generate_api(stream, &request, config, GenerationFamily::Chat)
-        }
-        ("POST", "/v1/completions") => {
-            generate_api(stream, &request, config, GenerationFamily::Completion)
-        }
-        ("POST", "/v1/responses") => {
-            generate_api(stream, &request, config, GenerationFamily::Responses)
-        }
+        ("POST", "/v1/chat/completions") => generate_api(
+            stream,
+            &request,
+            config,
+            GenerationFamily::Chat,
+            response_started,
+        ),
+        ("POST", "/v1/completions") => generate_api(
+            stream,
+            &request,
+            config,
+            GenerationFamily::Completion,
+            response_started,
+        ),
+        ("POST", "/v1/responses") => generate_api(
+            stream,
+            &request,
+            config,
+            GenerationFamily::Responses,
+            response_started,
+        ),
         _ => Err(
             OpenAiError::unsupported("this OpenAI endpoint family is not implemented")
                 .with_code("not_implemented"),
@@ -412,6 +438,7 @@ fn generate_api(
     request: &Request,
     config: &LoopbackConfig,
     family: GenerationFamily,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     if !request.header("content-type").is_some_and(|value| {
         value == "application/json" || value == "application/json; charset=utf-8"
@@ -425,7 +452,7 @@ fn generate_api(
         .map_err(|error| OpenAiError::new(400, format!("malformed JSON: {error}")))?;
     let generation = config.serving.validate_request(family, &input)?;
     if generation.stream {
-        stream_generation(stream, &generation, config, family)
+        stream_generation(stream, &generation, config, family, response_started)
     } else {
         let messages = generation.borrowed_messages();
         let outcome = config
@@ -445,9 +472,11 @@ fn stream_generation(
     generation: &crate::openai::GenerationRequest,
     config: &LoopbackConfig,
     family: GenerationFamily,
+    response_started: &mut bool,
 ) -> Result<(), OpenAiError> {
     let _permit = config.serving.try_start_generation()?;
     let identity = config.serving.stream_identity(family);
+    *response_started = true;
     write_sse_headers(stream, config)?;
     write_sse_event(
         stream,
@@ -649,7 +678,9 @@ fn serve_static(
     let body = if candidate == root.join("index.html") {
         let html = std::fs::read_to_string(&candidate)
             .map_err(|_| OpenAiError::new(404, "Studio index is unavailable"))?;
-        let bootstrap = serde_json::json!({"baseUrl": "/v1", "model": config.serving.model_id(), "token": config.token, "protocol": "openai", "temperature": 0, "ephemeral": true});
+        let bootstrap = serde_json::json!({"baseUrl": "/v1", "model": config.serving.model_id(), "token": config.token, "protocol": "openai", "temperature": 0, "ephemeral": true})
+            .to_string()
+            .replace('<', "\\u003c");
         let script = format!(
             "<script>window.__UOR_NATIVE_BOOTSTRAP__=Object.freeze({});</script>",
             bootstrap

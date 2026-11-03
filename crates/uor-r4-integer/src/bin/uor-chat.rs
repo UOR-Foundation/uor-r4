@@ -1424,17 +1424,42 @@ impl From<std::io::Error> for StackCliError {
 }
 
 fn read_launch_token_stdin() -> std::result::Result<String, StackCliError> {
-    let mut bytes = [0u8; 257];
-    let read = io::stdin().read(&mut bytes)?;
-    if read == 0 || read > 256 {
+    let mut bytes = Vec::new();
+    let mut terminated = false;
+    loop {
+        let mut chunk = [0u8; 32];
+        let read = io::stdin().read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        if bytes.len() + read > 257 && !chunk[..read].contains(&b'\n') {
+            return Err(StackCliError::Usage(
+                "--token-stdin requires 1-256 bytes followed by a newline".into(),
+            ));
+        }
+        bytes.extend_from_slice(&chunk[..read]);
+        if chunk[..read].contains(&b'\n') {
+            terminated = true;
+            break;
+        }
+        if bytes.len() > 257 {
+            return Err(StackCliError::Usage(
+                "--token-stdin requires 1-256 bytes followed by a newline".into(),
+            ));
+        }
+    }
+    if !terminated {
         return Err(StackCliError::Usage(
             "--token-stdin requires 1-256 bytes followed by a newline".into(),
         ));
     }
-    let text = std::str::from_utf8(&bytes[..read])
+    let text = std::str::from_utf8(&bytes)
         .map_err(|_| StackCliError::Usage("--token-stdin must be UTF-8".into()))?;
     let token = text.trim_end_matches(&['\r', '\n'][..]);
-    if token.is_empty() || token.bytes().any(|byte| byte <= 0x20 || byte == 0x7f) {
+    if token.is_empty()
+        || token.len() > 256
+        || token.bytes().any(|byte| byte <= 0x20 || byte == 0x7f)
+    {
         return Err(StackCliError::Usage(
             "--token-stdin must be one nonempty token without whitespace or control characters"
                 .into(),
