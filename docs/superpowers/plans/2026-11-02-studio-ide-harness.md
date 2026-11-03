@@ -194,9 +194,9 @@ Write the REPORT with what did not work first, failing-first evidence, exact tes
 Run:
 
 ```bash
-UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-workflows/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop gates --full
-UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-workflows/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop pr-check --local
-CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-workflows/target/kimi cargo run -q --locked -p uor-r4-claim-wording -- .
+UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-mac-connections/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop gates --full
+UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-mac-connections/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop pr-check --local
+CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/.worktrees/kimi-studio-mac-connections/target/kimi cargo run -q --locked -p uor-r4-claim-wording -- .
 git diff --check
 ```
 
