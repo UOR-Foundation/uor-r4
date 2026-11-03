@@ -28,7 +28,7 @@ Every timing summary now labels the all-eight-run audit range
 `34.7-35.6 ms`. The deepseek-100 and deepseek-101 reports point to this active
 repair record, while the accepted timing implementation is unchanged.
 
-The exact PR diff is 51 files: 5,453 insertions and 17 deletions, including the
+The exact PR diff is 52 files: 5,464 insertions and 17 deletions, including the
 complete worker evidence and this repair record.
 
 ## Measurements
