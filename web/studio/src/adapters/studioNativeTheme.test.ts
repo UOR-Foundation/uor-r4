@@ -64,4 +64,20 @@ describe('Mac-inspired Studio visual system', () => {
             expect(parseFloat(getComputedStyle(control).minInlineSize), selector).toBeGreaterThanOrEqual(24);
         }
     });
+
+    it('sizes remaining controls and exposes switch focus', async () => {
+        const style = installTheme('dark');
+        document.body.innerHTML += '<button id="btnCommandPaletteNav" type="button">⌘K</button><label class="switch"><input type="checkbox"><span class="switch-track"></span></label><button class="tree-attach" type="button">＋</button>';
+        for (const selector of ['#btnCommandPaletteNav', '.switch-track', '.tree-attach']) {
+            const control = document.querySelector<HTMLElement>(selector)!;
+            expect(parseFloat(getComputedStyle(control).minBlockSize), selector).toBeGreaterThanOrEqual(24);
+            expect(parseFloat(getComputedStyle(control).minInlineSize), selector).toBeGreaterThanOrEqual(24);
+        }
+        expect(parseFloat(declaration(style, '.switch input:focus-visible + .switch-track').outline)).toBeGreaterThanOrEqual(2);
+        // @ts-expect-error Node's filesystem API is available in the Vitest runtime.
+        const { readFileSync } = await import('node:fs');
+        const files = readFileSync('assets/js/studio_files.js', 'utf8');
+        expect(files).toContain("document.createElement('button')");
+        expect(files).not.toContain("document.createElement('span'); // attach");
+    });
 });

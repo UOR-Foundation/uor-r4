@@ -121,7 +121,7 @@
                             <div class="composer-inner">
                                 <div class="composer-box">
                                     <span class="composer-prompt" aria-hidden="true">›</span>
-                                    <label class="visually-hidden" for="chatInput">Message</label>
+                                    <label class="sr-only" for="chatInput">Message</label>
                                     <textarea id="chatInput" rows="1" placeholder="Ask the model, or run a command with ⌘K"></textarea>
                                     <button class="send-btn" id="btnSend" type="button" aria-label="Send message" title="Send (Enter)"><span class="send-label">Send</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
                                     <button class="stop-btn" id="btnStop" type="button" hidden>Stop</button>
@@ -450,7 +450,7 @@
         <div class="palette" role="document">
             <div class="palette-input-row">
                 <span class="palette-prompt" aria-hidden="true">›</span>
-                <label class="visually-hidden" for="paletteInput">Search or run a command</label>
+                <label class="sr-only" for="paletteInput">Search or run a command</label>
                 <input id="paletteInput" type="text" placeholder="Search commands, files, sessions…" autocomplete="off" spellcheck="false" aria-controls="paletteList" aria-autocomplete="list">
                 <kbd class="kbd">Esc</kbd>
             </div>
@@ -872,7 +872,7 @@
             }
         }
 
-        function setView(view) {
+        function setView(view, options) {
             if (view !== 'chat' && view !== 'model' && view !== 'workspace' && view !== 'editor' && view !== 'files' && view !== 'guide') return;
             if (view === 'editor' || view === 'files') view = 'workspace';
             document.body.dataset.view = view;
@@ -880,7 +880,7 @@
                 var button = $('#viewBtn' + name);
                 if (button) button.setAttribute('aria-pressed', name.toLowerCase() === view ? 'true' : 'false');
             });
-            if (view === 'chat') {
+            if (view === 'chat' && (!options || options.focus !== false)) {
                 var input = $('#chatInput');
                 if (input && window.matchMedia('(max-width: 780px)').matches) input.focus();
             }
@@ -1982,7 +1982,7 @@
             renderMessages();
             startWorker();
             updateComposerState();
-            setView('chat');
+            setView('chat', { focus: false });
             document.addEventListener('uor-model-source-changed', onModelSourceChanged);
             document.addEventListener('uor-api-config-changed', onApiConfigChanged);
             document.documentElement.dataset.studioReady = '1';

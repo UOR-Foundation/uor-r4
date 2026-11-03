@@ -39,5 +39,10 @@ describe('URL artifact diagnostics after source regrouping', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(document.body.textContent).toContain('Enter a model file URL.');
         expect(document.body.textContent).not.toContain('undefined');
+        const status = document.getElementById('modelsVerifyRow')!;
+        expect(status.getAttribute('role')).toBe('status');
+        expect(status.getAttribute('aria-live')).toBe('polite');
+        expect(status.textContent).toContain('Enter a model file URL.');
+        expect(document.getElementById('modelsVerifyNote')!.textContent).toContain('Downloads, sizes, hashes and tokenizer bindings');
     });
 });

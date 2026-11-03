@@ -33,7 +33,7 @@ The console shell above was superseded after owner feedback that it was "janky" 
 were "not organized or labeled very well". The page is now a workable AI studio:
 
 - **One labeled navigation sidebar** with exactly four destinations: **Agent** (chat, context and
-  build tasks; ⌘1), **Workspace** (file tree, editor tabs and save; ⌘2), **Models** (local engine,
+  build tasks; ⌘1), **Workspace** (file tree, editor tabs and save; ⌘2), **Connections** (local engine,
   published M1, remote API providers; ⌘3) and **Guide** (workflows, shortcuts, limits; ⌘4). A
   permanent **Sessions** section lists title/preview/relative time with a `⋯` menu (Rename,
   Duplicate, Export JSON, Delete with an in-app confirm). Settings (⌘,) and Help (?) live in the

@@ -90,6 +90,9 @@
         guide: { view: 'guide', label: 'Guide', purpose: 'Quick start, the build-this-studio workflow, shortcuts and honest limits.' }
     };
     function sectionForView(view) { return view === 'chat' ? 'agent' : (view === 'model' ? 'models' : (view === 'workspace' || view === 'editor' || view === 'files' ? 'workspace' : (SECTIONS[view] ? view : 'agent'))); }
+    function syncSectionNavigation(section) {
+        $all('.nav-item').forEach(function (item) { var active = item.getAttribute('data-section') === section; item.setAttribute('aria-current', active ? 'page' : 'false'); item.classList.toggle('is-active', active); });
+    }
     function activateSection(name, options) {
         var section = SECTIONS[name] ? name : 'agent';
         var meta = SECTIONS[section];
@@ -97,7 +100,7 @@
         if (setView) setView(meta.view);
         else { var button = document.getElementById('viewBtn' + meta.view.charAt(0).toUpperCase() + meta.view.slice(1)); if (button) button.click(); }
         document.body.setAttribute('data-section', section);
-        $all('.nav-item').forEach(function (item) { var active = item.getAttribute('data-section') === section; item.setAttribute('aria-current', active ? 'page' : 'false'); item.classList.toggle('is-active', active); });
+        syncSectionNavigation(section);
         var label = document.getElementById('activeSectionLabel');
         if (label) label.textContent = meta.label;
         var sessions = document.getElementById('sessionSection');
@@ -198,7 +201,13 @@
             var status = document.createElement('div');
             status.className = 'models-verify-row';
             status.id = 'modelsVerifyRow';
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
             sections.appendChild(status);
+            var verifyNote = document.createElement('div');
+            verifyNote.className = 'models-verify-note';
+            verifyNote.id = 'modelsVerifyNote';
+            sections.appendChild(verifyNote);
         }
         var freshGroups = mount.querySelectorAll('.source-group');
         if (freshGroups.length > 1) {
@@ -231,7 +240,7 @@
                 body.appendChild(group);
             }
         });
-        var verify = document.getElementById('modelsVerifyRow');
+        var verify = document.getElementById('modelsVerifyNote');
         if (verify) verify.textContent = 'Downloads, sizes, hashes and tokenizer bindings are verified in this tab before the worker receives an artifact. Remote contact is always user-initiated.';
     }
     function watchModels() {
@@ -648,6 +657,8 @@
     function openPalette() {
         var backdrop = document.getElementById('commandPalette');
         if (!backdrop || paletteOpen) return;
+        var openModalDialog = document.querySelector('.modal-backdrop:not([hidden])');
+        if (openModalDialog) closeModal(openModalDialog);
         paletteOpen = true; lastFocus = document.activeElement; backdrop.hidden = false;
         var input = document.getElementById('paletteInput');
         if (input) { input.value = ''; input.focus(); }
@@ -717,6 +728,7 @@
     }
     function openModal(dialog) {
         if (!dialog) return;
+        closePalette();
         modalReturnFocus = document.activeElement;
         dialog.hidden = false;
         window.setTimeout(function () { var first = modalFocusables(dialog)[0]; if (first) first.focus(); }, 20);
@@ -923,6 +935,7 @@
         on('btnOpenFolderSettings', 'click', function () { var files = window.__studioFiles; if (files) files.openFolder(); });
         on('btnClearSessions', 'click', clearSessions);
         on('btnClearEditor', 'click', clearEditor);
+        document.addEventListener('uor-view-changed', function (event) { syncSectionNavigation(sectionForView(event.detail && event.detail.view)); });
         document.addEventListener('uor-files-changed', function () { updateStatus(); updateSettingsInfo(); });
         document.addEventListener('uor-workspace-changed', function () { updateStatus(); updateSettingsInfo(); });
         document.addEventListener('uor-model-source-changed', function () { window.setTimeout(updateStatus, 80); });
@@ -944,10 +957,11 @@
             }
             var openModalDialog = document.querySelector('.modal-backdrop:not([hidden])');
             if (event.key === 'Tab' && openModalDialog) { trapModalTab(event, openModalDialog); return; }
+            if (event.key === 'Tab' && paletteOpen) { trapModalTab(event, document.getElementById('commandPalette')); return; }
             if (event.key === 'Tab' && app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) { trapNavTab(event); return; }
             if (event.key === 'Escape') {
-                if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
                 if (openModalDialog) { event.preventDefault(); event.stopPropagation(); closeModal(openModalDialog); return; }
+                if (paletteOpen) { event.preventDefault(); event.stopPropagation(); closePalette(); return; }
                 if (app && app.getAttribute('data-nav') === 'expanded' && window.matchMedia('(max-width: 900px)').matches) {
                     event.preventDefault();
                     setChrome('nav', 'collapsed', true);
