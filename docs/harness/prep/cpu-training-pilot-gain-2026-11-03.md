@@ -95,6 +95,16 @@ The input token sequence and recurrent state never change.
 
 The full-forward trainer remains available behind `--reference`.
 
+## Steps
+
+1. Build and hash the release driver from the pinned source commit.
+2. Run seed 1 into a fresh attempt root with the registered hashes, selection,
+   eight memory steps, eight gain steps and 16 Rayon workers.
+3. Run seed 2 with the same corpus split, random-control seed and worker
+   boundary, changing only its source artifact and memory-baseline hash.
+4. Compare the two sealed reports, verify the five-arm parity and preserve
+   every report, manifest and worked artifact.
+
 ## Commands
 
 ```sh
