@@ -16,7 +16,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - **The larger margin improvement did not transfer to target ranking.** On
   seed 1, K4 reduced the held-out margin-loss sum from `11,739,473` to
   `11,731,518` while leaving top-1 unchanged. On seed 2 it reduced the sum
-  from `29,717,075` to `29,602,710`, again without a top-1 gain.
+  from `29,717,075` to `29,471,323`, again without a top-1 gain.
 - **The K1 control was not a positive route on seed 1.** At the same one-Q12
   amplitude, K1 changed 278/384/396 to 278/383/395 and increased the
   margin-loss sum to `11,747,984`.
