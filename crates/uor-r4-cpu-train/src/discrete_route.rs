@@ -1384,9 +1384,32 @@ impl CpuDiscreteProposalScorer {
             self.apply_virtual_move(&mut model, kind, record.index, record.proposal.lane)
                 .map_err(|error| score_error(4, error.to_string()))?;
         }
-        let mut joint_loss = 0u64;
-        let mut joint_eligible = 0usize;
+        let mut baseline_eligible = Vec::new();
         for sample in samples {
+            let query = self
+                .read(&self.model, &sample.prefix)
+                .map_err(|error| score_error(2, error.to_string()))?;
+            let loss = writer_loss(
+                &query,
+                self.token_blocks(&self.model),
+                sample.target,
+                self.kept_cells,
+                self.objective,
+            )
+            .map_err(writer_score_error)?;
+            if loss.token_rivals != 0 {
+                baseline_eligible.push(sample);
+            }
+        }
+        if baseline_eligible.is_empty() {
+            return Ok(CpuDiscreteBlockScoring {
+                records,
+                joint_loss: None,
+                eligible_rows,
+            });
+        }
+        let mut joint_loss = 0u64;
+        for sample in baseline_eligible {
             let query = self
                 .read(&model, &sample.prefix)
                 .map_err(|error| score_error(2, error.to_string()))?;
@@ -1399,19 +1422,15 @@ impl CpuDiscreteProposalScorer {
             )
             .map_err(writer_score_error)?;
             if loss.token_rivals == 0 || loss.loss == u64::MAX {
-                continue;
+                return Ok(CpuDiscreteBlockScoring {
+                    records,
+                    joint_loss: None,
+                    eligible_rows,
+                });
             }
-            joint_eligible += 1;
             joint_loss = joint_loss
                 .checked_add(loss.loss)
                 .ok_or_else(|| score_error(9, "BVG-K joint loss sum overflows"))?;
-        }
-        if joint_eligible == 0 {
-            return Ok(CpuDiscreteBlockScoring {
-                records,
-                joint_loss: None,
-                eligible_rows,
-            });
         }
         Ok(CpuDiscreteBlockScoring {
             records,
