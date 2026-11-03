@@ -4082,8 +4082,10 @@ fn the_copy_key_is_recorded_only_when_two() {
     let three = with_header(&two, |h| {
         h["hamming"]["copy_key"] = serde_json::json!(3);
     });
-    assert!(super::read_hamming_uorlut01(&three).is_err(), "the loader refuses copy key 3");
-    assert!(IntegerStackModel::parse(&three).is_err(), "the session refuses copy key 3");
+    let loader = super::read_hamming_uorlut01(&three).err().map(|e| e.to_string());
+    assert!(loader.is_some_and(|e| e.contains("names 1 or 2 tokens")), "the loader refuses copy key 3");
+    let session = IntegerStackModel::parse(&three).err().map(|e| e.to_string());
+    assert!(session.is_some_and(|e| e.contains("names 1 or 2 tokens")), "the session refuses copy key 3");
     snap.hamming = Some(crate::fbs_snapshot::FbsHammingSnapshot { copy_key: 3, ..read });
     assert!(super::export_fbs_trunk_uorlut01(&snap).is_err(), "copy key 3 is refused");
 }
