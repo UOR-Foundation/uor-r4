@@ -1,5 +1,10 @@
 # REPORT: worker-state comparison repair, deepseek-102
 
+> **Superseded by [deepseek-103](../deepseek-103/REPORT.md).** A third fresh
+> review found three stale CPU-utilization ranges in the earlier deepseek-100
+> summary. The timing implementation and all prior repair points remained
+> accepted.
+
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Base:

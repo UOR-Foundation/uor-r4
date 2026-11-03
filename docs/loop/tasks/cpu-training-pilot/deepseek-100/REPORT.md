@@ -79,8 +79,8 @@ reverse order:
 | 16 | 4.640 s | 4.630 s | 13.409x |
 | 32 | 3.534 s | 3.522 s | 17.616x |
 
-Average process CPU use rose from 99% at one worker to 759-761% at eight,
-1,445-1,447% at 16 and 2,719-2,735% at 32. Peak RSS rose from about 53 MiB to
+Average process CPU use rose from 99% at one worker to 758-760% at eight,
+1,440-1,451% at 16 and 2,751-2,761% at 32. Peak RSS rose from about 53 MiB to
 about 125 MiB.
 
 All eight runs produced final artifact
