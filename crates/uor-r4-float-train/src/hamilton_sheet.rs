@@ -579,6 +579,16 @@ thread_local! {
 /// 2^-16 grid.
 pub const Q16_SCALE: f32 = 65536.0;
 
+/// The exponent the integer step holds both requantized activations at before
+/// `stack_quantize16` (claude-262): the MLP's gated product (`stack_step_fbs`) and the
+/// recurrence's output (`stack_recurrence_core`), each at `PRODUCT_EXP`, twice the residual's.
+pub const ACTIVATION_EXP: i32 = uor_r4_integer::fbs_snapshot::FBS_ACTIVATION_EXP;
+
+/// The largest row magnitude, as the integer step holds it at [`ACTIVATION_EXP`], that the
+/// quantizer tells apart: an `i64` product saturates below 2^63, so every magnitude from 2^62 on
+/// has bit length 63 and keeps the same shift, 48.
+const ACTIVATION_SATURATED: f64 = 4_611_686_018_427_387_904.0; // 2^62
+
 /// Runs `f` with the trunk's residual stream rounded to 2^-16 after the embedding and after each
 /// sublayer add, where the integer session holds it (claude-133, the Q16 control). It restores
 /// the flag as it was. Called directly, it is an evaluation control with no backward bridge;
@@ -653,12 +663,17 @@ fn q16_residual_ste_scalar(value: f32) -> (f32, f32) {
     (q16_residual_scalar(value), gradient)
 }
 
+/// The scale `stack_quantize16` gives a row whose largest magnitude is `max` in real units
+/// (claude-262). At [`ACTIVATION_EXP`] the row's integer magnitude is `max · 2^-ACTIVATION_EXP`;
+/// the step keeps 15 bits of it, shifting by `s = max(bit_length − 15, 0)`, so a value `v` is
+/// served as `round(v · scale) / scale` with `scale = 2^(-ACTIVATION_EXP - s)`.
 #[cfg_attr(not(test), allow(dead_code))]
 fn activation_scale_scalar(max: f64) -> f64 {
-    let mut scale = 1.0;
+    let integer = (max * 2f64.powi(-ACTIVATION_EXP)).min(ACTIVATION_SATURATED);
+    let mut scale = 2f64.powi(-ACTIVATION_EXP);
     let mut threshold = 32768.0;
     for _ in 15..64 {
-        if max >= threshold {
+        if integer >= threshold {
             scale *= 0.5;
         }
         threshold *= 2.0;
@@ -679,21 +694,32 @@ fn activation_quantize16_ste_scalar(value: f32, scale: f64) -> (f32, f32) {
     (rounded / scale, gradient)
 }
 
-/// Quantize each row to signed i16 at a power-of-two scale selected from the row maximum.
-/// Forward values are dequantized to the input scale. Under the served-surrogate wrapper the
-/// gradient reaches the unquantized activation inside the clamp and is zero where it saturates.
+/// Quantize each row to signed i16 as `stack_quantize16` does at [`ACTIVATION_EXP`]: the row's
+/// largest magnitude keeps 15 bits (claude-262; before, the scale left out the exponent and
+/// rounded every activation below 2^15 to a whole number). Forward values are dequantized to the
+/// input scale. Under the served-surrogate wrapper the gradient reaches the unquantized
+/// activation inside the clamp and is zero where it saturates.
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 pub(crate) fn activation_quantize16(x: &Tensor) -> Result<Tensor> {
-    let max = x.abs()?.max_keepdim(candle_core::D::Minus1)?;
-    let device = x.device();
-    let mut scale = Tensor::ones_like(&max)?;
-    for bit in 15..64 {
-        let threshold = 2f64.powi(bit);
-        let factor = max.ge(threshold)?.where_cond(
-            &Tensor::full(0.5, max.shape(), device)?,
-            &Tensor::full(1.0, max.shape(), device)?,
-        )?;
-        scale = scale.broadcast_mul(&factor)?;
+    // The row's integer magnitude, held apart from the gradient: the scale only selects the grid.
+    let mut integer = x
+        .abs()?
+        .max_keepdim(candle_core::D::Minus1)?
+        .detach()
+        .affine(2f64.powi(-ACTIVATION_EXP), 0.0)?
+        .clamp(0.0, ACTIVATION_SATURATED)?;
+    let ones = Tensor::ones_like(&integer)?;
+    let mut scale = ones.affine(2f64.powi(-ACTIVATION_EXP), 0.0)?;
+    // `s = max(bit_length − 15, 0)` is at most 48, so six halvings find it: `s ≥ k` exactly when
+    // the magnitude is at least 2^(14 + k), and each pass takes `bits` more of the shift where
+    // the magnitude left after the earlier passes reaches 2^(14 + bits). Every factor is a power
+    // of two, so the passes are exact; they replace one pass per threshold (49).
+    for bits in [32, 16, 8, 4, 2, 1] {
+        let factor = integer
+            .ge(2f64.powi(14 + bits))?
+            .where_cond(&ones.affine(2f64.powi(-bits), 0.0)?, &ones)?;
+        integer = integer.mul(&factor)?;
+        scale = scale.mul(&factor)?;
     }
     let scaled = x.broadcast_mul(&scale)?;
     let quantized = scaled
@@ -3107,26 +3133,9 @@ mod tests {
         assert_eq!(q16_residual_scalar(32768.0), i32::MAX as f32 / Q16_SCALE);
         assert_eq!(activation_scale_scalar(40_000.0), 0.5);
         assert_eq!(activation_scale_scalar(70_000.0), 0.25);
-        assert_eq!(activation_scale_scalar(2f64.powi(63)), 2f64.powi(-49));
-        let integer_scale = |max: u64| {
-            let shift = (64 - max.leading_zeros()) as i32 - 15;
-            2f64.powi(-shift.max(0))
-        };
-        for max in [
-            0,
-            1,
-            (1 << 15) - 1,
-            1 << 15,
-            (1 << 16) - 1,
-            u32::MAX as u64,
-            1 << 47,
-            // The greatest f64 below 2^63. Casting 2^63 - 1 rounds it up to the boundary.
-            (1 << 63) - 1024,
-            1 << 63,
-            u64::MAX,
-        ] {
-            assert_eq!(activation_scale_scalar(max as f64), integer_scale(max));
-        }
+        // claude-262: past the saturated end the shift stays 48 (the full check is in
+        // `served_activation_quantizer_is_the_integer_step_at_product_exp`).
+        assert_eq!(activation_scale_scalar(2f64.powi(63)), 2f64.powi(-16));
         let huge_scale = activation_scale_scalar(1e30) as f32;
         assert!(!(-32767.0..=32767.0).contains(&(1e30 * huge_scale)));
         assert!((-32767.0..=32767.0).contains(&(1.0 * huge_scale)));
@@ -3180,12 +3189,7 @@ mod tests {
             row.map(|value| activation_quantize16_ste_scalar(value, f64::from(scale)));
         assert_eq!(
             activation_gradients,
-            [
-                (40_000.0, 1.0),
-                (-12_000.0, 1.0),
-                (4.0, 1.0),
-                (0.0, 1.0),
-            ]
+            [(40_000.0, 1.0), (-12_000.0, 1.0), (4.0, 1.0), (0.0, 1.0),]
         );
         let clamped_scale = activation_scale_scalar(1e30) as f32;
         let clamped_activation = [
@@ -3232,6 +3236,64 @@ mod tests {
         Ok(())
     }
 
+    /// `stack_quantize16`'s shift for the `i64` the integer step holds a row maximum `max` as, at
+    /// [`ACTIVATION_EXP`] (claude-262). The cast saturates, as the step's product does.
+    fn integer_activation_shift(max: f64) -> i32 {
+        let held = (max * 2f64.powi(-ACTIVATION_EXP)) as i64;
+        let bit_length = 64 - held.unsigned_abs().leading_zeros() as i32;
+        (bit_length - 15).max(0)
+    }
+
+    /// claude-262: the served activation quantizer is the integer step's `stack_quantize16` at
+    /// `PRODUCT_EXP`, on real activations. Every row maximum from 2^-20 to 2^31, on each side of
+    /// each power of two and past the saturated end, gets the step's own shift. A row of
+    /// realistic activations, all below 1, is served on the step's grid to within half a step,
+    /// value for value as the step computes it. Before, the scale left out the exponent and
+    /// rounded that row to whole numbers.
+    #[test]
+    fn served_activation_quantizer_is_the_integer_step_at_product_exp() {
+        let mut maxima = vec![0.0, f64::from(f32::MIN_POSITIVE), 1e30];
+        for k in -20..=31 {
+            let edge = 2f64.powi(k);
+            // The f32 just below the edge, the edge, and halfway to the next.
+            maxima.extend([
+                edge * (1.0 - f64::from(f32::EPSILON) / 2.0),
+                edge,
+                edge * 1.5,
+            ]);
+        }
+        for max in maxima {
+            assert_eq!(
+                activation_scale_scalar(max),
+                2f64.powi(-ACTIVATION_EXP - integer_activation_shift(max)),
+                "row maximum {max}"
+            );
+        }
+
+        // A gated product's row as training sees it: the step holds each value at 2^-32, shifts
+        // by `s` rounding half up, clamps to ±32767 and reads the result at 2^(s - 32).
+        let row = [0.3f32, -0.12, 0.004, -1.5e-5, 0.0];
+        let max = f64::from(row.iter().fold(0f32, |m, v| m.max(v.abs())));
+        let shift = integer_activation_shift(max);
+        assert_eq!(shift, 16, "a row maximum of 0.3 is 2^30.3 at 2^-32");
+        let scale = activation_scale_scalar(max);
+        let step = 2f64.powi(ACTIVATION_EXP + shift);
+        for v in row {
+            let held = (f64::from(v) * 2f64.powi(-ACTIVATION_EXP)).round() as i64;
+            let shifted = ((held + (1 << (shift - 1))) >> shift).clamp(-32767, 32767);
+            let (value, gradient) = activation_quantize16_ste_scalar(v, scale);
+            assert_eq!(f64::from(value), shifted as f64 * step, "{v}");
+            assert_eq!(gradient, 1.0, "{v}");
+            assert!((f64::from(value) - f64::from(v)).abs() <= step / 2.0, "{v}");
+        }
+        // The integer kernel itself serves the first three as 19661, -7864 and 262 at 2^-16
+        // (`fbs_activation_exponent_is_the_requantized_product` in the integer crate).
+        for (&v, served) in row.iter().zip([19661.0, -7864.0, 262.0]) {
+            let (value, _) = activation_quantize16_ste_scalar(v, scale);
+            assert_eq!(f64::from(value), served * step, "{v}");
+        }
+    }
+
     #[cfg(feature = "cuda")]
     #[test]
     fn served_surrogate_gradients_are_exact_on_cuda() -> Result<()> {
@@ -3260,7 +3322,7 @@ mod tests {
         );
 
         let activation = Var::from_vec(
-            vec![40_000.0, -12_001.0, 3.0, -1.0, 70_001.0, 7.0, -3.0, 3.0],
+            vec![40_000.0f32, -12_001.0, 3.0, -1.0, 70_001.0, 7.0, -3.0, 3.0],
             (2, 4),
             &device,
         )?;
@@ -3292,7 +3354,7 @@ mod tests {
             vec![vec![1.0; 4]; 2]
         );
 
-        let clamped = Var::from_vec(vec![1e30, 1.0], (1, 2), &device)?;
+        let clamped = Var::from_vec(vec![1e30f32, 1.0], (1, 2), &device)?;
         let output = with_served_surrogate_training(1, 0, || {
             served_activation_quantize16(clamped.as_tensor())
         })?;
@@ -3304,6 +3366,82 @@ mod tests {
                 .to_vec2::<f32>()?,
             vec![vec![0.0, 1.0]]
         );
+        Ok(())
+    }
+
+    /// claude-262: on CUDA the served activation quantizer is its scalar reference, value for
+    /// value, at every power-of-two edge of the row maximum from 2^-20 to 2^31 and past the
+    /// saturated end, with the reference's straight-through gradient. A weight after it receives
+    /// the served activation as its gradient. On a realistic row, all below 1, that gradient is
+    /// the activation to within half a step of the integer grid. Before, the row rounded to whole
+    /// numbers, and the weight after it received 0.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn served_activation_quantizer_is_its_integer_reference_on_cuda() -> Result<()> {
+        use candle_core::Var;
+
+        let device = Device::new_cuda(0)?;
+        let mut rows: Vec<[f32; 4]> = Vec::new();
+        for k in -20..=31 {
+            let edge = 2f32.powi(k);
+            for max in [edge * (1.0 - f32::EPSILON / 2.0), edge, edge * 1.5] {
+                rows.push([max, -0.37 * max, 0.011 * max, -0.5 * max]);
+            }
+        }
+        rows.push([1e30, 1.0, -0.5, 0.25]);
+        let flat: Vec<f32> = rows.iter().flatten().copied().collect();
+        let shape = (rows.len(), 4);
+        let x = Var::from_vec(flat.clone(), shape, &device)?;
+        let after = Var::from_vec(vec![1f32; flat.len()], shape, &device)?;
+        let quantized =
+            with_served_surrogate_training(1, 0, || served_activation_quantize16(x.as_tensor()))?;
+        let grads = (&quantized * after.as_tensor())?.sum_all()?.backward()?;
+        let values = quantized.flatten_all()?.to_vec1::<f32>()?;
+        let through = grads
+            .get(x.as_tensor())
+            .expect("activation straight-through gradient")
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let received = grads
+            .get(after.as_tensor())
+            .expect("the gradient of the weight after the activation")
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for (r, row) in rows.iter().enumerate() {
+            let max = row.iter().fold(0f32, |m, v| m.max(v.abs()));
+            let scale = activation_scale_scalar(f64::from(max));
+            for (c, &v) in row.iter().enumerate() {
+                let i = r * 4 + c;
+                let (value, gradient) = activation_quantize16_ste_scalar(v, scale);
+                assert_eq!(values[i].to_bits(), value.to_bits(), "row {r} ({max}), {v}");
+                assert_eq!(through[i], gradient, "row {r} ({max}), {v}");
+                assert_eq!(
+                    received[i].to_bits(),
+                    value.to_bits(),
+                    "row {r} ({max}), {v}"
+                );
+            }
+        }
+
+        // A realistic row, apart from the scalar reference: the shift is 16 (largest 0.3), so
+        // every value is served within half of 2^-16.
+        let real = [0.3f32, -0.12, 0.004, -1.5e-5];
+        let x = Var::from_vec(real.to_vec(), (1, 4), &device)?;
+        let after = Var::from_vec(vec![1f32; 4], (1, 4), &device)?;
+        let quantized =
+            with_served_surrogate_training(1, 0, || served_activation_quantize16(x.as_tensor()))?;
+        let grads = (&quantized * after.as_tensor())?.sum_all()?.backward()?;
+        let received = grads
+            .get(after.as_tensor())
+            .expect("the gradient of the weight after the activation")
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for (&v, &g) in real.iter().zip(&received) {
+            assert!(
+                (f64::from(g) - f64::from(v)).abs() <= 2f64.powi(-17),
+                "{v} reached the weight after it as {g}"
+            );
+        }
         Ok(())
     }
 

@@ -45,6 +45,7 @@ Classed mechanism-instrument: the served graph's float stand-in is wrong, and th
 - `crates/uor-r4-float-train/src/geometric_stack_native.rs`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/fbs_export.rs` (only if the profile puts the served step's cost in the per-step export rounding)
+- `crates/uor-r4-integer/src/fbs_snapshot.rs` and `crates/uor-r4-integer/src/stack/tests.rs` (added while building: the float crate cannot see `stack`, which compiles only for serving and tests. So the activation exponent is a snapshot constant, `FBS_ACTIVATION_EXP`, which a stack test holds equal to `PRODUCT_EXP`, as `FBS_FIXED_EXP` is held to `RESIDUAL_EXP`.)
 - `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/claude-262/**`
 - `docs/research/notebook/float-training.md`
@@ -52,7 +53,7 @@ Classed mechanism-instrument: the served graph's float stand-in is wrong, and th
 
 ## Done when
 
-1. **The quantizer is the integer one.** `activation_quantize16` scales by `2^−ACTIVATION_EXP` before the integer formula, with `ACTIVATION_EXP` held equal to `uor_r4_integer::stack::FbsImage::PRODUCT_EXP` by a test. Its scale comes from at most six exact comparison passes, not 49. A laptop host test pins the scalar reference to `stack_quantize16`'s formula on real activations: row maxima from 2^−20 to 2^31, every power-of-two boundary, and the saturated end. **With the fix set aside, that test fails.**
+1. **The quantizer is the integer one.** `activation_quantize16` scales by `2^−ACTIVATION_EXP` before the integer formula. `ACTIVATION_EXP` is `fbs_snapshot::FBS_ACTIVATION_EXP`, which a stack test holds equal to `PRODUCT_EXP`; the same test runs `stack_quantize16` on a realistic row. Its scale comes from at most six exact comparison passes, not 49. A laptop host test pins the scalar reference to `stack_quantize16`'s formula on real activations: row maxima from 2^−20 to 2^31, every power-of-two boundary, and the saturated end. **With the fix set aside, that test fails.**
 2. **On CUDA (I-0 on the pod):**
    - (a) the tensor quantizer equals the scalar reference value for value, with the straight-through gradient exact;
    - (b) a model-level check: one served training forward and backward gives every layer's `mlp.down.weight` and `rec.out.weight` a gradient whose norm is within 4× of the plain forward's, and never 0.
