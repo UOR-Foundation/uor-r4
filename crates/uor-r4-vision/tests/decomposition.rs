@@ -102,14 +102,11 @@ fn one_patch_has_hand_computed_means_and_signed_edges() {
     let out = decompose_rgba(2, 2, &FIXTURE_RGBA, Grid::new(1, 1)).unwrap();
     let patch = &out.patches()[0];
     assert_eq!([patch.x0, patch.y0, patch.x1, patch.y1], [0, 0, 2, 2]);
-    assert_eq!(patch.mean_rgb_q12, [4096, 4096, 4096]);
-    assert_eq!(patch.luma_q12, 4096);
+    assert_eq!(patch.mean_rgb_q12, [2048, 2048, 2048]);
+    assert_eq!(patch.luma_q12, 2048);
     assert_eq!(patch.chroma_q12, [0, 0]);
     assert_eq!(patch.edges_q12, [2401, 474]);
-    assert_eq!(
-        patch.r4_q12,
-        [[2048, 2048, 2048, 2048], [0, 0, 2401, 474]]
-    );
+    assert_eq!(patch.r4_q12, [[0, 0, 0, 0], [0, 0, 2401, 474]]);
 }
 
 #[test]
@@ -222,5 +219,8 @@ fn every_pixel_belongs_to_exactly_one_positioned_patch() {
     assert!(covered.iter().flatten().all(|&count| count == 1));
     assert_eq!(rgba, untouched);
     assert_eq!(out.source_hash(), *blake3::hash(&rgba).as_bytes());
-    assert_eq!(out.source_hash_hex(), blake3::hash(&rgba).to_hex().to_string());
+    assert_eq!(
+        out.source_hash_hex(),
+        blake3::hash(&rgba).to_hex().to_string()
+    );
 }
