@@ -1,14 +1,14 @@
-# REPORT: one-model-end-to-end, claude-264 (rounding the served projections to 2^-16 closes 12 and 6 misses; I-3 still fails)
+# REPORT: one-model-end-to-end, claude-264 (with the served projections rounded to 2^-16, net 12 and 6 fewer misses; I-3 still fails)
 
 Lab: claude. [ORDER](./ORDER.md). PR #3596, item #3407.
 Sheet: [one-model-end-to-end-i3-projection-2026-11-03](../../../../harness/prep/one-model-end-to-end-i3-projection-2026-11-03.md).
 
 **In one paragraph.** claude-263 found that the integer first token misses the float one on 112 and 137 of DEV's 310 prompts, against a bar of 8. A code read found one rounding the integer session does and the float served surrogate did not: every FBS projection output goes onto the residual's 2^-16 grid. This unit added that rounding to the surrogate, under the served bridge only. Two CUDA tests pin it, and the model-level one fails with the `linear` hunk set aside. claude-262's two step-256 checkpoints were then re-scored in float, against claude-263's stored integer replies.
-- **The rounding is real.** It moved the float first token on 62 and 77 prompts.
-- **It closed only 12 and 6 misses.** Seed 1 now misses on 100 of 310, which the sheet calls partial. Seed 2 misses on 131, within 10 of 137, which the sheet calls not the part.
-- **It moved first tokens both ways.** It fixed 27 and 23 prompts and broke 15 and 17. A site that was the whole difference would only fix. So many first tokens sit near a tie, and roundings the surrogate does not yet copy decide those ties.
+- **The float first token moved on 62 and 77 prompts** between claude-263's scoring and this one. There was no same-host repeat of the old commit, so how many of those moves the rounding caused, rather than run-to-run variation on the GPU, is not separated.
+- **The misses fell by a net 12 and 6.** Seed 1 now misses on 100 of 310; read per seed, the sheet calls that partial. Seed 2 misses on 131, within 10 of 137, which it calls not the part. The sheet defines no outcome for a split between the seeds.
+- **The moves went both ways.** 27 and 23 prompts went from miss to match, and 15 and 17 from match to miss. A site that was the whole difference, matched exactly and scored deterministically, would only fix. Three explanations fit, and this unit does not separate them (item 2).
 
-The rounding stays, because it is a real mismatch, and the next unit reads the remaining sites. The scorer also ran 2.1–2.9× slower than in claude-263; the cause is not separated.
+The rounding stays: the code review found it is the integer session's own conversion, so it is a real mismatch. The next unit reads the remaining sites. The scorer also ran 2.1–2.9× slower than in claude-263; the cause is not separated.
 
 ## Tokens per second first
 
@@ -23,12 +23,12 @@ The rounding stays, because it is a real mismatch, and the next unit reads the r
 
 1. **I-3 still fails at both seeds.** `compare-264.sh` printed:
 
-   | Seed | First tokens differ, claude-263 | Now (bar 8) | Whole replies differ, claude-263 → now | Order / prompt mismatches | Sheet outcome |
+   | Seed | First tokens differ, claude-263 | Now (bar 8) | Whole replies differ, claude-263 → now | Order / prompt mismatches | Sheet outcome, read per seed |
    |---:|---:|---:|---|---|---|
    | 1 | 112 / 310 | 100 / 310 | 308 → 303 | 0 / 0 | PARTIAL (fell by 12) |
    | 2 | 137 / 310 | 131 / 310 | 304 → 308 | 0 / 0 | NOT THE PART (fell by 6) |
 
-   The sheet's partial wants both seeds to fall by more than 10, and seed 2 fell by 6. Both outcomes say the same next step: keep the rounding and read the remaining sites. So the split between the seeds does not change what follows.
+   The sheet's partial wants both seeds to fall by more than 10, and seed 2 fell by 6. Its not-the-part wants both within 10, and seed 1 fell by 12. So it has no outcome for this split, and the table reads each seed alone. Both outcomes say the same next step: keep the rounding and read the remaining sites. So the split between the seeds does not change what follows.
 
 2. **The rounding moves first tokens both ways.** Split of the prompts whose float first token moved, read from the stored files with the `jq` text below:
 
@@ -37,13 +37,16 @@ The rounding stays, because it is a real mismatch, and the next unit reads the r
    | 1 | 62 | 27 | 15 | 20 | 65 |
    | 2 | 77 | 23 | 17 | 37 | 77 |
 
-   - If the projection rounding were the only difference, it could only turn misses into matches. It also broke 15 and 17 prompts that the unrounded float had matched.
-   - So on many DEV prompts, a few 2^-16 steps decide the first token, and the integer's other roundings decide which way it goes.
-   - Matching one site at a time is likely to move the count both ways until the last site is matched. A count of first-token misses is therefore a weak guide to which site matters.
-   - One known edge is left in the new path. `q16_residual` in f32 is one step high for |x| ≥ 128 (the sheet's FIT note). Whether any projection output here reaches 128 was not read.
+   - If the projection rounding were the only difference, matched exactly and scored deterministically, it could only turn misses into matches. It also broke 15 and 17 prompts that the unrounded float had matched.
+   - Neither net change is separated from moves going both ways at random. A two-sided sign test gives p ≈ 0.09 for 27 against 15, and p ≈ 0.43 for 23 against 17.
+   - Three explanations fit, and this unit does not separate them:
+     - **Other roundings.** Roundings the surrogate does not yet copy decide many near-tie first tokens, which a few 2^-16 steps can flip either way.
+     - **This rounding is inexact.** It does not match the integer on some inputs. One edge is known: `q16_residual` in f32 is one step high on odd grid points with |x| in [128, 256). That is the sheet's FIT note, narrowed by the code review. Whether any projection output here reaches 128 was not read.
+     - **Run-to-run variation.** The GPU float scorer may not give the same first token run to run. This unit had no same-host repeat, and claude-263 and this unit scored on different hosts.
+   - If the first is the cause, matching one site at a time will move the count both ways until the last site is matched. A count of first-token misses is then a weak guide to which site matters.
 
 3. **The scorer ran 2.1–2.9× slower.** Each seed took 1,372 s and 1,560 s, against claude-263's 568 s and 532 s. Two causes are not separated:
-   - **The host.** A different pod, at $0.908/h against $0.563/h. On it, seed 1's memory and no-memory arms differ by 32% (42.5 against 32.2 tok/s); claude-263's differed by under 1%. So this host varied a lot.
+   - **The host.** A different pod, at $0.908/h against $0.563/h. On it, seed 1's memory and no-memory arms differ by 32% (42.5 against 32.2 tok/s); claude-263's differed by under 1%. On this one pair of arms, this host varied far more than claude-263's.
    - **The rounding's kernels.** It adds several elementwise kernels to each of six projections per layer, in every decode step.
 
    If the kernels are the cause, served training pays the same cost. Its throughput was not measured.
@@ -72,7 +75,7 @@ Training runs the same surrogate, so served training now takes this rounding too
   - **The build.** `train-in-space` `9b8452ea2a173caf8e1908baf01027c74b54ce07be8480a19087a08fa49c138c`.
   - **The inputs.** The tokenizer, DEV `tokens.u16` and DEV `response_mask.u8` match the sheet's pins. TRAIN's `tokens.u16` (`3dee858f…`) and `response_mask.u8` (`b5e7352d…`) were fetched for the data root, as in claude-263. claude-262's seal and its members check (I-2).
   - **Scoring.** Seed 1 took 1,372 s and seed 2 1,560 s, one after the other. Each wrote 310 DEV samples (I-4). EXIT 0 came at 12:38:10Z.
-- **The seal.** `/workspace/i3p` without the fetched inputs, 48 files. It checked against `SHA256SUMS.files` on the laptop, then went to the store as a tar and was read back.
+- **The seal.** `/workspace/i3p` without the fetched inputs: the 48 files that `SHA256SUMS.files` seals, plus `DONE`, `EXIT`, `SHA256SUMS.err` and `SHA256SUMS.files` itself, 52 in the tar. The 48 checked on the laptop. The tar then went to the store and was read back.
 - **The laptop.** `compare-264.sh` ran against claude-263's float files and integer replies. Its instrument check gave claude-263's 112 and 137 at both seeds. Item 2's split is the `jq` text below.
 - **Not run:** export, serving, and R6 tok/s on an integer artifact. The sheet redoes none of them.
 
@@ -221,14 +224,19 @@ None applied. The scripts are `job-264.sh`, `compare-264.sh` and `watch-264.sh`.
    - the writer's Q12 query;
    - the convolution;
    - the embedding;
-   - and `q16_residual`'s f32 edge at |x| ≥ 128.
+   - and `q16_residual`'s f32 edge on odd grid points with |x| in [128, 256).
 
-   The method is claude-263's still open 1, with the existing tools: `fbs-snapshot --dev` and `fbs-compare` attribute the float-to-integer gap to each snap and to table rounding, and an integer serve with the turn memory off checks the memory path. Item 2 adds one caution. First tokens flip both ways near ties, so a site's effect on the first-token count can be small or hidden. A value read per layer says more than a count.
-2. **The scorer's slowdown.** Read the decode time with the served bridge on and off on one host, before any long served-training run. If the rounding's kernels are the cause, a fused rounding kernel is a candidate.
-3. **Then the full-length served run**, by its FIT sheet, once I-3 passes.
+   The method is claude-263's still open 1, with the existing tools: `fbs-snapshot --dev` and `fbs-compare` attribute the float-to-integer gap to each snap and to table rounding, and an integer serve with the turn memory off checks the memory path. Item 2 adds two cautions:
+   - **Score the same commit twice on one host** before reading the next site's count. That separates run-to-run variation from what a change does.
+   - **Read values per layer.** If first tokens flip both ways near ties, a site's effect on the first-token count can be small or hidden, so a value read per layer says more than a count.
+2. **Two test gaps the code review found**, both MINOR and safe by construction. A later code unit adds both tests.
+   - The model-level test asserts the plain, Q16-control and D11 forwards unchanged, but not the Export forward. Only `with_served_surrogate_training` sets the bridge flag, so Export cannot reach the rounding.
+   - The SpiralCore/FBS arm's return in `linear` is rounded, but no test covers it.
+3. **The scorer's slowdown.** Read the decode time with the served bridge on and off on one host, before any long served-training run. If the rounding's kernels are the cause, a fused rounding kernel is a candidate.
+4. **Then the full-length served run**, by its FIT sheet, once I-3 passes.
 
 ## Plain summary
 
-The laptop's integer model still gives a different first word from the trained model on about a third of 310 test prompts. This unit found one difference in how the two round numbers inside each layer and made the trained model round the same way. Mismatches fell from 112 to 100 at one seed and from 137 to 131 at the other, far from the bar of 8. The change also turned some matching prompts into mismatches, which says the first word often hangs on very small rounding differences, and others remain. The fix is kept; the next unit finds the remaining differences. The scoring also ran about two to three times slower, for a reason not yet separated. GPU cost: one pod, about an hour, about $0.97.
+The laptop's integer model still gives a different first word from the trained model on about a third of 310 test prompts. This unit found one difference in how the two round numbers inside each layer and made the trained model round the same way. Mismatches fell from 112 to 100 at one seed and from 137 to 131 at the other, far from the bar of 8. The change also turned some matching prompts into mismatches. That fits other rounding differences still in place, or scoring that varies from run to run, and this unit cannot tell which. The fix is kept, because it copies what the integer model does; the next unit finds the remaining differences. The scoring also ran about two to three times slower, for a reason not yet separated. GPU cost: one pod, about an hour, about $0.97.
 
 References #3407.
