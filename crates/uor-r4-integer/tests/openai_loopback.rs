@@ -213,6 +213,30 @@ fn config() -> LoopbackConfig {
     config
 }
 
+fn config_with_long_generation() -> LoopbackConfig {
+    for seed in 1..128 {
+        let model = IntegerStackModel::parse(&artifact(seed)).unwrap();
+        let serving = OpenAiServing::new(model, tokenizer_json(), 2).unwrap();
+        let outcome = serving
+            .generate(
+                &[Message {
+                    role: "user",
+                    content: "Hi",
+                }],
+                40,
+                |_, _| Ok(()),
+            )
+            .unwrap();
+        if outcome.reply.ids.len() >= 8 {
+            let mut config = LoopbackConfig::new(serving).unwrap();
+            config.port = 0;
+            config.token = "test-token".into();
+            return config;
+        }
+    }
+    panic!("no synthetic artifact produced at least eight tokens");
+}
+
 fn request(
     port: u16,
     method: &str,
@@ -416,24 +440,70 @@ fn sse_matches_json_and_supports_all_generation_families() {
         .unwrap();
     assert_usage(&usage);
     assert!(raw.contains("data: [DONE]"));
+    assert_eq!(
+        frames
+            .iter()
+            .map(|frame| frame["id"].as_str().unwrap())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        1,
+        "one completion ID covers every chunk"
+    );
+    assert_eq!(
+        frames
+            .iter()
+            .map(|frame| frame["created"].as_u64().unwrap())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        1,
+        "one created timestamp covers every chunk"
+    );
 
     let (_, _, legacy) = request(server.port(), "POST", "/v1/completions", &json!({"model": "uor-chat", "prompt": "Hi", "max_tokens": 2, "stream": true, "stream_options": {"include_usage": true}}).to_string(), "test-token", "");
     assert!(legacy.contains("text_completion"));
     assert!(legacy.contains("data: [DONE]"));
-    let legacy_usage = sse_json(&legacy)
-        .into_iter()
+    let legacy_frames = sse_json(&legacy);
+    let legacy_usage = legacy_frames
+        .iter()
         .find(|frame| frame["choices"].as_array().unwrap().is_empty())
         .unwrap();
     assert_usage(&legacy_usage);
+    assert_eq!(
+        legacy_frames
+            .iter()
+            .map(|frame| frame["id"].as_str().unwrap())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        1
+    );
     let (_, _, response) = request(server.port(), "POST", "/v1/responses", &json!({"model": "uor-chat", "input": "Hi", "max_output_tokens": 2, "stream": true, "stream_options": {"include_usage": true}}).to_string(), "test-token", "");
-    assert!(response.contains("response.output_text.delta"));
-    assert!(response.contains("response.completed"));
+    assert!(response.contains("event: response.output_text.delta"));
+    assert!(response.contains("event: response.completed"));
     assert!(response.contains("data: [DONE]"));
-    let completed = sse_json(&response)
-        .into_iter()
+    let response_frames = sse_json(&response);
+    let created = response_frames
+        .iter()
+        .find(|frame| frame["type"] == "response.created")
+        .unwrap();
+    let completed = response_frames
+        .iter()
         .find(|frame| frame["type"] == "response.completed")
         .unwrap();
     assert_usage(&completed["response"]);
+    assert_eq!(
+        created["response"]["id"], completed["response"]["id"],
+        "Responses stream keeps one response ID"
+    );
+    let item_ids = response_frames
+        .iter()
+        .filter(|frame| frame["type"] == "response.output_text.delta")
+        .map(|frame| frame["item_id"].as_str().unwrap())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(item_ids.len(), 1, "Responses deltas share one item ID");
+    assert_eq!(
+        item_ids.into_iter().next().unwrap(),
+        completed["response"]["output"][0]["id"].as_str().unwrap()
+    );
     server.shutdown().unwrap();
 }
 
@@ -667,6 +737,74 @@ fn stop_mapping_text_parts_and_exact_prompt_counts() {
 }
 
 #[test]
+fn http_busy_preflight_disconnect_and_header_bounds() {
+    let mut config = config_with_long_generation();
+    config.origin = Some("https://studio.test".into());
+    let server = LoopbackServer::spawn(config).unwrap();
+    let body = json!({"model": "uor-chat", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 40, "stream": true, "stream_options": {"include_usage": true}}).to_string();
+    let wire = |port: u16| {
+        format!("POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    };
+    let mut first = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    first.write_all(wire(server.port()).as_bytes()).unwrap();
+    let mut role = [0u8; 512];
+    let read = first.read(&mut role).unwrap();
+    assert!(read > 0);
+    let (status, _, second) = request(
+        server.port(),
+        "POST",
+        "/v1/chat/completions",
+        &body,
+        "test-token",
+        "",
+    );
+    assert_eq!(
+        status, 429,
+        "a second stream is rejected before any 200/SSE bytes: {second}"
+    );
+    let mut remainder = String::new();
+    first.read_to_string(&mut remainder).unwrap();
+    assert!(remainder.contains("data: [DONE]"));
+    assert!(!remainder.contains("HTTP/1.1 429"));
+
+    let mut disconnect = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    disconnect
+        .write_all(wire(server.port()).as_bytes())
+        .unwrap();
+    disconnect.read(&mut role).unwrap();
+    disconnect.shutdown(std::net::Shutdown::Both).unwrap();
+    let (status, _, _) = request(server.port(), "GET", "/v1/models", "", "test-token", "");
+    assert_eq!(
+        status, 200,
+        "the server remains healthy after a real client disconnect"
+    );
+
+    let (status, headers, _) = request(
+        server.port(),
+        "OPTIONS",
+        "/v1/chat/completions",
+        "",
+        "",
+        "Origin: https://studio.test\r\n",
+    );
+    assert_eq!(status, 204, "CORS preflight needs no API credential");
+    assert!(headers.contains("Access-Control-Allow-Origin: https://studio.test"));
+
+    let mut oversized = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    let header = format!(
+        "GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nX-Oversize: {}\r\n",
+        server.port(),
+        "a".repeat(40_000)
+    );
+    oversized.write_all(header.as_bytes()).unwrap();
+    oversized.shutdown(std::net::Shutdown::Write).unwrap();
+    let mut response = String::new();
+    let _ = oversized.read_to_string(&mut response);
+    assert!(response.starts_with("HTTP/1.1 400"), "{response}");
+    server.shutdown().unwrap();
+}
+
+#[test]
 fn cli_serve_loads_the_same_artifact_without_logging_the_token() {
     let root = std::env::temp_dir().join(format!("uor-openai-cli-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -728,6 +866,66 @@ fn cli_serve_loads_the_same_artifact_without_logging_the_token() {
     );
     child.kill().unwrap();
     child.wait().unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn cli_token_stdin_supports_headless_loopback() {
+    let root = std::env::temp_dir().join(format!("uor-openai-cli-stdin-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let model_path = root.join("model.lut");
+    let tokenizer_path = root.join("tokenizer.json");
+    std::fs::write(&model_path, artifact(5)).unwrap();
+    std::fs::write(&tokenizer_path, tokenizer_json()).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_uor-chat"))
+        .arg("--stack")
+        .arg(&model_path)
+        .arg("--tokenizer")
+        .arg(&tokenizer_path)
+        .arg("--serve")
+        .arg("127.0.0.1:0")
+        .arg("--token-stdin")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"headless-token\n")
+        .unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    stdout.read_line(&mut line).unwrap();
+    assert!(line.contains("OpenAI loopback listening"), "{line}");
+    let port = line
+        .split("127.0.0.1:")
+        .nth(1)
+        .and_then(|tail| {
+            tail.split(|character: char| !character.is_ascii_digit())
+                .next()
+        })
+        .and_then(|digits| digits.parse::<u16>().ok())
+        .unwrap();
+    let (status, _, _) = request(port, "GET", "/v1/models", "", "headless-token", "");
+    assert_eq!(status, 200);
+    assert!(!line.contains("headless-token"));
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let refused = Command::new(env!("CARGO_BIN_EXE_uor-chat"))
+        .arg("--stack")
+        .arg(&model_path)
+        .arg("--tokenizer")
+        .arg(&tokenizer_path)
+        .arg("--serve")
+        .arg("127.0.0.1:0")
+        .output()
+        .unwrap();
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("--token-stdin"));
     std::fs::remove_dir_all(root).unwrap();
 }
 

@@ -180,6 +180,9 @@ fn handle_connection(mut stream: TcpStream, config: &LoopbackConfig) -> Result<(
             return write_json(&mut stream, 200, &config.serving.health_json(), config);
         }
         if request.target.starts_with("/v1/") {
+            if request.method == "OPTIONS" {
+                return route_api(&mut stream, request, config);
+            }
             authenticate(&request, &config.token)?;
             return route_api(&mut stream, request, config);
         }
@@ -199,30 +202,9 @@ fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, Open
     let mut lines = Vec::new();
     let mut consumed = 0usize;
     loop {
-        let mut line = String::new();
-        let read = reader
-            .read_line(&mut line)
-            .map_err(|_| OpenAiError::new(400, "could not read HTTP headers"))?;
-        if read == 0 {
-            return Err(OpenAiError::new(400, "incomplete HTTP headers"));
-        }
-        consumed = consumed
-            .checked_add(read)
-            .ok_or_else(|| OpenAiError::new(400, "HTTP length overflow"))?;
-        if consumed > HEADER_LIMIT {
-            return Err(OpenAiError::new(
-                400,
-                "HTTP headers exceed the configured limit",
-            ));
-        }
+        let line = read_header_line(&mut reader, &mut consumed)?;
         if line == "\r\n" || line == "\n" {
             break;
-        }
-        if line.len() > 4096 || !line.ends_with('\n') {
-            return Err(OpenAiError::new(
-                400,
-                "invalid or oversized HTTP header line",
-            ));
         }
         lines.push(line);
     }
@@ -306,6 +288,36 @@ fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, Open
         .read_exact(&mut body)
         .map_err(|_| OpenAiError::new(400, "HTTP body is shorter than Content-Length"))?;
     Ok(Request { body, ..request })
+}
+
+fn read_header_line<R: BufRead>(
+    reader: &mut R,
+    consumed: &mut usize,
+) -> Result<String, OpenAiError> {
+    let mut line = Vec::new();
+    loop {
+        let available = reader
+            .fill_buf()
+            .map_err(|_| OpenAiError::new(400, "could not read HTTP headers"))?;
+        if available.is_empty() {
+            return Err(OpenAiError::new(400, "incomplete HTTP headers"));
+        }
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let take = newline.map_or(available.len(), |index| index + 1);
+        if line.len() + take > 4096 || *consumed + take > HEADER_LIMIT {
+            return Err(OpenAiError::new(
+                400,
+                "invalid or oversized HTTP header line",
+            ));
+        }
+        line.extend_from_slice(&available[..take]);
+        *consumed += take;
+        reader.consume(take);
+        if newline.is_some() {
+            return String::from_utf8(line)
+                .map_err(|_| OpenAiError::new(400, "HTTP headers must be valid UTF-8"));
+        }
+    }
 }
 
 fn validate_host_origin(request: &Request, config: &LoopbackConfig) -> Result<(), OpenAiError> {
@@ -434,11 +446,17 @@ fn stream_generation(
     config: &LoopbackConfig,
     family: GenerationFamily,
 ) -> Result<(), OpenAiError> {
+    let _permit = config.serving.try_start_generation()?;
+    let identity = config.serving.stream_identity(family);
     write_sse_headers(stream, config)?;
-    write_sse(stream, &config.serving.stream_role_chunk(family))?;
+    write_sse_event(
+        stream,
+        family,
+        &config.serving.stream_role_chunk(family, &identity),
+    )?;
     let mut utf8 = Utf8Buffer::default();
     let eos = config.serving.protocol()?.eos_id;
-    let outcome = config.serving.generate(
+    let outcome = config.serving.generate_with_permit(
         &generation.borrowed_messages(),
         generation.max_tokens,
         |id, bytes| {
@@ -447,19 +465,31 @@ fn stream_generation(
             } else {
                 utf8.push(bytes)?
             };
-            write_sse(
+            write_sse_event(
                 stream,
-                &config.serving.stream_token_chunk(family, id, &text),
+                family,
+                &config
+                    .serving
+                    .stream_token_chunk(family, &identity, id, &text),
             )
         },
     )?;
     utf8.finish()?;
-    write_sse(
+    write_sse_event(
         stream,
-        &config.serving.stream_finish_chunk(family, &outcome),
+        family,
+        &config
+            .serving
+            .stream_finish_chunk(family, &identity, &outcome),
     )?;
     if generation.include_usage && family != GenerationFamily::Responses {
-        write_sse(stream, &config.serving.stream_usage_chunk(family, &outcome))?;
+        write_sse_event(
+            stream,
+            family,
+            &config
+                .serving
+                .stream_usage_chunk(family, &identity, &outcome),
+        )?;
     }
     stream
         .write_all(b"data: [DONE]\r\n\r\n")
@@ -476,7 +506,18 @@ fn write_sse_headers(stream: &mut TcpStream, config: &LoopbackConfig) -> Result<
         .map_err(|_| OpenAiError::new(500, "client disconnected before stream"))
 }
 
-fn write_sse(stream: &mut TcpStream, value: &Value) -> Result<(), OpenAiError> {
+fn write_sse_event(
+    stream: &mut TcpStream,
+    family: GenerationFamily,
+    value: &Value,
+) -> Result<(), OpenAiError> {
+    if family == GenerationFamily::Responses {
+        if let Some(event) = value.get("type").and_then(Value::as_str) {
+            stream
+                .write_all(format!("event: {event}\r\n").as_bytes())
+                .map_err(|_| OpenAiError::new(500, "client disconnected during stream"))?;
+        }
+    }
     let bytes =
         serde_json::to_vec(value).map_err(|error| OpenAiError::new(500, error.to_string()))?;
     stream

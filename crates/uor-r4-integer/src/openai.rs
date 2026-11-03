@@ -133,6 +133,13 @@ impl GenerationRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct StreamIdentity {
+    pub id: String,
+    pub created: u64,
+    pub item_id: Option<String>,
+}
+
 #[derive(Debug, Default)]
 pub struct Utf8Buffer {
     bytes: Vec<u8>,
@@ -469,12 +476,24 @@ impl OpenAiServing {
         &self,
         messages: &[Message<'_>],
         max_tokens: usize,
-        mut emit: F,
+        emit: F,
     ) -> Result<GenerationOutcome, OpenAiError>
     where
         F: FnMut(u32, &[u8]) -> Result<(), OpenAiError>,
     {
         let _permit = self.try_start_generation()?;
+        self.generate_with_permit(messages, max_tokens, emit)
+    }
+
+    pub fn generate_with_permit<F>(
+        &self,
+        messages: &[Message<'_>],
+        max_tokens: usize,
+        mut emit: F,
+    ) -> Result<GenerationOutcome, OpenAiError>
+    where
+        F: FnMut(u32, &[u8]) -> Result<(), OpenAiError>,
+    {
         let started = Instant::now();
         let mut first_token_ns = None;
         let mut emitted_error = None;
@@ -554,40 +573,68 @@ impl OpenAiServing {
                 "choices": [{"index": 0, "text": outcome.reply.text, "finish_reason": finish}],
                 "usage": usage, "uor": metrics
             }),
-            GenerationFamily::Responses => json!({
-                "id": request_id("resp"), "object": "response", "created_at": created, "model": self.model_id(), "status": "completed",
-                "output": [{"id": request_id("msg"), "type": "message", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": outcome.reply.text}]}],
-                "usage": {"prompt_tokens": outcome.usage.prompt_tokens, "completion_tokens": outcome.usage.completion_tokens, "total_tokens": outcome.usage.total_tokens, "input_tokens": outcome.usage.prompt_tokens, "output_tokens": outcome.usage.completion_tokens},
-                "uor": metrics
-            }),
+            GenerationFamily::Responses => {
+                self.responses_json_with_identity(outcome, &self.stream_identity(family))
+            }
         }
     }
 
-    pub fn stream_role_chunk(&self, family: GenerationFamily) -> Value {
+    pub fn stream_identity(&self, family: GenerationFamily) -> StreamIdentity {
+        StreamIdentity {
+            id: request_id(match family {
+                GenerationFamily::Chat => "chatcmpl",
+                GenerationFamily::Completion => "cmpl",
+                GenerationFamily::Responses => "resp",
+            }),
+            created: unix_seconds(),
+            item_id: (family == GenerationFamily::Responses).then(|| request_id("msg")),
+        }
+    }
+
+    fn responses_json_with_identity(
+        &self,
+        outcome: &GenerationOutcome,
+        identity: &StreamIdentity,
+    ) -> Value {
+        json!({
+            "id": identity.id, "object": "response", "created_at": identity.created, "model": self.model_id(), "status": "completed",
+            "output": [{"id": identity.item_id, "type": "message", "status": "completed", "role": "assistant", "content": [{"type": "output_text", "text": outcome.reply.text}]}],
+            "usage": {"prompt_tokens": outcome.usage.prompt_tokens, "completion_tokens": outcome.usage.completion_tokens, "total_tokens": outcome.usage.total_tokens, "input_tokens": outcome.usage.prompt_tokens, "output_tokens": outcome.usage.completion_tokens},
+            "uor": outcome.uor
+        })
+    }
+
+    pub fn stream_role_chunk(&self, family: GenerationFamily, identity: &StreamIdentity) -> Value {
         match family {
             GenerationFamily::Chat => {
-                json!({"id": request_id("chatcmpl"), "object": "chat.completion.chunk", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": null}]})
+                json!({"id": identity.id, "object": "chat.completion.chunk", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": null}]})
             }
             GenerationFamily::Completion => {
-                json!({"id": request_id("cmpl"), "object": "text_completion", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "text": "", "finish_reason": null}]})
+                json!({"id": identity.id, "object": "text_completion", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "text": "", "finish_reason": null}]})
             }
             GenerationFamily::Responses => {
-                json!({"type": "response.created", "response": {"id": request_id("resp"), "object": "response", "created_at": unix_seconds(), "model": self.model_id(), "status": "in_progress"}})
+                json!({"type": "response.created", "response": {"id": identity.id, "object": "response", "created_at": identity.created, "model": self.model_id(), "status": "in_progress"}})
             }
         }
     }
 
-    pub fn stream_token_chunk(&self, family: GenerationFamily, id: u32, text: &str) -> Value {
+    pub fn stream_token_chunk(
+        &self,
+        family: GenerationFamily,
+        identity: &StreamIdentity,
+        id: u32,
+        text: &str,
+    ) -> Value {
         let token = json!({"token_id": id});
         match family {
             GenerationFamily::Chat => {
-                json!({"id": request_id("chatcmpl"), "object": "chat.completion.chunk", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": null}], "uor": token})
+                json!({"id": identity.id, "object": "chat.completion.chunk", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": null}], "uor": token})
             }
             GenerationFamily::Completion => {
-                json!({"id": request_id("cmpl"), "object": "text_completion", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "text": text, "finish_reason": null}], "uor": token})
+                json!({"id": identity.id, "object": "text_completion", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "text": text, "finish_reason": null}], "uor": token})
             }
             GenerationFamily::Responses => {
-                json!({"type": "response.output_text.delta", "item_id": request_id("msg"), "output_index": 0, "content_index": 0, "delta": text, "uor": token})
+                json!({"type": "response.output_text.delta", "item_id": identity.item_id, "output_index": 0, "content_index": 0, "delta": text, "uor": token})
             }
         }
     }
@@ -595,18 +642,19 @@ impl OpenAiServing {
     pub fn stream_finish_chunk(
         &self,
         family: GenerationFamily,
+        identity: &StreamIdentity,
         outcome: &GenerationOutcome,
     ) -> Value {
         let finish = finish_reason(outcome.reply.stop);
         match family {
             GenerationFamily::Chat => {
-                json!({"id": request_id("chatcmpl"), "object": "chat.completion.chunk", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "delta": {}, "finish_reason": finish}], "uor": {"stop": outcome.uor.stop}})
+                json!({"id": identity.id, "object": "chat.completion.chunk", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "delta": {}, "finish_reason": finish}], "uor": {"stop": outcome.uor.stop}})
             }
             GenerationFamily::Completion => {
-                json!({"id": request_id("cmpl"), "object": "text_completion", "created": unix_seconds(), "model": self.model_id(), "choices": [{"index": 0, "text": "", "finish_reason": finish}], "uor": {"stop": outcome.uor.stop}})
+                json!({"id": identity.id, "object": "text_completion", "created": identity.created, "model": self.model_id(), "choices": [{"index": 0, "text": "", "finish_reason": finish}], "uor": {"stop": outcome.uor.stop}})
             }
             GenerationFamily::Responses => {
-                json!({"type": "response.completed", "response": self.response_json(family, outcome)})
+                json!({"type": "response.completed", "response": self.responses_json_with_identity(outcome, identity)})
             }
         }
     }
@@ -614,6 +662,7 @@ impl OpenAiServing {
     pub fn stream_usage_chunk(
         &self,
         family: GenerationFamily,
+        identity: &StreamIdentity,
         outcome: &GenerationOutcome,
     ) -> Value {
         let object = if family == GenerationFamily::Chat {
@@ -621,7 +670,7 @@ impl OpenAiServing {
         } else {
             "text_completion"
         };
-        json!({"id": request_id(if family == GenerationFamily::Chat { "chatcmpl" } else { "cmpl" }), "object": object, "created": unix_seconds(), "model": self.model_id(), "choices": [], "usage": outcome.usage, "uor": outcome.uor})
+        json!({"id": identity.id, "object": object, "created": identity.created, "model": self.model_id(), "choices": [], "usage": outcome.usage, "uor": outcome.uor})
     }
 }
 

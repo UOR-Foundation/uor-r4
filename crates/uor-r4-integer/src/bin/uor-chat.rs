@@ -5,7 +5,7 @@
 //! Persistent dialogue continuity via exact-token history and literal-role protocol.
 
 use sha2::{Digest, Sha256};
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read as IoRead, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 use uor_r4_integer::bundle::{create_test_bundle_with_byte_vocab, Bundle};
@@ -64,6 +64,8 @@ struct CliArgs {
     studio_root: Option<PathBuf>,
     /// Optional additional exact browser Origin accepted by the loopback service.
     origin: Option<String>,
+    /// Read the loopback API token once from standard input, for headless serving.
+    token_stdin: bool,
     system_prompt: Option<String>,
     /// One-turn explicit system-memory value for the stack chat path.
     memory: Option<String>,
@@ -195,6 +197,7 @@ impl Default for CliArgs {
             serve: None,
             studio_root: None,
             origin: None,
+            token_stdin: false,
             system_prompt: None,
             memory: None,
             memory_sieve: false,
@@ -243,6 +246,7 @@ fn print_usage() {
     eprintln!("                              loads the same --stack artifact; no CLI subprocess");
     eprintln!("      --studio-root <PATH>    serve this Studio on the same origin with ephemeral bootstrap");
     eprintln!("      --origin <ORIGIN>       additionally accept this exact browser Origin (off by default)");
+    eprintln!("      --token-stdin           read the API token once from stdin (required without --studio-root)");
     eprintln!("  -s, --system <PROMPT>       Initial persistent system persona");
     eprintln!(
         "      --memory <VALUE>        Queue System: Memory: <VALUE>. for the next stack-chat turn"
@@ -321,6 +325,9 @@ fn parse_cli_args() -> CliArgs {
                     eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--origin'");
                     process::exit(1);
                 }
+            }
+            "--token-stdin" => {
+                args.token_stdin = true;
             }
             "-s" | "--system" => {
                 idx += 1;
@@ -616,6 +623,14 @@ fn parse_cli_args() -> CliArgs {
     }
     if args.origin.is_some() && args.serve.is_none() {
         eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--origin' requires '--serve'");
+        process::exit(1);
+    }
+    if args.serve.is_some() && args.studio_root.is_none() && !args.token_stdin {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} headless '--serve' requires '--token-stdin' (or use '--studio-root' for in-memory bootstrap)");
+        process::exit(1);
+    }
+    if args.token_stdin && args.serve.is_none() {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--token-stdin' requires '--serve'");
         process::exit(1);
     }
     if args.prompt_ids.is_some() && args.stack_path.is_none() && args.discrete_path.is_none() {
@@ -1408,6 +1423,26 @@ impl From<std::io::Error> for StackCliError {
     }
 }
 
+fn read_launch_token_stdin() -> std::result::Result<String, StackCliError> {
+    let mut bytes = [0u8; 257];
+    let read = io::stdin().read(&mut bytes)?;
+    if read == 0 || read > 256 {
+        return Err(StackCliError::Usage(
+            "--token-stdin requires 1-256 bytes followed by a newline".into(),
+        ));
+    }
+    let text = std::str::from_utf8(&bytes[..read])
+        .map_err(|_| StackCliError::Usage("--token-stdin must be UTF-8".into()))?;
+    let token = text.trim_end_matches(&['\r', '\n'][..]);
+    if token.is_empty() || token.bytes().any(|byte| byte <= 0x20 || byte == 0x7f) {
+        return Err(StackCliError::Usage(
+            "--token-stdin must be one nonempty token without whitespace or control characters"
+                .into(),
+        ));
+    }
+    Ok(token.to_owned())
+}
+
 /// The initial history of a stack conversation: BOS alone, or BOS and a system
 /// turn encoded by the literal-role protocol.
 fn stack_initial_history(
@@ -1598,6 +1633,9 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             .map_err(|error| StackCliError::Usage(error.to_string()))?;
         config.host = host.to_owned();
         config.port = port;
+        if cli.token_stdin {
+            config.token = read_launch_token_stdin()?;
+        }
         config.studio_root = cli.studio_root.clone();
         config.origin = cli.origin.clone();
         return serve_loopback(config).map_err(|error| StackCliError::Usage(error.to_string()));
