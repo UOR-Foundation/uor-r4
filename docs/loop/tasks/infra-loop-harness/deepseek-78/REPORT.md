@@ -39,7 +39,7 @@ batched-scorer files. deepseek-79 extends the final item scope to the float
 activation, export-rounding and served-loop sources that its profile can
 select.
 
-Size at the record-repair head: 8 changed files, 431 insertions, 0 deletions;
+Size at the record-repair head: 8 changed files, 434 insertions, 0 deletions;
 seven documentation records and one shared claim entry. No code or tests
 changed.
 

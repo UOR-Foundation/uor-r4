@@ -19,7 +19,7 @@ The reports now distinguish the initial integer quantizer unit from the final
 four-source scope, identify the pre-repair commit whose remote CI was observed,
 and list only the genuinely pending exact-head checks and review.
 
-Size at this head: 8 changed files, 431 insertions, 0 deletions; seven
+Size at this head: 8 changed files, 434 insertions, 0 deletions; seven
 documentation records and one shared claim entry.
 
 ## Measurements
