@@ -19,7 +19,7 @@ Ran the repository's `roadmap render` generator. The generated
 item plus its dependency edge. Deepseek-109 points to this active record. No
 source item, scope, requirement, source code or implementation plan changed.
 
-The exact PR diff is 25 files: 861 insertions and 2 deletions.
+The exact PR diff is 25 files: 863 insertions and 2 deletions.
 
 ## Measurements
 
@@ -34,8 +34,10 @@ The exact PR diff is 25 files: 861 insertions and 2 deletions.
 - `cargo run -q -p xtask -- roadmap check`: PASS.
 - `git diff --check`, `loop report --check`, `loop pr-check --local` and
   `loop gates --full`: PASS.
-- The following receipt commit adds only its receipts file and updates this
-  report's exact-size line.
+- Full gates ran at content commit
+  `e410b455735db335f3df0a60c175c54737636f32`.
+- The following accounting commit adds its receipts file, records that tested
+  content commit here and updates this report's exact-size line.
 
 ## Skills used
 
