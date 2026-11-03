@@ -18,7 +18,7 @@ Added `Setup row: 2 (item-file maintenance)` to every ORDER from deepseek-104
 through deepseek-111. The image item, generated roadmap, requirements, links,
 mapping and implementation plan are unchanged.
 
-The exact PR diff is recorded before the closing receipt commit.
+The exact PR diff is 28 files: 973 insertions and 2 deletions.
 
 ## Measurements
 
@@ -31,8 +31,10 @@ registration for the deterministic image-decomposition item.
 - The final generated roadmap reports 24 ready/139 total.
 - `roadmap render --check`, `roadmap check`, `git diff --check`,
   `loop report --check`, `loop pr-check --local` and `loop gates --full` pass.
-- The following receipt commit adds only its receipts file and updates this
-  report's exact-size line.
+- Full gates ran at content commit
+  `afdfd0f7fcc8f1dc48c14af1706c9193f9548624`.
+- The following accounting commit adds its receipts file, records that tested
+  content commit here and updates this report's exact-size line.
 
 ## Skills used
 
