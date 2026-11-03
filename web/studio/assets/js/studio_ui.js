@@ -131,9 +131,9 @@
 
     /* models page grouping */
     var MODELS_SECTIONS = [
-        { key: 'local', title: 'Local engine (offline)', desc: 'Runs a UORLUT01 artifact in a Web Worker in this tab; prompts stay on this device.', match: /local wasm engine/i },
+        { key: 'local', title: 'UOR Chat — experimental', desc: 'Synthetic continuation through the existing local WASM worker; not a trained conversational model.', match: /local wasm engine/i },
         { key: 'trained', title: 'Published models', desc: 'Trained 19-table M1 trunk exports; next-token prediction only, not a chat assistant.', match: /trained m1/i },
-        { key: 'api', title: 'API providers (remote)', desc: 'Prompts are sent to the selected endpoint and leave this device.', match: /openai-compatible api/i },
+        { key: 'api', title: 'Custom API providers', desc: 'OpenAI-compatible endpoints. Selection does not prove reachability; prompts leave this device only when sent.', match: /openai-compatible api/i },
         { key: 'research', title: 'Research artifacts (experimental)', desc: 'Earlier exports kept for inspection; not generation-capable in this Studio.', match: /research|experimental/i }
     ];
     function regroupModels() {
@@ -149,7 +149,7 @@
             if (panel && providersHead) providersHead.insertAdjacentElement('afterend', sections);
             else if (panel) panel.appendChild(sections);
             mount.classList.add('visually-hidden');
-            MODELS_SECTIONS.forEach(function (def) {
+            MODELS_SECTIONS.filter(function (def) { return def.key === 'local' || def.key === 'api'; }).forEach(function (def) {
                 var section = document.createElement('section');
                 section.className = 'models-section';
                 section.setAttribute('data-kind', def.key);
@@ -167,47 +167,61 @@
                 section.appendChild(header); section.appendChild(body);
                 sections.appendChild(section);
             });
+            var diagnostics = document.createElement('details');
+            diagnostics.id = 'artifactDiagnostics';
+            diagnostics.className = 'models-section artifact-diagnostics';
+            var summary = document.createElement('summary');
+            summary.textContent = 'Artifact diagnostics';
+            var diagnosticsDesc = document.createElement('p');
+            diagnosticsDesc.className = 'models-section-desc';
+            diagnosticsDesc.textContent = 'Next-token prediction, local artifact tools, and research exports.';
+            diagnostics.appendChild(summary);
+            diagnostics.appendChild(diagnosticsDesc);
+            ['trained', 'research', 'local-artifacts'].forEach(function (key) {
+                var body = document.createElement('div');
+                body.className = 'models-section-body';
+                body.id = 'modelsSection-' + key;
+                diagnostics.appendChild(body);
+            });
+            sections.appendChild(diagnostics);
             var status = document.createElement('div');
             status.className = 'models-verify-row';
             status.id = 'modelsVerifyRow';
             sections.appendChild(status);
         }
         var freshGroups = mount.querySelectorAll('.source-group');
-        if (freshGroups.length) {
+        if (freshGroups.length > 1) {
             Array.prototype.slice.call(document.querySelectorAll('.models-section-body')).forEach(function (body) { body.textContent = ''; });
         }
         Array.prototype.slice.call(freshGroups).forEach(function (group) {
             var heading = group.querySelector('h3');
             var text = heading ? heading.textContent : '';
             var def = MODELS_SECTIONS.find(function (item) { return item.match.test(text); }) || MODELS_SECTIONS[0];
+            if (def.key === 'local') {
+                var bundledBody = document.getElementById('modelsSection-local');
+                var localArtifacts = document.getElementById('modelsSection-local-artifacts');
+                Array.prototype.slice.call(group.querySelectorAll(':scope > .source-card')).forEach(function (card) {
+                    var bundled = card.querySelector('[data-action="load-bundled"]');
+                    var body = bundled ? bundledBody : localArtifacts;
+                    if (body && card.parentElement !== body) body.appendChild(card);
+                    if (bundled) bundled.textContent = 'Connect UOR Chat';
+                });
+                return;
+            }
             var body = document.getElementById('modelsSection-' + def.key);
-            if (body && group.parentElement !== body) { var heading = group.querySelector('h3'); if (heading) heading.classList.add('source-group-heading'); body.appendChild(group); }
+            if (def.key === 'trained' && !group.querySelector('.models-note')) {
+                var note = document.createElement('p');
+                note.className = 'models-note';
+                note.textContent = "M1 seed 2 evidence is tracked on the roadmap item and ships when its release URL exists.";
+                group.appendChild(note);
+            }
+            if (body && group.parentElement !== body) {
+                if (heading) heading.classList.add('source-group-heading');
+                body.appendChild(group);
+            }
         });
         var verify = document.getElementById('modelsVerifyRow');
         if (verify) verify.textContent = 'Downloads, sizes, hashes and tokenizer bindings are verified in this tab before the worker receives an artifact. Remote contact is always user-initiated.';
-        var trainedBody = document.getElementById('modelsSection-trained');
-        if (trainedBody && !trainedBody.querySelector('.models-note')) {
-            var note = document.createElement('p');
-            note.className = 'models-note';
-            note.textContent = "M1 seed 2 evidence is tracked on the roadmap item and ships when its release URL exists.";
-            trainedBody.appendChild(note);
-        }
-        var researchSection = document.querySelector('.models-section[data-kind="research"]');
-        var researchBody = document.getElementById('modelsSection-research');
-        if (researchSection && researchBody && !researchSection.querySelector('.models-collapse')) {
-            researchBody.hidden = true;
-            var toggle = document.createElement('button');
-            toggle.type = 'button';
-            toggle.className = 'models-collapse';
-            toggle.setAttribute('aria-expanded', 'false');
-            toggle.textContent = 'Show research artifacts';
-            toggle.addEventListener('click', function () {
-                researchBody.hidden = !researchBody.hidden;
-                toggle.setAttribute('aria-expanded', researchBody.hidden ? 'false' : 'true');
-                toggle.textContent = researchBody.hidden ? 'Show research artifacts' : 'Hide research artifacts';
-            });
-            researchSection.appendChild(toggle);
-        }
     }
     function watchModels() {
         var mount = document.getElementById('modelSourceMount');

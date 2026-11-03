@@ -838,7 +838,7 @@
                 if (ui && typeof ui.activateSection === 'function') ui.activateSection(section);
                 else setView(view);
             }
-            quickButton('Open Models', function () { go('models', 'model'); });
+            quickButton('Open Connections', function () { go('models', 'model'); });
             quickButton('Open Workspace', function () { go('workspace', 'workspace'); });
             quickButton('Explore demo workspace', function () {
                 if (!window.__studioFiles || typeof window.__studioFiles.openDemo !== 'function') return;
