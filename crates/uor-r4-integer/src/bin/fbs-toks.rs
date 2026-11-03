@@ -635,7 +635,7 @@ fn artifact_copy_key(bytes: &[u8]) -> Result<usize, String> {
         None => Ok(1),
         Some(value) => value
             .as_u64()
-            .map(|key| key as usize)
+            .and_then(|key| usize::try_from(key).ok())
             .ok_or_else(|| "the artifact's Hamming copy key is not a non-negative integer".to_owned()),
     }
 }
