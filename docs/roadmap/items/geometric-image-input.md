@@ -41,15 +41,17 @@ returns 501 and the composer currently refuses binary files.
 - `POST /v1/images/decompose` accepts bounded `application/octet-stream` RGBA
   with explicit dimensions/grid and returns the canonical decomposition. Native
   `uor_r4_image` parts validate schema/hash/canonical form and pass normal
-  context preflight. Ordinary `image_url` and unsupported OpenAI families retain
-  truthful failures.
+  context preflight. Ordinary `image_url` and unsupported OpenAI endpoint
+  families retain truthful 501 responses; bounded resource/context refusals
+  retain truthful 413 responses.
 - Browser Canvas decodes and downsamples images to at most 256 by 256.
   Paste/drop/picker provides previews, names/sizes, removal and the label
   `R4 patch input - experimental; not visual understanding`. Native Send uses
   only successful decompositions after explicit Send; custom providers may use
   ordinary `image_url`; image blobs are memory-only and reload asks for
   reattachment.
-- Vision, native integer/OpenAI, Studio, real-browser, native/WASM audit,
+- Vision, native integer/OpenAI, Studio, real-browser flow with exact usage,
+  native/WASM audit,
   repository gates, fresh exact-head review, green GitHub checks, protected
   queue and fresh-main verification pass. No visual-understanding, useful-chat,
   production, M4/M7 completion or trained multimodal capability is claimed.

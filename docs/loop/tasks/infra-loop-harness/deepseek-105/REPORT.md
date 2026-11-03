@@ -1,5 +1,10 @@
 # REPORT: image-item registration repair, deepseek-105
 
+> **Superseded by [deepseek-106](../deepseek-106/REPORT.md).** A fresh review
+> found the diff-size prose stale, this report's final-check wording still
+> ambiguous about the receipt-only commit, two issue requirements generalized,
+> and the PR-body links unsuited to copied Markdown.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
@@ -25,7 +30,7 @@ superseded. Its checks now identify implementation head `42f228e5b` and the
 later receipt-only commit explicitly. The acceptance requirements, status and
 implementation boundary are unchanged.
 
-The exact PR diff is 8 files: 321 insertions and no deletions.
+The cumulative diff at this head was 9 files and 332 insertions.
 
 ## Measurements
 
@@ -37,8 +42,8 @@ the vision dependency and native route without widening scope.
 
 - `cargo run -q -p xtask -- roadmap check`: PASS.
 - The corrected composer-report target exists. Repository-wide
-  `cargo xtask links` completed successfully but reports the project's existing
-  broken-link backlog as advisory output.
+  `cargo run -q -p xtask -- links` reports the project's existing broken-link
+  backlog as advisory output.
 - `git diff --check`, `loop report --check`, `loop pr-check --local` and
   `loop gates --full`: PASS.
 - `geometric-image-input` in `docs/roadmap/issues.json` maps to #3619.
