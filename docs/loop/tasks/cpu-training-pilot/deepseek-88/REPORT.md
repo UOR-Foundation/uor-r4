@@ -2,7 +2,7 @@
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Base: `498e36574`. Source commit:
-`680fd1bd6`.
+`a4821664d`.
 
 ## What did not work
 
@@ -21,6 +21,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   two, five with three and three with four. The joint path therefore ran.
 - **The public four-table artifacts do not contain Hamming, turn-memory or
   point-key records.** This says nothing about training those learned records.
+- **The first six-run batch used a superseded joint-loss predicate.** It
+  skipped a baseline-eligible row that lost eligibility after all proposed
+  moves. The corrected scorer rejects that joint candidate, matching the
+  single-coordinate rule. All six arms were rerun; the panel readings were
+  unchanged.
 
 ## What changed
 
@@ -47,9 +52,9 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 | 2 | pivot-k4 | 46 | 71 | 13 | 63 | 256 | reject admission | 2 |
 
 All six CPU/serving exports had zero query-coordinate, admitted-cell, top-8 or
-token mismatches. Total wall time was 456.908 seconds; peak RSS was 20,320 KiB.
+token mismatches. Total wall time was 474.602 seconds; peak RSS was 20,380 KiB.
 The release driver SHA-256 was
-`42c9a725c7a4e8ecc3e476e97de5fccd7256a07a5444754ca3a2267441960cdf`.
+`ddfb994a78d8512983ee142e184474094fc068d995d24859299694c23ce6edf9`.
 The comparison and all six receipts are under
 [evidence](evidence/comparison.json).
 

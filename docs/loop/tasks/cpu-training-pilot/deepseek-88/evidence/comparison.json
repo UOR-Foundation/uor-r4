@@ -1,7 +1,7 @@
 {
   "schema": "uor-r4.cpu-discrete-k1-k4-comparison/1",
-  "source_commit": "680fd1bd6edc28ad9d08d8134a94f650dd1bb949",
-  "driver_sha256": "42c9a725c7a4e8ecc3e476e97de5fccd7256a07a5444754ca3a2267441960cdf",
+  "source_commit": "a4821664de61b1c7d8bd7afc7abbf27b956670f0",
+  "driver_sha256": "ddfb994a78d8512983ee142e184474094fc068d995d24859299694c23ce6edf9",
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "design_sha256_approved": "22e7228502ff90a83f17077d5ae4d703b7fe354daa25bb520d7e40def974e037",
@@ -132,8 +132,8 @@
     "admitted_cell_mismatches": 0,
     "top8_mismatches": 0,
     "token_mismatches": 0,
-    "total_wall_seconds": 456.908335163,
-    "peak_rss_kib": 20320
+    "total_wall_seconds": 474.601599713,
+    "peak_rss_kib": 20380
   },
   "verdict": "negative for the tested 256-block discrete K1/K4 corpus configurations",
   "claim_limit": "Public internal-development component evidence only; not fresh-transfer, useful-chat, GPU-equivalence or GPU-replacement evidence."
