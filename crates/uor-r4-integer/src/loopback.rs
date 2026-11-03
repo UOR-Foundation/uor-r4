@@ -484,7 +484,10 @@ fn stream_generation(
         &config.serving.stream_role_chunk(family, &identity),
     )?;
     let mut utf8 = Utf8Buffer::default();
-    let eos = config.serving.protocol()?.eos_id;
+    let protocol = config.serving.protocol()?;
+    let eos = protocol.eos_id;
+    let mut decoded = String::new();
+    let mut emitted_bytes = 0;
     let outcome = config.serving.generate_with_permit(
         &generation.borrowed_messages(),
         generation.max_tokens,
@@ -492,7 +495,13 @@ fn stream_generation(
             let text = if id == eos {
                 String::new()
             } else {
-                utf8.push(bytes)?
+                decoded.push_str(&utf8.push(bytes)?);
+                let visible = protocol.reply_text(&decoded);
+                let text = visible.get(emitted_bytes..).ok_or_else(|| {
+                    OpenAiError::new(500, "streaming reply text is not append-only")
+                })?;
+                emitted_bytes = visible.len();
+                text.to_owned()
             };
             write_sse_event(
                 stream,
@@ -504,6 +513,12 @@ fn stream_generation(
         },
     )?;
     utf8.finish()?;
+    if protocol.reply_text(&decoded) != outcome.reply.text {
+        return Err(OpenAiError::new(
+            500,
+            "streaming reply text diverged from the batch reply",
+        ));
+    }
     write_sse_event(
         stream,
         family,

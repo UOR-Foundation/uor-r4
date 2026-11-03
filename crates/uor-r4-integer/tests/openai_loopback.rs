@@ -237,6 +237,66 @@ fn config_with_long_generation() -> LoopbackConfig {
     panic!("no synthetic artifact produced at least eight tokens");
 }
 
+fn config_with_leading_space_generation() -> LoopbackConfig {
+    for seed in 1..512 {
+        let model = IntegerStackModel::parse(&artifact(seed)).unwrap();
+        let serving = OpenAiServing::new(model, tokenizer_json(), 2).unwrap();
+        let outcome = serving
+            .generate(
+                &[Message {
+                    role: "user",
+                    content: "Hi",
+                }],
+                2,
+                |_, _| Ok(()),
+            )
+            .unwrap();
+        let Some(&first) = outcome.reply.ids.first() else {
+            continue;
+        };
+        let chat = StackChat::from_tokenizer_json(serving.model(), &tokenizer_json(), 2).unwrap();
+        if chat.tokenizer().decode_bytes(&[first]) == b" " {
+            assert!(!outcome.reply.text.starts_with(' '));
+            let mut config = LoopbackConfig::new(serving).unwrap();
+            config.port = 0;
+            config.token = "test-token".into();
+            return config;
+        }
+    }
+    panic!("no synthetic artifact produced a leading-space reply");
+}
+
+#[test]
+fn sse_applies_v2_reply_text_to_leading_space() {
+    let server = LoopbackServer::spawn(config_with_leading_space_generation()).unwrap();
+    let (_, _, raw) = request(
+        server.port(),
+        "POST",
+        "/v1/chat/completions",
+        &chat_request(true).to_string(),
+        "test-token",
+        "",
+    );
+    let (_, _, batch) = request(
+        server.port(),
+        "POST",
+        "/v1/chat/completions",
+        &chat_request(false).to_string(),
+        "test-token",
+        "",
+    );
+    let batch: Value = serde_json::from_str(&batch).unwrap();
+    let batch_text = batch["choices"][0]["message"]["content"].as_str().unwrap();
+    assert!(!batch_text.starts_with(' '));
+    let frames = sse_json(&raw);
+    let text = frames
+        .iter()
+        .filter_map(|frame| frame["choices"][0]["delta"]["content"].as_str())
+        .collect::<String>();
+    assert_eq!(text, batch_text);
+    server.shutdown().unwrap();
+}
+
 fn request(
     port: u16,
     method: &str,
