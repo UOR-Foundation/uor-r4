@@ -1,4 +1,5 @@
 c09f80e670efe43c86ece8b5c3ecb5cdff262aeac0e286d0f0d795566633d1a3  fbs-export-tests.txt
+1431571fc3d42dbd0db1917a36dfddbbc368e7cc43653833e07d89a995aa0bf5  fbs-export-clippy-warn.txt
 35b88e4cf5a33ddf16e203bb1731d9f625a9a5f9818d8fb33e1068c3c16c33e8  integer-lib-bins-tests.txt
 94e19522cfd5784b99c96e546dd0f7acf3d3646a3c1197f2dd61170b826e8c02  integer-release-full-attempt.txt
 2012ceafe32aa79de88956d56a6c3b1ee3199075fae0445e1b9c88f9c4be7f99  integer-clippy.txt

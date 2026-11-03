@@ -16,6 +16,9 @@ Order: [ORDER.md](ORDER.md). Base:
   toolchain. It reports 70 pre-existing lints across the integer library and
   its tests, none in `bin/fbs-export.rs`. The output is retained in
   [integer-clippy.txt](evidence/integer-clippy.txt).
+- A non-denying Clippy run completed the exporter target with 51 pre-existing
+  library warnings and no diagnostic in the changed file:
+  [fbs-export-clippy-warn.txt](evidence/fbs-export-clippy-warn.txt).
 - This guard only runs when the caller supplies `--run-config`; it cannot
   infer training history from a snapshot alone.
 - Pre-claude-265 configs also used `train_as_served: true` for the snapped
@@ -63,7 +66,8 @@ pre-registered experiment was needed for this host-only instrument repair.
 - The full package test was attempted; its unrelated missing-fixture failure
   is recorded above.
 - Strict Clippy was attempted; its pre-existing baseline failures are recorded
-  above.
+  above, and a non-denying exporter run reached the changed target with no
+  diagnostic there.
 - Changed-file formatting and whitespace checks passed.
 
 ## Skills used
