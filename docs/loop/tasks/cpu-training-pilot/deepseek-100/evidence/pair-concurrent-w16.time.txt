@@ -1,4 +1,4 @@
-	Command being timed: "bash -c 
+	Command being timed: "bash -c
   set -euo pipefail
   env RAYON_NUM_THREADS=16 "$1" "$2" "$3" "$4" "$5" 1 16 2 1024 16 "$6" > "$7" 2> "$8" & p1=$!
   env RAYON_NUM_THREADS=16 "$1" "$2" "$3" "$4" "$5" 1 16 2 1024 16 "$9" > "${10}" 2> "${11}" & p2=$!

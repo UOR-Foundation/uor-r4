@@ -9,8 +9,8 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/step-000000000016.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/step-000000000016.ckpt",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/step-000000000016.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/step-000000000016.ckpt",
       "sha256": "b3a9c501c42d94f88091f4360a9b0a67dc8d294ebf5bdbb0d58b98de20e6ce24",
       "step": 16
     }
@@ -35,13 +35,13 @@
   },
   "final_artifact": {
     "matches_source": false,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/final.uorlut",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/final.uorlut",
     "reloaded": true,
     "sha256": "6b35fed04be8a98168b7a7a0a22030300de5383b7576c0c06a812f28e7bb38c8"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/final.ckpt",
+    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/final.binding.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/final.ckpt",
     "sha256": "b3a9c501c42d94f88091f4360a9b0a67dc8d294ebf5bdbb0d58b98de20e6ce24"
   },
   "panel_baseline": {
@@ -155,13 +155,13 @@
     ],
     "accepted_coordinate_moves": 5,
     "accepted_updates": 5,
-    "checkpoint_elapsed_ms": 2.092456,
+    "checkpoint_elapsed_ms": 2.1589880000000004,
     "context_tokens": 1052,
-    "context_tokens_per_second": 3646.497369776594,
+    "context_tokens_per_second": 3688.100767775636,
     "executed_steps": 16,
     "final_epoch": 0,
-    "mean_step_ms": 18.031001625000002,
-    "peak_rss_kib": 127516,
+    "mean_step_ms": 17.827604,
+    "peak_rss_kib": 127336,
     "rank_margin": {
       "coordinates_per_step": 1,
       "margin_q12": 1,
@@ -174,26 +174,31 @@
     "resumed_from_step": 0,
     "seed": 1,
     "stage_elapsed_ms": {
-      "baseline_panel": 1603.5625200000002,
-      "checkpoint_and_reload": 12.665686,
-      "final_panel": 1564.907076,
-      "final_served_forward_audit": 48.6751,
-      "online_updates": 288.49602600000003,
-      "setup": 5.392582
+      "artifact_publish_and_reload": 13.800473,
+      "baseline_panel": 1590.6903570000002,
+      "checkpoint_and_reload": 12.485534,
+      "final_panel": 1603.0943829999999,
+      "final_served_forward_audit": 35.255926,
+      "gate_evaluation": 0.005531,
+      "post_publish_verification": 0.7754489999999999,
+      "setup": 5.133171,
+      "trainer_setup": 10.98937,
+      "training": 287.412594,
+      "unattributed": 0.002224
     },
-    "step_elapsed_ms": 288.49602600000003,
+    "step_elapsed_ms": 285.241664,
     "steps": 16,
-    "steps_per_second": 55.46003604222957,
+    "steps_per_second": 56.09278734259522,
     "target_visits": 16,
-    "target_visits_per_second": 55.46003604222957,
-    "wall_elapsed_ms": 3537.739247
+    "target_visits_per_second": 56.09278734259522,
+    "wall_elapsed_ms": 3559.645012
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
   "served_forward_audit": {
     "decision_sha256": "2ac6b0971afe222860453846f286385428bb870e802fccf66a6097965ea1b897",
     "kept_cells_compared": 512,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed1/final.audit.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed1/final.audit.json",
     "positions_checked": 64,
     "query_coordinates_compared": 16384,
     "sha256": "4fccc7659f2c73f4e677cb1800b25edea6c55f40b5a69fab47df9ee1a9be6dd5",

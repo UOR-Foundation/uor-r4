@@ -1,7 +1,8 @@
 # Public corpus worker-budget readings
 
 Host: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
-Driver SHA-256: `18a99d0602bdddda4c3cf97e7eb96112ac73c7d733b52c9e5f41e9fb5a9e55ba`.
+Repaired driver SHA-256:
+`51d6c1b4c543e24bd5bb1b0fa2b769efb1554521891935e4ddba309a17903ffd`.
 Configuration: public dual-c131 seed 1, rank-margin seed 1, 16 update attempts,
 evaluation stride 2, panel cap 1,024 and checkpoint interval 16.
 
@@ -12,26 +13,35 @@ worker counts reversed for the second invocation.
 
 | Workers | Forward wall ms | Reverse wall ms | Speedup vs one (forward) | Speedup vs one (reverse) | Average CPU |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 62,108.924 | 62,226.693 | 1.000x | 1.000x | 99% |
-| 8 | 8,491.539 | 8,506.975 | 7.314x | 7.315x | 759-761% |
-| 16 | 4,635.815 | 4,616.408 | 13.398x | 13.479x | 1,445-1,447% |
-| 32 | 3,550.101 | 3,561.695 | 17.495x | 17.471x | 2,719-2,735% |
+| 1 | 62,044.786 | 62,248.336 | 1.000x | 1.000x | 99% |
+| 8 | 8,482.573 | 8,474.837 | 7.314x | 7.345x | 758-760% |
+| 16 | 4,639.734 | 4,629.612 | 13.372x | 13.446x | 1,440-1,451% |
+| 32 | 3,533.861 | 3,521.686 | 17.557x | 17.676x | 2,751-2,761% |
 
-Peak RSS was 52,712-52,984 KiB at one worker, 67,576-67,872 KiB at eight,
-86,596-87,872 KiB at 16 and 124,524-127,456 KiB at 32.
+Peak RSS was 53,244-53,608 KiB at one worker, 67,264-67,496 KiB at eight,
+86,436-86,444 KiB at 16 and 124,324-124,688 KiB at 32.
 
 ## Forward-order stages
 
-| Workers | Setup | Baseline panel | Online updates | Final panel | Checkpoint + reload | Final audit |
+| Workers | Setup | Baseline panel | Trainer setup | Training | Final panel | Gate |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 5.289 | 30,851.558 | 283.910 | 30,893.506 | 13.058 | 47.907 |
-| 8 | 4.150 | 4,053.015 | 283.622 | 4,076.217 | 12.623 | 47.982 |
-| 16 | 4.098 | 2,134.839 | 282.350 | 2,139.736 | 12.611 | 47.873 |
-| 32 | 4.700 | 1,592.146 | 285.695 | 1,591.774 | 12.561 | 49.058 |
+| 1 | 5.004 | 30,858.883 | 10.555 | 285.534 | 30,828.185 | 0.007 |
+| 8 | 4.692 | 4,055.515 | 10.909 | 284.407 | 4,062.162 | 0.005 |
+| 16 | 4.402 | 2,134.261 | 12.223 | 282.763 | 2,143.670 | 0.005 |
+| 32 | 4.270 | 1,593.860 | 11.291 | 287.848 | 1,574.148 | 0.012 |
+
+| Workers | Final checkpoint + reload | Served-forward audit | Publish + reload | Post-publish check | Unattributed |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 13.505 | 35.305 | 7.031 | 0.775 | 0.003 |
+| 8 | 12.556 | 34.944 | 16.610 | 0.771 | 0.002 |
+| 16 | 13.054 | 35.098 | 13.478 | 0.777 | 0.002 |
+| 32 | 12.957 | 35.342 | 13.359 | 0.771 | 0.003 |
 
 All values are milliseconds. The two full-panel comparisons dominate wall time;
 the online update chain and the recurrent 64-position served-forward audit are
 dependency-ordered and remain effectively constant across worker counts.
+Trainer setup, gate construction, audit computation, atomic publication/reload,
+post-publish verification and the unattributed remainder are separate stages.
 
 ## State equality
 
@@ -47,20 +57,28 @@ All eight single-artifact runs produced:
 - zero query-coordinate, token or kept-cell mismatches over 262,144 Q12
   coordinates and 8,192 kept cells.
 
-Removing worker count, stage/wall timing, path and timing-derived throughput
-fields leaves one identical semantic report checksum across 1, 8, 16 and 32
-workers: `cbfa12224b69d507bbf7b8328cb486ff0c86ddd93671994624c1e7cb60d6b1f8`.
+The state comparison is reproducible with the retained reports:
+
+```sh
+for workers in 1 8 16 32; do
+  jq -cS '{panel_baseline,panel_final,accepted:.run.accepted_updates,
+    artifact:.final_artifact.sha256,checkpoint:.final_checkpoint.sha256,
+    audit:.served_forward_audit}' "w${workers}.json"
+done | sort -u | wc -l
+```
+
+The result is `1`: all four worker budgets produced the same compared state.
 
 ## Independent two-artifact scheduling
 
 Two public artifact seeds were compared with the same 16-update work:
 
-- two sequential 32-worker jobs: 6.98 s wall, 2,785% average CPU, 124,736 KiB
+- two sequential 32-worker jobs: 7.06 s wall, 2,746% average CPU, 124,664 KiB
   peak RSS;
-- two concurrent 16-worker jobs: 6.60 s wall, 2,927% average CPU, 87,256 KiB
+- two concurrent 16-worker jobs: 6.60 s wall, 2,937% average CPU, 89,304 KiB
   maximum per-process peak RSS.
 
-The concurrent schedule was 5.4% faster but used two simultaneous process
+The concurrent schedule was 6.5% faster but used two simultaneous process
 footprints. Seed 1 trained and seed 2 accepted no update; each output matched
 its corresponding sequential run exactly.
 

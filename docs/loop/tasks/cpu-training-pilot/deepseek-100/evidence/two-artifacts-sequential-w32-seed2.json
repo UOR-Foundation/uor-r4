@@ -9,8 +9,8 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/step-000000000016.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/step-000000000016.ckpt",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/step-000000000016.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/step-000000000016.ckpt",
       "sha256": "ab69bd4c110452a347aaf32d5e0b4e6e737c4a7f33084acd8cd158d815768737",
       "step": 16
     }
@@ -35,13 +35,13 @@
   },
   "final_artifact": {
     "matches_source": true,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/final.uorlut",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/final.uorlut",
     "reloaded": true,
     "sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/final.ckpt",
+    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/final.binding.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/final.ckpt",
     "sha256": "ab69bd4c110452a347aaf32d5e0b4e6e737c4a7f33084acd8cd158d815768737"
   },
   "panel_baseline": {
@@ -155,13 +155,13 @@
     ],
     "accepted_coordinate_moves": 0,
     "accepted_updates": 0,
-    "checkpoint_elapsed_ms": 2.344707,
+    "checkpoint_elapsed_ms": 2.398945,
     "context_tokens": 1052,
-    "context_tokens_per_second": 5619.833409226904,
+    "context_tokens_per_second": 5584.539806713875,
     "executed_steps": 16,
     "final_epoch": 0,
-    "mean_step_ms": 11.6996350625,
-    "peak_rss_kib": 128824,
+    "mean_step_ms": 11.7735753125,
+    "peak_rss_kib": 128820,
     "rank_margin": {
       "coordinates_per_step": 1,
       "margin_q12": 1,
@@ -174,26 +174,31 @@
     "resumed_from_step": 0,
     "seed": 1,
     "stage_elapsed_ms": {
-      "baseline_panel": 1580.913655,
-      "checkpoint_and_reload": 14.280883,
-      "final_panel": 1576.6138939999998,
-      "final_served_forward_audit": 48.43415,
-      "online_updates": 187.194161,
-      "setup": 4.759265
+      "artifact_publish_and_reload": 9.989894,
+      "baseline_panel": 1573.452325,
+      "checkpoint_and_reload": 12.524859,
+      "final_panel": 1650.513606,
+      "final_served_forward_audit": 35.089117,
+      "gate_evaluation": 0.004769000000000001,
+      "post_publish_verification": 0.983535,
+      "setup": 4.394051,
+      "trainer_setup": 11.572262,
+      "training": 190.851923,
+      "unattributed": 0.002777
     },
-    "step_elapsed_ms": 187.194161,
+    "step_elapsed_ms": 188.377205,
     "steps": 16,
-    "steps_per_second": 85.47275147113163,
+    "steps_per_second": 84.93596664203612,
     "target_visits": 16,
-    "target_visits_per_second": 85.47275147113163,
-    "wall_elapsed_ms": 3427.040607
+    "target_visits_per_second": 84.93596664203612,
+    "wall_elapsed_ms": 3489.379118
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
   "served_forward_audit": {
     "decision_sha256": "56d067e2d8c141bc20bbc254ff73d09eba90d18c64a5c2e1f6e64dfd36ed1ff7",
     "kept_cells_compared": 512,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/two-artifacts-sequential-w32-seed2/final.audit.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/two-artifacts-sequential-w32-seed2/final.audit.json",
     "positions_checked": 64,
     "query_coordinates_compared": 16384,
     "sha256": "d1bc89e8b4dc8d00b3184c82f7b9ee837aede43a6855f2d89bc6de20a3e7a08f",

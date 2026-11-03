@@ -9,8 +9,8 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/step-000000000016.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/step-000000000016.ckpt",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/step-000000000016.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/step-000000000016.ckpt",
       "sha256": "b3a9c501c42d94f88091f4360a9b0a67dc8d294ebf5bdbb0d58b98de20e6ce24",
       "step": 16
     }
@@ -35,13 +35,13 @@
   },
   "final_artifact": {
     "matches_source": false,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/final.uorlut",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/final.uorlut",
     "reloaded": true,
     "sha256": "6b35fed04be8a98168b7a7a0a22030300de5383b7576c0c06a812f28e7bb38c8"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/final.ckpt",
+    "binding_path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/final.binding.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/final.ckpt",
     "sha256": "b3a9c501c42d94f88091f4360a9b0a67dc8d294ebf5bdbb0d58b98de20e6ce24"
   },
   "panel_baseline": {
@@ -155,13 +155,13 @@
     ],
     "accepted_coordinate_moves": 5,
     "accepted_updates": 5,
-    "checkpoint_elapsed_ms": 2.105271,
+    "checkpoint_elapsed_ms": 1.9889489999999999,
     "context_tokens": 1052,
-    "context_tokens_per_second": 3709.166065795868,
+    "context_tokens_per_second": 3725.063989659109,
     "executed_steps": 16,
     "final_epoch": 0,
-    "mean_step_ms": 17.726356499999998,
-    "peak_rss_kib": 67872,
+    "mean_step_ms": 17.6507035,
+    "peak_rss_kib": 67856,
     "rank_margin": {
       "coordinates_per_step": 1,
       "margin_q12": 1,
@@ -174,26 +174,31 @@
     "resumed_from_step": 0,
     "seed": 1,
     "stage_elapsed_ms": {
-      "baseline_panel": 4053.0149570000003,
-      "checkpoint_and_reload": 12.622625,
-      "final_panel": 4076.216639,
-      "final_served_forward_audit": 47.981640999999996,
-      "online_updates": 283.62170399999997,
-      "setup": 4.149815
+      "artifact_publish_and_reload": 16.609738,
+      "baseline_panel": 4055.51461,
+      "checkpoint_and_reload": 12.556458,
+      "final_panel": 4062.1619109999997,
+      "final_served_forward_audit": 34.944472,
+      "gate_evaluation": 0.00524,
+      "post_publish_verification": 0.770527,
+      "setup": 4.692248,
+      "trainer_setup": 10.909049000000001,
+      "training": 284.407095,
+      "unattributed": 0.002084
     },
-    "step_elapsed_ms": 283.62170399999997,
+    "step_elapsed_ms": 282.411256,
     "steps": 16,
-    "steps_per_second": 56.4131721033592,
+    "steps_per_second": 56.654965622191774,
     "target_visits": 16,
-    "target_visits_per_second": 56.4131721033592,
-    "wall_elapsed_ms": 8491.53934
+    "target_visits_per_second": 56.654965622191774,
+    "wall_elapsed_ms": 8482.573432000001
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
   "served_forward_audit": {
     "decision_sha256": "2ac6b0971afe222860453846f286385428bb870e802fccf66a6097965ea1b897",
     "kept_cells_compared": 512,
-    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-100/w8/final.audit.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-worker-budget/deepseek-101/w8/final.audit.json",
     "positions_checked": 64,
     "query_coordinates_compared": 16384,
     "sha256": "4fccc7659f2c73f4e677cb1800b25edea6c55f40b5a69fab47df9ee1a9be6dd5",

@@ -1,5 +1,11 @@
 # REPORT: cpu-training-pilot, deepseek-100
 
+> **Superseded by [deepseek-101](../deepseek-101/REPORT.md).** The fresh
+> exact-head review separated audit computation from publication I/O, made
+> trainer/gate/unattributed stages explicit, strengthened the worker assertion
+> and replaced this report's stale size and timing claims. The worker-budget
+> conclusion remains unchanged.
+
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Base:
@@ -22,8 +28,8 @@ Order: [ORDER.md](ORDER.md). Base:
 - **The first concurrent timing wrapper could not wait on grandchildren.** It
   produced no corpus output. The correction put both jobs inside the timed
   shell; the failed wrapper log is retained.
-- **More cores do not speed up every phase.** Online updates stayed at
-  282-286 ms and the recurrent 64-position audit at 43-50 ms from one through 32
+- **More cores do not speed up every phase.** The training stage stayed at
+  283-288 ms and the recurrent 64-position audit at 35 ms from one through 32
   workers. The wall gain comes from the two independent 1,024-row panels.
 - **More workers are not universally best.** This public panel-heavy corpus
   workload improves through 32 hardware threads, while the earlier synthetic
@@ -44,14 +50,16 @@ artifact format or qualification bar changed.
 The unit adds 34 lines to one code file, including the assertion, plus generated
 and hand-written reports under the task folder. It also adds one notebook row
 and updates the CPU program and roadmap pages with the measured recommendation.
-The total diff is 40 files and 4,402 inserted lines because the retained raw
-JSON, timing logs and test logs account for nearly all of it.
+The initial deepseek-100 implementation commit changed 40 files and inserted
+4,402 lines because the retained raw JSON, timing logs and test logs accounted
+for nearly all of it. The repair re-ran and replaced those readings; the active
+diff size is recorded by deepseek-101.
 
 ## Measurements
 
 Host: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
-Binary SHA-256:
-`18a99d0602bdddda4c3cf97e7eb96112ac73c7d733b52c9e5f41e9fb5a9e55ba`.
+Repaired binary SHA-256:
+`51d6c1b4c543e24bd5bb1b0fa2b769efb1554521891935e4ddba309a17903ffd`.
 Each run started from public dual-c131 artifact seed 1
 `a9df5263…6cfd`, used the same 16 update attempts, trainer seed 1, evaluation
 stride 2, 1,024-row panel cap and checkpoint interval 16:
@@ -66,10 +74,10 @@ reverse order:
 
 | Workers | Forward wall | Reverse wall | Average speedup vs one |
 |---:|---:|---:|---:|
-| 1 | 62.109 s | 62.227 s | 1.000x |
-| 8 | 8.492 s | 8.507 s | 7.315x |
-| 16 | 4.636 s | 4.616 s | 13.439x |
-| 32 | 3.550 s | 3.562 s | 17.483x |
+| 1 | 62.045 s | 62.248 s | 1.000x |
+| 8 | 8.483 s | 8.475 s | 7.330x |
+| 16 | 4.640 s | 4.630 s | 13.409x |
+| 32 | 3.534 s | 3.522 s | 17.616x |
 
 Average process CPU use rose from 99% at one worker to 759-761% at eight,
 1,445-1,447% at 16 and 2,719-2,735% at 32. Peak RSS rose from about 53 MiB to
@@ -82,13 +90,12 @@ final checkpoint
 panel `278 / 384 / 396`, served-forward decision hash
 `2ac6b0971afe222860453846f286385428bb870e802fccf66a6097965ea1b897`,
 and zero query, token or kept-cell mismatches over 262,144 Q12 coordinates and
-8,192 kept cells. The semantic report checksum was
-`cbfa12224b69d507bbf7b8328cb486ff0c86ddd93671994624c1e7cb60d6b1f8`
-after removing worker count, timing, paths and timing-derived throughput.
+8,192 kept cells. The reproducible state-comparison command is in the
+measurements receipt.
 
 Two real artifact seeds also ran as two sequential 32-worker jobs and two
-concurrent 16-worker jobs. Sequential took 6.98 s; concurrent took 6.60 s, a
-5.4% wall reduction. Each seed retained the artifact, checkpoint, panel and
+concurrent 16-worker jobs. Sequential took 7.06 s; concurrent took 6.60 s, a
+6.5% wall reduction. Each seed retained the artifact, checkpoint, panel and
 audit from its sequential counterpart.
 
 The full stage table, commands and raw links are in
@@ -133,5 +140,5 @@ different execution orders. The trained files and every score stayed identical.
 The ordered learning updates and recurrent audit cannot be split without
 changing their meaning, so they stayed near 0.3 seconds and 0.05 seconds.
 For one run, use 32 workers. For two independent artifacts when wall time
-matters, two 16-worker jobs can run together and were 5.4% faster than running
+matters, two 16-worker jobs can run together and were 6.5% faster than running
 two 32-worker jobs one after the other.
