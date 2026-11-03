@@ -1,7 +1,7 @@
 # ORDER: infra-loop-harness, deepseek-106 (finish image-item fidelity)
 
 Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
-Base: `9e0403b13e72cdc9cb840e9b62898ec33e0d614d`.
+Base: `9e0403b132da34752499c657def95dfce3235538`.
 
 ## Goal
 

@@ -8,7 +8,7 @@
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
-`9e0403b13e72cdc9cb840e9b62898ec33e0d614d`.
+`9e0403b132da34752499c657def95dfce3235538`.
 
 ## What did not work, first
 
