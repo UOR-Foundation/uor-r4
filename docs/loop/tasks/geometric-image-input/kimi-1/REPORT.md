@@ -45,6 +45,14 @@ Used the existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f7
 - Final repository gates, local policy, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external records and will be posted only after they exist.
 - Modern Web Guidance `accessibility` informed decorative preview alt text and dynamic error semantics. No Canvas-specific guide matched; existing native Canvas/fetch patterns and live error regions were retained.
 
+## Checks run at the head
+
+The original implementation is committed through `4b54042812f0ac9fbefa0f765dbd43ef61874bb6`; final repair-head identity and all delivery checks are external verification records on the PR. The measured unit/native/Studio/browser/audit results above are actual command output; protected GitHub delivery is not claimed here.
+
+## Skills used
+
+Isolated worktrees, plan execution, test-driven development, systematic debugging, solution integrity, modern web accessibility guidance, integer Rust decomposition, native loopback/OpenAI protocols, plain-JS Canvas composition, and real built-in-browser verification. No GPU, paid compute, production publication, visual-quality evaluation, or model-quality evaluation was used.
+
 ## Still open
 
 - Browser Stop was not retested here. No production publish or visual-understanding/useful-chat claim is made. A future trained multimodal artifact and registered evaluation are required for image question answering.

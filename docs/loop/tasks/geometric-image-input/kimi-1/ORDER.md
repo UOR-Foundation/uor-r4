@@ -1,6 +1,6 @@
 # ORDER: deterministic integer R4 image decomposition and Studio input
 
-Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`.
+Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), with follow-up [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619). Base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`.
 
 ## Goal
 
@@ -14,7 +14,7 @@ Accept pictures in the live Studio only through deterministic integer RGBA decom
 
 - `Cargo.toml`, `Cargo.lock`, `src-tauri/Cargo.lock`, new `crates/uor-r4-vision/**`, and narrow `crates/uor-r4-integer/{Cargo.toml,src/openai.rs,src/loopback.rs,tests/openai_loopback.rs}` changes.
 - `web/studio/index.html`, `index.css`, `README.md`, `assets/js/**`, and focused `src/adapters/**` tests, including new `image_input.js` and its tests.
-- This task folder, `docs/roadmap/items/geometric-image-input.md`, generated roadmap data when produced by a safe sync, `PLAN.md` only if the registered direction changes, and narrow `docs/products/web-client.md` updates.
+- This task folder, `docs/roadmap/items/geometric-image-input.md`, `docs/start/FILEMAP.md`, generated roadmap data when produced by a safe sync, and narrow `docs/products/web-client.md` updates.
 
 ## Done when
 
@@ -28,7 +28,3 @@ Accept pictures in the live Studio only through deterministic integer RGBA decom
 ## Stop and report conditions
 
 Stop before adding an external runtime dependency, changing model/training/tokenizer/artifact semantics, mounting the typed library, weakening loopback admission or request bounds, silently truncating images/canonical context, persisting image blobs or launch tokens, enabling images without the integer decomposition, adding a captioner/semantic label, publishing production, or editing `.github/**`, another lab's files/issues, or the owner checkout. Merge forward from fresh `main`; never force-push. Reuse the existing Rust/npm runtimes and preserve all unique evidence.
-
-## Roadmap sync ruling
-
-The global `roadmap sync --apply` dry run proposed creating this item plus updating #3506, #3407, #3392 and the M7 checklist. To avoid unrelated remote writes, #3619 was created directly with the normal roadmap labels/milestone and `roadmap:id` marker. Generated `issues.json`/README mapping is left for a maintainer-scoped sync; no generated file was hand-edited.
