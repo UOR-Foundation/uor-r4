@@ -42,6 +42,14 @@ ready for a useful-chat demonstration; it does not change this item's status or
 replace the served-training comparison above. Full transcripts and pins:
 [public-chat post-smoke baseline](../../labs/one-model-end-to-end/public-chat-post-smoke-2026-11-02/README.md).
 
+The CPU-only `m2-evidence` lane now executes the public trained 19-table M1
+artifact through the independent `CpuDiscreteTrunkReader`. On its existing
+616-target public panel it checked all 19,712 Q12 query coordinates and all
+complete admitted-cell, top-8 and token decisions with zero mismatches. This
+closes the earlier full-CPU-trunk query gap in the evidence instrument; it is
+not a training, complete-reply, fresh-phrasing or GPU-qualification result.
+See [deepseek-11](../../loop/tasks/one-model-end-to-end/deepseek-11/REPORT.md).
+
 ## What is missing
 
 - **Served-surrogate training is repaired; it now passes the operational
@@ -66,7 +74,12 @@ replace the served-training comparison above. Full transcripts and pins:
   the repair. The float side's turn memory
   is not needed to explain the gap: float first tokens with and without
   memory differ on 3 and 0 prompts. The integer memory path is unchecked.
-  The fault must be localized to one layer and repaired before the
+  [claude-264](../../loop/tasks/one-model-end-to-end/claude-264/REPORT.md)
+  made the float served forward round every FBS projection to 2^-16, as the
+  integer session does. The misses fell only to 100 and 131. Some matches broke
+  as well as others being made. That fits other unmatched roundings,
+  an inexact match of this one, or run-to-run variation in the scorer, and the
+  unit does not separate them. The remaining sites must be matched before the
   full-length served run, whose sheet is FIT and whose pre-run review passed.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
