@@ -4,7 +4,7 @@
   "qualification": "gpu-required",
   "scope": "Zero-step public artifact promotion through the full served-forward audit; no training or capability claim.",
   "source_commit": "08213d45b",
-  "driver_sha256": "413dc8d6b83da0d8ae9cddd57e2f2c5c725583fd4409b50bd0350bbedb24da85",
+  "driver_sha256": "f678c238b7f4039596815603237a8e6f04de0d7dbee2bf9104e14e7892cba426",
   "inputs": {
     "artifact_sha256": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd",
     "tokens_sha256": "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b",

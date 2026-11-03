@@ -631,38 +631,40 @@ fn write_verified_artifact(
     }
 
     let partial = path.with_extension("partial");
-    let mut file = std::fs::File::create(&partial)
-        .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
-    file.write_all(artifact)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
-    drop(file);
     let audit_partial = audit_path.with_extension("partial");
-    let mut audit_file = std::fs::File::create(&audit_partial)
-        .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
-    audit_file
-        .write_all(&audit_bytes)
-        .and_then(|()| audit_file.sync_all())
-        .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
-    drop(audit_file);
-    std::fs::rename(&audit_partial, &audit_path)
-        .map_err(|error| format!("final audit {}: {error}", audit_path.display()))?;
-    if let Err(error) = std::fs::rename(&partial, path) {
-        let _ = std::fs::remove_file(&audit_path);
-        return Err(format!("final artifact {}: {error}", path.display()));
+    let published = (|| {
+        let mut file = std::fs::File::create(&partial)
+            .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
+        file.write_all(artifact)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
+        drop(file);
+        let mut audit_file = std::fs::File::create(&audit_partial)
+            .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
+        audit_file
+            .write_all(&audit_bytes)
+            .and_then(|()| audit_file.sync_all())
+            .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
+        drop(audit_file);
+        std::fs::rename(&audit_partial, &audit_path)
+            .map_err(|error| format!("final audit {}: {error}", audit_path.display()))?;
+        std::fs::rename(&partial, path)
+            .map_err(|error| format!("final artifact {}: {error}", path.display()))?;
+        let reloaded = std::fs::read(path)
+            .map_err(|error| format!("final artifact reload {}: {error}", path.display()))?;
+        let audit_reloaded = std::fs::read(&audit_path)
+            .map_err(|error| format!("final audit reload {}: {error}", audit_path.display()))?;
+        if reloaded != artifact || audit_reloaded != audit_bytes {
+            return Err("final artifact or served-forward audit reload differs".to_owned());
+        }
+        Ok((audit_path.clone(), audit, audit_sha256))
+    })();
+    if published.is_err() {
+        for failed in [&partial, &audit_partial, path, &audit_path] {
+            let _ = std::fs::remove_file(failed);
+        }
     }
-    let reloaded = std::fs::read(path)
-        .map_err(|error| format!("final artifact reload {}: {error}", path.display()))?;
-    let audit_reloaded = std::fs::read(&audit_path)
-        .map_err(|error| format!("final audit reload {}: {error}", audit_path.display()))?;
-    if reloaded != artifact || audit_reloaded != audit_bytes {
-        std::fs::remove_file(path)
-            .map_err(|error| format!("failed final artifact {}: {error}", path.display()))?;
-        std::fs::remove_file(&audit_path)
-            .map_err(|error| format!("failed final audit {}: {error}", audit_path.display()))?;
-        return Err("final artifact or served-forward audit reload differs".to_owned());
-    }
-    Ok((audit_path, audit, audit_sha256))
+    published
 }
 
 fn panel_json(reading: &uor_r4_cpu_train::PanelReading) -> serde_json::Value {

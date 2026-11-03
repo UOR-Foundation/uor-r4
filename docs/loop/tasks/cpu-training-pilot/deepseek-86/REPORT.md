@@ -51,9 +51,9 @@ The public seed-1 zero-step smoke used the unchanged artifact:
   `0175e1c6c6bd7bc3100ff8403a8b048edaf9de4edc89873f90f26acc2070973e`;
 - 64-row panel gate: accepted, unchanged from source.
 
-The smoke took 29.235 seconds wall time and used 54,128 KiB peak RSS. The
+The smoke took 29.695 seconds wall time and used 54,068 KiB peak RSS. The
 driver binary SHA-256 was
-`413dc8d6b83da0d8ae9cddd57e2f2c5c725583fd4409b50bd0350bbedb24da85`.
+`f678c238b7f4039596815603237a8e6f04de0d7dbee2bf9104e14e7892cba426`.
 The full evidence is in
 [public-seed-1-zero-step-smoke.json](evidence/public-seed-1-zero-step-smoke.json)
 and [public-seed-1-final.audit.json](evidence/public-seed-1-final.audit.json).
