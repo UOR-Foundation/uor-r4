@@ -1,8 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-91
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
-(#3506). Base: `d1d465eaeea0063cf83c3bd3260659a6ebf3f976`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `d1d465eaeea0063cf83c3bd3260659a6ebf3f976`.
 
 ## Goal
 
