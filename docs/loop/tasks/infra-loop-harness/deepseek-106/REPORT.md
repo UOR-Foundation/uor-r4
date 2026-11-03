@@ -1,5 +1,9 @@
 # REPORT: image-item record fidelity, deepseek-106
 
+> **Superseded by [deepseek-107](../deepseek-107/REPORT.md).** A final review
+> found that this report described the following commit as receipts-only even
+> though that commit also updated this report's size line.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
