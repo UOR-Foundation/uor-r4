@@ -22,20 +22,23 @@ Order: [ORDER.md](ORDER.md). Base: `a9d0461e2`.
   GPU-only.
 - **The power interruption lost the original local profiling context.** The
   probe was rebuilt from the pinned source; no prior measurement was reused.
+- **The first exact-head review requested changes.** It found that the item
+  could select activation or table-copy repairs after profiling but did not
+  scope their source files, and that its rerun condition did not require
+  passing the doors. deepseek-79 repairs both.
 
 ## What changed
 
-This registration unit adds one roadmap item and one ORDER. It does not change
-serving code, an artifact, a model, an acceptance bar, or Claude's active
-copy-key branch.
+This registration unit adds one roadmap item, two ORDERs, this REPORT, and the
+shared claim entry that records the branch. It does not change serving code, an
+artifact, a model, an acceptance bar, or Claude's active copy-key branch.
 
 The item's first implementation scope is the integer snapshot quantizer. That
 path runs on every `--train-as-served 1` step but does not overlap PR #3583's
 batched-scorer files.
 
-Size: 2 code/test files changed by this registration (one roadmap item, one
-ORDER), 58 lines in the ORDER commit; the REPORT is documentation. No size
-estimate overrun.
+Size: 5 changed files, 279 insertions, 0 deletions at the repair commit; four
+documentation records and one shared claim entry. No code or tests changed.
 
 ## Measurements
 
@@ -54,8 +57,11 @@ stage attribution or an operational-door pass.
 ## Checks run at the head
 
 - `cargo run --locked -p xtask -- roadmap check`: 135 items OK.
-- `git diff --check`: passed before the ORDER commit.
+- `git diff --check origin/main...HEAD`: passed.
 - Host Rust/Candle probe: forward and straight-through controls passed.
+- Remote CI: 10 checks passed; 13 path-appropriate checks skipped.
+- `uor-harness check`: exit 0 with no errors; repository-wide advisory warnings
+  did not name the changed files.
 - Full CUDA profile and four-job rerun: `NOT_RUN` on this host.
 
 ## Skills used

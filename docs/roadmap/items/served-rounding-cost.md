@@ -9,7 +9,7 @@ needs_gpu: true
 depends_on: []
 notebook: docs/research/notebook/m4-serving.md
 done_class: gpu
-scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, docs/harness/prep/served-rounding-cost*, docs/loop/tasks/served-rounding-cost/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/served-rounding-cost.md]
+scope: [crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/in_space_long.rs, docs/harness/prep/served-rounding-cost*, docs/loop/tasks/served-rounding-cost/**, docs/research/notebook/m4-serving.md, docs/roadmap/items/served-rounding-cost.md]
 ---
 
 ## Why it matters
@@ -51,9 +51,12 @@ stand in for GPU profiling.
    every grid code and adjacent value, every activation threshold and adjacent
    value, and the straight-through gradient at every in-range and saturated
    boundary.
-3. The original four-job comparison is rerun unchanged at the same 256 steps:
-   two seeds, plain against served, with the same instrument, 2x operational,
-   and quality-smoke doors.
+3. The repaired configuration passes the original four-job comparison unchanged
+   at the same 256 steps. Both seeds must pass the instrument door and complete
+   served training in at most 2x plain training; the registered two-seed
+   quality-smoke rule must not find served materially below plain. A still-slow
+   or materially lower-quality rerun records a negative and leaves this item
+   open.
 4. The dossier includes source and binary hashes, every data pin, per-stage
    timings, checkpoint hashes, and the sealed artifact checksum.
 
