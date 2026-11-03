@@ -1,5 +1,10 @@
 # REPORT: studio-conversational-composer, deepseek-1
 
+> **Superseded by [deepseek-2](../deepseek-2/REPORT.md).** A fresh review found
+> that the first regression test did not observe callback counts and that the
+> Node environment note conflated the CLI global with the test runner's default
+> WebCrypto exposure. The production mixed-paste behavior was accepted.
+
 Lab: deepseek. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
@@ -11,9 +16,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - **The existing browser-oriented test covered only one channel at a time.** It
   tested a file-only paste as prevented and a text-only paste as native, but not
   a single event carrying both.
-- **The plain Node package check is not a complete Studio run.** It passed 28 of
-  30 tests; the two failures are unrelated environment limits because Node
-  18.19.1 has no browser `crypto` or `File` globals for `model_sources.test.mjs`.
+- **The plain Node package check is not a complete Studio run.** Its test-runner
+  child reports `crypto` and `File` as undefined for `model_sources.test.mjs`
+  even though the Node 18.19.1 CLI exposes `globalThis.crypto`. The explicit
+  `NODE_OPTIONS=--experimental-global-webcrypto` flag fixes the crypto case;
+  browser `File` remains unavailable.
 - **`npm`, Vitest and the browser flow could not be rerun on this machine.**
   `npm` is not installed and `web/studio/node_modules` is absent. The focused
   behavior is covered by a dependency-free Node test; the complete Studio suite
@@ -27,16 +34,17 @@ paste carrying files still calls the attachment callback, and mixed paste lets
 the browser insert its text normally at the caret.
 
 The change is four added and two removed lines in the controller. A new
-51-line plain-Node test covers mixed, file-only and text-only paste. The task
-report and item note are documentation; retained focused/broader test output,
-syntax checks and diff checks are generated evidence.
+65-line plain-Node test covers mixed, file-only and text-only paste with
+explicit attachment and send invocation counters. The task report and item note
+are documentation; retained focused/broader test output, syntax checks and diff
+checks are generated evidence.
 
 ## Measurements
 
-- `node --test web/studio/assets/js/composer_input.test.mjs`: **2 passed, 0
+- `node --test web/studio/assets/js/composer_input.test.mjs`: **3 passed, 0
   failed**.
-- `node --test web/studio/assets/js/*.test.mjs`: **28 passed, 2 failed**. Both
-  failures are the environment limitations named above; all 28 tests outside
+- `node --test web/studio/assets/js/*.test.mjs`: **29 passed, 2 failed**. Both
+  failures are the environment limitations named above; all 29 tests outside
   those missing browser globals passed.
 - Mixed paste: attachment callback received the file and `defaultPrevented`
   stayed false.
@@ -47,8 +55,11 @@ syntax checks and diff checks are generated evidence.
 ## Checks run at the head
 
 - `node --test web/studio/assets/js/composer_input.test.mjs`: PASS.
-- `node --test web/studio/assets/js/*.test.mjs`: 28 PASS / 2 environment
+- `node --test web/studio/assets/js/*.test.mjs`: 29 PASS / 2 environment
   failures.
+- `NODE_OPTIONS=--experimental-global-webcrypto node --test
+  --test-name-pattern='published loads forward operation metadata'
+  web/studio/assets/js/model_sources.test.mjs`: 1 PASS.
 - `node --check web/studio/assets/js/composer_input.js`: PASS.
 - `node --check web/studio/assets/js/composer_input.test.mjs`: PASS.
 - `git diff --check`: PASS.

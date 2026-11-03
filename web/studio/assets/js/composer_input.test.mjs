@@ -12,11 +12,16 @@ function setup() {
         textarea.selectionEnd = end;
     };
     const files = [];
+    const calls = { files: 0, sends: 0 };
     createComposerInput({
         textarea,
-        onFiles: (value) => files.push(...value),
+        onSend: () => { calls.sends += 1; },
+        onFiles: (value) => {
+            calls.files += 1;
+            files.push(...value);
+        },
     });
-    return { textarea, files };
+    return { textarea, files, calls };
 }
 
 function paste(textarea, files, text = '') {
@@ -32,20 +37,29 @@ function paste(textarea, files, text = '') {
 }
 
 test('mixed clipboard paste attaches the file and leaves its text native', () => {
-    const { textarea, files } = setup();
+    const { textarea, files, calls } = setup();
     const file = { name: 'note.txt', type: 'text/plain', size: 8 };
     const event = paste(textarea, [file], 'visible text');
     assert.equal(event.defaultPrevented, false);
     assert.deepEqual(files, [file]);
+    assert.equal(calls.files, 1);
+    assert.equal(calls.sends, 0);
 });
 
-test('file-only paste remains prevented while text-only paste stays native', () => {
-    const { textarea, files } = setup();
+test('file-only paste remains prevented and attached without sending', () => {
+    const { textarea, files, calls } = setup();
     const file = { name: 'note.txt', type: 'text/plain', size: 8 };
     assert.equal(paste(textarea, [file]).defaultPrevented, true);
     assert.deepEqual(files, [file]);
+    assert.equal(calls.files, 1);
+    assert.equal(calls.sends, 0);
+});
 
+test('text-only paste remains native without attachment or send callbacks', () => {
+    const { textarea, files, calls } = setup();
     const textOnly = paste(textarea, [], 'text only');
     assert.equal(textOnly.defaultPrevented, false);
-    assert.deepEqual(files, [file]);
+    assert.deepEqual(files, []);
+    assert.equal(calls.files, 0);
+    assert.equal(calls.sends, 0);
 });
