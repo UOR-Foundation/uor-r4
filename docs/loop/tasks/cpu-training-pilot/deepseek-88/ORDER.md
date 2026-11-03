@@ -21,6 +21,7 @@ not hold out or report an evaluation panel. The unit stands.
 
 - `crates/uor-r4-cpu-train/src/discrete_route.rs`
 - `crates/uor-r4-cpu-train/src/bin/cpu-discrete-corpus-driver.rs`
+- `crates/uor-r4-cpu-train/src/lib.rs`
 - `docs/harness/prep/cpu-training-pilot-discrete-k1-k4-2026-11-03.md`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-88/**`
 - `docs/research/notebook/cpu-training.md`
