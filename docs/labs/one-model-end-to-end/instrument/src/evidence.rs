@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uor_r4_cpu_train::{
-    ABSENT_CELL, CpuDiscreteProposalSample, CpuDiscreteProposalScorer, CpuDiscreteTrunkReader,
-    CpuWriterCore, READ_WIDTH, VOCABULARY,
+    CpuDiscreteProposalSample, CpuDiscreteProposalScorer, CpuDiscreteTrunkReader, CpuWriterCore,
+    ABSENT_CELL, READ_WIDTH, VOCABULARY,
 };
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 use uor_r4_tokenizer::ByteBpeTokenizer;
@@ -1854,11 +1854,9 @@ mod tests {
         let directory = TempDir::new("tokenizer-no-vocab");
         let path = directory.0.join("tokenizer.json");
         fs::write(&path, br#"{"model":{}}"#).unwrap();
-        assert!(
-            read_tokenizer(&path)
-                .unwrap_err()
-                .contains("supported byte-level BPE")
-        );
+        assert!(read_tokenizer(&path)
+            .unwrap_err()
+            .contains("supported byte-level BPE"));
 
         let (_directory, tokenizer) = written_tokenizer("tokenizer-binding");
         let mut panel = corpus(&[0, 10, 11, 20, 21], &[0, 0, 0, 1, 1]);
@@ -1893,33 +1891,25 @@ mod tests {
             serde_json::from_slice(&fs::read(&files.manifest).unwrap()).unwrap();
         manifest["mask_sha256"] = serde_json::json!("00".repeat(32));
         fs::write(&files.manifest, serde_json::to_vec(&manifest).unwrap()).unwrap();
-        assert!(
-            read_corpus(&files, 8, 4096, 0)
-                .unwrap_err()
-                .contains("manifest identity")
-        );
+        assert!(read_corpus(&files, 8, 4096, 0)
+            .unwrap_err()
+            .contains("manifest identity"));
     }
 
     #[test]
     fn vocabulary_bos_and_empty_response_inputs_fail_closed() {
         let (_directory, files) = written_corpus("artifact-mismatch", &[0, 10, 20], &[0, 0, 1]);
-        assert!(
-            read_corpus(&files, 8, 4097, 0)
-                .unwrap_err()
-                .contains("vocabulary/BOS")
-        );
-        assert!(
-            read_corpus(&files, 8, 4096, 1)
-                .unwrap_err()
-                .contains("vocabulary/BOS")
-        );
+        assert!(read_corpus(&files, 8, 4097, 0)
+            .unwrap_err()
+            .contains("vocabulary/BOS"));
+        assert!(read_corpus(&files, 8, 4096, 1)
+            .unwrap_err()
+            .contains("vocabulary/BOS"));
 
         let (_directory, empty) = written_corpus("empty-response", &[0, 10], &[0, 0]);
-        assert!(
-            read_corpus(&empty, 8, 4096, 0)
-                .unwrap_err()
-                .contains("no response")
-        );
+        assert!(read_corpus(&empty, 8, 4096, 0)
+            .unwrap_err()
+            .contains("no response"));
         assert!(evenly_cap((0..10).collect::<Vec<_>>(), Some(0)).is_empty());
         assert!(codebook_from_artifact(b"not-an-artifact").is_err());
     }
@@ -2037,11 +2027,9 @@ mod tests {
         let panel = corpus(&[0, 10, 11, 2, 3, 4, 5, 6], &[0, 0, 0, 1, 1, 1, 1, 1]);
         let (_directory, tokenizer) = written_tokenizer_with_eos("tokenizer-without-eos", None);
         assert_eq!(tokenizer.identity.eos_id, None);
-        assert!(
-            generate_replies(&panel, None, &tokenizer, 32, 2, |_| Ok(2))
-                .unwrap_err()
-                .contains("require a tokenizer added <|eos|>")
-        );
+        assert!(generate_replies(&panel, None, &tokenizer, 32, 2, |_| Ok(2))
+            .unwrap_err()
+            .contains("require a tokenizer added <|eos|>"));
     }
 
     #[test]
@@ -2066,29 +2054,31 @@ mod tests {
         };
 
         let four = identity("uor-r4.lut-discrete/1", 4);
-        assert!(
-            observe_cpu_engine_parity(&four, b"not-an-artifact", std::slice::from_ref(&target))
-                .unwrap_err()
-                .contains("independent CPU discrete engine")
-        );
+        assert!(observe_cpu_engine_parity(
+            &four,
+            b"not-an-artifact",
+            std::slice::from_ref(&target)
+        )
+        .unwrap_err()
+        .contains("independent CPU discrete engine"));
 
         let trunk = identity("uor-r4.lut-discrete-trunk/1", 19);
-        assert!(
-            observe_cpu_engine_parity(&trunk, b"not-an-artifact", std::slice::from_ref(&target))
-                .unwrap_err()
-                .contains("independent CPU discrete trunk")
-        );
+        assert!(observe_cpu_engine_parity(
+            &trunk,
+            b"not-an-artifact",
+            std::slice::from_ref(&target)
+        )
+        .unwrap_err()
+        .contains("independent CPU discrete trunk"));
 
         let unsupported = identity("uor-r4.lut-discrete/2", 7);
         let unavailable =
             observe_cpu_engine_parity(&unsupported, b"not-an-artifact", &[target]).unwrap();
-        assert!(
-            unavailable
-                .unavailable
-                .as_deref()
-                .unwrap()
-                .contains("four-table and 19-table")
-        );
+        assert!(unavailable
+            .unavailable
+            .as_deref()
+            .unwrap()
+            .contains("four-table and 19-table"));
     }
 
     #[test]
