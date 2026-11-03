@@ -2,7 +2,7 @@
 
 **Status:** REGISTERED (claude-262, [ORDER](../../loop/tasks/one-model-end-to-end/claude-262/ORDER.md), PR #3587).
 
-TEST FITNESS: pending
+TEST FITNESS: FIT (see Verdict)
 
 ## Question
 
@@ -40,7 +40,9 @@ deepseek-5's pins, unchanged:
 - DEV mask `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`.
 - Tokenizer `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
 
-A data hash that does not match stops the run.
+On the pod the data root is staged from the HF store with
+`/root/uor-store get w2-inputs/2026-10-25/ /workspace`, and the five files' SHA-256 are checked
+against these pins before the first job. A data hash that does not match stops the run.
 
 ## Steps
 
@@ -159,4 +161,35 @@ claude-261's pods (`vast-58896165`, `vast-58912154`) are not touched.
 
 ## Verdict
 
-(pending a fresh non-author review)
+TEST FITNESS: FIT [claude] — two fresh non-author review rounds.
+
+- **Round 1** (sheet SHA-256 `a67d1555…6896c6`): NOT FIT, on one BLOCKER. The negative gate set aside
+  the old tensor body, whose f64 constants fail on f32 input with a dtype error before any assertion,
+  so the gate could not tell a right fix from a wrong one. Everything else was FIT: the profile window
+  (8 + 2·16 = 40 steps), the `served.round`/`served.restore` stages, R's recipe, data pins, bar and
+  evaluation step identical to deepseek-5's, the cost cap, no banned technique.
+- **Round 2** (sheet SHA-256 `ec6bd88d…96f2`): FIT. The pinned patch removes only the exponent and
+  keeps the input's dtype. With it, the reference test's edge rows still agree bit for bit and the
+  realistic row fails its named assertion. Both host tests fail on `assert_eq!` lines. Whether the
+  model-level test fails is decided on the pod, and a pass there stops the run at I-0, so it cannot
+  give a false pass. If a repair touches lines 669–712 of `hamilton_sheet.rs`, the patch is made
+  again and its hash pinned again before I-0 reruns.
+
+PRE-RUN: PASS [claude] — fresh adversarial review under D67 at `43ca02940`:
+- *chain:* Casey's 2 Nov chat-model goal, every path model trains as served, and deepseek-10's
+  decision names this unit next;
+- *mechanism and tools present:* the fix, the three CUDA tests and the stack test are at the head, as
+  are both binaries, every flag, the data pins equal to `PINNED_*`, the store route for the data and the
+  patch hash; there is no checkpoint input;
+- *every outcome changes the next step:* a pass opens longer served runs; an I-0 fail reclassifies the
+  cause; an operational fail comes with the stage profile; a quality fail starts the surrogate
+  isolation;
+- *caps:* 3 pods, $1.68/h, two GPU-hours at most.
+
+Two notes were taken:
+- the staging command is now written out above;
+- main registered `served-rounding-cost` (#3586) after this unit's base. Its host probe puts most of
+  the served step's cost in per-step `grid_code` and host table copies (`fbs_export`), with about 2% in
+  the 49-pass loop, so the operational door may fail again at this head. Step P's GPU profile is that
+  item's first deliverable. A repair of `fbs_export` is that item's unit, not this lease's, and the
+  REPORT records the overlap.
