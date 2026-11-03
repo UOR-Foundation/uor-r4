@@ -99,6 +99,9 @@ changes the file hash without changing its bar, inputs or claim boundary.
 - JSON parsing for both seed reports, the comparison and the claims ledger: passed.
 - `sha256sum -c SHA256SUMS`: all three evidence files passed.
 - Both registered seeds exited zero with exact complete CPU/serving parity.
+- `uor-harness loop report --check --order …/deepseek-96/ORDER.md`: PASS.
+- `uor-harness loop pr-check --local`: PASS, with advisory D76 warnings only for
+  the branch claim file's item scope and pre-existing stale FILEMAP rows.
 
 ## Skills used
 
