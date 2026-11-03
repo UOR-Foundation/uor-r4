@@ -322,4 +322,42 @@ describe('overlay and view-state coordination', () => {
         expect(document.activeElement).toBe(document.querySelector('.conv-rename'));
         expect(document.querySelectorAll('.conv-rename')).toHaveLength(1);
     });
+
+    it('blocks navigation shortcuts while session or template menus own focus', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        const build = document.createElement('button');
+        build.id = 'btnBuildTask';
+        document.body.appendChild(build);
+        const templates = document.createElement('div');
+        templates.id = 'templateMenu';
+        templates.hidden = true;
+        templates.innerHTML = '<button type="button">Template</button>';
+        document.body.appendChild(templates);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        document.body.dataset.section = 'agent';
+        document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!.click();
+        const sessionFirst = document.querySelector<HTMLButtonElement>('.session-popover-item')!;
+        for (const key of ['2', 'b']) {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key, metaKey: true, bubbles: true, cancelable: true }));
+            expect(document.body.dataset.section).toBe('agent');
+            expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
+            expect(document.activeElement).toBe(sessionFirst);
+        }
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        build.click();
+        const templateFirst = templates.querySelector('button')!;
+        for (const key of ['2', 'b']) {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key, metaKey: true, bubbles: true, cancelable: true }));
+            expect(document.body.dataset.section).toBe('agent');
+            expect(document.getElementById('app')!.getAttribute('data-nav')).toBe('collapsed');
+            expect(document.activeElement).toBe(templateFirst);
+        }
+    });
 });

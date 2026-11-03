@@ -992,7 +992,8 @@
             var meta = event.metaKey || event.ctrlKey;
             var target = event.target;
             var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
-            var overlayActive = paletteOpen || document.querySelector('.modal-backdrop:not([hidden])');
+            var templateMenuState = document.getElementById('templateMenu');
+            var overlayActive = paletteOpen || sessionPopover || (templateMenuState && !templateMenuState.hidden) || document.querySelector('.modal-backdrop:not([hidden])');
             if (overlayActive && meta && ['1', '2', '3', '4', 'b', 'B', 'i', 'I'].indexOf(event.key) >= 0) { event.preventDefault(); return; }
             if (meta && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); if (paletteOpen) closePalette(); else openPalette(); return; }
             if (meta && event.key === ',') { event.preventDefault(); openSettings(); return; }
