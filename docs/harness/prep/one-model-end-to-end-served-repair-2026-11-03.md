@@ -323,3 +323,65 @@ round 3, which then passed:
 
 Its condition that the dry run be redone at the repair head was met by step P there: the inspect of
 the rounded copy read [8, 16, 0, 476], the run's own step-40 line.
+
+## Run result
+
+[claude] On `vast-58920706` (RTX 5090), with binaries built at `4465685531`, from R's head `b15b653b7`,
+which differs from it in the sheet only.
+
+**I-0 at `4465685531`: PASS.**
+- 290 CUDA library tests passed (7 ignored), with the three named tests and
+  `icosian_scores_are_the_four_axis_sum_on_cuda`.
+- With the pinned patch, the first test failed on "0.3 reached the weight after it as 0" and the
+  third on "layers.00.mlp.down.spiralcore_fbs: gradient norm 0.023247106 as served against
+  0.0027099452 plain".
+- Restored, all three passed, the binaries were byte-identical, and all five data pins matched.
+
+**P at `4465685531`.** Served 167.5 ms against 90.5 ms plain (1.85×). Per stage:
+- each recurrence 3.50 ms (0.57 plain), each MLP 2.48 ms (0.18 plain);
+- `backward` 84.0 ms (53.6 plain), `served.round` 14.6 ms.
+
+No stage adds a plain step, so R ran at this head. The 40-step served checkpoint is byte-identical
+in all five files to the one at `3980925d1`, before the scoring repair. The dry run's instrument check
+passed: [8, 16, 0, 476] from the run, the same from `--inspect`.
+
+**R.** All four jobs and every evaluation command exited 0, and `DONE` was written at 05:56:50Z. The
+first attempt stopped after plain/s1 on the wrapper's own null check: step 0's training loss is null
+by design. The check was repaired to require a number after step 0, and all four jobs reran. plain/s1's
+step-256 line was the same in both attempts.
+
+| Seed | Mode | Wall s | Train s | Context tok/s | Evaluator top-1 | Nearest | Openings | Admitted |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | plain | 52 | 23.24 | 33,838 | 40 | 239 | 27 | 445 |
+| 1 | served | 93 | 43.02 | 18,282 | 53 | 305 | 9 | 491 |
+| 2 | plain | 51 | 23.26 | 33,807 | 43 | 248 | 35 | 436 |
+| 2 | served | 94 | 43.11 | 18,243 | 67 | 357 | 17 | 490 |
+
+The evaluator columns are `--inspect --served-forward 1` on each rounded copy. Decode through the
+served evaluator, 48 tokens, read 93.2–93.9, 87.0–88.5 and 85.4–86.0 tok/s at contexts 16, 64 and 192
+across the four checkpoints.
+
+- **Instrument door: PASS.** All four runs are finite and load through the served evaluator. Both
+  served checkpoints are byte-identical after `--round-as-exported`: the round adds only its marker.
+  Four of five files change for each plain checkpoint. Each served run's own step-256 DEV line equals
+  its evaluator reading on the rounded copy: [53, 305, 9, 491] and [67, 357, 17, 490]. A plain run's
+  does not: [41, 359, 52, 404] and [86, 422, 43, 471] before the round.
+- **Operational door: PASS.** Served took 1.79× plain wall time at seed 1 and 1.84× at seed 2, and
+  1.85× plain training time at both (bar 2×).
+- **Quality smoke: INCONCLUSIVE, with served above plain.** Served minus plain is +13 at seed 1 and
+  +24 at seed 2, against a band of max(24, two-seed spread 11) = 24. Served is not below plain on
+  either seed. Plain is below served by the band on seed 2 only.
+- **Unit reading: the repair holds.** I-0 passed, both doors passed, and served is not materially
+  below plain. Against deepseek-5's run, DEV nearest went from 23 / 20 to 305 / 357 served, beside
+  225 / 229 → 239 / 248 plain. Served openings stay below plain: 9 / 17 against 27 / 35.
+
+**S.** The seal is at `results/claude/one-model-end-to-end-served-repair-2026-11-03/` in the HF store:
+- `claude-262.tar` (206 MB, 175 members), SHA-256 `d04505ac64af7c9f37c60c1e26b00943cad16b3bd36aebde37541da8cabb00e3`;
+- `MEMBERS.sha256` `a698f9a3…65ff`, the hash of each member;
+- `SHA256SUMS`.
+
+It holds the logs, job logs, progress, configs, `profile.json` files, binary, data and copy hashes,
+and R's four step-256 checkpoints. It was read back and checked against `SHA256SUMS` before `down`.
+
+The lease was released and `vast-58920706` destroyed at 05:59:21Z, after about 57 minutes (about
+$0.54). claude-261's pod was not touched.
