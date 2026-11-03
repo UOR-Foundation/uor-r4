@@ -170,34 +170,51 @@ what runs next. Neither changes the question, the data, R's training recipe, the
 rule.
 
 **Step P's profile.** 16 profiled steps of 40; each run's stages sum to its unprofiled median within
-0.2%.
+0.7%. The third column is step P again after the first repair below; its plain run read 90.1 ms.
 
-| Stage (median) | plain, seed 1 | served, seed 1 |
-|---|---:|---:|
-| Step, unprofiled | 90.2 ms | 682.9 ms (7.57×) |
-| `served.round` | — | 14.5 ms |
-| Each layer's recurrence | 0.57 ms | 26.9 ms |
-| Each layer's MLP | 0.18 ms | 20.0 ms |
-| `backward` | 53.6 ms | 353.2 ms |
-| `layer1.hamming_read`, `readout.hamming`, `objective.table_search` | 8.1, 8.1, 12.8 ms | 8.6, 8.5, 12.8 ms |
+| Stage (median) | plain, `753e08d7b` | served, `753e08d7b` | served, `3980925d1` |
+|---|---:|---:|---:|
+| Step, unprofiled | 90.2 ms | 682.9 ms (7.57×) | 657.4 ms (7.29×) |
+| `served.round` | — | 14.5 ms | 14.5 ms |
+| Each layer's recurrence | 0.57 ms | 26.9 ms | 25.5 ms |
+| Each layer's MLP | 0.18 ms | 20.0 ms | 19.0 ms |
+| `backward` | 53.6 ms | 353.2 ms | 338.3 ms |
+| `layer1.hamming_read`, `readout.hamming`, `objective.table_search` | 8.1, 8.1, 12.8 ms | 8.6, 8.5, 12.8 ms | 8.2, 8.2, 12.8 ms |
 
-The backward alone adds 299.6 ms, 3.3 plain steps; the six recurrence and six MLP stages add 277 ms
-together. Export rounding (`served.round`, 0.16 of a plain step) is not the cost, so this is not the
-host-copy cause that `served-rounding-cost` (#3586) probed.
+At `753e08d7b` the backward alone adds 299.6 ms, 3.3 plain steps; the six recurrence and six MLP
+stages add 277 ms together. Export rounding (`served.round`, 0.16 of a plain step) is not the cost,
+so this is not the host-copy cause that `served-rounding-cost` (#3586) probed.
 
-**Named cause.** In the D11 mode every Hamilton gate runs the icosian-hard arm, which snaps each
-4-block to its nearest icosian (`icosian_snap_cuda_tensor` in `hamilton_sheet.rs`) in passes of
-8,192 blocks, about ten candle operations a pass. At batch 16 a recurrence makes two snaps (the
-transition and the output gate, 24 + 24 passes) and an MLP one (36 passes), and the icosian-hard
-backward snaps each gate again. The stage times follow the pass counts: 26.9 / 20.0 = 1.35 against
-48 / 36 = 1.33, about 0.56 ms a pass. The cause is read from these proportions, not timed on its
-own; step P at the new head tests it.
+**A first repair, refuted.** In the D11 mode every Hamilton gate runs the icosian-hard arm, which
+snaps each 4-block to its nearest icosian (`icosian_snap_cuda_tensor` in `hamilton_sheet.rs`), then
+in passes of 8,192 blocks. At batch 16 a recurrence makes two snaps (the transition and the output
+gate, 24 + 24 passes) and an MLP one (36 passes), and the icosian-hard backward snaps each gate
+again. The stage times followed the pass counts (26.9 / 20.0 = 1.35 against 48 / 36 = 1.33), so
+`3980925d1` snapped in passes of 2^18 blocks, two passes per stage, with a CUDA test holding the
+roots bit for bit against 8,192-block passes. I-0 passed at `3980925d1`. Step P there refuted the
+cause: the passes fell from 48 and 36 to 2 and 2, but the stages fell by only 5% (third column).
+At a fixed pass size the pass count and the block count grow together, so the proportion could not
+tell a cost per pass from a cost per block.
 
-**Repair, in the ORDER's files.** `3980925d1` snaps in passes of 2^18 blocks (`SNAP_PASS_BLOCKS`,
-about 0.5 GB a pass). Every step of the snap is per block, so no root changes. A new CUDA test,
-`icosian_snap_pass_size_changes_only_its_cost_on_cuda`, holds the roots bit for bit against
-8,192-block passes on a batch-16 gate (spread, zero, −0.0 and exactly tied blocks), and fails at
-8,192, where that gate takes 36 passes. The repair does not touch lines 669–712, so
+**Named cause.** Each pass scored its blocks against the 120 roots as a `(len, 120, 4)` product
+summed over the 4-axis. candle 0.9.2's CUDA `sum`
+(`third_party/candle-core-0.9.2/src/cuda_backend/mod.rs` lines 320–335, kernel `fast_sum`) launches
+one GPU block per output value, with `next_power_of_two(min(1024, values summed))` threads. So that
+sum launched one block of four threads per score: 35.4 million blocks for a batch-16 MLP gate
+(294,912 4-blocks × 120 roots), in every forward snap and again in the backward. The cost follows
+the scores, not the passes, as step P at `3980925d1` showed. It is read from the launch shape, not
+timed on its own; step P at the new head tests it.
+
+**Repair, in the ORDER's files.** `4465685531` (`icosian_scores`) adds the four products as
+`(q0 r0 + q2 r2) + (q1 r1 + q3 r3)` in four elementwise products and three additions. That is the
+order `fast_sum` adds them in with four threads (each thread loads `0 + p_t`, then halving at
+`s = 2` and `s = 1`), so every score keeps its f32 value; only a −0 score can come out −0 where the
+sum gave +0, which compares equal and changes no argmax. The pass size returns to 2^16 blocks, which
+only bounds each pass's `(blocks, 120)` tensors to 32 MB. The test
+`icosian_scores_are_the_four_axis_sum_on_cuda` replaces the pass-size test. Over two passes of a gate
+it checks that no score differs from the old 4-axis sum, and that every snapped root is bit for bit
+the root the old sum's argmax picks, on spread, zero, −0.0 and exactly tied blocks. It pins values,
+not cost; step P reads the cost. The repair does not touch lines 669–712, so
 `setaside-exponent.patch` applies unchanged (`git apply --check`; its hash is unchanged).
 
 **Evaluation commands.** Step P's evaluation dry run found two faults in the registered commands,
@@ -216,9 +233,15 @@ to the decode, and pass the decode the checkpoint folder. The fold and floor fla
 defaults, which the runs train with. deepseek-10's REPORT does not record whether the earlier run of
 deepseek-5's sheet passed these flags, so its top-1 and nearest figures are cited only as reported.
 
-**What runs, in order, at the amended head** (the head that carries this amendment and its FIT;
-its source differs from `3980925d1` in docs only):
-1. I-0 as registered, with the new test also required by name.
+The amended commands ran in step P's dry run at `3980925d1`, on its served run's step-40 checkpoint.
+The round changed no saved file and added only its `rounded-as-exported.json` marker. `--inspect` on
+the rounded copy read top-1 8, nearest 16, openings 0, admitted 476, the run's own step-40 line. The
+decode read 81.9, 60.2 and 38.6 tokens/s at contexts 16, 64 and 192 (48 tokens each).
+
+**What runs, in order.** I-0 and step P run at the repair head `4465685531` under the base sheet's
+rule for a repair (a new commit, I-0 again before R); R runs at the amended head, which carries this
+amendment and its FIT and differs from `4465685531` in docs only, with I-0's binaries.
+1. I-0 as registered, with `icosian_scores_are_the_four_axis_sum_on_cuda` also required by name.
 2. Step P again, same command. The served step is read against 2× plain, stage by stage. If it is
    still past 2× and a stage in the ORDER's files adds more than one plain step, that stage is
    repaired the same way before R (a new head, I-0 again). If the stage is outside the ORDER's
@@ -229,7 +252,7 @@ its source differs from `3980925d1` in docs only):
    work before R.
 4. R and S as registered, with the amended evaluation commands.
 
-The added I-0 and P take about 10 minutes, inside the two GPU-hour and $1.50 cap.
+Each added I-0 and P takes about 15 minutes, inside the two GPU-hour and $1.50 cap.
 
 ## Verdict
 
