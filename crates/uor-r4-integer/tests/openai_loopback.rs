@@ -464,6 +464,12 @@ fn models_health_and_json_generation_routes() {
     );
     let capabilities: Value = serde_json::from_str(&capabilities).unwrap();
     assert_eq!(capabilities["vision"], false);
+    assert_eq!(
+        capabilities["image_input"]["native_content_part"],
+        "uor_r4_image"
+    );
+    assert_eq!(capabilities["image_input"]["decomposition"], true);
+    assert_eq!(capabilities["image_input"]["visual_understanding"], false);
     assert_eq!(capabilities["inflight_limit"], 1);
     assert_eq!(capabilities["context"], 64);
 
@@ -693,7 +699,12 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
             400,
         ),
         ("short body", short, "application/octet-stream", 400),
-        ("long body", long.as_slice(), "application/octet-stream", 413),
+        (
+            "long body",
+            long.as_slice(),
+            "application/octet-stream",
+            400,
+        ),
     ] {
         let (status, _, response) = request_bytes(
             server.port(),
@@ -711,14 +722,32 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
             String::from_utf8_lossy(&response)
         );
     }
-    for target in [
-        "/v1/images/decompose?width=0&height=2&columns=1&rows=1",
-        "/v1/images/decompose?width=257&height=2&columns=1&rows=1",
-        "/v1/images/decompose?width=2&height=2&columns=0&rows=1",
-        "/v1/images/decompose?width=2&height=2&columns=3&rows=1",
-        "/v1/images/decompose?width=2&height=2&columns=1",
-        "/v1/images/decompose?width=2&height=2&columns=1&rows=1&rows=1",
-        "/v1/images/decompose?width=2&height=2&columns=1&rows=1&extra=1",
+    for (target, expected_status) in [
+        (
+            "/v1/images/decompose?width=0&height=2&columns=1&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=257&height=2&columns=1&rows=1",
+            413,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=0&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=3&rows=1",
+            400,
+        ),
+        ("/v1/images/decompose?width=2&height=2&columns=1", 400),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=1&rows=1&rows=1",
+            400,
+        ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=1&rows=1&extra=1",
+            400,
+        ),
     ] {
         let (status, _, response) = request_bytes(
             server.port(),
@@ -729,12 +758,27 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
             "test-token",
             "",
         );
-        assert!(
-            matches!(status, 400 | 413),
+        assert_eq!(
+            status,
+            expected_status,
             "{target}: {}",
             String::from_utf8_lossy(&response)
         );
     }
+    let mut bounded = config();
+    bounded.max_body_bytes = 16;
+    let bounded = LoopbackServer::spawn(bounded).unwrap();
+    let (status, _, response) = request_bytes(
+        bounded.port(),
+        "POST",
+        target,
+        &long,
+        "application/octet-stream",
+        "test-token",
+        "",
+    );
+    assert_eq!(status, 413, "{}", String::from_utf8_lossy(&response));
+    bounded.shutdown().unwrap();
     let (status, _, _) = request_bytes(
         server.port(),
         "POST",
@@ -762,11 +806,7 @@ fn native_r4_image_parts_validate_and_pass_context_preflight() {
     let server = LoopbackServer::spawn(config_with_context(512)).unwrap();
     let (status, text) = post_json(server.port(), "/v1/chat/completions", text_request);
     assert_eq!(status, 200, "{text}");
-    let (status, image) = post_json(
-        server.port(),
-        "/v1/chat/completions",
-        image_request.clone(),
-    );
+    let (status, image) = post_json(server.port(), "/v1/chat/completions", image_request.clone());
     assert_eq!(status, 200, "{image}");
     assert!(
         image["usage"]["prompt_tokens"].as_u64().unwrap()
@@ -793,6 +833,11 @@ fn native_r4_image_parts_validate_and_pass_context_preflight() {
     let mut value = part.clone();
     value["grid"]["columns"] = json!(2);
     malformed.push(("grid", value));
+    let mut value = part.clone();
+    let mut canonical = hex::decode(value["canonical_hex"].as_str().unwrap()).unwrap();
+    canonical[52 + 26] ^= 1;
+    value["canonical_hex"] = json!(hex::encode(canonical));
+    malformed.push(("canonical redundancy", value));
     let mut value = part.clone();
     value["unexpected"] = json!(true);
     malformed.push(("extra field", value));
@@ -873,6 +918,17 @@ fn truthful_validation_and_unsupported_family_errors() {
         "Content-Type: text/plain\r\n",
     );
     assert_eq!(status, 400);
+    let duplicate = "{\"model\":\"uor-chat\",\"messages\":[{\"role\":\"user\",\"content\":\"Hi\",\"content\":\"Hi\"}]}";
+    let (status, _, body) = request(
+        server.port(),
+        "POST",
+        "/v1/chat/completions",
+        duplicate,
+        "test-token",
+        "",
+    );
+    assert_eq!(status, 400);
+    assert!(body.contains("duplicate JSON object key"), "{body}");
     server.shutdown().unwrap();
 }
 
