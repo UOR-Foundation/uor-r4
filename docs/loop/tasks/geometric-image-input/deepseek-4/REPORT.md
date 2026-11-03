@@ -51,7 +51,6 @@ The image implementation's earlier functional evidence is unchanged:
 - `uor-harness loop pr-check --local`.
 - `uor-harness loop gates --full`: passed all 11 gates on the immediate rerun
   after the retained `ETXTBSY` flake.
-- Exact-head adversarial review and protected merge.
 
 The repair gate attempts are retained in
 [evidence/loop-gates.txt](evidence/loop-gates.txt).
@@ -64,7 +63,8 @@ workflow skill dependency.
 ## Still open
 
 Visual understanding, semantic image answers, useful multimodal conversation,
-M4 and M7 remain open. This repair changes records only.
+M4 and M7 remain open. Exact-head review and protected merge are pending at
+this report revision. This repair changes records only.
 
 ## Plain summary
 
