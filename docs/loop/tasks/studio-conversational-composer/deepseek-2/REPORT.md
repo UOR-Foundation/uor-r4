@@ -1,5 +1,10 @@
 # REPORT: mixed-paste test evidence repair, deepseek-2
 
+> **Superseded by [deepseek-3](../deepseek-3/REPORT.md).** A fresh review found
+> that this report assigned unexecuted Studio/browser checks to CI even though
+> no current workflow runs them. The accepted test and implementation are
+> unchanged.
+
 Lab: deepseek. Item:
 [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md)
 (#3608). Order: [ORDER.md](ORDER.md). Base:
@@ -56,9 +61,11 @@ No available Codex skill applied.
 
 ## Still open
 
-- Full Vitest, typecheck and Vite verification remains a CI responsibility
-  because `npm` and `node_modules` are absent locally.
-- A real browser mixed file-plus-text paste remains unexecuted on this host.
+- Full Vitest, typecheck and Vite verification is `NOT_RUN` because `npm` and
+  `node_modules` are absent locally, and no current repository workflow
+  executes that suite.
+- A real browser mixed file-plus-text paste remains `NOT_RUN` on this host and
+  is not covered by a current workflow.
 - Image decomposition and visual understanding remain outside this item.
 
 ## Plain summary

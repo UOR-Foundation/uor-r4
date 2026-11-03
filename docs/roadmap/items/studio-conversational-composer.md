@@ -22,7 +22,7 @@ The live plain-JS composer does not provide complete keyboard/history behavior, 
 Repair, 3 November 2026: a mixed clipboard event carrying both text and a
 text/source file now attaches the file while leaving the text to insert
 normally. File-only paste remains intercepted, text-only paste remains native,
-and nothing sends implicitly. See [deepseek-1](../../loop/tasks/studio-conversational-composer/deepseek-1/REPORT.md).
+and nothing sends implicitly. See [deepseek-3](../../loop/tasks/studio-conversational-composer/deepseek-3/REPORT.md).
 
 ## Done when
 

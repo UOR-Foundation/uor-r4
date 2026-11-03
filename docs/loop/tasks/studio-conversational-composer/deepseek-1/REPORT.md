@@ -24,7 +24,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - **`npm`, Vitest and the browser flow could not be rerun on this machine.**
   `npm` is not installed and `web/studio/node_modules` is absent. The focused
   behavior is covered by a dependency-free Node test; the complete Studio suite
-  remains a CI requirement.
+  is `NOT_RUN`.
 
 ## What changed
 
@@ -71,11 +71,11 @@ No available Codex skill applied.
 
 ## Still open
 
-- The full Vitest/typecheck/Vite suite must run in CI because this host has no
-  `npm` install.
-- A real browser mixed file-plus-text paste is not exercised on this host. The
-  Node regression pins the controller contract, and CI remains the browser
-  compatibility check.
+- The full Vitest/typecheck/Vite suite is `NOT_RUN`: this host has no `npm`
+  install, and no current repository workflow executes that suite.
+- A real browser mixed file-plus-text paste is `NOT_RUN` on this host and is not
+  covered by a current workflow. The Node regression pins only the controller
+  contract.
 - Image decomposition and visual understanding remain outside this item.
 
 ## Plain summary
@@ -85,4 +85,5 @@ to treat any file as a reason to cancel the browser's normal paste, so the text
 disappeared while the file was attached. It now inspects the text too. It still
 blocks the browser insertion for file-only paste, but mixed paste attaches the
 file and leaves the text to insert normally. The focused test passes; the full
-web test runner is unavailable locally and remains a CI check.
+web test runner is unavailable locally and is `NOT_RUN`; no current workflow
+covers it.
