@@ -1,6 +1,6 @@
 # REPORT: Native uor-chat OpenAI-compatible loopback service
 
-Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Original base: `de21884d104391b3dfc29e569ca9c33e85f61057`; current-main integration through `d1d465eaeea0063cf83c3bd3260659a6ebf3f976`. Initial implementation lineage: `f371e05d51ebec597c6128a29a741119e9040c6d`; protocol, stream-text and response-lifecycle repairs are committed through `77319779bc4f3119019a0a7e91146ad1ef338569`; the final delivery head is recorded on the PR. The follow-up issue remains open until the full unit is delivered.
+Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Original base: `de21884d104391b3dfc29e569ca9c33e85f61057`; current-main integration through `59f7770ae2d936cfb3ac7337cd041cb3f25ead0f`. Initial implementation lineage: `f371e05d51ebec597c6128a29a741119e9040c6d`; protocol, stream-text and response-lifecycle repairs are committed through `77319779bc4f3119019a0a7e91146ad1ef338569`; the final delivery head is recorded on the PR. The follow-up issue remains open until the full unit is delivered.
 
 ## What did not work
 
