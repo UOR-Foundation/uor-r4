@@ -1,6 +1,6 @@
 # ORDER: Studio conversational composer, text attachments, and native metrics
 
-Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), dependent on the delivered [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Base: `af6c27ad78f8fdde2babbf084bd10bbaeba1a45e`.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569), with follow-up [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), dependent on the delivered [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Base: `af6c27ad78f8fdde2babbf084bd10bbaeba1a45e`.
 
 ## Goal
 
