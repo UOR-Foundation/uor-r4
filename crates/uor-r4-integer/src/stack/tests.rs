@@ -1665,6 +1665,70 @@ fn stack_chat_extends_the_session_instead_of_replaying_it() -> ChatTest {
 }
 
 #[test]
+fn stack_chat_callback_stream_matches_batch_ids_text_and_history() -> ChatTest {
+    let model = IntegerStackModel::parse(&artifact_with_context(19, &[], 16))?;
+    let json = chat_tokenizer_json();
+    let bos = 0;
+    let mut batch = open_chat(&model, &json)?;
+    let mut stream = open_chat(&model, &json)?;
+    batch.seed(&[bos])?;
+    stream.seed(&[bos])?;
+    let eos = stream.protocol().eos_id;
+    let mut emitted_ids = Vec::new();
+    let mut emitted_bytes = Vec::new();
+    let expected = batch.reply_history(&[bos, 3], 3)?;
+    let actual = stream.reply_history_with(&[bos, 3], 3, |id, bytes| {
+        emitted_ids.push(id);
+        if id != eos {
+            emitted_bytes.extend_from_slice(bytes);
+        }
+        Ok(())
+    })?;
+    assert_eq!(actual.ids, expected.ids);
+    assert_eq!(actual.text, expected.text);
+    assert_eq!(actual.stop, expected.stop);
+    assert_eq!(emitted_ids, expected.ids);
+    let emitted_text = String::from_utf8(emitted_bytes)?;
+    assert_eq!(stream.protocol().reply_text(&emitted_text), actual.text);
+    assert_eq!(stream.tokens(), batch.tokens());
+
+    let mut second_history = vec![bos, 3];
+    second_history.extend_from_slice(&expected.ids);
+    second_history.push(4);
+    let second_expected = batch.reply_history(&second_history, 2)?;
+    let mut second_emitted = Vec::new();
+    let second_actual = stream.reply_history_with(&second_history, 2, |id, _| {
+        second_emitted.push(id);
+        Ok(())
+    })?;
+    assert_eq!(second_actual.ids, second_expected.ids);
+    assert_eq!(second_actual.text, second_expected.text);
+    assert_eq!(second_actual.stop, second_expected.stop);
+    assert_eq!(second_emitted, second_expected.ids);
+    assert_eq!(stream.tokens(), batch.tokens());
+    Ok(())
+}
+
+#[test]
+fn stack_chat_callback_error_aborts_before_another_model_step() -> ChatTest {
+    let (model, json) = chat(23)?;
+    let mut stream = open_chat(&model, &json)?;
+    stream.seed(&[0])?;
+    let before = stream.position();
+    let error = stream
+        .reply_history_with(&[0, 3], 3, |_, _| {
+            Err(super::StackChatError::Protocol("client disconnected".into()))
+        })
+        .expect_err("a disconnected callback must abort generation");
+    assert!(matches!(error, super::StackChatError::Protocol(_)));
+    let after = stream.tokens().to_vec();
+    assert_eq!(after.len(), 3, "only the first generated ID is retained");
+    assert_eq!(&after[..2], &[0, 3]);
+    assert_eq!(stream.position(), before + 1);
+    Ok(())
+}
+
+#[test]
 fn stack_chat_refuses_a_turn_that_does_not_fit_the_context() -> ChatTest {
     let (model, json) = chat(17)?;
     let mut chat = open_chat(&model, &json)?;
