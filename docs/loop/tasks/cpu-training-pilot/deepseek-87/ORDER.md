@@ -19,6 +19,7 @@ silently compute the old read. The unit stands.
 
 - `crates/uor-r4-cpu-train/src/fbs.rs`
 - `crates/uor-r4-cpu-train/src/hamming.rs`
+- `crates/uor-r4-cpu-train/src/served_forward.rs`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-87/**`
 - `docs/research/notebook/cpu-training.md`
 - `docs/research/cpu-training-program.md`
