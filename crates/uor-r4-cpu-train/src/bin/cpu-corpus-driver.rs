@@ -158,7 +158,9 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
     let split = corpus
         .split(config.evaluation_stride, config.max_evaluation)
         .map_err(|error| error.to_string())?;
+    let setup_elapsed = started.elapsed();
 
+    let baseline_started = Instant::now();
     let mut baseline_panel = CpuPanelEvaluator::from_artifact(
         &artifact,
         split.evaluation.clone(),
@@ -168,6 +170,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
     let baseline = baseline_panel
         .evaluate()
         .map_err(|error| error.to_string())?;
+    let baseline_elapsed = baseline_started.elapsed();
     let (mut trainer, resume) = if let Some(checkpoint_path) = &config.resume_checkpoint {
         let (trainer, resume) = resume_checkpoint(
             checkpoint_path,
@@ -262,6 +265,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
         }
     }
 
+    let final_panel_started = Instant::now();
     let mut final_panel = CpuPanelEvaluator::from_artifact(
         trainer.artifact(),
         split.evaluation.clone(),
@@ -269,6 +273,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
     )
     .map_err(|error| error.to_string())?;
     let final_reading = final_panel.evaluate().map_err(|error| error.to_string())?;
+    let final_panel_elapsed = final_panel_started.elapsed();
     let gate =
         panel_admission_gate(&baseline, &final_reading).map_err(|error| error.to_string())?;
     let mut gate = match gate {
@@ -299,6 +304,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
         "gate admission is an acceptance constraint, not a capability gain; use the raw readings"
     );
 
+    let finalization_started = Instant::now();
     let final_checkpoint = trainer.checkpoint().map_err(|error| error.to_string())?;
     let final_checkpoint_path = config.checkpoint_dir.join("final.ckpt");
     let final_binding_path = write_checkpoint(
@@ -319,9 +325,12 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
     if target_steps == 0 && final_artifact != artifact {
         return Err("zero-step run changed the source artifact".to_owned());
     }
+    let finalization_elapsed = finalization_started.elapsed();
     let final_artifact_path = config.checkpoint_dir.join("final.uorlut");
+    let audit_started = Instant::now();
     let (final_audit_path, final_audit, final_audit_sha256) =
         write_verified_artifact(&final_artifact_path, &final_artifact, &audit_tokens)?;
+    let audit_elapsed = audit_started.elapsed();
     let final_artifact_sha256 = uor_r4_discrete::corpus::sha256(&final_artifact);
     if !baseline.export.is_exact() || !final_reading.export.is_exact() {
         return Err("CPU/serving query, token or kept-cell export mismatch".to_owned());
@@ -358,6 +367,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
             "evaluation_stride": split.evaluation_stride,
         },
         "run": {
+            "rayon_workers": rayon::current_num_threads(),
             "seed": config.seed,
             "rank_margin": config.rank_margin,
             "require_admission": config.require_admission,
@@ -392,6 +402,14 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
                 executed_steps as f64 / step_seconds
             } else {
                 0.0
+            },
+            "stage_elapsed_ms": {
+                "setup": setup_elapsed.as_secs_f64() * 1_000.0,
+                "baseline_panel": baseline_elapsed.as_secs_f64() * 1_000.0,
+                "online_updates": step_elapsed.as_secs_f64() * 1_000.0,
+                "final_panel": final_panel_elapsed.as_secs_f64() * 1_000.0,
+                "checkpoint_and_reload": finalization_elapsed.as_secs_f64() * 1_000.0,
+                "final_served_forward_audit": audit_elapsed.as_secs_f64() * 1_000.0,
             },
             "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
             "peak_rss_kib": peak_rss_kib(),
@@ -1036,6 +1054,22 @@ mod tests {
         let report = execute(&base_config).unwrap();
         let accepted = report["run"]["accepted_updates"].as_u64().unwrap();
         assert_eq!(report["run"]["rank_margin"]["coordinates_per_step"], 4);
+        assert!(report["run"]["rayon_workers"].as_u64().unwrap() >= 1);
+        for stage in [
+            "setup",
+            "baseline_panel",
+            "online_updates",
+            "final_panel",
+            "checkpoint_and_reload",
+            "final_served_forward_audit",
+        ] {
+            assert!(
+                report["run"]["stage_elapsed_ms"][stage]
+                    .as_f64()
+                    .is_some_and(|elapsed| elapsed >= 0.0),
+                "missing non-negative {stage} timing: {report}"
+            );
+        }
         assert_eq!(
             report["run"]["accepted_coordinate_histogram"]
                 .as_array()

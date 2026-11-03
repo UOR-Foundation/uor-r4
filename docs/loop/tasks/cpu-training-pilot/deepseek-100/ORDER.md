@@ -21,6 +21,7 @@ reading as an instrument negative.
 
 - `crates/uor-r4-cpu-train/src/bin/cpu-corpus-driver.rs`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-100/**`
+- `docs/research/cpu-training-program.md`
 - `docs/research/notebook/cpu-training.md`
 - `docs/roadmap/items/cpu-training-pilot.md`
 
