@@ -1,12 +1,13 @@
-# ORDER: fail closed on served-export contract mismatches, deepseek-1
+# ORDER: turn-memory-integer, deepseek-2 (fail closed on served-export contract mismatches)
 
-Lab: deepseek. Item: [served-export-contract-guard](../../../../roadmap/items/served-export-contract-guard.md). Base: `66c50fa19a3acc783819c198c598f24a2a55fe67`.
+Lab: deepseek. Item: [turn-memory-integer](../../../../roadmap/items/turn-memory-integer.md) (#3392). Base: `66c50fa19a3acc783819c198c598f24a2a55fe67`.
 
 ## Goal
 
-Make `fbs-export --run-config` bind the raw/snapped contract recorded by the
-run, so a checkpoint trained through the unsnapped served bridge cannot be
-silently exported with snapped gates and transition.
+As an export prerequisite for serving the trained turn memory from the
+integer artifact, make `fbs-export --run-config` bind the raw/snapped contract
+recorded by the run. A checkpoint trained through the unsnapped served bridge
+must not be silently exported with snapped gates and transition.
 
 This is a host-only instrument repair. It does not change a trained model,
 served arithmetic, a capability bar or Claude's open branch.
@@ -23,10 +24,8 @@ checkpoint. The task stands.
 ## Files in scope
 
 - `crates/uor-r4-integer/src/bin/fbs-export.rs`
-- `docs/harness/prep/served-export-contract-guard*`
-- `docs/loop/tasks/served-export-contract-guard/**`
+- `docs/loop/tasks/turn-memory-integer/deepseek-2/**`
 - `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/served-export-contract-guard.md`
 - `docs/harness/claims.json`
 
 ## Done when

@@ -1,7 +1,7 @@
-# REPORT: served-export contract guard, deepseek-1
+# REPORT: served-export contract guard, turn-memory-integer deepseek-2
 
 Lab: deepseek. Item:
-[served-export-contract-guard](../../../../roadmap/items/served-export-contract-guard.md).
+[turn-memory-integer](../../../../roadmap/items/turn-memory-integer.md) (#3392).
 Order: [ORDER.md](ORDER.md). Base:
 `66c50fa19a3acc783819c198c598f24a2a55fe67`.
 
@@ -68,7 +68,7 @@ pre-registered experiment was needed for this host-only instrument repair.
 
 ## Skills used
 
-No available Codex skill applied. The exporter, run-config writer and
+No available Codex skill applied. The exporter, run configuration and
 unsnapped training constant were inspected directly.
 
 ## Still open
