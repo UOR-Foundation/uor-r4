@@ -46,6 +46,16 @@ claude-267's count found that copy key 2, backed off to copy key 1, was right on
 2. `uor-harness loop gates --full`, `loop report --check` and `loop pr-check --local` pass.
 3. A fresh-context review approves at the exact head.
 
+## Amendment (3 November, mid-build): the guard's scope
+
+The loop guard reads an ORDER's scope from the item file on `main`, as claude-260 found. The item lists neither `bin/fbs-toks.rs` nor the three cpu-train files, so the guard refused the first edit to `fbs-toks.rs`.
+
+**My decision (top session, reversible).** This unit lands the float and integer sides, which are in scope. It also widens the item's scope by those four files. The `fbs-toks --copy-codes` refusal and cpu-train's per-head change become claude-269, the next unit, before any GPU run.
+
+**Why the gap is safe.** Only a training run with `--hamming-copy-keys` writes a mixed artifact, and that run waits for its own sheet after claude-269. Until then no mixed artifact exists for `fbs-toks` or cpu-train to misread.
+
+**Tests.** Test (a)'s cpu-train half and test (d)'s cpu-train clause move to claude-269. This unit still runs the cpu-train suite, to show the integer change leaves it green.
+
 ## Stop and decide (never stop and wait)
 
 - If a struct literal outside scope breaks, add the field so that it keeps compiling (for example `..Default::default()` or a constructor). Otherwise record it and decide.

@@ -136,6 +136,10 @@ pub struct LongConfig {
     /// `config.json` at 1, so a one-token run writes the same file as before.
     #[serde(skip_serializing_if = "is_one")]
     pub hamming_copy_key: usize,
+    /// Each copy head's own key, 1 or 2, one per copy head, in place of `hamming_copy_key`
+    /// (`HammingReads::with_copy_keys`, claude-268). Left out of `config.json` when none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_copy_keys: Option<Vec<usize>>,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -622,14 +626,20 @@ fn start_hamming(
     )>,
 > {
     if config.hamming_read == 0 {
-        if config.hamming_copy_key != 1 {
-            return Err(invalid("--hamming-copy-key keys the Hamming read's copy heads; turn the read on with --hamming-read"));
+        if config.hamming_copy_key != 1 || config.hamming_copy_keys.is_some() {
+            return Err(invalid("--hamming-copy-key and --hamming-copy-keys key the Hamming read's copy heads; turn the read on with --hamming-read"));
         }
         return Ok(None);
     }
     let mut reads =
         crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?
             .with_copy_key(config.hamming_copy_key)?;
+    if let Some(keys) = &config.hamming_copy_keys {
+        if config.hamming_copy_key != 1 {
+            return Err(invalid("--hamming-copy-keys names every copy head's key; leave --hamming-copy-key out"));
+        }
+        reads = reads.with_copy_keys(keys)?;
+    }
     if config.type_spin {
         reads = reads.with_type_spin()?;
     }
@@ -11352,6 +11362,7 @@ mod tests {
             width: hs::SHEET_WIDTH,
             type_spin: false,
             hamming_copy_key: 1,
+            hamming_copy_keys: None,
             fix_input_table: false,
             train_split: None,
             samples: 6,
@@ -11413,6 +11424,17 @@ mod tests {
                 "\"type_spin\": false,\n  \"hamming_copy_key\": 2,\n  \"fix_input_table\": false,"
             ),
             "{two}"
+        );
+        // claude-268: per-head keys are written only when set.
+        assert!(!one.contains("hamming_copy_keys"), "{one}");
+        let mixed = LongConfig {
+            hamming_copy_keys: Some(vec![2, 1]),
+            ..config(0, None)
+        };
+        let mixed = String::from_utf8(serde_json::to_vec_pretty(&mixed).unwrap()).unwrap();
+        assert!(
+            mixed.contains("\"type_spin\": false,\n  \"hamming_copy_keys\": [\n    2,\n    1\n  ],\n  \"fix_input_table\": false,"),
+            "{mixed}"
         );
     }
 
