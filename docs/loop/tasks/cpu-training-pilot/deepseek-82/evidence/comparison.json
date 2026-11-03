@@ -1,0 +1,148 @@
+{
+  "schema": "uor-r4.cpu-table-bvgk-comparison/1",
+  "source_commit": "8a0defae5",
+  "substrate": "cpu-development-research",
+  "qualification": "gpu-required",
+  "raw_evidence": "local/deepseek/table-bvgk-same-amplitude-2026-11-03/",
+  "design_sha256_approved": "860f5260be8ed1bcc63721f47bd59ee2805a750bc095ffb3b15de630c10de678",
+  "design_sha256_current": "359ae945151de618161ccd21ccd26284b3b723b34654eb8a1a01338bed845fb6",
+  "driver_sha256": "cc73bc0dcdcec1440c27bc95811d1ae4f72aa9bd8d9a18196cd9cd1e0e4096d7",
+  "config": {
+    "margin_q12": 1,
+    "step_q12": 1,
+    "parameter_limit_q12": 8192,
+    "training_steps": 4096,
+    "evaluation_stride": 2,
+    "maximum_evaluation_rows": 1024
+  },
+  "thresholds": {
+    "seed_1_top1_rows": 43,
+    "seed_2_top1_rows": 40
+  },
+  "arms": [
+    {
+      "seed": 1,
+      "arm": "baseline",
+      "accepted": 0,
+      "final": {
+        "top1": 278,
+        "top8": 384,
+        "admitted": 396,
+        "margin_loss_sum": 11739473,
+        "rank_sum": 319318
+      },
+      "gate": "accept",
+      "artifact_sha256": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd"
+    },
+    {
+      "seed": 1,
+      "arm": "control-k1",
+      "accepted": 431,
+      "refused": 3665,
+      "accepted_coordinate_moves": 431,
+      "final": {
+        "top1": 278,
+        "top8": 383,
+        "admitted": 395,
+        "margin_loss_sum": 11747984,
+        "rank_sum": 319147
+      },
+      "gate": "reject_admission",
+      "artifact_sha256": "9d59da8d4241ed6eb81917cc4af22698c948ca95ae4eaa0f02a4040e0239f807",
+      "checkpoint_sha256": "626e7290b6f5ac29f225eab00ceb681241421860b0bd7b1433f829c8d4725d79"
+    },
+    {
+      "seed": 1,
+      "arm": "pivot-k4",
+      "accepted": 437,
+      "refused": 3659,
+      "accepted_coordinate_moves": 1748,
+      "accepted_coordinate_histogram": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 437
+      },
+      "final": {
+        "top1": 278,
+        "top8": 383,
+        "admitted": 395,
+        "margin_loss_sum": 11731518,
+        "rank_sum": 318759
+      },
+      "gate": "reject_admission",
+      "artifact_sha256": "349e0f154a72f2e3d4eba200ecca8306952619d425993ca50060dacabf8830ff",
+      "checkpoint_sha256": "c2338ce3e8cb7399f9fc9ed89828b9685877623b6bac237e62ba7b0b4865bf50"
+    },
+    {
+      "seed": 2,
+      "arm": "baseline",
+      "accepted": 0,
+      "final": {
+        "top1": 224,
+        "top8": 285,
+        "admitted": 292,
+        "margin_loss_sum": 29717075,
+        "rank_sum": 342478
+      },
+      "gate": "accept",
+      "artifact_sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1"
+    },
+    {
+      "seed": 2,
+      "arm": "control-k1",
+      "accepted": 216,
+      "refused": 3880,
+      "accepted_coordinate_moves": 216,
+      "final": {
+        "top1": 224,
+        "top8": 285,
+        "admitted": 292,
+        "margin_loss_sum": 29603785,
+        "rank_sum": 342464
+      },
+      "gate": "accept",
+      "artifact_sha256": "554d7ad817db681c6c1fc3ec49dfe197ddef883eceae55d770e048917cf5e730",
+      "checkpoint_sha256": "f8d44d3021c96bba67d4b3a0d0f06e496f66ef0bb4c6a9c3ac1e8c7c7ecd1a7b"
+    },
+    {
+      "seed": 2,
+      "arm": "pivot-k4",
+      "accepted": 225,
+      "refused": 3871,
+      "accepted_coordinate_moves": 900,
+      "accepted_coordinate_histogram": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 225
+      },
+      "final": {
+        "top1": 224,
+        "top8": 285,
+        "admitted": 292,
+        "margin_loss_sum": 29602710,
+        "rank_sum": 342483
+      },
+      "gate": "accept",
+      "artifact_sha256": "c9a5859a4750d8f8e39fae550d4b6d2d80970b992abf8e16b063c203ee031fef",
+      "checkpoint_sha256": "914bb04574a1c9b7d5215df9c7ac54609ad6fe07b40dbac684ea41cbab34198b"
+    }
+  ],
+  "instrument": {
+    "processes": 6,
+    "nonzero_exit": 0,
+    "evaluated_rows_per_arm": 1024,
+    "query_coordinates_checked_per_arm": 262144,
+    "kept_cells_checked_per_arm": 8192,
+    "query_coordinate_mismatches": 0,
+    "token_mismatches": 0,
+    "kept_cell_mismatches": 0,
+    "artifact_reload_failures": 0,
+    "checkpoint_reload_failures": 0,
+    "total_wall_ms": 621690.690461,
+    "peak_rss_kib": 52436
+  },
+  "verdict": "negative for one-versus-four coordinate breadth at one Q12 per coordinate",
+  "claim_limit": "Public internal-development component evidence only; not fresh-transfer, useful-chat, GPU-equivalence or GPU-replacement evidence."
+}
