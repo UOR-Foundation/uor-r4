@@ -23,6 +23,12 @@ $ npm test -- --run
 Test Files  31 passed (31)
 Tests       266 passed (266)
 
+The first post-merge Studio run exited 1 on one unhandled teardown exception
+from the unchanged `src/components/Inspector.tsx` (`document is not defined`)
+after all 31 files and 266 tests reported passing. An isolated immediate rerun
+completed without that exception and exited 0. This is retained as an
+instrument flake, not hidden as a clean first run.
+
 $ npm run typecheck
 tsc --noEmit
 exit 0

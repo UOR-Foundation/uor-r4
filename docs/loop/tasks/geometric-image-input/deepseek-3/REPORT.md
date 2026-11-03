@@ -26,6 +26,10 @@ Lab: deepseek. Item:
   reconstruction now substitutes the bounded marker `[Image patch input]` for
   a historical empty user turn; the live image-only request still sends no
   empty text part.
+- The first Studio test run after merging current `main` exited 1 on an
+  unhandled teardown exception from the unchanged `Inspector.tsx` after all 266
+  tests had passed. An isolated immediate rerun exited 0. The transient output
+  is retained in the evidence rather than reported as a clean first run.
 - Strict Clippy over `uor-r4-integer` still exits 101 on 51 pre-existing
   diagnostics. None names a changed file.
 
