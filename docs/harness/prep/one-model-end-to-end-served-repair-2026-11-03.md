@@ -56,10 +56,22 @@ A data hash that does not match stops the run.
   and backward against one plain, on the same model and batch; every layer's `mlp.down.weight` and
   `rec.out.weight` gradient norm is above 0 and served/plain is within [0.25, 4].
 
-**Negative gate:** set aside only the bodies of `activation_scale_scalar` and
-`activation_quantize16` (the patch is `git diff` of those two bodies against the reviewed head,
-streamed from the laptop), rebuild the test binary and read its build line: the first and third tests
-above must fail. Restore with `git checkout` of the file, rebuild, and rerun all three green.
+**Negative gate:** set aside only the fix's exponent with
+[`setaside-exponent.patch`](../../loop/tasks/one-model-end-to-end/claude-262/setaside-exponent.patch)
+(SHA-256 `ced6e8cbd0e6d6101ac2a27900c873b2f40be05f4dd25583ba69dc7bdb280a57`, committed in the head):
+in `activation_scale_scalar` and `activation_quantize16` the `2^−ACTIVATION_EXP` factor becomes 1,
+and the six passes, the dtype handling and the constants stay. That is the old fault exactly, without
+the old body's f64 constants, which would fail on f32 input with a dtype error before any assertion.
+Run `git apply` on the pod, rebuild the test binary and read its build line. The first and third tests
+above must fail **on their named assertions**:
+- the first with the message "… reached the weight after it as …" on the realistic row (the edge
+  rows still agree, since scalar and tensor both lose the exponent);
+- the third with "…: gradient norm … as served against … plain".
+
+A candle `Err`, a panic elsewhere, or a build failure does not count. Restore with
+`git checkout` of the file, rebuild, and rerun all three green. On the laptop the same patch makes
+both host tests (`served_activation_quantizer_is_the_integer_step_at_product_exp`,
+`served_surrogate_scalar_and_state_controls_are_exact`) fail on their `assert_eq!` lines.
 
 **P. Profile.** One plain and one served run on seed 1 with the R recipe below, `--steps 40
 --profile 16 --eval-every 40`. Report each run's `profile.json`: stage medians (GPU and host),
@@ -95,8 +107,8 @@ upload, read back and check against `SHA256SUMS` before `down`.
 
 ## Bar
 
-- **I-0:** the three named tests pass at the head; with the two bodies set aside, the first and third
-  fail; restored, they pass. A failure here stops the run before P.
+- **I-0:** the three named tests pass at the head; with the exponent set aside, the first and third
+  fail on their named assertions; restored, they pass. A failure here stops the run before P.
 - **R, deepseek-5's bar unchanged:**
   1. *Instrument door:* all four runs finish with finite losses and load through the served
      evaluator; both served checkpoints are byte-identical after `--round-as-exported`; at least one
