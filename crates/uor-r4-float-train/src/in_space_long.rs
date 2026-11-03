@@ -131,6 +131,11 @@ pub struct LongConfig {
     /// The Hamming read's type heads compare positions through SpiralCore's path-dependent
     /// icosian transport (`HammingReads::with_type_spin`, claude-151); off by default.
     pub type_spin: bool,
+    /// How many tokens before a position the Hamming read's copy heads key on: 1, the default,
+    /// or 2, the ordered two-token key (`HammingReads::with_copy_key`, claude-261). Left out of
+    /// `config.json` at 1, so a one-token run writes the same file as before.
+    #[serde(skip_serializing_if = "is_one")]
+    pub hamming_copy_key: usize,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -617,10 +622,14 @@ fn start_hamming(
     )>,
 > {
     if config.hamming_read == 0 {
+        if config.hamming_copy_key != 1 {
+            return Err(invalid("--hamming-copy-key keys the Hamming read's copy heads; turn the read on with --hamming-read"));
+        }
         return Ok(None);
     }
     let mut reads =
-        crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?;
+        crate::flock_read_hamming::HammingReads::new(config.hamming_read, config.width, device)?
+            .with_copy_key(config.hamming_copy_key)?;
     if config.type_spin {
         reads = reads.with_type_spin()?;
     }
@@ -802,6 +811,10 @@ fn start_memory(
 
 fn is_zero(n: &usize) -> bool {
     *n == 0
+}
+
+fn is_one(n: &usize) -> bool {
+    *n == 1
 }
 
 const ABSENT: f32 = -1.0e30;
@@ -10948,6 +10961,7 @@ mod tests {
             register_select: None,
             width: hs::SHEET_WIDTH,
             type_spin: false,
+            hamming_copy_key: 1,
             fix_input_table: false,
             train_split: None,
             samples: 6,
@@ -10988,6 +11002,28 @@ mod tests {
             );
             assert!(json.contains(&keys), "{json}");
         }
+    }
+
+    #[test]
+    fn a_config_writes_the_copy_key_only_when_two() {
+        // claude-261: a one-token run writes the same `config.json` as before the key.
+        let one = String::from_utf8(serde_json::to_vec_pretty(&config(0, None)).unwrap()).unwrap();
+        assert!(!one.contains("hamming_copy_key"), "{one}");
+        assert!(
+            one.contains("\"type_spin\": false,\n  \"fix_input_table\": false,"),
+            "{one}"
+        );
+        let two = LongConfig {
+            hamming_copy_key: 2,
+            ..config(0, None)
+        };
+        let two = String::from_utf8(serde_json::to_vec_pretty(&two).unwrap()).unwrap();
+        assert!(
+            two.contains(
+                "\"type_spin\": false,\n  \"hamming_copy_key\": 2,\n  \"fix_input_table\": false,"
+            ),
+            "{two}"
+        );
     }
 
     #[test]
@@ -14538,6 +14574,81 @@ mod tests {
             crate::flock_read_memory::set_turn_memory(None);
         }
         fs::remove_dir_all(&root)?;
+        Ok(())
+    }
+
+    /// claude-262: one training step as served reaches every projection that reads a requantized
+    /// activation. Each layer's `mlp.down` and `rec.out` table gets a gradient whose norm
+    /// is within 4x of the plain step's, from the same initial values, and never 0. Before, the
+    /// served stand-in rounded those activations to whole numbers, so most of them were 0 and so
+    /// was the gradient of the weight that reads them.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_step_as_served_reaches_every_projection_after_a_requantized_activation() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let batch = 2;
+        let ids: Vec<u32> = (0..batch * SHEET_CONTEXT)
+            .map(|i| ((i * 37 + 5) % hs::SHEET_VOCAB) as u32)
+            .collect();
+        let scored: Vec<u32> = (0..batch * SHEET_CONTEXT - 1)
+            .step_by(7)
+            .map(|i| i as u32)
+            .collect();
+        let targets: Vec<u32> = scored.iter().map(|&i| ids[i as usize + 1]).collect();
+        let mut norms: Vec<Vec<(String, f32)>> = Vec::new();
+        for on in [false, true] {
+            let (model, reads, memory) = served_parts(&device)?;
+            crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
+            crate::flock_read_memory::set_turn_memory(Some(memory.clone()));
+            let served = round_if_served(on, &model, Some(&reads), Some(&memory))?;
+            let grads = with_training_forward(on, 1, 0, || {
+                let loss = batch_loss(
+                    &model,
+                    PointObjective::Cell,
+                    &ids,
+                    &scored,
+                    &targets,
+                    batch,
+                    on,
+                )?;
+                Ok(loss.backward()?)
+            })?;
+            if let Some(served) = served {
+                served.restore()?;
+            }
+            crate::flock_read_hamming::set_hamming_reads(None);
+            crate::flock_read_memory::set_turn_memory(None);
+            let mut arm = Vec::new();
+            // The FBS trunk holds each projection as its SpiralCore table, `….spiralcore_fbs`,
+            // in place of the dense `….weight`.
+            for layer in 0..model.config.layers() {
+                for table in ["mlp.down.spiralcore_fbs", "rec.out.spiralcore_fbs"] {
+                    let name = format!("layers.{layer:02}.{table}");
+                    let var = model
+                        .variables()
+                        .get(&name)
+                        .ok_or_else(|| invalid(format!("the trunk lacks {name}")))?;
+                    let norm = match grads.get(var.as_tensor()) {
+                        Some(g) => g.sqr()?.sum_all()?.sqrt()?.to_scalar::<f32>()?,
+                        None => 0.0,
+                    };
+                    arm.push((name, norm));
+                }
+            }
+            norms.push(arm);
+        }
+        assert!(
+            !norms[0].is_empty(),
+            "the trunk has no layers, so the check is vacuous"
+        );
+        for ((name, plain), (_, served)) in norms[0].iter().zip(&norms[1]) {
+            assert!(*plain > 0.0, "{name}: the plain step gives it no gradient");
+            let ratio = served / plain;
+            assert!(
+                (0.25..=4.0).contains(&ratio),
+                "{name}: gradient norm {served} as served against {plain} plain"
+            );
+        }
         Ok(())
     }
 

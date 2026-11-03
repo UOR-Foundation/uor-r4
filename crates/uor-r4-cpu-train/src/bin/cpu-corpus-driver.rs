@@ -3,12 +3,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use uor_r4_cpu_train::{
-    panel_admission_gate, validate_corpus_manifest, CpuCorpusIdentity, CpuMaskedCorpus,
-    CpuPanelEvaluator, CpuRankMarginTrainer, PanelGateDecision, RankMarginConfig,
+    audit_served_forward, panel_admission_gate, read_uort_token_slice, validate_corpus_manifest,
+    CpuCorpusIdentity, CpuMaskedCorpus, CpuPanelEvaluator, CpuRankMarginTrainer, PanelGateDecision,
+    RankMarginConfig, ServedForwardAuditConfig, ServedForwardAuditReport, UortTokenSlice,
 };
 use uor_r4_integer::stack::IntegerStackModel;
 
 const CHECKPOINT_BINDING_SCHEMA: &str = "uor-r4.cpu-corpus-checkpoint-binding/1";
+const FINAL_AUDIT_POSITIONS: usize = 64;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -26,6 +28,8 @@ struct CheckpointBinding {
     step_q12: i16,
     #[serde(default = "default_parameter_limit_q12")]
     parameter_limit_q12: i16,
+    #[serde(default = "default_coordinates_per_step")]
+    coordinates_per_step: usize,
     evaluation_stride: usize,
     max_evaluation: usize,
     completed_steps: u64,
@@ -46,6 +50,7 @@ struct Config {
     checkpoint_every: usize,
     checkpoint_dir: PathBuf,
     resume_checkpoint: Option<PathBuf>,
+    require_admission: bool,
 }
 
 fn default_margin_q12() -> i32 {
@@ -60,9 +65,19 @@ fn default_parameter_limit_q12() -> i16 {
     RankMarginConfig::default().parameter_limit_q12
 }
 
+fn default_coordinates_per_step() -> usize {
+    RankMarginConfig::default().coordinates_per_step
+}
+
 fn main() {
     match run() {
-        Ok(report) => println!("{report}"),
+        Ok((report, required_gate_failed)) => {
+            println!("{report}");
+            if required_gate_failed {
+                eprintln!("cpu-corpus-driver: required admission gate failed");
+                std::process::exit(2);
+            }
+        }
         Err(error) => {
             eprintln!("cpu-corpus-driver: {error}");
             std::process::exit(1);
@@ -70,10 +85,38 @@ fn main() {
     }
 }
 
-fn run() -> Result<String, String> {
+fn run() -> Result<(String, bool), String> {
     let config = parse_args()?;
     let report = execute(&config)?;
-    serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
+    Ok((
+        serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?,
+        required_gate_failed(&config, &report),
+    ))
+}
+
+fn required_gate_failed(config: &Config, report: &serde_json::Value) -> bool {
+    config.require_admission && report["panel_gate"]["decision"].as_str() != Some("accept")
+}
+
+fn accepted_coordinate_block(
+    coordinates: &[usize],
+    width: usize,
+    limit: usize,
+) -> Result<usize, String> {
+    if coordinates.is_empty() || coordinates.len() > limit {
+        return Err("an accepted table block has no legal coordinate count".to_owned());
+    }
+    let mut distinct = coordinates.to_vec();
+    distinct.sort_unstable();
+    distinct.dedup();
+    if distinct.len() != coordinates.len()
+        || coordinates
+            .iter()
+            .any(|&coordinate| !(8..width.saturating_sub(8)).contains(&coordinate))
+    {
+        return Err("an accepted table block has invalid coordinates".to_owned());
+    }
+    Ok(coordinates.len())
 }
 
 fn execute(config: &Config) -> Result<serde_json::Value, String> {
@@ -103,6 +146,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
             identity.max_tokens, shape.context
         ));
     }
+    let audit_tokens = uort_audit_tokens(&token_bytes, shape.context)?;
     let corpus = CpuMaskedCorpus::from_bytes(
         &token_bytes,
         &mask,
@@ -166,6 +210,8 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
     let mut refused = 0usize;
     let mut context_tokens = 0usize;
     let mut target_visits = 0usize;
+    let mut accepted_coordinate_moves = 0usize;
+    let mut accepted_coordinate_histogram = vec![0usize; 65];
     let mut checkpoints = Vec::new();
     for completed in resumed_from_step + 1..=target_steps {
         let step_started = Instant::now();
@@ -176,6 +222,15 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
             .ok_or_else(|| "target visit count overflow".to_owned())?;
         if step.updated {
             accepted += 1;
+            let coordinate_count = accepted_coordinate_block(
+                &step.coordinates,
+                shape.width,
+                config.rank_margin.coordinates_per_step,
+            )?;
+            accepted_coordinate_moves = accepted_coordinate_moves
+                .checked_add(coordinate_count)
+                .ok_or_else(|| "accepted coordinate count overflow".to_owned())?;
+            accepted_coordinate_histogram[coordinate_count] += 1;
         } else {
             refused += 1;
         }
@@ -265,7 +320,8 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
         return Err("zero-step run changed the source artifact".to_owned());
     }
     let final_artifact_path = config.checkpoint_dir.join("final.uorlut");
-    write_verified_artifact(&final_artifact_path, &final_artifact)?;
+    let (final_audit_path, final_audit, final_audit_sha256) =
+        write_verified_artifact(&final_artifact_path, &final_artifact, &audit_tokens)?;
     let final_artifact_sha256 = uor_r4_discrete::corpus::sha256(&final_artifact);
     if !baseline.export.is_exact() || !final_reading.export.is_exact() {
         return Err("CPU/serving query, token or kept-cell export mismatch".to_owned());
@@ -304,6 +360,7 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
         "run": {
             "seed": config.seed,
             "rank_margin": config.rank_margin,
+            "require_admission": config.require_admission,
             "final_epoch": trainer.epoch(),
             "steps": target_steps,
             "resumed_from_step": resumed_from_step,
@@ -311,6 +368,8 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
             "accepted_updates": accepted,
             "refused_steps": refused,
             "target_visits": target_visits,
+            "accepted_coordinate_moves": accepted_coordinate_moves,
+            "accepted_coordinate_histogram": accepted_coordinate_histogram,
             "context_tokens": context_tokens,
             "step_elapsed_ms": step_elapsed.as_secs_f64() * 1_000.0,
             "mean_step_ms": if executed_steps > 0 {
@@ -353,6 +412,15 @@ fn execute(config: &Config) -> Result<serde_json::Value, String> {
             "reloaded": true,
             "matches_source": final_artifact == artifact,
         },
+        "served_forward_audit": {
+            "path": final_audit_path,
+            "sha256": final_audit_sha256,
+            "positions_checked": final_audit.parity.positions_checked,
+            "query_coordinates_compared": final_audit.parity.query_coordinates_compared,
+            "token_decisions_compared": final_audit.parity.token_decisions_compared,
+            "kept_cells_compared": final_audit.parity.kept_cells_compared,
+            "decision_sha256": final_audit.parity.cpu_decision_sha256,
+        },
         "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
     });
     Ok(report)
@@ -381,6 +449,7 @@ fn checkpoint_binding(
         margin_q12: config.rank_margin.margin_q12,
         step_q12: config.rank_margin.step_q12,
         parameter_limit_q12: config.rank_margin.parameter_limit_q12,
+        coordinates_per_step: config.rank_margin.coordinates_per_step,
         evaluation_stride: config.evaluation_stride,
         max_evaluation: config.max_evaluation,
         completed_steps,
@@ -453,6 +522,7 @@ fn resume_checkpoint(
         || binding.margin_q12 != expected.margin_q12
         || binding.step_q12 != expected.step_q12
         || binding.parameter_limit_q12 != expected.parameter_limit_q12
+        || binding.coordinates_per_step != expected.coordinates_per_step
         || binding.evaluation_stride != expected.evaluation_stride
         || binding.max_evaluation != expected.max_evaluation
     {
@@ -479,26 +549,122 @@ fn resume_checkpoint(
     ))
 }
 
-fn write_verified_artifact(path: &Path, artifact: &[u8]) -> Result<(), String> {
-    IntegerStackModel::parse(artifact)
-        .map_err(|error| format!("final artifact does not parse: {error}"))?;
-    let partial = path.with_extension("partial");
-    let mut file = std::fs::File::create(&partial)
-        .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
-    file.write_all(artifact)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
-    drop(file);
-    std::fs::rename(&partial, path)
-        .map_err(|error| format!("final artifact {}: {error}", path.display()))?;
-    let reloaded = std::fs::read(path)
-        .map_err(|error| format!("final artifact reload {}: {error}", path.display()))?;
-    if reloaded != artifact {
-        std::fs::remove_file(path)
-            .map_err(|error| format!("failed final artifact {}: {error}", path.display()))?;
-        return Err("final artifact reload differs from the trainer artifact".to_owned());
+fn uort_audit_tokens(bytes: &[u8], context: usize) -> Result<UortTokenSlice, String> {
+    let first = read_uort_token_slice(bytes, 0, 1).map_err(|error| error.to_string())?;
+    let count = FINAL_AUDIT_POSITIONS
+        .min(context)
+        .min(first.source.total_tokens);
+    if count == 1 {
+        Ok(first)
+    } else {
+        read_uort_token_slice(bytes, 0, count).map_err(|error| error.to_string())
+    }
+}
+
+fn validate_served_forward_export(
+    report: &ServedForwardAuditReport,
+    artifact: &[u8],
+    tokens: &UortTokenSlice,
+) -> Result<(), String> {
+    let artifact_sha256 = uor_r4_discrete::corpus::sha256(artifact);
+    if report.artifact.sha256 != artifact_sha256 || report.artifact.bytes != artifact.len() as u64 {
+        return Err("served-forward audit artifact identity differs".to_owned());
+    }
+    if report.token_source.as_ref() != Some(&tokens.source) {
+        return Err("served-forward audit token provenance differs".to_owned());
+    }
+    let parity = &report.parity;
+    if parity.positions_checked != tokens.tokens.len() {
+        return Err("served-forward audit position count differs".to_owned());
+    }
+    let positions = parity.positions_checked as u64;
+    let expected_coordinates = positions
+        .checked_mul(report.manifest.shape.width as u64)
+        .ok_or_else(|| "served-forward audit Q12 count overflows".to_owned())?;
+    let expected_kept_cells = positions
+        .checked_mul(report.manifest.shape.kept_cells as u64)
+        .ok_or_else(|| "served-forward audit kept-cell count overflows".to_owned())?;
+    if parity.query_coordinates_compared != expected_coordinates
+        || parity.token_decisions_compared != positions
+        || parity.kept_cells_compared != expected_kept_cells
+    {
+        return Err("served-forward audit decision counts differ".to_owned());
+    }
+    if parity.query_coordinate_mismatches != 0
+        || parity.token_mismatches != 0
+        || parity.kept_cell_mismatches != 0
+        || parity.instrument_fault
+        || parity.cpu_decision_sha256 != parity.serving_decision_sha256
+        || !parity.mismatches.is_empty()
+        || parity.mismatches_recorded != 0
+        || parity.mismatches_omitted != 0
+    {
+        return Err("served-forward CPU/serving parity failed".to_owned());
     }
     Ok(())
+}
+
+fn write_verified_artifact(
+    path: &Path,
+    artifact: &[u8],
+    tokens: &UortTokenSlice,
+) -> Result<(PathBuf, ServedForwardAuditReport, String), String> {
+    IntegerStackModel::parse(artifact)
+        .map_err(|error| format!("final artifact does not parse: {error}"))?;
+    let audit_config = ServedForwardAuditConfig {
+        tokens: tokens.tokens.clone(),
+        token_source: Some(tokens.source.clone()),
+        expected_artifact_sha256: Some(uor_r4_discrete::corpus::sha256(artifact)),
+        reply_start: None,
+        measure_timing: false,
+    };
+    let audit = audit_served_forward(artifact, &audit_config)
+        .map_err(|error| format!("final served-forward audit: {error}"))?;
+    validate_served_forward_export(&audit, artifact, tokens)
+        .map_err(|error| format!("final served-forward audit: {error}"))?;
+    let audit_bytes = serde_json::to_vec_pretty(&audit)
+        .map_err(|error| format!("final served-forward audit JSON: {error}"))?;
+    let audit_sha256 = uor_r4_discrete::corpus::sha256(&audit_bytes);
+    let audit_path = path.with_extension("audit.json");
+    if path.exists() || audit_path.exists() {
+        return Err("final artifact or audit receipt already exists".to_owned());
+    }
+
+    let partial = path.with_extension("partial");
+    let audit_partial = audit_path.with_extension("partial");
+    let published = (|| {
+        let mut file = std::fs::File::create(&partial)
+            .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
+        file.write_all(artifact)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("final artifact {}: {error}", partial.display()))?;
+        drop(file);
+        let mut audit_file = std::fs::File::create(&audit_partial)
+            .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
+        audit_file
+            .write_all(&audit_bytes)
+            .and_then(|()| audit_file.sync_all())
+            .map_err(|error| format!("final audit {}: {error}", audit_partial.display()))?;
+        drop(audit_file);
+        std::fs::rename(&audit_partial, &audit_path)
+            .map_err(|error| format!("final audit {}: {error}", audit_path.display()))?;
+        std::fs::rename(&partial, path)
+            .map_err(|error| format!("final artifact {}: {error}", path.display()))?;
+        let reloaded = std::fs::read(path)
+            .map_err(|error| format!("final artifact reload {}: {error}", path.display()))?;
+        let audit_reloaded = std::fs::read(&audit_path)
+            .map_err(|error| format!("final audit reload {}: {error}", audit_path.display()))?;
+        if reloaded != artifact || audit_reloaded != audit_bytes {
+            return Err("final artifact or served-forward audit reload differs".to_owned());
+        }
+        Ok((audit_path.clone(), audit, audit_sha256))
+    })();
+    if published.is_err() {
+        for failed in [&partial, &audit_partial, path, &audit_path] {
+            let _ = std::fs::remove_file(failed);
+        }
+    }
+    published
 }
 
 fn panel_json(reading: &uor_r4_cpu_train::PanelReading) -> serde_json::Value {
@@ -536,10 +702,15 @@ fn parse_args() -> Result<Config, String> {
 fn parse_args_from(values: &[String]) -> Result<Config, String> {
     let mut positional = Vec::new();
     let mut rank_margin = RankMarginConfig::default();
+    let mut require_admission = false;
     let mut at = 0;
     while at < values.len() {
         match values[at].as_str() {
-            "--margin-q12" | "--step-q12" | "--parameter-limit-q12" => {
+            "--require-admission" => {
+                require_admission = true;
+                at += 1;
+            }
+            "--margin-q12" | "--step-q12" | "--parameter-limit-q12" | "--coordinates-per-step" => {
                 let flag = values[at].as_str();
                 let value = values
                     .get(at + 1)
@@ -568,6 +739,15 @@ fn parse_args_from(values: &[String]) -> Result<Config, String> {
                                 "--parameter-limit-q12 needs a positive integer".to_owned()
                             })?;
                     }
+                    "--coordinates-per-step" => {
+                        rank_margin.coordinates_per_step = value
+                            .parse::<usize>()
+                            .ok()
+                            .filter(|value| (1..=64).contains(value))
+                            .ok_or_else(|| {
+                                "--coordinates-per-step needs an integer in 1..=64".to_owned()
+                            })?;
+                    }
                     _ => unreachable!(),
                 }
                 at += 2;
@@ -586,7 +766,8 @@ fn parse_args_from(values: &[String]) -> Result<Config, String> {
             "usage: cpu-corpus-driver <artifact> <tokens.u16> <mask.u8> <manifest.json> \
              <seed> <steps> <evaluation-stride> <max-evaluation> <checkpoint-every> \
              <checkpoint-dir> [resume-checkpoint] \
-             [--margin-q12 N] [--step-q12 N] [--parameter-limit-q12 N]"
+             [--margin-q12 N] [--step-q12 N] [--parameter-limit-q12 N] \
+             [--coordinates-per-step N] [--require-admission]"
                 .to_owned(),
         );
     }
@@ -615,6 +796,7 @@ fn parse_args_from(values: &[String]) -> Result<Config, String> {
         checkpoint_every,
         checkpoint_dir: Path::new(positional[9]).to_path_buf(),
         resume_checkpoint: positional.get(10).map(PathBuf::from),
+        require_admission,
     })
 }
 
@@ -741,6 +923,7 @@ mod tests {
             checkpoint_every: 2,
             checkpoint_dir: fixture.root.join(checkpoint_name),
             resume_checkpoint,
+            require_admission: false,
         }
     }
 
@@ -807,6 +990,11 @@ mod tests {
                 "corpus, seed or split",
             ),
             (
+                "coordinates_per_step",
+                serde_json::json!(4),
+                "corpus, seed or split",
+            ),
+            (
                 "evaluation_stride",
                 serde_json::json!(3),
                 "corpus, seed or split",
@@ -841,40 +1029,133 @@ mod tests {
     }
 
     #[test]
+    fn a_table_block_run_reports_its_coordinate_invariants_and_fails_required_admission() {
+        let fixture = corpus_fixture("table-block");
+        let mut base_config = config(&fixture, 8, "block", None);
+        base_config.rank_margin.coordinates_per_step = 4;
+        let report = execute(&base_config).unwrap();
+        let accepted = report["run"]["accepted_updates"].as_u64().unwrap();
+        assert_eq!(report["run"]["rank_margin"]["coordinates_per_step"], 4);
+        assert_eq!(
+            report["run"]["accepted_coordinate_histogram"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_u64().unwrap())
+                .sum::<u64>(),
+            accepted
+        );
+        assert!(
+            report["run"]["accepted_coordinate_moves"].as_u64().unwrap() >= accepted,
+            "{report}"
+        );
+        let checkpoint = PathBuf::from(
+            report["checkpoints"][1]["path"]
+                .as_str()
+                .expect("step-4 checkpoint path"),
+        );
+        let mut resumed_config = config(&fixture, 8, "resumed", Some(checkpoint));
+        resumed_config.rank_margin.coordinates_per_step = 4;
+        let resumed = execute(&resumed_config).unwrap();
+        assert_eq!(
+            resumed["final_artifact"]["sha256"],
+            report["final_artifact"]["sha256"]
+        );
+        assert_eq!(resumed["resume"]["verified"], true);
+        assert_eq!(resumed["resume"]["completed_steps"], 4);
+
+        assert_eq!(accepted_coordinate_block(&[8, 10, 12, 64], 80, 4), Ok(4));
+        assert!(accepted_coordinate_block(&[8, 8, 10, 12], 80, 4).is_err());
+        assert!(accepted_coordinate_block(&[7, 10, 12, 64], 80, 4).is_err());
+        assert!(accepted_coordinate_block(&[8, 10, 12, 64, 66], 80, 4).is_err());
+
+        base_config.require_admission = true;
+        let accepted_report = serde_json::json!({
+            "panel_gate": {"decision": "accept"}
+        });
+        let rejected_report = serde_json::json!({
+            "panel_gate": {"decision": "reject_admission"}
+        });
+        assert!(!required_gate_failed(&base_config, &accepted_report));
+        assert!(required_gate_failed(&base_config, &rejected_report));
+        std::fs::remove_dir_all(fixture.root).unwrap();
+    }
+
+    #[test]
     fn final_artifact_write_is_byte_identical_and_reloadable() {
-        let artifact = artifact();
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let directory = std::env::temp_dir().join(format!(
-            "uor-r4-cpu-corpus-artifact-{}-{nonce}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("final.uorlut");
-        write_verified_artifact(&path, &artifact).unwrap();
+        let fixture = corpus_fixture("artifact");
+        let artifact = std::fs::read(&fixture.artifact).unwrap();
+        let token_bytes = std::fs::read(&fixture.tokens).unwrap();
+        let tokens = uort_audit_tokens(&token_bytes, 8).unwrap();
+        let path = fixture.root.join("gate/final.uorlut");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let (audit_path, audit, audit_sha256) =
+            write_verified_artifact(&path, &artifact, &tokens).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), artifact);
         IntegerStackModel::parse(&artifact).unwrap();
-        std::fs::remove_dir_all(directory).unwrap();
+        assert_eq!(audit.parity.positions_checked, 8);
+        assert_eq!(audit.parity.query_coordinate_mismatches, 0);
+        assert_eq!(audit.parity.token_mismatches, 0);
+        assert_eq!(audit.parity.kept_cell_mismatches, 0);
+        assert_eq!(audit_path, path.with_extension("audit.json"));
+        let audit_bytes = std::fs::read(&audit_path).unwrap();
+        assert_eq!(uor_r4_discrete::corpus::sha256(&audit_bytes), audit_sha256);
+        let persisted: serde_json::Value = serde_json::from_slice(&audit_bytes).unwrap();
+        assert_eq!(persisted["artifact"]["sha256"], audit.artifact.sha256);
+        std::fs::remove_dir_all(fixture.root).unwrap();
     }
 
     #[test]
     fn final_artifact_write_refuses_non_uorlut_bytes() {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let directory = std::env::temp_dir().join(format!(
-            "uor-r4-cpu-corpus-invalid-{}-{nonce}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("final.uorlut");
-        assert!(write_verified_artifact(&path, b"not a UORLUT01 artifact").is_err());
+        let fixture = corpus_fixture("invalid-artifact");
+        let token_bytes = std::fs::read(&fixture.tokens).unwrap();
+        let tokens = uort_audit_tokens(&token_bytes, 8).unwrap();
+        let path = fixture.root.join("gate/final.uorlut");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        assert!(write_verified_artifact(&path, b"not a UORLUT01 artifact", &tokens).is_err());
         assert!(!path.exists());
+        assert!(!path.with_extension("audit.json").exists());
         assert!(!path.with_extension("partial").exists());
-        std::fs::remove_dir_all(directory).unwrap();
+        std::fs::remove_dir_all(fixture.root).unwrap();
+    }
+
+    #[test]
+    fn audit_failure_and_tampered_report_are_refused() {
+        let fixture = corpus_fixture("audit-gate");
+        let artifact = std::fs::read(&fixture.artifact).unwrap();
+        let token_bytes = std::fs::read(&fixture.tokens).unwrap();
+        let mut tokens = uort_audit_tokens(&token_bytes, 8).unwrap();
+        let path = fixture.root.join("gate/final.uorlut");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+
+        let audit_config = ServedForwardAuditConfig {
+            tokens: tokens.tokens.clone(),
+            token_source: Some(tokens.source.clone()),
+            expected_artifact_sha256: Some(uor_r4_discrete::corpus::sha256(&artifact)),
+            reply_start: None,
+            measure_timing: false,
+        };
+        let report = audit_served_forward(&artifact, &audit_config).unwrap();
+        validate_served_forward_export(&report, &artifact, &tokens).unwrap();
+
+        let mut tampered = report.clone();
+        tampered.parity.query_coordinate_mismatches = 1;
+        assert!(
+            validate_served_forward_export(&tampered, &artifact, &tokens)
+                .unwrap_err()
+                .contains("parity failed")
+        );
+
+        tokens.tokens[0] = 4096;
+        assert!(write_verified_artifact(&path, &artifact, &tokens).is_err());
+        assert!(!path.exists());
+        assert!(!path.with_extension("audit.json").exists());
+        assert!(!path.with_extension("partial").exists());
+        assert!(!path
+            .with_extension("audit.json")
+            .with_extension("partial")
+            .exists());
+        std::fs::remove_dir_all(fixture.root).unwrap();
     }
 
     fn driver_args(extra: &[&str]) -> Vec<String> {
@@ -892,6 +1173,7 @@ mod tests {
     fn update_geometry_arguments_are_positive_and_backward_compatible() {
         let default = parse_args_from(&driver_args(&[])).unwrap();
         assert_eq!(default.rank_margin, RankMarginConfig::default());
+        assert!(!default.require_admission);
         let changed = parse_args_from(&driver_args(&[
             "--margin-q12",
             "2",
@@ -899,6 +1181,9 @@ mod tests {
             "16",
             "--parameter-limit-q12",
             "4096",
+            "--coordinates-per-step",
+            "4",
+            "--require-admission",
         ]))
         .unwrap();
         assert_eq!(
@@ -907,12 +1192,16 @@ mod tests {
                 margin_q12: 2,
                 step_q12: 16,
                 parameter_limit_q12: 4096,
+                coordinates_per_step: 4,
             }
         );
+        assert!(changed.require_admission);
         for bad in [
             vec!["--step-q12", "0"],
             vec!["--margin-q12", "-1"],
             vec!["--parameter-limit-q12", "32768"],
+            vec!["--coordinates-per-step", "0"],
+            vec!["--coordinates-per-step", "65"],
             vec!["--step-q12"],
             vec!["--unknown", "1"],
         ] {

@@ -18,6 +18,12 @@ use serde::{Deserialize, Serialize};
 /// (`stack::kernels::RESIDUAL_EXP`, held equal by a stack test).
 pub const FBS_FIXED_EXP: i32 = -16;
 
+/// The exponent the FBS step holds both requantized activations at, the MLP's
+/// gated product and the recurrence's output, before `stack_quantize16`
+/// (`stack::kernels::PRODUCT_EXP`, held equal by a stack test). The float
+/// trainer's served stand-in reads its activations at it (claude-262).
+pub const FBS_ACTIVATION_EXP: i32 = -32;
+
 /// Encode a finite scalar as a grid code `±(16 + m) 2^(e - 4)` with
 /// `1 <= e + 64 <= 127`: the exporter's form for gains and convolution taps.
 /// `stack::encode_grid_code` wraps it.
@@ -383,6 +389,21 @@ pub struct FbsHammingSnapshot {
     pub depths: Vec<usize>,
     /// One read per depth, in the same order.
     pub reads: Vec<FbsHammingRead>,
+    /// How many tokens before a position a copy head's key names (claude-261): 1, absent from a
+    /// one-token snapshot, or 2, the ordered two-token key the float read's
+    /// `HammingReads::with_copy_key` trains.
+    #[serde(default = "one_token", skip_serializing_if = "is_one_token")]
+    pub copy_key: usize,
+}
+
+/// The one-token copy key, a Hamming record's default (claude-261).
+pub(crate) fn one_token() -> usize {
+    1
+}
+
+/// Whether `copy_key` is the one-token key, which a record leaves out (claude-261).
+pub(crate) fn is_one_token(copy_key: &usize) -> bool {
+    *copy_key == 1
 }
 
 /// One Hamming read's learned parameters, as `hamming_read.safetensors` stores them under

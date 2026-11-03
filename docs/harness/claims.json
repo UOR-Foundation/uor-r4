@@ -1,4 +1,11 @@
 {
+  "deepseek/audit-export-gate": {
+    "branch": "deepseek/audit-export-gate",
+    "claimed_at": "2026-11-03T01:55:46-05:00",
+    "head": "08213d45b",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/capacity-sheet-shape": {
     "branch": "deepseek/capacity-sheet-shape",
     "claimed_at": "2026-11-02T17:50:54-05:00",
@@ -31,6 +38,13 @@
     "branch": "deepseek/copy-codes-key2-guard",
     "claimed_at": "2026-11-02T23:04:45-05:00",
     "head": "b6ebf7002",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/copy-key2-cpu": {
+    "branch": "deepseek/copy-key2-cpu",
+    "claimed_at": "2026-11-03T02:21:59-05:00",
+    "head": "1499c09ed",
     "lab": "deepseek",
     "note": ""
   },
@@ -115,6 +129,13 @@
     "branch": "deepseek/served-rounding-item",
     "claimed_at": "2026-11-02T23:38:15-05:00",
     "head": "a9d0461e2",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/table-bvgk-pivot": {
+    "branch": "deepseek/table-bvgk-pivot",
+    "claimed_at": "2026-11-03T00:03:13-05:00",
+    "head": "de9cfc84a",
     "lab": "deepseek",
     "note": ""
   },
