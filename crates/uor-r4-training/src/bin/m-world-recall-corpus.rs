@@ -759,10 +759,11 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs the pinned issue-1017 tokenizer JSON"]
     fn pinned_tokenizer_default_mix_is_deterministic_and_teaches_memory() {
-        let Some(tokenizer_path) = std::env::var_os("UOR_R4_TOKENIZER").map(PathBuf::from) else {
-            return;
-        };
+        let tokenizer_path = std::env::var_os("UOR_R4_PINNED_TOKENIZER")
+            .map(PathBuf::from)
+            .expect("set UOR_R4_PINNED_TOKENIZER to the d36d3e87 tokenizer JSON");
         assert_eq!(
             uor_r4_training::sha256_file(&tokenizer_path).expect("pinned tokenizer"),
             PINNED_TOKENIZER_SHA256

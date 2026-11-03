@@ -88,6 +88,24 @@ The synthetic byte-tokenizer control remains useful as an independent fixture:
 24 conversations, 66 turns, 4,793 tokens, 10 recall lines and the same matched
 off/oracle behavior.
 
+The default `conversations=5600`, seed 73, protocol 2 generation also completed
+for both modes in about 13 seconds each:
+
+| Reading | `recall=off` | `recall=oracle` |
+|---|---:|---:|
+| Turns | 19,895 | 19,895 |
+| Tokens | 680,952 | 734,929 |
+| Response tokens | 227,031 | 227,031 |
+| Recall lines | 0 | 3,563 |
+| Value-bearing recall lines | 0 | 3,136 |
+| `Memory: none.` lines | 0 | 427 |
+| Longest episode | 245 | 263 |
+
+| Corpus | `tokens.u16` SHA-256 | `response_mask.u8` SHA-256 |
+|---|---|---|
+| off | `562d5a3de8053c65a2434750ad2322ebe234ddbd72b1b37dfbdff7ed16ba2ff5` | `c1270548bdca5a5eafaf58f4cb7115f0cdb716347fe54bab589bd90e7b184785` |
+| oracle | `299d3a46aa01ca1d8e6af0d19aeb5b80dce9513a32748153b3138a75d0bdb685` | `64cf637890f6a310459058f59ac041335dd8a2888f262b2a96742b89869289b3` |
+
 The existing `mix-chat-corpus` consumer accepted the two generated stores and
 emitted a 31,348-token, 9,806-response-token store with one source span per
 input. This is a structural integration check, not training.
@@ -96,10 +114,11 @@ No training, model evaluation, GPU run or capability claim was made.
 
 ## Checks run at the head
 
-- `UOR_R4_TOKENIZER=<pinned path> cargo test --locked -p uor-r4-training
-  --bin m-world-recall-corpus`: **6 passed**, including the exact pinned
-  tokenizer and default mix, byte determinism, the matched off/oracle census,
-  exclusion identity and report-root claim/seal/verify.
+- `cargo test --locked -p uor-r4-training --bin m-world-recall-corpus`:
+  **5 passed, 1 ignored**; the ignored test is the pinned-tokenizer path.
+- `UOR_R4_PINNED_TOKENIZER=<pinned path> cargo test --locked
+  -p uor-r4-training --bin m-world-recall-corpus -- --include-ignored`:
+  **6 passed**, including the exact pinned tokenizer and default mix.
 - `cargo test --locked -p uor-r4-training --lib`: **80 passed**.
 - `cargo check --locked -p uor-r4-training --bin m-world-recall-corpus`: passed.
 - `cargo build --locked -p uor-r4-training --bin mix-chat-corpus`: passed.
@@ -117,9 +136,8 @@ and admitted M-world/tokenizer APIs were read directly.
 
 ## Still open
 
-- Generate matched TRAIN-scale off/oracle stores with the default mix and record
-  their SHA-256 values and decoded census. Uploading those stores requires
-  private-store write authority.
+- Upload the generated TRAIN-scale off/oracle stores and their SHA-256 values
+  to the private store. Uploading requires private-store write authority.
 - Decide whether the next training unit composes the M-world source with the
   pinned chat store through `mix-chat-corpus` or consumes an integrated writer.
 - Bring the sealed English probe's exclusion rule into the lawful writer before
