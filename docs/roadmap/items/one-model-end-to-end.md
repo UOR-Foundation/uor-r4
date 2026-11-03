@@ -61,8 +61,9 @@ replace the served-training comparison above. Full transcripts and pins:
 - **A model trained as served does not yet serve as trained.** [claude-263](../../loop/tasks/one-model-end-to-end/claude-263/REPORT.md)
   exported claude-262's served step-256 checkpoints snapped and served them in
   integers. Their first tokens differ from the model's own float first tokens
-  on 112 and 137 of DEV's 310 prompts, against I-3's bar of 8. That is down
-  from claude-261's 295–305 before the repair. The float side's turn memory
+  on 112 and 137 of DEV's 310 prompts, against I-3's bar of 8. claude-261's
+  2,048-step checkpoints, a different configuration, missed 295–305 before
+  the repair. The float side's turn memory
   is not needed to explain the gap: float first tokens with and without
   memory differ on 3 and 0 prompts. The integer memory path is unchecked.
   The fault must be localized to one layer and repaired before the

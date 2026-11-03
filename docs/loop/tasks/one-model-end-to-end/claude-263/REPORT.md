@@ -29,14 +29,14 @@ Sheets: [part A](../../../../harness/prep/one-model-end-to-end-i3-repaired-2026-
    - At 256 steps the float model's first token with memory and without memory differs on only 3 of 310 prompts at seed 1 (prompts 32, 37 and 190) and 0 at seed 2.
    - The integer first token misses the float *no-memory* first token on 112 prompts at seed 1 and 137 at seed 2. At seed 1, 111 of those 112 are the prompts that miss the float memory first token; at seed 2 the two sets of 137 are the same.
 
-   So the float side's memory is not needed to explain the gap, which points at the trunk or the readout. This does **not** show that the integer memory and reply-table path is right: a fault there would give the same counts. claude-264's first check is an integer serve with the turn memory off, if the existing tools allow it.
+   So the float side's memory is not needed to explain the gap. The trunk, the readout and the integer memory path all remain candidates. This does **not** show that the integer memory and reply-table path is right: a fault there would give the same counts. claude-264's first check is an integer serve with the turn memory off, if the existing tools allow it.
 
 4. **Where the replies part.** Count each prompt at the first position where the integer and float replies differ.
    - At position 0: 112 prompts at seed 1 and 136 at seed 2. Seed 2's 137 first-token misses include prompt 242, whose float reply is empty, so it has no position 0 to part at.
    - At positions 1–4: 44 / 27 / 19 / 15 at seed 1, and 26 / 17 / 10 / 10 at seed 2.
    - 2 replies at seed 1 and 11 at seed 2 agree to their shorter length. Seed 1's 2 are identical. Of seed 2's 11, 6 are identical, one of them prompt 89, which is empty on both sides. The other 5 differ only in length, prompt 242 among them.
 
-   The fault reaches the first token on more than a third of the prompts (36% and 44%), so it is in the prompt's forward pass, not only in longer decodes.
+   The fault reaches the first token on more than a third of the prompts (36% and 44%), so it is not only in longer decodes. Where in the first token's computation it lies, including the integer memory read, is not known.
 
 5. **Neither sheet's review records were on #3407 when the PR opened, and CI went red.** Part A's sheet had no `TEST FITNESS` line, so `prep::tests::the_real_sheets_are_readable` and `preprules::tests::the_real_sheets_pass_the_shape_rule` failed. Both sheets had passed their reviews earlier. `75304ef9c` adds the line. Both sheets' FIT and pre-run records are now on #3407 (comment 6600769545).
 
@@ -61,7 +61,7 @@ Docs only; no code changed. The files:
 
     `git diff 4465685531 fac0131bc` over both crates is empty. Both runs' `config.json` carry `train_as_served: true` and `hamming_copy_key: null`, so neither has a copy key.
   - **Scoring:** seed 1 took 568 s and seed 2 took 532 s, one after the other. Each wrote 310 DEV samples, and each snapshot exited 0. EXIT 0 came at 10:18:18Z.
-- **The laptop.** `serve-i3.sh` ran with `fbs-export` `b2d9aff9…` and `fbs-toks` `79f49ff2…`, built in a tree whose integer and tokenizer crates and Cargo.lock equal the pin. It made the snapped exports (format `uor-r4.lut-stack/7`, seed 1 `607511e3…`, seed 2 `80567113…`), then the I-3 reading above.
+- **The laptop.** `serve-i3.sh` ran with `fbs-export` `b2d9aff9…` and `fbs-toks` `79f49ff2…`, built in a tree whose integer and tokenizer crates and Cargo.lock equal the pin. A deviation from the sheet's step 6: that tree was not this unit's worktree but `.worktrees/claude-copy-key-k2` at tree `afd99dd94`, as `serve-out/binaries.sha256` records. The script's equality guard passed on it, so the served code is the pinned code. It made the snapped exports (format `uor-r4.lut-stack/7`, seed 1 `607511e3…`, seed 2 `80567113…`), then the I-3 reading above.
 - **Not run:** E, the batched scorer's parity. #3583 was not merged at claim time, so the sheet drops it. claude ran it outside this unit as review evidence for #3583: PASS, store `results/claude/pr-3583-parity-2026-11-03`.
 
 ## The serving script
@@ -166,6 +166,6 @@ None applied. The scripts are `job-i3.sh`, `serve-i3.sh` and `watch-i3.sh`. They
 
 ## Plain summary
 
-claude-262 fixed how the model trains "as served". This unit checked whether the integer version the laptop runs gives the same answers as the trained model. It does not yet. On 310 test prompts, the laptop's first word differs from the trained model's own first word on 112 at one seed and 137 at the other. Before claude-262's fix it was about 300. The trained model gives the same first word with or without the memory that recalls replies, so that memory is not needed to explain the gap; the laptop's own memory path is still to be checked. The full-length training run therefore waits. The next unit finds the one layer where the two versions part and fixes it. GPU cost: one pod, about 28 minutes, about $0.26.
+claude-262 fixed how the model trains "as served". This unit checked whether the integer version the laptop runs gives the same answers as the trained model. It does not yet. On 310 test prompts, the laptop's first word differs from the trained model's own first word on 112 at one seed and 137 at the other. Before claude-262's fix it was about 300, on claude-261's longer runs, a different configuration. The trained model gives the same first word with or without the memory that recalls replies, so that memory is not needed to explain the gap; the laptop's own memory path is still to be checked. The full-length training run therefore waits. The next unit finds the one layer where the two versions part and fixes it. GPU cost: one pod, about 28 minutes, about $0.26.
 
 References #3407.
