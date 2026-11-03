@@ -1421,16 +1421,13 @@ impl CpuDiscreteProposalScorer {
                 self.objective,
             )
             .map_err(writer_score_error)?;
-            if loss.token_rivals == 0 || loss.loss == u64::MAX {
+            if !accumulate_joint_loss(&mut joint_loss, loss)? {
                 return Ok(CpuDiscreteBlockScoring {
                     records,
                     joint_loss: None,
                     eligible_rows,
                 });
             }
-            joint_loss = joint_loss
-                .checked_add(loss.loss)
-                .ok_or_else(|| score_error(9, "BVG-K joint loss sum overflows"))?;
         }
         Ok(CpuDiscreteBlockScoring {
             records,
@@ -3259,6 +3256,19 @@ fn writer_loss(
     Ok(CpuWriterLoss { loss, token_rivals })
 }
 
+fn accumulate_joint_loss(
+    total: &mut u64,
+    loss: CpuWriterLoss,
+) -> std::result::Result<bool, CpuDiscreteScoreError> {
+    if loss.token_rivals == 0 || loss.loss == u64::MAX {
+        return Ok(false);
+    }
+    *total = total
+        .checked_add(loss.loss)
+        .ok_or_else(|| score_error(9, "BVG-K joint loss sum overflows"))?;
+    Ok(true)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CpuWriterObservation {
     loss: u64,
@@ -4664,6 +4674,38 @@ mod tests {
         );
         assert!(scoring.joint_loss.is_some());
         assert_eq!(scorer.model.token_blocks(), before);
+    }
+
+    #[test]
+    fn joint_loss_rejects_a_row_that_loses_baseline_eligibility() {
+        let mut total = 7u64;
+        assert!(!accumulate_joint_loss(
+            &mut total,
+            CpuWriterLoss {
+                loss: 11,
+                token_rivals: 0,
+            }
+        )
+        .unwrap());
+        assert_eq!(total, 7);
+        assert!(!accumulate_joint_loss(
+            &mut total,
+            CpuWriterLoss {
+                loss: u64::MAX,
+                token_rivals: 1,
+            }
+        )
+        .unwrap());
+        assert_eq!(total, 7);
+        assert!(accumulate_joint_loss(
+            &mut total,
+            CpuWriterLoss {
+                loss: 5,
+                token_rivals: 1,
+            }
+        )
+        .unwrap());
+        assert_eq!(total, 12);
     }
 
     #[test]
