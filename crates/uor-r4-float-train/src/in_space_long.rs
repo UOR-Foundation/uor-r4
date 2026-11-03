@@ -5581,7 +5581,7 @@ fn decode_replies_with_mode(
                         continue;
                     }
                     let global_row = b * window_len + window_len - 1;
-                    if step == 0 {
+                    if step == 0 && memory.is_some() {
                         openings.push(global_row);
                     } else if let Some(memory) = &memory {
                         let cut = prompt_cut(width, start);
