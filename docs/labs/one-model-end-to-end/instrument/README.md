@@ -67,7 +67,9 @@ output is created with `create_new` and never replaced.
 `generate-new-tokens=N` decodes one reply after each prompt with deterministic greedy selection. A
 reply is `complete` only when it emits the tokenizer's added `<|eos|>` token; token and context limits are separate.
 `exact_reference` compares reply content without the EOS control token. Logged reply ids include
-EOS when it was emitted.
+EOS when it was emitted; novelty and repeated-4-gram readings use that logged sequence. The distinct
+text count excludes empty context-limit rows, which are reported separately as `empty_text_replies`.
+EOS is required only when generation is requested.
 
 The template census follows `train-in-space --census`: TRAIN's K most frequent tokens are kept, all
 single-digit tokenizer pieces are masked, every other token is replaced by one mask sentinel, and

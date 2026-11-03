@@ -9,16 +9,20 @@ Lab: deepseek. Item:
 
 - **The first complete-reply attempt required EOS in the panel manifest.**
   These older manifests do not carry EOS; the fail-closed parse exposed that
-  before generating anything. The instrument now takes EOS from the pinned
-  tokenizer's added `<|eos|>` token and records its id in the report.
+  before generating anything. When generation is requested, the instrument
+  now takes EOS from the pinned tokenizer's added `<|eos|>` token and records
+  its id in the report. Teacher-forced-only runs still accept tokenizers
+  without an added EOS.
 - **Most public M1 replies are not correct by exact reference.** None of the 58
   generated replies matched its reference reply.
-- **The public M1 model is not ready for useful chat.** Only 12 distinct texts
-  appeared across 58 prompts, most commonly "Got it, I'll remember that."
+- **The public M1 model is not ready for useful chat.** Only 11 distinct
+  non-empty texts appeared across 58 prompts, most commonly "Got it, I'll
+  remember that."
   Two replies repeated a 4-gram, and one decoded text contained a replacement
   character.
 - **Four prompts had no remaining context for a new token.** They are recorded
-  as context-limit stops rather than counted as completion or empty replies.
+  as context-limit stops and as four empty-text rows, separately from the 11
+  distinct non-empty texts.
 - **Three prompts reached the 16-token cap.** They are recorded separately from
   EOS completion.
 - **This is not fresh-phrasing or semantic-correctness evidence.** The panel
@@ -32,9 +36,11 @@ Lab: deepseek. Item:
 - EOS, token-limit and context-limit stops are distinct.
 - Each generated row records prompt/reply indices, complete ids, decoded text,
   exact-reference agreement and repeated-4-gram status.
-- Aggregate output records completion, exact-reference count, distinct texts,
-  replacement-character texts and generated 4-/8-gram novelty against the
-  supplied reference corpus.
+- Aggregate output records completion, exact-reference count, distinct
+  non-empty texts, empty-text rows, replacement-character texts and generated
+  4-/8-gram novelty against the supplied reference corpus. Novelty includes
+  EOS for complete replies, matching the item's existing free-generation
+  measure.
 - The tokenizer identity now records the validated added `<|eos|>` id.
 - Teacher-forced scoring, writer parity and full CPU trunk parity remain in the
   same report and remain exact.
@@ -52,26 +58,27 @@ Public seed-1 19-table artifact:
 | Token-limit stops | 3 |
 | Context-limit stops | 4 |
 | Exact-reference replies | 0 |
-| Distinct generated texts | 12 |
+| Distinct non-empty generated texts | 11 |
+| Empty context-limit texts | 4 |
 | Replies containing a repeated 4-gram | 2 |
 | Replies containing a decoder replacement character | 1 |
-| Generated new / total 4-grams | 51 / 360 |
-| Generated new / total 8-grams | 145 / 145 |
+| Generated new / total 4-grams | 57 / 411 |
+| Generated new / total 8-grams | 195 / 195 |
 | Teacher-forced targets | 616 |
 | Teacher-forced admitted / top-1 / top-8 | 365 / 293 / 306 |
 | Full CPU trunk parity | 19,712 / 19,712 coordinates exact |
 
 The full generated reply list is in the pinned report. Its SHA-256 is
-`48fe585f40106e943c48ab59c199c77d97f23680427baa09401a217dba90e20b`.
+`538f4508a96d5fcbd7c96cc9d485198f5e60f751269cf81af46f0824d5560b68`.
 The committed summary is
 `docs/labs/one-model-end-to-end/evidence-deepseek-12-generated-replies.json`
 (SHA-256
-`aa6ac6e4ac6de7445ee84d829804450db63c68a965744c8bc22a0c1f0f2ca0f0`).
+`03d707876d9f6009aff411cf19a4b31801a3d1472ae5c821def95d14650f814e`).
 
 ## Checks run at the head
 
 - `cargo test --offline --features cpu-parity --lib --bin m2-evidence -j1`:
-  15 library tests and 3 CLI tests passed.
+  16 library tests and 3 CLI tests passed.
 - Strict package Clippy with `--all-targets --no-deps -- -D warnings`: passed.
 - The public 58-prompt, 16-token generation process completed successfully.
 - Targeted `rustfmt --check` passed.
@@ -96,5 +103,6 @@ integer model, public panel and repository delivery rules were read directly.
 The CPU evidence tool can now generate bounded complete replies and grade their
 stop reasons, repetition, exact-reference agreement and novelty. On the public
 M1 model, 51 of 58 responses reached EOS, but none matched the reference reply,
-and 58 prompts collapsed to 12 distinct texts. The model can finish short
-geometric outputs; it does not yet hold a useful conversation.
+and 58 prompts collapsed to 11 distinct non-empty texts plus four empty
+context-limit rows. The model can finish short geometric outputs; it does not
+yet hold a useful conversation.

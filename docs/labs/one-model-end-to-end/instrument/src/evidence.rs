@@ -4,9 +4,9 @@
 //! `IntegerDiscreteModel` used by native serving. It reports next-token
 //! admission/top-1/top-8, checks the independent CPU writer on the serving
 //! query where its fixed width-four codebook applies, and stratifies panel rows
-//! by whole-run overlap with a supplied TRAIN or control split. It does not
-//! call generated text "complete" and does not infer generated-reply novelty
-//! when no generated-reply file is supplied.
+//! by whole-run overlap with a supplied TRAIN or control split. With
+//! `generate-new-tokens`, it also records bounded greedy replies and calls a
+//! reply complete only when it emits the tokenizer's added EOS token.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -16,8 +16,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uor_r4_cpu_train::{
-    CpuDiscreteProposalSample, CpuDiscreteProposalScorer, CpuDiscreteTrunkReader, CpuWriterCore,
-    ABSENT_CELL, READ_WIDTH, VOCABULARY,
+    ABSENT_CELL, CpuDiscreteProposalSample, CpuDiscreteProposalScorer, CpuDiscreteTrunkReader,
+    CpuWriterCore, READ_WIDTH, VOCABULARY,
 };
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 use uor_r4_tokenizer::ByteBpeTokenizer;
@@ -223,7 +223,8 @@ pub struct TokenizerIdentity {
     pub path: String,
     pub sha256: String,
     pub vocabulary: usize,
-    pub eos_id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eos_id: Option<u32>,
     pub digit_tokens: usize,
     pub mask_ks: Vec<usize>,
 }
@@ -293,6 +294,7 @@ pub struct ReplyGeneration {
     pub exact_reference: u64,
     pub repeated_4gram_replies: u64,
     pub distinct_texts: u64,
+    pub empty_text_replies: u64,
     pub replacement_character_replies: u64,
     pub eos_stops: u64,
     pub token_limit_stops: u64,
@@ -367,7 +369,7 @@ struct Metadata {
 struct TokenizerCensus {
     identity: TokenizerIdentity,
     digits: HashSet<u32>,
-    eos: u32,
+    eos: Option<u32>,
     decoder: ByteBpeTokenizer,
 }
 
@@ -631,18 +633,15 @@ fn read_tokenizer(path: &Path) -> Result<TokenizerCensus> {
         })
         .filter_map(|(_, id)| id.as_u64().and_then(|id| u32::try_from(id).ok()))
         .collect();
-    let eos = value["added_tokens"]
-        .as_array()
-        .and_then(|tokens| {
-            tokens.iter().find_map(|token| {
-                (token["content"].as_str() == Some("<|eos|>"))
-                    .then(|| token["id"].as_u64().and_then(|id| u32::try_from(id).ok()))
-                    .flatten()
-            })
+    let eos = value["added_tokens"].as_array().and_then(|tokens| {
+        tokens.iter().find_map(|token| {
+            (token["content"].as_str() == Some("<|eos|>"))
+                .then(|| token["id"].as_u64().and_then(|id| u32::try_from(id).ok()))
+                .flatten()
         })
-        .ok_or_else(|| "tokenizer JSON has no added <|eos|> token".to_owned())?;
-    if eos == 0 || eos as usize >= decoder.vocab_size() {
-        return Err("tokenizer EOS id is outside its vocabulary".to_owned());
+    });
+    if eos.is_some_and(|eos| eos == 0 || eos as usize >= decoder.vocab_size()) {
+        return Err("tokenizer added <|eos|> id is outside its vocabulary".to_owned());
     }
     Ok(TokenizerCensus {
         identity: TokenizerIdentity {
@@ -1197,6 +1196,9 @@ where
     if max_new_tokens == 0 {
         return Err("generated-token limit must be positive".to_owned());
     }
+    let eos = tokenizer
+        .eos
+        .ok_or_else(|| "generated replies require a tokenizer added <|eos|> token".to_owned())?;
     let train_4 = train.map(|train| ngram_index(train, 4));
     let train_8 = train.map(|train| ngram_index(train, 8));
     let mut generated = ReplyGeneration {
@@ -1206,6 +1208,7 @@ where
         exact_reference: 0,
         repeated_4gram_replies: 0,
         distinct_texts: 0,
+        empty_text_replies: 0,
         replacement_character_replies: 0,
         eos_stops: 0,
         token_limit_stops: 0,
@@ -1236,25 +1239,19 @@ where
             prefix.extend_from_slice(&ids);
             let token = predict(&prefix)?;
             ids.push(token);
-            if token == tokenizer.eos {
+            if token == eos {
                 break GenerationStop::Eos;
             }
         };
-        let content: Vec<u32> = ids
-            .iter()
-            .copied()
-            .filter(|&id| id != tokenizer.eos)
-            .collect();
+        let content: Vec<u32> = ids.iter().copied().filter(|&id| id != eos).collect();
         let reference: Vec<u32> = run_tokens(corpus, reply)
             .iter()
             .copied()
-            .filter(|&id| id != tokenizer.eos)
+            .filter(|&id| id != eos)
             .collect();
         let exact_reference = content == reference;
         let mut seen = HashSet::new();
-        let repeated_4gram = content
-            .windows(4)
-            .any(|window| !seen.insert(window.to_vec()));
+        let repeated_4gram = ids.windows(4).any(|window| !seen.insert(window.to_vec()));
         generated.replies += 1;
         generated.complete += u64::from(stop == GenerationStop::Eos);
         generated.exact_reference += u64::from(exact_reference);
@@ -1265,16 +1262,17 @@ where
             GenerationStop::ContextLimit => generated.context_limit_stops += 1,
         }
         if let Some(novelty) = &mut generated.novelty {
-            for window in content.windows(4) {
+            for window in ids.windows(4) {
                 novelty.total_4grams += 1;
                 novelty.new_4grams += u64::from(!train_4.as_ref().unwrap().contains(window));
             }
-            for window in content.windows(8) {
+            for window in ids.windows(8) {
                 novelty.total_8grams += 1;
                 novelty.new_8grams += u64::from(!train_8.as_ref().unwrap().contains(window));
             }
         }
         let text = tokenizer.decoder.decode(&content);
+        generated.empty_text_replies += u64::from(text.is_empty());
         generated.replacement_character_replies += u64::from(text.contains('\u{fffd}'));
         generated.rows.push(GeneratedReply {
             prompt: prompt.ordinal,
@@ -1290,6 +1288,7 @@ where
         .rows
         .iter()
         .map(|reply| reply.text.as_str())
+        .filter(|text| !text.is_empty())
         .collect::<HashSet<_>>()
         .len() as u64;
     Ok(generated)
@@ -1657,9 +1656,22 @@ mod tests {
         (directory, files)
     }
 
-    fn written_tokenizer(name: &str) -> (TempDir, TokenizerCensus) {
+    fn written_tokenizer_with_eos(name: &str, eos_id: Option<u32>) -> (TempDir, TokenizerCensus) {
         let directory = TempDir::new(name);
         let path = directory.0.join("tokenizer.json");
+        let added_tokens = eos_id
+            .map(|id| {
+                serde_json::json!([{
+                    "id": id,
+                    "content": "<|eos|>",
+                    "single_word": false,
+                    "lstrip": false,
+                    "rstrip": false,
+                    "normalized": false,
+                    "special": true
+                }])
+            })
+            .unwrap_or_else(|| serde_json::json!([]));
         let tokenizer = serde_json::json!({
             "model": {
                 "type": "BPE",
@@ -1673,22 +1685,16 @@ mod tests {
                 },
                 "merges": []
             },
-            "added_tokens": [
-                {
-                    "id": 6,
-                    "content": "<|eos|>",
-                    "single_word": false,
-                    "lstrip": false,
-                    "rstrip": false,
-                    "normalized": false,
-                    "special": true
-                }
-            ],
+            "added_tokens": added_tokens,
             "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": true}
         });
         fs::write(&path, serde_json::to_vec(&tokenizer).unwrap()).unwrap();
         let census = read_tokenizer(&path).unwrap();
         (directory, census)
+    }
+
+    fn written_tokenizer(name: &str) -> (TempDir, TokenizerCensus) {
+        written_tokenizer_with_eos(name, Some(6))
     }
 
     fn corpus(tokens: &[u32], mask: &[u8]) -> Corpus {
@@ -1848,9 +1854,11 @@ mod tests {
         let directory = TempDir::new("tokenizer-no-vocab");
         let path = directory.0.join("tokenizer.json");
         fs::write(&path, br#"{"model":{}}"#).unwrap();
-        assert!(read_tokenizer(&path)
-            .unwrap_err()
-            .contains("supported byte-level BPE"));
+        assert!(
+            read_tokenizer(&path)
+                .unwrap_err()
+                .contains("supported byte-level BPE")
+        );
 
         let (_directory, tokenizer) = written_tokenizer("tokenizer-binding");
         let mut panel = corpus(&[0, 10, 11, 20, 21], &[0, 0, 0, 1, 1]);
@@ -1885,25 +1893,33 @@ mod tests {
             serde_json::from_slice(&fs::read(&files.manifest).unwrap()).unwrap();
         manifest["mask_sha256"] = serde_json::json!("00".repeat(32));
         fs::write(&files.manifest, serde_json::to_vec(&manifest).unwrap()).unwrap();
-        assert!(read_corpus(&files, 8, 4096, 0)
-            .unwrap_err()
-            .contains("manifest identity"));
+        assert!(
+            read_corpus(&files, 8, 4096, 0)
+                .unwrap_err()
+                .contains("manifest identity")
+        );
     }
 
     #[test]
     fn vocabulary_bos_and_empty_response_inputs_fail_closed() {
         let (_directory, files) = written_corpus("artifact-mismatch", &[0, 10, 20], &[0, 0, 1]);
-        assert!(read_corpus(&files, 8, 4097, 0)
-            .unwrap_err()
-            .contains("vocabulary/BOS"));
-        assert!(read_corpus(&files, 8, 4096, 1)
-            .unwrap_err()
-            .contains("vocabulary/BOS"));
+        assert!(
+            read_corpus(&files, 8, 4097, 0)
+                .unwrap_err()
+                .contains("vocabulary/BOS")
+        );
+        assert!(
+            read_corpus(&files, 8, 4096, 1)
+                .unwrap_err()
+                .contains("vocabulary/BOS")
+        );
 
         let (_directory, empty) = written_corpus("empty-response", &[0, 10], &[0, 0]);
-        assert!(read_corpus(&empty, 8, 4096, 0)
-            .unwrap_err()
-            .contains("no response"));
+        assert!(
+            read_corpus(&empty, 8, 4096, 0)
+                .unwrap_err()
+                .contains("no response")
+        );
         assert!(evenly_cap((0..10).collect::<Vec<_>>(), Some(0)).is_empty());
         assert!(codebook_from_artifact(b"not-an-artifact").is_err());
     }
@@ -1993,22 +2009,39 @@ mod tests {
         assert_eq!(generation.exact_reference, 1);
         assert_eq!(generation.repeated_4gram_replies, 1);
         assert_eq!(generation.distinct_texts, 1);
+        assert_eq!(generation.empty_text_replies, 0);
         assert_eq!(generation.replacement_character_replies, 0);
         let novelty = generation.novelty.unwrap();
-        assert_eq!(novelty.total_4grams, 5);
+        assert_eq!(novelty.total_4grams, 6);
         assert_eq!(novelty.new_4grams, 0);
-        assert_eq!(novelty.total_8grams, 1);
+        assert_eq!(novelty.total_8grams, 2);
         assert_eq!(novelty.new_8grams, 0);
         assert_eq!(generation.rows[0].stop, GenerationStop::Eos);
 
         let limited = generate_replies(&panel, None, &tokenizer, 32, 2, |_| Ok(2)).unwrap();
         assert_eq!(limited.token_limit_stops, 1);
         assert_eq!(limited.complete, 0);
+        assert_eq!(limited.distinct_texts, 1);
+        assert_eq!(limited.empty_text_replies, 0);
         assert_eq!(limited.rows[0].ids, [2, 2]);
 
         let context_bound = generate_replies(&panel, None, &tokenizer, 3, 2, |_| Ok(2)).unwrap();
         assert_eq!(context_bound.context_limit_stops, 1);
+        assert_eq!(context_bound.distinct_texts, 0);
+        assert_eq!(context_bound.empty_text_replies, 1);
         assert!(context_bound.rows[0].ids.is_empty());
+    }
+
+    #[test]
+    fn tokenizer_eos_is_required_only_for_generated_replies() {
+        let panel = corpus(&[0, 10, 11, 2, 3, 4, 5, 6], &[0, 0, 0, 1, 1, 1, 1, 1]);
+        let (_directory, tokenizer) = written_tokenizer_with_eos("tokenizer-without-eos", None);
+        assert_eq!(tokenizer.identity.eos_id, None);
+        assert!(
+            generate_replies(&panel, None, &tokenizer, 32, 2, |_| Ok(2))
+                .unwrap_err()
+                .contains("require a tokenizer added <|eos|>")
+        );
     }
 
     #[test]
@@ -2033,31 +2066,29 @@ mod tests {
         };
 
         let four = identity("uor-r4.lut-discrete/1", 4);
-        assert!(observe_cpu_engine_parity(
-            &four,
-            b"not-an-artifact",
-            std::slice::from_ref(&target)
-        )
-        .unwrap_err()
-        .contains("independent CPU discrete engine"));
+        assert!(
+            observe_cpu_engine_parity(&four, b"not-an-artifact", std::slice::from_ref(&target))
+                .unwrap_err()
+                .contains("independent CPU discrete engine")
+        );
 
         let trunk = identity("uor-r4.lut-discrete-trunk/1", 19);
-        assert!(observe_cpu_engine_parity(
-            &trunk,
-            b"not-an-artifact",
-            std::slice::from_ref(&target)
-        )
-        .unwrap_err()
-        .contains("independent CPU discrete trunk"));
+        assert!(
+            observe_cpu_engine_parity(&trunk, b"not-an-artifact", std::slice::from_ref(&target))
+                .unwrap_err()
+                .contains("independent CPU discrete trunk")
+        );
 
         let unsupported = identity("uor-r4.lut-discrete/2", 7);
         let unavailable =
             observe_cpu_engine_parity(&unsupported, b"not-an-artifact", &[target]).unwrap();
-        assert!(unavailable
-            .unavailable
-            .as_deref()
-            .unwrap()
-            .contains("four-table and 19-table"));
+        assert!(
+            unavailable
+                .unavailable
+                .as_deref()
+                .unwrap()
+                .contains("four-table and 19-table")
+        );
     }
 
     #[test]
@@ -2080,7 +2111,7 @@ mod tests {
                 path: "t".to_owned(),
                 sha256: "22".repeat(32),
                 vocabulary: 4096,
-                eos_id: 1,
+                eos_id: Some(1),
                 digit_tokens: 10,
                 mask_ks: CENSUS_MASK_KS.to_vec(),
             },

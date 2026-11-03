@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.m2-evidence.generated-summary/1",
-  "source_report_sha256": "48fe585f40106e943c48ab59c199c77d97f23680427baa09401a217dba90e20b",
+  "source_report_sha256": "538f4508a96d5fcbd7c96cc9d485198f5e60f751269cf81af46f0824d5560b68",
   "artifact": {
     "sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
     "tables": 19,
@@ -55,16 +55,17 @@
     "complete": 51,
     "exact_reference": 0,
     "repeated_4gram_replies": 2,
-    "distinct_texts": 12,
+    "distinct_texts": 11,
+    "empty_text_replies": 4,
     "replacement_character_replies": 1,
     "eos_stops": 51,
     "token_limit_stops": 3,
     "context_limit_stops": 4,
     "novelty": {
-      "new_4grams": 51,
-      "total_4grams": 360,
-      "new_8grams": 145,
-      "total_8grams": 145
+      "new_4grams": 57,
+      "total_4grams": 411,
+      "new_8grams": 195,
+      "total_8grams": 195
     }
   },
   "unavailable": {
