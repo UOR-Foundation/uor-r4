@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: false
 depends_on: [studio-typed-shell-upgrade]
 done_class: host
-scope: [web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/studio_ui.js, web/studio/assets/js/model_sources.js, web/studio/assets/js/mcp_client.js, web/studio/assets/js/mcp_client.test.mjs, web/studio/src/adapters/**, docs/products/web-client.md, docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md, docs/superpowers/plans/2026-11-02-studio-ide-harness.md, docs/loop/tasks/studio-ide-harness/**, docs/roadmap/items/studio-ide-harness.md, docs/roadmap/issues.json]
+scope: [web/studio/index.html, web/studio/index.css, web/studio/README.md, web/studio/assets/js/studio_ui.js, web/studio/assets/js/studio_files.js, web/studio/assets/js/model_sources.js, web/studio/assets/js/mcp_client.js, web/studio/assets/js/mcp_client.test.mjs, web/studio/src/adapters/**, docs/products/web-client.md, docs/superpowers/specs/2026-11-02-studio-ide-harness-design.md, docs/superpowers/plans/2026-11-02-studio-ide-harness.md, docs/loop/tasks/studio-ide-harness/**, docs/roadmap/items/studio-ide-harness.md, docs/roadmap/issues.json]
 ---
 
 ## Why it matters

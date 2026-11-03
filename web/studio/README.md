@@ -48,9 +48,8 @@ were "not organized or labeled very well". The page is now a workable AI studio:
   can be copied, inserted into the editor, saved as a file or retried; the composer states whether
   the active mode is local WASM (stays on device) or an OpenAI-compatible API (prompts leave the
   device). No API code lives here - the API integration remains another lab's work.
-- **Models** is four labeled sections: Local engine (offline), Published models (M1 seed 1 PRIMARY,
-  seed 2), API providers (remote add/use/test/edit/remove) and a collapsed Research (experimental)
-  section. **Settings** has Appearance (theme, reduce motion), Editor (font, tab size, wrap), Data
+- **Connections** presents UOR Chat — experimental, custom API providers, and a closed Artifact
+  diagnostics region for M1/research/local-file/URL tools. **Settings** has Appearance (theme, reduce motion), Editor (font, tab size, wrap), Data
   (sessions/draft storage and clearing) and About. **Guide** is the product documentation.
 - **Command palette** (⌘K, also `#command-palette`) has eight groups - Navigation, Sessions,
   Workspace, Agent, Models, Build, Interface, Help - with label, one-line description and only

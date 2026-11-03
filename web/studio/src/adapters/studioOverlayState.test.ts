@@ -89,6 +89,10 @@ describe('overlay and view-state coordination', () => {
         expect(html).toMatch(/class="sr-only" for="chatInput"/);
         expect(html).toMatch(/class="sr-only" for="paletteInput"/);
         expect(html).toContain("setView('chat', { focus: false })");
+        expect(html).not.toContain('under Model sources');
+        expect(html).not.toContain("when Claude's API endpoint is available");
+        const readme = readFileSync('README.md', 'utf8');
+        expect(readme).not.toContain('**Models** is four labeled sections');
     });
 
     it('closes other modals and blocks background navigation shortcuts', async () => {
@@ -119,5 +123,38 @@ describe('overlay and view-state coordination', () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         expect(help.hidden).toBe(true);
         expect(document.querySelectorAll('.modal-backdrop:not([hidden])')).toHaveLength(0);
+    });
+
+    it('restores the opener after switching overlays and closes transient menus', async () => {
+        const rows = document.createElement('div');
+        rows.id = 'sessionRowsV2';
+        document.body.appendChild(rows);
+        (window as unknown as { __studioUi: { listSessions(): unknown[] } }).__studioUi = {
+            listSessions: () => [{ id: 's1', title: 'Session', createdAt: Date.now(), updatedAt: Date.now(), messageCount: 1, preview: 'preview' }],
+        };
+        await import(studioUiModule);
+        document.dispatchEvent(new CustomEvent('uor-studio-ready'));
+        await vi.advanceTimersByTimeAsync(0);
+        const ui = (window as unknown as { __studioUi: { openSettings(): void; openPalette(): void; openHelp(): void } }).__studioUi;
+        const opener = document.createElement('button');
+        opener.id = 'btnSettings';
+        document.body.appendChild(opener);
+        opener.focus();
+        document.querySelector<HTMLButtonElement>('.session-row .conv-menu')!.click();
+        expect(document.querySelector('.session-popover')).not.toBeNull();
+        const templates = document.createElement('div');
+        templates.id = 'templateMenu';
+        document.body.appendChild(templates);
+        ui.openSettings();
+        ui.openPalette();
+        expect(document.querySelector('.session-popover')).toBeNull();
+        expect(templates.hidden).toBe(true);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(opener);
+        opener.focus();
+        ui.openSettings();
+        ui.openHelp();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        expect(document.activeElement).toBe(opener);
     });
 });

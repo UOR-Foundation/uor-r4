@@ -120,9 +120,11 @@ describe('actual mobile navigation dismissal', () => {
         expect(scrim.hidden).toBe(true);
         expect(main.inert).toBe(false);
         mobileMedia.matches = true;
+        document.getElementById('viewBtnModel')!.focus();
         synchronize!();
         expect(scrim.hidden).toBe(false);
         expect(main.inert).toBe(true);
+        expect(document.activeElement?.id).toBe('navAgent');
     });
 
     it('keeps the wired model id on the actual Connections navigation control', async () => {

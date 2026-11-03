@@ -205,7 +205,7 @@
                             <div class="providers-head">
                                 <div>
                                     <span class="micro-label">PROVIDERS</span>
-                                    <p class="hint">Load a local artifact or the published M1 trunk; a remote model or API is contacted only after your explicit click.</p>
+                                    <p class="hint">Connect UOR Chat, choose a custom API provider, or open Artifact diagnostics; a remote model or API is contacted only after your explicit click.</p>
                                 </div>
                                 <span class="badge">on-device first</span>
                             </div>
@@ -282,7 +282,7 @@
                                     <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Workspace</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
                                     <li>Click a file to open an editor tab; save edits back to disk with <kbd class="kbd">⌘S</kbd>.</li>
                                     <li>In <button class="inline-link" data-guide-nav="agent" type="button">Agent</button>, attach the active file as context and describe the task.</li>
-                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Connections</button> when Claude's API endpoint is available; until then the local engine serves next-token prediction only.</li>
+                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Connections</button> when a custom OpenAI-compatible endpoint is configured; until then the local engine serves next-token prediction only.</li>
                                 </ol>
                             </section>
                             <section class="guide-card">
@@ -509,7 +509,7 @@
             'The local engine runs a UORLUT01 stack artifact in a Web Worker.',
             'The bundled seed-5 stack is a synthetic stand-in for the serving',
             'engine, not a language model. An OpenAI-compatible API can be',
-            'configured under Model sources; prompts then leave this device.',
+            'configured under Connections; prompts then leave this device.',
         ].join('\n');
 
         var app = {
@@ -1011,7 +1011,7 @@
                 return false;
             }
             if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {
-                toast('Load the M1 discrete model first under Model sources.', 'warn');
+                toast('Load the M1 discrete model first under Connections.', 'warn');
                 return false;
             }
             if (!app.tokenizerArtifact) {
@@ -1449,7 +1449,7 @@
 
         function sendViaWorker(prompt, conversation) {
             if (!app.worker || !app.caps) {
-                toast('Load a local model first under Model sources.', 'warn');
+                toast('Load a local model first under Connections.', 'warn');
                 setView('model');
                 return false;
             }

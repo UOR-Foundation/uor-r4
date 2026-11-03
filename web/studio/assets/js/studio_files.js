@@ -348,8 +348,8 @@
                 var attach = document.createElement('button');
                 attach.type = 'button';
                 attach.className = 'tree-attach';
-                attach.setAttribute('aria-label', 'Attach as agent context');
-                attach.title = 'Attach as agent context';
+                attach.setAttribute('aria-label', 'Attach ' + entry.path + ' as agent context');
+                attach.title = 'Attach ' + entry.path + ' as agent context';
                 attach.textContent = '＋';
                 attach.addEventListener('click', function (event) { event.stopPropagation(); attachPath(entry.path); });
                 row.appendChild(attach);

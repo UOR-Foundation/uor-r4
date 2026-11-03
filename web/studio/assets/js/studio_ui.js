@@ -120,6 +120,13 @@
         if (scrim) scrim.hidden = !(expanded && mobile);
         var main = document.getElementById('mainColumn');
         if (main) main.inert = expanded && mobile;
+        if (expanded && mobile) {
+            var sidebar = document.getElementById('navSidebar');
+            if (sidebar && !sidebar.contains(document.activeElement)) {
+                var firstDestination = sidebar.querySelector('button[data-section]');
+                if (firstDestination) firstDestination.focus();
+            }
+        }
     }
     function setChrome(name, value, persist) {
         if (!app) return;
@@ -726,7 +733,12 @@
         return Array.prototype.slice.call(dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(function (node) { return !node.disabled && node.getClientRects().length; });
     }
     function closeOtherModals(except) {
-        $all('.modal-backdrop:not([hidden])').forEach(function (other) { if (other !== except) other.hidden = true; });
+        closeSessionPopover();
+        var templateMenu = document.getElementById('templateMenu');
+        if (templateMenu) templateMenu.hidden = true;
+        var templateAnchor = document.getElementById('btnBuildTask');
+        if (templateAnchor) templateAnchor.setAttribute('aria-expanded', 'false');
+        $all('.modal-backdrop:not([hidden])').forEach(function (other) { if (other !== except) closeModal(other); });
     }
     function openModal(dialog) {
         if (!dialog) return;
