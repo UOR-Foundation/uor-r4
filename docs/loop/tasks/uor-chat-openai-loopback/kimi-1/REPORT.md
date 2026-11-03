@@ -33,13 +33,13 @@ Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-o
 - Real non-discrete smoke: existing Claude dual-c131 FBS artifact `local/claude/claude-181/exp/raw-both.uorlut` (read-only substitution; the user's previous invocation was not identified) plus W2 tokenizer. Artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, declared context 192. Model discovery returned that exact hash/schema. JSON and SSE both returned `I.` with 3 completion IDs, 12 prompt tokens and 15 total tokens. JSON measured `elapsed_ns=5,154,500`, `first_token_ns=4,720,500`, `tokens_per_second_milli=582,015`; SSE independently measured `5,142,709`, `4,671,834`, and `583,350`. `/v1/embeddings` returned 501 and a 10,000-byte prompt returned 413 before streaming. This is protocol evidence only, not a quality claim. The launch token was not printed or persisted, and the server was stopped.
 - Storage: 35,506 generated files (6.5 GiB) were removed from the Kimi target after the smoke run. Free space increased from 27 GiB to 32 GiB. No model evidence or other labs' files were deleted.
 
-## Skills used
-
-Isolated worktrees, plan execution, test-driven development, systematic debugging, solution integrity, native Rust implementation, OpenAI-compatible protocol design, native/WASM serving audits, real loopback smoke verification, and independent exact-head delivery review. No GPU, paid compute, production publish, or model-quality evaluation was used.
-
 ## Checks run at the head
 
 Implementation head: `f371e05d51ebec597c6128a29a741119e9040c6d`. Final clean-head `loop gates --full`, local policy, claim wording, roadmap check, fresh exact-head review, GitHub checks and protected queue delivery are external verification records and will be posted on the PR only after they exist. They are not claimed in this REPORT.
+
+## Skills used
+
+Isolated worktrees, plan execution, test-driven development, systematic debugging, solution integrity, native Rust implementation, OpenAI-compatible protocol design, native/WASM serving audits, real loopback smoke verification, and independent exact-head delivery review. No GPU, paid compute, production publish, or model-quality evaluation was used.
 
 ## Still open
 
