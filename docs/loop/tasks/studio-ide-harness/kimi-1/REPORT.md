@@ -1,6 +1,6 @@
 # REPORT: Mac-inspired Studio IDE and simplified UOR/API connections
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d` and `b6ebf7002745f1c9ec5c7de230bc9f9ae66009e3` before final delivery checks; exact delivery-head evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d`, `b6ebf7002745f1c9ec5c7de236bc9f9ae66009e3`, and `498e3657498aea4cc722dce96d89f9276b8e9378` before final delivery checks; the earlier review base was `de9cfc84a`. Exact delivery-head evidence is posted on the PR.
 
 ## What did not work
 
@@ -10,6 +10,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Browser automation needed fresh element snapshots and explicit responsive orientation/dimensions. More importantly, the first fresh exact-head review returned **CHANGES_REQUIRED** and proved the visible Connections click was genuinely unwired (`navConnections` vs the wired `navModels`); the original test fixture had hidden this by using `navModels`. The actual markup now restores `navModels` and has a direct file-based regression plus desktop/mobile click checks.
 - The same review found that stored desktop expansion reopened the mobile drawer on reload, Tab could leave the drawer, close-focus restoration was conditional, regrouping stranded the URL input outside its manager's mount, the palette used a separate focus-only path, and three control classes were below 24px. Mobile hydration now starts collapsed, a drawer-local Tab trap and unconditional close-focus restoration are tested, URL lookup/palette/diagnostic behavior share one helper, and the controls meet the minimum. The URL manager received a declared narrow lookup repair, not a provider/network behavior change.
 - Roadmap rendering initially rejected the new item's invalid `issue` key and missing Sources section. Those metadata defects were corrected; a stale `xtask` binary then falsely proposed creating a duplicate of #3569 until a clean rebuild proved the live marker/labels were valid. Sync updated #3569 and the generated 136-item views with zero creates.
+- The latest exact-head review returned **CHANGES_REQUIRED**. Its overlay/focus repairs initially failed three of 19 focused tests: shared cleanup overwrote the return target during replacement, a navigation fixture omitted the actual Settings close button, and dynamic confirmation lacked an initial hidden state. The repair now preserves one return target, uses synchronous dialog focus, and restores the session trigger on Escape/Cancel. Dynamic-node fixtures re-query each new dialog; no assertion was removed.
 - No real model/API trajectory, MCP connectivity, desktop stdio bridge, real disk access, typed-library cutover, production publish, or trained-chat capability was exercised or is claimed. #3569 and #3500 remain open for their broader units.
 
 ## What changed
@@ -22,20 +23,21 @@ The recovered five-commit unit:
 - Includes the ORDER, roadmap item, design, implementation plan, and focused actual-page tests for computed visual treatment, source regrouping/listener preservation, readiness, and navigation labels.
 - Fresh-review scope now explicitly includes `studio_files.js`: the tree attachment is a separate native button with visible row hover/focus and coarse-pointer states. Overlay exclusivity, early diagnostics, remaining controls, and live status/aria-current behavior have focused tests in `studioOverlayState.test.ts`, `studioNativeTheme.test.ts`, and `studioUrlDiagnostics.test.ts`.
 
-During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and restores Menu on every mobile close, while a drawer-local Tab trap contains focus and mobile hydration starts collapsed. All 230 tests and the real-browser open/close, Connections, stored-expanded reload, and palette checks pass after these repairs. The recovered commits, merge-forward, ORDER/REPORT, and these scoped repairs form the delivery.
+During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and restores Menu on every mobile close, while a drawer-local Tab trap contains focus and mobile hydration starts collapsed. All 236 tests and the real-browser open/close, Connections, stored-expanded reload, and palette checks pass after these repairs. The recovered commits, merge-forward, ORDER/REPORT, and these scoped repairs form the delivery.
 
 ## Measurements and checks
 
-At the repaired verification head before the final REPORT commit:
+At implementation commit `918aa886fd5ace96db148f71f66ef34eab0342ef` (tree `211ac7f21d145ea62a41b7c9900089ae4e4816d9`):
 
-- `npm test`: **29 test files, 230 tests passed, 0 failures**.
+- Focused overlay/navigation/diagnostics regression run: **3 files, 19 tests passed, 0 failures**.
+- `npm test`: **29 test files, 236 tests passed, 0 failures**.
 - `npm run typecheck`: PASS, no TypeScript errors.
-- `npm run build`: PASS; `dist/studio-foundation.js` 123.06 kB (gzip 33.77 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
+- `npm run build`: PASS; `dist/studio-foundation.js` 123.06 kB (gzip 33.76 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
 - `node --test assets/js/model_sources.test.mjs`: **12 tests passed, 0 failures**.
-- `node --check assets/js/studio_ui.js` and `node --check assets/js/model_sources.js`: PASS; `studio_files.js` also passed the earlier syntax check.
+- `node --check assets/js/studio_ui.js`, `model_sources.js`, and `studio_files.js`: PASS.
 - `node verify_studio_page.mjs --strict-router`: PASS for `index.html` and `geometric_prime_router_webapp.html`; `legacyResidual: []`, `failures: []`.
 - `node verify_studio_page_load.mjs --strict-router`: PASS. Studio: 12 page-load requests, 0 external; router: 2 requests, 0 external. Planted external detection passed on inline, blob-worker, and late channels.
-- Combined executed unit/model-source tests: **242 passed, 0 failures**.
+- Combined executed unit/model-source tests: **248 passed, 0 failures**.
 - `cargo xtask roadmap render` and `roadmap check`: **136 items OK**. A fresh `xtask` build was required after the stale binary first proposed a duplicate issue; the refreshed sync then updated #3569 with zero creates and wrote `issues.json`/the 136-item roadmap README.
 
 Repository gates, claim wording, local policy, exact-head review, and GitHub checks are recorded at the exact delivery head below after this REPORT is committed.
@@ -60,7 +62,7 @@ The built-in browser exercised the actual local page, with no real credentials/f
 - `UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop gates --full`: **11/11 GREEN**.
 - `uor-harness loop pr-check --local`: the first run identified the new-item merge-base anchor and two missing REPORT headings. The ORDER now names the existing parent #3500 plus the new follow-up #3569 without hiding scope, and the required headings are present. The corrected rerun is recorded in the final PR receipts.
 - `cargo run -q --locked -p uor-r4-claim-wording -- .` and `git diff --check`: final results are recorded in the PR receipts.
-- The final 242 Studio/model-source checks and both page-load layers listed above ran at the repaired head. After the focus/overlay/navigation regressions, the focused tests and complete 230-test suite, typecheck, and syntax checks all passed again; the real-browser focus, Connections, stored-expanded reload, and palette diagnostics were also rechecked.
+- The final 248 Studio/model-source checks and both page-load layers listed above cover implementation commit `918aa886f`. The focused 19-test run and complete 236-test suite, typecheck, build, and syntax checks passed after the focus/overlay/navigation regressions. The real browser rechecked modal-to-palette focus return and Cancel-first dynamic Delete confirmation with clean Escape removal; the earlier Connections, stored-expanded reload, responsive, and diagnostic evidence remains scoped to its recorded head.
 
 ## Skills used
 
@@ -73,7 +75,7 @@ Recovery and working discipline, isolated worktrees, plan execution, test-driven
 
 ## Exact delivery head
 
-Verification commit `db222246dc77162010b41407f30a55ee8712cf4a` (tree `13f9452cca6611fcebbfbfbe0f218fe2cdf945c2`) contains the recovered implementation, all scoped review repairs, current-main integration, and generated roadmap mapping. At that exact head: 29 files/230 Vitest plus 12 model-source tests passed (242 total); typecheck/build/syntax passed; static and runtime page-load traps passed with zero external requests; full repository gates were 11/11 GREEN; `loop pr-check --local` passed with only the disclosed D76 scope/commit-order/FILEMAP advisories; claim wording and `git diff --check` passed. The roadmap has 136 items and #3569 is mapped with zero duplicate creates. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). The subsequent receipt commit is the review/PR head. Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
+Implementation commit `918aa886fd5ace96db148f71f66ef34eab0342ef` (tree `211ac7f21d145ea62a41b7c9900089ae4e4816d9`) contains the recovered implementation, all scoped review repairs, and current-main integration through `498e3657498aea4cc722dce96d89f9276b8e9378`. At that exact content: 29 files/236 Vitest plus 12 model-source tests passed (248 total); typecheck/build/syntax passed; static and runtime page-load traps passed with zero external requests; full repository gates were 11/11 GREEN (log `local/kimi/gates/1793694201-26745`); `loop pr-check --local` passed with only the disclosed D76 scope/commit-order/FILEMAP advisories; claim wording, roadmap check (136 items), and `git diff --check` passed. The lineage receipt records the earlier verified tree `13f9452cca6611fcebbfbfbe0f218fe2cdf945c2` and the actual `db222246d..dd58c76a` REPORT/receipts-only delta; the newer source/test repairs are not mislabeled as docs-only. Durable command/scenario receipts are in [`receipts.jsonl`](receipts.jsonl). The subsequent receipt commit is the review/PR head. Fresh exact-head review, protected PR checks, and merge-queue delivery remain pending and are not claimed as complete.
 
 ## Still open
 
