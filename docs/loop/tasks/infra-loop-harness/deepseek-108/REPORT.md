@@ -1,5 +1,9 @@
 # REPORT: correct the recorded base, deepseek-108
 
+> **Superseded by [deepseek-109](../deepseek-109/REPORT.md).** A final review
+> found the following commit's report-change description incomplete and the
+> PR-body ORDER link premature. The verified base and gate receipt are retained.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
@@ -41,8 +45,8 @@ No model or serving measurement applies. The verified facts are:
 - `cargo run -q -p xtask -- roadmap check`: PASS.
 - `git diff --check`, `loop report --check`, `loop pr-check --local` and
   `loop gates --full`: PASS.
-- The final receipt commit adds only the receipts file and updates this report's
-  exact-size line.
+- The final accounting commit adds the receipts file, records the tested
+  content commit and updates this report's exact-size line.
 
 ## Skills used
 
