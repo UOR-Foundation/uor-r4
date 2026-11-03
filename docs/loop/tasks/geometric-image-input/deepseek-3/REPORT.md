@@ -60,7 +60,9 @@ development context, while four images overflow it and return 413.
 
 - 17 focused Node image/API/composer tests passed.
 - 266 Studio tests passed across 31 files.
-- Native loopback: 14 passed. Integer library: 451 passed, 1 ignored.
+- Native loopback: 14 passed. Integer library at the merged image head: 452
+  passed, 1 ignored. The earlier 451-test receipt is retained; current `main`
+  added one passing test before the final merge-forward.
 - Vision crate: 9 tests passed in the default parallel build.
 - Real Chrome 157 against native `uor-chat`: exact metrics were
   **34 prompt / 6 completion / 40 total tokens**, 470.3 tok/s, TTFT 10.953 ms,
@@ -86,6 +88,9 @@ development context, while four images overflow it and return 413.
 
 - The evidence files under [evidence/](evidence/) retain the Node, Studio,
   native, WASM, page and browser outputs plus their SHA-256 manifest.
+- The merged-head integer rerun is retained in
+  [integer-lib-tests-452.txt](evidence/integer-lib-tests-452.txt): 452 passed,
+  1 ignored.
 - `rustfmt --check` on changed Rust files, `node --check` on changed JavaScript,
   and `git diff --check`: passed.
 - Strict Clippy on `uor-r4-vision`: passed. Integer Clippy has the 51
