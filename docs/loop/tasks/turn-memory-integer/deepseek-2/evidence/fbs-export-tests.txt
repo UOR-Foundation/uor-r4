@@ -8,4 +8,3 @@ test tests::malformed_served_flags_fail_closed ... ok
 test tests::served_training_requires_both_raw_flags ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
