@@ -37,7 +37,7 @@ The item's first implementation scope is the integer snapshot quantizer. That
 path runs on every `--train-as-served 1` step but does not overlap PR #3583's
 batched-scorer files.
 
-Size: 5 changed files, 279 insertions, 0 deletions at the repair commit; four
+Size: 6 changed files, 339 insertions, 0 deletions at the repair head; five
 documentation records and one shared claim entry. No code or tests changed.
 
 ## Measurements
