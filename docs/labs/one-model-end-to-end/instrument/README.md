@@ -38,6 +38,7 @@ cargo run --release --offline --features cpu-parity --bin m2-evidence -- \
   train-manifest=TRAIN/manifest.json \
   train-role=generated_control \
   max-targets=1024 \
+  generate-new-tokens=16 \
   out=NEW_REPORT.json
 ```
 
@@ -50,6 +51,8 @@ The report contains:
   reference-reply strata;
 - reference prompt/reply exact overlap and reply 4-/8-gram novelty;
 - value-masked prompt and reply template overlap at K = 256 and 1,024;
+- opt-in greedy replies with EOS, token-limit and context-limit stops, exact-reference matching,
+  repeated 4-grams and generated reply 4-/8-gram novelty;
 - an independent `CpuWriterCore` comparison against the integer serving writer;
 - for supported four-table artifacts, a full independent CPU read-query/writer comparison;
 - explicit `unavailable` entries for data or controls not supplied.
@@ -58,8 +61,15 @@ The input UORT header vocabulary, tokenizer structure/hash, manifest hashes, voc
 conversation count and response inventory are checked before scoring. Each document's BOS is
 excluded from prompt and first-8-key runs, matching the census and turn-memory semantics. Empty
 corpora, missing prompt or response runs, zero targets, `max-targets=0`, malformed artifacts,
-unknown or duplicate arguments and an existing output path are refused. An output is created with
-`create_new` and never replaced.
+`generate-new-tokens=0`, unknown or duplicate arguments and an existing output path are refused. An
+output is created with `create_new` and never replaced.
+
+`generate-new-tokens=N` decodes one reply after each prompt with deterministic greedy selection. A
+reply is `complete` only when it emits the tokenizer's added `<|eos|>` token; token and context limits are separate.
+`exact_reference` compares reply content without the EOS control token. Logged reply ids include
+EOS when it was emitted; novelty and repeated-4-gram readings use that logged sequence. The distinct
+text count excludes empty context-limit rows, which are reported separately as `empty_text_replies`.
+EOS is required only when generation is requested.
 
 The template census follows `train-in-space --census`: TRAIN's K most frequent tokens are kept, all
 single-digit tokenizer pieces are masked, every other token is replaced by one mask sentinel, and
@@ -72,15 +82,16 @@ For a supported four-table `uor-r4.lut-discrete/1` artifact, `cpu_engine_parity`
 `CpuDiscreteProposalScorer` to recompute the query and checks query coordinates, admitted cells,
 top-8 and top-1 against integer serving.
 
-For the current 19-table M1 artifact, that full comparison is unavailable because `uor-r4-cpu-train`
-implements the four-table discrete read path, not the 15 additional M1 trunk tables. The report
-still independently reproduces the writer from each serving trunk Q12 query and records the full
-trunk check as unavailable rather than treating a second serving call as parity.
+For a supported 19-table `uor-r4.lut-discrete-trunk/1` artifact, it uses
+`CpuDiscreteTrunkReader` through the CPU Relation/Flock/Route read, recurrence, joint-pointer
+rotation and post-rotation writer. The report checks every complete Q12 query coordinate,
+admitted-cell vector, top-8 and token against integer serving. Other schemas remain explicitly
+`unavailable`; no unsupported artifact is treated as parity.
 
 ### Evidence still unavailable without more inputs
 
-- Generated complete-reply correctness and loops need a model-generated reply file.
-- Generated-reply novelty needs those generated replies.
+- Semantic correctness against human judgments is not available; the instrument records completion,
+  loops and exact reference agreement, not a claim that a different reply is wrong.
 - Count-table, memory-off and no-read comparisons need corresponding exported arms.
 
 The public smoke result is recorded in the

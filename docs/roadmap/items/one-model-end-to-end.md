@@ -42,6 +42,49 @@ ready for a useful-chat demonstration; it does not change this item's status or
 replace the served-training comparison above. Full transcripts and pins:
 [public-chat post-smoke baseline](../../labs/one-model-end-to-end/public-chat-post-smoke-2026-11-02/README.md).
 
+The CPU-only `m2-evidence` lane now executes the public trained 19-table M1
+artifact through the independent `CpuDiscreteTrunkReader`. On its existing
+616-target public panel it checked all 19,712 Q12 query coordinates and all
+complete admitted-cell, top-8 and token decisions with zero mismatches. This
+closes the earlier full-CPU-trunk query gap in the evidence instrument; it is
+not a training, complete-reply, fresh-phrasing or GPU-qualification result.
+See [deepseek-11](../../loop/tasks/one-model-end-to-end/deepseek-11/REPORT.md).
+
+The same instrument now supports bounded greedy complete-reply generation.
+On the public M1 panel, 51 of 58 prompts reached EOS within 16 new tokens;
+three reached the token limit and four had no remaining context. None matched
+its reference reply, only 11 distinct non-empty texts appeared across 58
+prompts, and four context-limit rows were empty. Two replies repeated a 4-gram.
+Generated 4-/8-gram novelty against the generated control was 57/411 and
+195/195. This is a useful complete-reply instrument and a public-model
+readiness negative, not a fresh-phrasing or chat verdict. See
+[deepseek-12](../../loop/tasks/one-model-end-to-end/deepseek-12/REPORT.md).
+
+The complete-reply grader was then rerun on an unused-seed 218-prompt
+held-out-phrasing panel. None of its prompt templates occur in the same-seed
+generated control at K = 256 or 1,024, and both the panel and decode reproduce
+byte for byte. The public M1 model still produced only 22 distinct non-empty
+texts across 199 non-empty replies and matched no reference reply. Every
+generated 8-gram was new, while only 201 of 1,517 generated 4-grams were new.
+Teacher-forced and CPU trunk parity remained exact. This confirms the
+public-model readiness negative under a genuinely new-template draw; it is not
+semantic-correctness, fresh-reply-wording or GPU evidence. See
+[deepseek-13](../../loop/tasks/one-model-end-to-end/deepseek-13/REPORT.md).
+
+The same instrument now has a count-table arm. It builds the corpus-wide most
+common successor and each previous token's most common successor from adjacent
+tokens inside the supplied reference documents, then runs the identical
+218-prompt, 16-token, context-limited and EOS-aware reply pass. On the public
+seed-1 M1 artifact and the seed-2201 generated control, the model completed 184
+replies with 22 distinct non-empty texts, seven repeated-4gram replies and five
+replacement-character replies; the count table completed 196 with four distinct
+texts and no repeated 4-gram or replacement-character reply. Neither matched an
+exact reference, and the two paths differed on 199 of 218 first tokens. The
+count table is therefore a matched naive control, while the public model's
+extra text forms are not evidence of correctness. Memory-off and no-read remain
+unavailable because this artifact carries neither mechanism. See
+[deepseek-14](../../loop/tasks/one-model-end-to-end/deepseek-14/REPORT.md).
+
 ## What is missing
 
 - **Served-surrogate training is repaired; it now passes the operational
@@ -58,6 +101,30 @@ replace the served-training comparison above. Full transcripts and pins:
   inconclusive, with served above plain on the bar's evaluator top-1 (53 / 67
   against 40 / 43, band 24) and on DEV nearest (305 / 357 against 239 / 248). The step's 1.85× margin to the 2× ceiling and served-run
   openings are still open before a longer run.
+- **A model trained as served does not yet serve as trained.** [claude-263](../../loop/tasks/one-model-end-to-end/claude-263/REPORT.md)
+  exported claude-262's served step-256 checkpoints snapped and served them in
+  integers. Their first tokens differ from the model's own float first tokens
+  on 112 and 137 of DEV's 310 prompts, against I-3's bar of 8. claude-261's
+  2,048-step checkpoints, a different configuration, missed 295–305 before
+  the repair. The float side's turn memory
+  is not needed to explain the gap: float first tokens with and without
+  memory differ on 3 and 0 prompts. The integer memory path is unchecked.
+  [claude-264](../../loop/tasks/one-model-end-to-end/claude-264/REPORT.md)
+  made the float served forward round every FBS projection to 2^-16, as the
+  integer session does. The misses fell only to 100 and 131. Some matches broke
+  as well as others being made. That fits other unmatched roundings,
+  an inexact match of this one, or run-to-run variation in the scorer, and the
+  unit does not separate them.
+  [claude-265](../../loop/tasks/one-model-end-to-end/claude-265/REPORT.md)
+  trained and served without the icosian snap: the gates pass through and
+  the transition is unit-normalized, in training and in the raw export alike.
+  Retrained at two seeds, the misses fell to 32 and 14 of 310, and the float
+  scorer gave identical output twice on one host. So the snap was the main
+  part of the gap, and the rest is a real, smaller one; whole replies still
+  differ on 287 and 240. The remaining sites (the Hamming reads, the turn
+  memory, the writer's Q12 query, the convolution, the embedding) come next,
+  read per layer. The full-length served run's sheet is FIT and its pre-run
+  review passed; it needs re-pinning to the unsnapped contract.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
   - a TRAIN reply index;

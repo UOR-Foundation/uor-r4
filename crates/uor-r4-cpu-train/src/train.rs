@@ -778,6 +778,7 @@ impl<'a> Reader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
     use uor_r4_discrete::normalization_mechanism::orbit_root_coords;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, synthetic_hamming, FbsSynth};
     use uor_r4_integer::stack::{
@@ -899,6 +900,601 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[derive(Clone)]
+    struct ConversationExample {
+        prompt: Vec<u32>,
+        reply: Vec<u32>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct FullPathParts {
+        initial: Vec<u8>,
+        after_writer: Vec<u8>,
+        after_hamming: Vec<u8>,
+        with_memory: Vec<u8>,
+        hamming_off: Vec<u8>,
+        stripped: Vec<u8>,
+        final_artifact: Vec<u8>,
+    }
+
+    fn commonest_target(counts: &BTreeMap<u32, usize>) -> u32 {
+        counts
+            .iter()
+            .min_by(|left, right| right.1.cmp(left.1).then_with(|| left.0.cmp(right.0)))
+            .map(|(&target, _)| target)
+            .unwrap()
+    }
+
+    #[test]
+    fn a_tied_memory_target_uses_the_smaller_token() {
+        assert_eq!(
+            commonest_target(&BTreeMap::from([(20, 1), (19, 1), (21, 1)])),
+            19
+        );
+    }
+
+    fn memory_entries(counts: BTreeMap<Vec<u32>, BTreeMap<u32, usize>>) -> Vec<FbsMemoryEntry> {
+        counts
+            .into_iter()
+            .map(|(key, targets)| FbsMemoryEntry {
+                key,
+                value: commonest_target(&targets),
+            })
+            .collect()
+    }
+
+    fn train_turn_memory(
+        examples: &[ConversationExample],
+        width: usize,
+        k: usize,
+        key_window: usize,
+        reply_turn: usize,
+    ) -> FbsMemorySnapshot {
+        let mut opening = BTreeMap::<Vec<u32>, BTreeMap<u32, usize>>::new();
+        let mut reply = BTreeMap::<Vec<u32>, BTreeMap<u32, usize>>::new();
+        for example in examples {
+            let prompt = &example.prompt;
+            let reply_tokens = &example.reply;
+            assert!(!reply_tokens.is_empty());
+            let prompt_start = prompt
+                .iter()
+                .rposition(|&token| token == 0 || token == 1)
+                .map_or(0, |at| at + 1);
+            let opening_key = prompt[prompt_start..]
+                .iter()
+                .copied()
+                .take(k)
+                .collect::<Vec<_>>();
+            assert!(!opening_key.is_empty());
+            *opening
+                .entry(opening_key)
+                .or_default()
+                .entry(reply_tokens[0])
+                .or_default() += 1;
+
+            let turn = prompt[prompt_start..]
+                .iter()
+                .copied()
+                .take(reply_turn)
+                .collect::<Vec<_>>();
+            let tokens = prompt
+                .iter()
+                .chain(reply_tokens)
+                .copied()
+                .collect::<Vec<_>>();
+            let reply_start = prompt.len();
+            for offset in 1..reply_tokens.len().saturating_sub(1) {
+                let row = reply_start + offset;
+                let block_start = row / key_window * key_window;
+                let visible = block_start.max(reply_start);
+                let length = row + 1 - visible;
+                let mut key = turn.clone();
+                key.extend([
+                    MEMORY_PAD,
+                    u32::try_from(length).unwrap(),
+                    MEMORY_PAD,
+                    tokens[row],
+                ]);
+                *reply
+                    .entry(key)
+                    .or_default()
+                    .entry(*reply_tokens.get(offset + 1).unwrap())
+                    .or_default() += 1;
+            }
+        }
+        FbsMemorySnapshot {
+            k,
+            key_window,
+            opening: memory_entries(opening),
+            opening_weight: vec![1.0; width],
+            reply: Some(FbsReplyTable {
+                turn: reply_turn,
+                entries: memory_entries(reply),
+                weight: vec![1.0; width],
+            }),
+        }
+    }
+
+    fn trained_full_path_parts() -> FullPathParts {
+        let mut snapshot = canonical_snapshot(true);
+        let initial = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        assert!(IntegerStackModel::parse(&initial)
+            .unwrap()
+            .turn_memory()
+            .is_none());
+        let writer_samples = admitted_samples(
+            &mut CpuRankMarginTrainer::from_artifact(
+                &initial,
+                vec![RankMarginSample {
+                    input: vec![0],
+                    target: 0,
+                }],
+                RankMarginConfig::default(),
+                911,
+            )
+            .unwrap(),
+            8,
+        );
+        let mut writer = CpuRankMarginTrainer::from_artifact(
+            &initial,
+            writer_samples,
+            RankMarginConfig::default(),
+            911,
+        )
+        .unwrap();
+        let old_table = writer.table().to_vec();
+        let steps = writer.train_steps(8).unwrap();
+        assert!(steps.iter().all(|step| step.updated));
+        for ((source, &old), &trained) in snapshot
+            .embed
+            .iter_mut()
+            .zip(&old_table)
+            .zip(writer.table())
+        {
+            *source += f64::from(i32::from(trained) - i32::from(old)) as f32 / 4096.0;
+        }
+        let after_writer = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let parsed = IntegerStackModel::parse(&after_writer).unwrap();
+        assert_eq!(
+            writer.table(),
+            parsed.fbs_trunk_image().unwrap().writer_table
+        );
+
+        let rank_samples = [
+            RankMarginSample {
+                input: vec![10, 11, 12],
+                target: 20,
+            },
+            RankMarginSample {
+                input: vec![30, 31, 32],
+                target: 40,
+            },
+        ];
+
+        let score =
+            |candidate: &FbsTrunkSnapshot, samples: &[RankMarginSample]| -> (u64, u64, i64, i64) {
+                let artifact = export_fbs_trunk_uorlut01(candidate).unwrap();
+                let mut trainer = CpuRankMarginTrainer::from_artifact(
+                    &artifact,
+                    samples.to_vec(),
+                    RankMarginConfig::default(),
+                    912,
+                )
+                .unwrap();
+                let mut score = (0u64, 0u64, 0i64, 0i64);
+                for sample in samples {
+                    let reading = trainer.evaluate_sample(sample).unwrap();
+                    score.0 += u64::from(!reading.target_admitted);
+                    score.1 += u64::try_from(reading.target_rank).unwrap_or(u64::MAX);
+                    score.2 += reading.margin_loss;
+                    score.3 = score.3.saturating_add(reading.target_distance);
+                }
+                score
+            };
+
+        let mut margins_changed = 0usize;
+        let candidates = [0.5f32, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0];
+        let read_count = snapshot.hamming.as_ref().unwrap().reads.len();
+        let head_count = snapshot.hamming.as_ref().unwrap().heads;
+        for read in 0..read_count {
+            for head in 0..head_count {
+                let original = snapshot.hamming.as_ref().unwrap().reads[read].margin[head];
+                let mut best = (score(&snapshot, &rank_samples), original);
+                for candidate in candidates {
+                    let mut trial = snapshot.clone();
+                    trial.hamming.as_mut().unwrap().reads[read].margin[head] = candidate;
+                    let candidate_score = score(&trial, &rank_samples);
+                    if candidate_score < best.0 {
+                        best = (candidate_score, candidate);
+                    }
+                }
+                if best.1 != original {
+                    snapshot.hamming.as_mut().unwrap().reads[read].margin[head] = best.1;
+                    margins_changed += 1;
+                }
+            }
+        }
+        assert!(margins_changed > 0, "Hamming margins did not train");
+        let after_hamming = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        assert_ne!(after_hamming, after_writer);
+
+        let memory_examples = [
+            ConversationExample {
+                prompt: vec![10, 11, 12],
+                reply: vec![20, 21, 22, 23],
+            },
+            ConversationExample {
+                prompt: vec![10, 11, 12],
+                reply: vec![19, 24],
+            },
+        ];
+        let memory = train_turn_memory(&memory_examples, snapshot.width, 3, snapshot.context, 3);
+        assert_eq!(
+            memory.opening[0].value, 19,
+            "the tied target did not break to 19"
+        );
+        snapshot.memory = Some(memory);
+        let with_memory = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+
+        let point_prompt = [30, 31, 32];
+        let mut point_forward = CpuFbsForward::from_artifact(&with_memory).unwrap();
+        let mut point = None;
+        for (index, &token) in point_prompt.iter().enumerate() {
+            if index + 1 == point_prompt.len() {
+                point_forward.mark_reply_start();
+            }
+            point = Some(point_forward.step(token, CpuFbsHead::Writer).unwrap());
+        }
+        let point = point.unwrap();
+        let point_values = point
+            .query_q12
+            .iter()
+            .map(|&value| i16::try_from(value).unwrap())
+            .collect::<Vec<_>>();
+        let mut no_hamming = snapshot.clone();
+        no_hamming.hamming = None;
+        let no_hamming_memory = export_fbs_trunk_uorlut01(&no_hamming).unwrap();
+        let hamming_off = add_point_key_uorlut01(
+            &no_hamming_memory,
+            &PointKeyImage {
+                width: snapshot.width,
+                points: point_values.clone(),
+                targets: vec![40],
+            },
+        )
+        .unwrap();
+        no_hamming.memory = None;
+        let stripped = export_fbs_trunk_uorlut01(&no_hamming).unwrap();
+        let final_artifact = add_point_key_uorlut01(
+            &with_memory,
+            &PointKeyImage {
+                width: snapshot.width,
+                points: point_values.clone(),
+                targets: vec![40],
+            },
+        )
+        .unwrap();
+        let memory = uor_r4_integer::stack::read_memory_uorlut01(&final_artifact)
+            .unwrap()
+            .unwrap();
+        assert_eq!(memory.record.opening, 1);
+        assert_eq!(memory.record.reply, Some(2));
+        assert_eq!(memory.opening.keys, vec![vec![10, 11, 12]]);
+        assert_eq!(memory.opening.values, vec![19]);
+        assert!(memory.opening.keys.windows(2).all(|pair| pair[0] < pair[1]));
+        let reply = memory.reply.as_ref().unwrap();
+        assert!(reply.keys.windows(2).all(|pair| pair[0] < pair[1]));
+        let point = memory.point.as_ref().unwrap();
+        assert_eq!(point.points, point_values);
+        assert_eq!(point.targets, vec![40]);
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "initial_sha256": uor_r4_discrete::corpus::sha256(&initial),
+                "writer_sha256": uor_r4_discrete::corpus::sha256(&after_writer),
+                "hamming_sha256": uor_r4_discrete::corpus::sha256(&after_hamming),
+                "hamming_off_sha256": uor_r4_discrete::corpus::sha256(&hamming_off),
+                "stripped_sha256": uor_r4_discrete::corpus::sha256(&stripped),
+                "final_sha256": uor_r4_discrete::corpus::sha256(&final_artifact),
+                "margins_changed": margins_changed,
+                "opening_rows": memory.record.opening,
+                "reply_rows": memory.record.reply,
+                "final_bytes": final_artifact.len(),
+            })
+        );
+        FullPathParts {
+            initial,
+            after_writer,
+            after_hamming,
+            with_memory,
+            hamming_off,
+            stripped,
+            final_artifact,
+        }
+    }
+
+    fn trace(
+        artifact: &[u8],
+        tokens: &[u32],
+        reply_start: usize,
+    ) -> Result<Vec<crate::CpuFbsStep>> {
+        let mut forward =
+            CpuFbsForward::from_artifact(artifact).map_err(|error| invalid(error.to_string()))?;
+        let mut out = Vec::with_capacity(tokens.len());
+        for (index, &token) in tokens.iter().enumerate() {
+            if index == reply_start {
+                forward.mark_reply_start();
+            }
+            out.push(
+                forward
+                    .step(token, CpuFbsHead::Writer)
+                    .map_err(|error| invalid(error.to_string()))?,
+            );
+        }
+        Ok(out)
+    }
+
+    fn first_query_divergence(
+        left: &[crate::CpuFbsStep],
+        right: &[crate::CpuFbsStep],
+    ) -> Option<usize> {
+        left.iter()
+            .zip(right)
+            .position(|(left, right)| left.query_q12 != right.query_q12)
+    }
+
+    #[test]
+    fn data_derived_records_train_and_audit_the_full_path() -> Result<()> {
+        let parts = trained_full_path_parts();
+        assert_eq!(
+            parts,
+            trained_full_path_parts(),
+            "the full-path construction is not deterministic"
+        );
+        assert_ne!(
+            parts.after_writer, parts.initial,
+            "the writer did not train"
+        );
+        assert_ne!(
+            parts.after_hamming, parts.after_writer,
+            "Hamming margins did not train"
+        );
+        assert_ne!(
+            parts.final_artifact, parts.after_hamming,
+            "records did not attach"
+        );
+
+        let base = trace(&parts.after_writer, &[10, 11, 12], 2)?;
+        let hamming = trace(&parts.after_hamming, &[10, 11, 12], 2)?;
+        assert_ne!(
+            base.last().unwrap().query_q12,
+            hamming.last().unwrap().query_q12,
+            "trained Hamming margins did not change the served query"
+        );
+
+        let full_reply = trace(&parts.final_artifact, &[10, 11, 12, 20, 21, 22, 23], 2)?;
+        let without_memory = trace(&parts.after_hamming, &[10, 11, 12, 20, 21, 22, 23], 2)?;
+        for (row, name) in [
+            (2, "opening"),
+            (4, "first reply row"),
+            (5, "second reply row"),
+        ] {
+            assert_ne!(
+                full_reply[row].query_q12, without_memory[row].query_q12,
+                "the {name} memory move did not change the served query"
+            );
+        }
+        assert_eq!(
+            full_reply[..2]
+                .iter()
+                .map(|step| &step.query_q12)
+                .collect::<Vec<_>>(),
+            without_memory[..2]
+                .iter()
+                .map(|step| &step.query_q12)
+                .collect::<Vec<_>>(),
+            "the opening memory changed a row before its lookup"
+        );
+
+        let point_reply = trace(&parts.final_artifact, &[30, 31, 32, 40], 2)?;
+        let no_point = trace(&parts.after_hamming, &[30, 31, 32, 40], 2)?;
+        assert_eq!(
+            point_reply[2].token, 40,
+            "the point key did not name its target"
+        );
+        assert_ne!(
+            point_reply[2].token, no_point[2].token,
+            "the point key changed no complete decision"
+        );
+
+        let mut audited = (0u64, 0u64, 0u64);
+        for (tokens, reply_start) in [
+            (vec![10, 11, 12, 20, 21, 22, 23], Some(2)),
+            (vec![30, 31, 32, 40], Some(2)),
+        ] {
+            let audit = audit_served_forward(
+                &parts.final_artifact,
+                &ServedForwardAuditConfig {
+                    tokens,
+                    token_source: None,
+                    expected_artifact_sha256: None,
+                    reply_start,
+                    measure_timing: false,
+                },
+            )
+            .unwrap();
+            assert!(!audit.parity.instrument_fault);
+            assert_eq!(audit.parity.query_coordinate_mismatches, 0);
+            assert_eq!(audit.parity.token_mismatches, 0);
+            assert_eq!(audit.parity.kept_cell_mismatches, 0);
+            audited.0 += audit.parity.query_coordinates_compared;
+            audited.1 += audit.parity.token_decisions_compared;
+            audited.2 += audit.parity.kept_cells_compared;
+            let manifest = &audit.manifest;
+            assert!(manifest.hamming.is_some());
+            assert!(manifest.memory.is_some());
+            assert!(manifest.memory.as_ref().unwrap().point_key.is_some());
+        }
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "query_coordinates": audited.0,
+                "token_decisions": audited.1,
+                "kept_cells": audited.2,
+                "point_decision": point_reply[2].token,
+                "no_point_decision": no_point[2].token,
+            })
+        );
+        let root =
+            std::env::temp_dir().join(format!("uor-full-path-records-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("trained-full-path.uorlut");
+        std::fs::write(&path, &parts.final_artifact).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), parts.final_artifact);
+        std::fs::remove_dir_all(root).unwrap();
+        if let Some(out) = std::env::var_os("UOR_FULL_PATH_ARTIFACT") {
+            std::fs::write(out, &parts.final_artifact).unwrap();
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn full_path_record_controls_are_matched_and_exact() -> Result<()> {
+        let parts = trained_full_path_parts();
+        let first = [10, 11, 12, 20, 21, 22, 23];
+        let point = [30, 31, 32, 40];
+
+        let full_first = trace(&parts.final_artifact, &first, 2)?;
+        let memory_off = trace(&parts.after_hamming, &first, 2)?;
+        let hamming_off = trace(&parts.hamming_off, &first, 2)?;
+        let stripped = trace(&parts.stripped, &first, 2)?;
+        for (row, name) in [(2, "opening"), (4, "reply 1"), (5, "reply 2")] {
+            assert_ne!(
+                full_first[row].query_q12, memory_off[row].query_q12,
+                "memory-off did not remove the {name} move"
+            );
+        }
+        assert_ne!(
+            memory_off[2].query_q12, stripped[2].query_q12,
+            "Hamming-off did not remove the Hamming query contribution"
+        );
+        assert_ne!(
+            full_first[2].query_q12, stripped[2].query_q12,
+            "the fully stripped arm retained the full query"
+        );
+
+        let point_full = trace(&parts.final_artifact, &point, 2)?;
+        let point_off = trace(&parts.with_memory, &point, 2)?;
+        let hamming_off_point = trace(&parts.hamming_off, &point, 2)?;
+        let memory_off_point = trace(&parts.after_hamming, &point, 2)?;
+        let stripped_point = trace(&parts.stripped, &point, 2)?;
+        assert_eq!(point_full[2].token, 40);
+        assert_ne!(
+            point_full[2].token, point_off[2].token,
+            "point-off did not remove the point fallback"
+        );
+
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.final_artifact)
+                .unwrap()
+                .is_some()
+        );
+        let full_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.final_artifact)
+            .unwrap()
+            .unwrap();
+        assert!(full_memory.point.is_some());
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            uor_r4_integer::stack::read_memory_uorlut01(&parts.after_hamming)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.with_memory)
+                .unwrap()
+                .is_some()
+        );
+        let point_off_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.with_memory)
+            .unwrap()
+            .unwrap();
+        assert!(point_off_memory.point.is_none());
+        let stripped_model = IntegerStackModel::parse(&parts.stripped).unwrap();
+        assert!(stripped_model.turn_memory().is_none());
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.stripped)
+                .unwrap()
+                .is_none()
+        );
+        let hamming_off_memory = uor_r4_integer::stack::read_memory_uorlut01(&parts.hamming_off)
+            .unwrap()
+            .unwrap();
+        assert_eq!(hamming_off_memory.record.opening, 1);
+        assert_eq!(hamming_off_memory.record.reply, Some(2));
+        assert_eq!(hamming_off_memory.point.as_ref().unwrap().targets, [40]);
+        assert!(
+            uor_r4_integer::stack::read_hamming_uorlut01(&parts.hamming_off)
+                .unwrap()
+                .is_none()
+        );
+
+        let arms = [
+            ("full", parts.final_artifact.as_slice()),
+            ("memory_off", parts.after_hamming.as_slice()),
+            ("point_off", parts.with_memory.as_slice()),
+            ("hamming_off", parts.hamming_off.as_slice()),
+            ("stripped", parts.stripped.as_slice()),
+        ];
+        for (name, artifact) in arms {
+            for (tokens, reply_start) in [(first.as_slice(), Some(2)), (point.as_slice(), Some(2))]
+            {
+                let audit = audit_served_forward(
+                    artifact,
+                    &ServedForwardAuditConfig {
+                        tokens: tokens.to_vec(),
+                        token_source: None,
+                        expected_artifact_sha256: None,
+                        reply_start,
+                        measure_timing: false,
+                    },
+                )
+                .unwrap();
+                assert!(!audit.parity.instrument_fault, "{name}");
+                assert_eq!(audit.parity.query_coordinate_mismatches, 0, "{name}");
+                assert_eq!(audit.parity.token_mismatches, 0, "{name}");
+                assert_eq!(audit.parity.kept_cell_mismatches, 0, "{name}");
+            }
+        }
+        assert_eq!(
+            parts,
+            trained_full_path_parts(),
+            "the control arms are not deterministic"
+        );
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "full_sha256": uor_r4_discrete::corpus::sha256(&parts.final_artifact),
+                "memory_off_sha256": uor_r4_discrete::corpus::sha256(&parts.after_hamming),
+                "point_off_sha256": uor_r4_discrete::corpus::sha256(&parts.with_memory),
+                "hamming_off_sha256": uor_r4_discrete::corpus::sha256(&parts.hamming_off),
+                "stripped_sha256": uor_r4_discrete::corpus::sha256(&parts.stripped),
+                "full_point_decision": point_full[2].token,
+                "point_off_decision": point_off[2].token,
+                "memory_off_point_decision": memory_off_point[2].token,
+                "hamming_off_point_decision": hamming_off_point[2].token,
+                "stripped_point_decision": stripped_point[2].token,
+                "first_memory_divergence": first_query_divergence(&full_first, &memory_off),
+                "first_hamming_off_divergence": first_query_divergence(&full_first, &hamming_off),
+                "first_stripped_divergence": first_query_divergence(&full_first, &stripped),
+                "point_hamming_off_divergence": first_query_divergence(&point_full, &hamming_off_point),
+            })
+        );
+        Ok(())
     }
 
     fn admitted_samples(probe: &mut CpuRankMarginTrainer, count: usize) -> Vec<RankMarginSample> {

@@ -55,6 +55,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/count-table-control": {
+    "branch": "deepseek/count-table-control",
+    "claimed_at": "2026-11-03T09:11:47-05:00",
+    "head": "640367b30",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/cpu-corpus-resume": {
     "branch": "deepseek/cpu-corpus-resume",
     "claimed_at": "2026-11-02T05:18:19-05:00",
@@ -111,10 +118,52 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/fresh-replies": {
+    "branch": "deepseek/fresh-replies",
+    "claimed_at": "2026-11-03T08:43:04-05:00",
+    "head": "686d9c872",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/full-path-controls": {
+    "branch": "deepseek/full-path-controls",
+    "claimed_at": "2026-11-03T09:43:17-05:00",
+    "head": "1fa3d1724",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/full-path-records": {
+    "branch": "deepseek/full-path-records",
+    "claimed_at": "2026-11-03T09:23:45-05:00",
+    "head": "d1d465eae",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/generated-replies": {
+    "branch": "deepseek/generated-replies",
+    "claimed_at": "2026-11-03T08:14:18-05:00",
+    "head": "0084568bc",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/harness-registry-reconcile": {
     "branch": "deepseek/harness-registry-reconcile",
     "claimed_at": "2026-11-02T04:56:29-05:00",
     "head": "050943645",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/m1-evidence": {
+    "branch": "deepseek/m1-evidence",
+    "claimed_at": "2026-11-03T07:51:55-05:00",
+    "head": "8515a3916",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/m1-trunk-cpu": {
+    "branch": "deepseek/m1-trunk-cpu",
+    "claimed_at": "2026-11-03T03:51:26-05:00",
+    "head": "3e9857da6",
     "lab": "deepseek",
     "note": ""
   },
