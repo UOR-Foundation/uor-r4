@@ -80,6 +80,7 @@ describe('native image decomposition transport', () => {
             source_sha256: 'a'.repeat(64),
             canonical_sha256: 'b'.repeat(64),
             canonical_prompt: 'R4IMG1;sha256=' + 'a'.repeat(64) + ';size=1x1;grid=1;q12=304,-128,144,0',
+            decomposition_id: 'r4img-test',
             visual_understanding: false,
             patches: [],
         };

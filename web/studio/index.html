@@ -1525,7 +1525,7 @@
                     if (item.reattachRequired) throw new Error('Reattach ' + String(item.name || 'the image') + ' after reload; image bytes are not persisted.');
                     if (native) {
                         var decomposition = item.decomposition;
-                        if (!decomposition || decomposition.schema !== 'uor-r4.image/1' || !decomposition.source_sha256 || !decomposition.canonical_sha256 || !decomposition.canonical_prompt) {
+                        if (!decomposition || decomposition.schema !== 'uor-r4.image/1' || !decomposition.source_sha256 || !decomposition.canonical_sha256 || !decomposition.canonical_prompt || !decomposition.decomposition_id) {
                             throw new Error('Reattach ' + String(item.name || 'the image') + '; its native R4 decomposition is unavailable.');
                         }
                         parts.push({ type: 'uor_r4_image', uor_r4_image: {
@@ -1533,6 +1533,7 @@
                             source_sha256: decomposition.source_sha256,
                             canonical_sha256: decomposition.canonical_sha256,
                             canonical_prompt: decomposition.canonical_prompt,
+                            decomposition_id: decomposition.decomposition_id,
                         } });
                     } else {
                         if (!item.imageUrl) throw new Error('Reattach ' + String(item.name || 'the image') + ' before sending it to this provider.');

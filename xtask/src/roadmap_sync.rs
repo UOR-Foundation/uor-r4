@@ -1023,6 +1023,15 @@ fn retain_only(items: &[Item], p: &mut Plan, only: Option<&str>) -> Result<(), S
         p.creates.retain(|create| create.id == id);
         p.updates.retain(|update| update.id == id);
         p.closes.retain(|(item, _)| item == id);
+        let selected = items.iter().find(|item| item.id == id).expect("selected item exists");
+        let labels = labels_for(selected);
+        p.labels.retain(|label| labels.contains(label));
+        if let Some(index) = milestone_index(&selected.milestone) {
+            let issue = MILESTONE_ISSUES[index - 1];
+            p.checklists.retain(|(number, _)| *number == issue);
+        } else {
+            p.checklists.clear();
+        }
     }
     Ok(())
 }
@@ -1553,6 +1562,19 @@ mod tests {
         assert!(p.creates.iter().all(|create| create.id == "a"));
         assert_eq!(p.checklists, checklists);
         assert!(retain_only(&items, &mut p, Some("missing")).is_err());
+    }
+
+    #[test]
+    fn item_scope_filters_labels_and_checklists_to_selected_milestone() {
+        let mut selected = item("a", "M7", "done", "", "");
+        selected.area = "serving".into();
+        let items = vec![selected];
+        let mut p = plan(&items, &Remote::default(), &Issues::new(), R);
+        p.labels = vec!["area:serving".into(), "area:infra".into()];
+        p.checklists = vec![(2029, "M1".into()), (2035, "M7".into())];
+        retain_only(&items, &mut p, Some("a")).unwrap();
+        assert_eq!(p.labels, ["area:serving"]);
+        assert_eq!(p.checklists, [(2035, "M7".into())]);
     }
 
     #[test]

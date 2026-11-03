@@ -149,6 +149,8 @@ export async function decomposeNativeImage({ config, image, signal } = {}) {
         && /^[0-9a-f]{64}$/.test(payload.source_sha256)
         && typeof payload.canonical_sha256 === 'string'
         && /^[0-9a-f]{64}$/.test(payload.canonical_sha256)
+        && typeof payload.decomposition_id === 'string'
+        && payload.decomposition_id.length > 0
         && typeof payload.canonical_prompt === 'string'
         && payload.canonical_prompt.startsWith('R4IMG1;sha256=')
         && payload.visual_understanding === false

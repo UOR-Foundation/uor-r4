@@ -24,6 +24,7 @@ const image = {
         source_sha256: 'a'.repeat(64),
         canonical_sha256: 'b'.repeat(64),
         canonical_prompt: canonical,
+        decomposition_id: 'r4img-test',
     },
 };
 

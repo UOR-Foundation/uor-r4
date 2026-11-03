@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 
@@ -100,11 +102,20 @@ impl Drop for GenerationPermit<'_> {
     }
 }
 
+#[derive(Clone)]
+struct IssuedImage {
+    id: String,
+    source_sha256: String,
+    canonical_sha256: String,
+    canonical_prompt: String,
+}
+
 pub struct OpenAiServing {
     model: IntegerStackModel,
     tokenizer_json: Vec<u8>,
     protocol_version: u8,
     busy: AtomicBool,
+    images: Mutex<VecDeque<IssuedImage>>,
 }
 
 #[derive(Clone, Debug)]
@@ -184,6 +195,7 @@ impl OpenAiServing {
             tokenizer_json,
             protocol_version,
             busy: AtomicBool::new(false),
+            images: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -262,8 +274,25 @@ impl OpenAiServing {
             .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("image"))?;
         let mut response = json!(image);
         let canonical = image.canonical_prompt();
+        let canonical_sha256 = uor_r4_vision::canonical_sha256(&canonical);
+        let id = request_id("r4img");
+        let mut images = self
+            .images
+            .lock()
+            .map_err(|_| OpenAiError::new(500, "decomposition registry is unavailable"))?;
+        if images.len() == 64 {
+            images.pop_front();
+        }
+        images.push_back(IssuedImage {
+            id: id.clone(),
+            source_sha256: image.source_sha256.clone(),
+            canonical_sha256: canonical_sha256.clone(),
+            canonical_prompt: canonical.clone(),
+        });
+        drop(images);
+        response["decomposition_id"] = json!(id);
         response["canonical_prompt"] = json!(&canonical);
-        response["canonical_sha256"] = json!(uor_r4_vision::canonical_sha256(&canonical));
+        response["canonical_sha256"] = json!(&canonical_sha256);
         response["visual_understanding"] = json!(false);
         Ok(response)
     }
@@ -418,7 +447,7 @@ impl OpenAiServing {
                         .with_param("messages"),
                 );
             }
-            let content = text_content(&input.content, &input.role)?;
+            let content = text_content(&input.content, &input.role, self)?;
             if input.role != "assistant" && content.trim().is_empty() {
                 return Err(
                     OpenAiError::new(400, "user and system content must not be blank")
@@ -723,7 +752,7 @@ struct InputMessage {
     content: Value,
 }
 
-fn text_content(value: &Value, role: &str) -> Result<String, OpenAiError> {
+fn text_content(value: &Value, role: &str, serving: &OpenAiServing) -> Result<String, OpenAiError> {
     match value {
         Value::String(text) if !text.is_empty() => Ok(text.clone()),
         Value::Array(parts) if !parts.is_empty() => {
@@ -734,7 +763,7 @@ fn text_content(value: &Value, role: &str) -> Result<String, OpenAiError> {
                     if role != "user" {
                         return Err(OpenAiError::new(400, "R4 image parts are accepted only in user turns").with_param("messages"));
                     }
-                    let piece = r4_image_content(part)?;
+                    let piece = r4_image_content(serving, part)?;
                     if !text.is_empty() && !text.ends_with('\n') {
                         text.push('\n');
                     }
@@ -776,7 +805,7 @@ fn text_content(value: &Value, role: &str) -> Result<String, OpenAiError> {
     }
 }
 
-fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
+fn r4_image_content(serving: &OpenAiServing, part: &Value) -> Result<String, OpenAiError> {
     if part.as_object().map(|object| object.len() != 2).unwrap_or(true) {
         return Err(OpenAiError::new(
             400,
@@ -787,10 +816,10 @@ fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
         .get("uor_r4_image")
         .and_then(Value::as_object)
         .ok_or_else(|| OpenAiError::new(400, "uor_r4_image requires an object"))?;
-    if image.len() != 4 {
+    if image.len() != 5 {
         return Err(OpenAiError::new(
             400,
-            "uor_r4_image accepts only schema, source_sha256, canonical_sha256, and canonical_prompt",
+            "uor_r4_image accepts only schema, source_sha256, canonical_sha256, canonical_prompt, and decomposition_id",
         ));
     }
     let schema = image.get("schema").and_then(Value::as_str).ok_or_else(|| {
@@ -808,8 +837,27 @@ fn r4_image_content(part: &Value) -> Result<String, OpenAiError> {
     let canonical = image.get("canonical_prompt").and_then(Value::as_str).ok_or_else(|| {
         OpenAiError::new(400, "uor_r4_image requires a string canonical_prompt")
     })?;
-    if uor_r4_vision::canonical_sha256(canonical) != canonical_hash {
-        return Err(OpenAiError::new(400, "canonical prompt hash does not match").with_param("uor_r4_image.canonical_sha256"));
+    let id = image.get("decomposition_id").and_then(Value::as_str).ok_or_else(|| {
+        OpenAiError::new(400, "uor_r4_image requires a string decomposition_id")
+    })?;
+    let issued = {
+        let images = serving
+            .images
+            .lock()
+            .map_err(|_| OpenAiError::new(500, "decomposition registry is unavailable"))?;
+        images.iter().find(|entry| entry.id == id).cloned()
+    };
+    let Some(issued) = issued else {
+        return Err(OpenAiError::new(400, "unknown or expired decomposition id").with_param("uor_r4_image.decomposition_id"));
+    };
+    if issued.source_sha256 != hash {
+        return Err(OpenAiError::new(400, "source hash does not match the issued decomposition id").with_param("uor_r4_image.source_sha256"));
+    }
+    if issued.canonical_sha256 != canonical_hash {
+        return Err(OpenAiError::new(400, "canonical prompt hash does not match the issued decomposition id").with_param("uor_r4_image.canonical_sha256"));
+    }
+    if issued.canonical_prompt != canonical {
+        return Err(OpenAiError::new(400, "canonical prompt does not match the issued decomposition id").with_param("uor_r4_image.canonical_prompt"));
     }
     uor_r4_vision::validate_canonical_prompt(canonical, hash)
         .map_err(|error| OpenAiError::new(400, error.to_string()).with_param("uor_r4_image"))?;

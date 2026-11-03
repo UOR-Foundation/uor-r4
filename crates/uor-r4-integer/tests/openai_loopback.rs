@@ -631,7 +631,8 @@ fn image_decomposition_route_and_chat_extension_use_exact_r4_bytes() {
                     "schema": "uor-r4.image/1",
                     "source_sha256": HASH,
                     "canonical_sha256": CANONICAL_HASH,
-                    "canonical_prompt": CANONICAL
+                    "canonical_prompt": CANONICAL,
+                    "decomposition_id": image["decomposition_id"].as_str().unwrap()
                 }}
             ]}],
             "max_tokens": 2
@@ -665,19 +666,40 @@ fn canonical_tamper_and_non_user_image_parts_are_refused() {
     const CANONICAL_HASH: &str = "f3f6fb9c8a61c0739ef0f8a1f484228abb39d61fd1909d50bf6662d634d4e5fa";
     const CANONICAL: &str = "R4IMG1;sha256=78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59;size=1x1;grid=1;q12=304,-128,144,0";
     let server = LoopbackServer::spawn(config()).unwrap();
+    let headers = "X-UOR-Width: 1\r\nX-UOR-Height: 1\r\nX-UOR-Grid: 1\r\n";
+    let (status, _, body) = request_bytes(server.port(), "/v1/images/decompose", &[12, 20, 28, 255], headers);
+    assert_eq!(status, 200, "{body}");
+    let issued: Value = serde_json::from_str(&body).unwrap();
     let tampered = CANONICAL.replace("144,0", "144,16");
+    let recomputed = uor_r4_vision::canonical_sha256(&tampered);
+    let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
+        "model": "uor-chat",
+        "messages": [{"role": "user", "content": [{"type": "uor_r4_image", "uor_r4_image": {
+            "schema": "uor-r4.image/1",
+            "source_sha256": HASH,
+            "canonical_sha256": recomputed,
+            "canonical_prompt": tampered.clone(),
+            "decomposition_id": issued["decomposition_id"].as_str().unwrap()
+        }}]}],
+        "max_tokens": 2
+    }));
+    assert_eq!(status, 400, "{response}");
+    assert!(response["error"]["message"].as_str().unwrap().contains("decomposition"), "{response}");
+    assert!(response["error"]["message"].as_str().unwrap().contains("id"), "{response}");
+
     let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
         "model": "uor-chat",
         "messages": [{"role": "user", "content": [{"type": "uor_r4_image", "uor_r4_image": {
             "schema": "uor-r4.image/1",
             "source_sha256": HASH,
             "canonical_sha256": CANONICAL_HASH,
-            "canonical_prompt": tampered
+            "canonical_prompt": tampered,
+            "decomposition_id": issued["decomposition_id"].as_str().unwrap()
         }}]}],
         "max_tokens": 2
     }));
     assert_eq!(status, 400, "{response}");
-    assert!(response["error"]["message"].as_str().unwrap().contains("canonical prompt hash does not match"), "{response}");
+    assert!(response["error"]["message"].as_str().unwrap().contains("does not match the issued decomposition id"), "{response}");
 
     let (status, response) = post_json(server.port(), "/v1/chat/completions", json!({
         "model": "uor-chat",
@@ -686,7 +708,8 @@ fn canonical_tamper_and_non_user_image_parts_are_refused() {
                 "schema": "uor-r4.image/1",
                 "source_sha256": HASH,
                 "canonical_sha256": CANONICAL_HASH,
-                "canonical_prompt": CANONICAL
+                "canonical_prompt": CANONICAL,
+                "decomposition_id": "r4img-role"
             }}]},
             {"role": "user", "content": "Hi"}
         ],
@@ -779,7 +802,8 @@ fn image_route_and_extension_reject_bad_inputs_and_context_overflow() {
             "schema": schema,
             "source_sha256": hash,
             "canonical_sha256": big["canonical_sha256"].as_str().unwrap(),
-            "canonical_prompt": canonical
+            "canonical_prompt": canonical,
+            "decomposition_id": big["decomposition_id"].as_str().unwrap()
         }});
         let content = if expected == 413 {
             vec![part.clone(), part.clone(), part.clone(), part]
