@@ -28,9 +28,13 @@ test('image dimensions preserve aspect ratio and never upscale', () => {
 
 test('image MIME and extensions are bounded to raster formats', () => {
     assert.equal(isImageFile(file('photo.png', 'image/png')), true);
+    assert.equal(isImageFile(file('photo', 'image/jpeg')), true);
     assert.equal(isImageFile(file('photo.webp', '')), true);
     assert.equal(isImageFile(file('diagram.svg', 'image/svg+xml')), false);
     assert.equal(isImageFile(file('notes.txt', 'text/plain')), false);
+    assert.equal(isImageFile(file('photo.png', 'image/svg+xml')), false);
+    assert.equal(isImageFile(file('photo.png', 'text/plain')), false);
+    assert.equal(isImageFile(file('photo.heic', 'image/heic')), false);
 });
 
 test('image reading retains memory-only RGBA and bounded preview metadata', async () => {

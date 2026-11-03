@@ -209,7 +209,7 @@ async function main() {
         }
         assert(await evaluate("document.querySelector('#composerContextNote').textContent.includes('R4 patch input - experimental; not visual understanding')"), 'experimental label missing');
         assert(await evaluate("!document.querySelector('.msg[data-role=assistant]')"), 'file selection sent without explicit Send');
-        await evaluate("const input=document.querySelector('#chatInput'); input.value='Hi'; input.dispatchEvent(new Event('input',{bubbles:true})); document.querySelector('#btnSend').click(); true");
+        await evaluate("document.querySelector('#btnSend').click(); true");
         await waitFor("document.querySelector('.msg[data-role=assistant] .msg-body') && document.querySelector('.msg[data-role=assistant] .msg-body').textContent.length > 0", 25000);
         const metrics = await evaluate("document.querySelector('.msg[data-role=assistant] .msg-meta').textContent");
         assert(/\d+\/\d+\/\d+/.test(metrics) && !/usage unavailable/.test(metrics), 'exact prompt/completion/total usage missing: ' + metrics);
@@ -222,9 +222,13 @@ async function main() {
         assert(await evaluate("document.querySelectorAll('.attachment-chip-preview').length === 0"), 'image attachment restored from storage');
         await evaluate(attachImage);
         await waitFor("document.querySelectorAll('.attachment-chip-preview').length === 1");
+        await evaluate("document.querySelector('#btnSend').click(); true");
+        await waitFor("document.querySelectorAll('.msg[data-role=assistant]').length === 2", 25000);
+        await evaluate(attachImage);
+        await waitFor("document.querySelectorAll('.attachment-chip-preview').length === 1");
         await evaluate("document.querySelector('.attachment-chip-remove').click(); true");
         await waitFor("document.querySelectorAll('.attachment-chip-preview').length === 0");
-        console.log(JSON.stringify({ verdict: 'NATIVE IMAGE BROWSER FLOW PASSED', metrics, label: 'R4 patch input - experimental; not visual understanding', memoryOnlyReload: true }, null, 2));
+        console.log(JSON.stringify({ verdict: 'NATIVE IMAGE BROWSER FLOW PASSED', metrics, label: 'R4 patch input - experimental; not visual understanding', imageOnlySend: true, memoryOnlyReload: true, reloadedHistoryResend: true }, null, 2));
         await cdp.send('Target.closeTarget', { targetId: target.targetId }).catch(() => {});
         cdp.ws.close();
     } finally {

@@ -1,0 +1,59 @@
+Fresh-context exact-head review repair
+======================================
+
+Finding 1: a raster filename could bypass an explicit non-raster MIME type.
+Fix: use an explicit raster MIME allowlist whenever MIME is present; use the
+extension allowlist only when MIME is absent. Conflicting MIME and extension
+cases now fail closed.
+
+Finding 2: an image-only user turn persisted empty content, so after reload the
+next native request included a blank historical message that the server rejects.
+Fix: reconstruct historical empty user turns as the bounded text marker
+`[Image patch input]`; live image-only requests still omit an empty text part.
+
+Commands and results
+--------------------
+
+$ node --test web/studio/assets/js/image_input.test.mjs web/studio/assets/js/studio_api_streaming.test.mjs
+# tests 14
+# pass 14
+# fail 0
+
+$ npm test -- --run
+Test Files  31 passed (31)
+Tests       266 passed (266)
+
+$ npm run typecheck
+tsc --noEmit
+exit 0
+
+$ npm run build
+vite v8.3.5 building client environment for production...
+29 modules transformed.
+dist/studio-foundation.css  3.57 kB
+dist/studio-foundation.js 124.55 kB
+exit 0
+
+$ CARGO_TARGET_DIR=target/claude-image-placeholder node web/studio/assets/js/verify_studio_image_input.mjs
+{
+  "verdict": "NATIVE IMAGE BROWSER FLOW PASSED",
+  "metrics": "16 tokens · 824.5 tok/s · TTFT 13.226 ms · 19.406 ms · 42/16/58 · length",
+  "label": "R4 patch input - experimental; not visual understanding",
+  "imageOnlySend": true,
+  "memoryOnlyReload": true,
+  "reloadedHistoryResend": true
+}
+
+$ node web/studio/verify_studio_page.mjs
+PAGE-LOAD CHECKS PASSED
+
+$ node web/studio/verify_studio_page_load.mjs
+RUNTIME PAGE-LOAD TRAP PASSED
+external requests: []
+
+$ node web/studio/verify_studio_worker.mjs
+ALL STUDIO WORKER CHECKS PASSED
+remoteRequests: 0
+
+$ git diff --check
+exit 0

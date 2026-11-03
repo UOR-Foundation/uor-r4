@@ -16,6 +16,16 @@ Lab: deepseek. Item:
 - Making the whole composer send path asynchronous broke the existing typed
   generation adapter. Image preparation is now a deferred content promise that
   only API streaming resolves; ordinary text and local sends remain synchronous.
+- The first exact-head adversarial review found that a raster filename could
+  bypass an explicit non-raster MIME type. The first type check accepted all
+  `image/*` MIME values and let the filename extension override a conflicting
+  MIME value. Type detection now fails closed through an explicit raster MIME
+  allowlist, with extension fallback only when MIME is absent.
+- The same review found that an image-only turn persisted empty content and the
+  next API request after reload included an invalid blank user message. History
+  reconstruction now substitutes the bounded marker `[Image patch input]` for
+  a historical empty user turn; the live image-only request still sends no
+  empty text part.
 - Strict Clippy over `uor-r4-integer` still exits 101 on 51 pre-existing
   diagnostics. None names a changed file.
 
@@ -52,6 +62,14 @@ development context, while four images overflow it and return 413.
   label matched exactly, reload retained no image bytes and showed the
   reattachment notice, reattachment restored the preview, and removal cleared
   it.
+- After the review repair, the real-browser flow performed an image-only Send
+  with no text part, reloaded, reattached the removed image and sent again.
+  Both generations completed. The two-turn run reported
+  **42 prompt / 16 completion / 58 total tokens**, 824.5 tok/s, TTFT 13.226 ms
+  and 19.406 ms elapsed for the retained final reading.
+- The review repair was reverified with 14 focused Node tests, all 266 Studio
+  tests and the static/load/worker/browser checks. Raw output is in
+  [review-repair.txt](evidence/review-repair.txt).
 - Static page checks, zero-external runtime trap and WASM worker checks passed.
   `npm run typecheck` and `npm run build` passed.
 
@@ -82,3 +100,6 @@ The Studio can now paste, drop or select an image, show it, remove it, and send
 its deterministic R4 decomposition through the native local chat path only on
 explicit Send. The browser keeps image bytes in memory, custom providers receive
 ordinary image URLs, and the complete native/WASM/browser path is verified.
+Conflicting MIME/extension inputs fail closed, and an image-only conversation
+can be reloaded, reattached and continued without sending an invalid blank
+historical turn.

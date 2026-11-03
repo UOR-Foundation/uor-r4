@@ -1499,7 +1499,14 @@
         function apiMessages(conversation) {
             var messages = conversation.messages
                 .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
-                .map(function (message) { return { role: message.role, content: message.content }; });
+                .map(function (message) {
+                    var content = message.content;
+                    // Image bytes are intentionally memory-only. Preserve a truthful,
+                    // non-empty history marker after reload instead of sending a blank
+                    // user turn that the native API rejects.
+                    if (message.role === 'user' && content === '') content = '[Image patch input]';
+                    return { role: message.role, content: content };
+                });
             var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function'
                 ? window.__studioUi.getAttachments()
                 : [];

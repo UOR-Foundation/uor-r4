@@ -1,6 +1,14 @@
 const MAX_IMAGE_DIMENSION = 256;
 const DEFAULT_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_MAX_TOTAL_IMAGE_BYTES = 16 * 1024 * 1024;
+const IMAGE_MIME_TYPES = new Set([
+    'image/avif',
+    'image/bmp',
+    'image/gif',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+]);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif']);
 
 function extension(name) {
@@ -14,7 +22,8 @@ function positiveLimit(value, fallback) {
 
 export function isImageFile(file) {
     const type = String(file && file.type || '').toLowerCase();
-    return type.startsWith('image/') && type !== 'image/svg+xml' || IMAGE_EXTENSIONS.has(extension(file && file.name));
+    if (type) return IMAGE_MIME_TYPES.has(type);
+    return IMAGE_EXTENSIONS.has(extension(file && file.name));
 }
 
 export function downsampleDimensions(width, height, maxDimension = MAX_IMAGE_DIMENSION) {
