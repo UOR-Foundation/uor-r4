@@ -11,7 +11,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   278/383/395. It lost one top-8 row and one admitted target, so the K4
   admission gate rejected it.
 - **The seed-2 replication was rank-neutral.** Against baseline 224/285/292,
-  both K1 and K4 remained 224/285/292. K4 accepted 225 four-coordinate blocks
+  both K1 and K4 remained 224/285/292. K4 accepted 238 four-coordinate blocks
   but did not exceed K1 or clear the pre-registered 40-row top-1 threshold.
 - **The larger margin improvement did not transfer to target ranking.** On
   seed 1, K4 reduced the held-out margin-loss sum from `11,739,473` to
@@ -40,10 +40,12 @@ metric or configuration switch was made.
 
 ## Measurements
 
-All arms used trainer seed equal to the artifact seed, margin Q12 1, step Q12
-1, parameter limit Q12 8,192, 4,096 attempts for trained arms, checkpoints
-every 1,024, evaluation stride 2 and the fixed 1,024-row public
-internal-development panel.
+All arms used trainer seed 1, margin Q12 1, step Q12 1, parameter limit Q12
+8,192, 4,096 attempts for trained arms, checkpoints every 1,024, evaluation
+stride 2 and the fixed 1,024-row public internal-development panel. An initial
+seed-2 run used trainer seed 2, contrary to the FIT sheet. Exact-head review
+caught that deviation; fresh baseline/K1/K4 runs with trainer seed 1 superseded
+it, and only the registered receipts are bound below.
 
 | Seed | Arm | Accepted | Four-coordinate blocks | Top-1 | Top-8 | Admitted | Artifact |
 |---:|---|---:|---:|---:|---:|---:|---|
@@ -51,18 +53,18 @@ internal-development panel.
 | 1 | control-k1 | 431 | 0 | 278 | 383 | 395 | `9d59da8d...` |
 | 1 | pivot-k4 | 437 | 437 | 278 | 383 | 395 | `349e0f15...` |
 | 2 | baseline | 0 | 0 | 224 | 285 | 292 | `da56fe96...` |
-| 2 | control-k1 | 216 | 0 | 224 | 285 | 292 | `554d7ad8...` |
-| 2 | pivot-k4 | 225 | 225 | 224 | 285 | 292 | `c9a5859a...` |
+| 2 | control-k1 | 228 | 0 | 224 | 285 | 292 | `44817e41...` |
+| 2 | pivot-k4 | 238 | 238 | 224 | 285 | 292 | `04a9887c...` |
 
-K4 moved 1,748 coordinates on seed 1 and 900 on seed 2; every accepted K4 block
+K4 moved 1,748 coordinates on seed 1 and 952 on seed 2; every accepted K4 block
 contained four distinct coordinates. Five runs exited zero; seed-1 K4 wrote its
 complete receipt and then exited 2 at the required admission gate, as
 pre-registered. Every arm evaluated 1,024 rows and checked 262,144 Q12 query
 coordinates and 8,192 kept cells with zero query, token or kept-cell
 mismatches. Final artifacts reloaded and checkpoint/export controls passed.
 
-Total wall time was 621.691 seconds on the Ryzen 9 9950X. Peak RSS was
-52,436 KiB. The release driver SHA-256 was
+Total wall time was 621.118 seconds on the Ryzen 9 9950X. Peak RSS was
+53,992 KiB. The release driver SHA-256 was
 `cc73bc0dcdcec1440c27bc95811d1ae4f72aa9bd8d9a18196cd9cd1e0e4096d7`.
 
 ## Checks run at the head

@@ -8,6 +8,7 @@
   "design_sha256_current": "359ae945151de618161ccd21ccd26284b3b723b34654eb8a1a01338bed845fb6",
   "driver_sha256": "cc73bc0dcdcec1440c27bc95811d1ae4f72aa9bd8d9a18196cd9cd1e0e4096d7",
   "config": {
+    "trainer_seed": 1,
     "margin_q12": 1,
     "step_q12": 1,
     "parameter_limit_q12": 8192,
@@ -95,44 +96,44 @@
     {
       "seed": 2,
       "arm": "control-k1",
-      "accepted": 216,
-      "refused": 3880,
-      "accepted_coordinate_moves": 216,
+      "accepted": 228,
+      "refused": 3868,
+      "accepted_coordinate_moves": 228,
       "final": {
         "top1": 224,
         "top8": 285,
         "admitted": 292,
-        "margin_loss_sum": 29603785,
-        "rank_sum": 342464
+        "margin_loss_sum": 29681043,
+        "rank_sum": 342468
       },
       "process_exit": 0,
       "gate": "accept",
-      "artifact_sha256": "554d7ad817db681c6c1fc3ec49dfe197ddef883eceae55d770e048917cf5e730",
-      "checkpoint_sha256": "f8d44d3021c96bba67d4b3a0d0f06e496f66ef0bb4c6a9c3ac1e8c7c7ecd1a7b"
+      "artifact_sha256": "44817e419f361dd610e630604c2b41021cfa849593e60d372f6d682136ff12d6",
+      "checkpoint_sha256": "ab91c3aede18cc919b47c64ca8418a4a2570b956396c8f8f2fce582a84b50dad"
     },
     {
       "seed": 2,
       "arm": "pivot-k4",
-      "accepted": 225,
-      "refused": 3871,
-      "accepted_coordinate_moves": 900,
+      "accepted": 238,
+      "refused": 3858,
+      "accepted_coordinate_moves": 952,
       "accepted_coordinate_histogram": {
         "1": 0,
         "2": 0,
         "3": 0,
-        "4": 225
+        "4": 238
       },
       "final": {
         "top1": 224,
         "top8": 285,
         "admitted": 292,
-        "margin_loss_sum": 29602710,
-        "rank_sum": 342483
+        "margin_loss_sum": 29471323,
+        "rank_sum": 342480
       },
       "process_exit": 0,
       "gate": "accept",
-      "artifact_sha256": "c9a5859a4750d8f8e39fae550d4b6d2d80970b992abf8e16b063c203ee031fef",
-      "checkpoint_sha256": "914bb04574a1c9b7d5215df9c7ac54609ad6fe07b40dbac684ea41cbab34198b"
+      "artifact_sha256": "04a9887c3adbaeccd0e94593222285800235cab23f1fc4fbaf4d114cd6f21d52",
+      "checkpoint_sha256": "649f842da7207c5147723f003dbc9c8195c902988c7127deeea481d990fa293c"
     }
   ],
   "instrument": {
@@ -147,9 +148,10 @@
     "kept_cell_mismatches": 0,
     "artifact_reload_failures": 0,
     "checkpoint_reload_failures": 0,
-    "total_wall_ms": 621690.690461,
-    "peak_rss_kib": 52436
+    "total_wall_ms": 621117.653946,
+    "peak_rss_kib": 53992
   },
+  "protocol_note": "An initial seed-2 run using trainer seed 2 was superseded after exact-head review found that the FIT sheet requires trainer seed 1. Only the corrected trainer-seed-1 receipts are bound here.",
   "verdict": "negative for one-versus-four coordinate breadth at one Q12 per coordinate",
   "claim_limit": "Public internal-development component evidence only; not fresh-transfer, useful-chat, GPU-equivalence or GPU-replacement evidence."
 }

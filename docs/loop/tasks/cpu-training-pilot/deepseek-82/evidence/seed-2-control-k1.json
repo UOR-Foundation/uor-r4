@@ -9,27 +9,27 @@
   },
   "checkpoints": [
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000001024.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000001024.ckpt",
-      "sha256": "22580da242f5a5af9b51a134fedd1e2519b2472bd24874752c7eef2ca4f0570c",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000001024.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000001024.ckpt",
+      "sha256": "9f870d2f2407fa6ad019944ecceb8a9de4ba49b07d612f26abdcd53c1a0adecd",
       "step": 1024
     },
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000002048.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000002048.ckpt",
-      "sha256": "83eef817e3c8cb1bd0404d9de806dc8d711c21e8c9d963bfbd861d1fa5dbabba",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000002048.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000002048.ckpt",
+      "sha256": "0d2087f82c8ff7e250e363b7c930a84dcaca3dfeab04849593f37b1246dbbd76",
       "step": 2048
     },
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000003072.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000003072.ckpt",
-      "sha256": "673943140405d2b4e95f2c34cc55550ad0534d6292f8b7b9eb881c9beee1fe03",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000003072.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000003072.ckpt",
+      "sha256": "cbe21e73ff003b72b3f04f8ccba431d2a9f59bc4f535c15b118138e06d6d80f7",
       "step": 3072
     },
     {
-      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000004096.binding.json",
-      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/step-000000004096.ckpt",
-      "sha256": "f8d44d3021c96bba67d4b3a0d0f06e496f66ef0bb4c6a9c3ac1e8c7c7ecd1a7b",
+      "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000004096.binding.json",
+      "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/step-000000004096.ckpt",
+      "sha256": "ab91c3aede18cc919b47c64ca8418a4a2570b956396c8f8f2fce582a84b50dad",
       "step": 4096
     }
   ],
@@ -53,14 +53,14 @@
   },
   "final_artifact": {
     "matches_source": false,
-    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/final.uorlut",
+    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/final.uorlut",
     "reloaded": true,
-    "sha256": "554d7ad817db681c6c1fc3ec49dfe197ddef883eceae55d770e048917cf5e730"
+    "sha256": "44817e419f361dd610e630604c2b41021cfa849593e60d372f6d682136ff12d6"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1/final.ckpt",
-    "sha256": "f8d44d3021c96bba67d4b3a0d0f06e496f66ef0bb4c6a9c3ac1e8c7c7ecd1a7b"
+    "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/final.binding.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-control-k1-trainer-1/final.ckpt",
+    "sha256": "ab91c3aede18cc919b47c64ca8418a4a2570b956396c8f8f2fce582a84b50dad"
   },
   "panel_baseline": {
     "export": {
@@ -85,17 +85,17 @@
       "query_coordinates_checked": 262144,
       "token_mismatches": 0
     },
-    "margin_loss_sum": 29603785,
+    "margin_loss_sum": 29681043,
     "samples": 1024,
     "target_admitted": 292,
-    "target_rank_sum": 342464,
+    "target_rank_sum": 342468,
     "top1_correct": 224,
     "top8_correct": 285
   },
   "panel_gate": {
     "decision": "accept",
     "interpretation": "gate admission is an acceptance constraint, not a capability gain; use the raw readings",
-    "margin_loss_sum": -113290,
+    "margin_loss_sum": -36032,
     "panel_changed": true,
     "target_admitted": 0,
     "top1_correct": 0,
@@ -106,7 +106,7 @@
   "run": {
     "accepted_coordinate_histogram": [
       0,
-      216,
+      228,
       0,
       0,
       0,
@@ -171,31 +171,31 @@
       0,
       0
     ],
-    "accepted_coordinate_moves": 216,
-    "accepted_updates": 216,
-    "checkpoint_elapsed_ms": 8.725577999999999,
-    "context_tokens": 317926,
-    "context_tokens_per_second": 5249.257942617531,
+    "accepted_coordinate_moves": 228,
+    "accepted_updates": 228,
+    "checkpoint_elapsed_ms": 9.924129,
+    "context_tokens": 314619,
+    "context_tokens_per_second": 5223.021533429979,
     "executed_steps": 4096,
     "final_epoch": 0,
-    "mean_step_ms": 14.786595208740234,
-    "peak_rss_kib": 51892,
+    "mean_step_ms": 14.706291905029296,
+    "peak_rss_kib": 53992,
     "rank_margin": {
       "coordinates_per_step": 1,
       "margin_q12": 1,
       "parameter_limit_q12": 8192,
       "step_q12": 1
     },
-    "refused_steps": 3880,
+    "refused_steps": 3868,
     "require_admission": false,
     "resumed_from_step": 0,
-    "seed": 2,
-    "step_elapsed_ms": 60565.893975,
+    "seed": 1,
+    "step_elapsed_ms": 60236.971643,
     "steps": 4096,
-    "steps_per_second": 67.6288209613602,
+    "steps_per_second": 67.99810628388366,
     "target_visits": 4096,
-    "target_visits_per_second": 67.6288209613602,
-    "wall_elapsed_ms": 122116.67378
+    "target_visits_per_second": 67.99810628388366,
+    "wall_elapsed_ms": 121706.513223
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",

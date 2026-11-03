@@ -28,14 +28,14 @@
   },
   "final_artifact": {
     "matches_source": true,
-    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline/final.uorlut",
+    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline-trainer-1/final.uorlut",
     "reloaded": true,
     "sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1"
   },
   "final_checkpoint": {
-    "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline/final.binding.json",
-    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline/final.ckpt",
-    "sha256": "48b5904d38b5a8f12fd3a2ce70c84e15df7ff6d7232bf7b18412a9b95518a6e6"
+    "binding_path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline-trainer-1/final.binding.json",
+    "path": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-bvgk-pivot/local/deepseek/table-bvgk-same-amplitude-2026-11-03/seed-2-baseline-trainer-1/final.ckpt",
+    "sha256": "04df0fe280c8e1c1f0a899f0cd09f3abd98dbc815736994f4fd619c21b642c61"
   },
   "panel_baseline": {
     "export": {
@@ -154,7 +154,7 @@
     "executed_steps": 0,
     "final_epoch": 0,
     "mean_step_ms": 0.0,
-    "peak_rss_kib": 52436,
+    "peak_rss_kib": 52096,
     "rank_margin": {
       "coordinates_per_step": 1,
       "margin_q12": 1,
@@ -164,13 +164,13 @@
     "refused_steps": 0,
     "require_admission": true,
     "resumed_from_step": 0,
-    "seed": 2,
+    "seed": 1,
     "step_elapsed_ms": 0.0,
     "steps": 0,
     "steps_per_second": 0.0,
     "target_visits": 0,
     "target_visits_per_second": 0.0,
-    "wall_elapsed_ms": 61439.376627000005
+    "wall_elapsed_ms": 61501.698105999996
   },
   "schema": "uor-r4.cpu-masked-corpus-run/1",
   "scope": "CPU development-research component run; not GPU qualification, language quality or complete-reply evidence",
