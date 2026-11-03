@@ -1,6 +1,6 @@
 # ORDER: Native uor-chat OpenAI-compatible loopback service
 
-Lab: kimi. Item: [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Base: `de21884d104391b3dfc29e569ca9c33e85f61057`. The issue remains open until the full unit is delivered.
+Lab: kimi. Item: [m7-studio-connect-wasm-engine](../../../../roadmap/items/m7-studio-connect-wasm-engine.md) (#2868), with follow-up [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Base: `de21884d104391b3dfc29e569ca9c33e85f61057`. The follow-up issue remains open until the full unit is delivered.
 
 ## Goal
 
