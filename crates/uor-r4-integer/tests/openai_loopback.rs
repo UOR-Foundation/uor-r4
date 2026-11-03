@@ -739,6 +739,10 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
             "/v1/images/decompose?width=2&height=2&columns=3&rows=1",
             400,
         ),
+        (
+            "/v1/images/decompose?width=2&height=2&columns=65536&rows=1",
+            413,
+        ),
         ("/v1/images/decompose?width=2&height=2&columns=1", 400),
         (
             "/v1/images/decompose?width=2&height=2&columns=1&rows=1&rows=1",

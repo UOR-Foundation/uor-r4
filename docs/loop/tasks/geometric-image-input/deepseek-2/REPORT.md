@@ -59,6 +59,8 @@ changed outside the supplied prompt context.
 ## Checks run at the head
 
 - `rustfmt --check` on every changed Rust file and `git diff --check`: passed.
+- `cargo check -p uor-r4-integer --target wasm32-unknown-unknown --features
+  serving-wasm --lib`: passed.
 - Strict Clippy on `uor-r4-vision` in parallel and serial configurations:
   passed.
 - Strict Clippy on `uor-r4-integer` is blocked by the 51 diagnostics reproduced

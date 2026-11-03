@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::openai::{parse_json_value, GenerationFamily, OpenAiError, OpenAiServing, Utf8Buffer};
 use crate::{IntegerError, Result as IntegerResult};
-use uor_r4_vision::{decompose_rgba, Grid, VisionError};
+use uor_r4_vision::{decompose_rgba, Grid, VisionError, MAX_GRID};
 
 const HEADER_LIMIT: usize = 32_768;
 
@@ -567,12 +567,21 @@ fn parse_image_query(query: &str) -> Result<(u32, u32, Grid), OpenAiError> {
     }
     let width = width.ok_or_else(|| OpenAiError::new(400, "width is required"))?;
     let height = height.ok_or_else(|| OpenAiError::new(400, "height is required"))?;
-    let columns =
-        u16::try_from(columns.ok_or_else(|| OpenAiError::new(400, "columns is required"))?)
-            .map_err(|_| OpenAiError::new(400, "columns exceeds u16"))?;
-    let rows = u16::try_from(rows.ok_or_else(|| OpenAiError::new(400, "rows is required"))?)
-        .map_err(|_| OpenAiError::new(400, "rows exceeds u16"))?;
+    let columns = bounded_grid_axis("columns", columns)?;
+    let rows = bounded_grid_axis("rows", rows)?;
     Ok((width, height, Grid::new(columns, rows)))
+}
+
+fn bounded_grid_axis(field: &str, value: Option<u32>) -> Result<u16, OpenAiError> {
+    let value = value.ok_or_else(|| OpenAiError::new(400, format!("{field} is required")))?;
+    if value > u32::from(MAX_GRID) {
+        return Err(OpenAiError::new(
+            413,
+            format!("{field} exceeds the {MAX_GRID} image grid limit"),
+        )
+        .with_code("image_limit"));
+    }
+    u16::try_from(value).map_err(|_| OpenAiError::new(400, format!("{field} exceeds u16")))
 }
 
 fn image_error(error: VisionError) -> OpenAiError {
