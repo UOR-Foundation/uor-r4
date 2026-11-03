@@ -40,6 +40,16 @@ language-capability result or complete-reply result.
 The source artifacts contain no Hamming readout. The trainer must fail closed
 when the final-query-dependent Hamming readout is present.
 
+## Source and binary
+
+- source commit: `89c3363d7`;
+- driver:
+  `local/deepseek/served-gain-target/release/cpu-gain-panel-driver`, SHA-256
+  `99c218d87f920a1fe02911287d3a3cee9f93d75706a2e367f14be3e9cd4c2ad4`;
+- Rust/Cargo: `1.97.1`;
+- host: AMD Ryzen 9 9950X, Ubuntu 24.04.3 LTS, 16 physical cores and 32
+  logical CPUs; the registered runs use 16 workers, one per physical core.
+
 ## Data split
 
 Reuse the deepseek-95 repeated-key panel exactly: 58 even-document training
