@@ -68,6 +68,9 @@ preprocessing timings, not model or visual-quality results.
 - The tests pin hand-computed pixel/patch values, exact canonical bytes,
   digest-change behavior, alpha-only binding, complete partition coverage,
   input immutability and all declared failure classes.
+- `uor-harness loop gates --full` passed all 11 gates on the immediate rerun.
+  The first attempt hit the known fake-gh `ETXTBSY` flake in `loop-drive`; both
+  records are retained.
 - No GPU was present and no GPU result is claimed.
 
 ## Skills used
