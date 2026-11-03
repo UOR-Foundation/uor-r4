@@ -80,6 +80,17 @@ describe('conversational composer keyboard and history', () => {
         controller.destroy();
     });
 
+    it('preserves native ArrowUp from the middle of a multiline draft', () => {
+        const { textarea } = setup(['previous']);
+        textarea.value = 'draft\nline';
+        textarea.setSelectionRange(7, 7);
+        expect(key(textarea, 'ArrowUp').defaultPrevented).toBe(false);
+        expect(textarea.value).toBe('draft\nline');
+        textarea.setSelectionRange(2, 4);
+        expect(key(textarea, 'ArrowUp').defaultPrevented).toBe(false);
+        expect(textarea.value).toBe('draft\nline');
+    });
+
     it('does not swallow native caret keys with empty or exhausted history', () => {
         const { textarea } = setup();
         textarea.value = 'draft';

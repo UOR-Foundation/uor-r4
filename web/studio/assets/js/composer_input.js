@@ -135,7 +135,7 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
             draft = '';
             return;
         }
-        if (event.key === 'ArrowUp' && (historyIndex > 0 || (historyIndex === submittedHistory.length && submittedHistory.length > 0 && firstLine()))) {
+        if (event.key === 'ArrowUp' && historyIndex > 0 && (historyIndex < submittedHistory.length || firstLine())) {
             event.preventDefault();
             older();
         } else if (event.key === 'ArrowDown' && historyIndex < submittedHistory.length && lastLine()) {

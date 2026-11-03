@@ -872,10 +872,12 @@
         var modeNote = document.getElementById('composerModeNote');
         if (modeNote) modeNote.setAttribute('data-mode', native ? 'native' : (api ? 'api' : 'local'));
         setText('#envEngine', native ? 'native uor-chat' : engine);
-        setText('#envModel', /no model/i.test(model) ? 'none' : model);
-        setText('#envTokenizer', tokenizer || 'awaiting model');
+        setText('#envModel', native ? 'native uor-chat' : (/no model/i.test(model) ? 'none' : model));
+        setText('#envTokenizer', native ? 'native artifact tokenizer' : (tokenizer || 'awaiting model'));
         setText('#ctxEngine', native ? 'native uor-chat' : engine);
-        setText('#ctxTokenizer', tokenizer || 'awaiting model');
+        setText('#ctxTokenizer', native ? 'native artifact tokenizer' : (tokenizer || 'awaiting model'));
+        setText('#ctxModelLabel', native ? 'Native uor-chat' : 'No model loaded');
+        setText('#ctxModelMeta', native ? 'Native loopback chat artifact · prompts stay on this device' : 'Load the synthetic demo or the M1 trunk in Connections.');
         setText('#ctxPrivacy', native ? 'native loopback' : (api ? 'api (leaves device)' : 'local only'));
         setText('#ctxStorage', storage || 'unknown');
         var sessions = sessionList();
@@ -893,8 +895,6 @@
             var saveState = document.getElementById('editorSaveState');
             legacySaved.textContent = saveState && saveState.textContent ? saveState.textContent : (document.getElementById('editorUnsaved') ? document.getElementById('editorUnsaved').textContent : 'Saved locally');
         }
-        setText('#envModel', /no model/i.test(model) ? 'none' : model);
-        setText('#envTokenizer', tokenizer || 'awaiting model');
         var sessionsCount = document.getElementById('settingsSessionCount');
         if (sessionsCount) sessionsCount.textContent = sessions.length + ' session' + (sessions.length === 1 ? '' : 's') + ' · ' + sessions.reduce(function (sum, session) { return sum + (session.messageCount || 0); }, 0) + ' messages';
         var draftCount = document.getElementById('settingsDraftCount');

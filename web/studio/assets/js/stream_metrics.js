@@ -77,6 +77,8 @@ export function createStreamMetrics() {
         if (state.elapsedNs !== null) parts.push(duration(state.elapsedNs));
         if (state.promptTokens !== null && state.totalTokens !== null) {
             parts.push(state.promptTokens + '/' + state.completionTokens + '/' + state.totalTokens);
+        } else {
+            parts.push('prompt/total usage unavailable');
         }
         if (state.finishReason) parts.push(state.finishReason);
         return parts.join(' · ');

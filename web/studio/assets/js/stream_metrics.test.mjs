@@ -15,7 +15,7 @@ test('live native token IDs and client nanoseconds produce exact measured rates'
         finishReason: null,
         exact: true,
     });
-    assert.equal(metrics.text(), '1 token · 500.0 tok/s · TTFT 1.000 ms · 2.000 ms');
+    assert.equal(metrics.text(), '1 token · 500.0 tok/s · TTFT 1.000 ms · 2.000 ms · prompt/total usage unavailable');
 });
 
 test('final native usage and server timing remain exact and include the finish reason', () => {
@@ -56,6 +56,15 @@ test('partial usage and rate-only payloads never produce null or fabricated exac
     rateOnly.update({ uor: { tokens_per_second_milli: 500000 }, chars: 7 });
     assert.equal(rateOnly.snapshot().exact, false);
     assert.equal(rateOnly.text(), '7 chars · usage unavailable');
+});
+
+test('exact live completion keeps partial final prompt and total usage explicitly unavailable', () => {
+    const metrics = createStreamMetrics();
+    metrics.update({ uor: { completion_ids: [1, 2, 3] }, elapsedNs: 3000000, chars: 2 });
+    metrics.update({ usage: { completion_tokens: 3 }, chars: 2 });
+    assert.equal(metrics.snapshot().exact, true);
+    assert.equal(metrics.text(), '3 tokens · 1000.0 tok/s · 3.000 ms · prompt/total usage unavailable');
+    assert.equal(metrics.text().includes('null'), false);
 });
 
 test('final usage recomputes a stale client rate when no server rate exists', () => {
