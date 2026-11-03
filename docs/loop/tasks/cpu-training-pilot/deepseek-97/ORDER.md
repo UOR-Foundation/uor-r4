@@ -9,8 +9,8 @@ Base: `c4c267c534d7160ac6d544c420c90249a1cddeba`.
 Add a new training-through-serving path for a full-width final gain. The
 teacher-forced token trajectory fixes the recurrent state. Cache the exact
 normalization immediately before `final_norm_gain`, then score candidate gain
-codes by replaying only the final gain, Q12 conversion, fixed turn-memory
-movement, writer decision and point fallback.
+codes by replaying only the final gain, fixed turn-memory movement in the
+normalization-fine domain, Q12 conversion, writer decision and point fallback.
 
 Run a materially new bounded CPU comparison on both public FBS seeds against
 matched frozen and equal-move random controls. This is distance training, not

@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use uor_r4_core::report_output;
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
     evaluate_memory_weight_samples, random_gain_control, read_gain, validate_corpus_manifest,
@@ -151,6 +153,52 @@ fn hex(value: &str) -> Result<String, String> {
 fn run() -> Result<serde_json::Value, String> {
     let config = parse_args()?;
     let started = Instant::now();
+    report_output::claim(&config.out).map_err(|error| {
+        format!(
+            "claim exclusive report directory {}: {error}",
+            config.out.display()
+        )
+    })?;
+    let result = run_claimed(&config, started);
+    if let Err(error) = &result {
+        let failure = serde_json::json!({
+            "schema": "uor-r4.cpu-gain-panel-failure/1",
+            "status": "INCOMPLETE_OR_UNVERIFIED",
+            "substrate": "cpu-development-research",
+            "qualification": "gpu-required",
+            "error": error,
+            "inputs": {
+                "artifact": config.artifact,
+                "artifact_sha256": config.expected_artifact_sha256,
+                "tokens": config.tokens,
+                "tokens_sha256": config.expected_tokens_sha256,
+                "mask": config.mask,
+                "mask_sha256": config.expected_mask_sha256,
+                "manifest": config.manifest,
+                "manifest_sha256": config.expected_manifest_sha256,
+                "memory_baseline_sha256": config.expected_memory_sha256,
+            },
+            "execution": {
+                "threads": rayon::current_num_threads(),
+                "reference": config.reference,
+                "seed": config.seed,
+            },
+            "scope": "Preserved execution or instrument failure; not a capability verdict. No automatic retry.",
+            "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
+            "peak_rss_kib": peak_rss_kib(),
+        });
+        let bytes = serde_json::to_vec_pretty(&failure)
+            .map_err(|error| format!("serialize failed-attempt report: {error}"))?;
+        write_new(&config.out.join("failed-attempt.json"), &bytes)?;
+    }
+    report_output::seal(&config.out)
+        .map_err(|error| format!("seal report directory {}: {error}", config.out.display()))?;
+    report_output::verify(&config.out)
+        .map_err(|error| format!("verify sealed report directory: {error}"))?;
+    result
+}
+
+fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, String> {
     let artifact = std::fs::read(&config.artifact).map_err(|error| error.to_string())?;
     let tokens = std::fs::read(&config.tokens).map_err(|error| error.to_string())?;
     let mask = std::fs::read(&config.mask).map_err(|error| error.to_string())?;
@@ -193,7 +241,7 @@ fn run() -> Result<serde_json::Value, String> {
     let examples = corpus
         .conversation_examples()
         .map_err(|error| error.to_string())?;
-    let groups = select_groups(&examples, &config);
+    let groups = select_groups(&examples, config);
     let training_samples = groups
         .iter()
         .flat_map(|group| group.training.iter())
@@ -259,11 +307,8 @@ fn run() -> Result<serde_json::Value, String> {
             "memory baseline SHA-256 differs: got {gain_baseline_sha256}"
         ));
     }
-    std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
-    std::fs::write(config.out.join("memory-baseline.uorlut"), &memory_artifact)
-        .map_err(|error| error.to_string())?;
-    std::fs::write(config.out.join("gain-baseline.uorlut"), &gain_baseline)
-        .map_err(|error| error.to_string())?;
+    write_new(&config.out.join("memory-baseline.uorlut"), &memory_artifact)?;
+    write_new(&config.out.join("gain-baseline.uorlut"), &gain_baseline)?;
 
     let gain_config = ServedGainConfig { step_code: 1 };
     let mut trainer = if config.reference {
@@ -293,13 +338,11 @@ fn run() -> Result<serde_json::Value, String> {
     }
     let train_after = trainer.reading().map_err(|error| error.to_string())?;
     let trained_artifact = trainer.artifact().to_vec();
-    std::fs::write(config.out.join("trained.uorlut"), &trained_artifact)
-        .map_err(|error| error.to_string())?;
+    write_new(&config.out.join("trained.uorlut"), &trained_artifact)?;
     let (random_artifact, random_moves) =
         random_gain_control(&gain_baseline, accepted.len(), config.seed)
             .map_err(|error| error.to_string())?;
-    std::fs::write(config.out.join("random.uorlut"), &random_artifact)
-        .map_err(|error| error.to_string())?;
+    write_new(&config.out.join("random.uorlut"), &random_artifact)?;
     let trained = evaluate_memory_weight_samples(&trained_artifact, &evaluation_samples, true)
         .map_err(|error| error.to_string())?;
     let random = evaluate_memory_weight_samples(&random_artifact, &evaluation_samples, true)
@@ -427,12 +470,16 @@ fn run() -> Result<serde_json::Value, String> {
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),
     });
-    std::fs::write(
-        config.out.join("report.json"),
-        serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    let bytes = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
+    write_new(&config.out.join("report.json"), &bytes)?;
     Ok(report)
+}
+
+fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut file = std::fs::File::create_new(path)
+        .map_err(|error| format!("create {}: {error}", path.display()))?;
+    file.write_all(bytes)
+        .map_err(|error| format!("write {}: {error}", path.display()))
 }
 
 fn memory_sample(sample: &CpuConversationSample) -> MemoryWeightSample {
