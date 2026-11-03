@@ -16,6 +16,8 @@
 //! `--hamming-copy-key 2` (needs `--hamming-read`) keys the read's copy heads on the two tokens
 //! before a position, in order, in place of one (`HammingReads::with_copy_key`, claude-261). The
 //! checkpoint's `hamming_read.safetensors` records it, so scoring and the export read it there.
+//! `--score-rows` additionally accepts `[--batched-decode 0|1]`.
+//!
 //! `--batched-decode 1` lets `--score-rows` decode equal-length prompts together on the
 //! full-scope nearest arms. It defaults to 0 while GPU parity is being qualified.
 //!
