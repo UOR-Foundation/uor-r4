@@ -31,13 +31,14 @@ Order: [ORDER.md](ORDER.md). Base:
 `fbs-export --run-config` now parses `train_as_served` before constructing the
 artifact. A true value requires both `--raw-gates` and `--raw-transition`,
 matching the current `SERVED_SNAPS` contract. A non-boolean value is refused.
-Absent and false values preserve the caller's existing snapped/raw choice.
+A JSON root that is not an object is refused. Absent and false values preserve
+the caller's existing snapped/raw choice.
 
 The rejection occurs before artifact construction and before
 `write_new_file`, so a refused contract cannot create its requested output.
 The documented command surface and export error name the required flags.
 
-The implementation is 99 added and 4 removed lines in
+The implementation is 104 added and 4 removed lines in
 `crates/uor-r4-integer/src/bin/fbs-export.rs`: the pure contract check, its
 call, three focused tests and the updated command documentation.
 
@@ -45,7 +46,8 @@ call, three focused tests and the updated command documentation.
 
 - Focused `fbs-export` tests: **3 passed, 0 failed**. They cover all four raw
   flag combinations, absent and false legacy configs, malformed JSON, null,
-  integer, and string values for `train_as_served`.
+  integer, and string values for `train_as_served`, and array and string JSON
+  roots.
 - Integer library, `fbs-compare`, `fbs-export`, `fbs-toks`, and `uor-chat`
   tests in release: **467 passed, 0 failed, 1 ignored**.
 - `rustfmt --check --edition 2021` on the changed exporter: passed.

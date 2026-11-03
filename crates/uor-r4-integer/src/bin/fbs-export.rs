@@ -50,7 +50,10 @@ const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-c
 fn check_run_export_contract(config: &str, snaps: FbsExportSnaps) -> Result<(), String> {
     let value: serde_json::Value =
         serde_json::from_str(config).map_err(|error| format!("the run config: {error}"))?;
-    let trained_as_served = match value.get("train_as_served") {
+    let config = value
+        .as_object()
+        .ok_or_else(|| "the run config root is not an object".to_owned())?;
+    let trained_as_served = match config.get("train_as_served") {
         None => false,
         Some(serde_json::Value::Bool(value)) => *value,
         Some(_) => return Err("the run config's train_as_served is not a bool".to_owned()),
@@ -248,6 +251,8 @@ mod tests {
     #[test]
     fn malformed_served_flags_fail_closed() {
         for config in [
+            r#"[]"#,
+            r#""served""#,
             r#"{"train_as_served": null}"#,
             r#"{"train_as_served": 1}"#,
             r#"{"train_as_served": "true"}"#,
