@@ -322,48 +322,50 @@ impl CpuGainTrajectory {
         let width = self.forward.width();
         let vocab = self.forward.vocabulary();
         let table = self.forward.token_table();
-        let readings = self
-            .sample_ranges
-            .iter()
-            .map(|range| {
-                let mut sample_top1 = 0u64;
-                let mut sample_distance = 0u64;
-                let mut sample_decisions = 0u64;
-                for decision in &self.decisions[range.clone()] {
-                    if decision.target as usize >= vocab {
-                        return Err(invalid("served-gain target is outside vocabulary"));
+        let readings =
+            self.sample_ranges
+                .iter()
+                .map(|range| {
+                    let mut sample_top1 = 0u64;
+                    let mut sample_distance = 0u64;
+                    let mut sample_decisions = 0u64;
+                    for decision in &self.decisions[range.clone()] {
+                        if decision.target as usize >= vocab {
+                            return Err(invalid("served-gain target is outside vocabulary"));
+                        }
+                        let (query, token) = self
+                            .forward
+                            .replay_final_gain(
+                                &decision.norm_before_final_gain,
+                                &gain,
+                                decision.memory,
+                                &self.opening_weights,
+                                self.reply_weights.as_deref(),
+                            )
+                            .map_err(|error| invalid(format!("served-gain replay: {error}")))?;
+                        let target_row = &table[decision.target as usize * width..][..width];
+                        let distance = query.iter().zip(target_row).try_fold(
+                            0u64,
+                            |sum, (&query, &point)| {
+                                sum.checked_add(u64::from(query.abs_diff(i32::from(point))))
+                                    .ok_or_else(|| {
+                                        invalid("served-gain decision distance overflows")
+                                    })
+                            },
+                        )?;
+                        sample_top1 = sample_top1
+                            .checked_add(u64::from(token == decision.target))
+                            .ok_or_else(|| invalid("served-gain top-1 count overflows"))?;
+                        sample_distance = sample_distance
+                            .checked_add(distance)
+                            .ok_or_else(|| invalid("served-gain distance sum overflows"))?;
+                        sample_decisions = sample_decisions
+                            .checked_add(1)
+                            .ok_or_else(|| invalid("served-gain decision count overflows"))?;
                     }
-                    let (query, token) = self
-                        .forward
-                        .replay_final_gain(
-                            &decision.norm_before_final_gain,
-                            &gain,
-                            decision.memory,
-                            &self.opening_weights,
-                            self.reply_weights.as_deref(),
-                        )
-                        .map_err(|error| invalid(format!("served-gain replay: {error}")))?;
-                    let target_row = &table[decision.target as usize * width..][..width];
-                    let distance =
-                        query
-                            .iter()
-                            .zip(target_row)
-                            .fold(0u64, |sum, (&query, &point)| {
-                                sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
-                            });
-                    sample_top1 = sample_top1
-                        .checked_add(u64::from(token == decision.target))
-                        .ok_or_else(|| invalid("served-gain top-1 count overflows"))?;
-                    sample_distance = sample_distance
-                        .checked_add(distance)
-                        .ok_or_else(|| invalid("served-gain distance sum overflows"))?;
-                    sample_decisions = sample_decisions
-                        .checked_add(1)
-                        .ok_or_else(|| invalid("served-gain decision count overflows"))?;
-                }
-                Ok((sample_top1, sample_distance, sample_decisions))
-            })
-            .collect::<Result<Vec<_>>>()?;
+                    Ok((sample_top1, sample_distance, sample_decisions))
+                })
+                .collect::<Result<Vec<_>>>()?;
         let (top1_correct, target_distance_sum, decisions) = checked_sample_totals(readings)?;
         Ok(MemoryWeightReading {
             artifact_sha256: uor_r4_discrete::corpus::sha256(artifact),

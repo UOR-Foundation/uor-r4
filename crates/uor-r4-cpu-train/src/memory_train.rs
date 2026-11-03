@@ -523,11 +523,18 @@ impl CpuMemoryTrajectory {
                         query
                             .iter()
                             .zip(target_row)
-                            .fold(0u64, |sum, (&query, &point)| {
-                                sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
-                            });
-                    sample_top1 += u64::from(token == decision.target);
-                    sample_distance = sample_distance.saturating_add(distance);
+                            .try_fold(0u64, |sum, (&query, &point)| {
+                                sum.checked_add(u64::from(query.abs_diff(i32::from(point))))
+                                    .ok_or_else(|| {
+                                        invalid("memory trajectory decision distance overflows")
+                                    })
+                            })?;
+                    sample_top1 = sample_top1
+                        .checked_add(u64::from(token == decision.target))
+                        .ok_or_else(|| invalid("memory trajectory top-1 count overflows"))?;
+                    sample_distance = sample_distance
+                        .checked_add(distance)
+                        .ok_or_else(|| invalid("memory trajectory distance sum overflows"))?;
                     sample_decisions = sample_decisions
                         .checked_add(1)
                         .ok_or_else(|| invalid("memory trajectory decision count overflows"))?;
@@ -700,15 +707,20 @@ fn evaluate_memory_sample(
                 .map_err(|error| invalid(format!("memory-weight forward: {error}")))?;
             let target = tokens[index + 1];
             let row = &table[target as usize * width..][..width];
-            let distance = step
-                .query_q12
-                .iter()
-                .zip(row)
-                .fold(0u64, |sum, (&query, &point)| {
-                    sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
-                });
-            top1_correct += u64::from(step.token == target);
-            target_distance_sum = target_distance_sum.saturating_add(distance);
+            let distance =
+                step.query_q12
+                    .iter()
+                    .zip(row)
+                    .try_fold(0u64, |sum, (&query, &point)| {
+                        sum.checked_add(u64::from(query.abs_diff(i32::from(point))))
+                            .ok_or_else(|| invalid("memory-weight decision distance overflows"))
+                    })?;
+            top1_correct = top1_correct
+                .checked_add(u64::from(step.token == target))
+                .ok_or_else(|| invalid("memory-weight top-1 count overflows"))?;
+            target_distance_sum = target_distance_sum
+                .checked_add(distance)
+                .ok_or_else(|| invalid("memory-weight distance sum overflows"))?;
             decisions = decisions
                 .checked_add(1)
                 .ok_or_else(|| invalid("memory-weight decision count overflows"))?;
