@@ -27,13 +27,15 @@ registration for a `ready` image-input item mapped to issue #3619.
 
 ## Checks run at the head
 
-- Full gates ran at content commit `CONTENT_HEAD`.
+- Full gates ran at content commit
+  `7960668808a91eb54d990235cff5520ed1476458`.
 - `cargo run -q -p xtask -- roadmap check`, focused link checks,
   `git diff --check`, `loop report --check`, `loop pr-check --local` and
   `loop gates --full` passed at that content commit.
 - The following receipt/accounting commit changes both
   `docs/loop/tasks/infra-loop-harness/deepseek-107/receipts.jsonl` and this
   report's exact-size line.
+- The final cumulative diff is 15 files, 544 insertions and no deletions.
 
 ## Skills used
 
