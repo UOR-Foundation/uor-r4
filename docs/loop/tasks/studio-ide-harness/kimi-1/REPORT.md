@@ -79,6 +79,7 @@ Merge commit `51e25aec4cafa99fb8415eaa99ab8ad2956d6a64` contains the recovered i
 - #3569 remains open for real remote MCP behavior and the later desktop bridge. No decorative MCP panel or simulated discovery was added.
 - #3500 remains open for typed-library parity/migration/cutover. The Preact library stays unmounted.
 - Production publication remains separate. The current trained M1 artifact remains next-token prediction, not a conversational product.
+- Generated STATE/HANDOFF/AGENTS lessons remain a separate generated-state render dependency. Their temporary render was reverted rather than including owner-path changes in this PR; the delivered `docs/roadmap/README.md` and `issues.json` carry the current 136-item mapping. Exact receipts and the final review are recorded in `receipts.jsonl` in this task folder.
 
 ## Plain summary
 
