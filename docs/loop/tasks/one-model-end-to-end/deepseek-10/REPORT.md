@@ -26,7 +26,8 @@ SHA-256 `738457b26af18e9176bd0e3ece76f0502d4505cdf0a3f249381fc0ccf574ad1d`.
 - Nearest hits: 225/23 and 229/20.
 - Openings: 22/1 and 15/1.
 - Served decode: 49.2–49.4, 40.8–41.1 and 28.6–28.8 tok/s at contexts 16, 64 and 192.
-- Both served checkpoints were unchanged by export rounding; all four plain files changed.
+- Both served checkpoints were unchanged by export rounding; four of five files
+  changed for each plain checkpoint.
 
 ## Checks run at the head
 

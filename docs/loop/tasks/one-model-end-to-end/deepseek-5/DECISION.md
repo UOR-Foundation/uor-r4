@@ -34,8 +34,8 @@ object SHA-256 on #3407. This workstation could not independently download the
 private store object because no Hugging Face credential is configured.
 
 - All four runs had finite losses and loaded through the served evaluator.
-- Both served checkpoints were byte-identical after export rounding; all four
-  plain files changed.
+- Both served checkpoints were byte-identical after export rounding; four of
+  five files changed for each plain checkpoint.
 - Training: 355 s served vs 51/52 s plain = 6.96×/6.83×, above 2×.
 - Top-1 served minus plain: −25/−55. The two-seed spread is 30; max(24, 30)=30,
   so seed 1 is inside the band and quality is inconclusive.

@@ -91,19 +91,20 @@ For every run:
 - `fbs-snapshot --round-as-exported`: the set of saved files whose bytes change.
 
 The served-forward override is for evaluation only and must not change the
-training objective. Before inspection, create each separate evaluation run as:
+training objective. Before inspection, let `fbs-snapshot` create each separate
+evaluation run:
 
 ```text
-mkdir -p EVAL/models
-cp RUN/config.json EVAL/config.json
 fbs-snapshot --round-as-exported RUN/models/step-000256 EVAL/models/step-000256
 ```
 
-The copied run config preserves the source arm, seed, architecture, reads,
-rounding flags and arm setting; all later scoring flags are identical. The
-source and copy file hashes are recorded. This is required for the plain arm,
-whose unrounded files `evaluate_dev_panel_d11` correctly refuses. The served arm
-receives the same copy step to keep the evaluation path identical.
+`EVAL` must not exist before the command. `fbs-snapshot` creates the run folder
+and copies the source `config.json` itself; the copied config preserves the
+source arm, seed, architecture, reads, rounding flags and arm setting. All later
+scoring flags are identical, and the source and copy file hashes are recorded.
+This is required for the plain arm, whose unrounded files
+`evaluate_dev_panel_d11` correctly refuses. The served arm receives the same
+copy step to keep the evaluation path identical.
 
 ## Steps
 
@@ -156,7 +157,8 @@ summary Claude posted on #3407.
 
 - **Instrument PASS:** all four runs completed with finite losses and loaded
   through the served evaluator. Both served checkpoints were byte-identical
-  after `--round-as-exported`; four files changed for each plain checkpoint.
+  after `--round-as-exported`; four of five files changed for each plain
+  checkpoint.
 - **Operational FAIL:** served/plain training time was 355/51 = 6.96× and
   355/52 = 6.83×, above the registered 2× limit.
 - **Quality inconclusive:** served minus plain top-1 was −25 at seed 1 and −55
@@ -167,6 +169,12 @@ summary Claude posted on #3407.
   tok/s at contexts 16, 64 and 192. This is decoding, not training throughput.
 - **Cause not yet measured:** the 49-pass `activation_quantize16` scale loop is
   a likely cost source, but no profile isolates it. Do not report it as proven.
+
+**Instrument fault found by the run:** the first evaluation wrapper created
+`EVAL/config.json` before calling `fbs-snapshot`, so the command correctly
+refused all four outputs. The wrapper nevertheless wrote `DONE`. The rerun used
+the corrected command above under a fresh root. A future wrapper writes `DONE`
+only after every round command's exit status has been checked.
 
 ## Minimum test power
 

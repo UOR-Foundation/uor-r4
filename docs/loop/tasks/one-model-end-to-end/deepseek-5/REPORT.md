@@ -92,7 +92,7 @@ run summary on #3407 rather than a second local download.
 
 **Instrument door: PASS.** All four runs were finite and loaded through the
 served evaluator. Both served checkpoints were unchanged by export rounding;
-all four plain files changed.
+four of five files changed for each plain checkpoint.
 
 **Operational door: FAIL.** Served training took 355 seconds against 51
 seconds plain at seed 1 (6.96×) and 355 against 52 at seed 2 (6.83×), above the
