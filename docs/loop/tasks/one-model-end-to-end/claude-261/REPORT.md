@@ -18,7 +18,7 @@ Lab: claude. [ORDER](./ORDER.md). Sheet: [`one-model-end-to-end-copy-key-2026-11
 - **The run's main finding is about the training form, not the key.** Under #3565's served form:
   - every arm learned far less per step than claude-259's runs (A);
   - the exported integer model does not reproduce what the pod scored: 297–305 of 310 first tokens differ, and 295–301 even when it is exported with the gates snapped as trained, against a bar of 8 (B).
-- **What else changed.** Every seed was cut to a quarter of its steps by two arms sharing a card. claude-262 found the cause of A and B in the stand-in quantizer and is repairing it in its own unit. Casey's two decisions for the next units are "Arms in turn" and "Yes, scorer next".
+- **What else changed.** Every seed was cut to a quarter of its steps by two arms sharing a card. claude-262 found a cause of A in the stand-in quantizer and repaired it in its own unit (#3587, merged as `fac0131bc` during this one). Its 256-step served runs learn again, at 1.79–1.84× plain's time. I-3 on a trained export at that head has not been run yet. Casey's two decisions for the next units are "Arms in turn" and "Yes, scorer next".
 
 ## Tokens per second
 
@@ -36,7 +36,7 @@ Lab: claude. [ORDER](./ORDER.md). Sheet: [`one-model-end-to-end-copy-key-2026-11
 - At step 2,048, DEV nearest is 921–2,314 of 14,287 here, across all six arms. claude-259's runs, trained under claude-258's form before #3565, were at 11,357 and above at the same step ([claude-259 REPORT](../claude-259/REPORT.md), "Training and DEV (R4)").
 - deepseek-5's four runs at this head isolate the cause to the served form. At 256 steps, the served runs reach DEV nearest 23 and 20 (seeds 1 and 2). The plain runs' checkpoints reach 225 and 229 when read through the same served evaluator, and 583 and 348 on their own training DEV. Over the 256 steps, served's train loss fell 0.00023 and 0.00016, against plain's 0.00103 and 0.00084. Those runs are DeepSeek's to read by their own sheet's bar; the readings are on #3407 (comment 6595148437).
 - Served training is also slower: 355 s against 51–52 s for 256 steps (6.8–7.0×).
-- **The cause, found in source by claude-262** (#3587, its own unit; its matched GPU rerun is still to come). `activation_quantize16`, the float stand-in for the integer step's `stack_quantize16`, left out the step's exponent (`PRODUCT_EXP = −32`). So the served forward rounded every recurrence and MLP activation below 2^15 to a whole number. Its 49-pass loop over thresholds is also replaced, with six exact halvings.
+- **The cause, found in source by claude-262** (#3587, its own unit, merged as `fac0131bc` while this one was closing). `activation_quantize16`, the float stand-in for the integer step's `stack_quantize16`, left out the step's exponent (`PRODUCT_EXP = −32`). So the served forward rounded every recurrence and MLP activation below 2^15 to a whole number. Its 49-pass loop over thresholds is also replaced, with six exact halvings.
 - **Classed instrument for this question** (CHARTER §4.2, L-007). Both arms train under the same form, so (k2) against (b) is still a paired comparison. But both sit far below that form's earlier level, and both are still rising. The copy-key question cannot be read at this level. The fault is a finding about #3565's served forward, which is now its own unit (the ORDER's last owner decision).
 
 **B. The exported model does not serve what the pod scored (I-3 failed).** This is the same fault as A, seen from the laptop.
@@ -51,11 +51,11 @@ Lab: claude. [ORDER](./ORDER.md). Sheet: [`one-model-end-to-end-copy-key-2026-11
 - **Control.** Today's `fbs-toks`, built after main was merged in, reproduces claude-259's integer replies for its b-s1 export byte for byte (SHA-256 `52d3bc00ac3f5828a55eab860441de79c615b27c2b9a4c861168b7ba1d4e0e0e`). `fbs-export`'s binary hash is unchanged. So the serving tools are cleared.
 - **The repair of (ii), made in this unit.** `serve-snap.sh` is `serve.sh` with the raw flags dropped, so the gates and the transition are served snapped, as trained. It writes transcripts only after a pass. I-3 still fails: 301 of 310 first tokens differ for (b), and 295 for (k2), with every whole reply different and no prompt out of order (table below). So (ii) is real but small. The remainder belongs to (i), to any (iii) or (iv) rounding mismatch, and to anything not yet found. claude-262 found one concrete defect in (i) (A). On 3 Nov it was told about (ii) and given the (iii)/(iv) parity question, so its rerun exports snapped, checks I-3, and splits the remainder.
 - **Classed instrument** (CHARTER §4.2). By the sheet, R6 and R7 are instrument faults, and R1–R5 stand.
-- **The decision, and a departure from the sheet.** The sheet says to repair them "in this unit before R6 and R7 are read". The export recipe was repaired here. The remainder lies in the training forward, and serving what was scored needs these checkpoints retrained under a repaired forward. So the rest moves to claude-262's matched rerun and to the next copy-key unit, with I-3 before R6. R6 and R7 stay unread. This was decided on claude's own decision review, in three rounds:
+- **The decision, and a departure from the sheet.** The sheet says to repair them "in this unit before R6 and R7 are read". The export recipe was repaired here. The remainder is (i), which lies in the training forward, plus any (iii) or (iv) rounding mismatch (its side not yet known) and anything not yet found. (i) alone means that serving what was scored needs these checkpoints retrained under a repaired forward. So the rest moves to claude-262's matched rerun and to the next copy-key unit, with I-3 before R6. R6 and R7 stay unread. This was decided on claude's own decision review, in three rounds:
   - round 1 failed on the evidence for the cause;
   - round 2 failed on the unnamed snap mismatch;
   - round 3 failed on naming (iii) and (iv) and on a single-cause overclaim;
-  - round 4 reviewed the corrected card.
+  - round 4 found the scope card and the four-change account sound, and called the card "merge-ready after the two wording fixes": two sentences still put the whole remainder in the training forward. Both were fixed as specified.
   The rounds are logged on #3407 as an owner log.
 - **A check not run.** Scoring (b)-s1 on the GPU with `--served-forward 0` would show whether the export equals the plain forward on the same weights. Either outcome leads to the same next step (claude-262's fix, then I-3 at its head), so it was not spent.
 - **What R1 to R5 are.** They are readings through the served float forward, which the export does not compute, even served snapped. They compare the two keys under that forward only, and are not readings of the served model.
@@ -97,7 +97,8 @@ Lab: claude. [ORDER](./ORDER.md). Sheet: [`one-model-end-to-end-copy-key-2026-11
 
 ## What changed
 
-- The copy key (`987cc3fe1`) and the quantizer's dtype repair (`36ca53c81`).
+- The copy key (`987cc3fe1`) and the quantizer's dtype repair (`36ca53c81`). At the merge of main, claude-262's rewrite of the same function superseded the repair. Its factors come from `ones_like` of the activation, so they keep its dtype, and its tests of the function replace this unit's. After the merge, `hamilton_sheet.rs` is identical to main's.
+- After the exact-head review: copy key 2 on one head is refused, and the CPU trainer's port refuses copy key 2. There are new tests for the float half order (CUDA) and for the parsers' refusal of copy key 3.
 - The sheet, and its stop rule's resource-fault case, added on claude's decision review after the first OOM.
 - [claude-259's REPORT](../claude-259/REPORT.md) now names deepseek-3's PR as #3563 (`dab00a9f8`).
 
@@ -227,9 +228,11 @@ None.
 
 ## Still open
 
-- **The served-training fault (A, B):** in its own session (claude-262, #3587), by Casey's go-ahead. On 3 Nov it was told about B, about the snapped export, and about the open (iii)/(iv) rounding-parity question, so its matched rerun can check I-3 too.
+- **The served-training fault (A, B):** claude-262 (#3587, by Casey's go-ahead) merged its repair as `fac0131bc` during this unit. At 256 steps, served training learns again: DEV nearest is 305 / 357 served, against 239 / 248 plain.
+  - Its instrument door was that checkpoints stay byte-identical through export rounding. It did not run I-3's `fbs-toks` parity on a trained export.
+  - So I-3 at that head, exported snapped, is the next copy-key unit's first gate. The (iii)/(iv) rounding-parity question claude-262 was given on 3 Nov goes with it.
 - **The batched scorer (H):** the next unit in this session.
-- **The served quantizer's 7× time (A):** claude-262 replaces the 49-pass loop in the same function; DeepSeek registered the speed repair as `served-rounding-cost` (#3586).
+- **The served quantizer's 7× time (A):** claude-262 replaced the 49-pass loop with six halvings and repaired the snap's scoring, and served steps now take 1.79–1.84× plain's time. DeepSeek's `served-rounding-cost` (#3586) is its own item.
 - **The copy-key candidate:** a new configuration at claude-262's repaired head. It trains (b) and (k2) one arm at a time, exports snapped, and passes I-3 before R6 or R7 is read.
 - **Copy key 2 on the CPU trainer's port** (`uor-r4-cpu-train`) is refused, not ported (see "Review at the head").
 

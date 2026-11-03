@@ -50,6 +50,7 @@ Classed instrument (no model ran).
 - `crates/uor-r4-integer/src/stack/hamming.rs`
 - `crates/uor-r4-integer/src/stack/synthetic.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
+- `crates/uor-r4-cpu-train/src/fbs.rs` (added after the exact-head review, by a decision card whose round-4 review passed it: the CPU trainer's port refuses copy key 2, which it would otherwise serve with one-token keys)
 
 ## Done when
 
