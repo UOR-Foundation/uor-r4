@@ -6,7 +6,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 claude-263 and claude-264 found that the integer first token misses the float one on 100–137 of 310 DEV prompts (bar 8), after two repairs.
 
-**The served bridge snaps.** `with_served_surrogate_training` calls `with_d11_training`, which snaps both Hamilton gates and the recurrence transition to the 120 icosians. So a run trained as served had to be exported snapped (`lut-stack/4`), as claude-263 did.
+**The served bridge snaps.** `with_served_surrogate_training` calls `with_d11_training`, which snaps both Hamilton gates and the recurrence transition to the 120 icosians. So a run trained as served had to be exported snapped (an icosian `transport_snap` in the header), as claude-263 did.
 
 **The project's own R6 result says the snap is the gap:**
 - **claude-180:** the gate snap carries most of the D11 forward's gap from float.
@@ -27,7 +27,7 @@ A snap is a discrete choice: two sides a hair apart before it can land on icosia
 **Plan step (the claim check):** order step 4, one model trained, exported, served and scored end to end. I-3 is the door to the full-length served run.
 
 **What it changes in the model:** what a model trained as served trains on and serves.
-- Its Hamilton gates and recurrence transition are exact unit quaternions in the training forward and in the artifact (`lut-stack/5`), in place of icosian snaps.
+- Its Hamilton gates and recurrence transition are exact unit quaternions in the training forward and in the artifact (`raw_gates`, `raw_transition`), in place of icosian snaps.
 - The Hamming read's backward no longer runs through the trunk's snap (`flock_read_hamming::as_trained`'s noted gap).
 
 ## Cancel probe
@@ -60,7 +60,8 @@ Classed instrument: an I-3 miss is a parity fault (§4.2). The change is a model
 1. Under the served bridge, the gate arm is `Hamilton_Active` and the transition is not snapped. The Q12 query bridge, the Q16 residual and the i16 activations stay on, and every flag is restored after `Ok`, `Err` and a panic. A host test fails with the change set aside and passes with it.
 2. The served DEV panel and loss follow the contract: under the served bridge, `with_d11_mode` is `SERVED_SNAPS`.
    - The served checkpoint's `evaluate_dev_panel_d11` and `panel_loss_d11` call `with_d11_mode`, so they need no edit.
-   - The I-3 serve step exports with `--raw-gates --raw-transition`, and refuses any artifact whose header is not `uor-r4.lut-stack/5`.
+   - The I-3 serve step exports with `--raw-gates --raw-transition`. It refuses any artifact whose header shape lacks `raw_gates: true` or `raw_transition: true`, or that carries a `transport_snap`.
+   - The schema does not say this: a stack with the turn memory is `uor-r4.lut-stack/7` (`STACK_FBS_MEMORY_SCHEMA`) whether its gates are raw or snapped. claude-263's snapped exports were `/7` with an icosian `transport_snap`.
    - A guard inside `fbs-export` is out of the item's scope (`crates/uor-r4-integer/src/bin/` is not listed), so it stays open in the REPORT.
 3. The prep sheet is FIT, and its pre-run review is PASS.
 4. On one 5090 at the PR head:

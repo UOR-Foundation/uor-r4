@@ -795,7 +795,9 @@ pub fn with_served_surrogate_training<T>(
 }
 
 /// The D11 contract a run trained as served trains on and is served on (claude-265): the
-/// unsnapped one, `uor-r4.lut-stack/5` (`fbs-export --raw-gates --raw-transition`). Both Hamilton
+/// unsnapped one (`fbs-export --raw-gates --raw-transition`: `raw_gates` and `raw_transition` in
+/// the artifact's shape and no `transport_snap`, schema `uor-r4.lut-stack/5` before the Hamming
+/// reads and the turn memory raise it). Both Hamilton
 /// gates and the recurrence transition are exact unit quaternions, never snapped to the 120
 /// icosians. R6 found that the snap carries the D11 forward's gap from float (claude-180), and
 /// that the unsnapped contract closes it (claude-182). Exact implementations with the same snaps
@@ -3308,7 +3310,7 @@ mod tests {
     }
 
     /// claude-265: the served bridge trains and evaluates on the unsnapped D11 contract
-    /// (`lut-stack/5`). Inside it the gates pass through (`Hamilton_Active`), the transition is
+    /// (`--raw-gates --raw-transition`). Inside it the gates pass through (`Hamilton_Active`), the transition is
     /// not snapped and the Q12 query bridge is on, directly and through the D11 mode that the
     /// served DEV panel and loss call. Outside it, the D11 mode and D11 training still snap both.
     #[test]
