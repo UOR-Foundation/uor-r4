@@ -1,6 +1,6 @@
 # REPORT: Studio conversational composer, text attachments, and native metrics
 
-Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), dependent on the delivered [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Original base: `af6c27ad78f8fdde2babbf084bd10bbaeba1a45e`; implementation head: `fa0e113218082fcb2451561a74f17fbf01a3bd4b`; current-main integration base is recorded in the final external verification and PR.
+Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), dependent on the delivered [uor-chat-openai-loopback](../../../../roadmap/items/uor-chat-openai-loopback.md) (#3595). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Original base: `af6c27ad78f8fdde2babbf084bd10bbaeba1a45e`; implementation head: `f2c3b84e4a68fc375ca2e7718dd241e934f4afa0`; current-main integration base is recorded in the final external verification and PR.
 
 ## What did not work
 
@@ -11,6 +11,7 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 - An empty-state ternary edit introduced a module parse error before `boot()`. The actual inline module was syntax-checked and corrected; temporary title/payload diagnostics were removed. Native registration then worked normally.
 - The generic API default `max_tokens=768` caused exact 780/786/933-position 413 errors against the 192-position artifact even for `Hi`. Ephemeral native configs now omit that field so the server's default of 16 applies; ordinary providers retain their default. This was a client default defect, not accumulated history.
 - The Stop-proxy browser attempt did not register its bootstrap and is **NOT_RUN**, not a pass. The API mid-stream abort regression passes, but this REPORT does not claim a completed browser Stop scenario. The proxy and native servers and the browser tab were stopped.
+- Independent review found false exact-token metrics for empty ID arrays, composition Enter being default-prevented, remaining native/external label mismatches, malformed SSE and in-band errors completing successfully, retained-attachment overflow, storage-dependent native boot, and draft leakage across sessions. Regressions now cover each: empty IDs and partial usage stay character-only, final rates recompute, composition defaults are preserved, every native surface is local, malformed SSE errors surface, retained totals include duplicate replacement, storage denial does not block native boot, and reset restores the selected session's draft. Empty/exhausted history keys no longer swallow native caret movement. #3608 is now marked done consistently with its ORDER.
 - No useful-chat, production, M4/M7, visual-understanding, embedding, or multimodal capability is claimed. Image decomposition remains the next unit.
 
 ## What changed
@@ -24,8 +25,8 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 
 ## Measurements and checks
 
-- Focused RED→GREEN: 9 composer-controller tests, long-attachment preservation, 5 streaming tests, 3 metrics tests, 2 native-bootstrap tests, and native privacy/label regressions. The 120,001-character file/prompt cases preserve every character; per-file/total/binary failures are explicit.
-- Complete Studio suite: **30 files / 256 Vitest tests PASS**. Node protocol/source tests: **22 PASS**. Typecheck and Vite build: PASS. Studio worker, page static/runtime traps, and desktop checks: PASS, with zero unexpected external requests.
+- Focused RED→GREEN: 12 composer-controller tests, 6 streaming tests, 5 metrics tests, 3 native-bootstrap tests, and native privacy/label regressions. The 120,001-character file/prompt cases preserve every character; per-file/total/binary failures are explicit. Empty-ID/non-native usage, malformed SSE, storage-denied boot, draft reset, retained totals, and assistant-role cases are covered.
+- Complete Studio suite: **31 files / 261 Vitest tests PASS**. Node protocol/source tests: **26 PASS**. Typecheck and Vite build: PASS. Studio worker, page static/runtime traps, and desktop checks: PASS, with zero unexpected external requests.
 - Real native browser flow against the retained dual-c131 artifact (`9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192):
   - First reply `I.`: **3 completion / 18 prompt / 21 total tokens**, 313.6 tok/s, TTFT 8.966 ms, elapsed 9.568 ms.
   - ArrowUp restored `Hi`; Shift+Enter added a second line; the second `I.` reply: **3 / 38 / 41**, 167.7 tok/s, TTFT 17.170 ms, elapsed 17.891 ms.
@@ -36,7 +37,7 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 
 ## Checks run at the head
 
-The implementation is committed as `fa0e113218082fcb2451561a74f17fbf01a3bd4b`. Final merged-head repository gates, claim wording, roadmap check, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external verification records and will be posted on the PR only after they exist. They are not claimed in this REPORT.
+The implementation is committed as `f2c3b84e4a68fc375ca2e7718dd241e934f4afa0`. Final merged-head repository gates, claim wording, roadmap check, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external verification records and will be posted on the PR only after they exist. They are not claimed in this REPORT.
 
 ## Skills used
 
