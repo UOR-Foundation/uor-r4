@@ -34,9 +34,9 @@ The rejection occurs before artifact construction and before
 `write_new_file`, so a refused contract cannot create its requested output.
 The documented command surface and export error name the required flags.
 
-The implementation is 45 added lines in
+The implementation is 99 added and 4 removed lines in
 `crates/uor-r4-integer/src/bin/fbs-export.rs`: the pure contract check, its
-call, and three focused tests.
+call, three focused tests and the updated command documentation.
 
 ## Measurements
 

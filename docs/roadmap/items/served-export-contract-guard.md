@@ -1,6 +1,6 @@
 ---
 id: served-export-contract-guard
-title: Refuse an integer export whose snapped contract differs from its served-training config
+title: Refuse snapped integer exports of unsnapped served-training runs
 milestone: M4
 area: serving
 status: ready
