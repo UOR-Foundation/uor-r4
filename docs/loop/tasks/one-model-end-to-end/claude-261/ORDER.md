@@ -50,7 +50,8 @@ Classed instrument (no model ran).
 - `crates/uor-r4-integer/src/stack/hamming.rs`
 - `crates/uor-r4-integer/src/stack/synthetic.rs`
 - `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-cpu-train/src/fbs.rs` (added after the exact-head review, by a decision card whose round-4 review passed it: the CPU trainer's port refuses copy key 2, which it would otherwise serve with one-token keys)
+
+**Found at the exact-head review, moved out of this unit.** The CPU trainer's port (`crates/uor-r4-cpu-train/src/fbs.rs`, `CpuFbsForward::from_artifact`) would serve a copy-key-2 artifact with one-token keys. A decision card to add that file here passed its round-4 review. But the guard reads an item's scope as it is on `origin/main`, so a branch cannot widen its own scope. So the refusal, with its test, is the next unit, under the CPU trainer's own item, right after this one merges.
 
 ## Done when
 

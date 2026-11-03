@@ -98,7 +98,7 @@ Lab: claude. [ORDER](./ORDER.md). Sheet: [`one-model-end-to-end-copy-key-2026-11
 ## What changed
 
 - The copy key (`987cc3fe1`) and the quantizer's dtype repair (`36ca53c81`). At the merge of main, claude-262's rewrite of the same function superseded the repair. Its factors come from `ones_like` of the activation, so they keep its dtype, and its tests of the function replace this unit's. After the merge, `hamilton_sheet.rs` is identical to main's.
-- After the exact-head review: copy key 2 on one head is refused, and the CPU trainer's port refuses copy key 2. There are new tests for the float half order (CUDA) and for the parsers' refusal of copy key 3.
+- After the exact-head review: copy key 2 on one head is refused. There are new tests for the float half order (CUDA) and for the parsers' refusal of copy key 3. The CPU trainer's port does not yet refuse copy key 2; that refusal is the next unit (see "Review at the head").
 - The sheet, and its stop rule's resource-fault case, added on claude's decision review after the first OOM.
 - [claude-259's REPORT](../claude-259/REPORT.md) now names deepseek-3's PR as #3563 (`dab00a9f8`).
 
@@ -217,7 +217,7 @@ Fresh reviewers each read one slice of `fe037d8b4`: the float-train diff, the in
   - copy key 2 on one head, which has no copy head, was accepted. It is now refused, with a test that fails on the old check.
   - the key's fallback at s = 1. That is narrower than copy key 1's and matches the integer `CopyHeads`, so it is kept.
 - **Integer: REQUEST CHANGES**, on three findings:
-  1. **The CPU trainer's port** (`uor-r4-cpu-train`, `CopyHeads::choose`) keys every artifact on one token. Now that the format accepts copy key 2, the port would serve such an artifact with the wrong key and no error. `CpuFbsForward::from_artifact` now refuses copy key 2. The test checks that a copy-key-2 export parses for the integer engine and is refused by the port. This is one file added to the item's scope by a decision card.
+  1. **The CPU trainer's port** (`uor-r4-cpu-train`, `CopyHeads::choose`) keys every artifact on one token. Now that the format accepts copy key 2, the port would serve such an artifact with the wrong key and no error. **Not fixed in this unit (a departure).** A decision card to add `crates/uor-r4-cpu-train/src/fbs.rs` to the item's scope passed its round-4 review. But the guard reads an item's scope as it is on `origin/main`, so a branch cannot widen its own scope, and the guard refused the write. So the refusal in `CpuFbsForward::from_artifact`, with a test that a copy-key-2 export parses for the integer engine and is refused by the port, is the next unit, under the CPU trainer's own item, right after this merge. Until then the hazard is bounded: the only copy-key-2 artifacts are this unit's local seed-1 exports, and nothing serves them through the CPU port.
   2. **No test tied the half order across float and integer.** The negative gate was run: swapping the halves in `CopyHeads::joined` makes `copy_heads_match_the_f64_reference` fail at `tests.rs:4322`, so the integer side is pinned to x_t / x_{s−1} in the low half. The float side's `pair_halves` is now pinned to the same rule by `pair_halves_puts_the_first_token_in_each_copy_heads_low_half`. That test runs on CUDA only, because CPU tensor compute is refused (D24/D29), so it first runs at the next pod's I-0. A float-to-integer check on trained weights is I-3, which cannot be read until the served form is repaired.
   3. **The loader's and the session's refusal of copy key 3** is now tested too, not only the exporter's.
 - **Claims: three wording errors fixed.** They were the scoring range (7,106 s, not 7,322), the training range (25 minutes, not 26), and deepseek-5's plain numbers, which had been read through the served evaluator. Every other count checked.
@@ -234,7 +234,7 @@ None.
 - **The batched scorer (H):** the next unit in this session.
 - **The served quantizer's 7× time (A):** claude-262 replaced the 49-pass loop with six halvings and repaired the snap's scoring, and served steps now take 1.79–1.84× plain's time. DeepSeek's `served-rounding-cost` (#3586) is its own item.
 - **The copy-key candidate:** a new configuration at claude-262's repaired head. It trains (b) and (k2) one arm at a time, exports snapped, and passes I-3 before R6 or R7 is read.
-- **Copy key 2 on the CPU trainer's port** (`uor-r4-cpu-train`) is refused, not ported (see "Review at the head").
+- **Copy key 2 on the CPU trainer's port** (`uor-r4-cpu-train`) is neither refused nor ported yet. The refusal is the next unit, under the CPU trainer's own item (see "Review at the head").
 
 The item stays open: its own bars (end to end on unseen prompts, with tokens per second) are not met. References #3407.
 
