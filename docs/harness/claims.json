@@ -111,6 +111,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/export-contract-guard": {
+    "branch": "deepseek/export-contract-guard",
+    "claimed_at": "2026-11-03T13:42:31-05:00",
+    "head": "66c50fa19",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/fbs-wide-export": {
     "branch": "deepseek/fbs-wide-export",
     "claimed_at": "2026-11-02T17:45:05-05:00",
@@ -215,6 +222,13 @@
     "head": "75086c1d3",
     "lab": "deepseek",
     "note": ""
+  },
+  "deepseek/served-gain-training": {
+    "branch": "deepseek/served-gain-training",
+    "claimed_at": "2026-11-03T12:28:16-05:00",
+    "head": "c4c267c53",
+    "lab": "deepseek",
+    "note": "final served gain distance training through exact CPU/serving replay"
   },
   "deepseek/served-rounding-item": {
     "branch": "deepseek/served-rounding-item",
