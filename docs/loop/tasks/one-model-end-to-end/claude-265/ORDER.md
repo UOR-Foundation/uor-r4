@@ -20,7 +20,7 @@ A snap is a discrete choice: two sides a hair apart before it can land on icosia
 - makes the served bridge use the unsnapped D11 contract:
   - the gates are continuous (`Hamilton_Active`) and the transition is unit-normalized;
   - the Q12 query bridge, the Q16 residual, the i16 activations and the projection rounding stay;
-- makes `fbs-export --run-config` refuse a snapped export of a run trained as served;
+- makes the served checkpoint's D11 panel and loss follow that contract;
 - trains claude-262's 256-step served recipe at seeds 1 and 2 under it, and scores each, seed 1 twice on the same host;
 - exports raw, serves on the laptop, and reads I-3.
 
@@ -48,7 +48,8 @@ Classed instrument: an I-3 miss is a parity fault (§4.2). The change is a model
 ## Files in scope
 
 - `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-integer/src/bin/fbs-export.rs`
+- `crates/uor-r4-float-train/src/in_space_long.rs`: one assertion of `the_training_forward_selects_and_restores_the_served_bridges` only, the transition flag the served contract turns off.
+  - #3583 also edits this file. Its last hunk inserts at base line 14017, about 680 lines before this test, and its diff names neither the test nor the snap flag.
 - `docs/harness/prep/one-model-end-to-end-i3-unsnapped*`
 - `docs/loop/tasks/one-model-end-to-end/claude-265/**`
 - `docs/research/notebook/float-training.md` (added rows only)
@@ -57,7 +58,10 @@ Classed instrument: an I-3 miss is a parity fault (§4.2). The change is a model
 ## Done when
 
 1. Under the served bridge, the gate arm is `Hamilton_Active` and the transition is not snapped. The Q12 query bridge, the Q16 residual and the i16 activations stay on, and every flag is restored after `Ok`, `Err` and a panic. A host test fails with the change set aside and passes with it.
-2. `fbs-export --run-config` refuses a snapped export of a config with `train_as_served: true`, and accepts `--raw-gates --raw-transition`. A test covers both.
+2. The served DEV panel and loss follow the contract: under the served bridge, `with_d11_mode` is `SERVED_SNAPS`.
+   - The served checkpoint's `evaluate_dev_panel_d11` and `panel_loss_d11` call `with_d11_mode`, so they need no edit.
+   - The I-3 serve step exports with `--raw-gates --raw-transition`, and refuses any artifact whose header is not `uor-r4.lut-stack/5`.
+   - A guard inside `fbs-export` is out of the item's scope (`crates/uor-r4-integer/src/bin/` is not listed), so it stays open in the REPORT.
 3. The prep sheet is FIT, and its pre-run review is PASS.
 4. On one 5090 at the PR head:
    - the CUDA library suite passes;
