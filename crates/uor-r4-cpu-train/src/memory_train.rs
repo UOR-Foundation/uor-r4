@@ -403,6 +403,7 @@ struct CachedMemoryMove {
 struct CpuMemoryTrajectory {
     forward: CpuFbsForward,
     decisions: Vec<CachedDecision>,
+    sample_ranges: Vec<std::ops::Range<usize>>,
     samples: usize,
 }
 
@@ -410,7 +411,7 @@ impl CpuMemoryTrajectory {
     fn build(artifact: &[u8], samples: &[MemoryWeightSample]) -> Result<Self> {
         let forward = CpuFbsForward::from_artifact(artifact)
             .map_err(|error| invalid(format!("memory trajectory forward: {error}")))?;
-        let decisions = samples
+        let sample_decisions = samples
             .par_iter()
             .map(|sample| {
                 let mut forward = CpuFbsForward::from_artifact(artifact)
@@ -448,13 +449,18 @@ impl CpuMemoryTrajectory {
                 }
                 Ok(decisions)
             })
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
+        let mut decisions = Vec::new();
+        let mut sample_ranges = Vec::with_capacity(sample_decisions.len());
+        for sample in sample_decisions {
+            let start = decisions.len();
+            decisions.extend(sample);
+            sample_ranges.push(start..decisions.len());
+        }
         Ok(Self {
             forward,
             decisions,
+            sample_ranges,
             samples: samples.len(),
         })
     }
@@ -471,53 +477,93 @@ impl CpuMemoryTrajectory {
         if opening_weights.len() != width || reply_weights.is_some_and(|w| w.len() != width) {
             return Err(invalid("memory trajectory weight width differs"));
         }
-        let mut top1_correct = 0u64;
-        let mut target_distance_sum = 0u64;
-        for decision in &self.decisions {
-            if decision.target as usize >= vocab {
-                return Err(invalid("memory trajectory target is outside vocabulary"));
-            }
-            let (query, token) = match decision.memory {
-                Some(memory) if memory.stored.is_some() => {
-                    let weights = if memory.opening {
-                        opening_weights
-                    } else {
-                        reply_weights.ok_or_else(|| {
-                            invalid("memory trajectory lost its reply weight table")
-                        })?
+        let sample_readings = self
+            .sample_ranges
+            .iter()
+            .map(|range| {
+                let mut sample_top1 = 0u64;
+                let mut sample_distance = 0u64;
+                let mut sample_decisions = 0u64;
+                for decision in &self.decisions[range.clone()] {
+                    if decision.target as usize >= vocab {
+                        return Err(invalid("memory trajectory target is outside vocabulary"));
+                    }
+                    let (query, token) = match decision.memory {
+                        Some(memory) if memory.stored.is_some() => {
+                            let weights = if memory.opening {
+                                opening_weights
+                            } else {
+                                reply_weights.ok_or_else(|| {
+                                    invalid("memory trajectory lost its reply weight table")
+                                })?
+                            };
+                            let mut norm = decision.norm_before_memory.clone();
+                            move_point_with_weight(
+                                memory.stored.unwrap(),
+                                table,
+                                weights,
+                                &mut norm,
+                            );
+                            let query = self.forward.query_from_norm(&norm).map_err(|error| {
+                                invalid(format!("memory trajectory query: {error}"))
+                            })?;
+                            let token = self
+                                .forward
+                                .writer_token_from_query(&query, false)
+                                .map_err(|error| {
+                                    invalid(format!("memory trajectory decision: {error}"))
+                                })?;
+                            (query, token)
+                        }
+                        _ => (decision.query_q12.clone(), decision.token),
                     };
-                    let mut norm = decision.norm_before_memory.clone();
-                    move_point_with_weight(memory.stored.unwrap(), table, weights, &mut norm);
-                    let query = self
-                        .forward
-                        .query_from_norm(&norm)
-                        .map_err(|error| invalid(format!("memory trajectory query: {error}")))?;
-                    let token = self
-                        .forward
-                        .writer_token_from_query(&query, false)
-                        .map_err(|error| invalid(format!("memory trajectory decision: {error}")))?;
-                    (query, token)
+                    let target_row = &table[decision.target as usize * width..][..width];
+                    let distance =
+                        query
+                            .iter()
+                            .zip(target_row)
+                            .fold(0u64, |sum, (&query, &point)| {
+                                sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
+                            });
+                    sample_top1 += u64::from(token == decision.target);
+                    sample_distance = sample_distance.saturating_add(distance);
+                    sample_decisions = sample_decisions
+                        .checked_add(1)
+                        .ok_or_else(|| invalid("memory trajectory decision count overflows"))?;
                 }
-                _ => (decision.query_q12.clone(), decision.token),
-            };
-            let target_row = &table[decision.target as usize * width..][..width];
-            let distance = query
-                .iter()
-                .zip(target_row)
-                .fold(0u64, |sum, (&query, &point)| {
-                    sum.saturating_add(u64::from(query.abs_diff(i32::from(point))))
-                });
-            top1_correct += u64::from(token == decision.target);
-            target_distance_sum = target_distance_sum.saturating_add(distance);
-        }
+                Ok((sample_top1, sample_distance, sample_decisions))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let (top1_correct, target_distance_sum, decisions) =
+            checked_sample_totals(sample_readings)?;
         Ok(MemoryWeightReading {
             artifact_sha256: uor_r4_discrete::corpus::sha256(artifact),
             samples: self.samples,
-            decisions: u64::try_from(self.decisions.len()).unwrap_or(u64::MAX),
+            decisions,
             top1_correct,
             target_distance_sum,
         })
     }
+}
+
+fn checked_sample_totals(
+    readings: impl IntoIterator<Item = (u64, u64, u64)>,
+) -> Result<(u64, u64, u64)> {
+    let mut top1_correct = 0u64;
+    let mut target_distance_sum = 0u64;
+    let mut decisions = 0u64;
+    for (sample_top1, sample_distance, sample_decisions) in readings {
+        top1_correct = top1_correct
+            .checked_add(sample_top1)
+            .ok_or_else(|| invalid("memory-weight top-1 count overflows"))?;
+        target_distance_sum = target_distance_sum
+            .checked_add(sample_distance)
+            .ok_or_else(|| invalid("memory-weight distance sum overflows"))?;
+        decisions = decisions
+            .checked_add(sample_decisions)
+            .ok_or_else(|| invalid("memory-weight decision count overflows"))?;
+    }
+    Ok((top1_correct, target_distance_sum, decisions))
 }
 
 fn strict_improvement(after: &MemoryWeightReading, before: &MemoryWeightReading) -> bool {
@@ -615,20 +661,7 @@ fn evaluate_with_memory(
         .par_iter()
         .map(|sample| evaluate_memory_sample(artifact, sample, memory_enabled, table, width))
         .collect::<Result<Vec<_>>>()?;
-    let mut top1_correct = 0u64;
-    let mut target_distance_sum = 0u64;
-    let mut decisions = 0u64;
-    for (sample_top1, sample_distance, sample_decisions) in readings {
-        top1_correct = top1_correct
-            .checked_add(sample_top1)
-            .ok_or_else(|| invalid("memory-weight top-1 count overflows"))?;
-        target_distance_sum = target_distance_sum
-            .checked_add(sample_distance)
-            .ok_or_else(|| invalid("memory-weight distance sum overflows"))?;
-        decisions = decisions
-            .checked_add(sample_decisions)
-            .ok_or_else(|| invalid("memory-weight decision count overflows"))?;
-    }
+    let (top1_correct, target_distance_sum, decisions) = checked_sample_totals(readings)?;
     Ok(MemoryWeightReading {
         artifact_sha256: uor_r4_discrete::corpus::sha256(artifact),
         samples: samples.len(),
@@ -1532,6 +1565,18 @@ mod tests {
             assert_eq!(first.train_step().unwrap(), second.train_step().unwrap());
         }
         assert_eq!(first.artifact(), second.artifact());
+    }
+
+    #[test]
+    fn cached_sample_aggregation_refuses_every_overflow_class() {
+        for readings in [
+            [(u64::MAX, 0, 0), (1, 0, 0)],
+            [(0, u64::MAX, 0), (0, 1, 0)],
+            [(0, 0, u64::MAX), (0, 0, 1)],
+        ] {
+            let error = checked_sample_totals(readings).unwrap_err();
+            assert!(error.to_string().contains("overflows"));
+        }
     }
 
     #[test]

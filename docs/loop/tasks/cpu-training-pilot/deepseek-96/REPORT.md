@@ -54,8 +54,8 @@ pre-registered 16 Rayon workers with `RAYON_NUM_THREADS=16`.
 
 | Seed | Full-forward wall | Cached/parallel wall | Speedup | Average CPU | Peak RSS |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 415.370 s | **9.961 s** | **41.70x** | 1,345% | 265,772 KiB |
-| 2 | 414.121 s | **9.826 s** | **42.14x** | 1,374% | 271,844 KiB |
+| 1 | 415.370 s | **8.774 s** | **47.34x** | 1,385% | 272,116 KiB |
+| 2 | 414.121 s | **8.397 s** | **49.32x** | 1,431% | 265,260 KiB |
 
 Each seed accepted all eight updates. Removing wall, peak RSS and the newly
 reported `training.search_mode` field from the old and new JSON produces
@@ -80,20 +80,24 @@ finished in 7.657 s at 2,494% average CPU with the same artifact and readings,
 but it is not part of the 16-physical-core FIT claim.
 
 Evidence: [comparison.json](evidence/comparison.json),
-[seed-1.json](evidence/seed-1.json), [seed-2.json](evidence/seed-2.json) and
-[SHA256SUMS](evidence/SHA256SUMS). The pre-FIT sheet hash remains the
-`ae440a49...` value recorded in its review block; the later FIT annotation
-changes the file hash without changing its bar, inputs or claim boundary.
+[prefit-sheet.md](evidence/prefit-sheet.md), [seed-1.json](evidence/seed-1.json),
+[seed-2.json](evidence/seed-2.json), the raw
+[timing-seed-1.txt](evidence/timing-seed-1.txt) and
+[timing-seed-2.txt](evidence/timing-seed-2.txt), and
+[SHA256SUMS](evidence/SHA256SUMS). The committed pre-FIT snapshot hashes to
+`ae440a49...`, exactly matching the FIT review note. The current annotated
+sheet has a different hash without changing its bar, inputs or claim boundary.
 
 ## Checks run at the head
 
 - Focused cached/full-forward suite:
   `cargo test --package uor-r4-cpu-train --release --lib memory_train`:
-  **11 passed**, including three-step full/optimized equality, opening-only,
+  **12 passed**, including three-step full/optimized equality, opening-only,
   reply-only, parameter-bound, deterministic repeated construction,
-  opening/reply hit and miss, point fallback, and unseen-key no-hit controls.
+  opening/reply hit and miss, point fallback, every checked aggregation
+  overflow class, and unseen-key no-hit controls.
 - Full package release suite:
-  `cargo test --package uor-r4-cpu-train --release`: **150 library tests
+  `cargo test --package uor-r4-cpu-train --release`: **151 library tests
   passed, 4 release benchmarks ignored**, plus driver suites **6, 1 and 5
   passed**; every listed test target was green after the known Cargo collision
   retry.

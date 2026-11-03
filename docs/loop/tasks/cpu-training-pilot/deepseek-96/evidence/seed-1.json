@@ -105,7 +105,7 @@
       "token_mismatches": 0
     }
   },
-  "peak_rss_kib": 265772,
+  "peak_rss_kib": 272116,
   "qualification": "gpu-required",
   "schema": "uor-r4.cpu-memory-panel-run/1",
   "selection": {
@@ -512,5 +512,5 @@
     "steps": 8,
     "threads": 16
   },
-  "wall_elapsed_ms": 9961.107923
+  "wall_elapsed_ms": 8773.545171
 }
