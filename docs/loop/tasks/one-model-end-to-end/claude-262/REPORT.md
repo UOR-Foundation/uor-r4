@@ -191,6 +191,12 @@ None applied. The candle reduce kernel and its launch were read in the vendored 
    longer run, not this smoke.
 4. **Capture mode.** A zero block's snap margin can now be written as −0.0 where it was +0.0 (FIT
    round 3, note 3). This matters only to something that pins a capture file's hash.
+5. **Two one-unit edges in the float stand-in**, found by the exact-head review. Both are older than
+   this unit, and the scalar reference shares them, so the CUDA equality test cannot see them.
+   - Rounding as `floor(x + 0.5)` in f32 serves 1 at the scaled value `0.5 − 2^−25`, where the integer
+     step serves 0: the sum is an exact f32 tie that rounds up to 1.0.
+   - The shift is chosen from the unrounded row maximum, not the held `round(v·2^32)`. So a maximum
+     within half a unit of a power of two can take a shift one less than the integer step's.
 
 References #3407.
 
