@@ -1,6 +1,7 @@
 # ORDER: infra-loop-harness, deepseek-107 (finish head accounting)
 
 Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
+Setup row: 2 (item-file maintenance).
 Base: `9e0403b132da34752499c657def95dfce3235538`.
 
 ## Goal

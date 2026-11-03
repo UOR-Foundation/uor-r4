@@ -1,5 +1,9 @@
 # REPORT: refresh the image-item roadmap view, deepseek-110
 
+> **Superseded by [deepseek-111](../deepseek-111/REPORT.md).** A final review
+> confirmed the generated roadmap, but the manually written ORDER chain omitted
+> the required maintenance setup row and therefore could not accept a review.
+
 Lab: deepseek. Item:
 [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
 Order: [ORDER.md](ORDER.md). Base:
