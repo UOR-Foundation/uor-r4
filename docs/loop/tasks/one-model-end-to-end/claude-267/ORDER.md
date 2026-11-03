@@ -30,7 +30,7 @@ In "My best friend is Maya.", the key at "Maya" is `[" is" | rarest of {My, best
 ## Step 1: the key measured on the data (decides whether step 2 runs)
 
 The rule is an exact-match count, with no training. Over every reply position `t` of DEV, and of p-w, whose next token `x_{t+1}` occurs earlier in its window (a copyable position):
-1. Take the candidates `s ≤ t` whose key under the rule equals the query at `t` exactly.
+1. Take the candidates `1 ≤ s < t` (the read's own range) whose key under the rule equals the query at `t` exactly.
 2. Count a position **right** when the latest such candidate's token `x_s` is `x_{t+1}`.
 3. Report, for copy key 1, copy key 2 and the slot key:
    - the copyable positions;
