@@ -2,7 +2,7 @@
 
 **Status:** READY FOR FIT REVIEW
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - CPU development research, #3506
 
 ## Question
 
@@ -163,4 +163,19 @@ unseen-key transfer, language quality, complete replies or GPU qualification.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - CPU development research, #3506
+sheet: docs/harness/prep/cpu-training-pilot-gain-2026-11-03.md
+prefit sheet: docs/loop/tasks/cpu-training-pilot/deepseek-97/evidence/prefit-sheet.md
+prefit sheet SHA-256:
+`c4e59a89451da7c386e8deff5b7ade2d7af6319dd6f118818a94980a077cfaff`
+reviewer: deepseek fresh read-only adversarial post-repair review
+source: `ef75026b4cc26f38f783461f566135f82f7fb1ed`
+driver SHA-256:
+`f115b3d49d5bc9b709128e8d7ca0c67aa9c8fa2cb8c81a2e3cf8ca9b738ff553`
+note: checked parity aggregation, exclusive and sealed attempts, distance-first
+objective, ordered candidate ties, serve-aligned memory order, five control
+arms, complete parity, stop coverage and source/binary identity accepted; no
+registered training had run when this verdict was recorded.
+date: 2026-11-03
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
