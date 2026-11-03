@@ -28,6 +28,10 @@ Sheet: [one-model-end-to-end-full-unsnapped-2026-11-03](../../../../harness/prep
 5. **Exact replies on p-w are rare:** 0–90 of 1,202 per export (R2), with right openings on 65–325 (R3). This is the model's level on held-out phrasings at this data, not a parity effect, since the integer replies match the float ones.
 6. **The 192-token context cuts 26 replies per export.** On those prompts the integer reply is an exact prefix of the float reply and prompt plus reply reach 192 positions, while the float scorer runs on to 64 reply tokens. They are counted as whole-reply differences by `serve-266.sh`, and they are not divergences.
 
+## What changed
+
+No code. The new sheet (FIT, PRE-RUN PASS, committed earlier on this branch), this REPORT, one notebook row in `docs/research/notebook/float-training.md`, and the item's line.
+
 ## Measurements
 
 **I-3, I-5 and I-6, every export** (`serve-266.sh`, log `serve-out.log`):
@@ -87,11 +91,36 @@ Casey's answer on #2028 ([6614481479](https://github.com/UOR-Foundation/uor-r4/i
 
 Three Vast pods: seed 1 `vast-58977590` ($0.563/h, 3.13 h), seed 2 `vast-58978404` ($0.563/h, 3.18 h), seed 3 `vast-58978093` ($0.975/h, 5.25 h). Total about **$8.67**, inside the sheet's $11–20 estimate and the $24 watcher budget. All three are down.
 
-## What changed
-
-No code. The new sheet, this REPORT, one notebook row in `docs/research/notebook/float-training.md`, and the item's line.
-
 ## Evidence
 
 - HF store `results/claude/one-model-end-to-end-full-unsnapped-2026-11-03/s1`, `s2` and `s3` (256 files each). Each was read back: `SHA256SUMS.files` and (k2)'s `samples-memory.json` match the local copies, and each pod's 252-file seal checks.
 - Local (not committed): `local/claude/full-266/serve-out/` (exports, parity files, transcripts, `decode-final`, `decode-final2`), `serve-out.log`, `grade-p-w.txt`, `grade-p-v.txt`, and the scripts `job-266.sh`, `watch-266.sh`, `serve-266.sh`, `timing-266.sh`.
+
+## Checks run at the head
+
+- **On each pod**, at the pin: I-0 (the named tests ran and passed), the input SHA-256 pins, the I-1 smoke and the I-2 throughput projection, by `job-266.sh` (SHA-256 `3e5f9a74…`, checked on every pod before launch).
+- **On the laptop:**
+  - each pod's 252-file seal with `shasum -a 256 -c SHA256SUMS.files`, and two files per seed read back from the store;
+  - `serve-266.sh` over all six exports (I-3, I-5, I-6, laptop speed, R7 transcripts), and an earlier pass on seeds 1 and 2 that gave the same counts;
+  - the whole-reply split into context-cap and real divergences, by joining each export's `toks.json` with its float `samples-memory.json` on `position`;
+  - `grade.sh` on p-w and p-v (I-4, R1–R3, R5) and the R4 `jq` read of every `progress.jsonl`;
+  - `timing-266.sh` twice (R6), as its protocol asks after a spread past 5%;
+  - `uor-harness loop report --check` and `uor-harness loop pr-check --local` on this REPORT.
+
+## Skills used
+
+None applied. The scripts above are local and not committed as files.
+
+## Still open
+
+1. **The slot key** (entity × attribute atoms) is the next copy-key unit, by row 4 (iii). It needs its own sheet and FIT.
+2. **The decode timing protocol.** Both R6 runs were too noisy to read. A timing that repeats the long run inside one process, so start-up drops out of the difference, would make R6 readable on a desktop. That needs a new sheet's protocol.
+3. **Recall in conversation.** R7's transcripts are mostly words now, but they do not recall a stated name or number. The model's own level, not parity, is the limit there, since the integer replies follow the float ones.
+4. **Two arms were still rising at 8,192 steps** ((b) at seed 2 and (k2) at seed 3, R4). A longer schedule is one lever, for a later sheet.
+5. **The served-contract readout** is not built. Casey's conditional approval stands if a later unit finds a parity gap.
+
+## Plain summary
+
+The model trained on the GPU and its integer copy on the laptop now agree. For the six full-length models (two variants, three seeds each), the laptop gives the same first word as the trained model on 309–310 of 310 test prompts, and the same whole reply on all but 0–3, once the copy's shorter context is allowed for. Earlier the same day, short 256-step runs disagreed on 14 and 32 first words. So the path the project set out to build works end to end: train on the GPU, export to integers, serve on a laptop at about 720–800 tokens per second. The model itself is still weak: it does not remember a friend's name or a lucky number when asked. The two-token copy key helped at one seed and hurt at two, so the one-token version stays, and a key built from entity and attribute pairs is the next thing to try.
+
+References #3407.
