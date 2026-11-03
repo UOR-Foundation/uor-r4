@@ -165,8 +165,9 @@ pub struct CopyHeads {
     codes: Vec<u64>,
     /// The copy heads' margins, in bits at Q16.
     margins: Vec<i32>,
-    /// Under copy key 2, the first half's bits, the low `head_width / 2`; `None` under copy key 1.
-    pair: Option<u64>,
+    /// Per copy head: under copy key 2, the first half's bits, the low `head_width / 2`; `None`
+    /// under copy key 1 (claude-268: each head by its own key).
+    pair: Vec<Option<u64>>,
 }
 
 impl CopyHeads {
@@ -180,7 +181,11 @@ impl CopyHeads {
             width,
             codes: vocab_codes(&units(&read.key_rotation), table, vocab, width, record.heads, 0..copy),
             margins: read.margin[..copy].to_vec(),
-            pair: (record.copy_key == 2).then(|| (1u64 << (width / record.heads / 2)) - 1),
+            pair: (0..copy)
+                .map(|h| {
+                    (record.head_copy_key(h) == 2).then(|| (1u64 << (width / record.heads / 2)) - 1)
+                })
+                .collect(),
         }
     }
 
@@ -189,10 +194,11 @@ impl CopyHeads {
         self.codes[token as usize * self.copy + h]
     }
 
-    /// Head `h`'s code of `near`, or under copy key 2 `near`'s first half joined to `far`'s second.
+    /// Head `h`'s code of `near`, or, when head `h` is on copy key 2, `near`'s first half joined to
+    /// `far`'s second.
     fn joined(&self, near: u32, far: u32, h: usize) -> u64 {
         let code = self.code(near, h);
-        match self.pair {
+        match self.pair[h] {
             None => code,
             Some(first) => (code & first) | (self.code(far, h) & !first),
         }
