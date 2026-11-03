@@ -110,5 +110,9 @@ Three seeds, with 1,202 paired p-w prompts and 393 p-v prompts per seed. claude-
 - **Stop rule:**
   - An export refusal is an instrument fault: it is repaired, never counted.
   - A diverged loss (non-finite) stops that arm, and is classified when it happens (CHARTER §4.2). If (b) at the same seed diverges too, or the divergence traces to a fault in the code, it is an instrument fault: repaired, never counted. If only (k2) diverges, it is a (k2) result at that seed: (k2) is absent there, read under row 4. If only (b) diverges, with no code fault traced, the control failed: (b) is trained again at that seed, alone on a fresh pod, and the seed is read once it has a checkpoint. If it diverges again, (b) is absent at that seed (row 4).
+  - Added during the run, on claude's decision review after seed 2's (k2) ran out of memory (the ORDER's "Found in the main run"):
+    - An arm that runs out of GPU memory while it shares the card is an instrument fault, never counted.
+    - That arm trains again at its seed, alone on a fresh pod, at the paired arm's step count, and the seed is read once it has a checkpoint.
+    - If it runs out alone too, it is absent at that seed (row 4).
   - Outputs are read back from the store before any pod goes down.
   - A watcher ends on every terminal state (`EXIT`, a fault file, error lines), with a 90-minute stall window for the scorer's silent passes.

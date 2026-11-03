@@ -71,6 +71,20 @@ The whole CUDA library suite failed 2 of 291. Both failures are in #3563 and #35
 
 Classed instrument: a fault in the served path both arms share, not a reading of either. It is repaired in this unit (the factors take the activation's dtype; the test's literals are `f32`). The values are unchanged: 0.5 and 1.0 are exact in both types. No training had started. The two tests are the repair's own check: they failed at `af7154c00` and run again as I-0 on every pod.
 
+## Found in the main run (seed 2's pod, `vast-58895486`)
+
+Seed 2's (k2) ran out of GPU memory at 01:12Z, 1,612 s into its 2,048 steps, with `Error: Candle(DriverError(CUDA_ERROR_OUT_OF_MEMORY, "out of memory"))`. Its only checkpoint is step 0's. Seed 2's (b) trained to its end, in 2,371 s.
+- The pod's GPU log (`gpu.csv`, once a minute) shows the two arms' memory together. It climbed from 23,611 MiB at 01:06Z to 31,323 MiB at 01:12Z, against the card's 32,607 MiB. It fell to 7,888 MiB once (k2) stopped.
+- Seeds 1 and 3 share their cards the same way, and their peaks so far are 28,603 and 29,275 MiB.
+
+Classed instrument (CHARTER §4.2, L-007): the shared card ran out of memory. That says nothing about (k2)'s read. The sheet's stop rule covers a diverged loss and an export refusal, but not a resource fault, so this case is decided here, on claude's decision review:
+- An arm that runs out of GPU memory while it shares the card trains again at its seed, alone on a fresh pod. It runs at the paired arm's step count, through `job.sh SHA SEED ARM STEPS`.
+- Its seed is read once it has a checkpoint.
+- If it runs out alone too, it is absent at that seed (row 4), and the REPORT names memory as the cause.
+- The failed run stays as written under its pod's sealed root. Nothing of it is scored.
+
+Seed 2's (k2) trains again on `vast-58901106`, at 2,048 steps, from 01:29Z (`job.sh 36ca53c81195969f9487747163cc13c50d145efa 2 k2 2048`).
+
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
