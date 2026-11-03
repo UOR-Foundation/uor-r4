@@ -133,10 +133,11 @@ failed diagnostic cannot contaminate the next forward on that thread. See
   [claude-266](../../loop/tasks/one-model-end-to-end/claude-266/REPORT.md)
   re-pinned it and ran it: (b) and (k2) trained as served for 8,192 steps at
   three seeds on the unsnapped contract, exported raw, and served in integers
-  on the laptop. All six exports pass I-3: first tokens differ on 0–1 of 310,
-  and whole replies match up to the 192-token context, with 0–3 real
-  divergences each. So at full length the model serves as it was trained, and
-  the per-layer readout is not needed. Laptop serve 717–796 tok/s, prefill
+  on the laptop. All six exports pass I-3: first tokens differ on 0–1 of 310
+  on DEV. Whole replies, reported only, differ on 26–29 per export, 26 of them
+  cut by the 192-token context, leaving 0–3 real divergences. So the
+  per-layer readout is not needed to pass I-3's bar; the residual divergences
+  are not localized, and Casey's conditional approval stands. Laptop serve 717–796 tok/s, prefill
   included; decode-only speed is unread (noisy timing). (k2) is better at
   seed 1 and worse at seeds 2 and 3, so (b) stays the base and the slot key
   is the next copy-key unit. Neither export recalls Maya in conv-a.
