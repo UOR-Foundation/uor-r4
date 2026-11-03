@@ -5436,7 +5436,7 @@ fn decode_reply_with_mode(
 /// opening and no served point key. Everything else keeps [`decode_reply_with_mode`]'s
 /// one-at-a-time path. Equal lengths avoid padding, which would change the recurrent state; each
 /// group is split by the evaluation's established row/token budget.
-fn exact_length_batches(prompts: &[Vec<u32>]) -> Vec<Vec<usize>> {
+fn exact_length_batches(prompts: &[Vec<u32>], reply_tokens: usize) -> Vec<Vec<usize>> {
     let budget = hs::SHEET_EVAL_BATCH * SHEET_CONTEXT;
     let mut by_length: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for (index, prompt) in prompts.iter().enumerate() {
@@ -5445,8 +5445,12 @@ fn exact_length_batches(prompts: &[Vec<u32>]) -> Vec<Vec<usize>> {
     let mut groups = Vec::new();
     for indices in by_length.into_values() {
         let width = prompts[indices[0]].len();
+        // A group is split by the widest window any member can reach, not only by its prompt.
+        let final_width = width
+            .saturating_add(reply_tokens)
+            .clamp(1, SHEET_CONTEXT);
         let per_group = budget
-            .checked_div(width)
+            .checked_div(final_width)
             .map_or(indices.len(), |count| count.max(1));
         for chunk in indices.chunks(per_group) {
             groups.push(chunk.to_vec());
@@ -5541,7 +5545,7 @@ fn decode_replies_with_mode(
     let table = table(model)?;
     let memory = crate::flock_read_memory::turn_memory();
     let mut replies: Vec<Option<DecodedReply>> = (0..prompts.len()).map(|_| None).collect();
-    for group in exact_length_batches(prompts) {
+    for group in exact_length_batches(prompts, reply_tokens) {
         let width = prompts[group[0]].len();
         if width == 0 {
             return Err(invalid("a batched decode needs a non-empty prompt"));
@@ -10466,7 +10470,7 @@ mod tests {
             .enumerate()
             .map(|(seed, len)| (0..len).map(|i| (i + seed) as u32).collect())
             .collect();
-        let groups = exact_length_batches(&prompts);
+        let groups = exact_length_batches(&prompts, 16);
         let mut seen: Vec<usize> = groups.iter().flatten().copied().collect();
         seen.sort_unstable();
         assert_eq!(seen, (0..prompts.len()).collect::<Vec<_>>());
@@ -10477,7 +10481,7 @@ mod tests {
         }
         assert_eq!(
             groups,
-            exact_length_batches(&prompts),
+            exact_length_batches(&prompts, 16),
             "the grouping is deterministic"
         );
     }
@@ -10485,9 +10489,15 @@ mod tests {
     #[test]
     fn exact_length_batches_split_a_wide_group_at_the_evaluation_budget() {
         let prompts: Vec<Vec<u32>> = (0..40).map(|seed| vec![seed; SHEET_CONTEXT]).collect();
-        let groups = exact_length_batches(&prompts);
+        let groups = exact_length_batches(&prompts, 64);
         assert!(groups.len() > 1);
         assert!(groups.iter().all(|group| group.len() <= hs::SHEET_EVAL_BATCH));
+        let near_context: Vec<Vec<u32>> =
+            (0..40).map(|seed| vec![seed; SHEET_CONTEXT - 12]).collect();
+        let groups = exact_length_batches(&near_context, 64);
+        assert!(groups.iter().all(|group| {
+            group.len() * SHEET_CONTEXT <= hs::SHEET_EVAL_BATCH * SHEET_CONTEXT
+        }));
     }
 
     #[test]
