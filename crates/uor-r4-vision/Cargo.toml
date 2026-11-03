@@ -1,0 +1,11 @@
+[package]
+name = "uor-r4-vision"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Deterministic integer RGBA decomposition into bounded R4 image patches"
+
+[dependencies]
+hex = "0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10.8"

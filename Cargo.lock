@@ -2599,6 +2599,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-vision"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "sha2",
+]
+
+[[package]]
 name = "uor-r4-wasm-router"
 version = "0.1.0"
 dependencies = [
