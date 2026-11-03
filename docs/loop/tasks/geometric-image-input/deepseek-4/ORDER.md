@@ -1,8 +1,6 @@
 # ORDER: geometric-image-input, deepseek-4 (merged-head evidence repair)
 
-Lab: deepseek. Item:
-[geometric-image-input](../../../../roadmap/items/geometric-image-input.md)
-(#3619). Base: `8fb9f3719`.
+Lab: deepseek. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619). Base: `8fb9f3719`.
 
 ## Goal
 
