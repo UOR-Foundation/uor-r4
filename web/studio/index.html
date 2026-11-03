@@ -51,7 +51,7 @@
                 <button class="icon-btn" id="btnToggleInspectorTop" type="button" aria-label="Toggle context panel" aria-expanded="true" title="Toggle context panel">▤</button>
                 <div class="visually-hidden" role="group" aria-label="Legacy view switch compatibility">
                     <button id="viewBtnChat" type="button" aria-pressed="true">Agent</button>
-                    <button id="viewBtnModel" type="button" aria-pressed="false">Models</button>
+                    <button id="viewBtnModel" type="button" aria-pressed="false">Connections</button>
                     <button id="viewBtnEditor" type="button" aria-pressed="false">Workspace</button>
                     <button id="btnNewChatTop" type="button">New session</button>
                     <button id="btnToggleRail" type="button">Rail</button>
@@ -73,7 +73,7 @@
                     <span class="nav-section-title">WORKSPACE</span>
                     <button class="nav-item" id="navAgent" type="button" data-section="agent" aria-current="page"><span class="nav-item-icon" aria-hidden="true">◈</span><span class="nav-item-text"><span class="nav-item-label">Agent <kbd class="nav-kbd">⌘1</kbd></span><span class="nav-item-desc">Chat, context and build tasks</span></span></button>
                     <button class="nav-item" id="navWorkspace" type="button" data-section="workspace"><span class="nav-item-icon" aria-hidden="true">▤</span><span class="nav-item-text"><span class="nav-item-label">Workspace <kbd class="nav-kbd">⌘2</kbd></span><span class="nav-item-desc">File tree, editor tabs, save</span></span></button>
-                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Models <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">Local engine, M1, API providers</span></span></button>
+                    <button class="nav-item" id="navConnections" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">UOR Chat, custom providers, diagnostics</span></span></button>
                     <button class="nav-item" id="navGuide" type="button" data-section="guide"><span class="nav-item-icon" aria-hidden="true">▸</span><span class="nav-item-text"><span class="nav-item-label">Guide <kbd class="nav-kbd">⌘4</kbd></span><span class="nav-item-desc">Workflows, shortcuts, limits</span></span></button>
                 </nav>
                 <section class="nav-sessions" id="sessionSection" aria-label="Sessions">
@@ -189,11 +189,11 @@
                     </div>
                 </section>
 
-                <section class="view model-view" id="modelView" data-view="model" aria-label="Models">
+                <section class="view model-view" id="modelView" data-view="model" aria-label="Connections">
                     <header class="view-head">
                         <div class="view-head-text">
-                            <h1 class="panel-title">Models</h1>
-                            <p class="view-subtitle">Local WASM artifacts, published trained models and OpenAI-compatible APIs</p>
+                            <h1 class="panel-title">Connections</h1>
+                            <p class="view-subtitle">Experimental UOR Chat, custom providers, and artifact diagnostics</p>
                         </div>
                         <div class="view-head-actions">
                             <span class="badge">on-device first</span>
@@ -201,7 +201,7 @@
                         </div>
                     </header>
                     <div class="model-view-body" id="modelViewMount">
-                        <aside class="model-sources-panel" id="modelSourcesPanel" aria-label="Model sources">
+                        <aside class="model-sources-panel" id="modelSourcesPanel" aria-label="Connections">
                             <div class="providers-head">
                                 <div>
                                     <span class="micro-label">PROVIDERS</span>
@@ -282,7 +282,7 @@
                                     <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Workspace</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
                                     <li>Click a file to open an editor tab; save edits back to disk with <kbd class="kbd">⌘S</kbd>.</li>
                                     <li>In <button class="inline-link" data-guide-nav="agent" type="button">Agent</button>, attach the active file as context and describe the task.</li>
-                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Models</button> when Claude's API endpoint is available; until then the local engine serves next-token prediction only.</li>
+                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Connections</button> when Claude's API endpoint is available; until then the local engine serves next-token prediction only.</li>
                                 </ol>
                             </section>
                             <section class="guide-card">
@@ -321,7 +321,7 @@
                             <h3>Shortcuts</h3>
                             <dl class="guide-shortcut-grid">
                                 <div><dt><kbd class="kbd">⌘K</kbd></dt><dd>Command palette</dd></div>
-                                <div><dt><kbd class="kbd">⌘1–4</kbd></dt><dd>Agent / Workspace / Models / Guide</dd></div>
+                                <div><dt><kbd class="kbd">⌘1–4</kbd></dt><dd>Agent / Workspace / Connections / Guide</dd></div>
                                 <div><dt><kbd class="kbd">⌘B</kbd></dt><dd>Toggle navigation</dd></div>
                                 <div><dt><kbd class="kbd">⌘I</kbd></dt><dd>Toggle context panel</dd></div>
                                 <div><dt><kbd class="kbd">⌘S</kbd></dt><dd>Save active file</dd></div>
@@ -347,9 +347,9 @@
                     <section class="ctx-card" aria-label="Active model">
                         <div class="ctx-card-head"><span class="micro-label">ACTIVE MODEL</span><span class="dot dot-muted" id="ctxModelDot" aria-hidden="true"></span></div>
                         <p class="ctx-model-label" id="ctxModelLabel">No model loaded</p>
-                        <p class="ctx-model-meta" id="ctxModelMeta">Load the synthetic demo or the M1 trunk in Models.</p>
+                        <p class="ctx-model-meta" id="ctxModelMeta">Load the synthetic demo or the M1 trunk in Connections.</p>
                         <p class="ctx-model-sha" id="ctxModelSha" hidden></p>
-                        <div class="ctx-actions"><button class="ghost-btn" id="ctxLoadModel" type="button">Open Models</button></div>
+                        <div class="ctx-actions"><button class="ghost-btn" id="ctxLoadModel" type="button">Open Connections</button></div>
                     </section>
                     <details class="ctx-card ctx-details"><summary><span class="micro-label">RUNTIME DETAILS</span></summary>
                         <dl class="ctx-rows">
@@ -370,7 +370,7 @@
                     <details class="ctx-card ctx-details"><summary><span class="micro-label">SHORTCUTS</span></summary>
                         <ul class="shortcut-list">
                             <li><kbd class="kbd">⌘K</kbd><span>Command palette</span></li>
-                            <li><kbd class="kbd">⌘1–4</kbd><span>Agent / Workspace / Models / Guide</span></li>
+                            <li><kbd class="kbd">⌘1–4</kbd><span>Agent / Workspace / Connections / Guide</span></li>
                             <li><kbd class="kbd">⌘S</kbd><span>Save active file</span></li>
                             <li><kbd class="kbd">⇧⌘S</kbd><span>Save as a copy</span></li>
                             <li><kbd class="kbd">Esc</kbd><span>Close dialog / stop generation</span></li>
@@ -429,7 +429,7 @@
                 <table class="help-table">
                     <tbody>
                         <tr><td><kbd class="kbd">⌘K</kbd></td><td>Command palette</td></tr>
-                        <tr><td><kbd class="kbd">⌘1 ⌘2 ⌘3 ⌘4</kbd></td><td>Agent / Workspace / Models / Guide</td></tr>
+                        <tr><td><kbd class="kbd">⌘1 ⌘2 ⌘3 ⌘4</kbd></td><td>Agent / Workspace / Connections / Guide</td></tr>
                         <tr><td><kbd class="kbd">⌘B</kbd></td><td>Toggle navigation sidebar</td></tr>
                         <tr><td><kbd class="kbd">⌘I</kbd></td><td>Toggle context panel</td></tr>
                         <tr><td><kbd class="kbd">⌘S</kbd></td><td>Save active file</td></tr>
@@ -467,7 +467,7 @@
     <div class="legacy-compat" id="legacyCompat" hidden aria-hidden="true">
         <nav id="rail" aria-label="Legacy navigation compatibility">
             <button id="railChat" type="button">Chat</button>
-            <button id="railModel" type="button">Models</button>
+            <button id="railModel" type="button">Connections</button>
             <button id="railEditor" type="button">Editor</button>
             <button id="railPalette" type="button">Commands</button>
             <button id="railTheme" type="button">Theme</button>
@@ -810,7 +810,7 @@
                 ? 'Prompts will be sent to the configured API provider when you send them and will leave this device. Configuration does not prove reachability; treat every reply as an external baseline, not a project result.'
                 : (ready
                     ? 'A supported non-discrete stack is loaded. Its generated continuation is synthetic engine evidence, not a useful conversation.'
-                    : 'No conversational model is configured. Explore the demo workspace or open your own files, then configure a chat-capable source under Models. M1 provides next-token prediction only.');
+                    : 'No conversational model is configured. Explore the demo workspace or open your own files, then configure a chat-capable source under Connections. M1 provides next-token prediction only.');
             var steps = document.createElement('ol');
             steps.className = 'empty-steps';
             [
@@ -1119,7 +1119,7 @@
             stop.disabled = Boolean(app.activePredictionRequestId);
             var ready = chatReadiness();
             send.disabled = app.generating || !ready;
-            send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Configure a chat-capable model or API provider under Models.');
+            send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Configure a chat-capable model or API provider under Connections.');
         }
 
         /* ------------------------------------------------------------ metrics */
@@ -1573,7 +1573,7 @@
                 return false;
             }
             if (!chatReadiness() || (app.mode === 'wasm' && !app.worker)) {
-                toast('Configure a chat-capable model or API provider under Models.', 'warn');
+                toast('Configure a chat-capable model or API provider under Connections.', 'warn');
                 setView('model');
                 return false;
             }

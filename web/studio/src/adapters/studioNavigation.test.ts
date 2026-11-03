@@ -17,7 +17,7 @@ beforeEach(() => {
     window.location.hash = '';
     mobileMedia = { matches: true, addEventListener: vi.fn() };
     window.matchMedia = vi.fn((query: string) => query === '(max-width: 900px)' ? mobileMedia : { matches: false, addEventListener: vi.fn() }) as unknown as typeof window.matchMedia;
-    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button id="navAgent" data-section="agent">Agent</button><button id="navWorkspace" data-section="workspace">Workspace</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Models</button><button id="viewBtnEditor">Workspace</button></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
+    document.body.innerHTML = '<div id="app" data-nav="collapsed"><header><button id="btnMobileNav" aria-expanded="false">Menu</button></header><div class="shell-body"><aside id="navSidebar"><button id="navAgent" data-section="agent">Agent</button><button id="navWorkspace" data-section="workspace">Workspace</button><button id="navModels" data-section="models">Connections</button></aside><button id="btnNavScrim" aria-label="Close navigation" hidden></button><main id="mainColumn"><button id="viewBtnChat">Chat</button><button id="viewBtnModel">Connections</button><button id="viewBtnEditor">Workspace</button><section id="modelView" data-view="model" aria-label="Connections"></section></main></div><div id="toastRegion"></div><div id="statusClock"></div><div id="conversationList"></div><div id="chatMessages"></div><div id="modelSourceMount"></div><textarea id="editorText"></textarea><div id="settingsDialog" class="modal-backdrop" hidden></div><div id="commandPalette" hidden><input id="paletteInput"><div id="paletteList"></div></div></div>';
     vi.resetModules();
 });
 
@@ -45,6 +45,9 @@ describe('actual mobile navigation dismissal', () => {
         const main = document.getElementById('mainColumn')!;
         expect(app.getAttribute('data-nav')).toBe('collapsed');
         expect(scrim.hidden).toBe(true);
+        expect(document.getElementById('navModels')!.textContent).toBe('Connections');
+        expect(document.getElementById('modelView')!.getAttribute('aria-label')).toBe('Connections');
+        expect(document.getElementById('modelView')!.getAttribute('data-view')).toBe('model');
         menu.click();
         expect(app.getAttribute('data-nav')).toBe('expanded');
         expect(menu.getAttribute('aria-expanded')).toBe('true');

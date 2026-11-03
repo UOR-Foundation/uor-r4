@@ -65,6 +65,10 @@ were "not organized or labeled very well". The page is now a workable AI studio:
   and the strict static checks pass with assertions intact. Real-browser/worker parity checks remain later work. The page remains offline-first: no
   external request at load; remote model/API contacts are user-initiated only.
 
+### Native IDE and simplified connections (2 November 2026)
+
+The source page uses a Mac-inspired application treatment: system typography, opaque panels, softer radii, compact controls with at least 24px targets, and a 2px keyboard-focus outline in dark and light themes. Connections presents **UOR Chat — experimental** as the primary local source through the existing synthetic WASM path, with **Custom API providers** beside it and M1/research/local-file/URL tools inside a closed **Artifact diagnostics** region. The original source buttons, listeners, `data-action` values, storage, readiness checks, and capability labels are preserved; configuration still does not prove reachability. These are source changes, not a production publish or trained-chat claim. Real remote MCP support is a separate protocol unit, and desktop stdio remains a later host bridge.
+
 ### IDE experience in the Studio source (2 November 2026)
 
 The Studio source page now presents a coherent IDE-style welcome panel with source-specific states and quick actions. Users can explore a demo workspace before a serving model exists: open two tabs, edit buffers, and attach files as context. Demo replacement refuses dirty work, restored tabs are labeled demo, and no automatic dirty edit is fabricated. No-source, research-only, and discrete-M1 chat are disabled; positively synthetic non-discrete continuation and valid HTTP(S) API configuration remain available. Mobile navigation persists destination dismissal, closes through the labeled scrim or destination, and handles Escape after any open modal or palette. Desktop 1440×900 and iPhone 393×852 dark/light views and the demo/attachment workflow were exercised in the built-in browser; no model/API/disk trajectory is claimed.

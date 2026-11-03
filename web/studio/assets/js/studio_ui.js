@@ -86,7 +86,7 @@
     var SECTIONS = {
         agent: { view: 'chat', label: 'Agent', purpose: 'Chat with the agent, manage sessions, attach context and run build tasks.' },
         workspace: { view: 'workspace', label: 'Workspace', purpose: 'Open a folder, edit files in tabs and save them back to disk.' },
-        models: { view: 'model', label: 'Models', purpose: 'Local engine, published M1 models and OpenAI-compatible API providers.' },
+        models: { view: 'model', label: 'Connections', purpose: 'UOR Chat, custom API providers, and artifact diagnostics.' },
         guide: { view: 'guide', label: 'Guide', purpose: 'Quick start, the build-this-studio workflow, shortcuts and honest limits.' }
     };
     function sectionForView(view) { return view === 'chat' ? 'agent' : (view === 'model' ? 'models' : (view === 'workspace' || view === 'editor' || view === 'files' ? 'workspace' : (SECTIONS[view] ? view : 'agent'))); }
@@ -502,7 +502,7 @@
     function templatePrompt(kind) {
         var base = 'Studio workspace context: ' + activeFileLabel() + '.\n\nScope: web/studio/** only. Do not modify the engine, WASM worker, model-source manager, API client, crates or verifiers. Browser-only, no external assets or URLs. Keep all existing ids, handlers, status markers and the boot contract intact; the four Studio verifiers must pass unchanged.\n\n';
         var map = {
-            ux: base + 'TASK — Studio UX improvement brief.\n\nProblem: <describe the UX problem and where it appears>.\nDesired outcome: <what a user should be able to do>.\nConstraints: four labeled destinations (Agent/Workspace/Models/Guide), one control per action, AA contrast, no horizontal overflow at 390px, no duplicate controls.\n\nSteps: read the relevant web/studio files, propose the smallest coherent change, implement it, then run node web/studio/verify_studio_page.mjs, verify_studio_page_load.mjs, verify_studio_worker.mjs and verify_desktop_client.mjs and report exact results.',
+            ux: base + 'TASK — Studio UX improvement brief.\n\nProblem: <describe the UX problem and where it appears>.\nDesired outcome: <what a user should be able to do>.\nConstraints: four labeled destinations (Agent/Workspace/Connections/Guide), one control per action, AA contrast, no horizontal overflow at 390px, no duplicate controls.\n\nSteps: read the relevant web/studio files, propose the smallest coherent change, implement it, then run node web/studio/verify_studio_page.mjs, verify_studio_page_load.mjs, verify_studio_worker.mjs and verify_desktop_client.mjs and report exact results.',
             api: base + 'TASK — API integration checklist (Claude owns API code; do not edit it here).\n\nIntegration: <endpoint + model + auth expectation>.\nDeliver: request/response contract sketch, error/failure modes, privacy line shown to users, test plan, and the exact Studio fields/events needed. Keep prompts local unless the user explicitly selects an API provider.',
             audit: base + 'TASK — Audit this file.\n\nReview for: broken contract ids, verifier weakening, duplicate controls, false keyboard hints, AA contrast failures, mobile overflow, external requests at load, and scope creep into engine/API files. Report findings with file:line and a concrete fix for each.',
             report: base + 'TASK — Write a milestone REPORT with negatives first.\n\nInclude: what was attempted and rejected, exact commands and outputs, contract preservation evidence, remaining limits, and links to screenshots. Do not claim capability beyond pre-alpha / M1 next-token prediction.',
@@ -573,7 +573,7 @@
         var list = [
             cmd('NAVIGATION', 'Go to Agent', 'Chat, context and build tasks.', '⌘1', function () { activateSection('agent'); }),
             cmd('NAVIGATION', 'Go to Workspace', 'File tree, editor tabs, save.', '⌘2', function () { activateSection('workspace'); }),
-            cmd('NAVIGATION', 'Go to Models', 'Local engine, published models, API providers.', '⌘3', function () { activateSection('models'); }),
+            cmd('NAVIGATION', 'Go to Connections', 'UOR Chat, custom providers, artifact diagnostics.', '⌘3', function () { activateSection('models'); }),
             cmd('NAVIGATION', 'Go to Guide', 'Quick start, workflows, shortcuts, limits.', '⌘4', function () { activateSection('guide'); }),
 
             cmd('SESSIONS', 'New session', 'Start a clean agent thread.', '', newSessionAction),
@@ -956,7 +956,7 @@
                             { role: 'assistant', content: 'Findings: (1) the old segmented Chat/Model/Editor switch duplicated the nav; (2) status bar mixed legacy and new labels; (3) mobile pa item leaked a hidden footer. Fixes: single labeled nav, one coherent status bar, true mobile drawer.' }
                         ] },
                         { title: 'API provider wiring notes', updatedAt: now - 9 * 60000, messages: [
-                            { role: 'user', content: 'Sketch how the OpenAI-compatible provider fields should appear on Models.' },
+                            { role: 'user', content: 'Sketch how the OpenAI-compatible provider fields should appear on Connections.' },
                             { role: 'assistant', content: 'Remote providers section: Name, Base URL, Model, Key state + Use/Test/Edit/Remove; warning line: Local only until you select an API provider.' }
                         ] },
                         { title: 'M1 card copy review', updatedAt: now - 26 * 60000, messages: [

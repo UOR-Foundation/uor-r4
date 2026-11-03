@@ -68,7 +68,7 @@ describe('live Agent source readiness', () => {
         const { hooks } = pageHooks();
         hooks.updateComposerState();
         expect(sendButton().disabled).toBe(true);
-        expect(sendButton().title).toContain('Models');
+        expect(sendButton().title).toContain('Connections');
         expect(hooks.sendFromComposer('hello')).toBe(false);
     });
 
