@@ -38,6 +38,38 @@ describe('actual studio UI attachment hooks', () => {
     });
 });
 
+describe('actual studio UI attachment preservation', () => {
+    it('preserves long content and replaces/removes duplicates without silent truncation', () => {
+        const long = 'x'.repeat(120001);
+        ui.addAttachment({ name: 'long.txt', content: long, source: 'paste' });
+        expect(ui.getAttachments()).toHaveLength(1);
+        expect(ui.getAttachments()[0].content).toBe(long);
+        ui.addAttachment({ name: 'long.txt', content: 'replacement', source: 'paste' });
+        expect(ui.getAttachments()).toHaveLength(1);
+        expect(ui.getAttachments()[0].content).toBe('replacement');
+        ui.removeAttachment('long.txt');
+        expect(ui.getAttachments()).toEqual([]);
+    });
+});
+
+describe('actual studio UI native source labels', () => {
+    it('keeps native loopback privacy and attachment notes local', () => {
+        document.body.insertAdjacentHTML('beforeend', '<span id="privacyStatus">Native loopback</span><span id="chatSourceBadge">Native uor-chat</span><span id="privacyStatusText"></span><span id="composerModeNote"></span><span id="composerContextNote"></span>');
+        ui.updateStatus();
+        expect(document.querySelector('#privacyStatusText')!.textContent).toBe('Native loopback');
+        expect(document.querySelector('#composerModeNote')!.textContent).toBe('Native uor-chat — prompts stay on this device');
+        ui.addAttachment({ name: 'note.txt', content: 'text', source: 'file' });
+        expect(document.querySelector('#composerContextNote')!.textContent).toContain('stays on this device');
+        expect(document.querySelector('#composerContextNote')!.textContent).not.toContain('leaves device');
+        ui.clearAttachments();
+        document.querySelector('#privacyStatus')!.remove();
+        document.querySelector('#chatSourceBadge')!.remove();
+        document.querySelector('#privacyStatusText')!.remove();
+        document.querySelector('#composerModeNote')!.remove();
+        document.querySelector('#composerContextNote')!.remove();
+    });
+});
+
 describe('actual studio UI settings hooks', () => {
     it('clamps finite numeric values and applies the editor font size', () => {
         const changed = vi.fn();

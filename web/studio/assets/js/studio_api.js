@@ -7,7 +7,7 @@
  * here runs, fetches or imports anything at page load.
  *
  * Configuration (base URL, model, API key) is owned by assets/js/model_sources.js and
- * persisted in this browser's localStorage under "uor.studio.modelSources.v1". API keys
+ * persisted in this browser's localStorage under "uor.studio.modelSources.v1" except for the ephemeral native bootstrap, which stays in memory. API keys
  * are never bundled in the repository and never leave this browser except as the
  * Authorization header of a request the user triggered.
  *
@@ -65,7 +65,7 @@ function configFromObject(config) {
         baseUrl: String(baseUrl),
         model: String(config.model || config.modelId || config.model_id || ''),
         apiKey: typeof config.apiKey === 'string' ? config.apiKey : (typeof config.api_key === 'string' ? config.api_key : ''),
-        maxTokens: Number(config.maxTokens) > 0 ? Math.min(4096, Number(config.maxTokens)) : 768,
+        maxTokens: Number(config.maxTokens) > 0 ? Math.min(4096, Number(config.maxTokens)) : (config.ephemeral ? undefined : 768),
         temperature: Number.isFinite(Number(config.temperature)) ? Math.max(0, Math.min(2, Number(config.temperature))) : 0.7,
     };
 }
@@ -236,8 +236,40 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         model: resolved.model || 'default',
         messages: normaliseMessages(messages),
         stream: true,
+        stream_options: { include_usage: true },
         temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : resolved.temperature,
         max_tokens: Number(options.maxTokens) > 0 ? Math.min(4096, Number(options.maxTokens)) : resolved.maxTokens,
+    };
+    let text = '';
+    let usage;
+    let uor;
+    let finishReason = null;
+    const complete = (stopped) => {
+        const result = { ok: !stopped, stopped, text, usage, uor, finishReason };
+        if (typeof onDone === 'function') onDone(result);
+        return result;
+    };
+    const emit = (delta, meta = {}) => {
+        const hasToken = meta.uor && Number.isFinite(Number(meta.uor.token_id));
+        if (!delta && !hasToken) return;
+        text += delta;
+        if (typeof onDelta === 'function') onDelta(delta, { ...meta, text });
+    };
+    const applyChunk = (chunk) => {
+        if (chunk && chunk.usage && typeof chunk.usage === 'object') usage = chunk.usage;
+        if (chunk && chunk.uor && typeof chunk.uor === 'object' && !Array.isArray(chunk.uor.token_id)) uor = chunk.uor;
+        const choice = chunk && chunk.choices && chunk.choices[0];
+        if (choice) {
+            finishReason = choice.finish_reason || finishReason;
+            const delta = choice.delta && typeof choice.delta.content === 'string'
+                ? choice.delta.content
+                : (choice.message && typeof choice.message.content === 'string'
+                    ? choice.message.content
+                    : (typeof choice.text === 'string' ? choice.text : ''));
+            emit(delta, { finishReason, model: chunk.model || resolved.model, uor: chunk.uor });
+            return;
+        }
+        if (chunk && chunk.uor && typeof chunk.uor.stop === 'string') finishReason = finishReason || chunk.uor.stop;
     };
     let response;
     try {
@@ -248,10 +280,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
             body: JSON.stringify(body),
         });
     } catch (error) {
-        if (error && error.name === 'AbortError') {
-            if (typeof onDone === 'function') onDone({ stopped: true, text: '' });
-            return { ok: false, stopped: true };
-        }
+        if (error && error.name === 'AbortError') return complete(true);
         if (typeof onError === 'function') onError(error);
         throw error;
     }
@@ -267,68 +296,51 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         throw error;
     }
 
-    let text = '';
-    const emit = (delta, meta) => {
-        if (!delta) return;
-        text += delta;
-        if (typeof onDelta === 'function') onDelta(delta, { ...meta, text });
-    };
-
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes(STREAM_HEADER) || !response.body) {
-        // Some gateways ignore stream=true and return one JSON object.
         const bodyText = await response.text();
-        let parsed = null;
+        let parsed;
         try {
             parsed = JSON.parse(bodyText);
         } catch (_error) {
-            throw failure('The API returned a non-JSON chat completion.');
+            const error = failure('The API returned a non-JSON chat completion.');
+            if (typeof onError === 'function') onError(error);
+            throw error;
         }
-        const content = parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.text ?? '';
-        emit(String(content || ''));
-        if (typeof onDone === 'function') onDone({ stopped: false, text });
-        return { ok: true, text };
+        applyChunk(parsed);
+        return complete(false);
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const nextBoundary = () => {
+        const match = /\r?\n\r?\n/.exec(buffer);
+        return match ? { index: match.index, length: match[0].length } : null;
+    };
     try {
         for (;;) {
             const { value, done } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            let boundary = buffer.indexOf('\n\n');
-            while (boundary !== -1) {
-                const block = buffer.slice(0, boundary);
-                buffer = buffer.slice(boundary + 2);
+            let boundary = nextBoundary();
+            while (boundary) {
+                const block = buffer.slice(0, boundary.index);
+                buffer = buffer.slice(boundary.index + boundary.length);
                 const parsed = parseSseBlock(block);
-                if (parsed && parsed.done) {
-                    if (typeof onDone === 'function') onDone({ stopped: false, text });
-                    return { ok: true, text };
-                }
-                const choice = parsed && parsed.chunk && parsed.chunk.choices && parsed.chunk.choices[0];
-                if (choice) {
-                    const delta = choice.delta && typeof choice.delta.content === 'string'
-                        ? choice.delta.content
-                        : (choice.message && typeof choice.message.content === 'string' ? choice.message.content : '');
-                    emit(delta, { finishReason: choice.finish_reason || null, model: parsed.chunk.model || resolved.model });
-                }
-                boundary = buffer.indexOf('\n\n');
+                if (parsed && parsed.done) return complete(false);
+                if (parsed && parsed.chunk) applyChunk(parsed.chunk);
+                boundary = nextBoundary();
             }
         }
+        buffer += decoder.decode();
         if (buffer.trim()) {
             const parsed = parseSseBlock(buffer.trim());
-            const choice = parsed && parsed.chunk && parsed.chunk.choices && parsed.chunk.choices[0];
-            if (choice && choice.delta && typeof choice.delta.content === 'string') emit(choice.delta.content);
+            if (parsed && parsed.chunk) applyChunk(parsed.chunk);
         }
-        if (typeof onDone === 'function') onDone({ stopped: false, text });
-        return { ok: true, text };
+        return complete(false);
     } catch (error) {
-        if (error && error.name === 'AbortError') {
-            if (typeof onDone === 'function') onDone({ stopped: true, text });
-            return { ok: false, stopped: true, text };
-        }
+        if (error && error.name === 'AbortError') return complete(true);
         if (typeof onError === 'function') onError(error);
         throw error;
     } finally {

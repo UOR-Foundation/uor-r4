@@ -482,8 +482,9 @@
     function addAttachment(entry) {
         if (!entry || !entry.content) { toast('No file content to attach.', 'info'); return; }
         var name = String(entry.name || 'attachment.txt');
+        var content = String(entry.content);
         attachments = attachments.filter(function (item) { return item.name !== name; });
-        attachments.push({ name: name, content: String(entry.content).slice(0, 120000), source: entry.source || 'file' });
+        attachments.push({ name: name, kind: entry.kind || 'text', content: content, source: entry.source || 'file', size: Number.isFinite(entry.size) ? entry.size : content.length });
         saveAttachments(); renderAttachments();
         toast('Attached ' + name + ' (' + Math.max(1, Math.round(String(entry.content).length / 1024)) + ' KB).', 'success');
     }
@@ -503,9 +504,10 @@
         if (tokenHint) tokenHint.textContent = attachments.length ? '~' + approxTokens + ' tokens · prepended to API prompts only' : 'Attachments are prepended to API prompts only.';
         if (inspector && !attachments.length) { var hint = document.createElement('li'); hint.className = 'hint'; hint.textContent = 'No context attached. Use Attach context in the composer.'; inspector.appendChild(hint); }
         var mode = hook('getMode') ? hook('getMode')() : 'wasm';
+        var native = textOf('#chatSourceBadge') === 'Native uor-chat';
         if (note) {
             note.hidden = attachments.length === 0;
-            note.textContent = attachments.length ? attachments.length + ' context file' + (attachments.length === 1 ? '' : 's') + ' · ~' + approxTokens + ' tokens · ' + (mode === 'api' ? 'prepended to the next API prompt (leaves device).' : 'local WASM mode ignores context; switch to an API provider to use it.') : '';
+            note.textContent = attachments.length ? attachments.length + ' context file' + (attachments.length === 1 ? '' : 's') + ' · ~' + approxTokens + ' tokens · ' + (native ? 'prepended to the next native prompt (stays on this device).' : (mode === 'api' ? 'prepended to the next API prompt (leaves device).' : 'local WASM mode ignores context; switch to an API provider to use it.')) : '';
         }
         attachments.forEach(function (item, index) {
             var chip = document.createElement('span');
@@ -851,18 +853,19 @@
         var storage = textOf('#footerStorage').replace(/^Storage:\s*/i, '');
         var mode = hook('getMode') ? hook('getMode')() : 'wasm';
         var api = mode === 'api';
+        var native = privacy === 'Native loopback' || textOf('#chatSourceBadge') === 'Native uor-chat';
         var attachmentCount = hook('getAttachments') ? hook('getAttachments')().length : 0;
         setText('#engineStatusText', 'local WASM · ' + engine);
         var modelShort = /no model/i.test(model) ? 'none' : model.split(' · ')[0];
         if (modelShort.length > 42) modelShort = modelShort.slice(0, 41) + '…';
         setText('#modelStatusText', modelShort);
-        setText('#privacyStatusText', api ? 'API (leaves device)' : 'Local only');
+        setText('#privacyStatusText', native ? 'Native loopback' : (api ? 'API (leaves device)' : 'Local only'));
         setText('#footerStorage', String(storage || 'unknown').replace('MB used of ', ' MB / ').replace(/\s+/g, ' '));
         setText('#statusWorkspaceLabel', (window.__studioFiles && window.__studioFiles.workspaceName && window.__studioFiles.workspaceName()) ? window.__studioFiles.workspaceName() : 'uor-r4');
         setText('#statusContext', attachmentCount + ' file' + (attachmentCount === 1 ? '' : 's'));
-        setText('#composerModeNote', api ? 'API — prompts leave this device' : 'Local WASM — prompts stay on this device');
+        setText('#composerModeNote', native ? 'Native uor-chat — prompts stay on this device' : (api ? 'API — prompts leave this device' : 'Local WASM — prompts stay on this device'));
         var modeNote = document.getElementById('composerModeNote');
-        if (modeNote) modeNote.setAttribute('data-mode', api ? 'api' : 'local');
+        if (modeNote) modeNote.setAttribute('data-mode', native ? 'native' : (api ? 'api' : 'local'));
         setText('#envEngine', engine);
         setText('#envModel', /no model/i.test(model) ? 'none' : model);
         setText('#envTokenizer', tokenizer || 'awaiting model');
