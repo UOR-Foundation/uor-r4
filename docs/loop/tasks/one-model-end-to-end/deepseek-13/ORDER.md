@@ -61,4 +61,3 @@ useful conversation.
   panel; the run is then a repeated-template diagnostic, not fresh phrasing.
 - The two deterministic decode reports differ.
 - Teacher-forced predictions, writer parity or CPU trunk parity fail.
-

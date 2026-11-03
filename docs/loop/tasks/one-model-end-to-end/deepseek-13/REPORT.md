@@ -67,10 +67,11 @@ Public seed-1 19-table artifact:
 | Teacher-forced admitted / top-1 / top-8 | 665 / 505 / 543 of 1,024 sampled targets |
 | Full CPU trunk parity | 32,768 / 32,768 Q12 coordinates exact |
 
-Against deepseek-12's 58-prompt panel, completion fell from 87.9% to 84.4%,
-the number of distinct non-empty texts per non-empty reply improved only from
-11/54 to 22/199, repeated-4-gram shares stayed near 3.2%, and new-4-gram
-shares stayed near 13.3%. The exact-reference count remained zero.
+Against deepseek-12's 58-prompt panel, completion fell from 87.9% to 84.4%.
+The raw count of distinct non-empty texts rose from 11 to 22, but the number
+of non-empty replies rose from 54 to 199, so diversity per non-empty reply
+fell from 20.4% to 11.1%. Repeated-4-gram shares stayed near 3.2%, and
+new-4-gram shares stayed near 13.3%. The exact-reference count remained zero.
 
 Panel identity:
 
