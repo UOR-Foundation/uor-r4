@@ -53,23 +53,29 @@ describe('actual mobile navigation dismissal', () => {
         expect(menu.getAttribute('aria-expanded')).toBe('true');
         expect(scrim.hidden).toBe(false);
         expect(main.inert).toBe(true);
+        expect(document.activeElement?.id).toBe('navAgent');
         scrim.click();
         expect(app.getAttribute('data-nav')).toBe('collapsed');
         expect(scrim.hidden).toBe(true);
         expect(main.inert).toBe(false);
+        expect(document.activeElement?.id).toBe('btnMobileNav');
         menu.click();
+        expect(document.activeElement?.id).toBe('navAgent');
         document.getElementById('navWorkspace')!.click();
         expect(app.getAttribute('data-nav')).toBe('collapsed');
         expect(scrim.hidden).toBe(true);
         expect(main.inert).toBe(false);
+        expect(document.activeElement?.id).toBe('btnMobileNav');
         expect(JSON.parse(window.localStorage.getItem('uor.studio.ui.v2') || '{}').nav).toBe('collapsed');
         menu.click();
         expect(scrim.hidden).toBe(false);
+        expect(document.activeElement?.id).toBe('navAgent');
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         expect(app.getAttribute('data-nav')).toBe('collapsed');
         expect(menu.getAttribute('aria-expanded')).toBe('false');
         expect(scrim.hidden).toBe(true);
         expect(main.inert).toBe(false);
+        expect(document.activeElement?.id).toBe('btnMobileNav');
     });
 
     it('closes an open modal or palette before the mobile navigation drawer', async () => {

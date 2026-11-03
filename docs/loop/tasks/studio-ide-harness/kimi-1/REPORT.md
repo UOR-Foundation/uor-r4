@@ -1,6 +1,6 @@
 # REPORT: Mac-inspired Studio IDE and simplified UOR/API connections
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569), references #3500 without closing it. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d` and `b6ebf7002745f1c9ec5c7de223bc9f9ae66009e3` before final delivery checks; exact delivery-head evidence is posted on the PR.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569); both issues remain open. Order: [ORDER.md](ORDER.md). Design: [design](../../../../superpowers/specs/2026-11-02-studio-ide-harness-design.md). Plan: [plan](../../../../superpowers/plans/2026-11-02-studio-ide-harness.md). Original base: `85f634af30809c998cc3dbd830366c85be214934`. Merged forward from `origin/main` `7394c344d` and `b6ebf7002745f1c9ec5c7de223bc9f9ae66009e3` before final delivery checks; exact delivery-head evidence is posted on the PR.
 
 ## What did not work
 
@@ -19,7 +19,7 @@ The recovered five-commit unit:
 - Renames user-facing Models navigation to Connections while preserving internal `models`/`model` keys and compatibility IDs. No engine, worker, tokenizer, `studio_api.js`, model artifact, MCP behavior, dependency, publisher, deployment, `.github/**`, or typed-library cutover was added.
 - Includes the ORDER, roadmap item, design, implementation plan, and focused actual-page tests for computed visual treatment, source regrouping/listener preservation, readiness, and navigation labels.
 
-No production repair beyond those recovered commits and the merge-forward was needed during this verification session; this REPORT is the remaining delivery record.
+During verification, the modern-web accessibility check exposed that the custom mobile drawer updated ARIA/scrim/`inert` without moving focus. A new regression failed first (`expected '' to be 'navAgent'`). `setChrome` now moves focus to the first destination on mobile open and returns it to Menu on scrim, destination, or Escape close. All 216 tests and the real-browser open/close check pass after that narrow repair. The recovered commits, merge-forward, ORDER/REPORT, and this focus repair form the delivery.
 
 ## Measurements and checks
 
@@ -50,6 +50,22 @@ The built-in browser exercised the actual local page, with no real credentials/f
 - Three older clean, merged Kimi worktrees were removed only after their ignored/untracked notes and scratch were moved byte-preserved into `local/kimi/retired-worktrees/`; their PRs were #3476, #3436, and #3468. Other labs' worktrees and scratch were untouched.
 - Guarded `uor-hygiene --apply` removed those worktrees and idle build output, freeing about 2 GB. Two additional known idle Cargo target directories (`local/target`, `local/pod-provider-target`) were cleaned for 652.0 MiB of regenerable build output. Nothing unique was deleted and the Trash was not emptied.
 - Free space reached 30,131,724 KiB (about 30.1 GB decimal / 29 GiB) before the Studio suite, restoring the project's 30 GB minimum. Generated `node_modules`, `dist`, and the SDD ledger remain uncommitted and will be handled by the normal post-merge cleanup.
+
+## Checks run at the head
+
+- `UOR_LAB=kimi CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/target/kimi cargo run -q --locked -p uor-r4-harness --bin uor-harness -- loop gates --full`: **11/11 GREEN**.
+- `uor-harness loop pr-check --local`: the first run identified the new-item merge-base anchor and two missing REPORT headings. The ORDER now names the existing parent #3500 plus the new follow-up #3569 without hiding scope, and the required headings are present. The corrected rerun is recorded in the final PR receipts.
+- `cargo run -q --locked -p uor-r4-claim-wording -- .` and `git diff --check`: final results are recorded in the PR receipts.
+- The 228 Studio/model-source checks and both page-load layers listed above ran before the REPORT commit. After the focus regression, the focused navigation test and the complete 216-test suite, typecheck, and `studio_ui.js` syntax check all passed again; the real-browser focus transition was also rechecked.
+
+## Skills used
+
+Recovery and working discipline, isolated worktrees, plan execution, test-driven development, systematic debugging, solution-integrity, scope/context guards, built-in-browser verification, modern web guidance, and fresh exact-head delivery review. No GPU, paid resource, real credential, real user data, or model compute was used.
+
+### Modern Web Guidance
+
+- **`navigation-drawer`**: I retained the existing sibling-scrim fallback rather than introducing a new popover/stacking system, and verified that Escape, backdrop, and destination dismissal all converge on the same collapsed/inert state ("replace `::backdrop` with a sibling element styled identically"). Focus is no longer left outside the custom overlay.
+- **`accessibility`**: I added failing-first and real-browser checks for entering/restoring focus ("Move focus to the overlay"), retained native buttons and `:focus-visible` outlines, and kept minimum targets at 24×24 CSS pixels ("Enforce the target size of elements using `min-block-size` / `min-inline-size`").
 
 ## Exact delivery head
 

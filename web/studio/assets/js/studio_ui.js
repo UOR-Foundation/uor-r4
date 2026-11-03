@@ -120,12 +120,26 @@
     }
     function setChrome(name, value, persist) {
         if (!app) return;
+        var wasExpanded = app.getAttribute('data-nav') === 'expanded';
         app.setAttribute('data-' + name, value);
         var expanded = value === 'expanded';
         var map = { nav: ['btnToggleNav', 'btnNavCollapse', 'btnMobileNav'], inspector: ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4'] };
         (map[name] || []).forEach(function (id) { var node = document.getElementById(id); if (node) node.setAttribute('aria-expanded', expanded ? 'true' : 'false'); });
         if (persist) { var patch = {}; patch[name] = value; writeUi(patch); }
-        if (name === 'nav') syncNavPresentation();
+        if (name === 'nav') {
+            syncNavPresentation();
+            var mobile = window.matchMedia('(max-width: 900px)').matches;
+            if (expanded && mobile && !wasExpanded) {
+                var firstDestination = document.querySelector('#navSidebar button[data-section]');
+                if (firstDestination) firstDestination.focus();
+            } else if (!expanded && mobile && wasExpanded) {
+                var active = document.activeElement;
+                var sidebar = document.getElementById('navSidebar');
+                var scrim = document.getElementById('btnNavScrim');
+                var trigger = document.getElementById('btnMobileNav');
+                if (trigger && ((sidebar && sidebar.contains(active)) || active === scrim)) trigger.focus();
+            }
+        }
     }
     function toggleChrome(name) { if (!app) return; var current = app.getAttribute('data-' + name) === 'collapsed' ? 'collapsed' : 'expanded'; setChrome(name, current === 'expanded' ? 'collapsed' : 'expanded', true); }
 

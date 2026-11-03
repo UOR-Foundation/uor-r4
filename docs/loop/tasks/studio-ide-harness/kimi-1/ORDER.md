@@ -1,6 +1,6 @@
 # ORDER: Mac-inspired Studio IDE and simplified UOR/API connections
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569), following the owner's explicit native-style IDE and simplified-connection direction. Base: `85f634af30809c998cc3dbd830366c85be214934`. References #3500; do not close it.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), with follow-up [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569), following the owner's explicit native-style IDE and simplified-connection direction. Base: `85f634af30809c998cc3dbd830366c85be214934`. Both issues remain open.
 
 ## Goal
 
