@@ -85,6 +85,10 @@ Classed instrument (CHARTER §4.2, L-007): the shared card ran out of memory. Th
 
 Seed 2's (k2) trains again on `vast-58901106`, at 2,048 steps, from 01:29Z (`job.sh 36ca53c81195969f9487747163cc13c50d145efa 2 k2 2048`).
 
+Seed 1's (b) ran out the same way on `vast-58894902`, at 01:52Z, 3,210 s in, after its step-1,024 checkpoint. The card held 30,555 MiB at 01:44Z. Its memory fell to 25,915 MiB at the step-1,024 eval, then climbed again to 29,819 MiB at 01:51Z. Seed 1's (k2) trained to its end. The same rule applies: (b) trains again at seed 1, alone on a fresh pod, at 2,048 steps, once a pod is free under the cap. Its step-1,024 checkpoint is never scored.
+
+While two arms share the card, their memory together climbs through training, by about 1,000 to 1,300 MiB a minute, and falls back at times. Trained alone, (k2) at seed 2 held 5,040–7,216 MiB through its whole 2,048 steps (9,424 MiB at the final eval), and trained in 1,565 s, against 3,182–3,284 s for each shared arm. So sharing caused the climb, and it bought no speed: two arms trained one after the other on one pod take about the same time. The REPORT names this for the next unit: arms train one after the other, and I-2 projects each arm alone (6,144 steps fit in 90 minutes alone, against 2,048 shared).
+
 ## Stop and ask if
 
 Each of these is decided in the unit, never waited on:
