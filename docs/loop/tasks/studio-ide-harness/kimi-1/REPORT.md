@@ -30,7 +30,7 @@ During verification, the modern-web accessibility check exposed that the custom 
 
 At the latest repaired content before the final evidence commit:
 
-- Focused review regression run: **6 files, 33 tests passed, 0 failures**; the new cases initially produced six failures, then two remaining root-cause failures before the fixes.
+- Focused review regression run: **6 files, 34 tests passed, 0 failures**; the new cases initially produced six failures, then two remaining root-cause failures before the fixes.
 - `npm test`: **29 test files, 243 tests passed, 0 failures**.
 - `npm run typecheck`: PASS, no TypeScript errors.
 - `npm run build`: PASS; `dist/studio-foundation.js` 123.06 kB (gzip 33.76 kB), `dist/studio-foundation.css` 3.57 kB (gzip 1.14 kB), uncommitted.
