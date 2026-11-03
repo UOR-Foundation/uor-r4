@@ -10,4 +10,4 @@ computing gzip size...
 dist/studio-foundation.css    3.57 kB │ gzip:  1.14 kB
 dist/studio-foundation.js   124.55 kB │ gzip: 34.13 kB
 
-✓ built in 133ms
+✓ built in 37ms

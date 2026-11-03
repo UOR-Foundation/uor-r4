@@ -28,10 +28,8 @@ const CHROME_CANDIDATES = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
     '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
-    '/snap/bin/chromium',
 ];
 
 const MIME = {
@@ -251,11 +249,7 @@ async function main() {
         console.log(JSON.stringify(report, null, 2));
         cdp.ws.close();
     } finally {
-        if (chrome && chrome.child) {
-            try { chrome.child.kill('SIGTERM'); } catch (_error) { /* snap wrapper may already be gone or not signalable */ }
-            await new Promise((r) => setTimeout(r, 500));
-            try { chrome.child.kill('SIGKILL'); } catch (_error) { /* process already exited */ }
-        }
+        if (chrome && chrome.child) chrome.child.kill('SIGTERM');
         started.server.close();
         await new Promise((r) => setTimeout(r, 500));
         await rm(profileDir, { recursive: true, force: true }).catch(() => {});

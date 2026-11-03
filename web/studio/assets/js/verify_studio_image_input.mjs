@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 import { connect } from 'node:net';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKTREE = resolve(__dirname, '..', '..');
+const STUDIO_ROOT = resolve(__dirname, '..', '..');
+const WORKTREE = resolve(STUDIO_ROOT, '..', '..');
 const TOKEN = 'image-flow-token';
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8Dwn4GBgYGJAQoAHxcCAk+Uzr4AAAAASUVORK5CYII=', 'base64');
 
@@ -77,7 +78,7 @@ async function nativeServer(root) {
         '--stack', artifact,
         '--tokenizer', tokenizer,
         '--serve', '127.0.0.1:' + port,
-        '--studio-root', join(WORKTREE, 'web', 'studio'),
+        '--studio-root', STUDIO_ROOT,
         '--token-stdin',
     ], { cwd: WORKTREE, stdio: ['pipe', 'pipe', 'pipe'] });
     let logs = '';

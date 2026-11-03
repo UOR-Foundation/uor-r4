@@ -492,7 +492,8 @@
     <script type="module">
 
         import { mountModelSources, ModelSources } from './assets/js/model_sources.js';
-        import { configFromSources, decomposeNativeImage, imageUrlPart, normalizeBaseUrl, streamChatCompletions } from './assets/js/studio_api.js';
+        import { configFromSources, normalizeBaseUrl, streamChatCompletions } from './assets/js/studio_api.js';
+        import { decomposeNativeImage, imageUrlPart } from './assets/js/studio_api.js';
         import { isImageFile, readImageFiles } from './assets/js/image_input.js';
         import { encodeTextWithArtifact } from './assets/js/uor_tokenizer_artifact.js';
         import { createComposerInput, readTextFiles } from './assets/js/composer_input.js';

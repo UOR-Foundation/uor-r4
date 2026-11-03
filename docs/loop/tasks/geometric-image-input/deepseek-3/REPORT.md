@@ -47,18 +47,18 @@ development context, while four images overflow it and return 413.
 - Native loopback: 14 passed. Integer library: 451 passed, 1 ignored.
 - Vision crate: 9 tests passed in the default parallel build.
 - Real Chrome 157 against native `uor-chat`: exact metrics were
-  **34 prompt / 6 completion / 40 total tokens**, 477.6 tok/s, TTFT 10.792 ms,
-  12.562 ms elapsed, stop. Selecting the image produced no generation. The
+  **34 prompt / 6 completion / 40 total tokens**, 470.3 tok/s, TTFT 10.953 ms,
+  12.758 ms elapsed, stop. Selecting the image produced no generation. The
   label matched exactly, reload retained no image bytes and showed the
   reattachment notice, reattachment restored the preview, and removal cleared
   it.
-- Static page checks, zero-external runtime trap, WASM worker checks and desktop
-  client checks passed. `npm run typecheck` and `npm run build` passed.
+- Static page checks, zero-external runtime trap and WASM worker checks passed.
+  `npm run typecheck` and `npm run build` passed.
 
 ## Checks run at the head
 
 - The evidence files under [evidence/](evidence/) retain the Node, Studio,
-  native, WASM, page, desktop and browser outputs plus their SHA-256 manifest.
+  native, WASM, page and browser outputs plus their SHA-256 manifest.
 - `rustfmt --check` on changed Rust files, `node --check` on changed JavaScript,
   and `git diff --check`: passed.
 - Strict Clippy on `uor-r4-vision`: passed. Integer Clippy has the 51

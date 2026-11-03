@@ -1,4 +1,3 @@
-    Checking uor-r4-tokenizer v0.1.0 (/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-image-studio-canvas/crates/uor-r4-tokenizer)
     Checking uor-r4-integer v0.1.0 (/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-image-studio-canvas/crates/uor-r4-integer)
 error: manual implementation of `.is_multiple_of()`
    --> crates/uor-r4-integer/src/codec.rs:109:8
