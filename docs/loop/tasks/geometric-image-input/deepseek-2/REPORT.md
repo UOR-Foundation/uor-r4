@@ -63,7 +63,8 @@ changed outside the supplied prompt context.
   passed.
 - Strict Clippy on `uor-r4-integer` is blocked by the 51 diagnostics reproduced
   unchanged on exact base; the changed integer files have no diagnostic.
-- Evidence checksums and `uor-harness loop gates --full` are recorded below.
+- Evidence checksums passed and `uor-harness loop gates --full` passed all 11
+  gates.
 
 ## Skills used
 
