@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import source from '../../index.html?raw';
+import uiSource from '../../assets/js/studio_ui.js?raw';
 
 describe('native assistant role labels', () => {
     it('labels native assistant messages Native uor-chat instead of API', () => {
@@ -11,5 +12,9 @@ describe('native assistant role labels', () => {
         const append = factory(app, document, (selector: string) => document.querySelector(selector));
         append('assistant', 'I.', '3 tokens');
         expect(document.querySelector('.msg-role')!.textContent).toBe('Native uor-chat');
+    });
+
+    it('labels the connection group as native and custom rather than custom only', () => {
+        expect(uiSource).toContain('Native & custom chat sources');
     });
 });

@@ -2006,6 +2006,7 @@
                         conversation.draft = draft;
                         persistConversations();
                     },
+                    initialDraft: activeConversation() ? activeConversation().draft || '' : '',
                 });
             }
             var list = $('#conversationList');

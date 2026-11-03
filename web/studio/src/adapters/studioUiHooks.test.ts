@@ -54,10 +54,13 @@ describe('actual studio UI attachment preservation', () => {
 
 describe('actual studio UI native source labels', () => {
     it('keeps native loopback privacy and attachment notes local', () => {
-        document.body.insertAdjacentHTML('beforeend', '<span id="privacyStatus">Native loopback</span><span id="chatSourceBadge">Native uor-chat</span><span id="privacyStatusText"></span><span id="composerModeNote"></span><span id="composerContextNote"></span><span id="ctxPrivacy"></span><span id="engineStatusText"></span>');
+        document.body.insertAdjacentHTML('beforeend', '<span id="privacyStatus">Native loopback</span><span id="chatSourceBadge">Native uor-chat</span><span id="privacyStatusText"></span><span id="composerModeNote"></span><span id="composerContextNote"></span><span id="ctxPrivacy"></span><span id="engineStatusText"></span><span id="envEngine"></span><span id="ctxEngine"></span><span id="modelStatusText"></span>');
         ui.updateStatus();
         expect(document.querySelector('#ctxPrivacy')!.textContent).not.toContain('leaves device');
         expect(document.querySelector('#engineStatusText')!.textContent).not.toContain('local WASM');
+        expect(document.querySelector('#envEngine')!.textContent).toBe('native uor-chat');
+        expect(document.querySelector('#ctxEngine')!.textContent).toBe('native uor-chat');
+        expect(document.querySelector('#modelStatusText')!.textContent).toBe('native uor-chat');
         expect(document.querySelector('#privacyStatusText')!.textContent).toBe('Native loopback');
         expect(document.querySelector('#composerModeNote')!.textContent).toBe('Native uor-chat — prompts stay on this device');
         ui.addAttachment({ name: 'note.txt', content: 'text', source: 'file' });

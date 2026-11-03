@@ -39,12 +39,11 @@ export function createStreamMetrics() {
             if (completion !== null) state.completionTokens = completion;
             state.promptTokens = finite(usage.prompt_tokens);
             state.totalTokens = finite(usage.total_tokens);
-            if (completion !== null || state.promptTokens !== null || state.totalTokens !== null) state.exact = true;
+            if (completion !== null && state.promptTokens !== null && state.totalTokens !== null) state.exact = true;
         }
         const serverRate = finite(uor && uor.tokens_per_second_milli);
         if (serverRate !== null) {
             state.tokensPerSecondMilli = serverRate;
-            state.exact = true;
             serverRateProvided = true;
         }
         const first = finite(uor && uor.first_token_ns) ?? finite(input.firstTokenNs);

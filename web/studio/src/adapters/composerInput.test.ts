@@ -12,13 +12,14 @@ function key(textarea: HTMLTextAreaElement, key: string, init: { shiftKey?: bool
     return event;
 }
 
-function setup(history: string[] = []) {
+function setup(history: string[] = [], initialDraft = '') {
     document.body.innerHTML = '<textarea id="chat"></textarea><input id="files" type="file" multiple>';
     const textarea = document.querySelector<HTMLTextAreaElement>('#chat')!;
     const picker = document.querySelector<HTMLInputElement>('#files')!;
     const onSend = vi.fn(() => 1);
     const onFiles = vi.fn();
     const onHistoryChange = vi.fn();
+    const onDraftChange = vi.fn();
     const controller = createComposerInput({
         textarea,
         picker,
@@ -26,8 +27,10 @@ function setup(history: string[] = []) {
         onFiles,
         getHistory: () => history,
         onHistoryChange,
+        onDraftChange,
+        initialDraft,
     });
-    return { textarea, picker, onSend, onFiles, onHistoryChange, controller };
+    return { textarea, picker, onSend, onFiles, onHistoryChange, onDraftChange, controller };
 }
 
 describe('conversational composer keyboard and history', () => {
@@ -91,6 +94,33 @@ describe('conversational composer keyboard and history', () => {
         expect(textarea.value).toBe('other session');
         controller.reset('first draft');
         expect(textarea.value).toBe('first draft');
+    });
+
+    it('restores the initial session draft and clears it after submission', () => {
+        const { textarea, controller, onDraftChange } = setup([], 'saved draft');
+        expect(textarea.value).toBe('saved draft');
+        controller.recordSubmitted('saved draft');
+        expect(onDraftChange).toHaveBeenLastCalledWith('');
+    });
+
+    it('preserves the original in-progress draft while editing history', () => {
+        const { textarea, controller, onDraftChange } = setup(['one', 'two']);
+        textarea.value = 'original draft';
+        key(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('two');
+        textarea.value = 'edited history';
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        key(textarea, 'ArrowDown');
+        expect(textarea.value).toBe('original draft');
+        expect(onDraftChange).not.toHaveBeenCalledWith('edited history');
+        controller.destroy();
+    });
+
+    it('does not swallow ArrowUp at the oldest history entry', () => {
+        const { textarea } = setup(['oldest']);
+        key(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('oldest');
+        expect(key(textarea, 'ArrowUp').defaultPrevented).toBe(false);
     });
 });
 

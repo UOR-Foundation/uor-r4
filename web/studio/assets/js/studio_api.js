@@ -225,11 +225,17 @@ function parseSseBlock(block) {
  * Calls onDelta(text, meta) for each content fragment and resolves when the stream ends.
  */
 export async function streamChatCompletions({ config, messages, signal, onDelta, onDone, onError, options = {} } = {}) {
+    let errorReported = false;
+    const reportError = (error) => {
+        if (errorReported) return;
+        errorReported = true;
+        if (typeof onError === 'function') onError(error);
+    };
     let resolved;
     try {
         resolved = requireConfig(config);
     } catch (error) {
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     }
     const body = {
@@ -265,7 +271,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
                 param: detail.param,
                 errorType: detail.type,
             });
-            if (typeof onError === 'function') onError(error);
+            reportError(error);
             throw error;
         }
         if (chunk && chunk.usage && typeof chunk.usage === 'object') usage = chunk.usage;
@@ -293,7 +299,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         });
     } catch (error) {
         if (error && error.name === 'AbortError') return complete(true);
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     }
     if (!response.ok) {
@@ -304,7 +310,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
             /* ignore */
         }
         const error = describeHttpError(response, bodyText);
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     }
 
@@ -316,7 +322,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
             parsed = JSON.parse(bodyText);
         } catch (_error) {
             const error = failure('The API returned a non-JSON chat completion.');
-            if (typeof onError === 'function') onError(error);
+            reportError(error);
             throw error;
         }
         applyChunk(parsed);
@@ -342,7 +348,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
                 const parsed = parseSseBlock(block);
                 if (parsed && parsed.done) return complete(false);
                 if (parsed && parsed.error) {
-                    if (typeof onError === 'function') onError(parsed.error);
+                    reportError(parsed.error);
                     throw parsed.error;
                 }
                 if (parsed && parsed.chunk) applyChunk(parsed.chunk);
@@ -353,7 +359,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         if (buffer.trim()) {
             const parsed = parseSseBlock(buffer.trim());
             if (parsed && parsed.error) {
-                if (typeof onError === 'function') onError(parsed.error);
+                reportError(parsed.error);
                 throw parsed.error;
             }
             if (parsed && parsed.chunk) applyChunk(parsed.chunk);
@@ -361,7 +367,7 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
         return complete(false);
     } catch (error) {
         if (error && error.name === 'AbortError') return complete(true);
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     } finally {
         try {

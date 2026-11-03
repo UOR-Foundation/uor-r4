@@ -67,7 +67,7 @@ export async function readTextFiles(files, options = {}) {
     return { attachments, errors };
 }
 
-export function createComposerInput({ textarea, picker, onSend, onFiles, getHistory, onHistoryChange, onDraftChange } = {}) {
+export function createComposerInput({ textarea, picker, onSend, onFiles, getHistory, onHistoryChange, onDraftChange, initialDraft = '' } = {}) {
     if (!textarea) throw new Error('A composer textarea is required.');
     const send = typeof onSend === 'function' ? onSend : () => {};
     const filesCallback = typeof onFiles === 'function' ? onFiles : () => {};
@@ -98,6 +98,7 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
         historyChanged(bounded);
         historyIndex = bounded.length;
         draft = '';
+        draftChanged('');
     }
 
     function older() {
@@ -134,7 +135,7 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
             draft = '';
             return;
         }
-        if (event.key === 'ArrowUp' && (historyIndex > 0 || (submittedHistory.length > 0 && firstLine()))) {
+        if (event.key === 'ArrowUp' && (historyIndex > 0 || (historyIndex === submittedHistory.length && submittedHistory.length > 0 && firstLine()))) {
             event.preventDefault();
             older();
         } else if (event.key === 'ArrowDown' && historyIndex < submittedHistory.length && lastLine()) {
@@ -144,7 +145,7 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
     }
 
     function input() {
-        if (settingValue) return;
+        if (settingValue || historyIndex < submittedHistory.length) return;
         draft = textarea.value;
         draftChanged(draft);
     }
@@ -168,20 +169,23 @@ export function createComposerInput({ textarea, picker, onSend, onFiles, getHist
         event.target.value = '';
     }
 
+    function reset(nextDraft = '') {
+        submittedHistory = historyCallback().slice();
+        historyIndex = submittedHistory.length;
+        draft = String(nextDraft || '');
+        setValue(draft);
+    }
+
     textarea.addEventListener('keydown', keydown);
     textarea.addEventListener('input', input);
     textarea.addEventListener('paste', paste);
     textarea.addEventListener('drop', drop);
     if (picker) picker.addEventListener('change', picked);
+    reset(initialDraft);
 
     return {
         recordSubmitted,
-        reset(nextDraft = '') {
-            submittedHistory = historyCallback().slice();
-            historyIndex = submittedHistory.length;
-            draft = String(nextDraft || '');
-            setValue(draft);
-        },
+        reset,
         destroy() {
             if (destroyed) return;
             destroyed = true;

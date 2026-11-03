@@ -46,6 +46,18 @@ test('empty token arrays and empty usage objects stay character-only', () => {
     assert.equal(metrics.text(), '17 chars · usage unavailable');
 });
 
+test('partial usage and rate-only payloads never produce null or fabricated exact usage', () => {
+    const metrics = createStreamMetrics();
+    metrics.update({ usage: { prompt_tokens: 12, total_tokens: 15 }, chars: 4 });
+    assert.equal(metrics.snapshot().exact, false);
+    assert.equal(metrics.text(), '4 chars · usage unavailable');
+    assert.equal(metrics.text().includes('null'), false);
+    const rateOnly = createStreamMetrics();
+    rateOnly.update({ uor: { tokens_per_second_milli: 500000 }, chars: 7 });
+    assert.equal(rateOnly.snapshot().exact, false);
+    assert.equal(rateOnly.text(), '7 chars · usage unavailable');
+});
+
 test('final usage recomputes a stale client rate when no server rate exists', () => {
     const metrics = createStreamMetrics();
     metrics.update({ uor: { completion_ids: [1] }, elapsedNs: 2000000, chars: 1 });

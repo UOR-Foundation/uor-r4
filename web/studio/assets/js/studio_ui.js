@@ -155,7 +155,7 @@
     var MODELS_SECTIONS = [
         { key: 'local', title: 'UOR Chat — experimental', desc: 'Synthetic continuation through the existing local WASM worker; not a trained conversational model.', match: /local wasm engine/i },
         { key: 'trained', title: 'Published models', desc: 'Trained 19-table M1 trunk exports; next-token prediction only, not a chat assistant.', match: /trained m1/i },
-        { key: 'api', title: 'Custom API providers', desc: 'Custom OpenAI-compatible endpoints send prompts to the configured provider; native loopback stays on this device.', match: /openai-compatible api/i },
+        { key: 'api', title: 'Native & custom chat sources', desc: 'Native loopback stays on this device; custom OpenAI-compatible providers send prompts to the configured provider.', match: /openai-compatible api/i },
         { key: 'research', title: 'Research artifacts (experimental)', desc: 'Earlier exports kept for inspection; not generation-capable in this Studio.', match: /research|experimental/i }
     ];
     function regroupModels() {
@@ -861,7 +861,7 @@
         var native = privacy === 'Native loopback' || textOf('#chatSourceBadge') === 'Native uor-chat';
         var attachmentCount = hook('getAttachments') ? hook('getAttachments')().length : 0;
         setText('#engineStatusText', native ? 'native uor-chat' : 'local WASM · ' + engine);
-        var modelShort = /no model/i.test(model) ? 'none' : model.split(' · ')[0];
+        var modelShort = native ? 'native uor-chat' : (/no model/i.test(model) ? 'none' : model.split(' · ')[0]);
         if (modelShort.length > 42) modelShort = modelShort.slice(0, 41) + '…';
         setText('#modelStatusText', modelShort);
         setText('#privacyStatusText', native ? 'Native loopback' : (api ? 'API (leaves device)' : 'Local only'));
@@ -871,10 +871,10 @@
         setText('#composerModeNote', native ? 'Native uor-chat — prompts stay on this device' : (api ? 'API — prompts leave this device' : 'Local WASM — prompts stay on this device'));
         var modeNote = document.getElementById('composerModeNote');
         if (modeNote) modeNote.setAttribute('data-mode', native ? 'native' : (api ? 'api' : 'local'));
-        setText('#envEngine', engine);
+        setText('#envEngine', native ? 'native uor-chat' : engine);
         setText('#envModel', /no model/i.test(model) ? 'none' : model);
         setText('#envTokenizer', tokenizer || 'awaiting model');
-        setText('#ctxEngine', engine);
+        setText('#ctxEngine', native ? 'native uor-chat' : engine);
         setText('#ctxTokenizer', tokenizer || 'awaiting model');
         setText('#ctxPrivacy', native ? 'native loopback' : (api ? 'api (leaves device)' : 'local only'));
         setText('#ctxStorage', storage || 'unknown');
@@ -893,7 +893,6 @@
             var saveState = document.getElementById('editorSaveState');
             legacySaved.textContent = saveState && saveState.textContent ? saveState.textContent : (document.getElementById('editorUnsaved') ? document.getElementById('editorUnsaved').textContent : 'Saved locally');
         }
-        setText('#envEngine', engine);
         setText('#envModel', /no model/i.test(model) ? 'none' : model);
         setText('#envTokenizer', tokenizer || 'awaiting model');
         var sessionsCount = document.getElementById('settingsSessionCount');

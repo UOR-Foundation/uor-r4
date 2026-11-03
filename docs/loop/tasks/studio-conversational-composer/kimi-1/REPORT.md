@@ -12,6 +12,7 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 - The generic API default `max_tokens=768` caused exact 780/786/933-position 413 errors against the 192-position artifact even for `Hi`. Ephemeral native configs now omit that field so the server's default of 16 applies; ordinary providers retain their default. This was a client default defect, not accumulated history.
 - The Stop-proxy browser attempt did not register its bootstrap and is **NOT_RUN**, not a pass. The API mid-stream abort regression passes, but this REPORT does not claim a completed browser Stop scenario. The proxy and native servers and the browser tab were stopped.
 - Independent review found false exact-token metrics for empty ID arrays, composition Enter being default-prevented, remaining native/external label mismatches, malformed SSE and in-band errors completing successfully, retained-attachment overflow, storage-dependent native boot, and draft leakage across sessions. Regressions now cover each: empty IDs and partial usage stay character-only, final rates recompute, composition defaults are preserved, every native surface is local, malformed SSE errors surface, retained totals include duplicate replacement, storage denial does not block native boot, and reset restores the selected session's draft. Empty/exhausted history keys no longer swallow native caret movement. #3608 is now marked done consistently with its ORDER.
+- The second review found five narrower defects: partial usage/rate-only payloads could be presented as exact and render `null`; submitted prompts persisted as unsent drafts and history edits could overwrite drafts; some native labels still said WASM/API/custom; ArrowUp at the oldest history entry was swallowed; and SSE errors could call `onError` twice. Repairs now require complete usage before exact labeling, clear submitted drafts while preserving in-progress drafts, restore the initial session draft, use consistent native labels, preserve native caret behavior at the oldest entry, and report each stream error once. The repair pass also hoisted composer reset initialization, removed a later legacy `#envEngine` overwrite, and corrected the group-title test source.
 - No useful-chat, production, M4/M7, visual-understanding, embedding, or multimodal capability is claimed. Image decomposition remains the next unit.
 
 ## What changed
@@ -25,8 +26,8 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 
 ## Measurements and checks
 
-- Focused RED→GREEN: 12 composer-controller tests, 6 streaming tests, 5 metrics tests, 3 native-bootstrap tests, and native privacy/label regressions. The 120,001-character file/prompt cases preserve every character; per-file/total/binary failures are explicit. Empty-ID/non-native usage, malformed SSE, storage-denied boot, draft reset, retained totals, and assistant-role cases are covered.
-- Complete Studio suite: **31 files / 261 Vitest tests PASS**. Node protocol/source tests: **26 PASS**. Typecheck and Vite build: PASS. Studio worker, page static/runtime traps, and desktop checks: PASS, with zero unexpected external requests.
+- Focused RED→GREEN: 15 composer-controller tests, 6 streaming tests, 6 metrics tests, 3 native-bootstrap tests, and native privacy/label regressions. The 120,001-character file/prompt cases preserve every character; per-file/total/binary failures are explicit. Empty-ID/non-native usage, malformed SSE, storage-denied boot, draft reset, retained totals, and assistant-role cases are covered.
+- Complete Studio suite: **31 files / 265 Vitest tests PASS**. Node protocol/source tests: **27 PASS**. Typecheck and Vite build: PASS. Studio worker, page static/runtime traps, and desktop checks: PASS, with zero unexpected external requests.
 - Real native browser flow against the retained dual-c131 artifact (`9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192):
   - First reply `I.`: **3 completion / 18 prompt / 21 total tokens**, 313.6 tok/s, TTFT 8.966 ms, elapsed 9.568 ms.
   - ArrowUp restored `Hi`; Shift+Enter added a second line; the second `I.` reply: **3 / 38 / 41**, 167.7 tok/s, TTFT 17.170 ms, elapsed 17.891 ms.
@@ -37,7 +38,7 @@ Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/stud
 
 ## Checks run at the head
 
-The implementation is committed as `f2c3b84e4a68fc375ca2e7718dd241e934f4afa0`. Final merged-head repository gates, claim wording, roadmap check, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external verification records and will be posted on the PR only after they exist. They are not claimed in this REPORT.
+The original implementation and first review repairs are committed through `2b15f8a3c6fa4500db782d6f14396b7cf16e49d5`; the second repair pass is committed separately. The final exact head, repository gates, claim wording, roadmap check, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external verification records and will be posted on the PR only after they exist. They are not claimed in this REPORT.
 
 ## Skills used
 
