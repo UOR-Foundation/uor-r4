@@ -25,7 +25,7 @@ Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-ima
 
 - Vision: **9/9 unit + doc tests PASS**, formatting and Clippy `-D warnings` PASS. Fixtures cover exact 1×1 bytes/hash, uniform/asymmetric/odd/horizontal/vertical/alpha values, Q12 signs, deterministic repeat, controlled pixel changes, strict canonical validation, and bounds/overflow.
 - Native: **14/14 OpenAI integration tests PASS** and **451 library/binary tests PASS, 1 ignored**. Exact decomposition, changed hashes, capabilities, strict extension errors, context overflow, and all previous routes/admission are covered.
-- Studio: **33 files / 276 Vitest tests PASS**, **30 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime page checks and desktop checks PASS with zero unexpected external requests. Custom `image_url` and native R4 content parts survive normalization; provider errors remain verbatim.
+- Studio: **33 files / 276 Vitest tests PASS**, **33 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime page checks and desktop checks PASS with zero unexpected external requests. Custom `image_url` and native R4 content parts survive normalization; provider errors remain verbatim.
 - Native serving audit: **FULL PASS**, 96 symbol ranges and 239 reachable functions, zero forbidden instructions; integer multiply/divide remains within D80/D81. Updated release SHA-256 `197bd998525dcd7b0aed49a9a04f0935fae897e6d526ae280263649bdd506b76`.
 - Updated WASM: **7/7 serving audit PASS**, zero floats; 675,518 bytes, SHA-256 `3439aa1023e6b9346bc29fdc3d4b92153d40415e2fa5c7009df15b98cd91df09`. Studio worker passes against this exact bundle.
 
