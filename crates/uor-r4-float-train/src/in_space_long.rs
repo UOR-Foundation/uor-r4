@@ -14542,7 +14542,7 @@ mod tests {
     }
 
     /// claude-262: one training step as served reaches every projection that reads a requantized
-    /// activation. Each layer's `mlp.down.weight` and `rec.out.weight` gets a gradient whose norm
+    /// activation. Each layer's `mlp.down` and `rec.out` table gets a gradient whose norm
     /// is within 4x of the plain step's, from the same initial values, and never 0. Before, the
     /// served stand-in rounded those activations to whole numbers, so most of them were 0 and so
     /// was the gradient of the weight that reads them.
@@ -14583,8 +14583,10 @@ mod tests {
             crate::flock_read_hamming::set_hamming_reads(None);
             crate::flock_read_memory::set_turn_memory(None);
             let mut arm = Vec::new();
+            // The FBS trunk holds each projection as its SpiralCore table, `….spiralcore_fbs`,
+            // in place of the dense `….weight`.
             for layer in 0..model.config.layers() {
-                for table in ["mlp.down.weight", "rec.out.weight"] {
+                for table in ["mlp.down.spiralcore_fbs", "rec.out.spiralcore_fbs"] {
                     let name = format!("layers.{layer:02}.{table}");
                     let var = model
                         .variables()
