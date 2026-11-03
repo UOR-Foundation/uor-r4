@@ -978,14 +978,31 @@ fn next_forced_call(blocks: usize) -> std::result::Result<Option<Vec<u8>>, Strin
     })
 }
 
+/// Blocks per pass of [`icosian_snap_cuda_tensor`]. A pass scores its blocks against all 120 roots
+/// (`blocks × 120 × 4` floats, about 0.5 GB here), so the pass size bounds memory and changes no
+/// root. At 8,192 a batch-16 training gate (`3,072 × 384` lanes) took 36 passes, and the D11
+/// snaps' passes made the served step 7.6× plain (claude-262's profile, about 0.56 ms a pass).
+#[cfg(feature = "cuda")]
+const SNAP_PASS_BLOCKS: usize = 1 << 18;
+
 /// Snaps a contiguous F32 tensor of shape `(..., 4 * K)` to its nearest unit icosians in `I_120` on CUDA.
 #[cfg(feature = "cuda")]
 pub fn icosian_snap_cuda_tensor(device: &CudaDevice, gate: &Tensor) -> candle_core::Result<Tensor> {
+    icosian_snap_in_passes(device, gate, SNAP_PASS_BLOCKS)
+}
+
+/// [`icosian_snap_cuda_tensor`] in passes of `chunk_size` blocks. Every step is per block, so the
+/// roots do not depend on `chunk_size`.
+#[cfg(feature = "cuda")]
+fn icosian_snap_in_passes(
+    device: &CudaDevice,
+    gate: &Tensor,
+    chunk_size: usize,
+) -> candle_core::Result<Tensor> {
     let total = gate.elem_count();
     let blocks = total / 4;
     let gate_2d = gate.reshape((blocks, 4))?;
     let (roots_120_4, roots_1_120_4) = cached_device_icosians(device)?;
-    let chunk_size = 8192usize;
     let mut chunks = Vec::with_capacity(blocks.div_ceil(chunk_size));
     let dev = Device::Cuda(device.clone());
     let capturing = is_capturing_snaps();
@@ -3441,6 +3458,51 @@ mod tests {
                 (f64::from(g) - f64::from(v)).abs() <= 2f64.powi(-17),
                 "{v} reached the weight after it as {g}"
             );
+        }
+        Ok(())
+    }
+
+    /// The snap's pass size changes only its cost (claude-262): a batch-16 training gate snaps in
+    /// at most two passes, to the same roots bit for bit as in the old 8,192-block passes, on
+    /// spread blocks, zero and −0.0 blocks, and two equal lanes, where the two golden roots that
+    /// swap them score equal bit for bit.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn icosian_snap_pass_size_changes_only_its_cost_on_cuda() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let Device::Cuda(cuda) = &device else {
+            unreachable!("a CUDA device")
+        };
+        let (rows, lanes) = (16 * 192, 384usize);
+        let blocks = rows * lanes / 4;
+        assert!(blocks.div_ceil(SNAP_PASS_BLOCKS) <= 2, "{blocks} blocks");
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut values = Vec::with_capacity(blocks * 4);
+        for block in 0..blocks {
+            match block % 8 {
+                0 => values.extend([0.0f32; 4]),
+                1 => values.extend([-0.0f32, 0.0, -0.0, 0.0]),
+                2 => values.extend([0.75f32, 0.75, 0.0, 0.0]),
+                _ => {
+                    for _ in 0..4 {
+                        state = state
+                            .wrapping_mul(6_364_136_223_846_793_005)
+                            .wrapping_add(1_442_695_040_888_963_407);
+                        values.push((state >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0);
+                    }
+                }
+            }
+        }
+        let gate = Tensor::from_vec(values, (rows, lanes), &device)?;
+        let before = icosian_snap_in_passes(cuda, &gate, 8192)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        let after = icosian_snap_cuda_tensor(cuda, &gate)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        assert_eq!(before.len(), after.len());
+        for (i, (b, a)) in before.iter().zip(&after).enumerate() {
+            assert_eq!(b.to_bits(), a.to_bits(), "block {}", i / 4);
         }
         Ok(())
     }
