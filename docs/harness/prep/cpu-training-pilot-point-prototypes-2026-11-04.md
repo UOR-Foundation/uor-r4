@@ -1,6 +1,6 @@
 # Target-local point prototypes on unseen opening keys
 
-**Status:** DRAFT
+**Status:** FIT
 
 ## Question
 
@@ -304,4 +304,20 @@ qualification or establishes complete replies, fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
-Pending independent review.
+TEST FITNESS: FIT - M2 #2030 target-local point prototypes
+sheet: `docs/harness/prep/cpu-training-pilot-point-prototypes-2026-11-04.md`
+head: `2d30dad9c0011ea0b9bd38d38793e066323e3c57`
+implementation pin: `34103fab4bcbfac97adfcc8c3fbecaa8318ba62f`
+reviewer: Codex fresh-context non-author
+note: two-seed D84 screen; training-only target-local medoid plus farthest
+residual, fixed unseen-key split, point-off and matched shuffled-target
+controls, both-build deterministic repeat, all-60 treatment exposure, row-wise
+distance equality, complete CPU/serving parity, fail-closed RSS measurement,
+two-seed paired bar, 30 GiB plus 128 MiB floor, and cumulative resource-ledger
+chain
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone
+before compute.
