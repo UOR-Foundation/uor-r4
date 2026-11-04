@@ -6,9 +6,9 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 ## Goal
 
 Test a writer-cell termination rule after the single-radius point gate closed
-negative. For every teacher-forced training query, derive the 256-way writer
-cell from the nearest first and last orbit-root scores, exactly as the writer
-admits its cell. Count terminal and nonterminal
+negative. For every teacher-forced training query, derive the writer's top
+admission cell from its nearest first and last orbit-root scores. Count
+terminal and nonterminal
 training rows per cell and learn only cells with strictly more terminal than
 nonterminal evidence. At decode, a generated query in a learned cell names the
 BOS stop sentinel.
@@ -28,12 +28,12 @@ not the failed point radius.
 
 ## Registered mechanism
 
-- The writer cell is `first_root * 16 + last_root`, where each root is the
-  lowest-index orbit root with the minimum L1 distance to the query's first or
-  last eight Q12 coordinates, exactly as the writer ranks admission cells.
+- The writer cell is the top-ranked of 256 first-root / last-root admission
+  cells under the writer's exact score and tie order.
 - Corpus EOS id 1 identifies the terminal row; prompt-final and earlier
   reply-content rows are nonterminal.
-- A cell is learned only when its terminal count is greater than its
+- This is a cell-local terminal-majority rule, not a class-normalized rate: a
+  cell is learned only when its terminal count is greater than its
   nonterminal count. Ties and nonterminal-majority cells are excluded.
 - The matched control has the same number of cells, sampled deterministically
   without replacement from observed cells outside the learned set using the
@@ -47,7 +47,7 @@ not the failed point radius.
 
 1. Gate derivation uses training examples only and deterministically records
    cell counts, selected cells, excluded ties/losses and control identity.
-2. Finite tests cover cell derivation, density selection, deterministic
+2. Finite tests cover cell derivation, local-majority selection, deterministic
    shuffled control, exact cell override, no override outside the set,
    premature-stop accounting, real decode stop behavior and no-gate digest
    preservation.

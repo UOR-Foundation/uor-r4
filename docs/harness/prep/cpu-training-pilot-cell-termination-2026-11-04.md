@@ -4,10 +4,10 @@
 
 ## Question
 
-Can terminal-versus-nonterminal density in the writer's 256 admission cells
-stop complete replies after the single-radius point gate closed negative? At
-served decode, name the BOS stop sentinel when a generated query maps to a
-learned cell. Compare the learned cell set with no gate and an equal-size
+Can a local terminal majority in the writer's 256 admission cells stop
+complete replies after the single-radius point gate closed negative? At served
+decode, name the BOS stop sentinel when a generated query maps to a learned top
+writer cell. Compare the learned cell set with no gate and an equal-size
 shuffled-cell control on both public model seeds.
 
 This changes the termination decision from point distance to cell-density
@@ -63,16 +63,14 @@ capability claim.
 
 For every prompt-final and reply-content training query:
 
-- score the first eight Q12 coordinates against all 16 writer roots and choose
-  the minimum-L1 root, with the lower root index on a tie;
-- do the same for the final eight coordinates;
-- map the roots to `first_root * 16 + last_root`, the writer's 256-cell
-  admission coordinate;
+- use the writer's exact admission scoring to choose its single highest-ranked
+  cell among the 256 first-root / last-root coordinates;
 - count prompt-final and earlier reply-content queries as nonterminal;
 - count the final content row before corpus EOS as terminal.
 
-A cell is learned only when its terminal count is strictly greater than its
-nonterminal count. Equal and nonterminal-majority cells are excluded.
+This is a cell-local terminal-majority rule: a cell is learned only when its
+terminal count is strictly greater than its nonterminal count. Equal and
+nonterminal-majority cells are excluded. It is not a class-normalized rate.
 
 The matched control has exactly the learned set's number of cells, sampled
 deterministically without replacement from distinct observed cells outside
@@ -122,8 +120,10 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 ## Instrument bar
 
 - The trained artifacts, selection and no-gate digests reproduce exactly.
-- Cell derivation uses training examples only; every root and cell is
-  deterministic, and the cell mapping matches the writer's admission scores.
+- Cell derivation uses training examples only; the mapping is the writer's
+  top admitted cell and finite tests compare it with the shared
+  writer-admission implementation on root-aligned, arbitrary and tie-shaped
+  queries.
 - Learned cells all have terminal count greater than nonterminal count.
 - The shuffled control is the same size, disjoint from the learned set and
   byte-wise different for a nonempty learned gate.

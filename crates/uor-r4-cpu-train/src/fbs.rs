@@ -341,28 +341,11 @@ impl CpuFbsForward {
         if query.len() != self.width {
             return Err(invalid("writer cell query width differs"));
         }
-        let root_score = |left: &[i32], right: &[i32]| -> i64 {
-            left.iter()
-                .zip(right)
-                .fold(0i64, |sum, (&left, &right)| {
-                    sum.wrapping_add(i64::from(left.abs_diff(right)))
-                })
-                .wrapping_neg()
-        };
-        let nearest = |block: &[i32]| {
-            let mut best = 0usize;
-            for root in 1..16 {
-                if root_score(block, &self.roots_q12[root])
-                    > root_score(block, &self.roots_q12[best])
-                {
-                    best = root;
-                }
-            }
-            best
-        };
-        let first = nearest(&query[..8]);
-        let last = nearest(&query[self.width - 8..]);
-        Ok((first * 16 + last) as u16)
+        writer_cells(query, &self.roots_q12, 1)
+            .first()
+            .copied()
+            .and_then(|cell| u16::try_from(cell).ok())
+            .ok_or_else(|| invalid("writer cell query admitted no cell"))
     }
 
     pub(crate) fn context_length(&self) -> usize {
@@ -1399,6 +1382,36 @@ mod tests {
         let model = IntegerStackModel::parse(&bytes).unwrap();
         let cpu = CpuFbsForward::from_model(&model).unwrap();
         (model, cpu)
+    }
+
+    #[test]
+    fn termination_cell_is_the_top_writer_admission_cell() {
+        let (_, forward) = fixture(17, 1, false);
+        let width = forward.width();
+        let roots = forward.writer_roots();
+        let mut aligned = vec![0i32; width];
+        aligned[..8].copy_from_slice(&roots[3]);
+        aligned[width - 8..].copy_from_slice(&roots[7]);
+        let mut tie = vec![0i32; width];
+        for channel in 0..8 {
+            tie[channel] = (roots[0][channel] + roots[1][channel]) / 2;
+            tie[width - 8 + channel] = (roots[2][channel] + roots[3][channel]) / 2;
+        }
+        let mut pseudo = vec![0i32; width];
+        let mut state = 0x1234_5678_9abc_def0u64;
+        for value in &mut pseudo {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            *value = (state % 40_001) as i32 - 20_000;
+        }
+        for query in [aligned, tie, vec![0; width], pseudo] {
+            let expected = writer_cells(&query, roots, forward.kept_cell_count())[0];
+            assert_eq!(
+                u32::from(forward.writer_query_cell(&query).unwrap()),
+                expected
+            );
+        }
     }
 
     fn assert_parity(seed: u64, layers: usize, head: CpuFbsHead) {
