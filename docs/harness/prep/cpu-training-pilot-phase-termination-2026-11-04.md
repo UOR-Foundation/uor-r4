@@ -1,6 +1,6 @@
 # Phase-transition termination readout
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -8,8 +8,9 @@ Does a phase-aligned transition between consecutive generated geometric states
 separate reply endpoints from ordinary continuation better than the closed
 current-state density and remaining-horizon representations?
 
-This is D84 CPU development research on the Ryzen 9 9950X. It does not change
-integer serving, `UORLUT01`, CUDA, float training or Claude-owned source.
+This is D84 CPU development research on the Ryzen 9 9950X. It uses the existing
+serving-parity controls but does not change integer serving, `UORLUT01`, CUDA,
+float training or Claude-owned source.
 
 ## Compute class
 
@@ -176,6 +177,16 @@ sha256sum -c <(printf '%s\n' \
   'a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  '"$DEV"'/dev-response-mask.u8' \
   'ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab  '"$DEV"'/dev-manifest.json') --quiet
 mkdir -p "$PIPELINE"
+seal_pipeline() {
+  (
+    cd "$PIPELINE"
+    find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
+      sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
+    mv SHA256SUMS.tmp SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+trap 'status=$?; trap - EXIT; seal_pipeline || status=$?; exit "$status"' EXIT
 
 /usr/bin/time -v -o "$PIPELINE/build.time.txt" \
   env CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
@@ -244,11 +255,15 @@ run_arm() {
       --reply-cap 16 --stop-phase-neighbors 8 --seed 1 \
       >"$PIPELINE/$label.stdout.json"
   test "$(jq -r '.peak_rss_kib' "$PIPELINE/$label/report.json")" -le 1048576
-  jq -e '.bar.gate_density.passes == true' "$PIPELINE/$label/report.json" >/dev/null
 }
 run_arm 1 seed-1 32 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 run_arm 2 seed-2 32 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 run_arm 1 seed-1-repeat 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+
+SEED_1_PASS=$(jq -r '.bar.gate_density.passes == true' "$PIPELINE/seed-1/report.json")
+SEED_2_PASS=$(jq -r '.bar.gate_density.passes == true' "$PIPELINE/seed-2/report.json")
+printf '{"seed_1_passes":%s,"seed_2_passes":%s}\n' \
+  "$SEED_1_PASS" "$SEED_2_PASS" >"$PIPELINE/bar-summary.json"
 
 jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
   "$PIPELINE/seed-1/report.json" >"$PIPELINE/seed-1.normalized.json"
@@ -263,9 +278,8 @@ done < <(find "$PIPELINE/seed-1" -maxdepth 1 -type f -name '*.json' \
 test "$(du -sb "$PIPELINE" | cut -f1)" -le 201326592
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
-(cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
-  sort -z | xargs -0 -r sha256sum >SHA256SUMS &&
-  sha256sum -c SHA256SUMS --quiet)
+test "$SEED_1_PASS" = true
+test "$SEED_2_PASS" = true
 ```
 
 Stop before seed 2 when any preflight condition fails. Seal every generated
