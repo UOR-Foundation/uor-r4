@@ -9,7 +9,7 @@
   "complete_projection_seconds": 1320,
   "cumulative_projected_seconds": 35953,
   "lab_cumulative_projection_seconds": 1320,
-  "previous_ledger": "docs/labs/infra-k16-normal-close-accounting/resource-ledger.json",
+  "previous_ledger": "infra-k16-normal-close-accounting/resource-ledger.json",
   "cost_kind": "local CPU resource projection, not an invoice",
   "rate_usd_per_hour": 0,
   "approx_gpu_cost_usd": 0,
@@ -48,7 +48,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-130/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-point-prototypes-2026-11-04.md",
-    "implementation_pin": "49a81fe9d415fedf5c96bd2b91dcff108e569df5"
+    "implementation_pin": "34103fab4bcbfac97adfcc8c3fbecaa8318ba62f"
   },
   "normal_close": {
     "gpu_pods": 0,

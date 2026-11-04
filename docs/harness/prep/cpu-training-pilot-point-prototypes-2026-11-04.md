@@ -22,7 +22,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `49a81fe9d415fedf5c96bd2b91dcff108e569df5` |
+| implementation source | `34103fab4bcbfac97adfcc8c3fbecaa8318ba62f` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -132,12 +132,13 @@ then a seed-1 repeat with build B, into fresh output roots under
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-point-prototypes
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=49a81fe9d415fedf5c96bd2b91dcff108e569df5
+SOURCE_PIN=34103fab4bcbfac97adfcc8c3fbecaa8318ba62f
 PIPELINE=$SHARED/local/deepseek/point-prototypes/2026-11-04-attempt-1
 BUILD_A=$SOURCE/target/deepseek/point-prototypes-build-130-a
 BUILD_B=$SOURCE/target/deepseek/point-prototypes-build-130-b
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
+HARNESS=$SHARED/local/harness-target/release/uor-harness
 MIN_BUILD_FREE_KIB=37748736
 MIN_RESERVE_KIB=31588352
 MAX_BUILD_BYTES=5368709120
@@ -149,6 +150,11 @@ free_kib() {
 }
 test "$(free_kib "$SOURCE")" -ge "$MIN_BUILD_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_BUILD_FREE_KIB"
+test "$("$HARNESS" budget show --json | jq -r '.model_time_ledger.present')" = false
+test "$("$HARNESS" budget show --json | jq -r '.resource_ledger.chain.head')" \
+  = "cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json"
+test "$("$HARNESS" budget show --json | jq -r '.resource_ledger.chain.cumulative_projected_seconds')" \
+  = 35953
 test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN rustc --version)" = \
   "rustc 1.97.1 (8bab26f4f 2026-07-14)"
 test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN cargo --version)" = \
