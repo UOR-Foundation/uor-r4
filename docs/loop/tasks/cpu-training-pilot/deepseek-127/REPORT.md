@@ -102,6 +102,10 @@ sets.
   timeout and strict RSS gates.
 - Prep shell syntax, evidence checksum reconstruction and `git diff --check`
   passed.
+- Full loop gates: **11/11 green**. Report, roadmap (139 items), documentation
+  catalog (1,175 records) and D23/D25/D32 ratchets passed.
+- `uor-harness check`: 0 errors and 135 pre-existing warnings, chiefly stale
+  claims, old merged branches and old presence records outside this unit.
 
 ## Skills used
 
