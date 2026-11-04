@@ -359,7 +359,7 @@ fn run() -> Result<serde_json::Value, String> {
 fn read_hashed(path: &PathBuf, expected: &str) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let actual = uor_r4_discrete::corpus::sha256(&bytes);
-    if &actual != expected {
+    if actual != expected {
         return Err(format!("{} SHA-256 differs: {actual}", path.display()));
     }
     Ok(bytes)
