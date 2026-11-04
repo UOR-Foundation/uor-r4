@@ -43,6 +43,11 @@ const REQUIRED_STAGES: [&str; 21] = [
     "table_verification",
     "training_row_derivation",
 ];
+type TrunkSemantics = (
+    Vec<u8>,
+    uor_r4_discrete::position_mechanism::PositionStepTable,
+    uor_r4_discrete::normalization_mechanism::NormFrameTable,
+);
 
 #[derive(Clone)]
 struct Config {
@@ -392,28 +397,44 @@ fn run(config: Config) -> Result<serde_json::Value, String> {
         return Err("exact and shuffled count training produced the same artifact".to_owned());
     }
 
-    let source_semantics = semantics(&artifact)?;
+    let (source_semantics, source_trunk_tables) = trunk_reading(&artifact)?;
+    let source_tables = table_reading(&source_trunk_tables);
+    let expected_exact_tables = expected_count_tables(source_trunk_tables, &training)?;
     let exact_artifact =
         std::fs::read(config.out.join("exact.uorlut")).map_err(|error| error.to_string())?;
-    if semantics(&exact_artifact)? != source_semantics {
-        return Err("count training changed a non-count trunk section".to_owned());
-    }
-    if trunk_tables(&exact_artifact)? != expected_count_tables(&artifact, &training)? {
-        return Err("decoded count tables differ from the independent tally".to_owned());
-    }
-    let source_tables = table_reading(&artifact)?;
-    let exact_tables = table_reading(&exact_artifact)?;
+    let (exact_semantics, exact_trunk_tables) = trunk_reading(&exact_artifact)?;
+    require_same(
+        &exact_semantics,
+        &source_semantics,
+        "count training changed a non-count trunk section",
+    )?;
+    require_same(
+        &exact_trunk_tables,
+        &expected_exact_tables,
+        "decoded count tables differ from the independent tally",
+    )?;
+    let exact_tables = table_reading(&exact_trunk_tables);
+    drop(exact_trunk_tables);
+    drop(expected_exact_tables);
     drop(exact_artifact);
     stages.lap("exact_verify")?;
+    let expected_shuffled_tables = expected_count_tables(trunk_tables(&artifact)?, &shuffled)?;
     let shuffled_artifact =
         std::fs::read(config.out.join("shuffled.uorlut")).map_err(|error| error.to_string())?;
-    if semantics(&shuffled_artifact)? != source_semantics {
-        return Err("shuffled count training changed a non-count trunk section".to_owned());
-    }
-    if trunk_tables(&shuffled_artifact)? != expected_count_tables(&artifact, &shuffled)? {
-        return Err("shuffled count tables differ from the independent tally".to_owned());
-    }
-    let shuffled_tables = table_reading(&shuffled_artifact)?;
+    let (shuffled_semantics, shuffled_trunk_tables) = trunk_reading(&shuffled_artifact)?;
+    require_same(
+        &shuffled_semantics,
+        &source_semantics,
+        "shuffled count training changed a non-count trunk section",
+    )?;
+    require_same(
+        &shuffled_trunk_tables,
+        &expected_shuffled_tables,
+        "shuffled count tables differ from the independent tally",
+    )?;
+    let shuffled_tables = table_reading(&shuffled_trunk_tables);
+    drop(shuffled_trunk_tables);
+    drop(expected_shuffled_tables);
     drop(shuffled_artifact);
     stages.lap("shuffled_verify")?;
     for (name, source) in &source_tables {
@@ -552,27 +573,32 @@ fn shuffled_targets(targets: &[u32], seed: u64) -> Result<Vec<u32>, String> {
     Ok(out)
 }
 
-fn semantics(
-    artifact: &[u8],
-) -> Result<
-    (
-        Vec<u8>,
-        uor_r4_discrete::position_mechanism::PositionStepTable,
-        uor_r4_discrete::normalization_mechanism::NormFrameTable,
-    ),
-    String,
-> {
-    let (snapshot, steps, norms, _) =
+fn trunk_reading(artifact: &[u8]) -> Result<(TrunkSemantics, TrunkTables), String> {
+    let (snapshot, steps, norms, tables) =
         import_trunk_d11(artifact).map_err(|error| error.to_string())?;
     Ok((
-        serde_json::to_vec(&snapshot).map_err(|error| error.to_string())?,
-        steps,
-        norms,
+        (
+            serde_json::to_vec(&snapshot).map_err(|error| error.to_string())?,
+            steps,
+            norms,
+        ),
+        tables,
     ))
 }
 
-fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, String> {
-    let tables = trunk_tables(artifact)?;
+fn require_same<T: PartialEq>(
+    actual: &T,
+    expected: &T,
+    mismatch: &'static str,
+) -> Result<(), String> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(mismatch.to_owned())
+    }
+}
+
+fn table_reading(tables: &TrunkTables) -> BTreeMap<String, TableReading> {
     let mut out = BTreeMap::new();
     out.insert(
         "unigram".to_owned(),
@@ -589,7 +615,7 @@ fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, Stri
                 .count(),
         },
     );
-    for (name, table) in sparse_tables(&tables) {
+    for (name, table) in sparse_tables(tables) {
         out.insert(
             name.to_owned(),
             TableReading {
@@ -598,7 +624,7 @@ fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, Stri
             },
         );
     }
-    Ok(out)
+    out
 }
 
 fn trunk_tables(artifact: &[u8]) -> Result<TrunkTables, String> {
@@ -607,8 +633,10 @@ fn trunk_tables(artifact: &[u8]) -> Result<TrunkTables, String> {
         .map_err(|error| error.to_string())
 }
 
-fn expected_count_tables(artifact: &[u8], rows: &[TrunkTrainRow]) -> Result<TrunkTables, String> {
-    let mut tables = trunk_tables(artifact)?;
+fn expected_count_tables(
+    mut tables: TrunkTables,
+    rows: &[TrunkTrainRow],
+) -> Result<TrunkTables, String> {
     for row in rows {
         let target = usize::from(row.target_token);
         if target >= tables.unigram_counts.len() {
@@ -905,6 +933,42 @@ mod tests {
         assert!(extra
             .reading(started.elapsed().as_secs_f64() * 1_000.0)
             .is_err());
+    }
+
+    #[test]
+    fn consolidated_verification_builds_and_checks_one_table_set() {
+        let source_row = TrunkTrainRow {
+            read_code: 1,
+            rec_code: 2,
+            rec_shuf_code: 3,
+            rec_unit_code: 4,
+            query_token: 5,
+            target_token: 6,
+        };
+        let added_row = TrunkTrainRow {
+            read_code: 7,
+            rec_code: 8,
+            rec_shuf_code: 9,
+            rec_unit_code: 10,
+            query_token: 11,
+            target_token: 12,
+        };
+        let source = TrunkTables::build(&[source_row]).unwrap();
+        let source_summary = table_reading(&source);
+        let expected = expected_count_tables(source, &[added_row]).unwrap();
+        let expected_summary = table_reading(&expected);
+        assert_eq!(source_summary.len(), 13);
+        assert_eq!(expected_summary.len(), 13);
+        assert_eq!(expected_summary["unigram"].total, 2);
+        assert!(require_same(&expected, &expected, "tables differ").is_ok());
+
+        let wrong = TrunkTables::build(&[TrunkTrainRow {
+            target_token: 13,
+            ..added_row
+        }])
+        .unwrap();
+        assert!(require_same(&wrong, &expected, "tables differ").is_err());
+        assert!(require_same(&1u8, &2u8, "semantics differ").is_err());
     }
 
     #[test]
