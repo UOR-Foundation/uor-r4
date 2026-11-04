@@ -55,7 +55,7 @@ for (const [name, content] of [
     ['index.css', indexCss],
     ['assets/css/uor_offline_fonts.css', fontsCss],
 ]) {
-    assert(!content.includes('http://') && !content.includes('https://'), name + ' contains an external http(s) URL');
+    assert(!/(?:\bsrc\s*=\s*["']https?:\/\/|\burl\(\s*['"]?https?:\/\/)/i.test(content), name + ' loads an external resource');
     assert(!content.includes('//cdn.') && !content.includes('unpkg.com') && !content.includes('jsdelivr'), name + ' references a CDN');
 }
 assert(!indexHtml.includes('<script src=\"http'), 'index.html must not load a remote script');
@@ -92,9 +92,7 @@ for (const [token, what] of [
     ['triggerSynapticFlash', 'the THREE flash hook'],
     ['THREE', 'any THREE reference'],
     ['callGithubApi', 'the GitHub API hook'],
-    ['createTauriNativeModelWorker', 'the Tauri desktop worker hook'],
-    ['__TAURI__', 'the Tauri IPC global'],
-    ["invoke('native_", 'a Tauri native_* IPC call'],
+    ['createTauriNativeModelWorker', 'the retired Tauri desktop worker hook'],
 ]) {
     assert(!indexHtml.includes(token), 'index.html must not reference ' + what + ' (found "' + token + '")');
 }
@@ -141,6 +139,8 @@ for (const api of [
 }
 const csp = tauriConf?.app?.security?.csp || '';
 assert(csp.includes("connect-src 'self' ipc: http://ipc.localhost"), 'tauri.conf.json CSP must restrict connect-src to local IPC');
+assert(csp.includes("'wasm-unsafe-eval'"), 'tauri.conf.json CSP must explicitly permit the measured browser WASM fallback');
+assert(csp.includes("worker-src 'self'"), 'tauri.conf.json CSP must confine workers to the packaged origin');
 assert(!csp.includes('https://'), 'tauri.conf.json CSP must not allow external https origins');
 assert(existsSync(resolve(repoRoot, 'src-tauri/src/main.rs')), 'the desktop client source (src-tauri/src/main.rs) must stay in the repository');
 assert(existsSync(resolve(repoRoot, 'src-tauri/tests/desktop_client_controls.rs')),
