@@ -54,6 +54,7 @@ struct OpeningReading {
 struct OpeningOutcome {
     top1: bool,
     target_distance: u64,
+    token: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -406,6 +407,25 @@ fn run() -> Result<serde_json::Value, String> {
     if opening_distances.len() != 1 {
         return Err("point fallback changed the opening query distance".to_owned());
     }
+    let point_fallback_exposure = arms
+        .iter()
+        .map(|(name, _)| *name)
+        .filter(|name| *name != "point_off")
+        .map(|name| {
+            let changed = opening_outcomes[name]
+                .iter()
+                .zip(&opening_outcomes["point_off"])
+                .filter(|(candidate, off)| candidate.token != off.token)
+                .count();
+            (name, changed)
+        })
+        .collect::<BTreeMap<_, _>>();
+    if point_fallback_exposure
+        .values()
+        .any(|&changed| changed == 0)
+    {
+        return Err("a point-key arm never changed the served opening".to_owned());
+    }
     let neighbor = if config.neighbor_vote == 0 {
         None
     } else {
@@ -549,6 +569,7 @@ fn run() -> Result<serde_json::Value, String> {
                 && medoid_vs_random["passes"].as_bool() == Some(true)
                 && medoid_full_not_lower,
         },
+        "point_fallback_exposure": point_fallback_exposure,
         "neighbor_vote": {
             "k": config.neighbor_vote,
             "reading": neighbor,
@@ -1196,6 +1217,7 @@ fn evaluate_opening_outcomes(
             Ok(OpeningOutcome {
                 top1: step.token == target,
                 target_distance: distance,
+                token: step.token,
             })
         })
         .collect::<Result<Vec<_>, String>>()
@@ -1307,13 +1329,13 @@ mod tests {
     fn target_medoids_choose_observed_minimum_l1_members_deterministically() {
         let point = PointKeyImage {
             width: 2,
-            points: vec![0, 0, 1, 0, 4, 0, 2, 0, 2, 2],
-            targets: vec![7, 7, 7, 8, 8],
+            points: vec![0, 0, 1, 0, 4, 0, 2, 0, 2, 2, 2, 0],
+            targets: vec![7, 7, 7, 8, 8, 9],
             vote_k: 1,
         };
         let medoid = derive_target_medoids(&point).unwrap();
-        assert_eq!(medoid.points, vec![1, 0, 2, 0]);
-        assert_eq!(medoid.targets, vec![7, 8]);
+        assert_eq!(medoid.points, vec![1, 0, 2, 0, 2, 0]);
+        assert_eq!(medoid.targets, vec![7, 8, 9]);
         assert_eq!(medoid.vote_k, 1);
         assert_eq!(medoid, derive_target_medoids(&point).unwrap());
 
@@ -1349,6 +1371,7 @@ mod tests {
         let outcome = |top1| OpeningOutcome {
             top1,
             target_distance: 0,
+            token: 0,
         };
         let candidate = [
             outcome(true),

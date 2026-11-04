@@ -111,25 +111,50 @@ point-fallback invariant.
 
 ## Steps
 
-The following runs only after FIT. Build once in a fresh release target, bind
-the binary hash, then execute seed 1, seed 2 and a seed-1 repeat into fresh
-output roots:
+The following runs only after FIT. It builds once in a fresh release target,
+binds the binary hash, and executes seed 1, seed 2 and a seed-1 repeat into
+fresh output roots under
+`local/deepseek/point-medoid/2026-11-04-attempt-1/`:
 
 ```sh
-cargo build --release --locked -p uor-r4-cpu-train \
-  --bin cpu-point-transfer-driver
-RAYON_NUM_THREADS=32 target/release/cpu-point-transfer-driver \
-  ARTIFACT TOKENS MASK MANIFEST OUT \
-  --expected-artifact-sha256 ARTIFACT_PIN \
-  --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
-  --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
-  --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
-  --train-keys 8 --evaluation-keys 8 --per-key 8 \
-  --key-tokens 8 --reply-turn 8 --random-seed 1
+set -euo pipefail
+ROOT=/home/callard/projects/codex-playground/uor-r4
+PIPELINE=$ROOT/local/deepseek/point-medoid/2026-11-04-attempt-1
+BUILD=$ROOT/target/deepseek/point-medoid-build-123
+DEV=$ROOT/local/deepseek/public-m1-parity
+DUAL=$ROOT/local/deepseek/public-fbs-dual
+test ! -e "$PIPELINE"
+test ! -e "$BUILD"
+CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+  -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+BIN="$BUILD/release/cpu-point-transfer-driver"
+BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+run() {
+  seed=$1 artifact_pin=$2 out=$3
+  test ! -e "$out"
+  /usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 \
+    "$BIN" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
+    "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" \
+    "$DEV/dev-manifest.json" "$out" \
+    --expected-artifact-sha256 "$artifact_pin" \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --train-keys 8 --evaluation-keys 8 --per-key 8 \
+    --key-tokens 8 --reply-turn 8 --neighbor-vote 8 --random-seed 1
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
+}
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
+run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
+diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
+  <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
 ```
 
-Exact artifact pins and output roots are fixed in the implementation before the
-run. The seed-1 repeat differs only in output root.
+The seed-1 repeat differs only in output root. Any source, binary, argument,
+output-root or deterministic mismatch is an instrument fault requiring a new
+FIT before retry.
 
 ## Minimum test power
 
