@@ -18,7 +18,7 @@ paid API. This is not GPU qualification or language-quality evidence.
 
 | Input | Identity |
 |---|---|
-| implementation source | `TBD_BEFORE_FIT` |
+| implementation source | `bdf26f616af32ce0c643cbd93a69f8aa8b364d5d` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -30,10 +30,11 @@ The corpus files are in the same directory.
 
 ## Data split and arms
 
-Use the existing document-disjoint masked-corpus split with evaluation stride
-2 and a fixed cap. Training rows are taken only from the training split;
-evaluation rows only from the held-out split. The exact train/eval counts are
-fixed by a selection-only run before FIT.
+Selection-only was run before this FIT revision and fixed the split:
+
+- 200 training documents / 7,080 eligible targets;
+- 193 evaluation documents / 512 evaluation targets at stride 2;
+- the first 128 training targets are used for count updates.
 
 Arms:
 
@@ -79,9 +80,63 @@ not a positive language result and no change is not a training failure.
 
 ## Steps
 
-The final FIT revision must replace this block with one executable build/run
-recipe naming source pin, binary hash, fresh roots, input hashes, exact split
-counts, timeout/RSS bounds, output inventory and repeat canonicalization.
+Run only after FIT. The source worktree and shared input/result root are
+separate:
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-count-training
+SHARED=/home/callard/projects/codex-playground/uor-r4
+SOURCE_PIN=bdf26f616af32ce0c643cbd93a69f8aa8b364d5d
+PIPELINE=$SHARED/local/deepseek/trunk-count/2026-11-04-attempt-1
+BUILD=$SOURCE/target/deepseek/trunk-count-build-124
+DATA=$SHARED/local/deepseek/public-m1-parity
+test -z "$(git -C "$SOURCE" status --porcelain)"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
+test ! -e "$PIPELINE"
+test ! -e "$BUILD"
+(
+  cd "$SOURCE"
+  CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+    -p uor-r4-cpu-train --bin cpu-trunk-count-driver
+)
+BIN="$BUILD/release/cpu-trunk-count-driver"
+BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+run() {
+  out=$1
+  test ! -e "$out"
+  /usr/bin/time -v timeout 600s "$BIN" \
+    "$DATA/t16-frozen-zero-seed1-trunk.d11" \
+    "$DATA/dev-tokens.u16" "$DATA/dev-response-mask.u8" \
+    "$DATA/dev-manifest.json" "$out" \
+    --expected-artifact-sha256 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --train-rows 128 --evaluation-stride 2 --max-evaluation 512 \
+    --seed 1 >/dev/null
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 2097152
+  printf '%s  cpu-trunk-count-driver\n' "$BIN_SHA" >"$out/binary.sha256"
+  (
+    cd "$out"
+    find . -type f ! -name SHA256SUMS -print0 |
+      sort -z | xargs -0 sha256sum >SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+run "$PIPELINE/seed-1"
+run "$PIPELINE/seed-1-repeat"
+cmp "$PIPELINE/seed-1/exact.uorlut" "$PIPELINE/seed-1-repeat/exact.uorlut"
+cmp "$PIPELINE/seed-1/shuffled.uorlut" "$PIPELINE/seed-1-repeat/shuffled.uorlut"
+diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
+  <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
+```
+
+The repeat removes exactly the top-level `wall_elapsed_ms` and
+`peak_rss_kib`; this report schema has no nested timing field. Any source,
+binary, argv, output-root or deterministic mismatch is an instrument fault
+requiring a new FIT.
 
 ## Minimum test power
 
@@ -92,9 +147,14 @@ capability bar is not required for this host mechanism unit.
 
 ## Cost and stop
 
-Local workstation only. Final storage/time bounds are fixed before FIT. Stop on
-artifact drift, semantic-section change, count mismatch/overflow,
-nondeterminism, output-root reuse or CPU/serving divergence.
+Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
+7.0.0-42-generic x86_64. At registration the project filesystem had
+548,723,466,240 bytes free and `/tmp` had 26,339,098,624 bytes free. The fresh
+build is capped below 3 GiB temporary storage; two output roots retain below
+400 MiB because each contains two approximately 86 MiB trunk artifacts. The
+128 MiB reserve remains intact. Each run has a 600-second timeout and 2 GiB
+peak-RSS cap. Stop on artifact drift, semantic-section change, count
+mismatch/overflow, nondeterminism, output-root reuse or CPU/serving divergence.
 
 ## Claim boundary
 
