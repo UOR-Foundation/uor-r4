@@ -114,11 +114,14 @@ and all twelve artifact copies. Raw roots remain under
 - Both public seeds and the cross-run seed-1 repeat produced passing per-root
   `SHA256SUMS`; the normalized report SHA-256 is
   `3dda35a2899ca1d8afdff6073a2ff24bd0989b0941f746ee92de3c811473b82b`.
+- Full loop gates were **11/11 green**. One `loop-drive` test hit a transient
+  `Text file busy`; the immediate rerun passed without a source or gate change.
 
 ## Skills used
 
-No system-provided Codex skill applied. Two read-only subagents were used for
-design/history separation and adversarial FIT/pre-run review.
+No system-provided Codex skill applied. Read-only subagents were used for the
+mechanism design audit and independent adversarial FIT, pre-run and final
+reviews.
 
 ## Still open
 
