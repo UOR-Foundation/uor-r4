@@ -73,8 +73,8 @@ Run `--select-only` for seeds 1 and 2 with
 
 Proceed only if, for each seed:
 
-- the horizon arm retains at least 1,568 rows, including at least 84
-  zero-horizon and 1,484 nonzero-horizon rows;
+- the horizon arm retains exactly 1,568 rows: 84 zero-horizon and 1,484
+  nonzero-horizon rows;
 - true LOO terminal recall is at least 26/84;
 - true false stops are at most the 1% nonterminal limit;
 - true horizon absolute error is strictly lower than the within-offset

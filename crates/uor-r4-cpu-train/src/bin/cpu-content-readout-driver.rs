@@ -1622,6 +1622,55 @@ mod tests {
     }
 
     #[test]
+    fn continuation_pairing_does_not_count_a_self_signature() {
+        let rows = vec![
+            ContentContinuationRow {
+                signature: signature(0),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(2),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(100),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(201),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+        ];
+        let candidate = fit_content_continuation_gate(&rows, 1).unwrap();
+        assert_eq!(
+            uor_r4_cpu_train::content_continuation_gate_prediction(
+                &candidate.gate,
+                &signature(0),
+                4
+            )
+            .unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            content_continuation_loo_prediction(&rows, 0, candidate.gate.neighbors).unwrap(),
+            Some(1)
+        );
+        let shuffled = shuffle_content_continuation_rows(&rows, 1).unwrap();
+        let control = fit_content_continuation_gate(&shuffled, 1).unwrap();
+        let paired =
+            paired_terminal_continuation_rows(&rows, &candidate, &shuffled, &control).unwrap();
+        assert_eq!(paired["candidate_sum"], 0);
+    }
+
+    #[test]
     fn terminal_pairing_threshold_uses_control_only_disagreements() {
         let mut rows = (0..5)
             .map(|_| ContentStopRow {
