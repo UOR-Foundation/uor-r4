@@ -8,6 +8,8 @@ PRE-RUN: GO WITH FIXES - claude lab, 4 Nov, two fresh non-author reviews of this
 - **First review.** Its MAJOR was that the signal trap sealed while passes still ran. The fix is in the job. A local trap test with a stub binary then caught two bugs in that fix, both now fixed: a wait that also waited on the GPU-trace logger, and a missing exit code for a pass stopped while running serially. The test passes in both modes.
 - **Second review.** Its MAJOR was that R3 measures time-slicing between processes, not room inside the kernels. R3 now decides only how the 2,048 passes are scheduled, and P3(c) is next whatever R3 reads. Its MINOR was that the grade must refuse a partial run; that lands in the grade before the read-back. It also checked `uor-store get` for files and folders, and `build.rs` at the pin: PTX is built ahead by nvcc, with no NVRTC.
 
+OUTCOME: **Inconclusive** ([claude-277](../../loop/tasks/one-model-end-to-end/claude-277/REPORT.md)). G holds in all nine comparisons and I-3 holds. B2 (211.497 s) is below min(A1, A2) = 211.690 s and B1 (226.142 s) is not; mean(A) / mean(B) is 1.118, and the two serial repeats differ by 31%. As the Bar says, the passes stay serial, and P5's pod repeats one A and one B pair. C (443.150 s) does not beat two B pairs back to back (437.639 s). R3's r is 2.389, so this line's 2,048 passes stay one at a time. P3's next unit is an exact decode cache in place of P3(b) and P3(c), by a lab decision posted on #2028 after this run launched.
+
 **What this run measures.** In P2b (claude-276), each seed scored its checkpoints in three passes, one after another, on one RTX 5090:
 - 2,624 s for (L) at 2,048, then 148 s for (L) at 192 and 138 s for (S) at 192;
 - each pass peaked at 5,296 MiB of 32 GiB;
