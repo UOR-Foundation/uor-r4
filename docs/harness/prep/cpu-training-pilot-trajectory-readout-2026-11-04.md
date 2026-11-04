@@ -20,7 +20,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | to be pinned after implementation |
+| implementation source | `e66475343ce7b0fc4ecf4a5ec3032c988c88dcb8` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -115,6 +115,13 @@ workers; wall and RSS.
 - One-worker and 32-worker generated evidence match.
 - Full CPU release tests, scoped Clippy, rustfmt and evidence manifests pass.
 
+## Minimum test power
+
+The split and model seeds are fixed. Fitting and generation are exact and
+deterministic, so a token or mapping mismatch fails the mechanism. Two trained
+artifacts and a one-worker seed-1 repeat prevent a one-seed or worker-order
+claim. The result applies only to the named public development corpus.
+
 ## Stop rules
 
 Stop on source/input/split drift, trajectory width or history mismatch,
@@ -161,7 +168,7 @@ BUILD=$SOURCE/target/deepseek/trajectory-readout-144
 CONTROL_BUILD=$SOURCE/target/deepseek/trajectory-readout-controls-144
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=TO_BE_PINNED
+IMPL_PIN=e66475343ce7b0fc4ecf4a5ec3032c988c88dcb8
 MIN_FREE_KIB=31588352
 RUNTIME_PATHS=(.cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party)
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
