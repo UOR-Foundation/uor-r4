@@ -12,4 +12,6 @@ launch and all associated loopback surfaces are covered by tests.
 
 The attempt-2 report, sidecar evidence, checksums and resource measurements
 are retained under `evidence-attempt-2/` and do not decide the unit. The
+ledger overwritten by the later deciding run is restored byte-for-byte as
+[`attempt-2-resource-ledger.json`](attempt-2-resource-ledger.json). The
 registered rerun uses pin `1be885d9d`.

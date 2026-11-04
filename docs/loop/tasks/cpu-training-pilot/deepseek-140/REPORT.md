@@ -67,6 +67,8 @@ with its original report, checksums and resource ledger. Attempt 2 at pin
 `fe253c5ca` passed the parity arm but omitted the required loopback sidecar
 identity and is retained under
 [`evidence-attempt-2/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-2/).
+Its overwritten ledger is restored byte-for-byte as
+[`attempt-2-resource-ledger.json`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/attempt-2-resource-ledger.json).
 Attempt 3 at pin `819482378` passed every parity and control assertion but
 grew its shared chat target above the registered ceiling; it remains under
 [`evidence-attempt-3/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-3/)
@@ -143,6 +145,9 @@ Build and runs:
   retain **247,496,467 bytes**, below the registered 256 MiB limit;
 - evidence `SHA256SUMS`:
   `b1e7889f305cca25973a99ccc4238b9fd53b0c6e42bd29c013b8f7677d7b3e31`.
+- measured attempt-5 compute was **75.111328644 s**, including
+  **0.041328644 s** of throughput generation loops; the five-attempt lab total
+  is **306.011328644 s** against **52,027.677487699 s** admitted cumulative.
 
 Compact evidence:
 [comparison.json](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence/comparison.json).
@@ -176,12 +181,13 @@ The source pipeline and efficiency record occupied **49,513,908 bytes**.
   diagnostics outside this unit. Its no-dependency Clippy correctness gate
   passed, all-target compilation and the full serving library tests passed,
   and the failure list contains none of the new content-readout diagnostics.
-- Both evidence manifests, the normalized repeat, generated JSON and
+- All five evidence manifests, the normalized repeat, generated JSON and
   `serving.uorlut`/sidecar files matched.
 - Three paired throughput runs used the same artifact, prompt IDs and
   single-threaded release CLI. The sidecar median was 4,529.714 tokens/s
   against 4,796.190/s without it; the measured generation-loop values and
-  candidate/byte costs are in `efficiency.json`.
+  candidate/byte costs are in `efficiency.json`. The six loops consumed
+  **0.041328644 s** of measured generation time.
 - Claim wording, docs catalog, roadmap schema/rendering, prep-check, D23 and
   D25 passed. The full harness check exited 0 with no errors and 164
   repository-wide warnings, with no warning attached to this unit.
