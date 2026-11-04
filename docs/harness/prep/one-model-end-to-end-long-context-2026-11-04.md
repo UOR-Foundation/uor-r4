@@ -91,7 +91,7 @@ Whatever the outcome:
 - **The census:** `train-in-space --census 1 --train-split TRAIN --train-sha256 HEX --train-mask-sha256 HEX --panel p-long=PLONG --panel-queries p-long=PLONG/queries.json`, on the laptop (23 s).
   - **Words:** 0 of the 319 invented-word answers appear in any TRAIN reply.
   - **Numbers:** 6 of the 290 number answers do, with values 10, 11 and 16: queries 0, 42, 93, 401, 471 and 487, at distances 919–1,863. TRAIN's replies say these small numbers elsewhere, so a reply could state one without reading its note.
-  - **Classed instrument, fixed in the grade** (the ORDER's stop rule). The 6 are left out of every paired reading and reported apart. The 603 left hold no answer TRAIN's replies say.
+  - **Classed instrument**, as the ORDER's stop rule says. The rule's fix, a new cell or an exclusion before this sheet, was not made; in its place this sheet pre-registers leaving the 6 out of every paired reading and reporting them apart (claude-275's REPORT, What did not work 1). The 603 left hold no answer TRAIN's replies say.
 - **DEV, the tokenizer and p-v:** claude-261's pins, unchanged, checked against their `SHA256SUMS`.
 
 No model output was read to set any panel, query or bar.
