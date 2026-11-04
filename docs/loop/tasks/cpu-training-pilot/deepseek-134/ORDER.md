@@ -41,11 +41,13 @@ same CPU FBS and integer serving path.
 Both seeds must pass:
 
 - K=16 raises generated-state positive-margin training eligibility from the
-  K=8 count to at least **640**, an increase of at least **610** rows;
+  K=8 count to at least **640**, an increase of at least **610** rows, with at
+  least **64** positive-margin same-cell pairs;
 - K=16 adds at least **128** admitted held-out target decisions over K=8;
 - K=16 target admissions and fixed-horizon matching depth do not fall below
   K=8, and teacher-forced top-1 does not fall;
-- K=16 admits more target cells than the equal-budget random-extra control;
+- K=16 admits more held-out targets and positive-margin target cells than the
+  equal-budget random-extra control;
 - K=8 bytes remain unchanged; K=16 preserves every table payload byte;
 - generated K=16 sequences retain exact CPU/integer query, token and
   kept-cell parity; and

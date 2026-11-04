@@ -245,9 +245,13 @@ fn run() -> Result<serde_json::Value, String> {
     };
     let training_generated = evaluate_self_prefix_admission(&k8, &training_samples, base)
         .map_err(|error| error.to_string())?;
+    let training_generated_k16 = evaluate_self_prefix_admission(&k16, &training_samples, base)
+        .map_err(|error| error.to_string())?;
     let training_reference = evaluate_self_prefix_admission(&k8, &training_samples, reference)
         .map_err(|error| error.to_string())?;
     let evaluation_generated = evaluate_self_prefix_admission(&k8, &evaluation_samples, base)
+        .map_err(|error| error.to_string())?;
+    let evaluation_generated_k16 = evaluate_self_prefix_admission(&k16, &evaluation_samples, base)
         .map_err(|error| error.to_string())?;
     let evaluation_reference = evaluate_self_prefix_admission(&k8, &evaluation_samples, reference)
         .map_err(|error| error.to_string())?;
@@ -259,8 +263,10 @@ fn run() -> Result<serde_json::Value, String> {
             "selection": selection_json(&groups, &training_samples, &evaluation_samples),
             "census": {
                 "training_generated": training_generated,
+                "training_generated_k16": training_generated_k16,
                 "training_reference": training_reference,
                 "evaluation_generated": evaluation_generated,
+                "evaluation_generated_k16": evaluation_generated_k16,
                 "evaluation_reference": evaluation_reference,
             },
             "artifacts": {
@@ -291,11 +297,12 @@ fn run() -> Result<serde_json::Value, String> {
         .map_err(|error| error.to_string())?;
     let paired = paired_depth(&k16_prompts, &k8_prompts)?;
     let k8_reading = k_reading(&training_generated, 8)?;
-    let k16_reading = k_reading(&training_generated, 16)?;
+    let k16_reading = k_reading(&training_generated_k16, 16)?;
     let k8_heldout = k_reading(&evaluation_generated, 8)?;
-    let k16_heldout = k_reading(&evaluation_generated, 16)?;
+    let k16_heldout = k_reading(&evaluation_generated_k16, 16)?;
     let threshold_pass = k16_reading.positive_margin >= 640
-        && k16_reading.positive_margin >= k8_reading.positive_margin + 610;
+        && k16_reading.positive_margin >= k8_reading.positive_margin + 610
+        && k16_reading.positive_margin_pairs >= 64;
     let heldout_added = k16_heldout
         .target_admitted
         .saturating_sub(k8_heldout.target_admitted);
@@ -303,6 +310,8 @@ fn run() -> Result<serde_json::Value, String> {
         "training_positive_margin_k8": k8_reading.positive_margin,
         "training_positive_margin_k16": k16_reading.positive_margin,
         "training_positive_margin_gain": k16_reading.positive_margin.saturating_sub(k8_reading.positive_margin),
+        "training_positive_margin_cells": k16_reading.positive_margin_cells,
+        "training_positive_margin_pairs": k16_reading.positive_margin_pairs,
         "training_positive_margin_pass": threshold_pass,
         "heldout_admitted_k8": k8_heldout.target_admitted,
         "heldout_admitted_k16": k16_heldout.target_admitted,
@@ -310,8 +319,11 @@ fn run() -> Result<serde_json::Value, String> {
         "heldout_admitted_pass": heldout_added >= 128,
         "depth_nonloss": k16_eval.matched_prefix_depth_sum >= k8_eval.matched_prefix_depth_sum,
         "teacher_top1_nonloss": k16_teacher.top1_correct >= k8_teacher.top1_correct,
-        "random_extra_target_admitted": evaluation_generated.random_extra.target_admitted,
-        "k16_above_random_extra": k16_heldout.target_admitted > evaluation_generated.random_extra.target_admitted,
+        "random_extra_target_admitted": evaluation_generated_k16.random_extra.target_admitted,
+        "random_extra_positive_margin": evaluation_generated_k16.random_extra.positive_margin,
+        "random_extra_positive_margin_cells": evaluation_generated_k16.random_extra.positive_margin_cells,
+        "k16_above_random_extra": k16_heldout.target_admitted > evaluation_generated_k16.random_extra.target_admitted,
+        "k16_above_random_extra_cells": k16_heldout.positive_margin_cells > evaluation_generated_k16.random_extra.positive_margin_cells,
         "payload_identical": artifact_payload(&k8) == artifact_payload(&k16),
         "k8_parity": k8_parity,
         "k16_parity": k16_parity,
@@ -320,7 +332,9 @@ fn run() -> Result<serde_json::Value, String> {
             && heldout_added >= 128
             && k16_eval.matched_prefix_depth_sum >= k8_eval.matched_prefix_depth_sum
             && k16_teacher.top1_correct >= k8_teacher.top1_correct
-            && k16_heldout.target_admitted > evaluation_generated.random_extra.target_admitted
+            && k16_heldout.target_admitted > evaluation_generated_k16.random_extra.target_admitted
+            && k16_heldout.positive_margin_cells
+                > evaluation_generated_k16.random_extra.positive_margin_cells
             && artifact_payload(&k8) == artifact_payload(&k16)
             && k8_parity.is_exact()
             && k16_parity.is_exact(),
@@ -345,8 +359,10 @@ fn run() -> Result<serde_json::Value, String> {
         "selection": selection_json(&groups, &training_samples, &evaluation_samples),
         "census": {
             "training_generated": training_generated,
+            "training_generated_k16": training_generated_k16,
             "training_reference": training_reference,
             "evaluation_generated": evaluation_generated,
+            "evaluation_generated_k16": evaluation_generated_k16,
             "evaluation_reference": evaluation_reference,
         },
         "evaluation": {
@@ -538,7 +554,6 @@ mod tests {
             kept_cells,
             target_admitted: 0,
             positive_margin: 0,
-            generated_top1: 0,
             writer_top1: 0,
             positive_margin_cells: 0,
             positive_margin_pairs: 0,
@@ -548,12 +563,12 @@ mod tests {
             observed_decisions: 0,
             missing_decisions: 0,
             rank_histogram: BTreeMap::new(),
+            minimum_k_histogram: BTreeMap::new(),
             readings: vec![row(8), row(16)],
             random_extra: RandomCellReading {
                 kept_cells: 16,
                 target_admitted: 0,
                 positive_margin: 0,
-                generated_top1: 0,
                 writer_top1: 0,
                 positive_margin_cells: 0,
                 positive_margin_pairs: 0,

@@ -1473,6 +1473,13 @@ mod tests {
         }
     }
 
+    #[test]
+    fn complete_cell_order_breaks_equal_scores_to_the_lower_cell_id() {
+        let roots = [[0i32; 8]; 16];
+        let order = writer_cells(&vec![0i32; 64], &roots, 256);
+        assert_eq!(order, (0..256).map(|cell| cell as u32).collect::<Vec<_>>());
+    }
+
     fn assert_parity(seed: u64, layers: usize, head: CpuFbsHead) {
         let (model, mut cpu) = fixture(seed, layers, head == CpuFbsHead::Nearest);
         let mut session = model.session();

@@ -64,11 +64,13 @@ any table payload byte.
 Both seeds must pass:
 
 - K=16 generated-state training positive-margin decisions are at least
-  **640**, with a gain of at least **610** over K=8;
+  **640**, with a gain of at least **610** over K=8 and at least **64**
+  positive-margin same-cell pairs;
 - K=16 adds at least **128** admitted held-out target decisions over K=8;
 - K=16 fixed-horizon matching depth is not below K=8;
 - teacher-forced top-1 is not below K=8;
-- K=16 admits more held-out targets than the equal-budget random-extra cells;
+- K=16 admits more held-out targets and positive-margin target cells than the
+  equal-budget random-extra cells;
 - every table payload byte is identical between K=8 and K=16;
 - K=8 and K=16 generated token sequences have zero CPU/integer query, token
   and kept-cell mismatches; and

@@ -126,7 +126,6 @@ pub struct CellKReading {
     pub kept_cells: usize,
     pub target_admitted: u64,
     pub positive_margin: u64,
-    pub generated_top1: u64,
     pub writer_top1: u64,
     pub positive_margin_cells: u64,
     pub positive_margin_pairs: u64,
@@ -138,7 +137,6 @@ pub struct RandomCellReading {
     pub kept_cells: usize,
     pub target_admitted: u64,
     pub positive_margin: u64,
-    pub generated_top1: u64,
     pub writer_top1: u64,
     pub positive_margin_cells: u64,
     pub positive_margin_pairs: u64,
@@ -151,6 +149,7 @@ pub struct SelfPrefixAdmissionCensus {
     pub observed_decisions: u64,
     pub missing_decisions: u64,
     pub rank_histogram: BTreeMap<usize, u64>,
+    pub minimum_k_histogram: BTreeMap<usize, u64>,
     pub readings: Vec<CellKReading>,
     pub random_extra: RandomCellReading,
 }
@@ -410,7 +409,6 @@ pub fn evaluate_self_prefix_admission(
             kept_cells,
             target_admitted: 0,
             positive_margin: 0,
-            generated_top1: 0,
             writer_top1: 0,
             positive_margin_cells: 0,
             positive_margin_pairs: 0,
@@ -420,12 +418,12 @@ pub fn evaluate_self_prefix_admission(
         kept_cells: 16,
         target_admitted: 0,
         positive_margin: 0,
-        generated_top1: 0,
         writer_top1: 0,
         positive_margin_cells: 0,
         positive_margin_pairs: 0,
     };
     let mut rank_histogram = BTreeMap::new();
+    let mut minimum_k_histogram = BTreeMap::new();
     let mut positive_cells = vec![BTreeMap::<u32, u64>::new(); KS.len()];
     let mut random_positive_cells = BTreeMap::<u32, u64>::new();
     let mut fixed_horizon_decisions = 0u64;
@@ -450,6 +448,9 @@ pub fn evaluate_self_prefix_admission(
                 .ok_or_else(|| invalid("self-prefix census lost the target cell"))?
                 + 1;
             *rank_histogram.entry(rank).or_default() += 1;
+            *minimum_k_histogram
+                .entry(KS.iter().copied().find(|k| rank <= *k).unwrap_or(17))
+                .or_default() += 1;
             for (slot, &kept_cells) in KS.iter().enumerate() {
                 let reading = reading_from_forward_at_kept(
                     &forward,
@@ -460,7 +461,6 @@ pub fn evaluate_self_prefix_admission(
                 )?;
                 let row = &mut readings[slot];
                 row.target_admitted += u64::from(reading.target_admitted);
-                row.generated_top1 += u64::from(decision.generated_token == target);
                 row.writer_top1 += u64::from(reading.top1 == target);
                 if reading.target_admitted && reading.margin_loss > 0 {
                     row.positive_margin += 1;
@@ -476,7 +476,6 @@ pub fn evaluate_self_prefix_admission(
                 &extra,
             )?;
             random_extra.target_admitted += u64::from(reading.target_admitted);
-            random_extra.generated_top1 += u64::from(decision.generated_token == target);
             random_extra.writer_top1 += u64::from(reading.top1 == target);
             if reading.target_admitted && reading.margin_loss > 0 {
                 random_extra.positive_margin += 1;
@@ -496,6 +495,7 @@ pub fn evaluate_self_prefix_admission(
         observed_decisions,
         missing_decisions: fixed_horizon_decisions.saturating_sub(observed_decisions),
         rank_histogram,
+        minimum_k_histogram,
         readings,
         random_extra,
     })
@@ -1546,6 +1546,33 @@ mod tests {
     }
 
     #[test]
+    fn kept_cell_budget_can_change_the_generated_trajectory() {
+        let artifact = export_fbs_trunk_uorlut01(&snapshot()).unwrap();
+        let k16 = patch_kept_cells(&artifact, 16).unwrap();
+        let config = config(SelfPrefixMode::DynamicGenerated, false);
+        let reply = vec![7, 8, 9, 1];
+        let mut differed = false;
+        'outer: for first in 2..256 {
+            for second in 2..256 {
+                let sample = MemoryWeightSample {
+                    prompt: vec![0, first, second],
+                    reply: reply.clone(),
+                };
+                let k8_scan = scan_sample(&artifact, 0, &sample, &config).unwrap();
+                let k16_scan = scan_sample(&k16, 0, &sample, &config).unwrap();
+                if k8_scan.tokens != k16_scan.tokens {
+                    differed = true;
+                    break 'outer;
+                }
+            }
+        }
+        assert!(
+            differed,
+            "K=8 and K=16 never changed a synthetic generated trajectory"
+        );
+    }
+
+    #[test]
     fn cell_order_is_complete_unique_and_target_ranks_are_exact() {
         let artifact = export_fbs_trunk_uorlut01(&snapshot()).unwrap();
         let scanned = scan_sample(
@@ -1598,6 +1625,20 @@ mod tests {
         let patched = patch_kept_cells(&artifact, 16).unwrap();
         let parity = audit_self_prefix_generated(&patched, &samples, config).unwrap();
         assert!(parity.is_exact());
+        let scan = scan(&artifact, &samples, &config).unwrap();
+        let targets = mapped_targets(&scan, &samples, config).unwrap();
+        let query = &scan.samples[0].decisions[0].query_q12;
+        let target = targets[&(0, 0)];
+        let forward8 = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let forward16 = CpuFbsForward::from_artifact(&patched).unwrap();
+        let nested =
+            reading_from_forward_at_kept(&forward8, RankMarginConfig::default(), query, target, 16)
+                .unwrap();
+        let actual =
+            reading_from_forward(&forward16, RankMarginConfig::default(), query, target).unwrap();
+        assert_eq!(actual.admitted_cells, nested.admitted_cells);
+        assert_eq!(actual.top1, nested.top1);
+        assert_eq!(actual.target_admitted, nested.target_admitted);
     }
 
     fn artifact_payload(artifact: &[u8]) -> &[u8] {
