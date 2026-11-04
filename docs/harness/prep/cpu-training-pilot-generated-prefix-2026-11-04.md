@@ -1,6 +1,6 @@
 # Generated-prefix writer training
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -163,6 +163,15 @@ the compact report.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 generated-prefix writer training
+sheet: docs/harness/prep/cpu-training-pilot-generated-prefix-2026-11-04.md
+head: efd9c9781690a6b3a121408dc83ac08126bad443
+implementation pin: 77524f3e47422a4c86578b2798bc98cd6d6d83b1
+reviewer: independent-subagent generated-prefix-fit-3
+note: two-seed D84 screen; live generated-prefix writer updates through exact
+FBS/memory, reference and static/dynamic controls, fixed-horizon targets,
+same-cell shuffled labels, admitted-row eligibility, exact parity, worker and
+resource gates, deterministic repeat, and no serving change
+date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
