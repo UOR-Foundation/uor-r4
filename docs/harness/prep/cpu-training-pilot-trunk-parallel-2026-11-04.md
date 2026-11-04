@@ -17,8 +17,8 @@ Local CPU development research under D84. No GPU, pod or paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `ca6e1cbac7ec5d5b5a477cd8d36d579407c9201a` |
-| driver binary | `8f46c82cee87568e146d0ab2319000da3c8704af2ec322018b5b937ceb5deac6` |
+| implementation source | `d21951f75a2ed696c22fcde1fcd6c69ee11db2fe` |
+| driver binary | `53162874aed67e6d3665918affafdac1670f511626d5a23d2b68a0167e4adb20` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -27,7 +27,7 @@ Local CPU development research under D84. No GPU, pod or paid API.
 Inputs are under
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/`.
 The binary was built cleanly with
-`CARGO_TARGET_DIR=target/deepseek/trunk-parallel-build-126 cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
+`CARGO_TARGET_DIR=target/deepseek/trunk-parallel-build-126-repair cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
 
 ## Fixed run
 
@@ -42,6 +42,21 @@ Replay the accepted deepseek-125 split and dose exactly:
 Only `threads`, `wall_elapsed_ms` and `peak_rss_kib` may differ between worker
 reports. Exact and shuffled artifact bytes, table readings, decision readings,
 checksums, changed-row lists and all other report fields must be identical.
+
+The accepted deepseek-125 result is the regression oracle, not merely another
+worker run:
+
+- exact artifact:
+  `db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2`;
+- shuffled artifact:
+  `19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd`;
+- no-update / exact / shuffled decision checksums:
+  `c707e1bebfe590b0` / `351b70cab8d7cbc9` / `c707e1bebfe590b0`;
+- exact and shuffled readings `331/245/269`; no update `332/246/270`;
+- changed exact/shuffled rows versus no update: `4` / `0`;
+- normalized report:
+  `64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f`,
+  after replacing `threads` with `1` and deleting wall time and peak RSS.
 
 ## Bar
 
@@ -79,13 +94,32 @@ set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-parallel
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
 PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-parallel/2026-11-04-attempt-1
-BIN="$SOURCE/target/deepseek/trunk-parallel-build-126/release/cpu-trunk-count-driver"
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = \
-  8f46c82cee87568e146d0ab2319000da3c8704af2ec322018b5b937ceb5deac6
+BIN="$SOURCE/target/deepseek/trunk-parallel-build-126-repair/release/cpu-trunk-count-driver"
+SOURCE_PIN=d21951f75a2ed696c22fcde1fcd6c69ee11db2fe
+BIN_SHA=53162874aed67e6d3665918affafdac1670f511626d5a23d2b68a0167e4adb20
+EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
+EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
+EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
+check_pins() {
+  test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
+  git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- \
+    crates/uor-r4-cpu-train Cargo.toml Cargo.lock
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(sha256sum "$DATA/t16-frozen-zero-seed1-trunk.d11" | cut -d' ' -f1)" = \
+    04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d
+  test "$(sha256sum "$DATA/dev-tokens.u16" | cut -d' ' -f1)" = \
+    0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b
+  test "$(sha256sum "$DATA/dev-response-mask.u8" | cut -d' ' -f1)" = \
+    a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078
+  test "$(sha256sum "$DATA/dev-manifest.json" | cut -d' ' -f1)" = \
+    ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab
+}
+check_pins
 test ! -e "$PIPELINE"
 run() {
   workers=$1
   out="$PIPELINE/workers-$workers"
+  check_pins
   /usr/bin/time -v timeout 600s "$BIN" \
     "$DATA/t16-frozen-zero-seed1-trunk.d11" \
     "$DATA/dev-tokens.u16" "$DATA/dev-response-mask.u8" \
@@ -96,13 +130,51 @@ run() {
     --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
     --train-rows 4096 --evaluation-stride 2 --max-evaluation 512 \
     --seed 1 --workers "$workers" >/dev/null
+  check_pins
   test "$(jq -er '.threads' "$out/report.json")" -eq "$workers"
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 2097152
+  test "$(jq -er '.artifacts.exact_sha256' "$out/report.json")" = "$EXPECTED_EXACT"
+  test "$(jq -er '.artifacts.shuffled_sha256' "$out/report.json")" = "$EXPECTED_SHUFFLED"
+  if cmp -s "$out/exact.uorlut" "$DATA/t16-frozen-zero-seed1-trunk.d11"; then exit 1; fi
+  if cmp -s "$out/exact.uorlut" "$out/shuffled.uorlut"; then exit 1; fi
+  test "$(jq -S '.threads = 1 | del(.wall_elapsed_ms, .peak_rss_kib)' \
+    "$out/report.json" | sha256sum | cut -d' ' -f1)" = "$EXPECTED_REPORT"
+  jq -e '
+    .tables.source | length == 13 and all(.[]; .total == 1049856)
+  ' "$out/report.json" >/dev/null
+  jq -e '
+    (.tables.exact | length == 13 and all(.[]; .total == 1053952)) and
+    (.tables.shuffled | length == 13 and all(.[]; .total == 1053952))
+  ' "$out/report.json" >/dev/null
+  jq -e '
+    (.readings.no_update.admitted == 332) and
+    (.readings.no_update.top1 == 246) and
+    (.readings.no_update.top8 == 270) and
+    (.readings.no_update.checksum == "c707e1bebfe590b0") and
+    (.readings.exact.admitted == 331) and
+    (.readings.exact.top1 == 245) and
+    (.readings.exact.top8 == 269) and
+    (.readings.exact.checksum == "351b70cab8d7cbc9") and
+    (.readings.shuffled.admitted == 332) and
+    (.readings.shuffled.top1 == 246) and
+    (.readings.shuffled.top8 == 270) and
+    (.readings.shuffled.checksum == "c707e1bebfe590b0") and
+    ([.readings[] |
+      .query_coordinate_mismatches, .admitted_cell_mismatches,
+      .top8_mismatches, .token_mismatches] | all(. == 0)) and
+    (.changed_decisions.exact_vs_no_update_rows == 4) and
+    (.changed_decisions.shuffled_vs_no_update_rows == 0) and
+    (.changed_decisions.exact_vs_shuffled_rows == 4)
+  ' "$out/report.json" >/dev/null
 }
 run 1
 run 8
 run 16
 run 32
+for workers in 8 16 32; do
+  cmp "$PIPELINE/workers-1/exact.uorlut" "$PIPELINE/workers-$workers/exact.uorlut"
+  cmp "$PIPELINE/workers-1/shuffled.uorlut" "$PIPELINE/workers-$workers/shuffled.uorlut"
+done
 ```
 
 After the four runs, compare artifact hashes and normalized reports; write the
