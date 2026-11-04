@@ -879,11 +879,11 @@ mod tests {
     fn eight_row_vote_can_override_a_wrong_nearest_row() {
         let points = PointKeyImage {
             width: 1,
-            points: vec![1, 2, 3, 4, 5],
-            targets: vec![9, 7, 7, 7, 8],
+            points: vec![1, 2, 3, 4, 5, 6, 7, 8, 9],
+            targets: vec![9, 7, 7, 7, 7, 7, 7, 7, 8],
         };
         assert_eq!(point_vote(&points, &[0], 1).unwrap(), 9);
-        assert_eq!(point_vote(&points, &[0], 3).unwrap(), 7);
+        assert_eq!(point_vote(&points, &[0], 8).unwrap(), 7);
     }
 
     #[test]
