@@ -978,6 +978,9 @@ pub fn derive_termination_orbit_gates(
                     .map_err(|_| invalid("termination orbit control index exceeds usize"))?,
             );
         }
+        if labels == original {
+            labels.rotate_left(1);
+        }
         control_changed_points += original
             .iter()
             .zip(&labels)
@@ -1901,10 +1904,11 @@ mod tests {
                 reply: vec![42, 77, CORPUS_EOS],
             },
         ];
-        let first = derive_termination_orbit_gates(&artifact, &samples, true, 1).unwrap();
-        let second = derive_termination_orbit_gates(&artifact, &samples, true, 1).unwrap();
+        let first = derive_termination_orbit_gates(&artifact, &samples, true, 2).unwrap();
+        let second = derive_termination_orbit_gates(&artifact, &samples, true, 2).unwrap();
         assert_eq!(first, second);
         assert!(first.cells_with_both_classes > 0);
+        assert!(first.control_changed_points > 0);
         for (cell, trained) in &first.trained.cells {
             let random = first.random.cells.get(cell).unwrap();
             assert_eq!(trained.terminal.len(), random.terminal.len());
