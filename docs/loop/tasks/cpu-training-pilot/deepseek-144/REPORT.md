@@ -6,9 +6,9 @@ Order: [ORDER.md](ORDER.md). Base: `d5d173073`.
 
 ## Status
 
-The ORDER, claim and trajectory-readout implementation are committed. FIT,
-GO, preflight and the public comparison are pending; no capability claim is
-made.
+The ORDER, claim and trajectory-readout implementation are committed. TEST
+FITNESS is FIT; GO, preflight and the public comparison are pending. No
+capability claim is made.
 
 ## What did not work
 
@@ -51,7 +51,7 @@ No system-provided Codex skill applies.
 
 ## Still open
 
-- Obtain FIT and fresh GO.
+- Obtain fresh GO.
 - Run and classify the bounded comparison.
 
 ## Plain summary

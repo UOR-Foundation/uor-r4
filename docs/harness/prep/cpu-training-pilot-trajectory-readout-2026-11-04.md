@@ -1,6 +1,6 @@
 # First-order generated trajectory content readout
 
-**Status:** FIT PENDING
+**Status:** FIT
 
 ## Question
 
@@ -357,4 +357,11 @@ resource mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - deepseek-144 first-order trajectory content readout.
+TEST FITNESS: FIT - M2 #2030 deepseek-144
+sheet: docs/harness/prep/cpu-training-pilot-trajectory-readout-2026-11-04.md
+reviewer: codex-fresh-context-fit-attempt-2
+note: Trajectory history, target shuffle, exact fallback and distinct
+  two/three-sigma paired thresholds verified.
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
