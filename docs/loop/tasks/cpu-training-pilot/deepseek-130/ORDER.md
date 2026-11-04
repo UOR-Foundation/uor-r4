@@ -37,6 +37,7 @@ and remains untested. No open order overlaps this CPU driver.
 - `crates/uor-r4-cpu-train/src/bin/cpu-point-transfer-driver.rs`
 - `docs/harness/prep/cpu-training-pilot-point-prototypes-2026-11-04.md`
 - `docs/harness/claims.json`
+- `docs/labs/cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-130/**`
 - `docs/research/notebook/cpu-training.md`
 - `docs/roadmap/items/cpu-training-pilot.md`

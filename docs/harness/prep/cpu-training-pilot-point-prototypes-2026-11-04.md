@@ -139,28 +139,61 @@ BUILD_B=$SOURCE/target/deepseek/point-prototypes-build-130-b
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
 MIN_BUILD_FREE_KIB=37748736
-MIN_RESERVE_KIB=31522816
+MIN_RESERVE_KIB=31588352
 MAX_BUILD_BYTES=5368709120
+MAX_BUILD_RSS_KIB=4194304
 MAX_RETAINED_BYTES=67108864
+SOURCE_GUARD_PATHS=(crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)
 free_kib() {
   df -Pk "$1" | awk 'NR == 2 { print $4 }'
 }
 test "$(free_kib "$SOURCE")" -ge "$MIN_BUILD_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_BUILD_FREE_KIB"
-test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
-git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
+test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN rustc --version)" = \
+  "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN cargo --version)" = \
+  "cargo 1.97.1 (c980f4866 2026-06-30)"
+test -z "$(git -C "$SOURCE" status --porcelain -- "${SOURCE_GUARD_PATHS[@]}")"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- "${SOURCE_GUARD_PATHS[@]}"
 test ! -e "$PIPELINE"
 test ! -e "$BUILD_A"
 test ! -e "$BUILD_B"
-for build in "$BUILD_A" "$BUILD_B"; do
-  (
-    cd "$SOURCE"
-    CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$build" cargo build --locked --release \
-      -p uor-r4-cpu-train --bin cpu-point-transfer-driver
-  )
-done
+mkdir -p "$PIPELINE/builds"
+BUILD_STARTED=$(date -u +%s)
+(
+  cd "$SOURCE"
+  /usr/bin/time -v -o "$PIPELINE/builds/build-a.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+      -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+      -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD_A" \
+      cargo build --locked --release \
+        -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+)
+(
+  cd "$SOURCE"
+  /usr/bin/time -v -o "$PIPELINE/builds/build-b.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+      -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+      -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD_B" \
+      cargo build --locked --release \
+        -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+)
+BUILD_SECONDS=$(( $(date -u +%s) - BUILD_STARTED ))
 BUILD_BYTES=$(( $(du -sb "$BUILD_A" | cut -f1) + $(du -sb "$BUILD_B" | cut -f1) ))
+BUILD_PEAK_RSS_KIB=$(awk -F': ' '/Maximum resident set size/ { print $2 }' \
+  "$PIPELINE/builds/build-a.time.txt" "$PIPELINE/builds/build-b.time.txt" |
+  sort -nr | head -n 1)
 test "$BUILD_BYTES" -le "$MAX_BUILD_BYTES"
+test "$BUILD_PEAK_RSS_KIB" -le "$MAX_BUILD_RSS_KIB"
+printf '{"jobs":16,"wall_seconds":%s,"peak_rss_kib":%s,"target_bytes":%s,"max_peak_rss_kib":%s}\n' \
+  "$BUILD_SECONDS" "$BUILD_PEAK_RSS_KIB" "$BUILD_BYTES" "$MAX_BUILD_RSS_KIB" \
+  >"$PIPELINE/builds/summary.json"
+(
+  cd "$PIPELINE/builds"
+  find . -type f ! -name SHA256SUMS -print0 |
+    sort -z | xargs -0 sha256sum >SHA256SUMS
+  sha256sum -c SHA256SUMS --quiet
+)
 test "$(free_kib "$SOURCE")" -ge "$MIN_RESERVE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_RESERVE_KIB"
 BIN_A="$BUILD_A/release/cpu-point-transfer-driver"
@@ -203,7 +236,7 @@ test "$(jq -er '.target_prototypes.artifact_sha256' "$PIPELINE/seed-1/report.jso
   = "$(jq -er '.target_prototypes.artifact_sha256' "$PIPELINE/seed-1-repeat/report.json")"
 test "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1/report.json")" \
   = "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1-repeat/report.json")"
-test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
+test -z "$(git -C "$SOURCE" status --porcelain -- "${SOURCE_GUARD_PATHS[@]}")"
 test "$(free_kib "$SOURCE")" -ge "$MIN_RESERVE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_RESERVE_KIB"
 test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_RETAINED_BYTES"
@@ -211,6 +244,13 @@ test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_RETAINED_BYTES"
 
 Any source, binary, argument, output-root, control or deterministic mismatch
 is an instrument fault requiring a new FIT before retry.
+
+At completion, update
+`docs/labs/cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json`
+from `PROJECTED_NOT_RUN` to `COMPLETE`, replacing projected seconds and RSS
+with actual values from the reports and build receipt. The ledger retains a
+null cumulative total because the named shared model-time ledger is absent;
+it does not treat the missing ledger as zero.
 
 ## Minimum test power
 
@@ -223,14 +263,14 @@ exploratory evidence, not a capability bar.
 
 Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
 7.0.0-42-generic x86_64. At the repaired review, the project filesystem had
-513,053,864 KiB (489.287 GiB) free. The shared model-time ledger is absent, so
-this unit records local CPU time without claiming a cumulative model-ledger
-balance.
+513,053,864 KiB (489.287 GiB) free. The named shared model-time ledger is
+absent. This unit creates its own projected resource-ledger receipt and does
+not treat the missing ledger as zero.
 
 | Stage | Projection |
 |---|---|
 | preparation and FIT | local inspection only; no model compute |
-| builds | two fresh release targets, 16 Cargo jobs each, under 5 GiB combined and under five minutes total |
+| builds | two sequential fresh release targets, 16 Cargo jobs each, under 5 GiB combined, peak RSS below 4 GiB per build and under five minutes total |
 | training | none |
 | controls and evaluation | seed 1, seed 2 and a seed-1 cross-build repeat, 32 Rayon workers, under two minutes total, peak RSS below 1 GiB |
 | retry | none; an instrument fault requires a new FIT |
