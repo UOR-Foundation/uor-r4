@@ -19,7 +19,7 @@ Base: `e5b7c500c`.
   root Cargo manifests.
 - **The optimization's peak-memory risk was real but bounded.** Exact
   verification briefly holds source expected tables and the decoded exact table
-  set together. The final eight-run peak was 1,544,884 KiB, 552,268 KiB below the
+  set together. The final eight-run peak was 1,545,672 KiB, 551,480 KiB below the
   registered stop. Both complete table sets are dropped before the shuffled
   arm imports its independent source tables.
 - **No model-math or capability question was tested.** The exact artifacts,
@@ -53,42 +53,43 @@ then requires both semantic and table mismatches to be refused.
 
 The fixed split held 200 training documents / 7,080 targets and 193 evaluation
 documents / 512 targets. Eight fresh roots ran the registered mirrored order.
-The first registered panel also passed under the prior binary, but a package
-format check then normalized three test-only expressions and changed the linked
-binary hash. A fresh FIT and this aligned attempt-2 panel replaced it; the
-first attempt remains diagnostic evidence and was not reused for the numbers
-below.
+Two earlier registration rounds also passed. A package-format pass changed the
+first binary hash, and an exact-head review then found that a test-only accessor
+had landed outside the item scope. The final test uses the existing public
+`q4_import` kappa constants; `crates/uor-r4-discrete/src/trunk.rs` now has no
+diff from `origin/main`. A fresh FIT and this aligned attempt-3 panel replaced
+both earlier attempts, which remain diagnostic and are not reused below.
 
 The final panel pinned source
-`fcb7c8c5327800cb372529926ada62e6ba5cfb55`, baseline binary
+`be0edd4682409398ebf2e7f86b4b44ec987f8edf`, baseline binary
 `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada`
 and optimized binary
-`8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df`.
+`e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4`.
 
 | Pass | Binary | Workers | Wall | Peak RSS | Verification |
 |---|---|---:|---:|---:|---:|
-| forward | baseline | 1 | 12.314 s | 1,542,344 KiB | 5,227.987 ms |
-| forward | optimized | 1 | 9.739 s | 1,542,528 KiB | 3,005.727 ms |
-| forward | baseline | 16 | 11.299 s | 1,543,856 KiB | 5,607.159 ms |
-| forward | optimized | 16 | 9.050 s | 1,544,884 KiB | 2,562.550 ms |
-| reverse | optimized | 16 | 8.770 s | 1,544,692 KiB | 2,799.789 ms |
-| reverse | baseline | 16 | 11.803 s | 1,543,868 KiB | 5,389.042 ms |
-| reverse | optimized | 1 | 9.400 s | 1,542,468 KiB | 3,133.832 ms |
-| reverse | baseline | 1 | 10.717 s | 1,541,952 KiB | 4,600.360 ms |
+| forward | baseline | 1 | 9.828 s | 1,543,152 KiB | 4,498.098 ms |
+| forward | optimized | 1 | 8.000 s | 1,545,092 KiB | 2,279.686 ms |
+| forward | baseline | 16 | 9.574 s | 1,544,992 KiB | 4,555.513 ms |
+| forward | optimized | 16 | 7.468 s | 1,545,452 KiB | 2,275.430 ms |
+| reverse | optimized | 16 | 7.453 s | 1,545,672 KiB | 2,247.289 ms |
+| reverse | baseline | 16 | 9.625 s | 1,544,932 KiB | 4,573.763 ms |
+| reverse | optimized | 1 | 7.907 s | 1,545,528 KiB | 2,243.819 ms |
+| reverse | baseline | 1 | 9.998 s | 1,544,092 KiB | 4,538.153 ms |
 
 ### Registered bars
 
 | Workers | Baseline wall | Optimized wall | Ratio | Reduction | Verification ratio | Reduction |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1 | 11,515.375 ms | 9,569.549 ms | **0.8310** | **16.90%** | **0.6247** | **37.53%** |
-| 16 | 11,550.905 ms | 8,910.020 ms | **0.7714** | **22.86%** | **0.4877** | **51.23%** |
+| 1 | 9,912.832 ms | 7,953.219 ms | **0.8023** | **19.77%** | **0.5006** | **49.94%** |
+| 16 | 9,599.227 ms | 7,460.616 ms | **0.7772** | **22.28%** | **0.4954** | **50.46%** |
 
 Both wall means clear the 90% ceiling and both verification means clear the
-80% ceiling. Wall speedups were **1.203x / 1.296x**; exact plus shuffled
-verification speedups were **1.601x / 2.051x**. At one worker,
-`exact_verify` fell from 2,926.114 to 1,694.338 ms and `shuffled_verify` from
-1,988.059 to 1,375.442 ms. At sixteen workers they fell from
-3,185.693/2,312.407 ms to 1,269.445/1,411.724 ms.
+80% ceiling. Wall speedups were **1.246x / 1.287x**; exact plus shuffled
+verification speedups were **1.998x / 2.019x**. At one worker,
+`exact_verify` fell from 2,657.280 to 1,133.426 ms and `shuffled_verify` from
+1,860.846 to 1,128.326 ms. At sixteen workers they fell from
+2,688.168/1,876.470 ms to 1,137.510/1,123.850 ms.
 
 All eight runs produced exact artifact
 `db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2`
@@ -103,7 +104,7 @@ and token mismatches over 512 rows / 16,384 Q12 coordinates.
 
 Every run recorded 21 finite stages with accounting equal to measured wall
 within 0.001 ms, completed below 600 seconds, and stayed strictly below the
-2-GiB RSS stop. The eight roots occupy **1,390,924,382 bytes**.
+2-GiB RSS stop. The eight roots occupy **1,390,924,424 bytes**.
 
 The compact evidence is [comparison.json](evidence/comparison.json);
 [SHA256SUMS](evidence/SHA256SUMS) binds both binaries, reports and every
@@ -111,17 +112,16 @@ artifact copy.
 
 ## Checks run at the head
 
-- Four fresh-context non-author TEST FITNESS reviews: the first two returned
-  NOT FIT; the repaired source returned FIT; and the formatting-only source
-  revision returned FIT at docs head
-  `befb6888b9042fac7fdfe1804ed6dcbb1e082127`.
+- Five fresh-context non-author TEST FITNESS reviews: the first two returned
+  NOT FIT; the next three repaired source revisions returned FIT. The final FIT
+  was at docs head `ba0ca6559502739fed48261403f727e63399b83d`.
 - Full `uor-r4-cpu-train` release suite: **237 tests passed, 0 failed, 4
   release benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
 - Package formatting for `uor-r4-cpu-train` and `uor-r4-discrete`: passed.
 - Focused consolidated D11 success/mismatch, ordered-fold, stage fail-closed
   and RSS tests: passed.
-- All eight attempt-2 runs passed artifact, table, decision, normalized-report,
+- All eight attempt-3 runs passed artifact, table, decision, normalized-report,
   21-stage accounting, timeout, worker, source, binary and strict-RSS gates.
 - Prep check, shell syntax, JSON parsing, evidence checksum reconstruction and
   `git diff --check`: passed.
@@ -149,7 +149,7 @@ reviewer read and applied the repository's `uor-research-architect` skill.
 ## Plain summary
 
 The count driver now verifies the same two exported artifacts with 60% fewer
-full-trunk imports. It is 20.3%/19.0% faster end to end and 50.1%/49.6% faster
-in verification at one/sixteen workers, while every artifact, table, decision,
-checksum and normalized report stayed byte-identical. This is a verified CPU
-implementation speedup, not a language-capability result.
+full-trunk imports. It reduced wall time by **19.77%/22.28%** and verification
+time by **49.94%/50.46%** at one/sixteen workers, while every artifact, table,
+decision, checksum and normalized report stayed byte-identical. This is a
+verified CPU implementation speedup, not a language-capability result.

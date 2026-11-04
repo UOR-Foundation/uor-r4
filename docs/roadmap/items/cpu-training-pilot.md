@@ -246,9 +246,9 @@ imports in exact and shuffled verification. The source table set is moved into
 exact expected-count reconstruction, each exported arm is decoded once, and
 the shuffled expectation still uses a separate fresh source import. Eight
 mirrored runs at one and sixteen workers reduced mean wall time by
-**16.90%/22.86%** and exact-plus-shuffled verification time by
-**37.53%/51.23%**. Every artifact, table, decision, checksum and normalized
-report remained byte-identical, and peak RSS stayed below 1.545 GiB. This is a
+**19.77%/22.28%** and exact-plus-shuffled verification time by
+**49.94%/50.46%**. Every artifact, table, decision, checksum and normalized
+report remained byte-identical, and peak RSS stayed below 1.546 GiB. This is a
 CPU implementation speedup, not a model or capability result. See
 [deepseek-128](../../loop/tasks/cpu-training-pilot/deepseek-128/REPORT.md).
 
