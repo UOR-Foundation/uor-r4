@@ -7,8 +7,8 @@ Order: [ORDER.md](ORDER.md). Base: `7dfd96644`.
 ## Status
 
 The ORDER, branch claim, implementation and pre-registration are committed.
-TEST FITNESS is FIT; GO, preflight and the public comparison are pending. No
-capability claim is made.
+TEST FITNESS is FIT and pre-run GO passed; preflight and the public comparison
+are pending. No capability claim is made.
 
 ## What did not work
 
@@ -59,7 +59,7 @@ No system-provided Codex skill applies.
 ## Still open
 
 - Implement the exact-offset continuation-horizon arm and tests.
-- Obtain fresh GO before the registered preflight.
+- Run the registered preflight and classify any stop.
 - Run and classify the bounded comparison.
 
 ## Plain summary

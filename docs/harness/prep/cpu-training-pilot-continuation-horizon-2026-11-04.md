@@ -383,3 +383,12 @@ note: Exact 1,568/84/1,484 counts, failure sealing, raw Option<i16>
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `codex-fresh-context-go-attempt-1`, 2026-11-04. HEAD was
+clean at `d44b905403ddfd70387c8bef1c65770854c01034`; implementation pin
+`0a8631d4e033af39025b06c64fc50496782269f4` matched the runtime tree. All
+five public inputs, host/toolchain limits and absent output roots passed.
+The registered shell syntax, report paths, exact row accounting, raw-horizon
+LOO controls and non-self pairing were checked read-only.
