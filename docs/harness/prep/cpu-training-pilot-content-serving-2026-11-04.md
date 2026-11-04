@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** FIT
+**Status:** PENDING RE-FIT
 
 ## Question
 
@@ -20,11 +20,12 @@ Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
 Final audit added canonical readout identity to serialized sessions. Attempt 2
 at pin `fe253c5ca` passed both public seeds but was superseded after
 exact-head review found that loopback JSON omitted the sidecar path and file
-SHA-256. Attempt 3 reruns under pin `8194823789244096e2db317bb45954d5a7eeaf8f`
-after the same review also required strict refusal of an omitted
-`includes_reference_end`, rejection of readouts on non-256-wide FBS models
-before any step, bounded sidecar reads, and transactional
-missing/different-readout restore checks.
+SHA-256. Attempt 3 ran under pin
+`8194823789244096e2db317bb45954d5a7eeaf8f` and passed every parity and
+control assertion, but its test builds grew the chat target to 2,246,424,310
+bytes, above the registered 2 GiB ceiling. It is retained as instrument
+evidence. Attempt 4 reruns the same source pin with a separate 3 GiB control
+target and post-control target-size checks.
 
 ## Base artifacts
 
@@ -87,8 +88,8 @@ signature, nearest distance, readout-fired state and complete reply tokens.
 
 The loopback service exposes `content_readout` and
 `content_readout_sha256` on health, model, capability, generation and final
-stream JSON. A real CLI launch must load the sidecar and report those exact
-values.
+stream JSON. Real CLI one-shot, REPL, prompt-ID and loopback launches must load
+the sidecar; every JSON path must report those exact values.
 
 ## Arms and bar
 
@@ -139,17 +140,19 @@ replies, fresh phrasing or useful chat.
 | preparation and FIT | 600 s |
 | release driver and chat builds | 600 s |
 | focused integer and loopback controls | 300 s |
-| two seeds plus repeat and CLI smoke | 300 s |
+| two seeds plus repeat and CLI paths | 300 s |
 | delivery and evidence | 300 s |
 | total increment | **2,100 s** |
 
 - Builds: 16 jobs, 4 GiB RSS, 2 GiB target maximum each.
 - Runs: 32 Rayon workers, 1 GiB RSS, 600 s each.
-- Retained evidence: 160 MiB maximum.
+- Focused controls: 4 GiB RSS and a separate 3 GiB target maximum.
+- Retained evidence: 224 MiB maximum for every attempt.
 - Previous ledger:
-  `cpu-training-pilot-content-gate-2026-11-04/resource-ledger.json` at
-  `35,377.977487699 s` measured and `43,927.677487699 s` admitted cumulative.
-- Admitted cumulative projection: **46,027.677487699 s**.
+  `cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json`
+  at `35,534.827487699 s` measured and `47,827.677487699 s` admitted
+  cumulative.
+- Admitted cumulative projection: **49,927.677487699 s**.
 
 ## Steps
 
@@ -159,9 +162,10 @@ After FIT and a fresh GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-content-readout-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-3
-BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-3
-CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-3
+PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-4
+BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-4
+CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-4
+CONTROL_BUILD=$SOURCE/target/deepseek/content-readout-serving-controls-140-attempt-4
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
 IMPL_PIN=8194823789244096e2db317bb45954d5a7eeaf8f
@@ -174,6 +178,7 @@ git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- crates/uor-r4-cpu-train crates/uor-
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
 test ! -e "$CHAT_BUILD"
+test ! -e "$CONTROL_BUILD"
 mkdir -p "$PIPELINE"
 BUILD_STARTED=$(date -u +%s)
 /usr/bin/time -v -o "$PIPELINE/build.time.txt" env CARGO_BUILD_JOBS=16 \
@@ -201,13 +206,23 @@ BIN=$BUILD/release/cpu-content-readout-driver
 CHAT=$CHAT_BUILD/release/uor-chat
 sha256sum "$BIN" "$CHAT" | sed 's# .*/#  #' >"$PIPELINE/binary.sha256"
 /usr/bin/time -v -o "$PIPELINE/control-integer.time.txt" env CARGO_BUILD_JOBS=16 \
-  CARGO_TARGET_DIR="$CHAT_BUILD" cargo test --locked \
+  CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked \
   -p uor-r4-integer --features 'serving-wasm fbs-synthetic' \
   --lib content_readout >"$PIPELINE/control-integer.txt"
 /usr/bin/time -v -o "$PIPELINE/control-loopback.time.txt" env CARGO_BUILD_JOBS=16 \
-  CARGO_TARGET_DIR="$CHAT_BUILD" cargo test --locked \
+  CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked \
   -p uor-r4-integer --features 'serving-wasm fbs-synthetic' \
   --test openai_loopback >"$PIPELINE/control-loopback.txt"
+CONTROL_BYTES=$(du -sb "$CONTROL_BUILD" | cut -f1)
+CONTROL_RSS=$(awk -F': ' '/Maximum resident set size/ {
+  if ($2 > max) max = $2
+} END { print max }' \
+  "$PIPELINE/control-integer.time.txt" "$PIPELINE/control-loopback.time.txt")
+test "$CONTROL_BYTES" -le 3221225472
+test "$CONTROL_RSS" -le 4194304
+test "$(du -sb "$CHAT_BUILD" | cut -f1)" -le 2147483648
+printf '{"jobs":16,"target_bytes":%s,"peak_rss_kib":%s}\n' \
+  "$CONTROL_BYTES" "$CONTROL_RSS" >"$PIPELINE/control-summary.json"
 run() {
   seed=$1 label=$2 artifact=$3
   out=$PIPELINE/$label
@@ -243,14 +258,34 @@ done < <(find "$PIPELINE/seed-1" -maxdepth 1 -type f \
   --tokenizer "$DUAL/tokenizer-seed-1.json" \
   --content-readout "$PIPELINE/seed-1/content-readout-sidecar.json" \
   --prompt-ids 0,7,11 --max-tokens 4 >"$PIPELINE/seed-1.chat-smoke.json"
-jq -e '.schema == "uor-r4.uor-chat-stack-parity/1" and
-  .content_readout_sha256 != null and
+SIDECAR_SHA256=$(sha256sum "$PIPELINE/seed-1/content-readout-sidecar.json" |
+  cut -d' ' -f1)
+jq -e --arg path "$PIPELINE/seed-1/content-readout-sidecar.json" \
+  --arg sha "$SIDECAR_SHA256" '.schema == "uor-r4.uor-chat-stack-parity/1" and
+  .content_readout == $path and
+  .content_readout_sha256 == $sha and
   (.generated_ids | length) == 4' \
   "$PIPELINE/seed-1.chat-smoke.json" >/dev/null
+"$CHAT" --stack "$PIPELINE/seed-1/serving.uorlut" \
+  --tokenizer "$DUAL/tokenizer-seed-1.json" \
+  --content-readout "$PIPELINE/seed-1/content-readout-sidecar.json" \
+  --say hello --max-tokens 1 >"$PIPELINE/seed-1.chat-one-shot.json"
+jq -e --arg path "$PIPELINE/seed-1/content-readout-sidecar.json" \
+  --arg sha "$SIDECAR_SHA256" '.schema == "uor-r4.uor-chat-stack-reply/1" and
+  .content_readout == $path and
+  .content_readout_sha256 == $sha and
+  (.reply_ids | length) == 1' \
+  "$PIPELINE/seed-1.chat-one-shot.json" >/dev/null
+printf 'hello\n/quit\n' | "$CHAT" \
+  --stack "$PIPELINE/seed-1/serving.uorlut" \
+  --tokenizer "$DUAL/tokenizer-seed-1.json" \
+  --content-readout "$PIPELINE/seed-1/content-readout-sidecar.json" \
+  --max-tokens 1 >"$PIPELINE/seed-1.chat-repl.txt"
+grep -q '1 id(s)' "$PIPELINE/seed-1.chat-repl.txt"
 (cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
   sort -z | xargs -0 sha256sum >SHA256SUMS &&
   sha256sum -c SHA256SUMS --quiet)
-test "$(du -sb "$PIPELINE" | cut -f1)" -le 167772160
+test "$(du -sb "$PIPELINE" | cut -f1)" -le 234881024
 ```
 
 Any source, input, binary, sidecar, parity, worker-order, repeat or resource
@@ -258,21 +293,12 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 CPU content-readout serving attempt 3
+TEST FITNESS: PENDING - M2 #2030 CPU content-readout serving attempt 4
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-reviewer: codex-exact-fit-attempt-3b
-note: Exact pin valid; five inputs match; strict parser, raw-step, synthetic no-memory restore and loopback controls are registered in the run recipe.
+reviewer: pending
+note: Attempt 3 is preserved as instrument evidence; attempt 4 isolates the control target and checks one-shot and REPL paths.
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
-
-## Pre-run GO
-
-GO - reviewer `codex-exact-go-attempt-3`, 2026-11-04. HEAD was clean at
-`c208aaf3e`; the exact implementation pin and all public inputs matched, the
-three run/build roots were absent, free space exceeded the stop floor, and no
-execution blocker was found. Delivery must replace attempt-2 status claims,
-record the 1,800-to-2,100-second control extension, and keep the absent shared
-model-time ledger unknown rather than zero.
