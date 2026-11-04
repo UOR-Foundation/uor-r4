@@ -47,6 +47,10 @@ Used existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a72
 - No production publish, paid provider, useful-chat, production-readiness, M4/M7 completion, trained multimodal, captioning, recognition, or visual-question-answering claim is made.
 - Modern Web Guidance `accessibility` informed decorative preview `alt=""` and dynamic error/live-region semantics. No Canvas-specific guide matched; existing native Canvas/fetch patterns were retained.
 
+## Checks run at the head
+
+The implementation measurements used `4806f2675c50b799c2c0914f822d7a3e7ad98c81`; the candidate then merged `35bfa270800e433f4225dbe418d1ecd4be6b28ba` without conflicts. Full repository gates are **11/11 GREEN**. Final local policy and clean-head checks are rerun after every delivery-record edit; GitHub checks, exact-head review, protected queue, and fresh-main verification are external records on the PR.
+
 ## Skills used
 
 Isolated worktrees, plan execution, test-driven development, systematic debugging, solution integrity, modern web accessibility guidance, integer Rust decomposition, native loopback/OpenAI protocols, plain-JS Canvas composition, and real built-in-browser verification. No GPU, paid compute, production publication, visual-quality evaluation, or model-quality evaluation was used.

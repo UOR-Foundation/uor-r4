@@ -1,10 +1,10 @@
 # ORDER: deterministic integer R4 image decomposition and Studio input
 
-Lab: kimi. Item: [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608), with follow-up [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619). Base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`.
+Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`.
 
 ## Goal
 
-Accept pictures in the live Studio only through deterministic integer RGBA decomposition into bounded, hash-bound R4 patches. Add the native decomposition route and validated `uor_r4_image` extension, then Canvas paste/drop/picker input with previews and explicit Send. Do not claim visual understanding, useful conversation, a trained multimodal artifact, or production readiness.
+Accept Studio pictures only as bounded integer R4 patches, with native decomposition, validated content parts, Canvas previews and explicit Send. Never claim visual understanding, useful conversation, trained multimodal capability, or production readiness.
 
 ## Design
 
@@ -23,7 +23,7 @@ Accept pictures in the live Studio only through deterministic integer RGBA decom
 - Native `uor_r4_image` accepts only flat eight-field parts with schema `uor-r4.image-decomposition/1`, matching canonical bytes/source hash/dimensions/grid, and an exact server-issued ID, then uses existing context preflight and exact usage/generation. Unknown, expired, substituted, and non-user image parts are rejected. Overflow returns 413 without truncation.
 - Browser Canvas accepts paste/drop/picker images, downsamples proportionally to at most 256×256, releases object URLs, and exposes previews/names/sizes/removal plus `R4 patch input — experimental; not visual understanding`. Native decomposition/send occurs only after successful processing and explicit Send. Custom providers may use ordinary `image_url`; local WASM and unsupported cases fail visibly. Image blobs never persist; reload asks for reattachment.
 - Vision/native/Studio suites, previous API/composer checks, real decode→decompose→send browser flows with changed-pixel hashes and exact usage, native/WASM audits, repository gates, fresh exact-head review, green GitHub checks, protected queue, and fresh-main verification pass.
-- The PR closes #3619 only after full acceptance. #3500 and #3569 remain open. No production publish or M4/M7/useful-chat/visual-understanding/multimodal claim.
+- The PR references #3619/#3628 and leaves #3500/#3569 open. No production publish or M4/M7/useful-chat/visual-understanding/multimodal claim.
 
 ## Stop and report conditions
 
