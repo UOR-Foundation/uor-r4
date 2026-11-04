@@ -11,6 +11,13 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   unrelated binary failure. The supported minimal configuration is the
   library used by the build dependency: `--no-default-features --lib` passes.
   The ORDER wording was corrected before the head was frozen.
+- **The default package-wide all-target surface is also not green at this
+  head.** `cargo check -p uor-r4-core --all-targets` reaches many stale core
+  binaries, examples and integration tests that refer to removed modules such
+  as `semantic`, old `native_geometric::learner` paths, `hex`, `ciborium` and
+  `uor_r4_model_source`. These failures predate this unit and are outside its
+  build-graph target. The default core **library** compiles and its 75 tests
+  pass; the minimal library review is `--no-default-features --lib`.
 - **The package-wide formatting command reports pre-existing differences.**
   Current `main` has rustfmt changes in three tokenizer integration tests
   outside this unit. The changed core source passes
@@ -33,9 +40,9 @@ script still executes the exact SpiralCore/prime-route metadata path but no
 longer compiles `uor-r4-integer` under a second feature set. Normal core
 consumers are unchanged because the feature is on by default.
 
-The source change is 20 added and 5 removed lines across three manifests/source
-files and two planning records. It is below the ORDER's finite build-repair
-scope.
+The code diff is 3 files, `+10/-2`. The docs diff at the reviewed source head
+is 4 files, `+174/-1`; retained evidence is 2 files, `+47/-0`. This remains
+within the ORDER's finite build-repair scope.
 
 ## Measurements
 
