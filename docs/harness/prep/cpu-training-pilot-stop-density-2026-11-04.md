@@ -357,3 +357,13 @@ note: Failed-bar evidence is sealed before classification; runtime identity cove
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
+
+## Pre-run GO
+
+GO - reviewer `codex-fresh-context-go-attempt-1`, 2026-11-04. HEAD was
+clean at `85f2894081f915c1cc370ec5cf4e3be4147340e4`; the design head
+`7255d0153` and implementation pin `c8180c157` matched the registered
+runtime tree. All five public inputs, the resource-ledger chain, current
+host/toolchain state and absent output roots passed. The registered shell
+syntax, driver flags and preflight JSON predicates were checked read-only.
+The full controls, public preflight and public runs remain post-GO gates.
