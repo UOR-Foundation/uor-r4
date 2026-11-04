@@ -1,6 +1,6 @@
 # Within-cell orbit-phase termination gate
 
-**Status:** DRAFT
+**Status:** FIT
 
 ## Question
 
@@ -219,4 +219,19 @@ threshold tuning.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 cpu-training-pilot
+sheet: `docs/harness/prep/cpu-training-pilot-orbit-termination-2026-11-04.md`
+head: `d143e8bafc9376cd755072a784d4adfe5b8b72ab`
+reviewer: Codex fresh-context non-author review
+note: bounded two-seed D84 CPU screen; exact cell-relative orbit signatures,
+training-only terminal/nonterminal rows, effective duplicate-safe label control,
+both-arm gate coverage, exact CPU/integer Q12/token/kept-cell parity, paired
+noise margin, exact non-loss, fixed 16-token cap, deterministic repeat,
+source/binary/argv/fresh-output controls, 600-second/2-GiB checks and local
+storage/cost projection are registered
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone
+before compute.
