@@ -2,7 +2,11 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). Casey's 4 November plan, P2b: train at 2,048 × 4 on the long corpus, score recall across turns against a no-memory control (L-010), and time a step at 2,048 against 192.
 
-TEST FITNESS: PENDING - a fresh non-author adversarial review of this sheet is under way.
+TEST FITNESS: FIT - fresh non-author adversarial review, round 1, of this sheet at `3d466b3a9`. It found no blocker or major. Its four minors are fixed in this text; no bar moved:
+- R4's decode tok/s is read from the `decode` pair `--score-rows` prints, not from the samples file;
+- (S)'s positions are 67,107,840, with its evals at about (L)'s;
+- I-6, which could not fail as written, now checks that the passes pair query by query and that each ran at its own window;
+- R1 reports the under-192 bin at both windows, as a check on scoring at 192.
 
 PRE-RUN: not yet. The pre-run review happens in the run's unit, right before launch (§5.10; claude-275's ORDER, amended 4 Nov). The run's pin is this unit's merge commit, which does not exist until this unit merges.
 
@@ -25,7 +29,7 @@ A training comparison from scratch; the candidates are the checkpoints each arm 
 
 Both arms train on the long TRAIN (Data split) through `--train-split TRAIN --train-sha256 HEX --train-mask-sha256 HEX`, for equal positions:
 - **(L)** `--context 2048 --batch 4 --steps 8192 --eval-every 1024`: 67,108,864 positions.
-- **(S)** `--context 192 --batch 16 --steps 21845 --eval-every 2731`: 67,104,768 positions, with its evals at (L)'s positions. Reported only (R3).
+- **(S)** `--context 192 --batch 16 --steps 21845 --eval-every 2731`: 67,107,840 positions, with its evals at about (L)'s positions (8,389,632 against 8,388,608). Reported only (R3).
 
 Seeds 1 and 2, `--seed S`, one 1 × RTX 5090 pod per seed. On each pod, (L) then (S) run alone on GPU 0 at every stage.
 
@@ -37,10 +41,10 @@ Each pass decodes every p-long query with the memory on and out, writing `sample
 
 ## Readings
 
-- **R1 (deciding): the window.** (L) at 2,048 against (L) at 192, memory on, paired by query. From the two `recall-p-long-memory.json` files, join `outcomes` on `query` over the queries `decoded` in both, less the census's 6 (queries 0, 42, 93, 401, 471 and 487). b counts those `stated` at 2,048 and not at 192, c the reverse. R1 is read overall (603 queries) and on the far bin, `distance` ≥ 512 (494). It passes where b − c > 2√(b + c) and b + c ≥ 10.
+- **R1 (deciding): the window.** (L) at 2,048 against (L) at 192, memory on, paired by query. From the two `recall-p-long-memory.json` files, join `outcomes` on `query` over the queries `decoded` in both, less the census's 6 (queries 0, 42, 93, 401, 471 and 487). b counts those `stated` at 2,048 and not at 192, c the reverse. R1 is read overall (603 queries) and on the far bin, `distance` ≥ 512 (494). It passes where b − c > 2√(b + c) and b + c ≥ 10. Beside it, reported only: the under-192 bin's recall at each window (23 queries, whose note both windows see), so a scorer broken at 192 cannot pass as "window shut".
 - **R2: the memory (L-010).** (L) at 2,048, memory on against out, paired the same way. Reported, with R2b, the same at 192.
 - **R3: training at 192.** (S) at 192 against (L) at 192, memory on, paired the same way. Reported only.
-- **R4: the cost, led by tok/s.** Decode tok/s from each queries file (tokens decoded over decode seconds), at 2,048 against 192 on (L). Training positions a second from each arm's trainer clock, against claude-273's 0.6026 s and 0.1349 s a step.
+- **R4: the cost, led by tok/s.** Decode tok/s for each queries file, from the `decode` pair (tokens, seconds) on the line `--score-rows` prints for it, at 2,048 against 192 on (L). Each pass's printed lines are kept as `scored.jsonl`. Training positions a second from each arm's trainer clock, against claude-273's 0.6026 s and 0.1349 s a step.
 - **R5: short context.** DEV and p-v rows and samples at 192 for (L) and (S), set beside each other. Reported only.
 - **By kind:** every reading above is also split by answer kind, invented word or number. The census (Data split) counts how many of each are found in TRAIN's replies.
 
@@ -69,7 +73,7 @@ Whatever the outcome:
 - **I-3 (the inputs):** on each pod, `shasum -a 256 -c SHA256SUMS` passes in each input folder, and every SHA-256 the Data split names equals its file's. `heldout-panel check-queries split=PLONG tokenizer=TOKENIZER` prints `checked 609 queries, 0 failed`.
 - **I-4 (the grade):** in every `recall-p-long-*.json`, `total.reference_states` equals `total.decoded`. Every reference reply states its answer, so the grade can see one.
 - **I-5 (the window):** at 2,048, `total.whole_document` equals `total.decoded`. Each conversation is at most 2,048 tokens, so every prompt holds its whole conversation.
-- **I-6 (the pairing):** in each pass, the memory and no-memory files decode the same set of queries, 609 each.
+- **I-6 (the pairing):** every `recall-p-long-*.json` has the same `outcomes[].query` and `outcomes[].distance` lists, 609 long, and its `context` is its pass's: 2,048 for (L) at 2,048, 192 for the other two. A pass run with the wrong window fails here.
 
 ## Data split
 
