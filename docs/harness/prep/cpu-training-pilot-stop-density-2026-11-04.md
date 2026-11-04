@@ -1,6 +1,6 @@
 # Generated-state offset-conditioned density stop gate
 
-**Status:** FIT
+**Status:** STOPPED AT PREFLIGHT
 
 ## Question
 
@@ -131,6 +131,35 @@ termination candidate and justifies a later artifact-bound serving unit. A
 fail closes this full-row density representation and requires a different
 continuation objective or trajectory representation. Neither result alone
 establishes useful chat.
+
+## Outcome
+
+Attempt 1 executed implementation pin
+`c8180c1576970069dcff395889460defad2a2d6c`. The release driver build, full
+`uor-r4-cpu-train` library tests, driver tests, scoped Clippy and targeted
+rustfmt passed. All five public inputs matched their registered hashes.
+
+The seed-1 preflight stopped the registered run:
+
+| Reading | True density | Shuffled density | Registered limit |
+|---|---:|---:|---:|
+| Training terminal rows | 84 | 84 | at least 84 |
+| Training nonterminal rows | 1,484 | 1,484 | at least 1,484 |
+| Terminal recall | **19/84** | **19/84** | at least 26/84 |
+| Nonterminal false stops | 9/1,484 | 11/1,484 | at most 14/1,484 |
+| Selected k | 8 | 8 | in `{1,2,4,8}` |
+| Fitted margin | 916 | 844 | reported |
+
+The true and shuffled gate hashes differed, the selected row counts matched
+the 1,568 generated training rows, and the preflight process completed in
+0.62 s at 236,356 KiB peak RSS. Recall missed the registered floor, so the
+stop rule prevented the seed-2 preflight, all public generation arms and the
+one-worker repeat. The 26/84 floor was not changed after observing the result.
+
+The exact stopped output and its checksums are under
+[`evidence-attempt-1/`](../../labs/cpu-training-pilot-stop-density-2026-11-04/evidence-attempt-1/).
+Measured compute and the ledger chain are in the
+[resource ledger](../../labs/cpu-training-pilot-stop-density-2026-11-04/resource-ledger.json).
 
 ## Cost
 
