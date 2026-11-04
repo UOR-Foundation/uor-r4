@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** PENDING RE-FIT
+**Status:** FIT
 
 ## Question
 
@@ -293,10 +293,10 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - M2 #2030 CPU content-readout serving attempt 4
+TEST FITNESS: FIT - M2 #2030 CPU content-readout serving attempt 4
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-reviewer: pending
-note: Attempt 3 is preserved as instrument evidence; attempt 4 isolates the control target and checks one-shot and REPL paths.
+reviewer: codex-exact-fit-attempt-4
+note: Attempt 3 target breach preserved; attempt 4 isolates controls, gates final target sizes, checks one-shot and REPL, preserves prior charges, and explicitly limits restore evidence to the synthetic no-memory FBS control.
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
