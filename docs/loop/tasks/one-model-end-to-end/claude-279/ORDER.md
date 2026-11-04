@@ -69,7 +69,7 @@ Every path is in the item's `scope:` list on `main`.
 5. **The gates, on the laptop:**
    - the crate's CPU tests pass;
    - the stub-nvcc CUDA check compiles every target;
-   - a decode test on the CPU: cache on and off give the same tokens, through a window slide.
+   - ~~a decode test on the CPU: cache on and off give the same tokens, through a window slide.~~ **Amended 4 Nov, at the build:** the native trunk has no CPU path (the scan's `cpu_fwd` refuses with "D24: native model operation requires CUDA; no CPU reference"). So this test runs on the pod, as item 6's decode-switch gate. The laptop instead checks the refusals that need no forward pass: the Hamming read's four instruments, and reads set after the prefill.
 6. **The gates, on one GPU pod.** The scoring passes re-score P2b's sealed checkpoints, so they run under a prep sheet with a fresh non-author FIT and a pre-run review (§4.5).
    - **Step equals full, bit for bit (G1 widened):** the random six-layer trunk with P2b's two Hamming reads, given random rotations, margins and weights. It crosses:
      - the retention reading, on and off;
