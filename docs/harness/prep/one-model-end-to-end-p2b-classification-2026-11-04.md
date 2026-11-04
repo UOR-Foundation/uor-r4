@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: [claude-281](../../loop/tasks/one-model-end-to-end/claude-281/ORDER.md), THE ORDER (#2028 6634218223) step 4.
 
-TEST FITNESS: PENDING - a fresh non-author FIT of this sheet is owed before any pod.
+TEST FITNESS: PENDING - round 1, a fresh non-author review at `63856b54e`, was NOT FIT with two majors. Both are fixed in this text, and what changed is at the end. Round 2 is owed before any pod.
 
 **Why.** [P2b](../../loop/tasks/one-model-end-to-end/claude-276/REPORT.md) read Negative. (L), trained at 2,048, stated a held-out note's value in 0 (seed 1) and 1 (seed 2) of 603 paired p-long queries. That closes the configuration only (§4.1). Before a next configuration is chosen, §4.2 asks for a classification, instrument or mechanism. p-long changes two things at once:
 - **The phrasing:** p-long is `cell=dev,dev`. Its note and query user turns use only the `development` templates (`milestone_world_v2.rs:986-1015`), which TRAIN never contains. The reply templates are shared.
@@ -56,7 +56,8 @@ Three new panels, written on the laptop with the pinned tokenizer `d36d3e87…`.
   | q-td | 0 of 301 | 10 of 309 | 10 |
   | q-dt | 2 of 286 | 303 of 304 | 305 |
 
-  A trained value that is a number comes from TRAIN's own pool, so in q-tt and q-dt a reply can state a number without reading its note. The invented words are new even in the trained-value cell. So **the deciding readings are words against words, census-clean:** 295 in q-tt, 301 in q-td, 284 in q-dt and 319 in p-long.
+  A trained value that is a number comes from TRAIN's own pool, so in q-tt and q-dt a reply can state a number without reading its note. The invented words are new even in the trained-value cell. So **the deciding readings are words against words, census-clean:** 295 in q-tt, 301 in q-td, 284 in q-dt and 319 in p-long, of which 283, 287, 270 and 306 are at a distance of at least 192.
+- **The value's split** is `split_of` (`milestone_world_v2.rs:427`), a keyed hash of the whole word, over one syllable generator (`word()`, `:566`). So a dev word and a train word are drawn alike, and only the hash tells them apart.
 - **Overlap:** TRAIN was drawn with `exclude=` p-long's user turns. The new panels are new draws (new seeds). A `train` user turn can equal a TRAIN user turn word for word, which is what a positive control drawn as TRAIN was looks like. Keys and values are drawn fresh per conversation.
 - **Stored,** with a `SHA256SUMS` read back: `results/claude/one-model-end-to-end-p2b-classification-2026-11-04/inputs/{q-tt,q-td,q-dt,census}/`. This is this unit's own root, never P2b's sealed one (L-002).
 
@@ -72,20 +73,30 @@ The four panels are p-long, q-tt, q-td and q-dt. There is one pass for each seed
 
 ## Readings
 
-Every count is read from the panel's `recall-NAME-memory.json` (memory on), per seed, by this fixed `jq` over `outcomes[]`. A query counts when its outcome is `stated`, its answer in the panel's `queries.json` is a word (not `^[0-9]+$`), and its index is not in the census's `found_queries` for that panel:
+Every count is read from the panel's `recall-NAME-memory.json` (memory on), per seed, by this fixed `jq` over `outcomes[]`. `outcomes[].query` is the query's index in `queries.json`, the index `found_queries` uses too. A query counts when four things hold:
+- its outcome is `stated`;
+- its answer in the panel's `queries.json` is a word (not `^[0-9]+$`);
+- its `distance` is at least 192;
+- its index is not in the census's `found_queries` for that panel.
 
 ```
-jq --slurpfile q PANEL/queries.json --slurpfile c census.json --arg p NAME '
+jq --slurpfile q PANEL/queries.json --slurpfile c census.json --arg p NAME --arg k stated '
   ($c[0].answers[] | select(.panel == $p) | .found_queries) as $E
   | [$q[0].queries[] | .answer | test("^[0-9]+$") | not] as $W
-  | [.outcomes[] | select(.stated and $W[.query] and (.query as $i | ($E | index($i)) == null))]
+  | [.outcomes[] | select(.[$k] and $W[.query] and .distance >= 192
+      and (.query as $i | ($E | index($i)) == null))]
   | length' recall-NAME-memory.json
 ```
 
-The same expression with `select(.decoded and …)` in place of `.stated` gives each panel's n. Tested on P2b's sealed `score-L-2048/recall-p-long-memory.json` with p-long's census: s_dd = 0 at seed 1 and 0 at seed 2, each of n = 319. Over every query, the seeds' stated counts are 0 and 1, so seed 2's one was a number.
+`--arg k decoded` gives each panel's n. Tested on P2b's sealed `score-L-2048/recall-p-long-memory.json` with p-long's census: s_dd = 0 at seed 1 and 0 at seed 2, each of n = 306. Over every query, the seeds' stated counts are 0 and 1; seed 2's one is query 20, a number.
 
-- **R1 (deciding): trained phrasings against held-out ones, words.** s_tt (q-tt) against s_dd (p-long). The panels are drawn apart, so the test is unpaired. R1 passes where s_tt ≥ 10 and s_tt − s_dd > 2√(s_tt + s_dd). It is reported with each panel's n.
-- **R2: which change carries it, words.** s_dt against s_tt (the phrasing alone) and s_td against s_tt (the value alone), under R1's rule. Each is reported, and read only where R1 passes. For words the value contrast is weak by construction: the census finds 3 of 298 q-tt words and 0 of 301 q-td words in TRAIN, so both cells' words are mostly new to the model.
+- **R1 (deciding): trained cell against held-out cell, far words.** s_tt (q-tt) against s_dd (p-long). The panels are drawn apart, so the test is unpaired. R1 passes where s_tt ≥ 10 and s_tt − s_dd > 2√(s_tt + s_dd). It is reported with each panel's n.
+  - **Far only:** a note at least 192 tokens back is past the window P2b's short arm trained at. The deciding reading is recall across turns, not recall of a note in the reply's own neighbourhood.
+- **R2: which change carries the gap, far words.** Two gaps, each against q-tt, each passing where s_tt − s_x > 2√(s_tt + s_x):
+  - **the phrasing gap:** q-dt (phrasing changed, value kept);
+  - **the value gap:** q-td (value changed, phrasing kept).
+
+  R2 picks the next step when R1 passes (Bar). The value gap is expected near 0 for words, since `split_of` draws dev and train words alike (Data split), but it is read, not assumed.
 - **R2n: numbers, reported only.** Each panel's stated count over its number answers, census-clean and in all, set beside its census count. In q-tt and q-dt nearly every number is TRAIN's, so their number counts are never read as recall.
 - **R3: the reply form.** In each panel's `samples-NAME-queries-memory.json`, the text of each reply before its first `<|eos|>`, classed by this fixed `jq` test:
   - **ack:** `test("^ Okay, I.ll remember")`;
@@ -94,16 +105,25 @@ The same expression with `select(.decoded and …)` in place of `.stated` gives 
   - **other:** the rest.
 
   Tested on P2b's sealed s1 L2048 queries file: 82 ack, 135 open "It's/That's", 1 opens "{k} is", 391 other. Reported only.
-- **R4: the memory (L-010).** Each panel's words, memory on against out, paired by query (b, c as P2b's R2). Reported only.
+- **R4: the memory (L-010).** Each panel's far clean words, memory on against out, paired by query (b, c as P2b's R2). Reported only.
+  - **Why it is not in the Bar:** the turn memory is built from TRAIN and holds none of these new words, so it cannot be where a stated word comes from.
+  - **What the Bar claims instead:** recall from the window by the trained model, read included. It is not a claim that the Hamming read alone carries the recall.
 - **R5: tok/s first.** Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pair `--score-rows` prints, set beside P2b's 15.2.
-- **The distance bins** (under 192, 192–511, at least 512) for R1, R2 and R4.
+- **The distance bins** (under 192, 192–511, at least 512) for R1, R2 and R4. The under-192 bin (12 to 14 clean words a panel) is reported, never read.
 
 ## Bar
 
 Read per seed, then across both:
-- **Phrasing (the read works in trained phrasings):** R1 passes at both seeds. P2b's Negative is then a generalization fault of the data, not of the read. The next unit on this line changes the data (held-out templates mixed into TRAIN, or the real-text corpus, THE ORDER step 6), and the read and recipe stay as they are. R2 says whether the phrasing carries it.
-- **Mechanism (it does not recall even as trained):** R1 fails at both seeds with s_tt < 10 at each. The trained model then does not recall a note across turns even in its trained phrasings, on panels drawn as TRAIN was. That closes P2b's configuration of the read (copy key 1, the earliest 16 matches averaged, `flock_read_hamming.rs`) at this recipe; it never closes the read (§4.2). The next unit is a read configuration the scout traced: copy key 2, or the latest match. claude-267's oracle found key 1 right at 3,859 of 8,243 copyable DEV positions with the latest match.
-- **Inconclusive:** anything else, the seeds disagreeing included. Nothing is named or closed.
+- **Generalization (P2b's Negative is a generalization fault):** R1 passes at both seeds. The trained model then states a new word from a note at least 192 tokens back in its trained cell, and not in the held-out cell. The read and the recipe stay as they are, and the next unit changes the data. Which change follows R2 at both seeds:
+  - **only the phrasing gap passes:** held-out phrasings mixed into TRAIN, or the real-text corpus (THE ORDER step 6);
+  - **only the value gap passes:** a change to TRAIN's values;
+  - **both pass:** both changes are named, and the data unit carries both;
+  - **neither passes, or the seeds disagree on R2:** only the double change fails. Both changes are named, and which one carries it is Inconclusive.
+- **Mechanism (it does not recall across turns even as trained):** R1 fails at both seeds with s_tt < 10 at each. The trained model then does not recall a far note even in its trained cell, on panels drawn as TRAIN was.
+  - **What it closes:** P2b's configuration (copy key 1, the earliest 16 matches averaged, `flock_read_hamming.rs`) at this recipe. It never closes the read (§4.2).
+  - **What it cannot say:** this test does not separate the read's configuration from the recipe.
+  - **The next unit's change** (copy key 2, or the latest match) is chosen on claude-267's oracle, which found key 1 right at 3,859 of 8,243 copyable DEV positions with the latest match. It is not shown by this test.
+- **Inconclusive:** anything else, the seeds disagreeing on R1 included. Nothing is named or closed.
 
 Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrument check leaves every reading unread (§4.1).
 
@@ -111,10 +131,14 @@ Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrum
 
 - **I-0:** the float crate's CUDA library suite at the pin passes, `--no-fail-fast`, with claude-275's query tests and claude-279's decode-cache tests named. That includes `the_decode_cache_decodes_the_same_replies_through_a_window_slide`, which carries this unit's tests for the row cut and `first_refusal`. **I-0n:** that test also fails with the row-cut fix set aside, by a reverse patch of the fix's own lines, and passes again once it is restored.
 - **I-1 (the scorer did not move):** the re-scored `recall-p-long-{memory,no-memory}.json` equal P2b's sealed ones byte for byte, seed by seed. Only the recall grades are compared across pods: claude-279 found that 19 of 609 query replies and 0.13–0.28% of top-1 picks differ between this lab's 5090 pods, while the recall files stayed identical. Every cell-against-cell reading is scored on one pod, in one pass, so no reading crosses pods.
-- **I-2 (the panels):** `check-queries` passes for each panel on the pod, and every SHA-256 in the Data split equals its file's.
+- **I-2 (the panels):** `check-queries` passed for each panel on the laptop (Data split). On the pod, every SHA-256 in the Data split equals its file's.
 - **I-3 (the grade can see a pass):** in every `recall-*.json`, `total.reference_states` equals `total.decoded`.
 - **I-4 (the cache ran):** each pass's `decode_forwards` has `steps` > 0. Its `first_refusal` is reported.
 - **I-5 (the pairing):** each panel's memory-on and memory-out recall files list the same queries.
+- **I-6 (the grade agrees with the text):** a second grade, made on the laptop from each queries samples file, agrees with `stated` on every query of every panel, memory on and out.
+  - **The second grade,** by `jq`: the query's answer as a whole word (no letter or digit beside it) in `reply_text` before its first `<|eos|>`.
+  - **Any disagreement** is listed and classed before any reading is made.
+  - **Tested on P2b's sealed p-long queries files:** it agrees on 609 of 609 at each seed, seed 2's one stated reply (" That's 97.", query 20) included.
 
 ## Steps
 
@@ -122,11 +146,20 @@ Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrum
 2. Fetch the inputs: the three panels, p-long, the census, both seeds' checkpoints and the pinned driver data. Check every `SHA256SUMS`, and run I-2.
 3. Score seed 1's (L), then seed 2's, at 2,048 over the four panels (Arms).
 4. Seal every output with `SHA256SUMS` under `results/claude/one-model-end-to-end-p2b-classification-2026-11-04/`, read it back, and only then take the pod down.
-5. On the laptop: check I-1 and I-3 to I-5, compute R1 to R5 and the bins, and apply the Bar.
+5. On the laptop: check I-1 and I-3 to I-6, compute R1 to R5 and the bins, and apply the Bar.
 
 ## Minimum test power
 
-R1's rule needs s_tt ≥ 10. On about 295 census-clean word queries, that is a stated rate of about 3.4%. P2b's s_dd on its 319 clean words was 0 at both seeds, so a positive control that recalls 4% of words passes, and one that recalls under 3% does not.
+R1's rule needs s_tt ≥ 10 on q-tt's 283 far clean words, a stated rate of about 3.5%. P2b's s_dd on p-long's 306 was 0 at both seeds. With s_dd near 0, R1's chance to pass, taking s_tt as Poisson with mean 283 × rate (computed with `jq`):
+
+| rate | one seed | both seeds |
+|---|---|---|
+| 3% | 0.35 | 0.12 |
+| 4% | 0.69 | 0.48 |
+| 5% | 0.90 | 0.81 |
+| 6% | 0.97 | 0.95 |
+
+So the test reliably sees a recall rate of 5% or more at both seeds. Below about 4%, a miss reads Inconclusive (seeds disagree) or Mechanism, and that is the floor of what it can tell apart.
 
 ## Code in this unit (claude-279's review SHOULDs, and the census)
 
@@ -148,3 +181,21 @@ Each refusal returns the group to the whole-window re-run, and the census field 
 ## Stop rule
 
 The run stops when both passes are scored, the files sealed and read back, and the pod is down. A failed instrument check is repaired and re-run once inside the bound. Nothing is trained.
+
+## Changes after FIT round 1
+
+Round 1 (`63856b54e`) was NOT FIT, with two majors and three minors. Every number it spot-checked was right, and so was the `jq`.
+
+**The majors:**
+- **M1 (L-010): the Phrasing branch claimed "the read works" without needing the memory to make a difference.** R1 also counted notes in the reply's own neighbourhood.
+  - **The fix:** R1 now reads far words only (distance at least 192: 283 in q-tt, 306 in p-long), and the near bin is reported only.
+  - **What the Bar claims now:** recall from the window by the trained model, not the Hamming read alone.
+  - **R4 stays reported, not in the Bar:** the turn memory holds no new word, so it cannot be where a stated word comes from.
+- **M2: R1 changes the phrasing and the value at once, but its pass was called "Phrasing" and fixed the next step as held-out templates.**
+  - **The fix:** the pass is now "Generalization", and R2's two gaps pick the next step.
+  - **The value split, checked:** it is a keyed hash of the whole word over one syllable generator (`milestone_world_v2.rs:427`, `:566`). The value gap is therefore expected near 0, but it is read.
+
+**The minors:**
+- **m1:** the power section gives Poisson chances, not a cut-off.
+- **m2:** the Mechanism branch says the next read configuration is chosen on claude-267's oracle, not shown by this test.
+- **m3:** new I-6, a second grade from the reply text, tested on P2b's sealed files. Also, I-2's `check-queries` is the laptop's (the pod checks the SHA-256s).
