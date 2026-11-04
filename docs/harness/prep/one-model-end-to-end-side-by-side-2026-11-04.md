@@ -4,6 +4,10 @@ Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-e
 
 TEST FITNESS: FIT - claude lab, 4 Nov. A first fresh non-author adversarial review read NOT FIT on one MAJOR (Inconclusive changed no decision) and six MINORs. A second fresh review of the fixed sheet read FIT: the Bar now covers every case exactly once, and each outcome names a decision. Its five MINORs are folded in: pooling across pods, a G failure only in D, the cost's low end, this line, and the width resting on one C.
 
+PRE-RUN: GO WITH FIXES - claude lab, 4 Nov, two fresh non-author reviews of this sheet, the ORDER, the job and the grade.
+- **First review.** Its MAJOR was that the signal trap sealed while passes still ran. The fix is in the job. A local trap test with a stub binary then caught two bugs in that fix, both now fixed: a wait that also waited on the GPU-trace logger, and a missing exit code for a pass stopped while running serially. The test passes in both modes.
+- **Second review.** Its MAJOR was that R3 measures time-slicing between processes, not room inside the kernels. R3 now decides only how the 2,048 passes are scheduled, and P3(c) is next whatever R3 reads. Its MINOR was that the grade must refuse a partial run; that lands in the grade before the read-back. It also checked `uor-store get` for files and folders, and `build.rs` at the pin: PTX is built ahead by nvcc, with no NVRTC.
+
 **What this run measures.** In P2b (claude-276), each seed scored its checkpoints in three passes, one after another, on one RTX 5090:
 - 2,624 s for (L) at 2,048, then 148 s for (L) at 192 and 138 s for (S) at 192;
 - each pass peaked at 5,296 MiB of 32 GiB;
@@ -15,7 +19,7 @@ This run re-scores P2b's sealed seed-1 checkpoints, unchanged, with the same com
 
 - At 192, do two scoring passes run side by side on one GPU finish sooner than the same two in turn, with every scored file byte-identical?
 - How does that scale to four passes at once?
-- At 2,048, does a second identical pass beside the first cost about nothing, or about a whole pass? This says whether the 2,048 forward leaves the GPU room. That decides whether P3(c), memory on and off in one forward, can help at 2,048.
+- At 2,048, does a second identical pass beside the first cost about nothing, or about a whole pass? Without MPS, CUDA time-slices separate processes: their kernels take turns and never run at once. So this measures how much idle time one 2,048 pass leaves the GPU, not whether its kernels leave the SMs room. It decides whether this line's 2,048 passes also run side by side. It cannot decide P3(c), memory on and off batched in one forward, because that would use room inside the kernels.
 
 ## Base artifact
 
@@ -44,10 +48,10 @@ The order on the pod is A1, B1, A2, B2, C, D. Interleaving A and B spreads any d
   - **No clock reading is inside `--out`.** P2b's seal lists the 19 files the command wrote to a 192 folder: `rows-*`, `samples-*` and `recall-*`. At the pin, `score_rows` writes these only through `write_new(&out.join(..))`. They hold positions, targets, picks, reply texts and recall counts. The decode seconds go to stdout, which the job saves as `scored.jsonl` beside `--out`, not inside it. The one file with millisecond fields, `keys-{split}.json`, is not written by this command.
   - Reported beside it, not part of the gate: A1 and D against P2b's sealed files, which come from another 5090.
 - **R1 (deciding): the pair's wall time at 192.** For each of A1, A2, B1 and B2, the seconds from the phase's first start to its last end, from the job's millisecond stamps. The speedup is mean(A) / mean(B). Both repeats are shown.
-  - A1 alone runs with cold caches, which makes A look slower. A2 against B2, both warm, is reported beside the means. A1 cannot produce a Positive on its own, because both B repeats must also beat A2.
+  - A1 alone runs with cold caches, which makes A look slower. One of those caches is the driver's. The PTX targets `compute_120`, so the driver compiles it to machine code when the module first loads and keeps it in its own cache. This is not NVRTC, and it cannot change a scored byte. I-0 runs first and probably warms that cache, and whatever is left adds to A1's cold start. A2 against B2, both warm, is reported beside the means. A1 cannot produce a Positive on its own, because both B repeats must also beat A2.
   - **What a Positive is worth.** P2b's two passes at 192 took 286 s of a 2,048 seed's 2,910 s of scoring, so a Positive saves at most about 143 s there. The saving that matters is for P5 and P6, which score many arms at 192. For P3's order, R3 matters most.
 - **R2: four at once.** C's wall time against 2 × mean(A), the serial time of its four passes, and against 2 × mean(B), two B pairs back to back. It sets the width on a Positive (see the Bar).
-- **R3: room at 2,048.** r = D's wall time / 2,624 s.
+- **R3: idle time at 2,048, under time-slicing between processes.** r = D's wall time / 2,624 s. The two D passes are separate processes with no MPS, so their kernels take turns. r is about 1 if one pass leaves the GPU idle about half its time (host work, gaps between launches), and about 2 if it leaves almost none. The 2,048 pass reads 99% or above utilization (the trace above), so r near 2 is the expected reading, and it says nothing about room inside the kernels.
   - 2,624 s is P2b's seed-1 (L) pass at 2,048: the same pin, the same checkpoint, on another 5090. The seed-2 pass took 2,622 s.
   - **Known bias: D is set against another pod.** P2b's two pods timed the 2,048 pass within 2 s of each other, but trained up to 7% apart. A 7% shift moves r by about 0.07, small beside the 1.3 / 1.7 split. r = 1 means the two passes overlap completely, and r = 2 means they queue completely. The REPORT names this bias.
   - Beside it: each D pass's decode tok/s against P2b's 15.2.
@@ -75,10 +79,10 @@ The outcomes are read in this order, and the first that applies is the reading.
   The passes stay serial for now, but the schedule is not closed. The next unit that already scores passes at 192 on its own pod (P5's scale probe) repeats one A and one B pair there, at no extra pod. It adopts the schedule only if, on each of the two pods, both B are below that pod's min(A), and the mean of the two pods' mean(A) / mean(B) is at least 1.2. Raw seconds from two pods are never pooled, since they carry the bias R3 names.
 - **Negative:** G holds, and neither of the above applies. The passes stay serial. This closes this schedule on this pod type only.
 
-**R3 sets P3's next unit, whatever R1 reads:**
-- r ≤ 1.3: the 2,048 forward leaves the GPU room. P3(c) is next: memory on and off in one forward. Its rows are the same prompt at the same length, so they batch with no padding.
-- r ≥ 1.7: the 2,048 pass fills the GPU. P3(c) is then for the passes at 192 only, and P3's next unit is chosen in its own ORDER.
-- Between the two: P3(c) is still next, with R3 named as uncertain.
+**R3 sets how this line schedules its 2,048 passes. P3(c) is next whatever R3 reads.** P3(c) batches memory on and off inside one forward. Its rows are the same prompt at the same length, so they batch with no padding. D cannot see the room inside the kernels that this batching would use, so no R3 reading takes P3(c) off 2,048. P3(c)'s own sheet tests it at both 192 and 2,048, and may add a D under MPS, where both processes' kernels run at once.
+- r ≤ 1.3: one 2,048 pass leaves much of its time idle. From P4 on, this line's 2,048 passes also run two side by side.
+- r ≥ 1.7: one 2,048 pass leaves little idle time. Its passes stay one at a time.
+- Between the two: the 2,048 passes stay one at a time, with R3 named as uncertain.
 
 Whatever the outcome:
 - no model, recall or served reading rests on this run;

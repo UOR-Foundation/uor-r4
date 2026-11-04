@@ -14,7 +14,7 @@ Every scored file must be byte-identical either way. Grade G and R1 to R4 on the
 - **Plan step:** Casey's 4 November plan, P3 (faster scoring), part (a), arms side by side on one GPU (bound: 3 units for P3).
 - **What it changes:**
   - **The job scripts.** On a positive reading, every job script on this line (P4 to P6) scores a seed's passes side by side, which cuts their wall time and pod cost.
-  - **P3's order.** R3 says whether the 2,048 forward leaves the GPU room, which decides whether P3(c), memory on and off in one forward, comes next.
+  - **The 2,048 schedule.** R3 says how much idle time one 2,048 pass leaves under time-slicing between processes. That decides whether this line's 2,048 passes also run side by side. P3(c), memory on and off in one forward, is next whatever R3 reads, because D cannot see the room inside the kernels that P3(c) would use. The pre-run review caught this.
   - **Not the model:** no model, recall or served reading is taken.
 - **Why now:** P2b's seed took 11,515 s on its pod, 2,910 s of it scoring. P5's scale probe scores many arms at 192, where one pass leaves the GPU idle about a quarter of the time (P2b's trace).
 - **The pin** is `e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde`, the commit P2b scored at. That lets the run's files be set beside P2b's sealed files as a reported, cross-pod check.
