@@ -1,6 +1,6 @@
 # First-order generated trajectory content readout
 
-**Status:** FIT
+**Status:** STOPPED AT PREFLIGHT
 
 ## Question
 
@@ -135,6 +135,33 @@ A pass makes first-order trajectory context a supported CPU content candidate
 and justifies artifact-bound serving integration. A fail closes this
 current-plus-XOR construction and requires higher-order transition history,
 learned transition geometry or a different content objective.
+
+## Outcome
+
+Attempt 1 executed implementation pin
+`99a0687f3a4a7cf87cc5bdaff07ce6330d5d3968`. The release driver, 255 library
+tests, ten driver tests, scoped Clippy and targeted rustfmt passed. Source and
+all five public inputs matched.
+
+| Seed 1 reading | Code | Trajectory | Registered rule |
+|---|---:|---:|---:|
+| Training rows | 894 | 894 | at least 640 |
+| Target values | 207 | 207 | at least 16 |
+| Covered rows | 807 | 806 | at least 90% |
+| Leave-one-out top-1 | **300** | **297** | trajectory not below code |
+| Ambiguous rows | 277 | **254** | reported |
+| Fitted radius | 537 | 1,080 | reported |
+| Signature bits | 2,048 | 4,096 | trajectory exactly 4,096 |
+
+The 4,096-bit trajectory mapping differed from its shuffled target control on
+632 effective assignments. It reduced ambiguity, but its top-1 fell below the
+existing code readout, so the preflight stopped before seed 2, generation or
+the repeat. The floor and representation were not changed after observation.
+
+Exact output is under
+[`evidence-attempt-1/`](../../labs/cpu-training-pilot-trajectory-readout-2026-11-04/evidence-attempt-1/).
+Measured compute and cumulative accounting are in the
+[resource ledger](../../labs/cpu-training-pilot-trajectory-readout-2026-11-04/resource-ledger.json).
 
 ## Cost
 
