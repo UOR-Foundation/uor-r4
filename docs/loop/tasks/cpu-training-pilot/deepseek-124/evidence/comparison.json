@@ -4,7 +4,7 @@
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "source": {
-    "source_commit": "d5108222aef6882007aba31eeadc95796b9c8aca",
+    "source_commit": "1ca202ef217918d4c8444499ebaabc3a91e1878a",
     "run_head": "a4f137d0d",
     "binary_sha256": "eee04141652007864d58e870104ee0923a0a51cd6146f5d27b9989698c30e521",
     "rust": "1.97.1",
