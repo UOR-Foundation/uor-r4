@@ -20,7 +20,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `5b8d0e17f` |
+| implementation source | `c128b6b62` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -158,7 +158,7 @@ BUILD=$SOURCE/target/deepseek/phase-termination-146
 CONTROL_BUILD=$SOURCE/target/deepseek/phase-termination-controls-146
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=5b8d0e17f
+IMPL_PIN=c128b6b62
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 
@@ -177,33 +177,95 @@ sha256sum -c <(printf '%s\n' \
   'ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab  '"$DEV"'/dev-manifest.json') --quiet
 mkdir -p "$PIPELINE"
 
-CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+/usr/bin/time -v -o "$PIPELINE/build.time.txt" \
+  env CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-content-readout-driver
-CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
+/usr/bin/time -v -o "$PIPELINE/control-lib.time.txt" \
+  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
   -p uor-r4-cpu-train --lib
-CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
+/usr/bin/time -v -o "$PIPELINE/control-bin.time.txt" \
+  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
   -p uor-r4-cpu-train --bin cpu-content-readout-driver
-CARGO_TARGET_DIR="$CONTROL_BUILD" cargo clippy --locked \
+/usr/bin/time -v -o "$PIPELINE/control-clippy.time.txt" \
+  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo clippy --locked \
   -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings
+cargo fmt -p uor-r4-cpu-train -- --check
+test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$PIPELINE/build.time.txt")" -le 4194304
+test "$(du -sb "$BUILD" | cut -f1)" -le 2147483648
+test "$(awk -F': ' '/Maximum resident set size/ {if ($2 > max) max=$2} END {print max}' "$PIPELINE"/control-*.time.txt)" -le 4194304
+test "$(du -sb "$CONTROL_BUILD" | cut -f1)" -le 3221225472
 
 BIN=$BUILD/release/cpu-content-readout-driver
-"$BIN" "$DUAL/dual-c131-seed-1-raw_both.uorlut" \
-  "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" "$DEV/dev-manifest.json" \
-  "$PIPELINE/select-only-unused-1" \
-  --expected-artifact-sha256 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd \
-  --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
-  --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
-  --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
-  --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
-  --reply-cap 16 --stop-phase-neighbors 8 --seed 1 --select-only \
-  >"$PIPELINE/seed-1.preflight.json"
+run_preflight() {
+  seed=$1
+  artifact=$2
+  /usr/bin/time -v -o "$PIPELINE/seed-$seed.preflight.time.txt" \
+    timeout 600s env RAYON_NUM_THREADS=32 "$BIN" \
+      "$DUAL/dual-c131-seed-$seed-raw_both.uorlut" \
+      "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" "$DEV/dev-manifest.json" \
+      "$PIPELINE/select-only-unused-$seed" \
+      --expected-artifact-sha256 "$artifact" \
+      --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+      --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+      --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+      --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
+      --reply-cap 16 --stop-phase-neighbors 8 --seed 1 --select-only \
+      >"$PIPELINE/seed-$seed.preflight.json"
+  test "$(awk -F': ' '/Maximum resident set size/ {print $2}' \
+    "$PIPELINE/seed-$seed.preflight.time.txt")" -le 1048576
+  jq -e '.modes.gate_density as $g |
+    $g.rows == 1568 and
+    $g.training.terminal_rows >= 84 and
+    $g.training.nonterminal_rows >= 1484 and
+    $g.training.terminal_stops >= 26 and
+    $g.training.nonterminal_stops <= $g.training.nonterminal_stop_limit and
+    $g.training.gate.neighbors <= 8 and
+    $g.training.gate.offset_radius == 2 and
+    $g.predictions_changed > 0' \
+    "$PIPELINE/seed-$seed.preflight.json" >/dev/null
+}
+run_preflight 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run_preflight 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 
-jq -e '.modes.gate_density.predictions_changed > 0' \
-  "$PIPELINE/seed-1.preflight.json" >/dev/null
-jq -e '.modes.gate_density.rows == 1568' \
-  "$PIPELINE/seed-1.preflight.json" >/dev/null
+run_arm() {
+  seed=$1
+  label=$2
+  workers=$3
+  artifact=$4
+  /usr/bin/time -v -o "$PIPELINE/$label.time.txt" \
+    timeout 600s env RAYON_NUM_THREADS="$workers" "$BIN" \
+      "$DUAL/dual-c131-seed-$seed-raw_both.uorlut" \
+      "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" "$DEV/dev-manifest.json" \
+      "$PIPELINE/$label" --expected-artifact-sha256 "$artifact" \
+      --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+      --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+      --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+      --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
+      --reply-cap 16 --stop-phase-neighbors 8 --seed 1 \
+      >"$PIPELINE/$label.stdout.json"
+  test "$(jq -r '.peak_rss_kib' "$PIPELINE/$label/report.json")" -le 1048576
+  jq -e '.bar.gate_density.passes == true' "$PIPELINE/$label/report.json" >/dev/null
+}
+run_arm 1 seed-1 32 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run_arm 2 seed-2 32 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run_arm 1 seed-1-repeat 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+
+jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
+  "$PIPELINE/seed-1/report.json" >"$PIPELINE/seed-1.normalized.json"
+jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
+  "$PIPELINE/seed-1-repeat/report.json" >"$PIPELINE/seed-1-repeat.normalized.json"
+cmp "$PIPELINE/seed-1.normalized.json" "$PIPELINE/seed-1-repeat.normalized.json"
+while IFS= read -r file; do
+  cmp "$file" "$PIPELINE/seed-1-repeat/${file#"$PIPELINE/seed-1/"}"
+done < <(find "$PIPELINE/seed-1" -maxdepth 1 -type f -name '*.json' \
+  ! -name report.json | sort)
+
+test "$(du -sb "$PIPELINE" | cut -f1)" -le 201326592
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
+(cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
+  sort -z | xargs -0 -r sha256sum >SHA256SUMS &&
+  sha256sum -c SHA256SUMS --quiet)
 ```
 
 Stop before seed 2 when any preflight condition fails. Seal every generated
