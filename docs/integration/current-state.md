@@ -9,6 +9,13 @@ registered preflight stopped before seed 2, public generation or the repeat.
 This closes the fixed current-plus-XOR concatenation, not trajectory content
 modeling generally. Record:
 [deepseek-144](../loop/tasks/cpu-training-pilot/deepseek-144/REPORT.md).
+Fresh exact-head review found that the first implementation's full-generation
+fallback check counted reference-aligned decisions while the readout counters
+covered every generated decision. [deepseek-145](../loop/tasks/cpu-training-pilot/deepseek-145/REPORT.md)
+adds an explicit total-generated-decision count and a capped-horizon
+regression, then reproduces the original preflight report and structured
+failure byte-for-byte from the corrected source. The same 300-versus-297
+result remains the registered stop.
 **Next:** test higher-order or learned transition geometry only if it preserves
 the code readout’s exact top-1 floor; separately pursue a nonterminal-aware
 continuation objective.

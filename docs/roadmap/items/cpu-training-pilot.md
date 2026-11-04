@@ -355,6 +355,14 @@ concatenation; higher-order transition history or learned transition geometry
 remains open. See
 [deepseek-144](../../loop/tasks/cpu-training-pilot/deepseek-144/REPORT.md).
 
+An exact-head review then found that the first trajectory implementation's
+full-generation fallback check compared reference-aligned decisions with all
+generated decisions. The repair added a separate generated-decision count and
+a capped-horizon regression, then reproduced the seed-1 preflight report and
+structured failure byte-for-byte from the corrected source. The same 300
+versus 297 top-1 result still stops before generation. See
+[deepseek-145](../../loop/tasks/cpu-training-pilot/deepseek-145/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

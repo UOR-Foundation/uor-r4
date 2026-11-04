@@ -163,6 +163,25 @@ Exact output is under
 Measured compute and cumulative accounting are in the
 [resource ledger](../../labs/cpu-training-pilot-trajectory-readout-2026-11-04/resource-ledger.json).
 
+## Repair attempt 2
+
+Fresh exact-head review found that full-generation fallback accounting compared
+reference-aligned decisions with counters covering every generated decision.
+The repair adds an explicit generated-decision count and a capped-horizon
+regression without changing the registered construction, inputs, split,
+threshold rule or stop rule.
+
+Attempt 2 rebuilt from source `4388db081b30ee0c554f99b41500c667cf08eb8c` and
+reran the seed-1 `--select-only --trajectory-readout` preflight. The preflight
+report and structured failure are byte-identical to attempt 1
+(`06311414…693bdc` and `17ac1246…b8879`): code top-1 300/894, trajectory
+297/894, coverage 807/806, ambiguity 277/254, and radii 537/1,080.
+
+The corrected source therefore stops for the registered mechanism reason, not
+an accounting fault. Attempt 1 remains sealed unchanged; attempt 2 is under
+`docs/labs/cpu-training-pilot-trajectory-readout-2026-11-04/evidence-attempt-2/`
+with `SHA256SUMS` `140cf3f54cf60931d149bd89359444e2caf67629f0e2485dcc4aa4ee5e288ee8`.
+
 ## Cost
 
 | Component | Projection |

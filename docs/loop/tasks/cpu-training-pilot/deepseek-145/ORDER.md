@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-145 (trajectory fallback-accounting repair)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Parent: [deepseek-144](../deepseek-144/ORDER.md). Base: `d5d173073`.
 
 ## Goal
