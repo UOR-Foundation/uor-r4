@@ -1,6 +1,6 @@
 # Generated-state content stop gate
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -16,11 +16,17 @@ integer serving and is not a language or GPU-qualification claim.
 Local CPU development research in `uor-r4-cpu-train`; no GPU, pod, paid API,
 upload or external model execution.
 
+Revision 2 supersedes implementation pin `18b0bc8c0` after delivery review
+found that the driver used the total discordant count instead of the
+registered control-only count in its paired thresholds. The attempt-1 run is
+retained as superseded instrument evidence; it does not decide this
+configuration.
+
 ## Base artifacts
 
 | Input | Identity |
 |---|---|
-| implementation source | `18b0bc8c07720160913435f338ae9f43c1b0194f` |
+| implementation source | `249b296072c2d716019af487dbb0afaa38281e55` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -217,11 +223,11 @@ or resource mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 generated-state content stop gate:
+TEST FITNESS: PENDING - M2 #2030 generated-state content stop gate:
 docs/harness/prep/cpu-training-pilot-content-gate-2026-11-04.md
-head: 18b0bc8c07720160913435f338ae9f43c1b0194f
-implementation pin: 18b0bc8c07720160913435f338ae9f43c1b0194f
-reviewer: independent-subagent content_gate_fit_quick
+head: pending
+implementation pin: 249b296072c2d716019af487dbb0afaa38281e55
+reviewer: pending
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
