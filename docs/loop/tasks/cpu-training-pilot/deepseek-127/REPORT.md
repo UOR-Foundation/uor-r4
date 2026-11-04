@@ -13,8 +13,12 @@ Base: `3441ba625`.
   The new profile includes timing overhead and is not a speed comparison.
 - **A single-stage optimization would address less than half the wall.**
   `exact_verify` was the stable largest stage, but exact and shuffled
-  verification together consumed 47.6% / 49.7% of wall time at one / sixteen
-  workers. All three held-out evaluations consumed another 31.5% / 31.5%.
+  verification together consumed 45.3% / 48.0% of wall time at one / sixteen
+  workers. All three held-out evaluations consumed another 32.2% / 32.0%.
+- **The first four-run attempt was superseded.** Exact-head review found that
+  the finite test did not require the complete 21-stage set. The driver now
+  rejects duplicate, missing and extra stages, and the retained result is a
+  fresh second attempt under that binary.
 - **No model or capability question was tested.** Artifact, table, decision and
   checksum identity with deepseek-125/126 was the required control, not a
   training result.
@@ -32,8 +36,9 @@ Base: `3441ba625`.
 - parity, changed-decision and resource reductions.
 
 The report includes each stage duration, attributed time and unattributed time
-before final report serialization. Duplicate stage names and invalid accounting
-fail closed. Model math, update order and artifact serialization are unchanged.
+before final report serialization. Duplicate stage names, missing or extra
+stages, and invalid accounting fail closed. Model math, update order and
+artifact serialization are unchanged.
 
 ## Measurements
 
@@ -43,22 +48,22 @@ mirrored `16,1` worker order.
 
 | Workers | Pass | In-process wall | Peak RSS |
 |---:|---|---:|---:|
-| 1 | forward | 12.621 s | 1,540,880 KiB |
-| 16 | forward | 11.793 s | 1,543,696 KiB |
-| 16 | reverse | 11.483 s | 1,543,952 KiB |
-| 1 | reverse | 12.626 s | 1,542,120 KiB |
+| 1 | forward | 10.140 s | 1,543,452 KiB |
+| 16 | forward | 9.376 s | 1,544,388 KiB |
+| 16 | reverse | 9.487 s | 1,544,968 KiB |
+| 1 | reverse | 9.967 s | 1,544,104 KiB |
 
-Order-averaged walls were 12.624 s at one worker and 11.638 s at sixteen.
+Order-averaged walls were 10.053 s at one worker and 9.431 s at sixteen.
 
 ### Stable hotspot
 
 | Stage | 1-worker mean | 1-worker share | 16-worker mean | 16-worker share |
 |---|---:|---:|---:|---:|
-| `exact_verify` | **3,629.871 ms** | **28.75%** | **3,460.038 ms** | **29.73%** |
-| `shuffled_verify` | 2,382.383 ms | 18.87% | 2,327.910 ms | 20.00% |
-| `shuffled_evaluation` | 1,513.467 ms | 11.99% | 1,407.129 ms | 12.09% |
-| `exact_evaluation` | 1,294.897 ms | 10.26% | 1,162.702 ms | 9.99% |
-| `no_update_evaluation` | 1,172.089 ms | 9.28% | 1,092.850 ms | 9.39% |
+| `exact_verify` | **2,684.618 ms** | **26.70%** | **2,666.162 ms** | **28.27%** |
+| `shuffled_verify` | 1,871.711 ms | 18.62% | 1,865.407 ms | 19.78% |
+| `shuffled_evaluation` | 1,097.514 ms | 10.92% | 1,007.868 ms | 10.69% |
+| `no_update_evaluation` | 1,072.497 ms | 10.67% | 1,004.498 ms | 10.65% |
+| `exact_evaluation` | 1,067.013 ms | 10.61% | 1,007.264 ms | 10.68% |
 
 `exact_verify` is the largest stage at both worker counts, so the predeclared
 hotspot rule selects it directly rather than a broader leading group.
@@ -80,9 +85,9 @@ threads was
 Every arm retained zero query, admitted-cell, top-8 and token mismatches over
 512 rows / 16,384 Q12 coordinates.
 
-Peak RSS ranged from 1,540,880-1,543,952 KiB, below the strict 2-GiB stop.
+Peak RSS ranged from 1,543,452-1,544,968 KiB, below the strict 2-GiB stop.
 Every run completed below the 600-second timeout. The four roots occupy
-**695,462,223 bytes**.
+**695,462,128 bytes**.
 
 The compact evidence is [comparison.json](evidence/comparison.json);
 [SHA256SUMS](evidence/SHA256SUMS) binds the binary, reports and both artifact
@@ -91,13 +96,13 @@ sets.
 ## Checks run at the head
 
 - Fresh-context non-author TEST FITNESS: FIT at docs head
-  `db71dfdb79d5cda1ba41463b965f858bf8662bde`, after repairing one expected
-  stage-key ordering error.
+  `1994b289b1e15bddbb7305cccc17be3f8feba706`, after repairing the expected
+  stage-key order and adding the canonical 21-stage fail-closed test.
 - Full `uor-r4-cpu-train` release suite: **236 tests passed, 0 failed, 4
   benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
-- Focused stage-accounting, ordered-fold, row/artifact/parity and fail-closed
-  RSS tests: passed.
+- Focused complete/missing/extra/duplicate stage-accounting, ordered-fold,
+  row/artifact/parity and fail-closed RSS tests: passed.
 - All four runs passed the pre-registered 21-stage, artifact, normalized-report,
   timeout and strict RSS gates.
 - Prep shell syntax, evidence checksum reconstruction and `git diff --check`
