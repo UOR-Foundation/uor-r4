@@ -83,7 +83,7 @@ These are the scorer's speeds, not the served model's. The integer session's lap
 
 - **On the laptop**, at the merge of main `0fbb687df`: `cargo test -p uor-r4-float-train --no-fail-fast` gives the library 225 passed, `train-in-space` 5 (the default test among them), `fbs-snapshot` 7, `spiralcore-fbs-sheet` 4, the dependency check 2 and the kernel controls 12, with 0 failed. `cargo fmt --check` lists the same 22 pre-existing diffs in `train-in-space.rs` before and after this change, none in its lines. The crate's other files, untouched here, carry 400 more.
 - **Negative gate:** with `BATCHED_DECODE_DEFAULT = false`, `score_rows_decodes_batched_unless_told_otherwise` fails at its first assertion. Restored byte for byte (`cmp`), it passes.
-- **On the GPU:** the table above, at code head `b58de92f0`. This branch's own later commits change only docs: the ORDER, this REPORT, the notebook, the item's text and scope line, and the module doc of `train-in-space.rs`. The merge of main (`0fbb687df`) brings other labs' code in `uor-r4-core`, `uor-r4-integer`, `cpu-train` and `uor-r4-discrete`, which the binary links, but changes no file under `crates/uor-r4-float-train`.
+- **On the GPU:** the table above, at code head `b58de92f0`. This branch's own later commits change only docs: the ORDER, this REPORT, the notebook, the item's text and scope line, and the module doc of `train-in-space.rs`. The merge of main (`0fbb687df`) brings other labs' code in `uor-r4-core`, `uor-r4-integer`, `cpu-train` and `uor-r4-discrete`, of which the binary links `uor-r4-core` and `uor-r4-integer`, but changes no file under `crates/uor-r4-float-train`.
 - **Review:** a fresh-context review of the diff and this REPORT, recorded on PR #3629 by `loop review`.
 
 ## Skills used
