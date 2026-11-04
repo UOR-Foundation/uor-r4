@@ -86,12 +86,24 @@ The instrument is ready; the model question is unanswered. A future fresh
 non-author FIT can authorize the bounded replay. Until then, no claim is made
 about whether trained movement weights affect complete replies or termination.
 
+The key census changes the next trainer decision. The table already contains a
+correct majority target for 59.2% of teacher-forced held-out reply decisions,
+while deepseek-109's served model named only 12.5% correctly. Increasing the
+coordinate sweep would therefore optimize the wrong bottleneck. If the pending
+replay is negative, the next bounded unit should compare the current
+query-moving memory read against a lawful exact-memory target arbitration that
+uses the stored row directly, with the same target-shaped and shuffled-target
+controls. That is a new mechanism hypothesis, not a wider version of the closed
+coordinate sweep.
+
 ## Still open
 
 - Fresh non-author TEST FITNESS for the pending sheet.
 - Two-seed replay and seed-1 repeat.
 - Comparison against frozen, random, memory-off and trained-memory-off.
 - A materially different credit rule if complete-reply propagation is negative.
+- Exact-memory target arbitration versus query-only movement as the next
+  mechanism comparison.
 - Complete replies, fresh phrasing, useful chat and GPU qualification.
 
 ## Plain summary
