@@ -2010,8 +2010,8 @@ mod tests {
     #[test]
     fn termination_orbit_control_changes_effective_class_membership() {
         let cell = TerminationOrbitCell {
-            terminal: vec![vec![1], vec![2]],
-            nonterminal: vec![vec![3], vec![4]],
+            terminal: vec![vec![1], vec![1]],
+            nonterminal: vec![vec![1], vec![2]],
         };
         let (control, changed_points, changed_class) =
             permute_termination_orbit_cell(&cell, 1).unwrap();
