@@ -21,7 +21,7 @@ D84 CPU development research in `uor-r4-cpu-train` on the local Ryzen 9
 
 | Input | Identity |
 |---|---|
-| implementation source | `7267bcf50da595bd51caafaf0d97d40dce13bfc9` |
+| implementation source | `334e457741085d5b8293aaba5ff7b0b8115e15c4` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -104,18 +104,25 @@ geometric termination.
 - Every gated cell has both classes; every control preserves its cell's
   signature multiset and both class counts.
 - The control changes at least one class assignment before public compute.
+- At least one evaluation decision enters a gated cell. The gate and control
+  report gated/ungated decision counts, so a zero-stop result is called a
+  mechanism negative only after the rule was reached.
 - Signature tests include exact aligned roots, cell equality, tie/no-stop,
   terminal-only separation, deterministic re-derivation and malformed-width
   refusal.
-- Every served arm retains exact CPU/integer parity.
+- The base forward retains exact CPU/integer parity for every Q12 query
+  coordinate, token and kept cell. The orbit rule is a deterministic
+  post-process of that audited Q12 query and the artifact roots.
 - Seed-1 repeat reproduces all non-timing gate data, reply counters, row
   outcomes and ordered reply digests.
 
 ## Cost and stop
 
 Local workstation only; no GPU, pod or paid API. Expected below 10 CPU minutes
-per seed and below 2 GiB peak RSS. Stop before seed 2 if seed 1 projects the
-two-seed total beyond 20 minutes.
+per seed and below 2 GiB peak RSS. Each seed runs under
+`/usr/bin/time -v timeout 600s`. A timeout, a peak above 2,097,152 KiB, or a
+seed-1 projection beyond 20 total CPU minutes stops the experiment before the
+next seed.
 
 Stop on input or source drift, leakage, missing trained/no-gate replay, a
 one-class or unchanged control, CPU/serving divergence, nondeterminism,
