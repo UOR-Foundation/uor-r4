@@ -1,0 +1,212 @@
+# Target-local point prototypes on unseen opening keys
+
+**Status:** DRAFT
+
+## Question
+
+Can a target-balanced two-point local prototype table, learned from
+training-only point rows, improve unseen-key opening transfer over point-off
+and a matched shuffled-target prototype table on both public model seeds while
+preserving exact CPU and integer-serving decisions through the complete
+Hamming, turn-memory and point path?
+
+This is D84 CPU development research on the Ryzen 9 9950X. It is not GPU
+qualification or language capability.
+
+## Compute class
+
+Local CPU development research in `uor-r4-cpu-train`; no GPU, pod, paid API,
+upload or external model execution.
+
+## Base artifact
+
+| Input | Identity |
+|---|---|
+| implementation source | `32db3159011c33d9fe94e775958a6bd12d6198fb` |
+| seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
+| seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
+| DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
+| DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
+| corpus manifest | `ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab` |
+
+Artifacts:
+
+- `/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-{1,2}-raw_both.uorlut`
+- `/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-{tokens.u16,response-mask.u8,manifest.json}`
+
+Hardware: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
+
+## Fixed split
+
+Replay deepseek-104/123/106 exactly: even document ordinals train, odd document
+ordinals evaluate, eight training keys and eight disjoint evaluation keys, up
+to eight examples per key, 60 training and 60 evaluation examples. The
+selection code and dimensions are unchanged. Opening/reply memory is derived
+only from training examples at key window 192 and reply turn 8. Every
+evaluation opening key must miss the exact memory table.
+
+The public manifest says `split=train`. "Unseen-key" therefore means the exact
+opening keys were absent from the learned memory and point tables; base-model
+exposure is not claimed to be zero.
+
+## Training procedure
+
+Build and coalesce the existing production raw point rows from the 60 training
+prompts. For each distinct supervised first-reply token:
+
+1. choose its observed medoid by exact within-target L1 sum;
+2. among the remaining distinct observed points, choose the point with maximum
+   minimum L1 distance to the selected set;
+3. break every distance tie by lexicographic point bytes, then target id; and
+4. retain at most two rows for that target.
+
+The fixed treatment is `k = 2`. It is chosen before observing any
+prototype-arm result because the prior one-medoid table erased the useful local
+neighborhood. `k = 2` preserves one central and one residual local observation
+per target without restoring every raw row.
+
+The matched shuffled-target prototype control preserves the treatment point
+multiset and target counts while permuting target assignments deterministically
+at seed 1. If the first permutation is unchanged, rotate once; refuse an
+unchanged or all-equal control.
+
+## Arms
+
+Every arm carries the same derived memory and evaluates the same 60 held-out
+samples:
+
+1. point-off;
+2. raw-row nearest;
+3. raw-row vote at `k = 8`;
+4. one target medoid;
+5. shuffled-target medoid;
+6. two target-local prototypes; and
+7. shuffled-target two-prototype control.
+
+Arms 2-5 are descriptive controls from the two preceding units. Arms 1, 6 and
+7 are the registered comparison.
+
+## Bar
+
+For each seed, pair the treatment and each primary control by evaluation row:
+
+- prototype opening top-1 must exceed point-off;
+- prototype opening top-1 must exceed the shuffled-target prototypes;
+- each paired gain must be at least
+  `max(2, ceil(2 * sqrt(b + c)))`, where `b` is candidate-only correct and `c`
+  is control-only correct; and
+- prototype complete teacher-forced top-1 must not be below either primary
+  control.
+
+Both seeds must pass. The result is negative if any condition fails on either
+seed. Do not tune `k`, keys, rows, targets, random seed or scoring after
+observing results.
+
+## Instrument gates
+
+- Input hashes, fixed key selection, zero key overlap and every held-out
+  exact-memory miss check.
+- The prototype table has at least two targets, contains only observed points,
+  has at most two rows per target and is strictly smaller than the raw table.
+- The treatment is deterministic across two builds.
+- The shuffled control preserves the point multiset and target counts and
+  changes every target assignment used by the served image.
+- Point fallback changes all 60 treatment openings relative to point-off.
+- Opening target distance is identical for every arm.
+- Every arm reports zero query-coordinate, token and kept-cell mismatches
+  against `IntegerStackModel` over 2,110 positions and 540,160 Q12
+  coordinates per seed.
+- A seed-1 repeat reproduces every non-timing and non-resource report field.
+
+## Steps
+
+This compute runs only after FIT. It builds once in a fresh release target,
+binds the binary hash, and executes seed 1, seed 2 and a seed-1 repeat into
+fresh output roots under
+`local/deepseek/point-prototypes/2026-11-04-attempt-1/`:
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-point-prototypes
+SHARED=/home/callard/projects/codex-playground/uor-r4
+SOURCE_PIN=32db3159011c33d9fe94e775958a6bd12d6198fb
+PIPELINE=$SHARED/local/deepseek/point-prototypes/2026-11-04-attempt-1
+BUILD=$SOURCE/target/deepseek/point-prototypes-build-130
+DEV=$SHARED/local/deepseek/public-m1-parity
+DUAL=$SHARED/local/deepseek/public-fbs-dual
+test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
+test ! -e "$PIPELINE"
+test ! -e "$BUILD"
+(
+  cd "$SOURCE"
+  CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+    -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+)
+BIN="$BUILD/release/cpu-point-transfer-driver"
+BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+run() {
+  seed=$1 artifact_pin=$2 out=$3
+  test ! -e "$out"
+  /usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 \
+    "$BIN" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
+    "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" \
+    "$DEV/dev-manifest.json" "$out" \
+    --expected-artifact-sha256 "$artifact_pin" \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --train-keys 8 --evaluation-keys 8 --per-key 8 \
+    --key-tokens 8 --reply-turn 8 --neighbor-vote 8 \
+    --target-prototypes 2 --random-seed 1
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
+  test "$(jq -er '.target_prototypes.rows' "$out/report.json")" \
+    -lt "$(jq -er '.point.rows' "$out/report.json")"
+  printf '%s  cpu-point-transfer-driver\n' "$BIN_SHA" >"$out/binary.sha256"
+  (
+    cd "$out"
+    find . -type f ! -name SHA256SUMS -print0 |
+      sort -z | xargs -0 sha256sum >SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
+run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
+diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
+  <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
+test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
+```
+
+Any source, binary, argument, output-root, control or deterministic mismatch
+is an instrument fault requiring a new FIT before retry.
+
+## Minimum test power
+
+Two model seeds over 60 fixed held-out openings; both must pass the paired bar.
+The complete teacher-forced check covers 2,050 decisions per seed and guards
+against an opening-only gain that damages continuation. This is bounded
+exploratory evidence, not a capability bar.
+
+## Cost and stop
+
+Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
+7.0.0-42-generic x86_64. At registration the project filesystem had at least
+490 GiB free. The fresh build allocates below 2.5 GiB temporarily; three roots
+retain below 64 MiB. The required 128 MiB reserve remains intact. Expected
+runtime is under two minutes total at 32 workers and peak RSS below 1 GiB.
+Stop on input drift, nondeterminism, a malformed or unchanged control,
+memory-key overlap, CPU/serving divergence, a non-reducing prototype table or
+evaluation-time tuning.
+
+## Claim boundary
+
+A positive supports only the fixed two-prototype construction on the fixed
+unseen-key panel and two public seeds. A negative closes only this
+deterministic target-balanced `k = 2` construction. Neither changes GPU
+qualification or establishes complete replies, fresh phrasing or useful chat.
+
+## TEST FITNESS
+
+Pending independent review.
