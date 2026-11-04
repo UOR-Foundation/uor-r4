@@ -2045,6 +2045,22 @@ impl CpuDiscreteTrunkReader {
         Ok(artifact)
     }
 
+    pub fn add_training_rows_consuming(mut self, rows: &[TrunkTrainRow]) -> Result<Vec<u8>> {
+        if rows.is_empty() {
+            return Err(invalid("CPU trunk count training requires rows"));
+        }
+        for row in rows {
+            add_trunk_count_row(&mut self.tables, row)?;
+        }
+        export_trunk_d11(
+            &self.snapshot,
+            &self.step_table,
+            &self.norm_frames,
+            &self.tables,
+        )
+        .map_err(|error| invalid(format!("CPU trunk count export: {error}")))
+    }
+
     pub fn export_parity(
         &self,
         artifact: &[u8],

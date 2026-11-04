@@ -225,9 +225,6 @@ fn run() -> Result<serde_json::Value, String> {
                 .map_err(|error| error.to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let exact_artifact = reader
-        .add_training_rows(&training)
-        .map_err(|error| error.to_string())?;
     let shuffled_targets = shuffled_targets(
         &training
             .iter()
@@ -246,28 +243,52 @@ fn run() -> Result<serde_json::Value, String> {
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    let shuffled_artifact = reader
-        .add_training_rows(&shuffled)
+    std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
+    let exact_artifact = reader
+        .add_training_rows_consuming(&training)
         .map_err(|error| error.to_string())?;
-    drop(reader);
-    if exact_artifact == shuffled_artifact {
+    let exact_sha256 = uor_r4_discrete::corpus::sha256(&exact_artifact);
+    let exact_bytes = exact_artifact.len();
+    std::fs::write(config.out.join("exact.uorlut"), &exact_artifact)
+        .map_err(|error| error.to_string())?;
+    drop(exact_artifact);
+
+    let shuffled_reader =
+        CpuDiscreteTrunkReader::from_bytes(&artifact).map_err(|error| error.to_string())?;
+    let shuffled_artifact = shuffled_reader
+        .add_training_rows_consuming(&shuffled)
+        .map_err(|error| error.to_string())?;
+    let shuffled_sha256 = uor_r4_discrete::corpus::sha256(&shuffled_artifact);
+    let shuffled_bytes = shuffled_artifact.len();
+    std::fs::write(config.out.join("shuffled.uorlut"), &shuffled_artifact)
+        .map_err(|error| error.to_string())?;
+    drop(shuffled_artifact);
+    if exact_sha256 == shuffled_sha256 {
         return Err("exact and shuffled count training produced the same artifact".to_owned());
     }
 
     let source_semantics = semantics(&artifact)?;
-    let exact_semantics = semantics(&exact_artifact)?;
-    let shuffled_semantics = semantics(&shuffled_artifact)?;
-    if exact_semantics != source_semantics || shuffled_semantics != source_semantics {
+    let exact_artifact =
+        std::fs::read(config.out.join("exact.uorlut")).map_err(|error| error.to_string())?;
+    if semantics(&exact_artifact)? != source_semantics {
         return Err("count training changed a non-count trunk section".to_owned());
     }
-    if trunk_tables(&exact_artifact)? != expected_count_tables(&artifact, &training)?
-        || trunk_tables(&shuffled_artifact)? != expected_count_tables(&artifact, &shuffled)?
-    {
+    if trunk_tables(&exact_artifact)? != expected_count_tables(&artifact, &training)? {
         return Err("decoded count tables differ from the independent tally".to_owned());
     }
     let source_tables = table_reading(&artifact)?;
     let exact_tables = table_reading(&exact_artifact)?;
+    drop(exact_artifact);
+    let shuffled_artifact =
+        std::fs::read(config.out.join("shuffled.uorlut")).map_err(|error| error.to_string())?;
+    if semantics(&shuffled_artifact)? != source_semantics {
+        return Err("shuffled count training changed a non-count trunk section".to_owned());
+    }
+    if trunk_tables(&shuffled_artifact)? != expected_count_tables(&artifact, &shuffled)? {
+        return Err("shuffled count tables differ from the independent tally".to_owned());
+    }
     let shuffled_tables = table_reading(&shuffled_artifact)?;
+    drop(shuffled_artifact);
     for (name, source) in &source_tables {
         let exact = &exact_tables[name];
         if name == "unigram" {
@@ -283,8 +304,14 @@ fn run() -> Result<serde_json::Value, String> {
     }
 
     let no_update = evaluate(&artifact, &split.evaluation)?;
+    let exact_artifact =
+        std::fs::read(config.out.join("exact.uorlut")).map_err(|error| error.to_string())?;
     let exact = evaluate(&exact_artifact, &split.evaluation)?;
+    drop(exact_artifact);
+    let shuffled_artifact =
+        std::fs::read(config.out.join("shuffled.uorlut")).map_err(|error| error.to_string())?;
     let shuffled_reading = evaluate(&shuffled_artifact, &split.evaluation)?;
+    drop(shuffled_artifact);
     for (name, reading) in [
         ("no_update", &no_update),
         ("exact", &exact),
@@ -299,11 +326,6 @@ fn run() -> Result<serde_json::Value, String> {
         }
     }
 
-    std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
-    std::fs::write(config.out.join("exact.uorlut"), &exact_artifact)
-        .map_err(|error| error.to_string())?;
-    std::fs::write(config.out.join("shuffled.uorlut"), &shuffled_artifact)
-        .map_err(|error| error.to_string())?;
     let report = json!({
         "schema": SCHEMA,
         "substrate": "cpu-development-research",
@@ -326,10 +348,10 @@ fn run() -> Result<serde_json::Value, String> {
         },
         "artifacts": {
             "no_update_sha256": config.expected_artifact_sha256,
-            "exact_sha256": uor_r4_discrete::corpus::sha256(&exact_artifact),
-            "shuffled_sha256": uor_r4_discrete::corpus::sha256(&shuffled_artifact),
-            "exact_bytes": exact_artifact.len(),
-            "shuffled_bytes": shuffled_artifact.len(),
+            "exact_sha256": exact_sha256,
+            "shuffled_sha256": shuffled_sha256,
+            "exact_bytes": exact_bytes,
+            "shuffled_bytes": shuffled_bytes,
         },
         "tables": {
             "source": source_tables,
