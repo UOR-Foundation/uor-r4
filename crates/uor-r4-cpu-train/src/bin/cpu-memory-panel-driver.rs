@@ -294,6 +294,7 @@ fn run() -> Result<serde_json::Value, String> {
         }));
     }
 
+    create_fresh_output(&config.out)?;
     let memory = derive_turn_memory(
         &training_samples,
         shape.width,
@@ -304,7 +305,6 @@ fn run() -> Result<serde_json::Value, String> {
     .map_err(|error| error.to_string())?;
     let memory_artifact =
         add_turn_memory_uorlut01(&artifact, &memory).map_err(|error| error.to_string())?;
-    create_fresh_output(&config.out)?;
     std::fs::write(config.out.join("memory-baseline.uorlut"), &memory_artifact)
         .map_err(|error| error.to_string())?;
 
