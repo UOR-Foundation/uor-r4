@@ -2,7 +2,7 @@
 eaa7d5f5b5a89f36da22e60d0b36e300d1ece74fd6c404c809267f898bffdfb7  ./build-summary.json
 4964fff56e3fa75d7dfc77340bfdc36ef9ae5d68f6eae67c98f5b5a76dae991e  ./build.time.txt
 d4b9ba315b62ab3d5d138e06c6572efb2c3630d1c87db1161d68fc440849a0ac  ./chat-build.time.txt
-010b9dad450446555932ce9b4620e80bfb01ec7286e8147fe11f7aa6f96153a6  ./comparison.json
+f03f3d2485c8fac3339aebbcf1cd902d04bffc06eabb25eee0f7921b0ae19595  ./comparison.json
 61c74d7bf885fd28754ba57e22d54b21cc3c3a4c5bda41a7194762a14d2db50b  ./input-sha256.txt
 29ca4343ef5aef5652e4c37b1a09cdca6bf2375633da25d683de2f9178038939  ./seed-1-repeat.normalized.json
 0ad83483c76cd6f4dfe5822fe9cd0a3a780377ca396a393e0f78d487c8cadc57  ./seed-1-repeat.stdout.json

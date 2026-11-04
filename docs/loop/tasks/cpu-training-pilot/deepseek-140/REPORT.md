@@ -97,7 +97,7 @@ Build and runs:
 - committed attempt-2 evidence: **49,494,038 bytes**; attempt 1 is retained
   separately;
 - evidence `SHA256SUMS`:
-  `fd24d98fcae3e703af748cca894b421b34d53e806b4b4eca7b9a54d3354b575f`.
+  `40e3e30526465ade4b0d8e7e11c3ae523805102032ce4b3909d88d6d5d1b8947`.
 
 Compact evidence:
 [comparison.json](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence/comparison.json).
