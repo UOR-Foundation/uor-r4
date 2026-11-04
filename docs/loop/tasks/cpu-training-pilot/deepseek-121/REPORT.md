@@ -10,10 +10,10 @@ Lab: deepseek. Item:
   the existing CPU oracle, full served-forward audit and integer serving path
   accept and agree at 2,048 positions. It does not establish long-context
   language quality.
-- **The still-open boundary moved again while this unit was in progress.**
-  Claude's draft PR #3646 remains active and its exact head is not pinned here.
-  This unit deliberately uses only synthetic data and does not edit
-  `uor-r4-float-train`.
+- **The boundary moved while this unit was in progress.** Claude's PR #3646
+  merged during the unit. This branch was merged forward from the new main and
+  all checks were rerun, but the unit deliberately uses only synthetic data and
+  does not edit `uor-r4-float-train`.
 - **No tracked run artifact is produced.** The fixture and both audits live in
   an in-memory test, so the retained record is the test plus this report rather
   than a saved UORLUT model.
