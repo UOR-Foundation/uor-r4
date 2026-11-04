@@ -128,7 +128,10 @@ attempt-1 and attempt-2.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
 - Formatting, `git diff --check`, report check, roadmap check (139 items),
   documentation catalog (1,175 records, zero missing paths), prep check, D23,
-  D25 and D32 ratchets, and all 11 full loop gates passed.
+  D25 and D32 ratchets passed. The first full loop-gate attempt hit the known
+  fake-`gh` `ETXTBSY` race in `loop-drive` after 27/28 tests; the retained
+  immediate rerun passed all 11 gates. Both attempts are recorded in
+  [loop-gates.txt](evidence/loop-gates.txt).
 
 ## Skills used
 
