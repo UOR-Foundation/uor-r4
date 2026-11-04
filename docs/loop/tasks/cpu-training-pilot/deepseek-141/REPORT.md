@@ -13,7 +13,7 @@ Order: [ORDER.md](ORDER.md). Base: `70f45367d`.
   Scope is evaluated from the branch base, so a branch cannot widen the
   permission it is already using.
 
-## What worked
+## What changed
 
 The item now explicitly permits the exact integer-serving, CLI, loopback,
 session-codec, integration-record and content-serving evidence paths required
@@ -21,6 +21,13 @@ by the separate deepseek-140 unit. Every previous scope entry is retained.
 
 This change does not alter runtime code, tests, artifact formats, evidence,
 status, bars or holds.
+
+## Measurements
+
+This code-neutral prerequisite ran no model, build or test workload. The
+roadmap scope retained all 13 base entries and added 13 focused entries. The
+branch has four changed paths: the roadmap item, this unit's ORDER and REPORT,
+and the branch claim.
 
 ## Checks run at the head
 

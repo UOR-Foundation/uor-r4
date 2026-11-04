@@ -11,6 +11,13 @@ already-ordered deepseek-140 content-readout serving unit. This is a
 code-neutral item-scope prerequisite: another branch may not widen the item
 scope in the same PR that consumes the widened paths.
 
+## Cancel probe (run first)
+
+At base `70f45367d`, the item scope excludes every `crates/uor-r4-integer/**`
+path used by deepseek-140, `docs/integration/current-state.md`, and the
+content-serving evidence tree. The consuming branch is based on the same item,
+so the separate scope prerequisite is still required.
+
 ## Fixed construction
 
 Add exactly the files consumed by deepseek-140:
