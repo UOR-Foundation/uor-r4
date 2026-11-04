@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: [claude-281](../../loop/tasks/one-model-end-to-end/claude-281/ORDER.md), THE ORDER (#2028 6634218223) step 4.
 
-TEST FITNESS: PENDING - round 1, a fresh non-author review at `63856b54e`, was NOT FIT with two majors. Both are fixed in this text, and what changed is at the end. Round 2 is owed before any pod.
+TEST FITNESS: FIT - round 2, a fresh non-author review at `eb40dcd99`. It found no blocker or major and re-derived every number it checked. Three of its four minors are applied in this text; the fourth needs no text. Round 1 at `63856b54e` was NOT FIT, with two majors. What changed in each round is at the end.
 
 **Why.** [P2b](../../loop/tasks/one-model-end-to-end/claude-276/REPORT.md) read Negative. (L), trained at 2,048, stated a held-out note's value in 0 (seed 1) and 1 (seed 2) of 603 paired p-long queries. That closes the configuration only (§4.1). Before a next configuration is chosen, §4.2 asks for a classification, instrument or mechanism. p-long changes two things at once:
 - **The phrasing:** p-long is `cell=dev,dev`. Its note and query user turns use only the `development` templates (`milestone_world_v2.rs:986-1015`), which TRAIN never contains. The reply templates are shared.
@@ -91,7 +91,7 @@ jq --slurpfile q PANEL/queries.json --slurpfile c census.json --arg p NAME --arg
 `--arg k decoded` gives each panel's n. Tested on P2b's sealed `score-L-2048/recall-p-long-memory.json` with p-long's census: s_dd = 0 at seed 1 and 0 at seed 2, each of n = 306. Over every query, the seeds' stated counts are 0 and 1; seed 2's one is query 20, a number.
 
 - **R1 (deciding): trained cell against held-out cell, far words.** s_tt (q-tt) against s_dd (p-long). The panels are drawn apart, so the test is unpaired. R1 passes where s_tt ≥ 10 and s_tt − s_dd > 2√(s_tt + s_dd). It is reported with each panel's n.
-  - **Far only:** a note at least 192 tokens back is past the window P2b's short arm trained at. The deciding reading is recall across turns, not recall of a note in the reply's own neighbourhood.
+  - **Far only:** a note at least 192 tokens back is past the window P2b's short arm (S) trained at, and past the window P2b's control scored (L) at ([P2b's sheet](one-model-end-to-end-long-context-2026-11-04.md#arms)). The deciding reading is recall across turns, not recall of a note in the reply's own neighbourhood.
 - **R2: which change carries the gap, far words.** Two gaps, each against q-tt, each passing where s_tt − s_x > 2√(s_tt + s_x):
   - **the phrasing gap:** q-dt (phrasing changed, value kept);
   - **the value gap:** q-td (value changed, phrasing kept).
@@ -109,14 +109,14 @@ jq --slurpfile q PANEL/queries.json --slurpfile c census.json --arg p NAME --arg
   - **Why it is not in the Bar:** the turn memory is built from TRAIN and holds none of these new words, so it cannot be where a stated word comes from.
   - **What the Bar claims instead:** recall from the window by the trained model, read included. It is not a claim that the Hamming read alone carries the recall.
 - **R5: tok/s first.** Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pair `--score-rows` prints, set beside P2b's 15.2.
-- **The distance bins** (under 192, 192–511, at least 512) for R1, R2 and R4. The under-192 bin (12 to 14 clean words a panel) is reported, never read.
+- **The distance bins** (under 192, 192–511, at least 512) for R1, R2 and R4, with each panel's median far distance. The under-192 bin (12 to 14 clean words a panel) is reported, never read. R1's rule inside the 192–511 bin and inside the at-least-512 bin is reported beside it, since the panels are separate draws.
 
 ## Bar
 
 Read per seed, then across both:
 - **Generalization (P2b's Negative is a generalization fault):** R1 passes at both seeds. The trained model then states a new word from a note at least 192 tokens back in its trained cell, and not in the held-out cell. The read and the recipe stay as they are, and the next unit changes the data. Which change follows R2 at both seeds:
   - **only the phrasing gap passes:** held-out phrasings mixed into TRAIN, or the real-text corpus (THE ORDER step 6);
-  - **only the value gap passes:** a change to TRAIN's values;
+  - **only the value gap passes:** an instrument flag, not a data change. For words, the two value splits differ only by a keyed hash the model cannot see (Data split), so a gap there points at a panel difference. The next step is Inconclusive until a panel check, comparing the two panels' distances and templates, finds it;
   - **both pass:** both changes are named, and the data unit carries both;
   - **neither passes, or the seeds disagree on R2:** only the double change fails. Both changes are named, and which one carries it is Inconclusive.
 - **Mechanism (it does not recall across turns even as trained):** R1 fails at both seeds with s_tt < 10 at each. The trained model then does not recall a far note even in its trained cell, on panels drawn as TRAIN was.
@@ -199,3 +199,11 @@ Round 1 (`63856b54e`) was NOT FIT, with two majors and three minors. Every numbe
 - **m1:** the power section gives Poisson chances, not a cut-off.
 - **m2:** the Mechanism branch says the next read configuration is chosen on claude-267's oracle, not shown by this test.
 - **m3:** new I-6, a second grade from the reply text, tested on P2b's sealed files. Also, I-2's `check-queries` is the laptop's (the pod checks the SHA-256s).
+
+## Changes after FIT round 2
+
+Round 2 (`eb40dcd99`) was FIT. It found M1 and M2 fixed in substance, re-derived the far counts, the Poisson table, I-6 and `split_of`, and left four minors:
+- **The value-gap-only branch** is now an instrument flag, Inconclusive until a panel check, never a change to TRAIN's values.
+- **The bins** report each panel's median far distance, and R1's rule inside 192-511 and inside 512 and over.
+- **The 192** cites P2b's arms: (S) trained at 192, and the control scored (L) at 192.
+- **I-6's positive** on P2b's files is one number reply. Stated words first show on q-tt, and I-6 covers every panel, so this needs no text.
