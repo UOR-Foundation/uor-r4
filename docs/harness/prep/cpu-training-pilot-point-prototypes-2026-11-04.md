@@ -248,9 +248,11 @@ is an instrument fault requiring a new FIT before retry.
 At completion, update
 `docs/labs/cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json`
 from `PROJECTED_NOT_RUN` to `COMPLETE`, replacing projected seconds and RSS
-with actual values from the reports and build receipt. The ledger retains a
-null cumulative total because the named shared model-time ledger is absent;
-it does not treat the missing ledger as zero.
+with actual values from the reports and build receipt. Preserve
+`previous_ledger` and update the project cumulative as the preceding ledger's
+34,633 seconds plus this run's actual increment. The current active chain has
+no earlier DeepSeek entry, so set the lab cumulative to that actual increment.
+The named shared model-time ledger is absent and is not treated as zero.
 
 ## Minimum test power
 
@@ -264,8 +266,10 @@ exploratory evidence, not a capability bar.
 Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
 7.0.0-42-generic x86_64. At the repaired review, the project filesystem had
 513,053,864 KiB (489.287 GiB) free. The named shared model-time ledger is
-absent. This unit creates its own projected resource-ledger receipt and does
-not treat the missing ledger as zero.
+absent. This unit chains its projected 1,320 seconds to the existing current
+repository ledger: 34,633 + 1,320 = 35,953 project seconds. Its 1,320-second
+lab cumulative is based on the absence of an earlier DeepSeek entry in the
+active chain, not on pretending the global model-time ledger exists.
 
 | Stage | Projection |
 |---|---|
