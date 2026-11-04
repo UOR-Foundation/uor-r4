@@ -16,6 +16,10 @@ qualification or a claim that the generated replies are useful.
 Local CPU development on the Ryzen 9 9950X; no GPU, pod, paid API, upload or
 external model execution.
 
+Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
+Final audit added canonical readout identity to serialized sessions; attempt 2
+reruns under pin `b7e0bc35a`.
+
 ## Base artifacts
 
 | Input | Identity |
@@ -138,9 +142,9 @@ After FIT and a fresh GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-content-readout-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-1
-BUILD=$SOURCE/target/deepseek/content-readout-serving-140
-CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140
+PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-2
+BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-2
+CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-2
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
 IMPL_PIN=b7e0bc35ac941f05630092ab06c06a828355c7b1
