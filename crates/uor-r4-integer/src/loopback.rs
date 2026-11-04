@@ -302,6 +302,7 @@ fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, Open
         None => 0,
     };
     if length > max_body {
+        let _ = std::io::copy(&mut reader.take(length as u64), &mut std::io::sink());
         return Err(OpenAiError::new(
             413,
             "HTTP body exceeds the configured limit",

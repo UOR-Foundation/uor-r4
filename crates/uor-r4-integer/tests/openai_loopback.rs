@@ -370,7 +370,13 @@ fn request_bytes(
     stream.write_all(wire.as_bytes()).unwrap();
     stream.write_all(body).unwrap();
     let mut response = Vec::new();
-    stream.read_to_end(&mut response).unwrap();
+    stream.read_to_end(&mut response).unwrap_or_else(|error| {
+        panic!(
+            "{method} {target} ({} body bytes): {error}; response: {}",
+            body.len(),
+            String::from_utf8_lossy(&response)
+        )
+    });
     let split = response
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
