@@ -302,7 +302,23 @@ fn read_request(stream: &mut TcpStream, max_body: usize) -> Result<Request, Open
         None => 0,
     };
     if length > max_body {
-        let _ = std::io::copy(&mut reader.take(length as u64), &mut std::io::sink());
+        let mut remaining = length.min(max_body.saturating_add(1));
+        let deadline = std::time::Instant::now() + Duration::from_millis(250);
+        let mut buffer = [0u8; 2048];
+        while remaining > 0 {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                break;
+            }
+            let _ = reader
+                .get_ref()
+                .set_read_timeout(Some(deadline.saturating_duration_since(now)));
+            let chunk = remaining.min(buffer.len());
+            match reader.read(&mut buffer[..chunk]) {
+                Ok(0) | Err(_) => break,
+                Ok(read) => remaining -= read,
+            }
+        }
         return Err(OpenAiError::new(
             413,
             "HTTP body exceeds the configured limit",

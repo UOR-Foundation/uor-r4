@@ -1,6 +1,6 @@
 # ORDER: deterministic integer R4 image decomposition and Studio input
 
-Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Original base `6729e5d507bd39ef400c6515bc29b75f97e682d7`; public base `2789caa9000c28440f881b8ac2b2a4ae7d67edf8`; measurement head `4806f2675c50b799c2c0914f822d7a3e7ad98c81`; review base `35bfa270800e433f4225dbe418d1ecd4be6b28ba`; final head/tree recorded on the PR.
+Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Original base `6729e5d507bd39ef400c6515bc29b75f97e682d7`; public base `2789caa9000c28440f881b8ac2b2a4ae7d67edf8`; measurement head `4806f2675c50b799c2c0914f822d7a3e7ad98c81`; earlier review base `35bfa270800e433f4225dbe418d1ecd4be6b28ba`; merged review base `8078271e06138f9e4a185aeb36e3f57f4b068ee0`. The PR is the exact final head/tree identity record.
 
 ## Goal
 

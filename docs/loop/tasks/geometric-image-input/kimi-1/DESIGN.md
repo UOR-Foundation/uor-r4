@@ -28,7 +28,7 @@ Attachments retain one owner in `window.__studioUi`. Image previews and blobs re
 
 ## Dark theme polish
 
-The owner requested a more Apple-like dark appearance without a layout or behavior change. A token-only refined graphite palette uses `#000000`, `#1C1C1E`, and `#2C2C2E` surfaces, `#F5F5F7` primary text, and a measured `#006EE6` primary/`#64D2FF` bright accent. Existing Apple system typography, controls, targets, radii, and the light theme remain unchanged. This intentionally overrides the generic UI-design prohibition on system fonts because the requested platform is Apple's own visual language. Contrast tests cover all changed text/accent pairs at 4.5:1 or better; no new dependency, gradient, animation, or layout is introduced.
+The owner requested a more Apple-like dark appearance without a layout or behavior change. A token-only refined graphite palette uses `#000000`, `#1C1C1E`, and `#2C2C2E` surfaces, `#F5F5F7` primary text, and a measured `#006EE6` primary/`#64D2FF` bright accent. Existing Apple system typography, controls, targets, radii, and light-theme layout remain unchanged; the light text-accent token is corrected to `#8f3f14` for contrast. This intentionally overrides the generic UI-design prohibition on system fonts because the requested platform is Apple's own visual language. Contrast tests cover all changed text/accent pairs at 4.5:1 or better; no new dependency, gradient, animation, or layout is introduced.
 
 ## Verification
 

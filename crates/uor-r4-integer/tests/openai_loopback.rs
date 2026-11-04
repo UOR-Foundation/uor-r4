@@ -796,6 +796,11 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
         "",
     );
     assert_eq!(status, 413, "{}", String::from_utf8_lossy(&response));
+    let error: Value = serde_json::from_slice(&response).unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        "HTTP body exceeds the configured limit"
+    );
     bounded.shutdown().unwrap();
     let (status, _, _) = request_bytes(
         server.port(),
@@ -807,6 +812,29 @@ fn image_decompose_route_returns_exact_canonical_bytes_and_bounded_errors() {
         "",
     );
     assert_eq!(status, 501);
+    server.shutdown().unwrap();
+}
+
+#[test]
+fn oversized_declared_body_returns_bounded_json_error() {
+    let server = LoopbackServer::spawn(config()).unwrap();
+    let mut stream = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .unwrap();
+    let started = std::time::Instant::now();
+    let wire = format!("POST /v1/images/decompose?width=1&height=1&columns=1&rows=1 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: Bearer test-token\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", server.port(), usize::MAX);
+    stream.write_all(wire.as_bytes()).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    let (head, body) = response.split_once("\r\n\r\n").unwrap();
+    assert!(head.starts_with("HTTP/1.1 413 "), "{head}");
+    let error: Value = serde_json::from_str(body).unwrap();
+    assert_eq!(
+        error["error"]["message"],
+        "HTTP body exceeds the configured limit"
+    );
     server.shutdown().unwrap();
 }
 
