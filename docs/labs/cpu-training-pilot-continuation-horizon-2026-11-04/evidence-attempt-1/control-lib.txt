@@ -260,4 +260,3 @@ test train::tests::full_path_record_controls_are_matched_and_exact ... ok
 test served_forward::tests::long_window_full_path_matches_serving_and_reaches_early_hamming_copy ... ok
 
 test result: ok. 254 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 2.35s
-

@@ -89,7 +89,7 @@ before classification.
 Exact stopped output is under
 [`evidence-attempt-1/`](../../../../labs/cpu-training-pilot-continuation-horizon-2026-11-04/evidence-attempt-1/).
 Evidence `SHA256SUMS` is
-`19a966c25a4a0d5f5eb6c5338b0a9c6f5d2e7e59329e39de55e4f65d6f8fb51d`.
+`162c781f6cf3abc206818551a36d0af47e11fe7152e34a7116a5102f698f5bfe`.
 Measured accounting is in the
 [resource ledger](../../../../labs/cpu-training-pilot-continuation-horizon-2026-11-04/resource-ledger.json).
 

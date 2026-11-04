@@ -154,11 +154,11 @@ public inputs and source pin matched.
 | Selected k | 2 | 1 | in `{1,2,4,8}` |
 | Changed raw predictions | 806 | 806 | > 0 |
 
-The true horizon signal beat the permuted control on error and raw prediction
-changes, and terminal recall passed. The false-stop count failed, so the
-registered stop rule prevented the seed-2 preflight, all generation arms and
-the one-worker repeat. The limit and configuration were not changed after
-observation.
+True horizon error was lower than the permuted control's and raw predictions
+changed, establishing a non-vacuous control; terminal recall passed. The
+false-stop count failed, so the registered stop rule prevented the seed-2
+preflight, all generation arms and the one-worker repeat. The limit and
+configuration were not changed after observation.
 
 Exact stopped evidence is under
 [`evidence-attempt-1/`](../../labs/cpu-training-pilot-continuation-horizon-2026-11-04/evidence-attempt-1/).
