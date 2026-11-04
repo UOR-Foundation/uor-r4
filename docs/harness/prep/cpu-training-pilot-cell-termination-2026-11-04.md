@@ -1,6 +1,6 @@
 # Writer-cell geometric termination gate
 
-**Status:** DRAFT
+**Status:** FIT
 
 ## Question
 
@@ -157,4 +157,19 @@ any edit to Claude-owned long-window files.
 
 ## TEST FITNESS
 
-Pending fresh-context non-author FIT at the committed source head.
+TEST FITNESS: FIT - M2 #2030
+sheet: `docs/harness/prep/cpu-training-pilot-cell-termination-2026-11-04.md`
+head: `bb4411ecd0c27431d946e4fb534e99a1297e4f71`
+reviewer: Codex fresh-context non-author review
+note: bounded two-seed D84 CPU writer-cell termination experiment; the gate
+uses the writer's exact top admission cell, training-only local
+terminal-majority counts, and an equal-size disjoint deterministic
+shuffled-cell control; inherited corpus-EOS/decoder-BOS normalization and
+non-premature BOS accounting remain fixed; 32-update replay, 114 prompts,
+16-token cap, 32 Rayon workers, pinned artifacts/digests, two-seed bar, repeat
+and 30-minute stop are registered.
+date: 2026-11-04
+
+This FIT clears only the registered repair at this exact source head. Any
+source, hash, selection, arm, bar, control, gate-rule or cap change requires
+re-review.
