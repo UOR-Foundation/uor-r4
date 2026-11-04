@@ -1859,17 +1859,26 @@ pub fn content_stop_density_gate_fires(
 }
 
 pub fn content_stop_density_predictions_changed(
-    rows: &[ContentStopRow],
+    candidate_rows: &[ContentStopRow],
+    control_rows: &[ContentStopRow],
     candidate: &ContentStopDensityGate,
     control: &ContentStopDensityGate,
 ) -> Result<u64> {
     validate_content_stop_density_gate(candidate)?;
     validate_content_stop_density_gate(control)?;
-    rows.iter()
+    if candidate_rows.len() != control_rows.len() {
+        return Err(invalid("content stop density control row count differs"));
+    }
+    candidate_rows
+        .iter()
+        .zip(control_rows)
         .enumerate()
-        .map(|(index, row)| {
+        .map(|(index, (row, control_row))| {
+            if row.offset != control_row.offset || row.signature != control_row.signature {
+                return Err(invalid("content stop density control rows differ"));
+            }
             let candidate_score = content_stop_density_score(
-                rows,
+                candidate_rows,
                 Some(index),
                 row.offset,
                 &row.signature,
@@ -1877,7 +1886,7 @@ pub fn content_stop_density_predictions_changed(
                 candidate.offset_radius,
             )?;
             let control_score = content_stop_density_score(
-                rows,
+                control_rows,
                 Some(index),
                 row.offset,
                 &row.signature,
@@ -2977,7 +2986,9 @@ mod tests {
         let mut never = training.gate.clone();
         never.margin = i64::MAX;
         assert!(
-            content_stop_density_predictions_changed(&rows, &training.gate, &never).unwrap() > 0
+            content_stop_density_predictions_changed(&rows, &shuffled, &training.gate, &never)
+                .unwrap()
+                > 0
         );
     }
 

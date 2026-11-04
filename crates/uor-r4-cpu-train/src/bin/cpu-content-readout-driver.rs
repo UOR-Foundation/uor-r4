@@ -394,8 +394,13 @@ fn run() -> Result<serde_json::Value, String> {
         .as_ref()
         .zip(gate_density_shuffled_training.as_ref())
         .map(|(training, shuffled)| {
-            content_stop_density_predictions_changed(density_rows, &training.gate, &shuffled.gate)
-                .map_err(|error| error.to_string())
+            content_stop_density_predictions_changed(
+                density_rows,
+                &density_shuffled_rows,
+                &training.gate,
+                &shuffled.gate,
+            )
+            .map_err(|error| error.to_string())
         })
         .transpose()?;
     let horizon_rows = config
@@ -715,12 +720,13 @@ fn run() -> Result<serde_json::Value, String> {
             let vs_code_depth = paired(&density_prompts, &code_prompts, |row| {
                 row.matched_prefix_depth as u64
             })?;
-            let vs_code_bos = paired(&density_prompts, &code_prompts, |row| {
+            let vs_code_bos = paired_two_sqrt(&density_prompts, &code_prompts, |row| {
                 u64::from(row.stop == "bos")
             })?;
-            let vs_shuffled_bos = paired(&density_prompts, &density_shuffled_prompts, |row| {
-                u64::from(row.stop == "bos")
-            })?;
+            let vs_shuffled_bos =
+                paired_two_sqrt(&density_prompts, &density_shuffled_prompts, |row| {
+                    u64::from(row.stop == "bos")
+                })?;
             let non_inferior = non_inferior(
                 vs_code_top1["candidate_sum"]
                     .as_u64()
