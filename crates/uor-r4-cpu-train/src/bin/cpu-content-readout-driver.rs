@@ -735,14 +735,14 @@ fn paired(
         only += u64::from(left > right);
         control_only += u64::from(right > left);
     }
-    let threshold = ceil_three_sqrt(only.saturating_add(control_only));
+    let threshold = ceil_three_sqrt(control_only).max(2);
     Ok(serde_json::json!({
         "candidate_only": only,
         "control_only": control_only,
         "candidate_sum": candidate_sum,
         "control_sum": control_sum,
         "threshold": threshold,
-        "passes": candidate_sum > control_sum && only >= threshold && threshold > 0,
+        "passes": candidate_sum > control_sum && only >= threshold,
     }))
 }
 
@@ -793,7 +793,7 @@ fn paired_terminal_rows(
         candidate_only += u64::from(left > right);
         control_only += u64::from(right > left);
     }
-    let threshold = ceil_two_sqrt(candidate_only.saturating_add(control_only)).max(2);
+    let threshold = ceil_two_sqrt(control_only).max(2);
     Ok(serde_json::json!({
         "candidate_only": candidate_only,
         "control_only": control_only,
@@ -960,11 +960,61 @@ mod tests {
         let paired = paired_terminal_rows(&rows, &candidate, &control).unwrap();
         assert_eq!(paired["candidate_only"], 4);
         assert_eq!(paired["control_only"], 0);
-        assert_eq!(paired["threshold"], 4);
+        assert_eq!(paired["threshold"], 2);
         assert_eq!(paired["passes"], true);
         assert_eq!(ceil_two_sqrt(0), 0);
         assert_eq!(ceil_two_sqrt(1), 2);
         assert_eq!(ceil_two_sqrt(4), 4);
+    }
+
+    #[test]
+    fn terminal_pairing_threshold_uses_control_only_disagreements() {
+        let mut rows = (0..5)
+            .map(|_| ContentStopRow {
+                signature: signature(10),
+                terminal: true,
+                writer_token: 7,
+            })
+            .collect::<Vec<_>>();
+        rows.extend((0..4).map(|_| ContentStopRow {
+            signature: signature(100),
+            terminal: true,
+            writer_token: 8,
+        }));
+        let candidate = gate(signature(10), signature(100));
+        let control = gate(signature(100), signature(10));
+
+        let paired = paired_terminal_rows(&rows, &candidate, &control).unwrap();
+        assert_eq!(paired["candidate_only"], 5);
+        assert_eq!(paired["control_only"], 4);
+        assert_eq!(paired["threshold"], 4);
+        assert_eq!(paired["passes"], true);
+    }
+
+    #[test]
+    fn paired_threshold_uses_control_only_disagreements() {
+        let reading = |sample, value| ContentPromptReading {
+            sample,
+            matched_prefix_depth: 0,
+            top1: value,
+            observed_decisions: 0,
+            exact_reference: false,
+            stop: "cap".to_owned(),
+            generated_tokens: 16,
+            reference_tokens: 16,
+        };
+        let candidate = (0..19)
+            .map(|sample| reading(sample, u64::from(sample < 10)))
+            .collect::<Vec<_>>();
+        let control = (0..19)
+            .map(|sample| reading(sample, u64::from((10..19).contains(&sample))))
+            .collect::<Vec<_>>();
+
+        let paired = paired(&candidate, &control, |row| row.top1).unwrap();
+        assert_eq!(paired["candidate_only"], 10);
+        assert_eq!(paired["control_only"], 9);
+        assert_eq!(paired["threshold"], 9);
+        assert_eq!(paired["passes"], true);
     }
 
     #[test]
