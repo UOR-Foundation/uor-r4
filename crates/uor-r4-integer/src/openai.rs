@@ -9,7 +9,8 @@ use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 use uor_r4_vision::{parse_canonical, Decomposition};
 
 use crate::stack::{
-    stack_schema_for, IntegerStackModel, StackChat, StackChatError, StackReply, StackStop,
+    stack_schema_for, IntegerStackModel, StackChat, StackChatError, StackError, StackReply,
+    StackStop,
 };
 
 const IMAGE_CONTENT_SCHEMA: &str = "uor-r4.image-decomposition/1";
@@ -317,12 +318,28 @@ impl OpenAiServing {
         mut self,
         path: impl Into<String>,
         sha256: impl Into<String>,
-    ) -> Self {
-        self.content_readout_identity = Some(ContentReadoutIdentity {
-            path: path.into(),
-            sha256: sha256.into(),
-        });
-        self
+    ) -> Result<Self, StackChatError> {
+        let (path, sha256) = (path.into(), sha256.into());
+        if self.model.content_readout_sha256().is_none() {
+            return Err(StackError::ContentReadout(
+                "loopback identity has no attached content readout".to_owned(),
+            )
+            .into());
+        }
+        if path.is_empty()
+            || sha256.len() != 64
+            || !sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(StackError::ContentReadout(
+                "loopback content-readout identity is not a path plus 64 lowercase hex digits"
+                    .to_owned(),
+            )
+            .into());
+        }
+        self.content_readout_identity = Some(ContentReadoutIdentity { path, sha256 });
+        Ok(self)
     }
 
     pub fn issue_decomposition(&self, image: Decomposition) -> Result<String, OpenAiError> {

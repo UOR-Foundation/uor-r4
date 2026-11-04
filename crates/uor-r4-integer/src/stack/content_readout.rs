@@ -6,6 +6,7 @@
 //! selected a token.
 
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -44,7 +45,6 @@ pub struct ContentExample {
 pub struct ContentReadout {
     pub mode: ContentSignatureMode,
     pub signature_bits: usize,
-    #[serde(default)]
     pub includes_reference_end: bool,
     pub rows: Vec<ContentExample>,
     pub max_distance: u32,
@@ -78,8 +78,9 @@ impl ContentReadout {
                 "sidecar exceeds {MAX_CONTENT_READOUT_BYTES} bytes"
             )));
         }
-        let sidecar: ContentReadoutSidecar = serde_json::from_slice(bytes)
-            .map_err(|error| StackError::ContentReadout(format!("invalid sidecar JSON: {error}")))?;
+        let sidecar: ContentReadoutSidecar = serde_json::from_slice(bytes).map_err(|error| {
+            StackError::ContentReadout(format!("invalid sidecar JSON: {error}"))
+        })?;
         if sidecar.schema != STACK_CONTENT_READOUT_SCHEMA {
             return Err(StackError::ContentReadout(format!(
                 "schema {:?} is not {STACK_CONTENT_READOUT_SCHEMA:?}",
@@ -107,19 +108,30 @@ impl ContentReadout {
     }
 
     /// Read and validate a sidecar file.
-    pub fn load(
+    pub fn load(path: &Path, artifact_sha256: &str, vocab: usize) -> Result<Self, StackError> {
+        Self::read_sidecar(path, artifact_sha256, vocab).map(|(_, readout)| readout)
+    }
+
+    /// Read a sidecar without allocating beyond the size limit, returning the
+    /// exact bytes alongside the validated table so callers can identify the
+    /// sidecar without rereading it.
+    pub fn read_sidecar(
         path: &Path,
         artifact_sha256: &str,
         vocab: usize,
-    ) -> Result<Self, StackError> {
-        let metadata = std::fs::metadata(path).map_err(StackError::Io)?;
-        if metadata.len() > MAX_CONTENT_READOUT_BYTES {
+    ) -> Result<(Vec<u8>, Self), StackError> {
+        let file = std::fs::File::open(path).map_err(StackError::Io)?;
+        let mut bytes = Vec::new();
+        file.take(MAX_CONTENT_READOUT_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(StackError::Io)?;
+        if bytes.len() as u64 > MAX_CONTENT_READOUT_BYTES {
             return Err(StackError::ContentReadout(format!(
                 "sidecar exceeds {MAX_CONTENT_READOUT_BYTES} bytes"
             )));
         }
-        let bytes = std::fs::read(path).map_err(StackError::Io)?;
-        Self::from_sidecar(&bytes, artifact_sha256, vocab)
+        let readout = Self::from_sidecar(&bytes, artifact_sha256, vocab)?;
+        Ok((bytes, readout))
     }
 
     /// Validate rows, target ids and the learned Hamming radius.
@@ -349,6 +361,17 @@ mod tests {
             )
             .is_err());
         }
+        let mut missing_terminal_flag = sidecar.clone();
+        missing_terminal_flag["readout"]
+            .as_object_mut()
+            .expect("readout object")
+            .remove("includes_reference_end");
+        assert!(ContentReadout::from_sidecar(
+            &serde_json::to_vec(&missing_terminal_flag).expect("json"),
+            &"a".repeat(64),
+            2
+        )
+        .is_err());
         let mut unknown = sidecar;
         unknown["extra"] = serde_json::json!(true);
         assert!(ContentReadout::from_sidecar(

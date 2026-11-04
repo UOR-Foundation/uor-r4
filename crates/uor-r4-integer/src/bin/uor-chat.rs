@@ -1667,9 +1667,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             .to_str()
             .ok_or_else(|| StackCliError::Usage("--content-readout path must be UTF-8".into()))?
             .to_owned();
-        let bytes = std::fs::read(path)?;
-        let readout =
-            ContentReadout::from_sidecar(&bytes, model.artifact_sha256(), model.shape().vocab)?;
+        let (bytes, readout) =
+            ContentReadout::read_sidecar(path, model.artifact_sha256(), model.shape().vocab)?;
         model.set_content_readout(readout)?;
         Some((path_string, hex::encode(Sha256::digest(&bytes))))
     } else {
@@ -1687,7 +1686,7 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             .map_err(|_| StackCliError::Usage("--serve port must be a u16".into()))?;
         let mut serving = OpenAiServing::new(model, std::fs::read(tokenizer_path)?, cli.protocol)?;
         if let Some((path, sha256)) = content_readout_identity {
-            serving = serving.with_content_readout_identity(path, sha256);
+            serving = serving.with_content_readout_identity(path, sha256)?;
         }
         let mut config = LoopbackConfig::new(serving)
             .map_err(|error| StackCliError::Usage(error.to_string()))?;

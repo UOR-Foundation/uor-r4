@@ -283,7 +283,8 @@ fn serving_with_content_readout() -> (OpenAiServing, String, String, PathBuf) {
     let sha256 = hex::encode(Sha256::digest(&sidecar));
     let serving = OpenAiServing::new(model, tokenizer_json_with_vocab(256), 2)
         .unwrap()
-        .with_content_readout_identity(path_identity.clone(), sha256.clone());
+        .with_content_readout_identity(path_identity.clone(), sha256.clone())
+        .unwrap();
     (serving, path_identity, sha256, path)
 }
 
@@ -776,6 +777,13 @@ fn cli_serve_exposes_the_loaded_content_readout_identity() {
     child.kill().unwrap();
     child.wait().unwrap();
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn loopback_content_readout_identity_requires_an_attached_table() {
+    assert!(serving()
+        .with_content_readout_identity("fixtures/content-readout.json", "ab".repeat(32))
+        .is_err());
 }
 
 fn sse_json(body: &str) -> Vec<Value> {
