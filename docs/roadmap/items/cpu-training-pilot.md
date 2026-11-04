@@ -212,6 +212,17 @@ fixed target-balanced `k=2` construction, not target-local point geometry
 generally. See
 [deepseek-130](../../loop/tasks/cpu-training-pilot/deepseek-130/REPORT.md).
 
+The next termination unit trained the final gain itself, rather than deciding
+after the writer query. At the final reply-content row it aimed decoder BOS at
+top-1; every other row protected content and rejected added BOS. Both seeds
+accepted all eight one-code moves, changed the held-out query distance and kept
+exact CPU/integer parity. BOS still stayed outside top-8 and reached 0/103
+held-out terminal top-1; seed 2 also lost two nonterminal content rows. Every
+free reply hit the 16-token cap. This closes the fixed final-gain coordinate
+schedule; it does not reject geometric termination or a direct serving-level
+BOS candidate. See
+[deepseek-131](../../loop/tasks/cpu-training-pilot/deepseek-131/REPORT.md).
+
 The public 19-table M1 trunk is now additively trainable and writable on CPU,
 rather than read-only. One bounded run added 128 exact teacher-forced rows to
 the unigram and all 12 sparse sufficient-statistic tables, exported and

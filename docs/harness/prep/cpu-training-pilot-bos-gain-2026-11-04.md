@@ -233,8 +233,12 @@ run() {
 run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
 run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
 run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
-diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
-  <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
+NORMALIZE='walk(if type == "object" then
+  del(.wall_elapsed_ms, .peak_rss_kib, .wall_elapsed_us,
+      .generated_tokens_per_second)
+else . end)'
+diff <(jq -S "$NORMALIZE" "$PIPELINE/seed-1/report.json") \
+  <(jq -S "$NORMALIZE" "$PIPELINE/seed-1-repeat/report.json")
 test -z "$(git -C "$SOURCE" status --porcelain -- crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)"
 test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_PIPELINE_BYTES"
 ```
