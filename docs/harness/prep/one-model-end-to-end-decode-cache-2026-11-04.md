@@ -13,7 +13,12 @@ RUN 1 (4 Nov, 18:17–18:34Z, `vast-59143240`, about $0.30): EXIT 5 at I-2, an i
 - **Sealed** in the store under `claude-279/run1/`: 155 files, read back 152 of 152 against `SHA256SUMS.files` (SHA-256 `e5151c7626bbf641fdcdfb2f2634e4f929937e5bb6fff700cc6cb02f6f257a6e`).
 - **Run 2** runs the new pin on the same pod, into fresh folders and under `claude-279/run2/`, after a fresh pre-run review of the change.
 
-OUTCOME: pending.
+OUTCOME: **Exact and faster** (run 2, 18:49–19:57Z, EXIT 0). See the [REPORT](../../loop/tasks/one-model-end-to-end/claude-279/REPORT.md).
+- **G** held at L192, S192 and L2048, and **G0** at L192 and S192. I-0 to I-4 hold.
+- **The 2,048 queries files:** 98.66 and 98.81 tok/s with the cache on, against 16.68 and 16.75 off.
+- **Steps:** 99.2% of the L2048 forwards.
+- **`--decode-cache`** stays at its default, 1.
+- **Run 2's seal:** `claude-279/run2/`, 335 files, read back 335 of 335. `SHA256SUMS.files` has SHA-256 `2f184e2ec21631075d6497236e380a5486c555ffec5f4aa8320f31d877f8c20b`.
 
 **What this run measures.** Today every decode step of a scoring pass re-runs the model over the whole window: 2,048 positions at P2b's long window, to compute one new position. At 2,048 the two `p-long` queries files are about 98% of a pass (claude-277). Of their 18,879 decode steps after the first, 18,721 (99.2%) fit the window, so they can step from the cache instead; at 192, 6,105 (32%) do.
 
