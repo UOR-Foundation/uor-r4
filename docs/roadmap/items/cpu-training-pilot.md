@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -27,6 +27,7 @@ The bounded public internal-development pilot has executed and failed its regist
 | Candidate artifact gate | `scripts/audit_served_forward_gate.py` binds a `UORT` token slice and optional expected artifact hash, validates the complete deterministic audit, and atomically promotes only exact-passing artifacts. The exact CPU corpus driver now runs the same audit internally before final promotion, validates all workload and mismatch fields, persists `final.audit.json`, and reloads both outputs. Public seed 1 passed a zero-step 64-position smoke with zero mismatches over 16,384 Q12 coordinates. Studio trained-model staging now requires a locally validated receipt and publishes it beside the model; remote cards pin the artifact and receipt; the release-bundle packager requires adjacent receipts for every UORLUT. The synthetic demo and arbitrary public-URL slot remain outside the trained-release gate, and automatic workflow publication/receipt signing are still open. See [deepseek-86](../../loop/tasks/cpu-training-pilot/deepseek-86/REPORT.md) and [deepseek-94](../../loop/tasks/cpu-training-pilot/deepseek-94/REPORT.md). |
 | Tied-table and lawful parameter-group trainer | Tied-token and BVG-K normalization/bias/decay/route groups delivered on finite fixtures. The exact CPU corpus driver binds rank-margin, coordinate-step, parameter-limit and coordinate-count settings into checkpoint identity. The two-seed 1/16/64-Q12 step comparison remained ranking-negative. The FIT-reviewed same-amplitude one-versus-four-coordinate pivot exercised 437/238 accepted four-coordinate blocks, reduced the margin objective on both seeds, and remained ranking-negative; seed 1 also lost admission and top-8. See [deepseek-9](../../loop/tasks/cpu-training-pilot/deepseek-9/REPORT.md) and [deepseek-82](../../loop/tasks/cpu-training-pilot/deepseek-82/REPORT.md). The repeated-key full-path memory comparison then trained eight coordinates with 16-thread candidate evaluation. Both seeds improved held-out target distance and top-1 over frozen and random controls with exact parity; the top-1 gains missed their three-sigma bars. See [deepseek-95](../../loop/tasks/cpu-training-pilot/deepseek-95/REPORT.md). A cached teacher-forced fast path then reproduced both runs exactly while parallelizing independent trace, evaluation and parity samples; walls fell to 8.774/8.397 s with zero artifact or reading changes. See [deepseek-96](../../loop/tasks/cpu-training-pilot/deepseek-96/REPORT.md). A final full-width gain trainer then accepted all eight updates on each seed and reduced held-out distance by 16,799,488/16,154,486 through the complete served query, but top-1 remained 291/243 and the registered ranking bar failed. See [deepseek-97](../../loop/tasks/cpu-training-pilot/deepseek-97/REPORT.md). |
 | Ordered parallel evaluation | Panel rows and counterfactual candidate lanes now use bounded Rayon workers, with source-ordered integer reductions and serial coordinate/joint selection. Tests reproduce panel readings, accepted steps, artifacts and checkpoints exactly across 1, 2, 3, 5, 8, 16 and 32 workers. At 16 workers, the synthetic panel reached 90,010 rows/s (9.13x) and counterfactual groups reached 4,686-5,192 candidate evaluations/s (7.33-8.80x). Thirty-two workers were workload-dependent rather than uniformly faster. See [deepseek-98](../../loop/tasks/cpu-training-pilot/deepseek-98/REPORT.md). On the real public corpus, two reversed-order runs measured 62.15 s at one worker, 8.48 s at eight, 4.63 s at 16 and 3.53 s at 32, an average 17.62x gain with byte-identical artifacts, checkpoints, panels and audits. The update chain and recurrent audit are dependency-ordered; the gain is concentrated in exact panel evaluation. See [deepseek-100](../../loop/tasks/cpu-training-pilot/deepseek-100/REPORT.md) and its corrected [deepseek-101](../../loop/tasks/cpu-training-pilot/deepseek-101/REPORT.md) accounting. |
+| CPU build graph | `uor-r4-discrete`'s build script now uses `uor-r4-core` with its default `integer-runtime` feature disabled. The build path therefore executes only the exact SpiralCore/prime-route metadata modules and does not compile a second feature set of `uor-r4-integer`. Ordinary `uor-r4-cpu-train` checks run in a shared target without the host/target `cdylib` collision or a fresh target directory. Normal core callers retain the full default API. See [deepseek-107](../../loop/tasks/cpu-training-pilot/deepseek-107/REPORT.md). |
 | Counterfactual corpus comparison | A one-arm runner now applies the existing exact BVG-K counterfactual trainer to the public masked corpus and compares normalization, bias, decay and route groups with zero-update controls. On both seeds the fixed 128-step, four-coordinate, delta-one configurations had exact export but no replicated ranking gain: normalization lost admission on seed 1, decay accepted no update, bias stayed rank-neutral, and route sharply degraded the held-out panel. See [deepseek-11](../../loop/tasks/cpu-training-pilot/deepseek-11/REPORT.md). |
 | Matched admission and exact checkpoint export control | Panel evaluator and gate delivered on finite fixtures. |
 | Trained artifact plus internal query panel | Bound: public dual-c131 seeds 1 and 2 have exact CPU/serving parity; the strict corpus driver creates document-disjoint public development samples. The public 19-table M1 artifact now has a read-only CPU path through its trained Relation read and all 15 joint-pointer trunk tables: all 14,287 DEV rows pass with zero query, admitted-cell, top-8 or token mismatch and reproduce 9,012 admitted / 7,002 top-1 / 7,485 top-8. See [deepseek-90](../../loop/tasks/cpu-training-pilot/deepseek-90/REPORT.md). |
@@ -89,6 +90,42 @@ evidence, but it is not a fresh capability test. The full item still needs
 credentialed sealed complete-reply and fresh-phrasing grading, a configuration
 that clears a registered ranking or capability bar, and a corpus-trained
 full-path model rather than the finite synthetic-initial-trunk control.
+
+The first unseen-exact-opening-key point transfer is now recorded. On both
+public seeds, training-only point rows beat point-off, but shuffled targets
+beat the learned table on seed 2. This closes the tested 60/60 split, 48-row
+point table, Q24 query points and nearest-target rule as a bounded negative; it
+does not reject every point-key representation. See
+[deepseek-104](../../loop/tasks/cpu-training-pilot/deepseek-104/REPORT.md).
+
+An eight-row majority vote over the same point rows then beat point-off, the
+single nearest row and the eight-row shuffled-target vote on both seeds, at
+`3/60` versus `1–2/60`. The gain was below the separate three-sigma threshold.
+The rule is now artifact-bound: `vote_k` defaults to the byte-compatible
+one-row behavior, and a synthetic plus two-seed public control proves exact
+native-session, CPU-oracle and served-forward parity at `vote_k = 8`. Seed 2's
+shuffled vote also reached `3/60`, so the mechanism remains subthreshold and
+is not a language result. See
+[deepseek-105](../../loop/tasks/cpu-training-pilot/deepseek-105/REPORT.md) and
+[deepseek-106](../../loop/tasks/cpu-training-pilot/deepseek-106/REPORT.md).
+
+A subsequent FIT free-generation screen tested whether the vote propagates
+beyond the opening. On both public seeds the vote reached `3/60` correct
+openings, but every arm produced zero exact-reference and zero BOS-complete
+replies; all 60 prompts per arm hit the 16-token cap. Seed 1's vote also
+produced fewer distinct replies and more repeated 4-grams than nearest. This
+closes the fixed greedy point-vote reply configuration and moves the next work
+to reply content and termination rather than another vote width. See
+[deepseek-108](../../loop/tasks/cpu-training-pilot/deepseek-108/REPORT.md).
+
+The memory-weight surrogate was then scaled from eight keys / 60 training / 56
+evaluation examples to 16 keys / 102 training / 114 evaluation examples with
+32 accepted Q24 movement updates. Trained top-1 rose `507→526` and `441→484`,
+beating frozen and equal-move random on both seeds, while target distance fell
+below both controls. The gains were `+19/+19` and `+43/+53`, still below the
+registered three-sigma thresholds of 64 and 60. This is a stronger
+repeated-key mechanism result and a ranking-signal negative. See
+[deepseek-109](../../loop/tasks/cpu-training-pilot/deepseek-109/REPORT.md).
 
 ## Done when
 
