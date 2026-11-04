@@ -28,8 +28,8 @@ true/shuffled mappings, generation arms and a separate bar.
 
 - focused transition packing: passed;
 - generated current/sign/code/trajectory determinism: passed;
-- driver tests: **9 passed**, including distinct two- and three-sigma paired
-  thresholds;
+- driver tests: **10 passed**, including distinct two- and three-sigma paired
+  thresholds and trajectory fallback accounting;
 - strict scoped Clippy and targeted rustfmt: passed.
 
 No release build, preflight or generation has run.
