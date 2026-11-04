@@ -11,15 +11,17 @@ Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-ima
 
 Cargo regenerated `src-tauri/Cargo.lock` with `uor-r4-vision` depending on `blake3` and `rayon`, replacing `hex`, `serde`, and `sha2`. The lockfile diff is exactly two insertions and three deletions; no source, dependency version, model, tokenizer, issue state, or Pages content changed. This task's ORDER and REPORT are the only other files.
 
-## Checks run at the head
-
-## Measurements and checks
+## Measurements
 
 - RED at base: `cargo build --manifest-path src-tauri/Cargo.toml --locked` refused to update the lockfile.
 - GREEN after regeneration: the same locked build finished without an offline rewrite.
 - `cargo test -p uor-r4-vision`: 9/9 PASS.
 - `node web/studio/verify_desktop_client.mjs`: real binary contract PASS, with no stale-lockfile message, 32 streamed tokens, 38 invoked commands, and zero remote requests.
 - `git diff --check`: PASS. Repository gates, exact-head review, GitHub checks, protected queue, and fresh-main locked-build verification remain external delivery records.
+
+## Checks run at the head
+
+Implementation verification used `7e0f7334cf18d4e6cae3a3f0658640ee9501c63f`; the final REPORT-only head and tree are the PR identity. Repository gates, exact-head review, GitHub checks, protected queue, and fresh-main verification are external delivery records, not preclaimed passes.
 
 ## Skills used
 
