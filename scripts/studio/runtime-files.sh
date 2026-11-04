@@ -15,6 +15,7 @@ list_files() {
         'assets/js/desktop_actions.js' \
         'assets/js/desktop_openai.js' \
         'assets/js/image_input.js' \
+        'assets/js/mcp_client.js' \
         'assets/js/model_sources.js' \
         'assets/js/stream_metrics.js' \
         'assets/js/studio_api.js' \

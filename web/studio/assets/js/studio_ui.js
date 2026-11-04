@@ -92,7 +92,7 @@
         workspace: { view: 'workspace', label: 'Files', purpose: 'Open a folder, edit files in tabs and save them back to disk.' },
         changes: { view: 'changes', label: 'Changes', purpose: 'Inspect repository status and the working-tree diff.' },
         terminal: { view: 'terminal', label: 'Terminal', purpose: 'Run explicitly approved commands inside a granted folder.' },
-        models: { view: 'model', label: 'Connections', purpose: 'UOR Chat, custom API providers, and artifact diagnostics.' },
+        models: { view: 'model', label: 'Connections', purpose: 'UOR Chat, MCP servers, custom API providers, and local models.' },
         guide: { view: 'guide', label: 'Guide', purpose: 'Quick start, the build-this-studio workflow, shortcuts and honest limits.' }
     };
     function sectionForView(view) { return view === 'chat' ? 'agent' : (view === 'model' ? 'models' : (view === 'workspace' || view === 'editor' || view === 'files' ? 'workspace' : (SECTIONS[view] ? view : 'agent'))); }
