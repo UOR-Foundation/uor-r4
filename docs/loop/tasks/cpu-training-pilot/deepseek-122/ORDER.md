@@ -50,7 +50,8 @@ proposed here.
    integer distance, strict-terminal stop rule, no-stop tie, and deterministic
    matched label control.
 2. The prep sheet is FIT-reviewed before public evaluation and registers a
-   non-premature BOS-gain / exact-non-loss bar plus cap, context and cost stops.
+   paired, noise-bounded non-premature BOS-gain / exact-non-loss bar plus cap,
+   context and cost stops.
 3. Both public seeds run the trained gate, no gate and matched control over the
    existing 114-prompt / 16-token panel; seed 1 repeats without timing.
 4. The fully-served base forward used by every gate arm retains exact

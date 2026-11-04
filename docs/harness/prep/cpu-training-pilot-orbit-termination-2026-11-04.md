@@ -21,7 +21,7 @@ D84 CPU development research in `uor-r4-cpu-train` on the local Ryzen 9
 
 | Input | Identity |
 |---|---|
-| implementation source | `a340222fd65d6b658341cf1b11ada580de815c30` |
+| implementation source | `d143e8bafc9376cd755072a784d4adfe5b8b72ab` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -87,36 +87,74 @@ shared `reply_stop` contract with a 16-token cap.
 
 ## Commands
 
-Build the release driver at the pinned source, then run each seed:
+The following is one executable session. It refuses source drift and any
+existing output root before the first run, fixes all three run orders, binds
+the binary before observing output, and hashes each output root:
 
-```text
-/usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 \
-  target/release/cpu-memory-panel-driver \
-  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-SEED-raw_both.uorlut \
-  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-tokens.u16 \
-  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-response-mask.u8 \
-  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-manifest.json \
-  OUT \
-  --expected-artifact-sha256 ARTIFACT_PIN \
-  --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
-  --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
-  --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
-  --expected-trained-sha256 TRAINED_PIN \
-  --expected-no-gate-reply-sha256 NO_GATE_PIN \
-  --steps 32 --keys 16 --per-key 16 --key-tokens 8 --reply-turn 8 \
-  --reply-cap 16 --seed SEED --termination-orbit-gate
+```sh
+set -euo pipefail
+SOURCE_PIN=d143e8bafc9376cd755072a784d4adfe5b8b72ab
+ROOT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/inner-cell-orbit/2026-11-04-attempt-1
+test -z "$(git status --porcelain)"
+git diff --quiet "$SOURCE_PIN" -- crates/uor-r4-cpu-train
+CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release \
+  -p uor-r4-cpu-train --bin cpu-memory-panel-driver
+BIN="$PWD/target/release/cpu-memory-panel-driver"
+BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+run() {
+  seed=$1 artifact_pin=$2 trained_pin=$3 no_gate_pin=$4 out=$5
+  test ! -e "$out"
+  /usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 "$BIN" \
+    "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-${seed}-raw_both.uorlut" \
+    /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-tokens.u16 \
+    /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-response-mask.u8 \
+    /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-manifest.json \
+    "$out" \
+    --expected-artifact-sha256 "$artifact_pin" \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --expected-trained-sha256 "$trained_pin" \
+    --expected-no-gate-reply-sha256 "$no_gate_pin" \
+    --steps 32 --keys 16 --per-key 16 --key-tokens 8 --reply-turn 8 \
+    --reply-cap 16 --seed "$seed" --termination-orbit-gate
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  sha256sum "$BIN" >"$out/binary.sha256"
+  find "$out" -type f ! -name SHA256SUMS -print0 |
+    sort -z | xargs -0 sha256sum >"$out/SHA256SUMS"
+}
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd \
+  c856ce21cf46a4be5a0cc02e033d9c7d0cd674bc4ab96a1185a1b9ccf3b88de4 \
+  ea95ef96a4adad3b3964912591ae0b9b9dfecf484aaae85cad9cb4dcbc769eec \
+  "$ROOT/seed-1"
+run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 \
+  10f91f7309c3ed36e3ce76878b2c75c07bae0102b3933571ccbd8f3b40b350e6 \
+  09920e95529cec1e4c87975d25cd9225a339c30e11a78853262fa918ed2d767c \
+  "$ROOT/seed-2"
+run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd \
+  c856ce21cf46a4be5a0cc02e033d9c7d0cd674bc4ab96a1185a1b9ccf3b88de4 \
+  ea95ef96a4adad3b3964912591ae0b9b9dfecf484aaae85cad9cb4dcbc769eec \
+  "$ROOT/seed-1-repeat"
+diff <(jq -S 'del(.. | .wall_elapsed_us?, .generated_tokens_per_second?, .wall_elapsed_ms?, .peak_rss_kib?)' "$ROOT/seed-1/report.json") \
+  <(jq -S 'del(.. | .wall_elapsed_us?, .generated_tokens_per_second?, .wall_elapsed_ms?, .peak_rss_kib?)' "$ROOT/seed-1-repeat/report.json")
 ```
 
-`ARTIFACT_PIN`, `TRAINED_PIN` and `NO_GATE_PIN` are the seed-specific table
-values above. Run in seed order 1, then 2, each in a fresh `OUT`. Repeat seed 1
-in another fresh `OUT` with the same command and compare all non-timing fields.
+The driver independently refuses an existing output root. Any edited source,
+changed argv, reused or nonempty output root, changed seed order, or deterministic
+mismatch is an instrument fault and requires a new FIT before another attempt.
 
 ## Bar
 
+For each control, pair `orbit_gate` and the control by evaluation row and count
+the rows where each has a non-premature BOS completion. Let `b` be candidate-only
+rows and `c` control-only rows. The required paired margin is
+`max(2, ceil(2 * sqrt(b + c)))`.
+
 On each seed, `orbit_gate` must:
 
-- strictly exceed both `no_gate` and `shuffled_orbit_gate` in non-premature BOS
-  completion, defined as `bos_complete - premature_stop`;
+- exceed both `no_gate` and `shuffled_orbit_gate` by at least that paired margin
+  in non-premature BOS completion, defined as a BOS stop whose tokens exactly
+  equal the normalized reference;
 - not reduce exact-reference replies against either control.
 
 A positive is bounded CPU development evidence and justifies fresh-phrasing
@@ -145,11 +183,21 @@ geometric termination.
 
 ## Cost and stop
 
-Local workstation only; no GPU, pod or paid API. Expected below 10 CPU minutes
-per seed and below 2 GiB peak RSS. Each seed and the seed-1 repeat run under
+Local workstation only; no GPU, pod or paid API. At registration the project
+filesystem had 547,461,091,328 bytes free and `/tmp` had 28,606,812,160 bytes
+free. The cold release build measured 2.2 GiB of temporary target storage.
+Three fresh output roots are projected below 64 MiB retained; one instrument-
+fault retry is projected below 10 CPU minutes and 16 MiB, with no rebuild.
+Preparation, build, FIT review, finite checks, three runs and delivery are
+projected below 45 CPU minutes on 32 threads. No retry is automatic.
+
+Expected peak RSS is below 2 GiB. Each seed and the seed-1 repeat run under
 `/usr/bin/time -v timeout 600s`. A timeout, a peak above 2,097,152 KiB, or a
 seed-1 projection beyond 20 total CPU minutes stops the experiment before the
-next seed.
+next seed. The projected 2.2 GiB temporary cache plus retained output leaves
+the required 128 MiB reserve intact. No shared model-time ledger or active
+storage receipt is present; this unit uses no paid or external service and
+records `$0` external cost.
 
 Stop on input or source drift, leakage, missing trained/no-gate replay, a
 one-class or unchanged control, CPU/serving divergence, nondeterminism,
