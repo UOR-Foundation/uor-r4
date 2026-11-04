@@ -31,10 +31,11 @@ None yet. The pre-registration is PENDING and must be FIT before public compute.
 
 ## Checks run at the head
 
-Focused point-transfer release tests currently pass, including medoid selection,
-ties, deterministic construction, shuffled targets, served-query agreement,
-malformed tables and paired margin arithmetic. Final checks are recorded after
-the evidence commit.
+Focused point-transfer release tests currently pass: 16/16, including medoid
+selection, distance and target ties, deterministic construction, shuffled
+targets, served-query agreement, malformed tables, paired margin arithmetic and
+non-zero point-fallback exposure. Strict package Clippy also passed. Final
+checks are recorded after the evidence commit.
 
 ## Skills used
 
