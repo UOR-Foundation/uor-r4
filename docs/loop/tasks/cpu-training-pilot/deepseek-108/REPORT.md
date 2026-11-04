@@ -55,16 +55,18 @@ Both seeds used 16 Rayon workers concurrently on the Ryzen 9 9950X.
 
 | Seed | Arm | Exact | BOS | Cap | Opening | Distinct | Repeat 4-gram | Generated tok/s |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | point-off | 0 | 0 | 60 | 0 | 2 | 22 | 18,509 |
-| 1 | nearest | 0 | 0 | 60 | 2 | 10 | 55 | 19,607 |
-| 1 | vote | 0 | 0 | 60 | 3 | 4 | 57 | 20,677 |
-| 1 | shuffled vote | 0 | 0 | 60 | 0 | 11 | 46 | 19,053 |
-| 2 | point-off | 0 | 0 | 60 | 0 | 2 | 40 | 19,880 |
-| 2 | nearest | 0 | 0 | 60 | 1 | 12 | 37 | 20,402 |
-| 2 | vote | 0 | 0 | 60 | 3 | 5 | 22 | 17,719 |
-| 2 | shuffled vote | 0 | 0 | 60 | 3 | 8 | 6 | 18,703 |
+| 1 | point-off | 0 | 0 | 60 | 0 | 2 | 22 | 20,303 |
+| 1 | nearest | 0 | 0 | 60 | 2 | 10 | 55 | 20,358 |
+| 1 | vote | 0 | 0 | 60 | 3 | 4 | 57 | 20,074 |
+| 1 | shuffled vote | 0 | 0 | 60 | 0 | 11 | 46 | 20,220 |
+| 2 | point-off | 0 | 0 | 60 | 0 | 2 | 40 | 20,904 |
+| 2 | nearest | 0 | 0 | 60 | 1 | 12 | 37 | 20,739 |
+| 2 | vote | 0 | 0 | 60 | 3 | 5 | 22 | 20,189 |
+| 2 | shuffled vote | 0 | 0 | 60 | 3 | 8 | 6 | 19,203 |
 
-Wall times were 1.593 s and 1.547 s. The tokens/s figures are aggregate
+The two registered seeds ran concurrently and alone; the seed-1 repeat ran
+afterward in a separate process. Registered wall times were 1.616 s and
+1.550 s. The tokens/s figures are aggregate
 generated tokens divided by each arm's wall interval over all 60 prompts; they
 are not single-stream decode rates.
 
