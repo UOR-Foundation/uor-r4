@@ -961,8 +961,12 @@ mod tests {
         );
 
         let artifact = bare_artifact();
-        let opening_weight = vec![1 << 20; 64];
-        let reply_weight = vec![-(1 << 20); 64];
+        let opening_weight = (0..64)
+            .map(|coordinate| (coordinate - 32) << 12)
+            .collect::<Vec<_>>();
+        let reply_weight = (0..64)
+            .map(|coordinate| (31 - coordinate) << 12)
+            .collect::<Vec<_>>();
         let mut original = add_turn_memory_uorlut01(&artifact, &memory).unwrap();
         original =
             replace_memory_weight_table(&original, MemoryWeightTable::Opening, &opening_weight)
@@ -977,6 +981,7 @@ mod tests {
             replace_memory_weight_table(&control, MemoryWeightTable::Reply, &reply_weight).unwrap();
         let original = read_memory_uorlut01(&original).unwrap().unwrap();
         let control = read_memory_uorlut01(&control).unwrap().unwrap();
+        assert_eq!(original.record, control.record);
         assert_eq!(original.opening.keys, control.opening.keys);
         assert_eq!(original.opening.weight, control.opening.weight);
         assert_ne!(original.opening.values, control.opening.values);

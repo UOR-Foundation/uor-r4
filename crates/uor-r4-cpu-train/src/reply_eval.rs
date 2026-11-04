@@ -112,8 +112,9 @@ pub fn evaluate_replies(
 /// A hit on the opening key names the first reply token. After each generated
 /// token is fed through the exact CPU forward, a hit on the same reply key the
 /// served memory uses replaces the writer's fallback token with the stored
-/// target. Misses retain the forward token. This experimental arbitration does
-/// not apply the memory-weight query move.
+/// target. Misses retain the forward token. The CPU forward still applies the
+/// artifact's memory-weight query movement when producing fallback tokens; only
+/// the chosen token is overridden on a hit.
 pub fn evaluate_memory_target_replies(
     artifact: &[u8],
     samples: &[MemoryWeightSample],

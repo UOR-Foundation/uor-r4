@@ -101,9 +101,11 @@ correct majority target for 59.2% of teacher-forced held-out reply decisions,
 while deepseek-109's served model named only 12.5% correctly. Increasing the
 coordinate sweep would therefore optimize the wrong bottleneck. This unit now
 includes the lawful exact-memory target arbitration and matched shuffled-target
-control. If the replay is negative, target arbitration is closed as a
-configuration and the next unit must change the memory key or proposal path,
-not widen the coordinate sweep.
+control. A positive target result is CPU-offline evidence only: the mechanism
+must then be implemented in integer serving and pass exact CPU/serving parity
+and the release gate before a larger fresh-phrasing run. If the replay is
+negative, target arbitration is closed as a configuration and the next unit
+must change the memory key or proposal path, not widen the coordinate sweep.
 
 ## Still open
 

@@ -172,9 +172,10 @@ repeated-key readiness screen, not a decisive capability run.
   reply content.
 - **Query-movement propagation only:** use the trained query-movement artifact
   as the candidate; direct target arbitration does not advance.
-- **Direct-target pass:** use exact-memory target arbitration as the next
-  candidate for a larger fresh-phrasing complete-reply panel, ahead of
-  query-only movement.
+- **Direct-target pass:** first implement exact-memory target arbitration in the
+  integer serving and export path, then pass exact CPU/serving parity and the
+  release gate before any larger fresh-phrasing run. The current target arms are
+  CPU-offline research and are not served yet.
 - **Both pass:** compare their paired exact-reference gain and cost, then carry
   the stronger arm and retain the other as a control.
 - **Instrument fault:** stop and repair without recording a mechanism negative.
