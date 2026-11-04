@@ -313,32 +313,31 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     std::fs::write(config.out.join("random.uorlut"), &random_artifact)
         .map_err(|error| error.to_string())?;
-    let shuffled_memory =
-        shuffled_memory_target_control(&memory, config.seed).map_err(|error| error.to_string())?;
-    let mut shuffled_artifact =
-        add_turn_memory_uorlut01(&artifact, &shuffled_memory).map_err(|error| error.to_string())?;
-    let trained_memory = read_memory_uorlut01(&trained_artifact)
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "trained artifact lost turn memory".to_owned())?;
-    shuffled_artifact = replace_memory_weight_table(
-        &shuffled_artifact,
-        MemoryWeightTable::Opening,
-        &trained_memory.opening.weight,
-    )
-    .map_err(|error| error.to_string())?;
-    if let Some(reply) = &trained_memory.reply {
-        shuffled_artifact = replace_memory_weight_table(
-            &shuffled_artifact,
-            MemoryWeightTable::Reply,
-            &reply.weight,
+    let shuffled_artifact = if config.reply_cap == 0 {
+        None
+    } else {
+        let shuffled_memory = shuffled_memory_target_control(&memory, config.seed)
+            .map_err(|error| error.to_string())?;
+        let mut shuffled = add_turn_memory_uorlut01(&artifact, &shuffled_memory)
+            .map_err(|error| error.to_string())?;
+        let trained_memory = read_memory_uorlut01(&trained_artifact)
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "trained artifact lost turn memory".to_owned())?;
+        shuffled = replace_memory_weight_table(
+            &shuffled,
+            MemoryWeightTable::Opening,
+            &trained_memory.opening.weight,
         )
         .map_err(|error| error.to_string())?;
-    }
-    std::fs::write(
-        config.out.join("target-shuffled.uorlut"),
-        &shuffled_artifact,
-    )
-    .map_err(|error| error.to_string())?;
+        if let Some(reply) = &trained_memory.reply {
+            shuffled =
+                replace_memory_weight_table(&shuffled, MemoryWeightTable::Reply, &reply.weight)
+                    .map_err(|error| error.to_string())?;
+        }
+        std::fs::write(config.out.join("target-shuffled.uorlut"), &shuffled)
+            .map_err(|error| error.to_string())?;
+        Some(shuffled)
+    };
     let trained = evaluate_memory_weight_samples(&trained_artifact, &evaluation_samples, true)
         .map_err(|error| error.to_string())?;
     let random = evaluate_memory_weight_samples(&random_artifact, &evaluation_samples, true)
@@ -385,7 +384,12 @@ fn run() -> Result<serde_json::Value, String> {
         for (name, bytes) in [
             ("target_frozen", memory_artifact.as_slice()),
             ("target_trained", trained_artifact.as_slice()),
-            ("target_shuffled", shuffled_artifact.as_slice()),
+            (
+                "target_shuffled",
+                shuffled_artifact.as_deref().ok_or_else(|| {
+                    "reply evaluation lost its shuffled target artifact".to_owned()
+                })?,
+            ),
         ] {
             complete_replies.insert(
                 name,
@@ -460,7 +464,9 @@ fn run() -> Result<serde_json::Value, String> {
             "trained_memory_off": uor_r4_discrete::corpus::sha256(&trained_artifact),
             "target_frozen": uor_r4_discrete::corpus::sha256(&memory_artifact),
             "target_trained": uor_r4_discrete::corpus::sha256(&trained_artifact),
-            "target_shuffled": uor_r4_discrete::corpus::sha256(&shuffled_artifact),
+            "target_shuffled": shuffled_artifact
+                .as_deref()
+                .map(uor_r4_discrete::corpus::sha256),
         },
         "complete_replies": complete_replies,
         "reply_cap": config.reply_cap,
