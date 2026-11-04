@@ -20,26 +20,26 @@ Casey was then told that a fused kernel moves a pinned count: the float crate pi
 Why these two kernels first:
 - **The step is host-bound.** [claude-157](../../loop/tasks/fbs-cost-profile/claude-157/REPORT.md) found the backward 62% of a training step in one configuration on an RTX 5090, and 54% in the other, with host time 0.98–0.99 of GPU time. That is launch overhead or a wait at a sync inside the backward; the run does not tell them apart. The cancel rule below is there for that reason.
 - **The served quantizers are op chains.** Under `--train-as-served 1`:
-  - `activation_quantize16` (`hamilton_sheet.rs:723`) is 43 stock tensor ops a call, 51 with the straight-through bridge the served wrapper (`:761`) always takes. It runs once a layer, in the gate block (`geometric_stack_native.rs:1757`, and `:2109` in the second forward), with a second call only under gate telemetry.
+  - `activation_quantize16` (`hamilton_sheet.rs:723`) is 43 stock tensor ops a call, 51 with the straight-through bridge the served wrapper (`:761`) always takes. It runs twice a layer: on the recurrence's output gate (`geometric_stack_native.rs:2109`, in `composed_recurrence`) and on the MLP gate (`:1757`, in `mlp`). The layer loop (`:1634-1639`) calls both in every forward, and gate telemetry adds one more call to each.
   - `q16_residual` (`:646`) is 6 ops, or 14 with the bridge. It rounds the residual 1 + 2 × layers times a trunk, once more after each read, and again on every FBS projection's output (`served_projection_q16`, `:774`, through `StackModel::linear`).
   - Each has a one-line backward: the gradient times the in-range mask.
 - **Scoring has the same floor.** [claude-279](../../loop/tasks/one-model-end-to-end/claude-279/REPORT.md) put scoring's decode on the exact cache. A cached step is then estimated at 8–9 ms for (L) at both 192 and 2,048 tokens. A step computes one position, so most of that is a fixed cost per forward, and the forward runs the same quantizer chains.
 
 ## What is missing
 
-1. **One kernel list.** `KERNEL_ENTRY_POINTS` (`src/lib.rs:36`) and `EXPECTED_KERNELS` (`tests/no_training_crate_dep.rs:9`) are two hand copies of the same 26 names (22 in `cuda_stack.cu`, 4 in `spiralcore_fbs.cu`), and the test asserts the count 26 (`:103`). At run time, only the `HISTORICAL_KERNELS` deny list (`src/cuda_stack_kernels.rs:356`) and the PTX load (`:376`) stand between a name and its launch. Nothing ties a launched name to the list.
+1. **One kernel list.** `KERNEL_ENTRY_POINTS` (`src/lib.rs:36`) and `EXPECTED_KERNELS` (`tests/no_training_crate_dep.rs:9`) are two hand copies of the same 26 names (22 in `cuda_stack.cu`, 4 in `spiralcore_fbs.cu`), and the test asserts the count 26 (`:103`). At run time, only the `HISTORICAL_KERNELS` deny list (defined at `src/cuda_stack_kernels.rs:46`, checked at `:356`) and the PTX load (`:376`) stand between a name and its launch. Nothing ties a launched name to the list.
 2. **A measured share.** No GPU profile has yet split a served training step by op chain.
    - [served-rounding-cost](served-rounding-cost.md) (#3594, DeepSeek's item, M4) is the item for training as served's 6.83–6.96× slowdown against plain training.
    - Its host probe points at the export rounding instead: `grid_code` searches 2,032 grid candidates on the host for every rounded gain on every step, and nine matrices are copied to the host and back each step. Replacing the activation-scale loop saved about 2% of one CPU activation there.
    - That is a host probe, not a GPU profile, but it is the reason the fusion below waits on a measurement.
    - The two items share `hamilton_sheet.rs`, so the claim's overlap check orders their units. This item adds the kernel list that any new GPU kernel for that repair also needs. It does not take on the export rounding.
-3. **The fused quantizers,** forward and backward, one kernel each, in `cuda_stack.cu`. That source builds both the f32 and the bf16 modules: `act_t` is defined at `cuda_stack.cu:61-84`, and the bf16 module is the same source built with `-DUOR_STORAGE_BF16` (`build.rs:40`). `spiralcore_fbs.cu` needs no change.
+3. **The fused quantizers,** forward and backward, one kernel each, in `cuda_stack.cu`. That source builds both the f32 and the bf16 modules: `act_t` is defined at `cuda_stack.cu:61-85`, and the bf16 module is the same source built with `-DUOR_STORAGE_BF16` (`build.rs:40`). `spiralcore_fbs.cu` needs no change.
 
 ## Done when
 
 1. **The kernel list is generated.**
-   - `build.rs` scans all three sources, `cuda_stack.cu`, `spiralcore_fbs.cu` and `spiralcore_fbs_arms.cu`, for `extern "C" __global__ void <name>` on every build, CPU builds included. It writes one list per PTX module, which `lib.rs` includes.
-   - The dispatch refuses a name not in its own module's list. The arms module's two kernels (`spiralcore_fbs_arm_fwd`, `spiralcore_fbs_arm_bwd`, launched through `launch_prebuilt`, `geometric_stack_native_cuda.rs:798-805`) must pass that check, not fail it.
+   - `build.rs` scans each `MODULES` entry's combined `sources` (`build.rs:26-54`) for `extern "C" __global__ void <name>` on every build, CPU builds included. It writes one list per PTX module, which `lib.rs` includes. The arms module is built from three files, `spiralcore_fbs_arms_prelude.cu`, `spiralcore_fbs.cu` and `spiralcore_fbs_arms.cu` (`:44-53`). So its list is the 4 FBS kernels plus `spiralcore_fbs_arm_fwd` and `spiralcore_fbs_arm_bwd`.
+   - The dispatch refuses a name not in its own module's list. The arms kernels, launched through `launch_prebuilt` (`geometric_stack_native_cuda.rs:798-805`), must pass that check, not fail it.
    - No literal kernel count is left in code, tests or their doc comments: `lib.rs:3-4, :33-35`, `tests/no_training_crate_dep.rs:3-4`, and the messages at `:83` and `:104`.
    - The test re-scans the sources itself and compares with the generated lists. The banned-token scan stays.
 2. **Fused `activation_quantize16`,** behind a flag, equal bit for bit to the op chain it replaces. The flag is a thread-local in `hamilton_sheet.rs`, where the served wrappers switch to the kernel, set by a `train-in-space` option. It is equal:
@@ -52,7 +52,7 @@ Why these two kernels first:
 
 ## Cancel if
 
-- A step's launch count or time shows the two chains under 5% of a training step at P2b's recipe. Then done-when 1 lands alone, and the fusion is reported as not worth its pin.
+- The two chains' share of wall seconds per training step at P2b's recipe, with `--train-as-served 1`, is under 5%, with their launch counts reported alongside. Then done-when 1 lands alone, and the fusion is reported as not worth its pin.
 
 ## How to start
 

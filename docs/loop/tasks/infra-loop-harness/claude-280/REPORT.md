@@ -9,7 +9,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). PR #3677. Plan step: THE ORDER of 4 No
 - **Nothing was built or measured.** No kernel exists yet, and no GPU profile has split a step by op chain. The item's fusion waits on one.
 - **The fusion may not be worth its pin.** DeepSeek's [served-rounding-cost](../../../../roadmap/items/served-rounding-cost.md) (#3594) traced training as served's slowdown, 6.83–6.96× plain, with a host probe. The probe points at the export rounding: `grid_code`'s 2,032-candidate search on the host for every rounded gain, and nine matrices copied each step. Replacing the activation-scale loop saved about 2% of one CPU activation there. That is not a GPU measurement, but it means the quantizer chains may be a small share. So the item now measures first, and its cancel rule (under 5% of a step) can fire.
 - **`loop claim` could not claim this unit.** The umbrella's `docs/roadmap/items/*.md` overlaps Kimi's open draft #3675, so it was claimed by hand under Casey's 1 Nov direction, quoted in the [ORDER](ORDER.md#how-this-unit-was-claimed). #3675 changes no file this unit edits.
-- **The draft item had seven faults,** found by a fresh fact-check against `origin/main` before the item was committed. The worst would have broken runs: a dispatch check keyed to the two scanned sources would have refused the FBS arms module's two kernels on every arms run. All seven were fixed, along with an eighth: `activation_quantize16` runs once a layer, not twice. Details are in the ORDER's cancel probe result.
+- **The draft item had seven faults,** found by a fresh fact-check against `origin/main` before the item was committed. The worst would have broken runs: a dispatch check keyed to the two scanned sources would have refused the FBS arms module's two kernels on every arms run. All seven were fixed; details are in the ORDER's cancel probe result.
+- **My own extra correction was wrong.** While applying them, I misread `geometric_stack_native.rs:2109` as a second forward and changed "twice a layer" to "once". The exact-head review caught it: `:2109` is the recurrence's output gate and `:1757` the MLP gate, and the layer loop calls both, so it is twice a layer. Restored, with both sites named. The same review also tightened four lines:
+  - the arms module's list comes from its three combined sources;
+  - the cancel rule reads one measure, the share of wall seconds;
+  - `act_t`'s range ends at `:85`;
+  - the deny list's definition is at `:46`.
 
 ## What changed
 
@@ -31,7 +36,11 @@ None. This unit makes no run.
 - `cargo xtask roadmap check`: 140 items OK.
 - `cargo xtask roadmap render --check`: the README is current.
 - `loop report --check` and `loop pr-check --local`, before the review.
-- **Reviews, each in a fresh context:** the fact-check of the draft item (REQUEST CHANGES, seven fixes, all applied), and the exact-head review of this PR, recorded by `loop review`.
+- **Reviews, each in a fresh context:**
+  - the fact-check of the draft item: REQUEST CHANGES, seven fixes, all applied;
+  - the exact-head review, round 1: REQUEST CHANGES. A BLOCKER (twice a layer, above), three SHOULDs and two NITs, all applied;
+  - round 2 on the delta, recorded by `loop review`.
+- **The issue body** is re-synced from the corrected item.
 
 ## Skills used
 

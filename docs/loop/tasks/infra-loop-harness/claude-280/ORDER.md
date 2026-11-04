@@ -69,10 +69,10 @@ Nothing of Kimi's or DeepSeek's is edited, closed or pushed to.
   - `build.rs`'s line ranges;
   - claude-157 shows a host-bound step, not a launch-bound one;
   - the flag's home: a thread-local in `hamilton_sheet.rs`, set from `train-in-space.rs`, added to the scope;
-  - `act_t` lives at `cuda_stack.cu:61-84`;
+  - `act_t` lives at `cuda_stack.cu:61-85`;
   - the PTX load is a check too;
   - the literal 26 in doc comments and messages.
 
-  It also found `activation_quantize16` runs once a layer, not twice, and that is corrected.
+  A correction of my own while applying them, "once a layer, not twice", was wrong. The exact-head review restored "twice a layer", at `:2109` and `:1757` (REPORT, What did not work).
 - **The sync's plan:** it creates this issue, and it re-renders five generated bodies from their merged item files: #3506, #3440, #3407, #3608 and #3392. Each carries the "Edit that file in a PR, not this issue" footer, so applying changes no hand-written text.
 - **Classed:** instrument. Nothing cancels the unit.
