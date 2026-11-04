@@ -82,7 +82,7 @@ The GPU check, run 3, at `d6fc3a2c5` on one RTX 5090 (driver 580.178.04, 32,607 
   Restored, each test passes again.
 
 - **The GPU check:**
-  - **the pod:** `vast-59176411`, Vast South Korea, $0.563/h, up 23:26:24Z to 23:43:11Z (1,003 s), about $0.16. The first pod, `vast-59174823`, was up 906 s at $0.975/h before `uor-pod` deleted it, at most $0.25. So the unit spent at most about $0.41 on pods;
+  - **the pod:** `vast-59176411`, Vast South Korea, $0.563/h, up 23:26:24Z to 23:43:11Z (1,003 s), about $0.16. The first pod, `vast-59174823`, was up 906 s at $0.975/h before `uor-pod` deleted it, at most $0.25. So the unit spent at most about $0.40 on pods;
   - **the job:** `job-282b.sh`, kept with the lab's scripts. It ran as `job-282c.sh` with the pin as its argument, and refuses any other pin. It refuses to write into an existing run folder;
   - **the seal:** run 3's `SHA256SUMS.files`, SHA-256 `bd762511568217b070200226cfe19d56557f6c8e0eb6f113bf38b429ee34c0bf`. It checks 29 of 29 after the copy off the pod, and 29 of 29 again after a full read-back from the store;
   - **the store:** `caseyallard/uor-r4-store:results/claude/float-kernel-fusion-kernel-list-2026-11-04/` holds `c282/` (run 1, 13 files), `c282b/` (run 2, 7 files) and `c282c/` (run 3, 33 files: the 29 sealed, the seal, its empty error file, `DONE` and `EXIT`). The read-back of all 53 files is identical to the copy;
@@ -96,7 +96,11 @@ The GPU check, run 3, at `d6fc3a2c5` on one RTX 5090 (driver 580.178.04, 32,607 
     - the module doc still said the whole module needs the `cuda` feature: fixed in `d6fc3a2c5`.
 
     It ran no build, by its brief, and named the GPU suite and the set-asides as the author's to run. Both are above.
-  - **round 2,** on the fix delta and on this REPORT's claims: below.
+  - **round 2, at `40ccdde2b`,** on the fix delta (`3b1201239..d6fc3a2c5`) and on every claim in this REPORT against the run files, the job scripts, the patches and the pod ledger: APPROVE WITH CHANGES, no blocker.
+    - **The code:** the depth counter, the pin test and the doc fix are correct. Among the cases checked: `# if` with a space, nesting, `#elif` and `#else`, and a directive line that names `__global__`. Its three nits are [Still open](#still-open), item 3.
+    - **The claims:** one minor, Still open's cross-references, which pointed at the wrong items; fixed here. The pod total is now the ledger's $0.40, not $0.41.
+    - **Not checked by it, checked by hand:** the five tests `job-282b.sh` requires by name (three dispatch tests and two decode-cache tests, at its `NAMED` list); the seal's SHA-256 (`shasum -a 256` of the local copy and the read-back); the 29 / 29 seal checks; and the 53-file read-back (`diff -r`).
+  - Both are recorded by `loop review`.
 
 ## Skills used
 
@@ -105,14 +109,18 @@ None applied.
 ## Still open
 
 1. **The kernel unit's next part: the measurement** (done-when 2's precondition, and the item's cancel rule). Time a training step at P2b's recipe with `--train-as-served 1`, chain by chain: the two quantizer chains (`activation_quantize16`, `q16_residual`) against the rest of the step. If they are under 5% of a step, the fusion does not start and the item closes on done-when 1. Time it on one pod type, or report the host: claude-281 saw 137–148 tok/s on one 5090 against claude-279's 98.7 on another, with the same cache.
-2. **The out-of-scope points** above: the training crate's own unlisted load paths (What did not work, item 2), the private arms constant (item 3) and the stale "24-kernel" doc (item 4).
-3. **Then, as #2028 orders:** the real-text corpus; P4 (#3471); P5; P6 (#3394).
+2. **The out-of-scope points** above: the training crate's own unlisted load paths (What did not work, item 4), the private arms constant (item 5) and the stale "24-kernel" doc (item 6).
+3. **Review round 2's three nits,** kept out of this PR so the merged code is exactly the code the GPU run qualified. None changes a list, a launch or a scored token. They land with the next unit that edits these files:
+   - the test's `#if` counter can go below zero on a stray `#endif`, where `build.rs` saturates. nvcc rejects an unbalanced `#endif`, so no real build reaches it. Saturate it too, or assert the depth never goes negative and ends at 0;
+   - both counters read a `#if` or `#endif` at the start of a line inside a `/* */` comment as a directive. A commented `#if` refuses a kernel (safe); a commented `#endif` inside a real block would hide one. No source does either. This is the shared rule of What did not work, item 7;
+   - the pin test matches the call's text, so `let _ = super::admit_launch(module, name);`, which drops the result, would still pass. Put `.map_err(Error::Msg)?` in the needle.
+4. **Then, as #2028 orders:** the real-text corpus; P4 (#3471); P5; P6 (#3394).
 
 ## Plain summary
 
 The float crate keeps a list of the GPU programs it is allowed to run. Until now that list was typed out by hand twice, and five files said how long it was. Adding one GPU program meant changing all of them, and nothing checked a launch against the list at all.
 
-Now the build reads the GPU source files and writes the list itself, once per compiled module. Every launch is checked against its own module's list and refused if the name is not there. A test reads the same source files its own way and fails if its list and the build's disagree. On a rented RTX 5090, the crate's whole GPU test suite passed with the check in place. That includes the tests that run the newest GPU programs and three steps of training. The programs the GPU compiler actually built matched the lists exactly. Getting there took three tries: the first two failed on mistakes in my test script, not in the code. The pods cost about $0.41 in all.
+Now the build reads the GPU source files and writes the list itself, once per compiled module. Every launch is checked against its own module's list and refused if the name is not there. A test reads the same source files its own way and fails if its list and the build's disagree. On a rented RTX 5090, the crate's whole GPU test suite passed with the check in place. That includes the tests that run the newest GPU programs and three steps of training. The programs the GPU compiler actually built matched the lists exactly. Getting there took three tries: the first two failed on mistakes in my test script, not in the code. The pods cost about $0.40 in all.
 
 This changes nothing the model computes. It is the groundwork for the next step, faster fused GPU programs for the served rounding, which first has to be measured to see whether it is worth doing.
 
