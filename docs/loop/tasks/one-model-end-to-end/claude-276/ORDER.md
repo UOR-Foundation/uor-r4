@@ -34,12 +34,26 @@ Run [P2b's sheet](../../../../harness/prep/one-model-end-to-end-long-context-202
 4. No. The only open PR on this item is this unit's draft, #3657.
 5. The job file and the grade are written before any output exists, and the pre-run review (done-when 1) checks the job against the sheet line by line:
    - **The job:** `local/claude/p2/job-p2b.sh`, SHA-256 `da1938f7e685a2c88a8ace48f6237115be2f0e2ef85ec296405c5e5089b8997e` at this ORDER. It changes only if the pre-run review finds a fault, and the REPORT records the launch SHA-256.
-   - **The grade:** `local/claude/p2/grade-p2b.sh`, SHA-256 `cfac639d4e783dc98786642b9f9f9d75f7af4a424c8b34947656b267b7c5a4a3`, fixed. It was tested on a synthetic seed folder built from p-long's `queries.json`:
+   - **The grade:** `local/claude/p2/grade-p2b.sh`. It was `cfac639d4e783dc98786642b9f9f9d75f7af4a424c8b34947656b267b7c5a4a3` at this ORDER's first commit, and is `e40789617a59da6f3706c1d380f86813dda1c622d35c276c44aaeb7520fe76f4` after the pre-run review's fixes (below), fixed from here on. It was tested on a synthetic seed folder built from p-long's `queries.json`:
      - its b and c match an independent count (334 and 26 overall, 283 and 24 far);
      - two passing seeds read Positive;
      - identical windows read Negative;
      - disagreeing seeds read Inconclusive;
      - a pass at the wrong window reads Unread.
+
+## Pre-run review (done-when 1)
+
+A fresh non-author reviewer, given the sheet at the pin, this ORDER, the job, the grade and the code at the pin, said **GO WITH FIXES**. It checked the chain, every flag against the CLI parser, every path, the seven p-long and long-TRAIN SHA-256s, the grade's field names against the structs, silent-failure modes, and cost (about 5.7 h a pod at worst, under MAXSEC 25,200; $3–6 a pod; peak GPU memory about 20 GiB of 32).
+- **M1 (major), fixed:** (S)'s `config.json` leaves out `context` at 192 (`skip_serializing_if = "is_sheet_context"`), so R4's training clock multiplied by null and the grade stopped. Now `($c.context // 192)`; `SHEET_CONTEXT` is 192 at the pin. Gate: with a real-shaped (S) config the fixed grade reads 22,756 positions a second, and the grade before the fix exits 5 on `number (349520) and null (null) cannot be multiplied`.
+- **m1, fixed:** one seed reads `Inconclusive (one seed)`, the stop rule's word.
+- **m2, checked:** a seed folder missing one file stops the grade with exit 3, before and after the change; the explicit `out=$(seed …) || exit 3` is kept.
+- **m3:** each reading prints its n. On the fixture it is 603 overall and 494 far, and the REPORT compares the run's to these.
+- **m4, checked:** the five driver-data SHA-256s in the job equal `hamilton_sheet.rs`'s `PINNED_*` at the pin, and p-v's two equal its sheet (`one-model-end-to-end-keyed-opening-2026-10-30.md:69`).
+- **m5, kept:** I-0 runs the sheet's literal command (a debug build), adding `--no-fail-fast -- --test-threads=1`, which runs the same tests.
+- **m6, noted:** (S)'s final save at step 21,845 is off its eval grid. That touches only reported readings.
+- **m7, checked:** claude-274's job fetched single files the same way and exited 0. The instrument's `Cargo.lock` resolves `--locked --offline --features panel-writer`.
+
+The job is unchanged at `da1938f7e685a2c88a8ace48f6237115be2f0e2ef85ec296405c5e5089b8997e`.
 
 ## Files in scope
 
