@@ -310,3 +310,18 @@ GO - reviewer `codex fresh-context GO round 2`, 2026-11-04. HEAD was clean at
 public inputs, host/toolchain/resource limits, absent output roots, failure-seal
 trap, seed ordering, full-run commands and repeat comparison were checked
 read-only.
+
+## Outcome
+
+Seed 1 of the registered preflight stopped before seed 2 or generation. The
+phase-transition density gate retained the exact 1,568 generated rows and
+recalled **14/84** terminal endpoints against the **26/84** floor, with
+**7/1,484** false stops inside the 14-row limit. The shuffled-label gate
+changed **48** leave-one-out firing decisions, recalled 16/84 and emitted
+11/1,484 false stops.
+
+The stopped evidence is in
+`docs/labs/cpu-training-pilot-phase-termination-2026-11-04/evidence-attempt-1/`
+with `SHA256SUMS`
+`5b5af4570dd10bc1935bd52e70da80611b3de9a18674b05d9f9a99a123a97859`.
+No threshold or representation was changed after observing the result.
