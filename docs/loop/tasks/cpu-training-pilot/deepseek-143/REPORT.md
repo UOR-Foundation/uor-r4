@@ -22,6 +22,9 @@ derives signed remaining-reference horizons for every generated code-signature
 state, predicts with the lower median of exact-offset Hamming neighbours, fits
 k by terminal recall/false stops/horizon error, and emits BOS only for a
 predicted zero. A within-offset horizon rotation is the matched control.
+Terminal-row and prediction-change controls use explicit leave-one-out
+predictions over aligned original and permuted rows, so the query cannot match
+itself.
 
 The arm is isolated from the earlier prototype and density gates and does not
 change serving.
