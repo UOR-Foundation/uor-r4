@@ -18,6 +18,10 @@ Order: [ORDER.md](ORDER.md). Base: `70f45367d`.
 - **This is CPU/serving integration evidence, not GPU or useful-chat
   evidence.** It does not establish termination, fresh phrasing or semantic
   correctness.
+- **Attempt 3 was an instrument failure.** It passed the same parity and
+  control assertions but ran the focused tests inside the chat target, which
+  grew to 2,246,424,310 bytes against the registered 2 GiB limit. Attempt 4
+  uses a separate control target and preserves attempt 3 as evidence.
 
 ## What worked
 
@@ -40,15 +44,25 @@ The CPU content driver now writes the training-derived turn-memory artifact
 and sidecar, then checks every generated evaluation decision against an
 independent `IntegerStackModel` carrying that sidecar.
 
-Session snapshots bind the canonical attached-readout hash. A same-readout
-restore succeeds; a model with no readout or a different readout refuses before
-changing state. `UR4SESS2` carries that identity, while legacy `UR4SESS1`
-snapshots remain byte-identical when neither side has a readout.
+Session snapshots bind the canonical attached-readout hash. In the synthetic
+no-turn-memory FBS control, a same-readout restore succeeds while a model with
+no readout or a different readout refuses before changing state. The public
+artifact keeps its pre-existing refusal to restore turn-memory sessions.
+`UR4SESS2` carries that identity, while legacy `UR4SESS1` snapshots remain
+byte-identical when neither side has a readout.
 
 Attempt 1 at pin `a463a1c8d` passed the parity arm but predated session
 identity. It remains under [`evidence-attempt-1/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-1/)
 with its original report, checksums and resource ledger. Attempt 2 at pin
-`fe253c5ca` is the deciding run below.
+`fe253c5ca` passed the parity arm but omitted the required loopback sidecar
+identity and is retained under
+[`evidence-attempt-2/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-2/).
+Attempt 3 at pin `819482378` passed every parity and control assertion but
+grew its shared chat target above the registered ceiling; it remains under
+[`evidence-attempt-3/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-3/)
+with its own [resource ledger](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json).
+Attempt 4 at the same implementation pin isolated the controls and is the
+deciding run below.
 
 ## Measurements
 
@@ -76,52 +90,64 @@ Sidecars:
 - seed 1: `e60a909e14a8fa2ab310a9a6255fa995920f51202471936661077c8f7ea290e7`;
 - seed 2: `20534cdd3c4710b77e3df26d18da33edc55810269bbda3358f10cc1426d4fdd6`.
 
-The one-shot CLI smoke loaded the seed-1 `serving.uorlut` and sidecar, recorded
+The prompt-ID path loaded the seed-1 `serving.uorlut` and sidecar, recorded
 both hashes, and generated `[2564, 1, 1, 1]` over four capped tokens. Its
 readout-bound session snapshot was 47,368 bytes with SHA-256
 `efc24c3d6136a9dad5e165061a15fbacb70395cbb4d71aebb1df6e238aed94c9`.
+A real one-shot text turn generated `[563]` (`small`) and exited at the
+one-token cap. The REPL completed one turn through the same sidecar. The
+OpenAI loopback tests covered health, model, capability, chat, completion,
+Responses, and final-stream JSON.
 
 Build and runs:
 
-- driver build: **20 s**, peak RSS **1,209,048 KiB**, target
-  **266,927,457 bytes**;
-- `uor-chat` build: **12 s**, peak RSS **1,176,336 KiB**, target
-  **104,626,926 bytes**;
-- walls: **3.25/3.22/3.25 s** at 32 Rayon workers for seed 1, seed 2 and the
+- driver build: **20 s**, peak RSS **1,224,168 KiB**, target
+  **266,917,268 bytes**;
+- `uor-chat` build: **12 s**, peak RSS **1,199,584 KiB**, target
+  **104,717,444 bytes**;
+- focused controls: **33.47 s**, peak RSS **2,430,812 KiB**, isolated target
+  **2,141,709,077 bytes**; 7 integer and 18 loopback tests passed;
+- walls: **3.19/3.15/3.23 s** at 32 Rayon workers for seed 1, seed 2 and the
   seed-1 repeat;
-- run RSS maxima: **227,916/226,564/228,632 KiB**;
+- run RSS maxima: **228,344/228,096/227,932 KiB**;
 - driver and chat binary SHA-256:
-  `67ec0468915c67ce4bfe06f0bd4b186d06b1c3e34d270dce67287065a97c18c3`
+  `811da311338b477c62a9c0f628cf86b7c4e2737be1e37b6973b035b939b75d29`
   and
-  `1dd95576db05543d0abcb04517764afbb9e11273bb23b8a2968867b103a38ca9`;
-- committed attempt-2 evidence: **49,494,038 bytes**; attempt 1 is retained
-  separately;
+  `31f562fd07e1c2993e8363ee2ec3b1a54f291296b99a92e459bd5d65dc727c96`;
+- committed deciding evidence: **49,502,485 bytes**; all four attempt trees
+  retain **197,982,490 bytes**, below the registered 224 MiB limit;
 - evidence `SHA256SUMS`:
-  `40e3e30526465ade4b0d8e7e11c3ae523805102032ce4b3909d88d6d5d1b8947`.
+  `7f18ffa272e7aad6681e3714fb83118fa244335decf0d5ed2b364b40a030286b`.
 
 Compact evidence:
 [comparison.json](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence/comparison.json).
-The source pipeline occupied **49,488,457 bytes**.
+The source pipeline occupied **49,502,485 bytes**.
 
 ## Checks run at the head
 
 - Full `uor-r4-cpu-train` release suite: **246 passed, 4 expected ignores**,
   with all binary tests green.
-- Full `uor-r4-integer` serving library suite: **460 passed, 1 expected
+- Full `uor-r4-integer` serving library suite: **462 passed, 1 expected
   ignore**.
+- The attempt-4 control target ran **7** focused integer/session tests and
+  **18** OpenAI-loopback tests, all passing.
+- The built release CLI independently completed a prompt-ID smoke, a text
+  one-shot and a one-turn REPL with the exact sidecar path and hash; a sidecar
+  missing `includes_reference_end` was refused before any step.
 - Focused tests cover sidecar strictness, BOS refusal, voting and fallback,
   raw-step isolation, complete CPU/serving parity, same-readout session
   restore, missing/different-readout refusal, legacy `UR4SESS1` and
   `UR4SESS2` codec identity.
-- Strict `uor-r4-cpu-train` Clippy, rustfmt and `git diff --check` passed.
-- The integer crate's blanket all-target Clippy still reports pre-existing
-  warnings-as-errors outside this unit; all-target compilation and the full
-  serving library tests pass. Filtered diagnostics found no new warning in the
-  new content-readout module.
+- Strict `uor-r4-cpu-train` Clippy with `--no-deps -D warnings`, targeted
+  `rustfmt --check` on every touched Rust file, and `git diff --check` passed.
+- The integer crate's blanket all-warning Clippy still reports 51 pre-existing
+  diagnostics outside this unit. Its no-dependency Clippy correctness gate
+  passed, all-target compilation and the full serving library tests passed,
+  and the failure list contains none of the new content-readout diagnostics.
 - Both evidence manifests, the normalized repeat, generated JSON and
   `serving.uorlut`/sidecar files matched.
 - Claim wording, docs catalog, roadmap schema/rendering, prep-check, D23 and
-  D25 passed. The full harness check exited 0 with no errors and 159
+  D25 passed. The full harness check exited 0 with no errors and 160
   repository-wide warnings, with no warning attached to this unit.
 
 ## Skills used

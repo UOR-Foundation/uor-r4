@@ -10,5 +10,5 @@ The attempt is instrument evidence, not the deciding run. The control tests
 used the chat release target, which grew to **2,246,424,310 bytes** after the
 two test suites, above the registered **2,147,483,648-byte** target ceiling.
 Attempt 4 uses a separate 3 GiB control target, preserves this completed
-evidence under `evidence-attempt-3/`, and rechecks all build and control target
-sizes after the tests.
+evidence under `evidence-attempt-3/`, and rechecks the control and chat targets
+after the tests; the isolated driver target is checked after its build.

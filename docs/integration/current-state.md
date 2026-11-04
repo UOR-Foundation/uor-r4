@@ -5,9 +5,10 @@ artifact-bound `uor-r4.stack-content-readout/1` sidecar and overrides only
 `IntegerStackModel::serve_step`, after the normal native/point fallback. On two
 public seeds, all **1,648 / 1,648** generated decisions per seed matched the
 CPU trajectory in token, fallback, signature, distance and fired state with
-zero mismatches and equal decision digests. `uor-chat --content-readout`
-loaded both serving files in a real CLI smoke, and session snapshots bind the
-canonical readout hash through `UR4SESS2`. The content arm remains
+zero mismatches and equal decision digests. The deciding attempt-4 run at
+implementation pin `819482378` exercised prompt-ID, one-shot, REPL and the
+OpenAI loopback surfaces with the exact sidecar path and hash. Session
+snapshots bind the canonical readout hash through `UR4SESS2`. The content arm remains
 **73/64** and **58/39** with no exact or completed replies, so this closes
 serving integration rather than the language goal. Record:
 [deepseek-140 REPORT](../loop/tasks/cpu-training-pilot/deepseek-140/REPORT.md).
