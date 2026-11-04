@@ -18,6 +18,7 @@ struct FixtureOptions {
     sse: bool,
     delay_ms: u64,
     large: bool,
+    multibyte_error: bool,
 }
 
 #[derive(Debug)]
@@ -112,13 +113,12 @@ impl HttpFixture {
                         }
                         if headers.get("authorization").map(String::as_str) != Some("Bearer secret")
                         {
-                            write_json(
-                                &mut stream,
-                                401,
-                                "application/json",
-                                b"{\"error\":{\"message\":\"bad credential\"}}",
-                                false,
-                            );
+                            let error_body = if options.multibyte_error {
+                                "€".repeat(134).into_bytes()
+                            } else {
+                                b"{\"error\":{\"message\":\"bad credential\"}}".to_vec()
+                            };
+                            write_json(&mut stream, 401, "application/json", &error_body, false);
                             continue;
                         }
                         if message["method"] == "notifications/initialized" {
@@ -401,4 +401,15 @@ fn manager_bounds_process_count_and_reuses_matching_surface() {
         .expect("disconnect releases a session slot");
     drop(manager);
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn remote_multibyte_error_body_does_not_panic() {
+    let fixture = HttpFixture::start(FixtureOptions {
+        multibyte_error: true,
+        ..FixtureOptions::default()
+    });
+    let error = McpRemoteSession::connect(&fixture.url, "wrong", limits())
+        .expect_err("401 must remain an error, not a panic");
+    assert!(error.contains("401"), "{error}");
 }

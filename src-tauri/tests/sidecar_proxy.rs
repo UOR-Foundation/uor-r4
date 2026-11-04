@@ -264,3 +264,37 @@ fn sidecar_startup_failure_kills_and_reaps_child() {
     assert!(!alive, "startup failure left child {pid} running");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn sidecar_readiness_requires_success_and_non_sse_cancellation_stops() {
+    let root = std::env::temp_dir().join(format!(
+        "uor-sidecar-readiness-cancel-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create readiness fixture directory");
+    let source =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/slow_sidecar_fixture.rs");
+    let binary = root.join("slow-sidecar");
+    assert!(Command::new("rustc")
+        .arg("--edition=2021")
+        .arg("--cfg")
+        .arg("uor_reject_once")
+        .arg(source)
+        .arg("-o")
+        .arg(&binary)
+        .status()
+        .expect("compile readiness fixture")
+        .success());
+    let (_, stack, tokenizer) = paths();
+    let sidecar = SidecarProcess::start(&binary, &stack, &tokenizer)
+        .expect("start after a transient model-list rejection");
+    assert_eq!(sidecar.models().expect("models after retry").status, 200);
+    sidecar
+        .cancel("json-cancel")
+        .expect("cancel non-SSE request");
+    let error = collect_chat(&sidecar, "json-cancel", r#"{"stream":false}"#)
+        .expect_err("non-SSE request must stop on cancellation");
+    assert!(error.contains("cancelled"), "{error}");
+    let _ = fs::remove_dir_all(&root);
+}

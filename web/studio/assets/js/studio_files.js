@@ -19,6 +19,7 @@
         files: {}, // path -> {path,name,kind,handle? , content?, size?}
         tabs: [],
         activePath: null,
+        activeRootPath: '',
         recent: []
     };
 
@@ -45,8 +46,9 @@
             rootPath: state.rootPath,
             rootName: state.rootName,
             fileCount: Object.keys(state.files).length,
-            tabs: state.tabs.map(function (tab) { return { path: tab.path, dirty: Boolean(tab.dirty) }; }),
-            activePath: state.activePath
+            tabs: state.tabs.map(function (tab) { return { path: tab.path, dirty: Boolean(tab.dirty), rootPath: tab.rootPath || '' }; }),
+            activePath: state.activePath,
+            activeRootPath: state.activeRootPath
         };
     }
 
@@ -69,9 +71,9 @@
     function persistTabs() {
         try {
             var payload = state.tabs.filter(function (tab) { return tab.mode !== 'directory' || !tab.dirty; }).map(function (tab) {
-                return { path: tab.path, content: tab.content, dirty: tab.mode !== 'directory' && tab.dirty, mode: tab.mode };
+                return { path: tab.path, content: tab.content, dirty: tab.mode !== 'directory' && tab.dirty, mode: tab.mode, rootPath: tab.rootPath };
             });
-            window.localStorage.setItem(TABS_KEY, JSON.stringify({ activePath: state.activePath, tabs: payload }));
+            window.localStorage.setItem(TABS_KEY, JSON.stringify({ activePath: state.activePath, activeRootPath: state.activeRootPath, tabs: payload }));
         } catch (error) { /* storage optional */ }
     }
 
@@ -81,7 +83,7 @@
             if (!raw) return;
             var parsed = JSON.parse(raw);
             state.tabs = (parsed.tabs || []).filter(function (tab) { return tab && typeof tab.content === 'string'; }).map(function (tab) {
-                return { path: tab.path, name: baseName(tab.path), content: tab.content, dirty: Boolean(tab.dirty), mode: tab.mode || 'local', handle: null };
+                return { path: tab.path, name: baseName(tab.path), content: tab.content, dirty: Boolean(tab.dirty), mode: tab.mode || 'local', handle: null, rootPath: tab.rootPath || '' };
             });
             if (state.tabs.length && state.tabs.every(function (tab) { return tab.mode === 'demo'; })) {
                 state.mode = 'demo';
@@ -93,8 +95,10 @@
                 renderTree();
             }
             state.activePath = parsed.activePath || (state.tabs[0] ? state.tabs[0].path : null);
+            var restoredActive = state.tabs.find(function (tab) { return tab.path === state.activePath; }) || state.tabs[0];
+            state.activeRootPath = typeof parsed.activeRootPath === 'string' ? parsed.activeRootPath : (restoredActive ? restoredActive.rootPath : '');
             renderTabs();
-            if (state.activePath) loadTabIntoEditor(state.activePath, true);
+            if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath);
         } catch (error) { /* ignore bad storage */ }
     }
 
@@ -295,16 +299,17 @@
         try { window.localStorage.removeItem(TABS_KEY); } catch (error) { /* optional */ }
         state.tabs = [];
         state.activePath = null;
+        state.activeRootPath = '';
         state.rootHandle = null;
-            state.rootPath = '';
+        state.rootPath = '';
         state.rootName = 'uor-r4';
         state.mode = 'demo';
         buildDemoTree(demoSamples());
         updateWorkspaceUI();
         renderTree();
         openFile('web/studio/index.html').then(function () { return openFile('web/studio/index.css'); });
-        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); }, 800);
-        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); }, 1600);
+        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath); }, 800);
+        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath); }, 1600);
         emit();
         toast('Loaded the demo workspace tree (screenshot/QA state).', 'info');
         return true;
@@ -411,23 +416,26 @@
         return record.content == null ? '' : record.content;
     }
 
-    async function openFile(path) {
-        if (!state.files[path]) return;
-        var existing = state.tabs.find(function (tab) { return tab.path === path; });
-        if (existing) { activateTab(path); return; }
+    async function openFile(path, rootPath) {
+        rootPath = typeof rootPath === 'string' ? rootPath : state.rootPath;
+        var existing = tabFor(path, rootPath);
+        if (existing) { activateTab(existing.path, existing.rootPath); return; }
+        if (!state.files[path] || rootPath !== state.rootPath) return;
+        var record = state.files[path];
+        var mode = state.mode === 'native' ? 'native' : (record.handle ? 'directory' : (state.mode === 'demo' ? 'demo' : (record.file ? 'imported' : 'local')));
         try {
             var content = await readPath(path);
-            var record = state.files[path];
             state.tabs.push({
                 path: path,
                 name: baseName(path),
                 content: content,
                 dirty: false,
-                mode: state.mode === 'native' ? 'native' : (record.handle ? 'directory' : (state.mode === 'demo' ? 'demo' : (record.file ? 'imported' : 'local'))),
-                handle: record.handle || null
+                mode: mode,
+                handle: record.handle || null,
+                rootPath: rootPath
             });
             addRecent(path);
-            activateTab(path);
+            activateTab(path, rootPath);
         } catch (error) {
             toast('Could not open ' + path + ': ' + (error && error.message ? error.message : error), 'error');
         }
@@ -462,9 +470,12 @@
         });
     }
 
-    function activateTab(path) {
-        state.activePath = path;
-        loadTabIntoEditor(path, false);
+    function activateTab(path, rootPath) {
+        var tab = tabFor(path, rootPath);
+        if (!tab) return;
+        state.activePath = tab.path;
+        state.activeRootPath = tab.rootPath || '';
+        loadTabIntoEditor(tab.path, false, state.activeRootPath);
         renderTabs();
         persistTabs();
         emit();
@@ -473,10 +484,19 @@
         }
     }
 
-    function tabFor(path) { return state.tabs.find(function (tab) { return tab.path === path; }); }
+    function sameTab(tab, path, rootPath) {
+        return tab.path === path && String(tab.rootPath || '') === String(rootPath || '');
+    }
 
-    function loadTabIntoEditor(path, silent) {
-        var tab = tabFor(path);
+    function tabFor(path, rootPath) {
+        rootPath = typeof rootPath === 'string' ? rootPath : state.rootPath;
+        return state.tabs.find(function (tab) { return sameTab(tab, path, rootPath); });
+    }
+
+    function activeTab() { return tabFor(state.activePath, state.activeRootPath); }
+
+    function loadTabIntoEditor(path, silent, rootPath) {
+        var tab = tabFor(path, rootPath);
         if (!tab) return;
         state.loadingTab = true;
         var text = document.getElementById('editorText');
@@ -533,7 +553,7 @@
             var item = document.createElement('div');
             item.className = 'editor-tab';
             item.setAttribute('role', 'tab');
-            item.setAttribute('aria-selected', tab.path === state.activePath ? 'true' : 'false');
+            item.setAttribute('aria-selected', sameTab(tab, state.activePath, state.activeRootPath) ? 'true' : 'false');
             item.setAttribute('tabindex', '0');
             var name = document.createElement('span');
             name.className = 'editor-tab-name';
@@ -551,22 +571,24 @@
             close.className = 'editor-tab-close';
             close.setAttribute('aria-label', 'Close ' + tab.name);
             close.textContent = '×';
-            close.addEventListener('click', function (event) { event.stopPropagation(); closeTab(tab.path); });
+            close.addEventListener('click', function (event) { event.stopPropagation(); closeTab(tab.path, tab.rootPath); });
             item.appendChild(close);
-            item.addEventListener('click', function () { activateTab(tab.path); });
-            item.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateTab(tab.path); } });
+            item.addEventListener('click', function () { activateTab(tab.path, tab.rootPath); });
+            item.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activateTab(tab.path, tab.rootPath); } });
             strip.appendChild(item);
         });
     }
 
-    function closeTab(path) {
-        var index = state.tabs.findIndex(function (tab) { return tab.path === path; });
+    function closeTab(path, rootPath) {
+        rootPath = typeof rootPath === 'string' ? rootPath : state.rootPath;
+        var index = state.tabs.findIndex(function (tab) { return sameTab(tab, path, rootPath); });
         if (index < 0) return;
         state.tabs.splice(index, 1);
-        if (state.activePath === path) {
+        if (state.activePath === path && String(state.activeRootPath || '') === String(rootPath || '')) {
             var next = state.tabs[Math.max(0, index - 1)] || state.tabs[0];
             state.activePath = next ? next.path : null;
-            if (next) loadTabIntoEditor(next.path, false);
+            state.activeRootPath = next ? (next.rootPath || '') : '';
+            if (next) loadTabIntoEditor(next.path, false, next.rootPath);
             else {
                 var text = document.getElementById('editorText');
                 if (text) text.value = '';
@@ -581,10 +603,11 @@
     function newFile() {
         var index = 1;
         var name = 'untitled.md';
-        while (state.tabs.some(function (tab) { return tab.path === name; })) { index += 1; name = 'untitled-' + index + '.md'; }
-        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null });
+        while (state.tabs.some(function (tab) { return sameTab(tab, name, state.rootPath); })) { index += 1; name = 'untitled-' + index + '.md'; }
+        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null, rootPath: state.rootPath });
         state.activePath = name;
-        loadTabIntoEditor(name, false);
+        state.activeRootPath = state.rootPath;
+        loadTabIntoEditor(name, false, state.activeRootPath);
         renderTabs();
         persistTabs();
         emit();
@@ -592,14 +615,14 @@
     }
 
     async function saveActive() {
-        var tab = tabFor(state.activePath);
+        var tab = activeTab();
         if (!tab) { toast('No file tab open. Open a file in Files first.', 'info'); return false; }
         var text = document.getElementById('editorText');
         tab.content = text ? text.value : tab.content;
         if (tab.mode === 'native') {
             try {
-                if (!state.rootPath || !window.UORDesktopActions?.available) throw new Error('The native folder grant is unavailable; reopen the folder.');
-                await window.UORDesktopActions.writeFile(state.rootPath.replace(/[\\/]+$/, '') + '/' + tab.path, tab.content);
+                if (!tab.rootPath || !window.UORDesktopActions?.available) throw new Error('The native folder grant is unavailable; reopen the folder.');
+                await window.UORDesktopActions.writeFile(tab.rootPath.replace(/[\\/]+$/, '') + '/' + tab.path, tab.content);
                 tab.dirty = false;
                 updateEditorHeader(tab);
                 renderTabs();
@@ -656,7 +679,7 @@
     }
 
     function saveAsCopy() {
-        var tab = tabFor(state.activePath);
+        var tab = activeTab();
         if (!tab) { toast('No file tab open.', 'info'); return false; }
         var text = document.getElementById('editorText');
         tab.content = text ? text.value : tab.content;
@@ -683,14 +706,14 @@
     }
 
     function activeFile() {
-        var tab = tabFor(state.activePath);
+        var tab = activeTab();
         if (!tab) return null;
         var text = document.getElementById('editorText');
-        return { path: tab.path, name: tab.name, content: text ? text.value : tab.content, mode: tab.mode };
+        return { path: tab.path, name: tab.name, content: text ? text.value : tab.content, mode: tab.mode, rootPath: tab.rootPath || '' };
     }
 
     function setActiveContent(content) {
-        var tab = tabFor(state.activePath);
+        var tab = activeTab();
         if (!tab) return false;
         tab.content = String(content);
         tab.dirty = true;
@@ -706,16 +729,18 @@
 
     function insertText(text, name) {
         var tabName = name || 'agent-snippet.md';
-        var existing = state.tabs.find(function (tab) { return tab.path === tabName; });
+        var existing = tabFor(tabName, state.rootPath);
         if (existing) {
             existing.content = text;
             existing.dirty = true;
             state.activePath = existing.path;
+            state.activeRootPath = existing.rootPath || '';
         } else {
-            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null });
+            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null, rootPath: state.rootPath });
             state.activePath = tabName;
+            state.activeRootPath = state.rootPath;
         }
-        loadTabIntoEditor(state.activePath, false);
+        loadTabIntoEditor(state.activePath, false, state.activeRootPath);
         renderTabs();
         persistTabs();
         emit();
@@ -726,6 +751,7 @@
     function closeAll() {
         state.tabs = [];
         state.activePath = null;
+        state.activeRootPath = '';
         var text = document.getElementById('editorText');
         if (text) text.value = '';
         renderTabs();
@@ -815,7 +841,7 @@
         var text = document.getElementById('editorText');
         if (text) {
             text.addEventListener('input', function () {
-                var tab = tabFor(state.activePath);
+                var tab = activeTab();
                 if (!tab || state.loadingTab) return;
                 tab.content = text.value;
                 tab.dirty = true;
@@ -857,9 +883,9 @@
         wire();
         updateWorkspaceUI();
         renderTree();
-        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); }, 400);
-        document.addEventListener('uor-studio-ready', function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); });
-        document.addEventListener('uor-files-ready', function () { if (state.activePath) loadTabIntoEditor(state.activePath, true); });
+        window.setTimeout(function () { if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath); }, 400);
+        document.addEventListener('uor-studio-ready', function () { if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath); });
+        document.addEventListener('uor-files-ready', function () { if (state.activePath) loadTabIntoEditor(state.activePath, true, state.activeRootPath); });
         var hash = window.location.hash || '';
         if (hash === '#demo=workspace') window.setTimeout(demoWorkspace, 260);
         window.__studioFiles = {
@@ -878,7 +904,7 @@
             activeFile: activeFile,
             workspaceName: function () { return state.rootName + (state.mode === 'demo' ? ' · demo' : ''); },
             mode: function () { return state.mode; },
-            tabs: function () { return state.tabs.map(function (tab) { return { path: tab.path, dirty: tab.dirty, mode: tab.mode }; }); },
+            tabs: function () { return state.tabs.map(function (tab) { return { path: tab.path, dirty: tab.dirty, mode: tab.mode, rootPath: tab.rootPath || '' }; }); },
             treeSummary: function () { return summary(); }
         };
         document.dispatchEvent(new CustomEvent('uor-files-ready'));

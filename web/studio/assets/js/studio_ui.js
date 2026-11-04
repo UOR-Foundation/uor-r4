@@ -99,6 +99,30 @@
     function syncSectionNavigation(section) {
         $all('.nav-item').forEach(function (item) { var active = item.getAttribute('data-section') === section; item.setAttribute('aria-current', active ? 'page' : 'false'); item.classList.toggle('is-active', active); });
     }
+    var sectionHistory = [];
+    var sectionHistoryIndex = -1;
+    function updateSectionHistoryButtons() {
+        var back = document.getElementById('btnSectionBack');
+        var forward = document.getElementById('btnSectionForward');
+        if (back) {
+            back.disabled = sectionHistoryIndex <= 0;
+            var backLabel = back.disabled ? 'Back' : 'Back to ' + SECTIONS[sectionHistory[sectionHistoryIndex - 1]].label;
+            back.title = backLabel;
+            back.setAttribute('aria-label', backLabel);
+        }
+        if (forward) {
+            forward.disabled = sectionHistoryIndex < 0 || sectionHistoryIndex >= sectionHistory.length - 1;
+            var forwardLabel = forward.disabled ? 'Forward' : 'Forward to ' + SECTIONS[sectionHistory[sectionHistoryIndex + 1]].label;
+            forward.title = forwardLabel;
+            forward.setAttribute('aria-label', forwardLabel);
+        }
+    }
+    function navigateSectionHistory(direction) {
+        var next = sectionHistoryIndex + direction;
+        if (next < 0 || next >= sectionHistory.length) return;
+        sectionHistoryIndex = next;
+        activateSection(sectionHistory[next], { fromHistory: true });
+    }
     function activateSection(name, options) {
         var section = SECTIONS[name] ? name : 'agent';
         var meta = SECTIONS[section];
@@ -111,6 +135,17 @@
         if (label) label.textContent = meta.label;
         var sessions = document.getElementById('sessionSection');
         if (sessions) sessions.classList.remove('is-hidden');
+        if (!options || !options.fromHistory) {
+            if (sectionHistoryIndex < 0) {
+                sectionHistory = [section];
+                sectionHistoryIndex = 0;
+            } else if (sectionHistory[sectionHistoryIndex] !== section) {
+                sectionHistory = sectionHistory.slice(0, sectionHistoryIndex + 1);
+                sectionHistory.push(section);
+                sectionHistoryIndex = sectionHistory.length - 1;
+            }
+        }
+        updateSectionHistoryButtons();
         if (!options || !options.silent) {
             if (window.matchMedia('(max-width: 900px)').matches) setChrome('nav', 'collapsed', true);
             updateStatus();
@@ -273,6 +308,30 @@
     /* sessions */
     function sessionList() { var fn = hook('listSessions'); return fn ? fn() : []; }
     function activeSessionId() { var fn = hook('activeSessionId'); return fn ? fn() : null; }
+    function syncSessionSwitcher(sessions) {
+        var select = document.getElementById('sessionSwitcher');
+        if (!select) return;
+        var signature = sessions.map(function (session) { return session.id + ':' + session.title; }).join('|');
+        if (select.getAttribute('data-signature') !== signature) {
+            select.textContent = '';
+            if (!sessions.length) {
+                var empty = document.createElement('option');
+                empty.value = '';
+                empty.textContent = 'No sessions';
+                select.appendChild(empty);
+            } else {
+                sessions.forEach(function (session) {
+                    var option = document.createElement('option');
+                    option.value = session.id;
+                    option.textContent = session.title || 'Untitled session';
+                    select.appendChild(option);
+                });
+            }
+            select.setAttribute('data-signature', signature);
+        }
+        select.disabled = !sessions.length;
+        if (sessions.length) select.value = activeSessionId() || sessions[0].id;
+    }
     function sessionMenuButton(item) {
         if (item.querySelector('.conv-menu')) return;
         var button = document.createElement('button');
@@ -667,7 +726,9 @@
             cmd('NAVIGATION', 'Go to Agent', 'Chat, context and build tasks.', '⌘1', function () { activateSection('agent'); }),
             cmd('NAVIGATION', 'Go to Workspace', 'File tree, editor tabs, save.', '⌘2', function () { activateSection('workspace'); }),
             cmd('NAVIGATION', 'Go to Connections', 'UOR Chat, custom providers, artifact diagnostics.', '⌘3', function () { activateSection('models'); }),
-            cmd('NAVIGATION', 'Go to Guide', 'Quick start, workflows, shortcuts, limits.', '⌘4', function () { activateSection('guide'); }),
+            cmd('NAVIGATION', 'Go to Changes', 'Repository status and working-tree diff.', '⌘4', function () { activateSection('changes'); }),
+            cmd('NAVIGATION', 'Go to Terminal', 'Explicitly approved commands in a granted folder.', '⌘5', function () { activateSection('terminal'); }),
+            cmd('NAVIGATION', 'Go to Guide', 'Quick start, workflows, shortcuts, limits.', '⌘6', function () { activateSection('guide'); }),
 
             cmd('SESSIONS', 'New session', 'Start a clean agent thread.', '', newSessionAction),
             cmd('SESSIONS', 'Rename current session…', 'Give the active thread a clear title.', '', function () { var item = document.querySelector('#sessionRowsV2 .session-row.is-active'); if (item) { var menu = item.querySelector('.conv-menu'); if (menu) menu.click(); } else toast('No active session.', 'info'); }),
@@ -680,7 +741,7 @@
             cmd('WORKSPACE', 'New file…', 'Create an empty editor tab.', '', function () { var files = window.__studioFiles; if (files) files.newFile(); }),
             cmd('WORKSPACE', 'Save file', 'Write the active tab back to disk (or download).', '⌘S', function () { var files = window.__studioFiles; if (files) files.saveActive(); }),
             cmd('WORKSPACE', 'Save as…', 'Download a copy of the active file.', '⇧⌘S', function () { var files = window.__studioFiles; if (files) files.saveAsCopy(); }),
-            cmd('WORKSPACE', 'Close tab', 'Close the active editor tab.', '', function () { var files = window.__studioFiles; if (files) { var active = files.activeFile(); if (active) files.closeTab(active.path); } }),
+            cmd('WORKSPACE', 'Close tab', 'Close the active editor tab.', '', function () { var files = window.__studioFiles; if (files) { var active = files.activeFile(); if (active) files.closeTab(active.path, active.rootPath); } }),
 
             cmd('AGENT', 'Attach current file', 'Add the active editor file to context.', '', attachContext),
             cmd('AGENT', 'Attach selection', 'Attach the active file text as context.', '', attachContext),
@@ -719,7 +780,7 @@
         var files = window.__studioFiles;
         if (files && files.tabs) {
             files.tabs().slice(0, 8).forEach(function (tab) {
-                list.push(cmd('WORKSPACE', 'File: ' + tab.path, tab.dirty ? 'Open tab · unsaved' : 'Open tab', '', function () { if (files.openFile) files.openFile(tab.path); }));
+                list.push(cmd('WORKSPACE', 'File: ' + tab.path, tab.dirty ? 'Open tab · unsaved' : 'Open tab', '', function () { if (files.openFile) files.openFile(tab.path, tab.rootPath); }));
             });
         }
         var ORDER = ['NAVIGATION', 'SESSIONS', 'WORKSPACE', 'AGENT', 'MODELS', 'BUILD', 'INTERFACE', 'HELP'];
@@ -925,6 +986,7 @@
         setText('#ctxPrivacy', native ? 'native loopback' : (api ? 'api (leaves device)' : 'local only'));
         setText('#ctxStorage', storage || 'unknown');
         var sessions = sessionList();
+        syncSessionSwitcher(sessions);
         var active = sessions.find(function (session) { return session.id === activeSessionId(); });
         setText('#statusSession', sessions.length ? (active ? 'session: ' + active.title.slice(0, 34) : 'session: ' + sessions.length) : 'session: new');
         var files = window.__studioFiles;
@@ -960,13 +1022,28 @@
             on(id, 'click', function () { activateSection(name); });
         });
         on('navSettings', 'click', openSettings);
+        on('btnSessionNav', 'click', function () { toggleChrome('nav'); });
+        on('btnSectionBack', 'click', function () { navigateSectionHistory(-1); });
+        on('btnSectionForward', 'click', function () { navigateSectionHistory(1); });
+        on('btnSessionChanges', 'click', function () { activateSection('changes'); });
+        on('btnSessionTerminal', 'click', function () { activateSection('terminal'); });
+        on('btnSessionFiles', 'click', function () { activateSection('workspace'); });
+        on('btnSessionNew', 'click', function () { closePalette(); newSessionAction(); });
+        on('btnSessionOptions', 'click', openPalette);
+        on('sessionSwitcher', 'change', function (event) {
+            var fn = hook('selectSession');
+            if (fn) fn(event.target.value);
+            activateSection('agent');
+            renderSessionRows();
+            updateStatus();
+        });
         on('btnToggleNav', 'click', function () { toggleChrome('nav'); });
         on('btnNavCollapse', 'click', function () { toggleChrome('nav'); });
         on('btnMobileNav', 'click', function () { toggleChrome('nav'); });
         on('btnNavScrim', 'click', function () { setChrome('nav', 'collapsed', true); });
         ['btnToggleInspector', 'btnToggleInspector2', 'btnToggleInspector3', 'btnToggleInspector4', 'btnInspectorCollapse'].forEach(function (id) { on(id, 'click', function () { toggleChrome('inspector'); }); });
         on('btnOpenModelSources', 'click', function () { activateSection('models'); });
-        on('ctxOpenFiles', 'click', function () { activateSection('files'); });
+        on('ctxOpenFiles', 'click', function () { activateSection('workspace'); });
         on('btnGuideAgent', 'click', function () { activateSection('agent'); });
         $all('[data-guide-nav]').forEach(function (button) { button.addEventListener('click', function () { activateSection(button.getAttribute('data-guide-nav')); }); });
         ['btnTheme', 'railTheme'].forEach(function (id) { on(id, 'click', toggleTheme); });
@@ -1158,12 +1235,14 @@
     function boot() {
         if (ready) return;
         ready = true;
+        updateSectionHistoryButtons();
         initialChrome();
         applySettings();
         updateThemeButton();
         updateStatus();
         renderAttachments();
         wire();
+        activateSection(sectionForView(document.body.dataset.view || 'chat'), { silent: true });
         updateStatus();
         watchSessions();
         watchMessages();

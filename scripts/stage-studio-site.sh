@@ -329,6 +329,8 @@ writeFileSync(join(dest, 'models.json'), JSON.stringify(manifest, null, 2) + '\n
 console.log('models.json: ' + manifest.models.map((m) => m.id).join(', '));
 NODE
 
+"$repo_root/scripts/studio/runtime-files.sh" --verify "$dest"
+
 if find "$dest" -type f -size +100M | grep -q .; then
     echo "stage-studio-site: a file in $dest is over GitHub Pages' 100 MB per-file limit:" >&2
     find "$dest" -type f -size +100M >&2

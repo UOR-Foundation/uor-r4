@@ -5,32 +5,41 @@ Lab: kimi. Item: `infra-desktop-client-tauri` (#2826). Delivery scope: developme
 ## What did not work
 
 - The sidecar serves the synthetic stack, not useful conversation or visual understanding. No production-readiness, M3/M7/M8-completion, exact sidecar hidden-state resume, signed-distribution or single-binary claim is made.
-- Normal app exit killed the app, `uor-chat` and stdio fixture. An earlier forced SIGTERM left an orphaned sidecar, which was killed by exact PID; forced-kill cleanup is not claimed. The ORDER requires normal exit only.
+- Normal app exit killed the app, `uor-chat` and stdio fixture. Earlier interrupted/forced shutdowns left sidecars that were stopped by exact PID; forced-kill cleanup is not claimed. The ORDER requires normal exit only.
 - Cmd+R did not reload the Tauri page or end the stdio child, so it was not evidence about credential clearing. A real close/restart left the credential field empty and MCP disconnected, while the saved conversation remained.
 - Model/file/durable-store operations can still serialize on the backend mutex. Blocking Tauri commands run on workers, keeping the main UI thread free; parallel storage access is not claimed. The terminal is an explicitly approved tool runner, not a general process or filesystem sandbox.
-- The initial packaged native transport accepted origin aliases/non-default ports, dropped delayed/partial responses, panicked on async remote-MCP errors, mishandled cancellation, allowed attached-option and Git-hook escapes, and had unsafe durable-restore paths. Failing-first regressions drove fixes for all of these. The first test-side response fixture also needed to consume the request body; that was an instrument correction, not a model result.
+- The initial packaged native transport accepted origin aliases/non-default ports, dropped delayed/partial responses, panicked on async remote-MCP errors, mishandled cancellation, allowed attached-option and Git-hook escapes, and had unsafe durable-restore paths. Later review added Git filter-driver, process-group, readiness, non-SSE cancellation, UTF-8 error, absolute-static-path and tool-list cleanup repairs.
+- Native file tabs originally shared only relative paths, so a same-named file in another project reused the old buffer. Root-aware `(path, rootPath)` identity now covers opening, switching, closing, persistence, new/inserted tabs, the palette and save. The first real A/B attempt exposed this before the focused regression was expanded.
+- The first toolbar implementation did not record the initial Chat section, leaving Back disabled after the first navigation. Boot now initializes history from the current view. The duplicate New chat header action was removed.
+- The new review test initially needed the repository's plain-JavaScript type-suppression convention; TypeScript then passed. One rebuild invocation used the preparation script from the wrong working directory and stopped before compiling; the corrected command built the app. These were instrument corrections, not model results.
+- During GUI verification, an empty MCP URL produced `relative URL without a base`, and an executable outside the granted folder was refused. Entering the actual fixture URL and placing a byte-identical fixture inside the grant resolved those fixture/setup failures without weakening host checks.
 - Exact-head independent review, protected merge, fresh-main verification, hosted Pages publication and the 30 GiB free-space target remain unfinished at this report's current state.
 
 ## What changed
 
-- One staged frontend/backend state and one Tauri asset origin, with exact scheme/host/default-port checks and no userinfo. A host proxy reaches the pinned `uor-chat` sidecar through Tauri IPC; the page never receives its token or contacts it directly.
-- Persistent byte buffers and 15-second idle deadlines preserve delayed/split JSON and SSE byte-for-byte. Blocking native commands run off the main thread; remote and stdio MCP connection work uses blocking workers, with errors rather than async-runtime panics.
+- One staged frontend/backend state and one Tauri asset-origin family: `tauri://localhost` plus declared `http(s)://tauri.localhost` aliases with exact host/default-port and no userinfo. A host proxy reaches the pinned `uor-chat` sidecar through Tauri IPC; the page never receives its token or contacts it directly.
+- Persistent byte buffers and 15-second idle deadlines preserve delayed/split JSON and SSE byte-for-byte. Readiness requires HTTP 200 with retries. Non-SSE reads honor cancellation, process groups receive TERM then KILL on timeout, and bounded process waits cannot hang after fd closure.
 - Chat, sessions/history, long paste/attachments, native model list/test and exact image decomposition use the shared OpenAI transport. Request IDs are page-unique; cancellation and bounded event queues are explicit.
-- Native project/model-folder grants share file, bounded Git and terminal state. Terminal enablement and each exact command use native approval, with a 60-second one-shot grant, direct allowlisted execution, metacharacter/attached-file-option refusal, hardened Git, and bounded output/time.
+- A Claude Code desktop-inspired session toolbar now exposes sidebar, Back/Forward, native session selection, Changes, Terminal, Files, New chat and view options. Section history starts with the actual initial section, and every action uses the shared controller rather than decorative navigation.
+- Native project/model-folder grants share file, bounded Git and terminal state. Same-named native files retain independent buffers and granted roots across project switches and persisted tabs. Guarded Git refuses configured filter drivers as well as hooks and external diff/process paths.
+- Terminal enablement and each exact command use native approval, with a 60-second one-shot grant, direct allowlisted execution, metacharacter/attached-file-option refusal, hardened Git and bounded output/time.
 - Durable manifests use collision-resistant scope filenames, same-directory temporary files and atomic rename; restore rejects `scopes` symlinks and verifies the granted manifest path. This older engine path is not represented as sidecar hidden-state resume.
-- Browser remote MCP and native remote/stdio MCP implement bounded initialize/list/call, JSON/SSE normalization and explicit approval. Credentials remain memory-only. Runtime-only allowlists stage the same files for Tauri and Pages, excluding development sources/tests/configuration/declarations/verifiers/README/`node_modules`.
+- Browser remote MCP and native remote/stdio MCP implement bounded initialize/list/call, JSON/SSE normalization and explicit approval. Failed tool listing disconnects the session. Browser arguments use UTF-8 byte limits; native errors truncate by characters. Credentials remain memory-only.
+- Runtime-only allowlists stage the same files for Tauri and Pages, excluding development sources/tests/configuration/declarations/verifiers/README/`node_modules`. Staging now rejects unexpected runtime files as well as missing allowlisted files.
+- The design record separately assesses GitHub authentication. Device flow is a native candidate with a configured public OAuth client ID and no secret. Static Pages cannot embed a secret and direct browser device authorization was not established by a live CORS probe, so no sign-in control is claimed.
 
 ## Measurements
 
 ### Real native GUI evidence
 
-The final formatted app was exercised through the actual macOS window and native sheets:
+The final packaged app was exercised through the actual macOS window and native sheets:
 
 - Existing `Hi` history displayed 16 completion tokens, exact usage `19/16/35`, `14985.9 tok/s`, TTFT `0.459 ms`, total `1.068 ms`. This is the earlier synthetic timing record, not a new quality benchmark.
-- `note.txt` retained the exact saved text `Native GUI note\nSaved through native host\n`; Changes previously showed `main · 1 changed file` and the exact `+Saved through native host` diff. `pwd` previously returned the disposable project path through both native terminal sheets.
+- Two projects each containing `note.txt` were opened through native folder grants. Project B displayed `Project B original`; switching back to A restored `Project A edited through native host`. Saving A produced exactly `Project A edited through native host\n` while B remained exactly `Project B original\n`. The UI reported `Saved to disk`.
 - Remote MCP at `127.0.0.1:9000/mcp` showed `Connected · 1 tool`; the parented approval sheet explicitly said `A credential will be sent to this server.` `read_file` returned `native remote result`.
-- The native folder picker granted only the disposable fixture directory. Stdio approval showed the exact executable, empty args and working directory; `read_file` returned `stdio result`.
-- Native Cancel displayed `Connection approval was cancelled; nothing started.` Normal Cmd+Q left no app, sidecar or stdio child (checked by exact PID). A real restart showed an empty credential field and no MCP session, with saved chat history intact.
+- Stdio approval showed the exact in-grant executable, `[]` args and project A working directory. `read_file` returned `stdio result`. The separate out-of-grant attempt was refused before execution.
+- Native Cancel displayed `Connection approval was cancelled; nothing started.` Normal Cmd+Q left no app (PID 88100), sidecar (PID 88102) or stdio child (PID 41016), checked directly by `ps`.
+- A real restart showed an empty credential field and no MCP session, with saved chat history intact.
 
 ### Package evidence
 
@@ -46,7 +55,7 @@ CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target \
 Bundle: `/Users/casey.allard/uor-r4/local/kimi/harness-app-target/release/bundle/macos/UOR Harness.app` (unsigned development package).
 
 - `UOR_TAURI_APP=... UOR_DESKTOP_SHA256=<fresh executable hash> python3 scripts/tests/test_tauri_app.py`: **2/2 PASS**.
-- Desktop executable SHA-256: `20cc8347c3346cb59600d4557ab0f8a48e860d4df24b6deb24baef4930893f9f`.
+- Desktop executable SHA-256: `81ee6f5122f29a2d12a5b66e2d004502cb6d69b05d2743302c4612eec13ff152`.
 - Sidecar SHA-256: `f4f36c72baea6b0fb76c72ff511cf8e9615fd328022d3b08937660b28cc05f7e`.
 - Stack SHA-256: `d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df`.
 - Tokenizer SHA-256: `6758318dbcad5925a550103a5c2ee41e35898c30a7daf066da09b0159a41c57b`.
@@ -54,19 +63,20 @@ Bundle: `/Users/casey.allard/uor-r4/local/kimi/harness-app-target/release/bundle
 
 ## Checks run at the head
 
-- Studio TypeScript typecheck and **300/300** Vitest tests.
+- Studio TypeScript typecheck and **306/306** Vitest tests.
 - JavaScript/Node **65/65** (the earlier incorrect working-directory glob reported zero tests and was discarded, not counted).
-- Default desktop: **2** library, **12** controls, **4** MCP, **5** review and **7** sidecar tests passed.
-- GUI-feature desktop: **4** library, **16** controls, **5** MCP, **5** review and **8** sidecar tests passed.
+- Default desktop: **3** library, **12** controls, **5** MCP, **7** review and **8** sidecar tests passed.
+- GUI-feature desktop: **5** library, **16** controls, **6** MCP, **7** review and **9** sidecar tests passed.
+- Python runtime preparation **6/6** and packaged app **2/2** passed.
 - `cargo fmt --check`, `git diff --check`, runtime preparation, resource identity and packaged app verification passed. No GPU or paid compute was used.
-- The first local PR check failed only because this REPORT lacked the required headings; those are now corrected. Full `loop pr-check --local` and `loop gates --full` must still pass at the delivery head.
+- The first local PR check failed only because an earlier REPORT lacked the required headings; those are now corrected. Full `loop pr-check --local` and `loop gates --full` must still pass at the delivery head.
 
 ## Skills used
 
-- `uor-research-architect`, `working-discipline`, `solution-integrity`, systematic debugging and test-driven red/green regression work.
+- `uor-research-architect`, `working-discipline`, `scope-guard`, `context-guard`, `solution-integrity`, systematic debugging, brainstorming and test-driven red/green regression work.
 - `superpowers:verification-before-completion` and `superpowers:finishing-a-development-branch` for measured delivery and protected integration.
-- `computer-use` and `kimi-cu` for real native GUI observations, consent sheets and process verification.
-- `modern-web-guidance` for outbound-connection limits and CSP-compatible fallback reasoning; no unsupported browser-only header was substituted for the host checks.
+- `computer-use` and `kimi-cu` for the Claude desktop reference, real native GUI observations, consent sheets and process verification.
+- `modern-web-guidance`: checked preserve-editor-tabs and section-history topics; no guide covered the root-identity or initial-history state rules, so none was applied. Existing outbound-connection and CSP-compatible fallbacks remain in force.
 - `session-close` and `compaction` for durable handoff state.
 
 ## Still open
@@ -75,7 +85,7 @@ Run loop checks and fresh-context exact-head adversarial review, deliver through
 
 ## Plain summary
 
-- The shared web/Tauri harness works at development scope, including native `uor-chat` streaming, local files, guarded terminal/Git, and both native MCP transports.
-- Review found real origin, stream, threading, consent and durable-store defects; focused regressions now cover their fixes.
+- The shared web/Tauri harness works at development scope, including native `uor-chat` streaming, same-named local files, guarded terminal/Git, visible session tools, and both native MCP transports.
+- Review and real GUI checks found and fixed origin, stream, threading, consent, durable-store, root-identity and initial-navigation defects; focused regressions now cover their fixes.
 - The packaged app and actual native dialogs were exercised, but the engine remains synthetic and forced-kill cleanup is not guaranteed.
 - Protected delivery, fresh-main and hosted verification, and the 30 GiB cleanup target are still pending.

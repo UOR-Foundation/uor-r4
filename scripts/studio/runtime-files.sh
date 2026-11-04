@@ -59,6 +59,14 @@ case "${1:-}" in
         while IFS= read -r rel; do
             [ -f "$dest/$rel" ] || { printf 'Runtime file is missing: %s\n' "$dest/$rel" >&2; exit 1; }
         done < <(list_files)
+        while IFS= read -r -d '' path; do
+            rel=${path#"$dest"/}
+            [ "$rel" = 'SHA256SUMS' ] && continue
+            if ! list_files | grep -Fxq "$rel"; then
+                printf 'Unexpected runtime file: %s\n' "$path" >&2
+                exit 1
+            fi
+        done < <(find "$dest" -type f -print0)
         printf 'Runtime allowlist verified: %s\n' "$dest"
         ;;
     *)

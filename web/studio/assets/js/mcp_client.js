@@ -151,7 +151,7 @@ export function createMcpClient(options = {}) {
         async callTool(name, args = {}) {
             if (!connected) throw mcpError('MCP is not connected.');
             const serialized = JSON.stringify(args ?? {});
-            if (serialized.length > 64 * 1024) throw mcpError('MCP tool arguments exceed 64 KiB.');
+            if (new TextEncoder().encode(serialized).length > 64 * 1024) throw mcpError('MCP tool arguments exceed 64 KiB.');
             const response = await request('tools/call', { name: String(name), arguments: args ?? {} });
             return response.payload;
         },
@@ -313,7 +313,16 @@ export function mountMcpConnections({ root = globalThis.document, connectRemote:
             status.textContent = `Connected · ${listed.length} tool${listed.length === 1 ? '' : 's'}`;
             renderTools(listed);
         } catch (error) {
+            const failedSession = session;
             session = null;
+            if (failedSession?.disconnect) {
+                try {
+                    await failedSession.disconnect();
+                } catch (cleanupError) {
+                    status.textContent = String(error?.message || error) + ' Cleanup failed: ' + String(cleanupError?.message || cleanupError);
+                    return;
+                }
+            }
             status.textContent = String(error?.message || error);
         } finally {
             button.disabled = false;

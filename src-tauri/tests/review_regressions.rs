@@ -205,3 +205,78 @@ fn durable_scope_filenames_do_not_collapse_distinct_identities() {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn legacy_static_handler_rejects_absolute_double_slash_paths() {
+    let root = temp_dir("legacy-absolute-path");
+    let studio = root.join("studio");
+    fs::create_dir_all(&studio).expect("create studio root");
+    fs::write(studio.join("index.html"), "<html></html>").expect("write index");
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let (status, _, _) = uor_r4_desktop_client::handle_studio_http_request(
+        &mut backend,
+        &studio,
+        "127.0.0.1:1420",
+        "launch-token",
+        "GET",
+        "//etc/passwd",
+        &[("Host".to_string(), "127.0.0.1:1420".to_string())],
+        b"",
+    );
+    assert_eq!(status, 403, "an absolute path escaped the Studio root");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn git_clean_filter_cannot_execute_from_a_granted_repository() {
+    let root = temp_dir("git-clean-filter");
+    let marker = root.join("clean-filter-ran");
+    let hook = root.join("filter.sh");
+    fs::write(
+        &hook,
+        format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+    )
+    .expect("write filter");
+    let mut permissions = fs::metadata(&hook).expect("filter metadata").permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+    fs::set_permissions(&hook, permissions).expect("make filter executable");
+    let run_git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .expect("run fixture git");
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    run_git(&["init"]);
+    run_git(&["config", "user.email", "studio@example.invalid"]);
+    run_git(&["config", "user.name", "Studio Fixture"]);
+    run_git(&["config", "filter.attack.clean", &hook.to_string_lossy()]);
+    fs::write(root.join(".gitattributes"), "tracked.txt filter=attack\n")
+        .expect("write attributes");
+    fs::write(root.join("tracked.txt"), "before\n").expect("write tracked file");
+    run_git(&["add", "tracked.txt", ".gitattributes"]);
+    run_git(&["commit", "-m", "fixture"]);
+    fs::write(root.join("tracked.txt"), "after\n").expect("modify tracked file");
+    let _ = fs::remove_file(&marker);
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend
+        .native_grant_folder(&root)
+        .expect("grant repository");
+    let error = backend
+        .native_git_diff(&root)
+        .expect_err("configured filter drivers must be refused explicitly");
+    assert!(
+        matches!(
+            error,
+            DesktopClientError::InvalidInput(_) | DesktopClientError::CommandFailed(_)
+        ),
+        "{error:?}"
+    );
+    assert!(!marker.exists(), "a repository-local clean filter executed");
+    let _ = fs::remove_dir_all(&root);
+}

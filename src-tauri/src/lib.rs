@@ -1357,6 +1357,14 @@ fn run_bounded_process(
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }
+    if child
+        .try_wait()
+        .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+        .is_none()
+    {
+        timed_out = true;
+        process_control::terminate(&mut child);
+    }
     let status = child
         .wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?;
@@ -1380,6 +1388,12 @@ fn hardened_git_command(repo: &Path) -> Command {
             "core.fsmonitor=false",
             "-c",
             "core.hooksPath=/dev/null",
+            "-c",
+            "filter.*.clean=cat",
+            "-c",
+            "filter.*.smudge=cat",
+            "-c",
+            "filter.*.process=cat",
             "-c",
             "core.pager=cat",
             "-c",
@@ -1408,6 +1422,28 @@ fn hardened_git_command(repo: &Path) -> Command {
     command
 }
 
+fn ensure_no_git_filters(repo: &Path) -> Result<(), DesktopClientError> {
+    let output = run_bounded_process(
+        hardened_git_command(repo).args(["config", "--local", "--get-regexp", "^filter\\."]),
+        PROCESS_TIMEOUT,
+        MAX_PROCESS_OUTPUT_BYTES,
+    )?;
+    if output.status.success() {
+        if !output.stdout.is_empty() {
+            return Err(DesktopClientError::InvalidInput(
+                "Git filter drivers are not allowed in guarded repositories".to_string(),
+            ));
+        }
+        return Ok(());
+    }
+    if output.status.code() == Some(1) {
+        return Ok(());
+    }
+    Err(DesktopClientError::CommandFailed(
+        "could not verify Git filter configuration".to_string(),
+    ))
+}
+
 fn ensure_git_repository_root(repo: &Path) -> Result<(), DesktopClientError> {
     let output = run_bounded_process(
         hardened_git_command(repo).args(["rev-parse", "--show-toplevel"]),
@@ -1428,7 +1464,7 @@ fn ensure_git_repository_root(repo: &Path) -> Result<(), DesktopClientError> {
             "Git repository discovery escapes the granted directory: {top}"
         )));
     }
-    Ok(())
+    ensure_no_git_filters(repo)
 }
 
 fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
@@ -1630,6 +1666,37 @@ mod bounded_process_tests {
             .expect("bounded sleep");
         assert!(output.timed_out);
         assert!(!output.status.success());
+    }
+
+    #[test]
+    fn process_timeout_kills_term_ignoring_descendants_and_closes_pipes() {
+        let root = std::env::temp_dir().join(format!("uor-grandchild-term-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create TERM-ignoring fixture");
+        let pid_path = root.join("sleep.pid");
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg(format!(
+            "nohup sh -c 'trap \"\" TERM; sleep 30' >/dev/null 2>&1 & echo $! > '{}'; exec 1>&- 2>&-; trap \"\" TERM; sleep 30",
+            pid_path.display()
+        ));
+        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+            .expect("bounded shell with TERM-ignoring descendant");
+        assert!(output.timed_out);
+        let pid = fs::read_to_string(&pid_path)
+            .expect("TERM-ignoring descendant pid")
+            .trim()
+            .to_string();
+        let alive = Command::new("ps")
+            .arg("-p")
+            .arg(&pid)
+            .status()
+            .expect("ps")
+            .success();
+        assert!(
+            !alive,
+            "TERM-ignoring descendant {pid} survived process timeout"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -2285,7 +2352,8 @@ pub fn handle_studio_http_request(
             .unwrap_or(clean_path)
     };
     let candidate = studio_root.join(rel);
-    if reject_parent_dir_traversal(Path::new(rel)).is_err()
+    if Path::new(rel).is_absolute()
+        || reject_parent_dir_traversal(Path::new(rel)).is_err()
         || reject_symlinks_between_root_and_target(studio_root, &candidate).is_err()
     {
         return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec());

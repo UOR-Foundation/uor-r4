@@ -18,6 +18,11 @@ pub(crate) fn terminate(child: &mut Child) {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &group])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
     }
     let _ = child.kill();
     let _ = child.wait();

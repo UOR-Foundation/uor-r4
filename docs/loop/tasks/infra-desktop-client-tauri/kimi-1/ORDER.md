@@ -13,8 +13,9 @@ Turn the conversation-first Studio into a simple, complete harness IDE without r
 ## Files in scope
 
 - `web/studio/**`, `src-tauri/**`, and focused host/browser tests.
-- `docs/products/desktop-client.md`, `docs/products/web-client.md`, `docs/integration/current-state.md`, `docs/research/notebook/m4-serving.md`, `docs/roadmap/items/infra-desktop-client-tauri.md`, and this task folder.
-- Build/package scripts under `scripts/studio/**` and `scripts/tests/**` only when required for the pinned sidecar or packaged-app verification.
+- `docs/products/desktop-client.md`, `docs/products/web-client.md`, `docs/integration/current-state.md`, `docs/research/notebook/m4-serving.md`, `docs/roadmap/items/infra-desktop-client-tauri.md`, and this task folder. `docs/integration/current-state.md` is retired and must not be edited. `PLAN.md` is in scope only for recording the owner's new Claude-desktop direction verbatim and its measured auth boundary.
+- Build/package scripts under `scripts/studio/**` and `scripts/tests/**`, plus `scripts/stage-studio-site.sh`, only when required for the pinned sidecar or packaged-app verification.
+- `.gitignore` for excluding generated dependencies/artifacts, and `docs/superpowers/plans/2026-11-04-unified-harness-ide.md` as the intentional design record for this same ORDER.
 
 ## Done when
 

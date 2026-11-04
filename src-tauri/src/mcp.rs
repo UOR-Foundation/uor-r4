@@ -221,7 +221,7 @@ fn read_remote_response(response: Response, max_bytes: usize) -> Result<RemoteAn
         let detail = String::from_utf8_lossy(&body);
         return Err(format!(
             "MCP request failed with HTTP {status}: {}",
-            &detail[..detail.len().min(400)]
+            &detail.chars().take(400).collect::<String>()
         ));
     }
     if body.is_empty() {

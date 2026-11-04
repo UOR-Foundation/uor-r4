@@ -169,7 +169,17 @@ impl SidecarProcess {
         let readiness_deadline = Instant::now() + STARTUP_TIMEOUT;
         loop {
             match sidecar.models() {
-                Ok(_) => return Ok(sidecar),
+                Ok(response) if response.status == 200 => return Ok(sidecar),
+                Ok(response) => {
+                    if Instant::now() >= readiness_deadline {
+                        sidecar.shutdown();
+                        return Err(format!(
+                            "uor-chat model listing returned HTTP {}",
+                            response.status
+                        ));
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
                 Err(error) => {
                     if Instant::now() >= readiness_deadline {
                         sidecar.shutdown();
@@ -199,7 +209,7 @@ impl SidecarProcess {
     pub fn models(&self) -> Result<NativeProxyResponse, String> {
         let (reader, status, headers) =
             self.request("GET", "/v1/models", &[], "application/json")?;
-        let body = read_bounded(reader)?;
+        let body = read_bounded(reader, None, "")?;
         Ok(NativeProxyResponse {
             status,
             headers,
@@ -235,7 +245,7 @@ impl SidecarProcess {
         );
         let (reader, status, headers) =
             self.request("POST", &path, rgba, "application/octet-stream")?;
-        let body = read_bounded(reader)?;
+        let body = read_bounded(reader, None, "")?;
         Ok(NativeProxyResponse {
             status,
             headers,
@@ -289,7 +299,7 @@ impl SidecarProcess {
             .get("content-type")
             .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
         if !is_sse {
-            let body_chunk = read_bounded(reader)?;
+            let body_chunk = read_bounded(reader, Some(cancel.clone()), request_id)?;
             emit(NativeChatEvent {
                 status,
                 headers,
@@ -489,11 +499,22 @@ fn read_header_line(reader: &mut impl BufRead) -> Result<String, String> {
     }
 }
 
-fn read_bounded(mut reader: impl Read) -> Result<Vec<u8>, String> {
+fn read_bounded(
+    mut reader: BufReader<TcpStream>,
+    cancel: Option<Arc<AtomicBool>>,
+    request_id: &str,
+) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     let mut buffer = [0u8; 8192];
     let mut deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
     loop {
+        if cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            let _ = reader.get_ref().shutdown(Shutdown::Both);
+            return Err(format!("request {request_id} cancelled"));
+        }
         match reader.read(&mut buffer) {
             Ok(0) => return Ok(bytes),
             Ok(read) => {
