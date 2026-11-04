@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -19,9 +19,9 @@ paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `fcb7c8c5327800cb372529926ada62e6ba5cfb55` |
+| implementation source | `be0edd4682409398ebf2e7f86b4b44ec987f8edf` |
 | baseline driver | `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada` |
-| optimized driver | `8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df` |
+| optimized driver | `e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -95,12 +95,12 @@ Run only after FIT:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-verify
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
-PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-verify/2026-11-04-attempt-2
+PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-verify/2026-11-04-attempt-3
 OLD_BIN="$SOURCE/target/deepseek/trunk-verify-baseline/release/cpu-trunk-count-driver"
 NEW_BIN="$SOURCE/target/deepseek/trunk-verify-optimized-final/release/cpu-trunk-count-driver"
-SOURCE_PIN=fcb7c8c5327800cb372529926ada62e6ba5cfb55
+SOURCE_PIN=be0edd4682409398ebf2e7f86b4b44ec987f8edf
 OLD_SHA=e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada
-NEW_SHA=8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df
+NEW_SHA=e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
 EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
@@ -254,8 +254,6 @@ change. The first attempt is retained as a passing diagnostic, but this fixed
 experiment will use a fresh fourth review, fresh binary pin and fresh output
 root so the delivered source, binary and timing record are aligned exactly.
 
-A FIT verdict clears compute for the configuration in that sheet only (D22).
-
 TEST FITNESS: FIT - M2 #2030 formatted public 19-table CPU verification panel
 sheet: `docs/harness/prep/cpu-training-pilot-trunk-verify-2026-11-04.md`
 docs head: `befb6888b9042fac7fdfe1804ed6dcbb1e082127`
@@ -273,3 +271,13 @@ verification bars remain executable
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+An exact-head review then found that the synthetic test's public constants put
+`crates/uor-r4-discrete/src/trunk.rs` outside the item scope. The test now uses
+the existing public kappa constants in `uor_r4_discrete::q4_import`, and
+`trunk.rs` is identical to `origin/main`. The production binary changed only
+through test-support source and is newly pinned at `e32f99e8…0dd4`; a fresh
+output root and review are required.
+
+TEST FITNESS: pending fifth fresh-context non-author review after in-scope
+test-access revision `be0edd4682409398ebf2e7f86b4b44ec987f8edf`.
