@@ -13,20 +13,6 @@
     "lab": "deepseek",
     "note": ""
   },
-  "deepseek/long-window-cpu": {
-    "branch": "deepseek/long-window-cpu",
-    "claimed_at": "2026-11-04T01:35:00-05:00",
-    "head": "b6561fe6e",
-    "lab": "deepseek",
-    "note": ""
-  },
-  "deepseek/termination-cell": {
-    "branch": "deepseek/termination-cell",
-    "claimed_at": "2026-11-04T01:20:00-05:00",
-    "head": "2833c451e",
-    "lab": "deepseek",
-    "note": ""
-  },
   "deepseek/bos-admission": {
     "branch": "deepseek/bos-admission",
     "claimed_at": "2026-11-04T00:28:14-05:00",
@@ -216,6 +202,20 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/inner-cell-termination": {
+    "branch": "deepseek/inner-cell-termination",
+    "claimed_at": "2026-11-04T02:07:14-05:00",
+    "head": "cb457faa4",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/long-window-cpu": {
+    "branch": "deepseek/long-window-cpu",
+    "claimed_at": "2026-11-04T01:35:00-05:00",
+    "head": "b6561fe6e",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/m1-evidence": {
     "branch": "deepseek/m1-evidence",
     "claimed_at": "2026-11-03T07:51:55-05:00",
@@ -321,12 +321,26 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/termination-cell": {
+    "branch": "deepseek/termination-cell",
+    "claimed_at": "2026-11-04T01:20:00-05:00",
+    "head": "2833c451e",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/trained-full-path-audit": {
     "branch": "deepseek/trained-full-path-audit",
     "claimed_at": "2026-11-02T16:56:17-05:00",
     "head": "e6aad12b6",
     "lab": "deepseek",
     "note": ""
+  },
+  "deepseek/trunk-count-dose": {
+    "branch": "deepseek/trunk-count-dose",
+    "claimed_at": "2026-11-04T03:55:03-05:00",
+    "head": "09c4f4abb",
+    "lab": "deepseek",
+    "note": "4096-row exact-vs-shuffled 19-table CPU count training comparison"
   },
   "kimi/docs-current-status": {
     "branch": "kimi/docs-current-status",

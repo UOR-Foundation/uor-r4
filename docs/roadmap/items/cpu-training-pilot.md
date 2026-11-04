@@ -181,6 +181,43 @@ prepares the existing `cpu-served-forward-audit` check for Claude's first
 trained long-context export; it is not a long-context capability result. See
 [deepseek-121](../../loop/tasks/cpu-training-pilot/deepseek-121/REPORT.md).
 
+A cell-relative orbit-phase gate then tested whether terminal and continuation
+rows sharing a writer cell separate by their position among the 16 orbit roots.
+The 32-value signature was reached on both seeds, but every learned stop was
+premature and both paired comparisons failed; the duplicate-safe label control
+also made only premature stops. This closes the fixed two-block nearest-class
+orbit-phase configuration. The next termination attempt needs a different
+within-cell representation or continuation-state invariant rather than a
+post-observation retune of this signature. See
+[deepseek-122](../../loop/tasks/cpu-training-pilot/deepseek-122/REPORT.md).
+
+A materially different point-training comparison then reduced each supervised
+opening target to an observed geometric medoid by exact within-target L1 sum.
+The medoid and a matched shuffled medoid ran against point-off, raw nearest and
+the served raw-row vote on the fixed unseen-key split. Seed 1 tied both primary
+controls at zero; seed 2's 4/60 opening result passed the point-off margin but
+beat its shuffled medoid by only one against a threshold of two. This closes
+the fixed 48-to-18 target-medoid construction, while leaving target-specific
+local neighborhoods open. See
+[deepseek-123](../../loop/tasks/cpu-training-pilot/deepseek-123/REPORT.md).
+
+The public 19-table M1 trunk is now additively trainable and writable on CPU,
+rather than read-only. One bounded run added 128 exact teacher-forced rows to
+the unigram and all 12 sparse sufficient-statistic tables, exported and
+re-imported all 19 tables, independently reconstructed every decoded count, and
+preserved exact CPU/integer parity for 512 document-disjoint evaluation rows.
+The counts changed but the held-out decisions did not, so the writeback gap is
+closed while the need for a materially larger bounded dose remains. See
+[deepseek-124](../../loop/tasks/cpu-training-pilot/deepseek-124/REPORT.md).
+
+The next fixed dose raised additive count training from 128 to 4,096 rows on
+the same public artifact and 512-row document-disjoint panel. Every count table
+gained exactly 4,096 entries and writeback/parity remained exact. The exact
+update changed four held-out decisions, but admitted/top-1/top-8 each fell by
+one while the shuffled control changed nothing, so the registered comparison
+is negative. This closes the fixed 4,096-row additive dose, not other count
+schedules. See [deepseek-125](../../loop/tasks/cpu-training-pilot/deepseek-125/REPORT.md).
+
 ## Done when
 
 - The pre-registration exists before compute and names pass, fail and stop outcomes.
