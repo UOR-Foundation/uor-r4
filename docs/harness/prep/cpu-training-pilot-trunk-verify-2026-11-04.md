@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -256,5 +256,20 @@ root so the delivered source, binary and timing record are aligned exactly.
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
 
-TEST FITNESS: pending fourth fresh-context non-author review after
-formatting-only source revision `fcb7c8c5327800cb372529926ada62e6ba5cfb55`.
+TEST FITNESS: FIT - M2 #2030 formatted public 19-table CPU verification panel
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-verify-2026-11-04.md`
+docs head: `befb6888b9042fac7fdfe1804ed6dcbb1e082127`
+implementation pin: `fcb7c8c5327800cb372529926ada62e6ba5cfb55`
+baseline binary: `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada`
+optimized binary: `8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df`
+reviewer: Codex fourth fresh-context non-author session
+note: production verification code unchanged from the prior FIT; test-only
+formatting source and rebuilt binary are clean and pinned; four imports,
+independent shuffled reconstruction, real D11 finite success/mismatch test,
+direct artifact hashes on all eight fresh runs, full-crates source pin, mirrored
+one/sixteen-worker order, 21 finite stages, strict positive RSS below
+2,097,152 KiB, 600-second timeout, and 10-percent wall plus 20-percent
+verification bars remain executable
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
