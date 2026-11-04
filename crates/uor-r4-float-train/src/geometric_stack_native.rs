@@ -3270,9 +3270,10 @@ mod decode_cache_tests {
 
     /// Prefill `prompt` positions of `rows`, apply `perturb` to the cache, then take `steps`
     /// steps, comparing the prefill with [`StackModel::hidden`] and each step's points with the
-    /// whole-window forward's last row of every window, as u32 bits. With `reply`, each step names
-    /// every row as a turn-memory reply row: row 0 under `reply`'s key, which the table holds, the
-    /// others under one it does not. Returns the rows that differ and the first of them.
+    /// whole-window forward's last row of every window, as u32 bits, and every layer's carries
+    /// with the ones a prefill of that whole window captures. With `reply`, each step names every
+    /// row as a turn-memory reply row: row 0 under `reply`'s key, which the table holds, the
+    /// others under one it does not. Returns the rows and carries that differ and the first.
     #[cfg(feature = "cuda")]
     fn compare_steps(
         model: &StackModel,
@@ -3305,8 +3306,26 @@ mod decode_cache_tests {
             let stepped = model.step_cached(&mut cache, &step_ids);
             crate::flock_read_memory::set_reply_rows(keyed(&|b| b * len + len - 1));
             let full = model.hidden(&windows(rows, len), batch, len);
+            let captured = model.prefill_cached(&windows(rows, len), batch, len);
             crate::flock_read_memory::set_reply_rows(None);
-            let (stepped, full) = (stepped?, full?);
+            let (stepped, full, (_, captured)) = (stepped?, full?, captured?);
+            // The carries themselves (the first pod run, claude-278): a difference in a carried
+            // state can round away before the points, so the points alone can miss it.
+            for (layer, (mine, whole)) in cache.layers.iter().zip(&captured.layers).enumerate() {
+                let held = std::iter::once((&mine.held, &whole.held, "scan state"));
+                let inputs = mine.inputs.iter().zip(&whole.inputs);
+                for (a, w, part) in held.chain(inputs.map(|(a, w)| (a, w, "convolution input"))) {
+                    if bits(a)? != bits(w)? {
+                        differing += 1;
+                        if first.is_none() {
+                            first = Some(format!(
+                                "step {s} (position {}), layer {layer}'s {part}",
+                                len - 1
+                            ));
+                        }
+                    }
+                }
+            }
             for b in 0..batch {
                 let step_row = bits(&stepped.narrow(0, b, 1)?)?;
                 let whole_row = bits(&full.narrow(0, b * len + len - 1, 1)?)?;
@@ -3340,7 +3359,8 @@ mod decode_cache_tests {
     /// G1: the random six-layer trunk, plain and under the served surrogate contract, with and
     /// without the retention reading, and with and without the turn memory's reply table, from
     /// prompts of 4, 7 and 33 positions, 12 steps each, at batch 1 and 3: every step's points
-    /// equal the whole-window forward's at that position, bit for bit. The retention reading is
+    /// equal the whole-window forward's at that position, and its carries a whole-window prefill's,
+    /// bit for bit. The retention reading is
     /// process-wide, so the pod runs this file's CUDA tests on one thread.
     #[cfg(feature = "cuda")]
     #[test]
@@ -3433,7 +3453,12 @@ mod decode_cache_tests {
         let flip = |cache: &mut DecodeCache| -> Result<()> {
             let held = cache.layers[0].held.clone();
             let mut values = held.flatten_all()?.to_vec1::<f32>()?;
-            values[0] = f32::from_bits(values[0].to_bits() ^ 1);
+            // The largest component's top mantissa bit: on the first pod run a flip of the
+            // lowest bit of component 0 rounded away within three steps.
+            let at = (0..values.len())
+                .max_by(|&a, &b| values[a].abs().total_cmp(&values[b].abs()))
+                .unwrap_or(0);
+            values[at] = f32::from_bits(values[at].to_bits() ^ (1 << 22));
             cache.layers[0].held = Tensor::from_vec(values, held.dims(), held.device())?;
             Ok(())
         };
