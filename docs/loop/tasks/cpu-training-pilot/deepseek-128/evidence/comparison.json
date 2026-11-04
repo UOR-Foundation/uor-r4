@@ -112,9 +112,9 @@
       "workers": 1,
       "wall_elapsed_ms": 12313.785944,
       "peak_rss_kib": 1542344,
-      "exact_verify_ms": 3146.584612,
-      "shuffled_verify_ms": 2081.402441,
-      "verification_ms": 5227.987053
+      "exact_verify_ms": 3146.5846119999997,
+      "shuffled_verify_ms": 2081.4024409999997,
+      "verification_ms": 5227.987052999999
     },
     {
       "pass": "forward",
@@ -123,18 +123,18 @@
       "wall_elapsed_ms": 9738.631791,
       "peak_rss_kib": 1542528,
       "exact_verify_ms": 1710.649666,
-      "shuffled_verify_ms": 1295.077537,
-      "verification_ms": 3005.727203
+      "shuffled_verify_ms": 1295.0775370000001,
+      "verification_ms": 3005.7272030000004
     },
     {
       "pass": "forward",
       "binary": "baseline",
       "workers": 16,
-      "wall_elapsed_ms": 11298.825822,
+      "wall_elapsed_ms": 11298.825821999999,
       "peak_rss_kib": 1543856,
-      "exact_verify_ms": 3012.736798,
+      "exact_verify_ms": 3012.7367980000004,
       "shuffled_verify_ms": 2594.422159,
-      "verification_ms": 5607.158957
+      "verification_ms": 5607.158957000001
     },
     {
       "pass": "forward",
@@ -150,21 +150,21 @@
       "pass": "reverse",
       "binary": "optimized",
       "workers": 16,
-      "wall_elapsed_ms": 8769.970848,
+      "wall_elapsed_ms": 8769.970847999999,
       "peak_rss_kib": 1544692,
       "exact_verify_ms": 1237.328688,
       "shuffled_verify_ms": 1562.460526,
-      "verification_ms": 2799.789214
+      "verification_ms": 2799.7892140000004
     },
     {
       "pass": "reverse",
       "binary": "baseline",
       "workers": 16,
-      "wall_elapsed_ms": 11802.984162,
+      "wall_elapsed_ms": 11802.984161999999,
       "peak_rss_kib": 1543868,
       "exact_verify_ms": 3358.649386,
-      "shuffled_verify_ms": 2030.392421,
-      "verification_ms": 5389.041807
+      "shuffled_verify_ms": 2030.3924210000002,
+      "verification_ms": 5389.0418070000005
     },
     {
       "pass": "reverse",
@@ -174,7 +174,7 @@
       "peak_rss_kib": 1542468,
       "exact_verify_ms": 1678.026107,
       "shuffled_verify_ms": 1455.806044,
-      "verification_ms": 3133.832151
+      "verification_ms": 3133.8321509999996
     },
     {
       "pass": "reverse",
