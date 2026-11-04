@@ -56,7 +56,7 @@
     "driver_build_target_bytes": 268980357,
     "control_target_bytes": 842142982,
     "driver_binary_sha256": "c45a4c7c688a0ede4845d17b9edc88a1e58fbd8c42a5cc94f82e19aa8b5c8ec7",
-    "retained_evidence_bytes": 10060673
+    "retained_evidence_bytes": 10060675
   },
   "threads": {
     "build": 16,
@@ -77,7 +77,7 @@
     "retained_evidence_limit_bytes": 201326592,
     "driver_build_target_bytes": 268980357,
     "control_target_bytes": 842142982,
-    "retained_evidence_bytes": 10060673,
+    "retained_evidence_bytes": 10060675,
     "post_run_floor_kib": 31588352
   },
   "host": {
@@ -97,7 +97,7 @@
     "sheet": "docs/harness/prep/cpu-training-pilot-trajectory-readout-2026-11-04.md",
     "implementation_pin": "99a0687f3a4a7cf87cc5bdaff07ce6330d5d3968",
     "evidence": "docs/labs/cpu-training-pilot-trajectory-readout-2026-11-04/evidence-attempt-1",
-    "evidence_sums_sha256": "0591d9537ffb60d1ea96ea1d6f85034afabd23c8b586afc28cb767dd5e8f045b",
+    "evidence_sums_sha256": "1294285ad6174e6f84b69a4197058175ff3a204a84f9d91021cf492ec7c21c21",
     "artifact_seed_1": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd",
     "artifact_seed_2": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1",
     "dev_tokens": "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b",

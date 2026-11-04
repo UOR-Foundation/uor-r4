@@ -73,7 +73,7 @@ content baseline.
 Exact stopped output is under
 [`evidence-attempt-1/`](../../../../labs/cpu-training-pilot-trajectory-readout-2026-11-04/evidence-attempt-1/).
 Evidence `SHA256SUMS` is
-`0591d9537ffb60d1ea96ea1d6f85034afabd23c8b586afc28cb767dd5e8f045b`.
+`1294285ad6174e6f84b69a4197058175ff3a204a84f9d91021cf492ec7c21c21`.
 Measured accounting is in the
 [resource ledger](../../../../labs/cpu-training-pilot-trajectory-readout-2026-11-04/resource-ledger.json).
 

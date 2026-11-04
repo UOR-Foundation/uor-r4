@@ -261,3 +261,4 @@ test train::tests::data_derived_records_train_and_audit_the_full_path ... ok
 test served_forward::tests::long_window_full_path_matches_serving_and_reaches_early_hamming_copy ... ok
 
 test result: ok. 255 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 2.32s
+
