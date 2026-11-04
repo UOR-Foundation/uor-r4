@@ -39,7 +39,7 @@ The public manifest says `split=train`. "Held-out" means odd-ordinal documents
 and learned evaluation keys are absent from training memory; base-model
 exposure is not claimed to be zero.
 
-## Data selection
+## Data split
 
 The model-free driver selected 16 eight-token keys. Even document ordinals
 train and odd ordinals evaluate, up to eight examples per key.
@@ -98,6 +98,15 @@ Both seeds must pass:
 Free-generation BOS, premature-BOS, cap, context, exact-reference, opening,
 distinct and repeated-4-gram readings are reported, not the primary bar.
 
+## Minimum test power
+
+Each seed has 103 held-out terminal decisions and 3,662 nonterminal decisions.
+Requiring at least 26 terminal wins tests a materially above-chance stop rule,
+while the 36-event nonterminal ceiling limits premature stops to at most 1%.
+Both independent seeds must pass, and each terminal win must also beat
+shuffled-label and random controls by the paired margin. This is a bounded
+screen, not a precision or capability qualification.
+
 ## Instrument gates
 
 - Input, source and binary hashes match.
@@ -109,7 +118,7 @@ distinct and repeated-4-gram readings are reported, not the primary bar.
 - Every artifact reparses, has no Hamming record and changes after a move.
 - A seed-1 repeat reproduces every non-timing and non-resource field.
 
-## Resource and stop projection
+## Cost
 
 | Component | Projection |
 |---|---:|
@@ -178,6 +187,14 @@ test -z "$(git -C "$SOURCE" status --porcelain -- crates third_party Cargo.toml 
 
 Any source, input, binary, output-root, control or deterministic mismatch is
 an instrument fault requiring a new FIT before retry.
+
+## Stop rules
+
+Stop on source/input drift, cached/full-forward divergence, no accepted true
+move, a vacuous or malformed control, CPU/integer parity loss, artifact parse
+failure, nondeterministic repeat, context/storage floor breach, or any need to
+change serving or Claude-owned files. A mechanism-negative bar result is
+retained rather than retried with a changed threshold.
 
 ## Claim boundary
 
