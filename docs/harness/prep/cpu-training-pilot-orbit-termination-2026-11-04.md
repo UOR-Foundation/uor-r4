@@ -21,7 +21,7 @@ D84 CPU development research in `uor-r4-cpu-train` on the local Ryzen 9
 
 | Input | Identity |
 |---|---|
-| implementation source | `334e457741085d5b8293aaba5ff7b0b8115e15c4` |
+| implementation source | `430fa8bc7ea8888593d13dfd3e30030e24a15f87` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -119,7 +119,7 @@ geometric termination.
 ## Cost and stop
 
 Local workstation only; no GPU, pod or paid API. Expected below 10 CPU minutes
-per seed and below 2 GiB peak RSS. Each seed runs under
+per seed and below 2 GiB peak RSS. Each seed and the seed-1 repeat run under
 `/usr/bin/time -v timeout 600s`. A timeout, a peak above 2,097,152 KiB, or a
 seed-1 projection beyond 20 total CPU minutes stops the experiment before the
 next seed.

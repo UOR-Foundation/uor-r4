@@ -65,4 +65,4 @@ proposed here.
 Stop on CPU/serving divergence, nondeterminism, more than 2 GiB peak RSS,
 training loss substituted for reply evidence, any edit to Claude-owned
 float-training files, an evaluation threshold tuned after seeing the panel, or
-two seeds above 10 minutes each.
+any seed or repeat above 10 minutes.
