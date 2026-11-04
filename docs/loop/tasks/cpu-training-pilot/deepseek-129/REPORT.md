@@ -92,8 +92,9 @@ artifact copy.
 ## Checks run at the head
 
 - Fresh-context non-author TEST FITNESS: FIT at implementation
-  `1f5fe3c3a4aee2e67de64276a4712cd0fbd23a7f` and docs head
-  `b0f2a7aa572f9cf95c2f535b6556fde630ed8069`.
+  `83d1bbce86f272d4c396edeea14c1efba4275c6b` and docs head
+  `9adf5e8b5e50feadf39eec1ca0e72ee8dcb2aa86`; the metadata-only ORDER
+  correction and re-pin preceded the final verdict.
 - Full `uor-r4-cpu-train` release suite: **238 tests passed, 0 failed, 4
   release benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.

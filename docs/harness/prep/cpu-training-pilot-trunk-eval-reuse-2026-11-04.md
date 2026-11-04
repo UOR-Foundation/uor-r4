@@ -1,6 +1,6 @@
 # Reuse loaded trunk models for CPU evaluation
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -243,4 +243,16 @@ metadata-only defect; the source tree and both binaries are byte-identical,
 with the source now at `83d1bbce…`. A fresh review is required at the corrected
 head.
 
-TEST FITNESS: pending repaired-metadata review.
+TEST FITNESS: FIT - M2 #2030 repaired-metadata public CPU evaluation reuse
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-eval-reuse-2026-11-04.md`
+docs head: `9adf5e8b5e50feadf39eec1ca0e72ee8dcb2aa86`
+implementation pin: `83d1bbce86f272d4c396edeea14c1efba4275c6b`
+baseline binary: `e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4`
+optimized binary: `a29541a5a9cdfdd3e07fbe6992bfbf54cbffe7f46f53fc897331b2b7fcc45d40`
+reviewer: Codex second fresh-context non-author session
+note: ORDER parses; source tree, Cargo manifests, binaries, technical gates
+and completed eight-run panel are unchanged from the first FIT; all 27 evidence
+hashes and eight report gates pass; no timing rerun
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
