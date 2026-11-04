@@ -252,12 +252,11 @@ impl CpuSelfPrefixTrainer {
             .find(|decision| decision.reply_offset == reply_offset)
             .ok_or_else(|| invalid("self-prefix eligible decision disappeared"))?;
         let before_scan = scan(&self.artifact, &self.samples, &self.config)?;
-        let before_targets = mapped_targets(&before_scan, &self.samples, self.config)?;
         let before = reading_from_scan(
             &self.artifact,
             &before_scan,
             &self.samples,
-            &before_targets,
+            &source_targets,
             self.config.reply_cap,
         )?;
         let forward = CpuFbsForward::from_artifact(&self.artifact)
@@ -287,12 +286,11 @@ impl CpuSelfPrefixTrainer {
             });
         };
         let after_scan = scan(&proposal.artifact, &self.samples, &self.config)?;
-        let after_targets = mapped_targets(&after_scan, &self.samples, self.config)?;
         let after = reading_from_scan(
             &proposal.artifact,
             &after_scan,
             &self.samples,
-            &after_targets,
+            &source_targets,
             self.config.reply_cap,
         )?;
         let updated = strictly_better(&after, &before);
@@ -427,6 +425,31 @@ fn scan_sample(
     let mut current = current.ok_or_else(|| invalid("self-prefix sample prompt is empty"))?;
     let mut decisions = Vec::new();
     let mut tokens = Vec::new();
+    if config.mode == SelfPrefixMode::Reference {
+        let horizon = reference.len().min(config.reply_cap);
+        for (offset, &target) in reference.iter().enumerate().take(horizon) {
+            decisions.push(SelfPrefixDecision {
+                sample: sample_index,
+                reply_offset: offset,
+                query_q12: current.query_q12.clone(),
+                generated_token: current.token,
+                reference_target: target,
+            });
+            if current.token != 0 {
+                tokens.push(current.token);
+            }
+            if offset + 1 < horizon {
+                current = forward
+                    .step(target, CpuFbsHead::Writer)
+                    .map_err(|error| invalid(format!("self-prefix reference step: {error}")))?;
+            }
+        }
+        return Ok(PrefixSampleScan {
+            decisions,
+            tokens,
+            stop: "cap",
+        });
+    }
     let mut offset = 0usize;
     let stop = loop {
         if let Some(reference_target) = reference.get(offset).copied() {
@@ -455,13 +478,8 @@ fn scan_sample(
                 ReplyEnd::Context => "context",
             };
         }
-        let feedback = if config.mode == SelfPrefixMode::Reference {
-            reference.get(offset).copied().unwrap_or(current.token)
-        } else {
-            current.token
-        };
         current = forward
-            .step(feedback, CpuFbsHead::Writer)
+            .step(current.token, CpuFbsHead::Writer)
             .map_err(|error| invalid(format!("self-prefix generated step: {error}")))?;
         offset += 1;
     };
@@ -561,7 +579,11 @@ fn eligibility(
     for row in &rows {
         *per_cell.entry(row.2 % TARGET_CELLS).or_default() += 1;
     }
-    let same_cell_shuffle_pairs = per_cell.values().filter(|&&count| count >= 2).sum();
+    let same_cell_shuffle_pairs = per_cell
+        .values()
+        .filter(|&&count| count >= 2)
+        .map(|count| count / 2)
+        .sum();
     Ok(SelfPrefixEligibility {
         eligible_decisions: rows.len() as u64,
         prompts: prompts as u64,
@@ -740,6 +762,9 @@ fn prompt_readings(
 }
 
 fn strictly_better(candidate: &SelfPrefixReading, control: &SelfPrefixReading) -> bool {
+    if candidate.missing_decisions > control.missing_decisions {
+        return false;
+    }
     (
         candidate.generated_top1,
         std::cmp::Reverse(candidate.target_rank_sum),
@@ -913,7 +938,7 @@ mod tests {
     #[test]
     fn early_bos_counts_the_missing_fixed_horizon_as_wrong() {
         let artifact = export_fbs_trunk_uorlut01(&snapshot()).unwrap();
-        let scan = PrefixScan {
+        let fabricated = PrefixScan {
             samples: vec![PrefixSampleScan {
                 decisions: vec![SelfPrefixDecision {
                     sample: 0,
@@ -933,7 +958,7 @@ mod tests {
         let mut targets = BTreeMap::new();
         targets.insert((0, 0), 7);
         targets.insert((0, 1), 8);
-        let reading = reading_from_scan(&artifact, &scan, &samples, &targets, 8).unwrap();
+        let reading = reading_from_scan(&artifact, &fabricated, &samples, &targets, 8).unwrap();
         assert_eq!(reading.fixed_horizon_decisions, 2);
         assert_eq!(reading.observed_decisions, 1);
         assert_eq!(reading.missing_decisions, 1);
@@ -1032,5 +1057,119 @@ mod tests {
             assert_eq!(trainer.accepted(), 1);
             assert!(step.parity.unwrap().is_exact());
         }
+    }
+
+    #[test]
+    fn reference_mode_continues_past_a_predicted_bos() {
+        let artifact = artifact_with_memory();
+        let mut early = None;
+        for token in 2..512 {
+            let candidate = MemoryWeightSample {
+                prompt: vec![0, 3, token],
+                reply: vec![token + 1, token + 2, token + 3, 1],
+            };
+            let generated = scan_sample(
+                &artifact,
+                0,
+                &candidate,
+                &config(SelfPrefixMode::DynamicGenerated, true),
+            )
+            .unwrap();
+            if generated.stop == "bos" {
+                early = Some(candidate);
+                break;
+            }
+        }
+        let sample = early.expect("synthetic writer predicts BOS for at least one prompt");
+        let reference = scan_sample(
+            &artifact,
+            0,
+            &sample,
+            &config(SelfPrefixMode::Reference, true),
+        )
+        .unwrap();
+        assert_eq!(reference.decisions.len(), 3);
+        assert_eq!(reference.stop, "cap");
+    }
+
+    #[test]
+    fn malformed_config_vacuous_shuffle_and_no_eligible_rows_are_refused_or_empty() {
+        let artifact = artifact_with_memory();
+        let mut invalid = config(SelfPrefixMode::DynamicGenerated, true);
+        invalid.rank_margin.coordinates_per_step = 2;
+        assert!(CpuSelfPrefixTrainer::from_artifact(&artifact, vec![sample()], invalid).is_err());
+
+        let fabricated = PrefixScan {
+            samples: vec![PrefixSampleScan {
+                decisions: vec![SelfPrefixDecision {
+                    sample: 0,
+                    reply_offset: 0,
+                    query_q12: Vec::new(),
+                    generated_token: 1,
+                    reference_target: 10,
+                }],
+                tokens: Vec::new(),
+                stop: "cap",
+            }],
+        };
+        let shuffled = SelfPrefixConfig {
+            targets: SelfPrefixTargets::SameCellShuffled,
+            ..config(SelfPrefixMode::StaticGenerated, false)
+        };
+        assert!(mapped_targets(&fabricated, &[], shuffled).is_err());
+
+        let mut one = config(SelfPrefixMode::DynamicGenerated, true);
+        one.reply_cap = 1;
+        let probe = MemoryWeightSample {
+            prompt: vec![0, 3, 4],
+            reply: vec![7, 1],
+        };
+        let scanned = scan(&artifact, std::slice::from_ref(&probe), &one).unwrap();
+        let query = &scanned.samples[0].decisions[0].query_q12;
+        let forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let top1 = reading_from_forward(&forward, RankMarginConfig::default(), query, 2)
+            .unwrap()
+            .top1;
+        let no_eligible = MemoryWeightSample {
+            prompt: vec![0, 3, 4],
+            reply: vec![top1, 1],
+        };
+        let trainer =
+            CpuSelfPrefixTrainer::from_artifact(&artifact, vec![no_eligible], one).unwrap();
+        assert_eq!(trainer.eligibility().unwrap().eligible_decisions, 0);
+    }
+
+    #[test]
+    fn early_bos_cannot_win_acceptance_by_increasing_missing_rows() {
+        let control = SelfPrefixReading {
+            generated_top1: 1,
+            target_rank_sum: 20,
+            target_distance_sum: 30,
+            missing_decisions: 2,
+            ..SelfPrefixReading::default()
+        };
+        let candidate = SelfPrefixReading {
+            generated_top1: 2,
+            target_rank_sum: 1,
+            target_distance_sum: 1,
+            missing_decisions: 3,
+            ..SelfPrefixReading::default()
+        };
+        assert!(!strictly_better(&candidate, &control));
+    }
+
+    #[test]
+    fn static_training_keeps_its_frozen_query_corpus() {
+        let artifact = artifact_with_memory();
+        let mut config = config(SelfPrefixMode::StaticGenerated, true);
+        config.reply_cap = 1;
+        let mut trainer =
+            CpuSelfPrefixTrainer::from_artifact(&artifact, vec![sample()], config).unwrap();
+        let frozen = trainer.frozen_scan.clone();
+        let _ = trainer.train_steps(2).unwrap();
+        assert_eq!(
+            trainer.frozen_scan.samples[0].decisions,
+            frozen.samples[0].decisions
+        );
     }
 }

@@ -222,6 +222,13 @@ fn run() -> Result<serde_json::Value, String> {
         .iter()
         .map(memory_sample)
         .collect::<Vec<_>>();
+    if training_samples.len() != 98 || evaluation_samples.len() != 103 {
+        return Err(format!(
+            "selected split differs: {} training, {} evaluation",
+            training_samples.len(),
+            evaluation_samples.len()
+        ));
+    }
     let memory = derive_turn_memory(
         &training_samples,
         shape.width,
@@ -246,6 +253,18 @@ fn run() -> Result<serde_json::Value, String> {
     let preflight = preflight_trainer
         .eligibility()
         .map_err(|error| error.to_string())?;
+    let shuffled_config = SelfPrefixConfig {
+        targets: SelfPrefixTargets::SameCellShuffled,
+        ..base
+    };
+    let shuffled_preflight = CpuSelfPrefixTrainer::from_artifact(
+        &memory_artifact,
+        training_samples.clone(),
+        shuffled_config,
+    )
+    .map_err(|error| error.to_string())?
+    .eligibility()
+    .map_err(|error| error.to_string())?;
     if config.select_only {
         return Ok(serde_json::json!({
             "schema": "uor-r4.cpu-generated-prefix-selection/1",
@@ -253,13 +272,18 @@ fn run() -> Result<serde_json::Value, String> {
             "qualification": "gpu-required",
             "selection": selection_json(&groups, &training_samples, &evaluation_samples),
             "preflight": preflight,
+            "shuffled_preflight": shuffled_preflight,
             "frozen_training": preflight_trainer.reading().map_err(|error| error.to_string())?,
         }));
     }
     let preflight_pass = preflight.eligible_decisions >= 640
         && preflight.prompts >= 16
         && preflight.target_cells >= 8
-        && preflight.same_cell_shuffle_pairs >= 64;
+        && preflight.same_cell_shuffle_pairs >= 64
+        && shuffled_preflight.eligible_decisions >= 640
+        && shuffled_preflight.prompts >= 16
+        && shuffled_preflight.target_cells >= 8
+        && shuffled_preflight.same_cell_shuffle_pairs >= 64;
     if !preflight_pass {
         return Err(format!(
             "self-prefix eligibility gate failed: {}",
@@ -305,6 +329,7 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     let frozen_parity = audit_memory_weight_samples(&memory_artifact, &evaluation_samples, true)
         .map_err(|error| error.to_string())?;
+    let mut all_parity_exact = frozen_parity.is_exact();
     let mut arm_reports = serde_json::Map::new();
     arm_reports.insert(
         "frozen".to_owned(),
@@ -321,8 +346,10 @@ fn run() -> Result<serde_json::Value, String> {
     let mut dynamic_prompts = None;
     let mut dynamic_reading = None;
     let mut dynamic_teacher = None;
+    let mut static_shuffled_accepted = 0u64;
     let mut shuffled_prompts = None;
     let mut shuffled_reading = None;
+    let mut dynamic_shuffled_accepted = 0u64;
     for arm in arms {
         let arm_config = SelfPrefixConfig {
             mode: arm.mode,
@@ -347,6 +374,7 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
         let parity = audit_memory_weight_samples(&trained, &evaluation_samples, true)
             .map_err(|error| error.to_string())?;
+        all_parity_exact &= parity.is_exact();
         std::fs::write(config.out.join(format!("{}.uorlut", arm.name)), &trained)
             .map_err(|error| error.to_string())?;
         arm_reports.insert(
@@ -369,6 +397,10 @@ fn run() -> Result<serde_json::Value, String> {
         if arm.name == "dynamic-shuffled" {
             shuffled_prompts = Some(prompts.clone());
             shuffled_reading = Some(reading.clone());
+            dynamic_shuffled_accepted = trainer.accepted();
+        }
+        if arm.name == "static-shuffled" {
+            static_shuffled_accepted = trainer.accepted();
         }
         let _ = steps;
     }
@@ -377,8 +409,8 @@ fn run() -> Result<serde_json::Value, String> {
     let dynamic_teacher = dynamic_teacher.ok_or("dynamic-true teacher reading missing")?;
     let shuffled_prompts = shuffled_prompts.ok_or("dynamic-shuffled prompts missing")?;
     let shuffled_reading = shuffled_reading.ok_or("dynamic-shuffled reading missing")?;
-    let vs_frozen = paired_depth(&dynamic_prompts, &frozen_prompts);
-    let vs_shuffled = paired_depth(&dynamic_prompts, &shuffled_prompts);
+    let vs_frozen = paired_depth(&dynamic_prompts, &frozen_prompts)?;
+    let vs_shuffled = paired_depth(&dynamic_prompts, &shuffled_prompts)?;
     let teacher_top1 = frozen_teacher.top1_correct;
     let bar = serde_json::json!({
         "vs_frozen": vs_frozen,
@@ -387,11 +419,18 @@ fn run() -> Result<serde_json::Value, String> {
         "generated_top1_above_shuffled": dynamic_reading.generated_top1 > shuffled_reading.generated_top1,
         "teacher_top1_frozen": teacher_top1,
         "teacher_top1_dynamic": dynamic_teacher.top1_correct,
+        "all_parity_exact": all_parity_exact,
+        "static_shuffled_accepted": static_shuffled_accepted,
+        "dynamic_shuffled_accepted": dynamic_shuffled_accepted,
+        "shuffle_controls_active": static_shuffled_accepted > 0 && dynamic_shuffled_accepted > 0,
         "passes": vs_frozen["passes"].as_bool() == Some(true)
             && vs_shuffled["passes"].as_bool() == Some(true)
             && dynamic_reading.generated_top1 > frozen_eval.generated_top1
             && dynamic_reading.generated_top1 > shuffled_reading.generated_top1
-            && dynamic_teacher.top1_correct >= teacher_top1,
+            && dynamic_teacher.top1_correct >= teacher_top1
+            && all_parity_exact
+            && static_shuffled_accepted > 0
+            && dynamic_shuffled_accepted > 0,
     });
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-generated-prefix-run/1",
@@ -449,13 +488,23 @@ fn arm_json(
 fn paired_depth(
     candidate: &[uor_r4_cpu_train::SelfPrefixPromptReading],
     control: &[uor_r4_cpu_train::SelfPrefixPromptReading],
-) -> serde_json::Value {
+) -> Result<serde_json::Value, String> {
+    if candidate.len() != control.len() {
+        return Err(format!(
+            "paired prompt counts differ: {} and {}",
+            candidate.len(),
+            control.len()
+        ));
+    }
     let mut candidate_only = 0u64;
     let mut control_only = 0u64;
     let mut ties = 0u64;
     let mut candidate_depth = 0u64;
     let mut control_depth = 0u64;
     for (candidate, control) in candidate.iter().zip(control) {
+        if candidate.sample != control.sample {
+            return Err("paired prompt identity differs".to_owned());
+        }
         candidate_depth += candidate.matched_prefix_depth as u64;
         control_depth += control.matched_prefix_depth as u64;
         match candidate
@@ -468,7 +517,7 @@ fn paired_depth(
         }
     }
     let threshold = ceil_three_sqrt(candidate_only.saturating_add(control_only));
-    serde_json::json!({
+    Ok(serde_json::json!({
         "candidate_only": candidate_only,
         "control_only": control_only,
         "ties": ties,
@@ -476,7 +525,7 @@ fn paired_depth(
         "control_depth": control_depth,
         "threshold": threshold,
         "passes": candidate_depth > control_depth && candidate_only >= threshold && threshold > 0,
-    })
+    }))
 }
 
 fn ceil_three_sqrt(value: u64) -> u64 {
@@ -588,5 +637,21 @@ mod tests {
         assert_eq!(ceil_three_sqrt(1), 3);
         assert_eq!(ceil_three_sqrt(2), 5);
         assert_eq!(ceil_three_sqrt(4), 6);
+    }
+
+    #[test]
+    fn paired_depth_refuses_unequal_or_reordered_panels() {
+        let reading = |sample, depth| uor_r4_cpu_train::SelfPrefixPromptReading {
+            sample,
+            matched_prefix_depth: depth,
+            generated_top1: 0,
+            observed_decisions: 0,
+            opening_correct: false,
+            exact_reference: false,
+            stop: "cap".to_owned(),
+            generated_tokens: 0,
+        };
+        assert!(paired_depth(&[reading(0, 1)], &[]).is_err());
+        assert!(paired_depth(&[reading(0, 1)], &[reading(1, 1)]).is_err());
     }
 }

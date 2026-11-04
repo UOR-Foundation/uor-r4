@@ -105,6 +105,15 @@ Report exact references, BOS/cap/context stops, opening accuracy,
 first-divergence histogram, admission, admitted-only accuracy,
 distinct/repeated replies, effective workers, wall and peak RSS.
 
+## Minimum test power
+
+The fixed panel has 103 held-out prompts. Both independent model seeds must
+pass. The paired threshold
+`max(2, ceil(3 * sqrt(b + c)))` requires at least two candidate-only wins
+after discordance, and the depth and aligned-top-1 differences must both have
+the registered direction. This is a bounded configuration screen, not a
+precision or language-capability result.
+
 ## Instrument gates
 
 - Source, inputs and binary hashes match.
@@ -115,6 +124,14 @@ distinct/repeated replies, effective workers, wall and peak RSS.
 - No admitted generated row or requested shuffle is vacuous.
 - Seed-1 repeat reproduces every non-timing and non-resource field and artifact.
 - Integer-serving files and the serving contract remain unchanged.
+
+## Stop rules
+
+Stop on source, split, panel, input or binary drift; a vacuous same-cell
+shuffle; no eligible generated rows; any CPU/integer parity mismatch; a
+teacher-forced top-1 loss; nondeterminism; or any need to change serving,
+integer-session, CUDA or Claude-owned files. An eligibility failure is
+retained as an insufficiency result without training compute.
 
 ## Cost
 
@@ -144,6 +161,8 @@ fresh roots under `RAYON_NUM_THREADS=32`, with 600-second timeouts, exact input
 pins, a 1-GiB RSS stop and per-root checksums. Preserve every arm artifact and
 the compact report.
 
-## Review record
+## TEST FITNESS
 
-Pending TEST FITNESS.
+TEST FITNESS: PENDING
+
+A FIT verdict clears compute for this configuration only (D22).
