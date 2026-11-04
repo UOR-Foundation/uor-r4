@@ -74,41 +74,50 @@ describe('image file decoding and composer intake', () => {
 });
 
 describe('native image decomposition transport', () => {
-    it('posts exact RGBA headers/body and returns the validated decomposition', async () => {
-        const payload = {
-            schema: 'uor-r4.image/1',
-            source_sha256: 'a'.repeat(64),
-            canonical_sha256: 'b'.repeat(64),
-            canonical_prompt: 'R4IMG1;sha256=' + 'a'.repeat(64) + ';size=1x1;grid=1;q12=304,-128,144,0',
-            decomposition_id: 'r4img-test',
-            visual_understanding: false,
-            patches: [],
+    it('posts exact RGBA query/body and validates canonical bytes and issued headers', async () => {
+        const canonical = new TextEncoder().encode('R4IMG001fixture');
+        const headers = {
+            'X-UOR-Image-Schema': 'uor-r4.image-decomposition/1',
+            'X-UOR-Source-Blake3': 'a'.repeat(64),
+            'X-UOR-Image-Width': '1',
+            'X-UOR-Image-Height': '1',
+            'X-UOR-Grid-Columns': '1',
+            'X-UOR-Grid-Rows': '1',
+            'X-UOR-Patch-Count': '1',
+            'X-UOR-Decomposition-Id': 'r4img-test',
         };
-        const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }));
+        const fetchMock = vi.fn().mockResolvedValue(new Response(canonical.buffer as ArrayBuffer, { status: 200, headers }));
         vi.stubGlobal('fetch', fetchMock);
         const rgba = new Uint8Array([12, 20, 28, 255]);
         const result = await decomposeNativeImage({
             config: { baseUrl: 'http://127.0.0.1:8765/v1/', apiKey: 'secret' },
             image: { rgba, width: 1, height: 1, grid: 1 },
         });
-        expect(result).toEqual(payload);
+        expect(result).toEqual({
+            schema: 'uor-r4.image-decomposition/1',
+            canonical_hex: '5234494d4730303166697874757265',
+            source_blake3: 'a'.repeat(64),
+            width: 1,
+            height: 1,
+            grid: { columns: 1, rows: 1 },
+            decomposition_id: 'r4img-test',
+        });
         const [url, init] = fetchMock.mock.calls[0];
-        expect(url).toBe('http://127.0.0.1:8765/v1/images/decompose');
+        expect(url).toBe('http://127.0.0.1:8765/v1/images/decompose?width=1&height=1&columns=1&rows=1');
         expect(init.method).toBe('POST');
         expect(init.headers).toMatchObject({
             'Content-Type': 'application/octet-stream',
+            Accept: 'application/octet-stream',
             Authorization: 'Bearer secret',
-            'X-UOR-Width': '1',
-            'X-UOR-Height': '1',
-            'X-UOR-Grid': '1',
         });
+        expect(init.headers).not.toHaveProperty('X-UOR-Width');
         expect(init.body).toBe(rgba);
     });
 
-    it('surfaces native error envelopes and invalid success payloads', async () => {
+    it('surfaces native error envelopes and rejects invalid success responses', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: 'dimension refused' } }), { status: 400 })));
         await expect(decomposeNativeImage({ config: { baseUrl: 'http://localhost/v1' }, image: { rgba: new Uint8Array(4), width: 1, height: 1, grid: 1 } })).rejects.toThrow('dimension refused');
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array([0]), { status: 200 })));
         await expect(decomposeNativeImage({ config: { baseUrl: 'http://localhost/v1' }, image: { rgba: new Uint8Array(4), width: 1, height: 1, grid: 1 } })).rejects.toThrow('invalid decomposition');
     });
 });

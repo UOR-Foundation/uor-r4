@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [studio-conversational-composer]
 done_class: host
 notebook: docs/research/notebook/m4-serving.md
-scope: [Cargo.toml, Cargo.lock, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/assets/js/**, web/studio/src/**, docs/products/web-client.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
+scope: [Cargo.toml, Cargo.lock, src-tauri/Cargo.lock, xtask/src/main.rs, xtask/src/roadmap_sync.rs, crates/uor-r4-vision/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/loopback.rs, crates/uor-r4-integer/tests/openai_loopback.rs, web/studio/index.html, web/studio/index.css, web/studio/assets/js/**, web/studio/src/**, docs/products/web-client.md, docs/start/FILEMAP.md, docs/research/notebook/m4-serving.md, docs/loop/tasks/geometric-image-input/**, docs/roadmap/items/geometric-image-input.md]
 ---
 
 ## Why it matters

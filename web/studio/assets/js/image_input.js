@@ -116,45 +116,86 @@ function invalidResponse() {
     return new Error('The native server returned an invalid decomposition response.');
 }
 
+function toHex(bytes) {
+    let value = '';
+    for (const byte of bytes) value += byte.toString(16).padStart(2, '0');
+    return value;
+}
+
 export async function decomposeNativeImage({ config, image, signal } = {}) {
     if (!config || !image || !(image.rgba instanceof Uint8Array)) throw new Error('A decoded RGBA image and native configuration are required.');
+    const width = Number(image.width);
+    const height = Number(image.height);
+    const columns = Number(image.grid);
+    const rows = columns;
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 256 || height > 256) {
+        throw new Error('Native image dimensions must be within 1..256.');
+    }
+    if (image.rgba.length !== width * height * 4) throw new Error('Native image decomposition requires exact RGBA bytes.');
+    if (!Number.isInteger(columns) || columns < 1 || columns > width || rows > height) {
+        throw new Error('Native image grid must fit the image.');
+    }
     const headers = {
         'Content-Type': 'application/octet-stream',
-        Accept: 'application/json',
-        'X-UOR-Width': String(image.width),
-        'X-UOR-Height': String(image.height),
-        'X-UOR-Grid': String(image.grid),
+        Accept: 'application/octet-stream',
     };
     if (config.apiKey) headers.Authorization = 'Bearer ' + config.apiKey;
-    const response = await fetch(normalizeBaseUrl(config.baseUrl) + '/images/decompose', {
+    const url = normalizeBaseUrl(config.baseUrl) + '/images/decompose?width=' + width + '&height=' + height + '&columns=' + columns + '&rows=' + rows;
+    const response = await fetch(url, {
         method: 'POST',
         headers,
         body: image.rgba,
         signal,
+        cache: 'no-store',
     });
-    const body = await response.text();
-    let payload;
-    try {
-        payload = JSON.parse(body);
-    } catch (_error) {
-        throw new Error('The native decomposition response was not JSON (HTTP ' + response.status + ').');
-    }
     if (!response.ok) {
-        const message = payload && payload.error && payload.error.message;
+        const body = await response.text();
+        let message = body;
+        try {
+            const payload = JSON.parse(body);
+            message = payload && payload.error && payload.error.message || body;
+        } catch (_error) {
+            // A non-JSON error body is already the most faithful available message.
+        }
         throw new Error(String(message || 'Native image decomposition failed with HTTP ' + response.status + '.'));
     }
-    const valid = payload
-        && payload.schema === 'uor-r4.image/1'
-        && typeof payload.source_sha256 === 'string'
-        && /^[0-9a-f]{64}$/.test(payload.source_sha256)
-        && typeof payload.canonical_sha256 === 'string'
-        && /^[0-9a-f]{64}$/.test(payload.canonical_sha256)
-        && typeof payload.decomposition_id === 'string'
-        && payload.decomposition_id.length > 0
-        && typeof payload.canonical_prompt === 'string'
-        && payload.canonical_prompt.startsWith('R4IMG1;sha256=')
-        && payload.visual_understanding === false
-        && Array.isArray(payload.patches);
-    if (!valid) throw invalidResponse();
-    return payload;
+    const header = (name) => {
+        const value = response.headers.get(name);
+        if (!value) throw invalidResponse();
+        return value;
+    };
+    const schema = header('x-uor-image-schema');
+    const sourceBlake3 = header('x-uor-source-blake3');
+    const decompositionId = header('x-uor-decomposition-id');
+    const responseWidth = Number(header('x-uor-image-width'));
+    const responseHeight = Number(header('x-uor-image-height'));
+    const responseColumns = Number(header('x-uor-grid-columns'));
+    const responseRows = Number(header('x-uor-grid-rows'));
+    const patchCount = Number(header('x-uor-patch-count'));
+    if (schema !== 'uor-r4.image-decomposition/1'
+        || !/^[0-9a-f]{64}$/.test(sourceBlake3)
+        || decompositionId.length > 128
+        || responseWidth !== width
+        || responseHeight !== height
+        || responseColumns !== columns
+        || responseRows !== rows
+        || patchCount !== columns * rows) {
+        throw invalidResponse();
+    }
+    const canonical = new Uint8Array(await response.arrayBuffer());
+    const magic = [82, 52, 73, 77, 71, 48, 48, 49];
+    if (canonical.length < magic.length
+        || canonical.length > 52 + 32 * 32 * 40
+        || magic.some((byte, index) => canonical[index] !== byte)) {
+        throw invalidResponse();
+    }
+    return {
+        schema,
+        canonical_hex: toHex(canonical),
+        source_blake3: sourceBlake3,
+        width,
+        height,
+        grid: { columns, rows },
+        decomposition_id: decompositionId,
+    };
 }

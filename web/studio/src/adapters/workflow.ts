@@ -86,8 +86,12 @@ export interface Attachment {
     reattachRequired?: boolean;
     decomposition?: {
         schema: string;
-        source_sha256: string;
-        canonical_prompt: string;
+        canonical_hex: string;
+        source_blake3: string;
+        width: number;
+        height: number;
+        grid: { columns: number; rows: number };
+        decomposition_id: string;
     } | null;
 }
 

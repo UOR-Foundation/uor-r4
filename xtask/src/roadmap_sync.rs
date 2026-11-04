@@ -1023,7 +1023,10 @@ fn retain_only(items: &[Item], p: &mut Plan, only: Option<&str>) -> Result<(), S
         p.creates.retain(|create| create.id == id);
         p.updates.retain(|update| update.id == id);
         p.closes.retain(|(item, _)| item == id);
-        let selected = items.iter().find(|item| item.id == id).expect("selected item exists");
+        let selected = items
+            .iter()
+            .find(|item| item.id == id)
+            .expect("selected item exists");
         let labels = labels_for(selected);
         p.labels.retain(|label| labels.contains(label));
         if let Some(index) = milestone_index(&selected.milestone) {

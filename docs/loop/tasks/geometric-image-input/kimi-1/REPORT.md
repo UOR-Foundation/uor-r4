@@ -1,53 +1,45 @@
 # REPORT: deterministic integer R4 image decomposition and Studio input
 
-Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`. Final exact head and external verification are recorded on the PR.
+Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-image-input.md) (#3619), dependent on delivered [studio-conversational-composer](../../../../roadmap/items/studio-conversational-composer.md) (#3608). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Original base: `6729e5d507bd39ef400c6515bc29b75f97e682d7`. Final exact head and external verification are recorded on the PR.
 
 ## What did not work
 
-- The vision tests initially had 24 missing-API compile failures. After the first implementation, two independent test oracles were wrong: one mixed x/y rectangle fields and one used RGB rather than luma differences for edges. Those expectations were corrected to the designed coordinates and luma-derived 164/92 values; production was not tuned to them.
-- Native image tests initially returned 501. Two negative fixtures then proved invalid rather than the server: four ASCII bytes are valid RGBA, and an all-zero canonical grid was too compressible to overflow the 64-position fixture. The tests now use a wrong-length body and four valid image parts to prove 413.
-- The pre-existing HTTP busy test failed twice in parallel because the first 40-token stream finished before the second request; it passed in isolation. The same HTTP 429 assertion now runs while holding the server permit, followed by a normal stream, removing timing dependence without weakening coverage.
-- The first real browser image send failed with `at least one message is required`. `normaliseMessages` dropped every content-part array. A failing-first API regression now preserves native/custom parts unchanged, and the real send works.
-- The first reattach send stayed at `streaming…` because preparation threw before request IDs were captured and outside the `try`. A failing-first lifecycle regression now drives the same reattach error through correlated cleanup. The real browser shows the explicit error and no hanging generation.
-- Whole-crate Clippy with `-D warnings` reports 121 pre-existing findings in untouched integer files; those unrelated sources were not rewritten. The new vision crate is Clippy-clean and the touched native files produced no new findings.
-- The first WASM build used the host's third-party `cargo` shim and failed on `cargo metadata`. Rebuilding with rustup Cargo on PATH succeeded; no source workaround was added.
-- Browser Stop was not retested in this unit and remains outside its evidence. No visual understanding, useful-chat, production, M4/M7 completion, trained multimodal artifact, captioning, recognition, or visual question answering is claimed.
+- Merging current `main` replaced the earlier JSON/prompt contract with canonical `R4IMG001` bytes but left the browser expecting the retired fields and the native parser without server issuance. Failing-first fixtures produced three Studio failures and a missing `issue_decomposition` native API. Two test-only configuration-shadowing errors were corrected before accepting the native RED result.
+- The first real current-head pixel-A send returned a truthful 413: the merged verbose R4 text required 206 positions of the artifact's 192-position context. A compact-renderer regression failed on the missing `R4IMG1/1x1/1x1/1:` payload before the lossless base64 encoding was added.
+- The broad OpenAI suite again reproduced a timing-dependent busy-test failure: a 40-token stream finished before the second request, turning expected 429 into 200. The fixture now holds a generation permit explicitly, asserts 429, releases it, and asserts a normal stream; production busy behavior did not change.
+- The complete integer run passes 452 library tests and all binary tests with one ignored, but six unrelated adversarial token-boundary tests fail because external tokenizer/bundle fixtures are absent. Those failures are not presented as passes or as image regressions.
+- Workspace-wide rustfmt reports many untouched baseline diffs. Only branch-local Rust formatting was corrected; unrelated files were not reformatted.
+- DeepSeek's draft #3628 initially duplicated the Studio unit, then merged with its compact renderer while this repair was underway. This branch is now a follow-up to that public implementation, not a competing claim that Canvas or deterministic decomposition was first built here.
 
 ## What changed
 
-- New internal `uor-r4-vision` crate: checked integer RGBA alpha composition over black, luma, rounded patch means, two chroma axes, directional edges, signed Q12 features, odd-dimension partitions, source SHA-256, and strict versioned canonical prompts. Dimensions are bounded to 256 and grids to 16. No float, matmul, learned captioner, external vision model, or semantic label exists.
-- Native `/v1/images/decompose` enforces octet-stream, authenticated loopback, explicit `X-UOR-Width`/`Height`/`Grid`, exact body length, and the same limits. A bounded 64-entry in-memory registry issues decomposition IDs. `uor_r4_image` accepts only schema `uor-r4.image/1` with the exact server-issued ID, source hash, canonical-prompt SHA-256, and canonical prompt before ordinary context preflight; recomputed checksums cannot forge issuance. Image parts are accepted only in user turns. Ordinary native `image_url` and other unsupported families remain 501.
-- Browser `image_input.js` supports raster paste/drop/picker through Canvas, proportional 256×256 downsampling, RGBA transport, object-URL/bitmap cleanup, and visible decode errors. The composer shows previews, names/sizes, removal, and `R4 patch input — experimental; not visual understanding`.
-- Native preparation occurs only on explicit Send inside the guarded async lifecycle, with the abort signal passed through decomposition and between images. Aborts finish as stopped rather than errors. Custom providers use ordinary `image_url`; local WASM refuses images. Image bytes/previews stay in memory, only a reattach marker persists, and reload produces an explicit reattach-required placeholder and error rather than a pretend image.
-- `src-tauri/Cargo.lock` and the shared `Attachment` type record only the new internal dependency/data shape. The typed library remains unmounted; #3500 and #3569 remain open.
+- DeepSeek's delivered `uor-r4-vision` and native ingestion remain the upstream base: checked integer RGBA patches, two signed Q12 R4 vectors, canonical `R4IMG001` bytes, Blake3 identity, bounded query/octet-stream transport, and strict canonical parsing. No float, matmul, learned captioner, external vision model, or semantic label exists.
+- The native server now retains at most 64 issued decompositions in a mutex-protected FIFO registry. `/v1/images/decompose` returns `X-UOR-Decomposition-Id` and exposes it through CORS. A flat native `uor_r4_image` part requires exactly eight fields: `type`, `schema`, `canonical_hex`, `source_blake3`, `width`, `height`, `grid`, and `decomposition_id`. The complete content must match the issued record. Unknown, expired, substituted, and non-user parts fail with 400; valid replacement bytes and recomputed hashes do not bypass issuance.
+- Accepted images render as a compact base64 payload containing every big-endian signed Q12 value, prefixed by dimensions/grid/patch count. This is lossless and avoids the 206-position verbose-text overflow without truncating features. The source hash remains validated transport identity rather than prompt text.
+- Browser `image_input.js` posts exact RGBA in the query/octet-stream contract with the generation abort signal and `cache: 'no-store'`. It reads canonical binary bytes, validates all identity headers and bounds, emits lowercase canonical hex, and preserves server error messages. `apiMessages` emits the exact flat part. Existing previews, removal, exact experimental label, abort/stopped lifecycle, custom `image_url`, local-WASM refusal, and reload reattachment remain intact.
+- `src-tauri/Cargo.lock` records the internal dependency. The typed library remains unmounted. Scoped roadmap sync filters issue operations and milestone checklist/label edits to the selected item. #3500 and #3569 remain open.
 
 ## Measurements and checks
 
-- Vision: **9/9 unit + doc tests PASS**, formatting and Clippy `-D warnings` PASS. Fixtures cover exact 1×1 bytes/hash, uniform/asymmetric/odd/horizontal/vertical/alpha values, Q12 signs, deterministic repeat, controlled pixel changes, strict canonical validation, and bounds/overflow.
-- Native: **15/15 OpenAI integration tests PASS** and **451 library/binary tests PASS, 1 ignored**. Exact decomposition, changed hashes, canonical-tamper and non-user rejection, capabilities, strict extension errors, context overflow, CORS headers, and all previous routes/admission are covered.
-- Studio: **33 files / 278 Vitest tests PASS**, **33 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime page checks and desktop checks PASS with zero unexpected external requests. Custom `image_url` and native R4 content parts survive normalization; provider errors remain verbatim.
-- Native serving audit: **FULL PASS**, 96 symbol ranges and 239 reachable functions, zero forbidden instructions; integer multiply/divide remains within D80/D81. Updated release SHA-256 `197bd998525dcd7b0aed49a9a04f0935fae897e6d526ae280263649bdd506b76`.
-- Updated WASM: **7/7 serving audit PASS**, zero floats; 675,518 bytes, SHA-256 `3439aa1023e6b9346bc29fdc3d4b92153d40415e2fa5c7009df15b98cd91df09`. Studio worker passes against this exact bundle.
+- Post-alignment Studio: **33 files / 278 Vitest tests PASS**, **33 Node tests PASS**, typecheck and Vite build PASS. Studio worker/static/runtime-page and desktop checks PASS with zero unexpected external requests.
+- Native: **14/14 OpenAI integration tests PASS** after the compact-renderer and deterministic busy-fixture repairs. Vision: **9/9 PASS**. xtask: **222/222 PASS**, including scoped roadmap sync.
+- Full integer library/binary run: **452 library tests PASS, 1 ignored**, and every binary test passes. The separate six-fixture-dependent adversarial failures are disclosed above.
+- Scoped rustfmt on the branch's Rust files and `git diff --check` PASS. Final repository gates, native/WASM audits, GitHub checks, exact-head review, and fresh-main verification remain external delivery steps and are not claimed here.
 
 ## Real browser and native evidence
 
-Used the existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192, with the established W2 tokenizer and updated native release.
+Used existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192, with the established W2 tokenizer and a rebuilt native release.
 
-- Real file-dialog upload of scratch 1×1 `pixel-a.bmp` showed a preview and the exact experimental label. Sending `Hi` returned `I.`: **3 completion / 117 prompt / 120 total tokens**, 63.9 tok/s, TTFT 45.646 ms, elapsed 46.958 ms.
-- Removing A and uploading one-byte-changed `pixel-b.bmp` then sending `Hi` returned `I.`: **3 / 134 / 137**, 77.9 tok/s, TTFT 37.843 ms, elapsed 38.514 ms.
-- Direct native decomposition returned different source hashes: A `78d46b99b22a762639ee0c3ec19b4b8e886b2a616ae9f72b21972a3338cb6e59`; B `d1827a84bd963254d848651b558b5b98b92340d0544556143167059be1f62dbb`.
-- Reload showed `Previous image — reattach required`; Send produced the visible error `Reattach Previous image — reattach required after reload; image bytes are not persisted.` No bytes or launch token were printed or persisted. Browser tab and native server were stopped.
-- Scratch BMPs were generated outside git and are not corpus/evidence of visual understanding. No image-quality or semantic score was run.
+- Current text-only turn returned `I.`: **15 prompt / 3 completion / 18 total tokens**, 387.3 tok/s, TTFT 7.210 ms, elapsed 7.746 ms. ArrowUp restored `Hello native` in the composer.
+- The first current-head pixel-A turn reached native preflight and returned the explicit **206 of 192** context error described above. It did not generate or claim visual understanding.
+- The compact renderer's real pixel-A/B sends and reload check are **NOT_RUN yet** at this report checkpoint. Earlier image results from other heads are historical and are not reused as current-head evidence.
+- A real delayed-browser Stop remains NOT_RUN; the automated native-preparation abort regression passes with outcome `stopped`.
 
 ## Roadmap and delivery notes
 
-- The global roadmap sync dry run proposed unrelated updates, so a tested `--only` scope was added to the existing Rust sync command. It filters issue operations after full planning and restricts labels/checklist edits to the selected milestone. `roadmap sync --only geometric-image-input --apply` updated and closed only #3619 and its M7 checklist, then generated `issues.json` and the 139-item roadmap with the new row. No unrelated issue or label was edited.
-- Final repository gates, local policy, fresh exact-head review, GitHub checks, protected queue, and fresh-main verification are external records and will be posted only after they exist.
-- Modern Web Guidance `accessibility` informed decorative preview alt text and dynamic error semantics. No Canvas-specific guide matched; existing native Canvas/fetch patterns and live error regions were retained.
-
-## Checks run at the head
-
-The original implementation is committed through `4b54042812f0ac9fbefa0f765dbd43ef61874bb6`; final repair-head identity and all delivery checks are external verification records on the PR. The measured unit/native/Studio/browser/audit results above are actual command output; protected GitHub delivery is not claimed here.
+- `main` now contains DeepSeek's #3628 Studio implementation and #3630 evidence repair. This follow-up preserves those changes and adds issuance, schema alignment, substitution/expiry coverage, and current-head verification. It does not duplicate their authorship or close an already closed item as if it were still open.
+- The final PR should reference #3619 and #3628, plus #3500/#3569 without closing them. Final roadmap/issue state must be read from fresh `main` before any sync; no unrelated issue edits are allowed.
+- No production publish, paid provider, useful-chat, production-readiness, M4/M7 completion, trained multimodal, captioning, recognition, or visual-question-answering claim is made.
 
 ## Skills used
 
@@ -55,9 +47,9 @@ Isolated worktrees, plan execution, test-driven development, systematic debuggin
 
 ## Still open
 
-- Browser Stop was not retested here. No production publish or visual-understanding/useful-chat claim is made. A future trained multimodal artifact and registered evaluation are required for image question answering.
-- #3500 and #3569 remain open. The generated roadmap mapping and 139-item view are current. Unrelated whole-crate Clippy findings remain outside this unit.
+- Compact-renderer real image turns, final audits/gates, exact-head review, protected delivery, and fresh-main verification remain to be completed. Browser Stop was not retested.
+- #3500 and #3569 remain open. External-fixture adversarial failures and unrelated baseline formatting findings remain outside this unit.
 
 ## Plain summary
 
-Studio can now accept raster pictures and turn them into deterministic integer R4 patches before sending them to native `uor-chat`. Text and image messages work with exact usage, changed pixels change hashes, and reload requires reattachment. This is representation and transport, not visual understanding.
+The native and browser protocol now agree on canonical binary R4 image input, and the server rejects content that was not actually issued to that client. Tests pass, and native text chat works in the real browser. Compact image turns still need their final real-browser verification before this unit can be called delivered.

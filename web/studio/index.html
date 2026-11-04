@@ -1525,16 +1525,30 @@
                     if (item.reattachRequired) throw new Error('Reattach ' + String(item.name || 'the image') + ' after reload; image bytes are not persisted.');
                     if (native) {
                         var decomposition = item.decomposition;
-                        if (!decomposition || decomposition.schema !== 'uor-r4.image/1' || !decomposition.source_sha256 || !decomposition.canonical_sha256 || !decomposition.canonical_prompt || !decomposition.decomposition_id) {
+                        if (!decomposition
+                            || decomposition.schema !== 'uor-r4.image-decomposition/1'
+                            || typeof decomposition.canonical_hex !== 'string'
+                            || !/^[0-9a-f]+$/.test(decomposition.canonical_hex)
+                            || !/^[0-9a-f]{64}$/.test(decomposition.source_blake3)
+                            || !Number.isInteger(decomposition.width)
+                            || !Number.isInteger(decomposition.height)
+                            || !decomposition.grid
+                            || !Number.isInteger(decomposition.grid.columns)
+                            || !Number.isInteger(decomposition.grid.rows)
+                            || typeof decomposition.decomposition_id !== 'string'
+                            || !decomposition.decomposition_id) {
                             throw new Error('Reattach ' + String(item.name || 'the image') + '; its native R4 decomposition is unavailable.');
                         }
-                        parts.push({ type: 'uor_r4_image', uor_r4_image: {
+                        parts.push({
+                            type: 'uor_r4_image',
                             schema: decomposition.schema,
-                            source_sha256: decomposition.source_sha256,
-                            canonical_sha256: decomposition.canonical_sha256,
-                            canonical_prompt: decomposition.canonical_prompt,
+                            canonical_hex: decomposition.canonical_hex,
+                            source_blake3: decomposition.source_blake3,
+                            width: decomposition.width,
+                            height: decomposition.height,
+                            grid: { columns: decomposition.grid.columns, rows: decomposition.grid.rows },
                             decomposition_id: decomposition.decomposition_id,
-                        } });
+                        });
                     } else {
                         if (!item.imageUrl) throw new Error('Reattach ' + String(item.name || 'the image') + ' before sending it to this provider.');
                         parts.push({ type: 'image_url', image_url: { url: item.imageUrl } });
@@ -1552,7 +1566,6 @@
                     if (app.abortController && app.abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
                     if (image.reattachRequired || !image.rgba) throw new Error('Reattach ' + String(image.name || 'the image') + ' after reload; image bytes are not persisted.');
                     image.decomposition = await decomposeNativeImage({ config: app.apiConfig || configFromSources(), image: image, signal: app.abortController && app.abortController.signal });
-                    image.content = image.decomposition.canonical_prompt;
                     image.rgba = null;
                     document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: image }));
                 }

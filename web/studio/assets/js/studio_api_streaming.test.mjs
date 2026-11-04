@@ -68,7 +68,7 @@ test('text and native image content parts survive request normalization unchange
     const payload = { choices: [{ index: 0, message: { role: 'assistant', content: 'I.' }, finish_reason: 'stop' }] };
     const messages = [{ role: 'user', content: [
         { type: 'text', text: 'Hi' },
-        { type: 'uor_r4_image', uor_r4_image: { schema: 'uor-r4.image/1', source_sha256: 'a'.repeat(64), canonical_prompt: 'R4IMG1;sha256=' + 'a'.repeat(64) + ';size=1x1;grid=1;q12=304,-128,144,0' } },
+        { type: 'uor_r4_image', schema: 'uor-r4.image-decomposition/1', canonical_hex: '5234494d4730303166697874757265', source_blake3: 'a'.repeat(64), width: 1, height: 1, grid: { columns: 1, rows: 1 }, decomposition_id: 'r4img-test' },
     ] }];
     let request;
     globalThis.fetch = async (url, init) => {

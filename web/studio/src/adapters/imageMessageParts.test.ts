@@ -13,17 +13,19 @@ function factory(apiConfig: unknown, attachments: unknown[]) {
     ) as (conversation: { messages: { role: string; content: string }[] }) => { role: string; content: unknown }[];
 }
 
-const canonical = 'R4IMG1;sha256=' + 'a'.repeat(64) + ';size=1x1;grid=1;q12=304,-128,144,0';
+const canonicalHex = '5234494d4730303166697874757265';
 const image = {
     name: 'pixel.png',
     kind: 'image',
-    content: canonical,
+    content: '',
     imageUrl: 'data:image/png;base64,preview',
     decomposition: {
-        schema: 'uor-r4.image/1',
-        source_sha256: 'a'.repeat(64),
-        canonical_sha256: 'b'.repeat(64),
-        canonical_prompt: canonical,
+        schema: 'uor-r4.image-decomposition/1',
+        canonical_hex: canonicalHex,
+        source_blake3: 'a'.repeat(64),
+        width: 1,
+        height: 1,
+        grid: { columns: 1, rows: 1 },
         decomposition_id: 'r4img-test',
     },
 };
@@ -34,7 +36,7 @@ describe('API image content parts', () => {
         const messages = apiMessages({ messages: [{ role: 'user', content: 'Hi' }] });
         expect(messages[0].content).toEqual([
             { type: 'text', text: 'Hi' },
-            { type: 'uor_r4_image', uor_r4_image: image.decomposition },
+            { type: 'uor_r4_image', ...image.decomposition },
         ]);
     });
 
