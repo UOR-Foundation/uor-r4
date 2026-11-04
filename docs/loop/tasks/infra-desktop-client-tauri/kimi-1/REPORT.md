@@ -35,6 +35,7 @@ Lab: kimi. Item: `infra-desktop-client-tauri` (#2826). Delivery scope: developme
 The final packaged app was exercised through the actual macOS window and native sheets:
 
 - Existing `Hi` history displayed 16 completion tokens, exact usage `19/16/35`, `14985.9 tok/s`, TTFT `0.459 ms`, total `1.068 ms`. This is the earlier synthetic timing record, not a new quality benchmark.
+- At the merged head, a fresh GUI `Hi` returned 16 tokens, exact usage `19/16/35`, `22984.4 tok/s`, TTFT `0.348 ms`, total `0.696 ms`. Normal exit left no app or sidecar. This is synthetic protocol evidence, not useful conversation.
 - Two projects each containing `note.txt` were opened through native folder grants. Project B displayed `Project B original`; switching back to A restored `Project A edited through native host`. Saving A produced exactly `Project A edited through native host\n` while B remained exactly `Project B original\n`. The UI reported `Saved to disk`.
 - Remote MCP at `127.0.0.1:9000/mcp` showed `Connected · 1 tool`; the parented approval sheet explicitly said `A credential will be sent to this server.` `read_file` returned `native remote result`.
 - Stdio approval showed the exact in-grant executable, `[]` args and project A working directory. `read_file` returned `stdio result`. The separate out-of-grant attempt was refused before execution.
@@ -55,7 +56,7 @@ CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target \
 Bundle: `/Users/casey.allard/uor-r4/local/kimi/harness-app-target/release/bundle/macos/UOR Harness.app` (unsigned development package).
 
 - `UOR_TAURI_APP=... UOR_DESKTOP_SHA256=<fresh executable hash> python3 scripts/tests/test_tauri_app.py`: **2/2 PASS**.
-- Desktop executable SHA-256: `81ee6f5122f29a2d12a5b66e2d004502cb6d69b05d2743302c4612eec13ff152`.
+- Desktop executable SHA-256: `55597310da1b886eea364abbb7e36608fd441650a0bc364b6b1d7e489bb0bd4a`.
 - Sidecar SHA-256: `f4f36c72baea6b0fb76c72ff511cf8e9615fd328022d3b08937660b28cc05f7e`.
 - Stack SHA-256: `d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df`.
 - Tokenizer SHA-256: `6758318dbcad5925a550103a5c2ee41e35898c30a7daf066da09b0159a41c57b`.
@@ -69,7 +70,7 @@ Bundle: `/Users/casey.allard/uor-r4/local/kimi/harness-app-target/release/bundle
 - GUI-feature desktop: **5** library, **16** controls, **6** MCP, **7** review and **9** sidecar tests passed.
 - Python runtime preparation **6/6** and packaged app **2/2** passed.
 - `cargo fmt --check`, `git diff --check`, runtime preparation, resource identity and packaged app verification passed. No GPU or paid compute was used.
-- The first local PR check failed only because an earlier REPORT lacked the required headings; those are now corrected. Full `loop pr-check --local` and `loop gates --full` must still pass at the delivery head.
+- The first local PR check failed only because an earlier REPORT lacked the required headings; those are now corrected. Current `loop pr-check --local` is PASS with only pre-existing advisory warnings, and `loop gates --full` is **12/12 GREEN**.
 
 ## Skills used
 
@@ -81,7 +82,7 @@ Bundle: `/Users/casey.allard/uor-r4/local/kimi/harness-app-target/release/bundle
 
 ## Still open
 
-Run loop checks and fresh-context exact-head adversarial review, deliver through the protected PR/queue, verify fresh `main`, publish only the runtime allowlist to Pages, and clean regenerable local files without deleting evidence or other labs' work. #2826 remains open; use `References #2826`, not `Closes`.
+Run fresh-context exact-head adversarial review, deliver through the protected PR/queue, verify fresh `main`, publish only the runtime allowlist to Pages, and clean regenerable local files without deleting evidence or other labs' work. #2826 remains open; use `References #2826`, not `Closes`.
 
 ## Plain summary
 
