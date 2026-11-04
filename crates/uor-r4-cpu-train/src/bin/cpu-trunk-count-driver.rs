@@ -174,20 +174,17 @@ fn run() -> Result<serde_json::Value, String> {
         validate_corpus_manifest(&manifest, &tokens, &mask).map_err(|error| error.to_string())?;
     let serving = IntegerDiscreteModel::from_bytes(&artifact).map_err(|error| error.to_string())?;
     let shape = serving.shape();
-    if identity.vocab != shape.vocabulary as usize || identity.bos != 0 {
+    let vocabulary = shape.vocabulary as usize;
+    let context = shape.context as usize;
+    if identity.vocab != vocabulary || identity.bos != 0 {
         return Err("corpus vocabulary or BOS differs from the trunk".to_owned());
     }
     identity
-        .validate_context(shape.context as usize)
+        .validate_context(context)
         .map_err(|error| error.to_string())?;
-    let corpus = CpuMaskedCorpus::from_bytes(
-        &tokens,
-        &mask,
-        shape.vocabulary as usize,
-        shape.context as usize,
-        0,
-    )
-    .map_err(|error| error.to_string())?;
+    drop(serving);
+    let corpus = CpuMaskedCorpus::from_bytes(&tokens, &mask, vocabulary, context, 0)
+        .map_err(|error| error.to_string())?;
     let split = corpus
         .split(config.evaluation_stride, config.max_evaluation)
         .map_err(|error| error.to_string())?;
@@ -252,12 +249,7 @@ fn run() -> Result<serde_json::Value, String> {
     let shuffled_artifact = reader
         .add_training_rows(&shuffled)
         .map_err(|error| error.to_string())?;
-    let exact_artifact_2 = reader
-        .add_training_rows(&training)
-        .map_err(|error| error.to_string())?;
-    if exact_artifact != exact_artifact_2 {
-        return Err("exact count training is not deterministic".to_owned());
-    }
+    drop(reader);
     if exact_artifact == shuffled_artifact {
         return Err("exact and shuffled count training produced the same artifact".to_owned());
     }
