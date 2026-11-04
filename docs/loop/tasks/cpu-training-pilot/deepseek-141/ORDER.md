@@ -1,8 +1,7 @@
 # ORDER: cpu-training-pilot, deepseek-141 (content-serving scope)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Base: `70f45367d`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
+(#3506). Base: `70f45367d`.
 
 ## Goal
 
