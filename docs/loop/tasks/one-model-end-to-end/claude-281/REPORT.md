@@ -8,7 +8,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3680, item #3407. Plan step: THE ORDER of 
 - **The Bar** reads **Mechanism**: s_tt < 10 at both seeds. The model does not recall a far note even in its trained cell, on panels drawn as TRAIN was.
 - **What it closes:** P2b's read configuration (copy key 1, the earliest 16 matches averaged) at this recipe. It never closes the read (§4.2). The next read configuration, copy key 2 or the latest match, is chosen on claude-267's oracle.
 - **What phrasing does change is the reply's form, not its value:**
-  - on trained phrasings, 386–427 of about 615 replies open as the trained answer does ("It's …", "That's …", "{k} is …");
+  - on trained phrasings, 386–427 of 610–617 replies open as the trained answer does ("It's …", "That's …", "{k} is …");
   - on held-out phrasings, 139–173 do, and about 80 a panel are acknowledgements ("Okay, I'll remember …").
 - **Every instrument check passes**, I-0 to I-7. The four p-long recall files equal P2b's sealed ones byte for byte.
 - **The decode cache's four refusals** landed, each with a test that fails with its fix set aside.
@@ -38,11 +38,11 @@ Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pa
 
    The repair, at `64475a830`, is test only: the row-cut check decodes the prompts from length 5 up. In run 2 the test passes with the fix. With the fix set aside it fails on "a row cut left on the thread changed the forwards" (`prefills: 2, steps: 11, whole: 43`, first refusal "Hamming read's row cut"), and it passes again once the fix is restored. Run 2 is the sheet's one re-run, in new folders. Run 1's 26 files are sealed in the store under `run1/`.
 2. **The positive control recalls nothing.** q-tt, drawn as TRAIN was, states 0 of 283 far word answers at both seeds. q-td (0 of 287), q-dt (0 of 270) and p-long (0 of 306) read 0 as well.
-   - **The test's reach:** the sheet's power table sees a recall rate of 5% or more at both seeds. Zero at both seeds also bounds the rate at about 0.5%, by the rule of three over 566 far words. That bound is not pre-registered.
+   - **The test's reach:** the sheet's power table sees a recall rate of 5% or more at both seeds. Zero of 283 also bounds each seed's rate at about 1.1%, by the rule of three (3 / 283), for that seed's model. That bound is not pre-registered.
    - **Near notes and numbers miss too:**
      - no panel states a near word either (0 of 12–14 a panel, under 192 tokens back);
      - no q-tt number is stated (0 of 319), though 318 of them are values from TRAIN's own pool.
-   - **The one stated reply** in the whole run is p-long seed 2's " That's 97." (query 20), as in P2b.
+   - **The only stated replies** in the whole run are p-long seed 2's " That's 97." (query 20, a number 189 tokens back), memory on and memory out, as in P2b.
 3. **R2 cannot pick a data change.** Every gap compares zeros, so the phrasing gap and the value gap both fail at both seeds. That is what the Mechanism branch expects: R2 picks a next step only when R1 passes.
 4. **The laptop grade first read I-4 from the wrong file,** a reader fault. `grade-281.sh` looked for `decode_forwards` in each pass's `scored.jsonl`, and found none. The scorer prints it to stderr, `score.err`. The script now reads `score.err`. Nothing re-ran, and I-4 passes (Measurements).
 
@@ -64,8 +64,8 @@ Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pa
   | p-long | 81, 82 | 139, 173 |
   | q-dt | 80, 79 | 153, 151 |
 
-  So the trunk routes a trained question to its answer template, and the value it fills in is not the note's.
-- **The whole classification cost about $0.61,** both runs on one pod. That is inside the sheet's $3 bound because the decode cache made each 2,048 pass about 5 minutes.
+  So the reply's form follows the phrasing. Its value is the note's in neither. This unit does not measure which part of the model sets the form.
+- **The whole classification cost about $0.61,** both runs on one pod, inside the sheet's $3 bound. Its passes ran 305–320 s against the sheet's estimate of 441 s from claude-279's pod.
 
 ## What changed
 
@@ -145,7 +145,20 @@ Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pa
   - the sheet's FIT: NOT FIT at round 1 (two majors, both fixed), then FIT at round 2 (#3407, 6642210770);
   - the pre-run review: incomplete at round 1 (it ran out of context; the gap it named was fixed), then GO after fixes, in four narrow parts (6642548198);
   - the run 1 note (6642885669);
-  - the exact-head review of this PR (recorded by `loop review`).
+  - the exact-head review of this PR, at `aa4f64ac6`, in two fresh slices:
+    - **the code:** APPROVE, no blocker. It confirms that nothing can change a scored token or the cache-off path, and that each test reaches the path it guards. Its three minors and two nits are [Still open](#still-open), item 2.
+    - **a claims check of every number here** against the run's files: APPROVE WITH CHANGES, no blocker. Its fixes are in this REPORT, the notebook row and the item line:
+      - two overclaims: the Plain summary and R3 named the read or the trunk as the cause, which this test cannot separate from the recipe; Still open named P6 as the next change, which only the oracle ranks;
+      - the rule-of-three bound, now per seed;
+      - a misstated cause of the cost margin;
+      - two nits.
+
+      The items it had no budget to check were checked by hand:
+      - the cited numbers of claude-267, claude-276 and claude-279;
+      - the CPU suite's 276 tests and the set-asides' line numbers;
+      - that I-0's job required each named test to pass;
+      - the stated replies in all 16 recall files. That found query 20 stated memory out as well, now in What did not work, item 2.
+  - It is recorded by `loop review`.
 
 ## Skills used
 
@@ -158,12 +171,17 @@ None applied.
    - copy key 2: 3,506, at purity 0.800;
    - the mixed pair `k2>k1`: 4,388, the most.
 
-   The mixed pair is P6's configuration (#3394's mixed copy pair), so this result points the next training change at P6. This unit does not change the order of THE ORDER's remaining steps.
+   The oracle, not this test, ranks the mixed pair highest: copy key 2, else copy key 1, at the latest match. That pair is P6's configuration (#3394's mixed copy pair). Which configuration the next training unit runs is for that unit's own sheet. This unit does not change the order of THE ORDER's remaining steps.
    - **It is a training unit:** a sheet, a FIT and a pre-run review, then a run at 2,048.
    - **This test does not separate** the read's configuration from the recipe (8,192 steps of 2,048 × 4 on this TRAIN). A miss there leaves the recipe open.
-2. **The real-text corpus** (THE ORDER step 6) still stands. This result does not clear the data; it says the read fails first, even on data drawn as TRAIN was.
-3. **The tok/s difference between pods** (137–148 here against claude-279's 98.7, with the same cache) is not explained. The kernel unit (#3678) times a cached step, and should time it on one pod type, or report the host.
-4. **Then, as #2028 orders:**
+2. **The exact-head code review's points** (APPROVE, no blocker). Each only sharpens a diagnostic or a comment, and none is reached by a scored token. They are kept out of this PR, so the merged code is exactly the code the run qualified. They land with the next unit that scores with the cache:
+   - `first_refusal` stays `None` when no group is ever asked to prefill: every prompt already fills the window, or every reply is one token long. Such a pass reads `prefills 0, steps 0` with no reason given.
+   - "First" is per pass, and groups run shortest first, so an early group's short prompt or slide can hide a later group's refusal. A count per kind would show both.
+   - The epoch comment calls it "the identity of the reads set". It counts calls to `set_hamming_reads`, so an in-place update of the reads' tensors would not bump it. Nothing does that inside a decode.
+   - Two nits: a `ReadHook` name reaches `first_refusal` with its trailing comma, and a doc comment in `DecodeForwards` has a broken line.
+3. **The real-text corpus** (THE ORDER step 6) still stands. This result does not clear the data; it says the read fails first, even on data drawn as TRAIN was.
+4. **The tok/s difference between pods** (137–148 here against claude-279's 98.7, with the same cache) is not explained. The kernel unit (#3678) times a cached step, and should time it on one pod type, or report the host.
+5. **Then, as #2028 orders:**
    - the kernel unit (#3678): the generated kernel list first, then the measurement, then the fusion if the chains are at least 5% of a step;
    - the real-text corpus;
    - P4 (#3471);
@@ -172,11 +190,11 @@ None applied.
 
 ## Plain summary
 
-P2b trained the model on long conversations, then asked it about something it had been told much earlier. It never answered right. That could mean two things. Either it can recall, but only when the question is worded the way it saw in training, or it cannot recall at all yet.
+P2b trained the model on long conversations, then asked it about something it had been told much earlier. It almost never answered right: once, at one of its two training seeds. That could mean two things. Either it can recall, but only when the question is worded the way it saw in training, or it cannot recall at all yet.
 
-This unit asked again, this time worded exactly as in training. It still answered 0 of 283 at both training seeds. So the problem is not the new wording: the part of the model that should copy the earlier note into the answer does not do it at this setting. What the wording does change is the shape of the answer. Asked in the trained wording, the model answers "It's …", but with the wrong word. Asked in new wording, it often answers as if told something new: "Okay, I'll remember that."
+This unit asked again, this time worded exactly as in training. It still answered 0 of 283 at both training seeds. So the problem is not the new wording: the trained model does not recall the earlier note at this setting. This test cannot say whether the fault is the part that reads the note or the way it was trained. What the wording does change is the shape of the answer. Asked in the trained wording, the model answers "It's …", but with the wrong word. Asked in new wording, it often answers as if told something new: "Okay, I'll remember that."
 
-The next step is a different setting for that copying part, picked from an earlier measurement of which setting finds the right note.
+The next step tries a different setting for the read, chosen from an earlier measurement of which setting finds the right note.
 
 The scoring checks all held. The re-scored files match P2b's earlier ones byte for byte. The unit also hardened the scoring speed-up's safety checks. Both runs together cost about $0.61.
 

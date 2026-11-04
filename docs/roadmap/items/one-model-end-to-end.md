@@ -271,9 +271,9 @@ failed diagnostic cannot contaminate the next forward on that thread. See
   p-long's 306. So the Bar reads Mechanism: it does not recall a far note even
   in its trained cell, on panels drawn as TRAIN was. That closes P2b's read
   configuration (copy key 1, the earliest 16 matches averaged) at this recipe,
-  not the read. claude-267's oracle chooses the next one; its best DEV rule is
-  P6's mixed pair `k2>k1`. The phrasing changes the reply's form, not its
-  value: on trained phrasings 386–427 of about 615 replies open as the trained
+  not the read. claude-267's oracle, not this test, chooses the next one; it
+  ranks P6's mixed pair `k2>k1` highest on DEV. The phrasing changes the reply's
+  form, not its value: on trained phrasings 386–427 of 610–617 replies open as the trained
   answer does, against 139–173 on held-out phrasings, where about 80 a panel
   are acknowledgements. The unit also landed the decode cache's four refusals.
 - **A census of the data:**
