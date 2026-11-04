@@ -21,7 +21,7 @@ D84 CPU development research in `uor-r4-cpu-train` on the local Ryzen 9
 
 | Input | Identity |
 |---|---|
-| implementation source | `430fa8bc7ea8888593d13dfd3e30030e24a15f87` |
+| implementation source | `a340222fd65d6b658341cf1b11ada580de815c30` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -85,6 +85,32 @@ On each seed, evaluate the same 114 prompts with:
 Every arm uses the trained memory artifact, the exact integer writer and the
 shared `reply_stop` contract with a 16-token cap.
 
+## Commands
+
+Build the release driver at the pinned source, then run each seed:
+
+```text
+/usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 \
+  target/release/cpu-memory-panel-driver \
+  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-SEED-raw_both.uorlut \
+  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-tokens.u16 \
+  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-response-mask.u8 \
+  /home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/dev-manifest.json \
+  OUT \
+  --expected-artifact-sha256 ARTIFACT_PIN \
+  --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+  --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+  --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+  --expected-trained-sha256 TRAINED_PIN \
+  --expected-no-gate-reply-sha256 NO_GATE_PIN \
+  --steps 32 --keys 16 --per-key 16 --key-tokens 8 --reply-turn 8 \
+  --reply-cap 16 --seed SEED --termination-orbit-gate
+```
+
+`ARTIFACT_PIN`, `TRAINED_PIN` and `NO_GATE_PIN` are the seed-specific table
+values above. Run in seed order 1, then 2, each in a fresh `OUT`. Repeat seed 1
+in another fresh `OUT` with the same command and compare all non-timing fields.
+
 ## Bar
 
 On each seed, `orbit_gate` must:
@@ -103,7 +129,8 @@ geometric termination.
   pins.
 - Every gated cell has both classes; every control preserves its cell's
   signature multiset and both class counts.
-- The control changes at least one class assignment before public compute.
+- At least one gated cell's terminal/nonterminal signature multisets change,
+  not merely two duplicate signatures swapping labels.
 - At least one evaluation decision enters a gated cell. The gate and control
   report gated/ungated decision counts, so a zero-stop result is called a
   mechanism negative only after the rule was reached.
