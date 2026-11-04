@@ -1925,7 +1925,7 @@ mod tests {
             point_vote(&prototypes, &prototype_query, 1).unwrap(),
             prototype_token
         );
-        let (_random_prototypes, random_prototype_artifact) = (2..100)
+        let (random_prototypes, random_prototype_artifact) = (2..100)
             .find_map(|seed| {
                 let image = PointKeyImage {
                     width: prototypes.width,
@@ -1938,6 +1938,12 @@ mod tests {
                     .then_some((image, artifact))
             })
             .unwrap();
+        assert_eq!(random_prototypes.points, prototypes.points);
+        let mut treatment_targets = prototypes.targets.clone();
+        let mut control_targets = random_prototypes.targets.clone();
+        treatment_targets.sort_unstable();
+        control_targets.sort_unstable();
+        assert_eq!(control_targets, treatment_targets);
         let baseline_opening = evaluate_opening_outcomes(
             &memory_artifact,
             std::slice::from_ref(&held_out),
