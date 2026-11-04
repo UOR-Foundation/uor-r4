@@ -221,6 +221,14 @@ fn run() -> Result<serde_json::Value, String> {
         termination_gain_labels(&evaluation_samples).map_err(|error| error.to_string())?;
     let shuffled_labels = shuffle_termination_gain_labels(&training_labels, config.seed)
         .map_err(|error| error.to_string())?;
+    let shuffled_changed_terminal_rows = training_labels
+        .iter()
+        .zip(&shuffled_labels)
+        .filter(|(left, right)| left != right)
+        .count();
+    if shuffled_changed_terminal_rows == 0 {
+        return Err("shuffled termination labels did not change the subset".to_owned());
+    }
     if config.select_only {
         return Ok(serde_json::json!({
             "schema": "uor-r4.cpu-termination-gain-selection/1",
@@ -233,7 +241,7 @@ fn run() -> Result<serde_json::Value, String> {
                 "evaluation_terminal": evaluation_labels.iter().filter(|terminal| **terminal).count(),
                 "evaluation_nonterminal": evaluation_labels.iter().filter(|terminal| !**terminal).count(),
                 "shuffled_terminal": shuffled_labels.iter().filter(|terminal| **terminal).count(),
-                "shuffled_changed_terminal_rows": training_labels.iter().zip(&shuffled_labels).filter(|(left, right)| left != right).count(),
+                "shuffled_changed_terminal_rows": shuffled_changed_terminal_rows,
             },
         }));
     }
@@ -290,6 +298,9 @@ fn run() -> Result<serde_json::Value, String> {
     if true_steps.is_empty() {
         return Err("true-label termination training accepted no move".to_owned());
     }
+    if shuffled_steps.is_empty() {
+        return Err("shuffled-label termination training accepted no move".to_owned());
+    }
     let true_after = true_trainer.reading().map_err(|error| error.to_string())?;
     let shuffled_after = shuffled_trainer
         .reading()
@@ -301,6 +312,15 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     if random_moves.len() != true_steps.len() {
         return Err("random-gain move count differs from the true trainer".to_owned());
+    }
+    if trained_artifact == memory_artifact {
+        return Err("true-label training returned the frozen artifact".to_owned());
+    }
+    if shuffled_artifact == memory_artifact {
+        return Err("shuffled-label training returned the frozen artifact".to_owned());
+    }
+    if random_artifact == memory_artifact {
+        return Err("random-gain control returned the frozen artifact".to_owned());
     }
     for (name, bytes) in [
         ("trained.uorlut", trained_artifact.as_slice()),
@@ -403,7 +423,7 @@ fn run() -> Result<serde_json::Value, String> {
             "evaluation_terminal": evaluation_labels.iter().filter(|terminal| **terminal).count(),
             "evaluation_nonterminal": evaluation_labels.iter().filter(|terminal| !**terminal).count(),
             "shuffled_terminal": shuffled_labels.iter().filter(|terminal| **terminal).count(),
-            "shuffled_changed_terminal_rows": training_labels.iter().zip(&shuffled_labels).filter(|(left, right)| left != right).count(),
+            "shuffled_changed_terminal_rows": shuffled_changed_terminal_rows,
         },
         "memory": {
             "k": memory.k,

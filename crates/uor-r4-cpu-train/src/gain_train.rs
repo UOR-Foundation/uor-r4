@@ -629,12 +629,7 @@ impl CpuTerminationGainTrainer {
     }
 
     pub fn reading(&self) -> Result<TerminationGainEvaluation> {
-        evaluate_termination_gain_samples(
-            &self.artifact,
-            &self.samples,
-            &self.labels,
-            self.trajectory.is_some(),
-        )
+        self.evaluate_artifact(&self.artifact)
     }
 
     pub fn train_step(&mut self) -> Result<TerminationGainStep> {
@@ -660,13 +655,7 @@ impl CpuTerminationGainTrainer {
                     let mut trial = gain.clone();
                     trial[coordinate] = after;
                     let artifact = patch_gain(&self.artifact, &trial)?;
-                    let reading = evaluate_termination_gain_samples(
-                        &artifact,
-                        &self.samples,
-                        &self.labels,
-                        self.trajectory.is_some(),
-                    )?
-                    .reading;
+                    let reading = self.evaluate_artifact(&artifact)?.reading;
                     if !termination_candidate_safe(&before, &reading)
                         || !termination_improves(&reading, &before)
                     {
@@ -720,6 +709,11 @@ impl CpuTerminationGainTrainer {
                 "termination-gain update lost complete CPU/serving parity",
             ));
         }
+        if best.reading.artifact_sha256 == before.artifact_sha256 {
+            return Err(invalid(
+                "termination-gain accepted move did not change the artifact",
+            ));
+        }
         self.artifact = best.artifact;
         Ok(TerminationGainStep {
             index,
@@ -731,6 +725,14 @@ impl CpuTerminationGainTrainer {
             after: best.reading,
             parity: Some(parity),
         })
+    }
+
+    fn evaluate_artifact(&self, artifact: &[u8]) -> Result<TerminationGainEvaluation> {
+        let Some(trajectory) = &self.trajectory else {
+            return evaluate_termination_gain_samples(artifact, &self.samples, &self.labels, false);
+        };
+        let outcomes = trajectory.termination_outcomes(artifact, &self.labels)?;
+        summarize_termination(artifact, self.samples.len(), &outcomes)
     }
 }
 
