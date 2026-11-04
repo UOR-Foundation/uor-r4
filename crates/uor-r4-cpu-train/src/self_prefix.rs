@@ -492,19 +492,29 @@ fn scan_sample(
 
 fn mapped_targets(
     scan: &PrefixScan,
-    _samples: &[MemoryWeightSample],
+    samples: &[MemoryWeightSample],
     config: SelfPrefixConfig,
 ) -> Result<BTreeMap<(usize, usize), u32>> {
     let mut targets = BTreeMap::new();
+    if scan.samples.len() != samples.len() {
+        return Err(invalid("self-prefix target sample count differs"));
+    }
+    for (sample_index, sample) in samples.iter().enumerate() {
+        let reference = normalized_reference(&sample.reply);
+        for (offset, &target) in reference.iter().enumerate().take(config.reply_cap) {
+            targets.insert((sample_index, offset), target);
+        }
+    }
+    if targets.is_empty() {
+        return Err(invalid("self-prefix target map is empty"));
+    }
     for (sample_index, sample_scan) in scan.samples.iter().enumerate() {
-        for decision in &sample_scan.decisions {
-            if decision.sample != sample_index {
-                return Err(invalid("self-prefix decision sample index differs"));
-            }
-            targets.insert(
-                (decision.sample, decision.reply_offset),
-                decision.reference_target,
-            );
+        if sample_scan
+            .decisions
+            .iter()
+            .any(|decision| decision.sample != sample_index)
+        {
+            return Err(invalid("self-prefix decision sample index differs"));
         }
     }
     if config.targets == SelfPrefixTargets::TrueLabels {
@@ -794,8 +804,8 @@ mod tests {
     use uor_r4_discrete::normalization_mechanism::orbit_root_coords;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::{
-        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsTrunkSnapshot,
-        IntegerStackModel,
+        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable,
+        FbsTrunkSnapshot, IntegerStackModel, MEMORY_PAD,
     };
 
     fn snapshot() -> FbsTrunkSnapshot {
@@ -845,6 +855,28 @@ mod tests {
             }],
             opening_weight: vec![1.0; snapshot.width],
             reply: None,
+        });
+        export_fbs_trunk_uorlut01(&snapshot).unwrap()
+    }
+
+    fn artifact_with_reply_memory(first_generated: u32) -> Vec<u8> {
+        let mut snapshot = snapshot();
+        snapshot.memory = Some(FbsMemorySnapshot {
+            k: 4,
+            key_window: snapshot.context,
+            opening: vec![FbsMemoryEntry {
+                key: vec![42, 43],
+                value: 8,
+            }],
+            opening_weight: vec![0.0; snapshot.width],
+            reply: Some(FbsReplyTable {
+                turn: 3,
+                entries: vec![FbsMemoryEntry {
+                    key: vec![3, 4, MEMORY_PAD, 1, MEMORY_PAD, first_generated],
+                    value: 9,
+                }],
+                weight: vec![1.0; snapshot.width],
+            }),
         });
         export_fbs_trunk_uorlut01(&snapshot).unwrap()
     }
@@ -936,6 +968,36 @@ mod tests {
     }
 
     #[test]
+    fn generated_scan_uses_reply_memory_after_the_opening() {
+        let plain = export_fbs_trunk_uorlut01(&snapshot()).unwrap();
+        let first = scan_sample(
+            &plain,
+            0,
+            &sample(),
+            &config(SelfPrefixMode::DynamicGenerated, false),
+        )
+        .unwrap()
+        .decisions[0]
+            .generated_token;
+        let artifact = artifact_with_reply_memory(first);
+        let on = scan_sample(
+            &artifact,
+            0,
+            &sample(),
+            &config(SelfPrefixMode::DynamicGenerated, true),
+        )
+        .unwrap();
+        let off = scan_sample(
+            &artifact,
+            0,
+            &sample(),
+            &config(SelfPrefixMode::DynamicGenerated, false),
+        )
+        .unwrap();
+        assert_ne!(on.decisions[1].query_q12, off.decisions[1].query_q12);
+    }
+
+    #[test]
     fn early_bos_counts_the_missing_fixed_horizon_as_wrong() {
         let artifact = export_fbs_trunk_uorlut01(&snapshot()).unwrap();
         let fabricated = PrefixScan {
@@ -955,9 +1017,13 @@ mod tests {
             prompt: vec![0, 1, 2],
             reply: vec![7, 8, 1],
         }];
-        let mut targets = BTreeMap::new();
-        targets.insert((0, 0), 7);
-        targets.insert((0, 1), 8);
+        let targets = mapped_targets(
+            &fabricated,
+            &samples,
+            config(SelfPrefixMode::DynamicGenerated, false),
+        )
+        .unwrap();
+        assert_eq!(targets.len(), 2);
         let reading = reading_from_scan(&artifact, &fabricated, &samples, &targets, 8).unwrap();
         assert_eq!(reading.fixed_horizon_decisions, 2);
         assert_eq!(reading.observed_decisions, 1);
@@ -1007,7 +1073,11 @@ mod tests {
             targets: SelfPrefixTargets::SameCellShuffled,
             ..config(SelfPrefixMode::StaticGenerated, false)
         };
-        let targets = mapped_targets(&scan, &[], config).unwrap();
+        let samples = [MemoryWeightSample {
+            prompt: vec![0, 3, 4],
+            reply: vec![10, 266, 20, 276, 1],
+        }];
+        let targets = mapped_targets(&scan, &samples, config).unwrap();
         assert_eq!(targets[&(0, 0)] % TARGET_CELLS, 10);
         assert_eq!(targets[&(0, 0)], 266);
         assert_eq!(targets[&(0, 1)], 10);
@@ -1116,7 +1186,11 @@ mod tests {
             targets: SelfPrefixTargets::SameCellShuffled,
             ..config(SelfPrefixMode::StaticGenerated, false)
         };
-        assert!(mapped_targets(&fabricated, &[], shuffled).is_err());
+        let vacuous_samples = [MemoryWeightSample {
+            prompt: vec![0, 3, 4],
+            reply: vec![10, 1],
+        }];
+        assert!(mapped_targets(&fabricated, &vacuous_samples, shuffled).is_err());
 
         let mut one = config(SelfPrefixMode::DynamicGenerated, true);
         one.reply_cap = 1;

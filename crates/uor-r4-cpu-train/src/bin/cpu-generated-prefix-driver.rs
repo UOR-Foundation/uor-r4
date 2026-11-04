@@ -419,6 +419,8 @@ fn run() -> Result<serde_json::Value, String> {
         "generated_top1_above_shuffled": dynamic_reading.generated_top1 > shuffled_reading.generated_top1,
         "teacher_top1_frozen": teacher_top1,
         "teacher_top1_dynamic": dynamic_teacher.top1_correct,
+        "frozen_admitted_only_writer_top1": admitted_only_top1(&frozen_eval),
+        "dynamic_admitted_only_writer_top1": admitted_only_top1(&dynamic_reading),
         "all_parity_exact": all_parity_exact,
         "static_shuffled_accepted": static_shuffled_accepted,
         "dynamic_shuffled_accepted": dynamic_shuffled_accepted,
@@ -454,6 +456,7 @@ fn run() -> Result<serde_json::Value, String> {
         "reply_cap": config.reply_cap,
         "arms": arm_reports,
         "bar": bar,
+        "rayon_workers": rayon::current_num_threads(),
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),
     });
@@ -535,6 +538,14 @@ fn ceil_three_sqrt(value: u64) -> u64 {
         root += 1;
     }
     root
+}
+
+fn admitted_only_top1(reading: &uor_r4_cpu_train::SelfPrefixReading) -> f64 {
+    if reading.target_admitted == 0 {
+        0.0
+    } else {
+        reading.writer_top1 as f64 / reading.target_admitted as f64
+    }
 }
 
 fn selection_json(
