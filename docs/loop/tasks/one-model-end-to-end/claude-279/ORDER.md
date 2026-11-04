@@ -1,81 +1,95 @@
-# ORDER: one-model-end-to-end, claude-279
+# ORDER: one-model-end-to-end, claude-279 (P3, cache unit 2: the Hamming read's step and the decode switch)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `f34f0b17c`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `f34f0b17c`. Draft PR #3673.
 
 ## Goal
 
-The item's done-when reads:
+Make scoring's decode use [claude-278](../claude-278/REPORT.md)'s exact step cache wherever the window fits, so a decode step stops re-running the whole window. Every scored file must stay byte-identical.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+- **Plan step:** Casey's 4 November plan, P3 (faster scoring), cache unit 2 of 2. The order on #2028 (6634218223) reads: "the Hamming read's step, the decode switch where the window fits, and a full re-run on slide".
+- **Why the switch pays at long windows:** at a 2,048 window, P2b's two queries files are about 98% of a scoring pass ([claude-277](../claude-277/REPORT.md)).
+  - Of their 18,879 decode steps after the first, 18,721 (99.2%) fit the window. That count comes from p-long's `queries.json` and the scorer's own cut (`query_prompts`), with 31 steps after the prompt.
+  - At a 192 window, 6,105 (32%) fit. The rest slide and keep the full re-run.
+- **What it changes in the model:** nothing the model computes. It adds three things:
+  - **The Hamming read's step.** The cache keeps each Hamming read's input residual for every position so far, plus each row's ids. A step then runs the read's own code over the whole window, with the query axis cut to the new position.
+    - Everything before the cut is the same op on the same tensors as the whole window's: the keys, the values and the asks.
+    - After the cut, every op works one query row at a time.
+    - The selection's distances and tie keys are exact small integers.
+  - **The decode switch,** in the batched decode (`decode_replies_with_mode`), which is the default for the samples and queries files.
+    - It prefills the prompt and then steps, for as long as each step's window fits.
+    - The first step that would slide the window, and any typed refusal, returns that group to today's whole-window re-run for the rest of its decode.
+  - **`--decode-cache 0|1` on `train-in-space`, default 1.** At 0 the scorer keeps today's re-run, so one binary runs both sides of the gate on one pod.
+- **Not in this unit:** the serial decode (`decode_reply_with_mode`: forced openings, served keys, read scopes and the writer). It keeps the full re-run. Its share of a pass is reported.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. Does another open PR or order hold the float trainer's files?
+2. Does a decode switch already exist?
+3. Do the caps hold one pod for the gates (at most 4 pods and $8/h across all labs)?
+4. Is the base `origin/main`?
+5. Has Casey written on #2028 since the order (6634218223)?
+
+**Result, at `f34f0b17c`: not cancelled.**
+1. No. No open PR changes a path under `crates/uor-r4-float-train` (`gh pr list` over every open PR's files).
+2. No. `in_space_long.rs` and `flock_read_hamming.rs` name neither `step_cached` nor `prefill_cached`.
+3. Yes. `uor-pod status`: 0 pods, $0/h of $8/h; 5 verified 5090 offers, the cheapest at $1/h.
+4. Yes. The base is claude-278's merge commit, `f34f0b17c76cac6c28e82fbc754163023948ba65`.
+5. No. The newest notes on #2028 are the lab's own, the last being 6634218223.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/harness/prep/one-model-end-to-end*`
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
 - `crates/uor-r4-float-train/src/geometric_stack_native.rs`
+- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
-- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
-- `crates/uor-r4-training/Cargo.toml`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-training/src/milestone_world_v2.rs`
+
+Every path is in the item's `scope:` list on `main`.
 
 ## Done when
 
-To fill in.
+1. **The Hamming read's step.**
+   - The read takes the first query position. Whole-window calls pass 0 and run as before, op for op.
+   - The step refuses the read's instruments, each a typed refusal: the decode cut, the row cut, the decision trace, and forced codes.
+   - Copy key 2 and the type spin are either covered by the GPU gate or refused.
+2. **The cache carries the Hamming reads.**
+   - Per read: the input residual at every position so far, `(batch, positions, width)` at f32.
+   - Each row's ids.
+   - The prefill captures both from its own forward, and a step appends one position.
+3. **The decode switch,** as in the Goal:
+   - turn-memory reply rows named in step rows;
+   - the opening row at the prefill, which is the whole-window forward;
+   - `--decode-cache`.
+4. **Unit 1's two deferred checks** (claude-278, Still open, item 2):
+   - the carry compare asserts that both caches hold the same number of layers, inputs and reads before it zips them;
+   - the old lowest-bit flip is rerun under the carry compare and reported, not gated.
+5. **The gates, on the laptop:**
+   - the crate's CPU tests pass;
+   - the stub-nvcc CUDA check compiles every target;
+   - a decode test on the CPU: cache on and off give the same tokens, through a window slide.
+6. **The gates, on one GPU pod.** The scoring passes re-score P2b's sealed checkpoints, so they run under a prep sheet with a fresh non-author FIT and a pre-run review (§4.5).
+   - **Step equals full, bit for bit (G1 widened):** the random six-layer trunk with P2b's two Hamming reads, given random rotations, margins and weights. It crosses:
+     - the retention reading, on and off;
+     - the served surrogates, on and off;
+     - the turn memory's reply table, on and off;
+     - prompts of 4, 7 and 33 positions, 12 steps each;
+     - batch 1 and 3.
+
+     Every step's points and every carry, the reads' residuals included, must equal the whole window's.
+   - **The negatives (G3 widened):** one flipped bit in a carried read residual fails the compare.
+   - **The decode switch:** a random model with the reads and the turn memory decodes the same tokens with the cache on and off, through a window slide.
+   - **The crate's CUDA lib suite** passes.
+   - **The scoring passes:** P2b's seed-1 checkpoints with P2b's commands, L192, S192 and L2048, each with `--decode-cache 0` and `1` on one pod.
+     - Every output file is byte-identical.
+     - The printed lines are identical but for the decode seconds.
+     - The REPORT gives tok/s per file for both sides.
+7. **The REPORT,** negatives first and tok/s first, with one notebook row and a line on the item.
 
 ## Stop and ask if
 
-To fill in.
+- **A step's bits differ from the whole window's,** and the cause is an op whose result depends on the launch's shape. Then the Hamming read stays refused in the step, and the trunk-only cache still serves models without the read. The REPORT names the op.
+- **Any scored file differs between cache on and off.** Then the default goes to 0, and the REPORT names the first file and row that differ.
+- **The pod needs more than about $3.**
