@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -222,11 +222,11 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
+TEST FITNESS: FIT - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: pending
+head: 92504acd7679e73c46d3eea4d5a47584b6033fb4
 implementation pin: a463a1c8d028348fed0c95494e5282eac7c5756e
-reviewer: pending
+reviewer: independent-subagent content_readout_serving_fit_2
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
