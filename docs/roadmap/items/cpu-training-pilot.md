@@ -169,7 +169,7 @@ replies and 48/114 seed-2 replies, but every BOS was premature and the exact
 count stayed zero. Equal-size disjoint shuffled-cell controls never fired.
 This resolves the missing-admission question but shows that cell identity alone
 does not separate the final row from ordinary continuation. See
-[deepseek-119](../../loop/tasks/cpu-training-pilot/deepseek-119/REPORT.md).
+[deepseek-120](../../loop/tasks/cpu-training-pilot/deepseek-120/REPORT.md).
 
 ## Done when
 

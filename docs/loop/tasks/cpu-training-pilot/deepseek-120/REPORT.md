@@ -1,4 +1,4 @@
-# REPORT: cpu-training-pilot, deepseek-119 (writer-cell termination gate)
+# REPORT: cpu-training-pilot, deepseek-120 (writer-cell termination gate)
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Prep:
@@ -15,10 +15,10 @@ Base: `2833c451e`.
   cells 30, 64 and 69 on seed 2 produced no BOS stop. Their reply digests were
   identical to no-gate.
 - **The learned majority is dominated by one corpus pattern.** Cell 1 held
-  92/102 seed-1 terminal training rows and produced six or seven additional
-  terminal observations across all seven terminal cells. A cell-local majority
-  is therefore broad enough to trigger inside ongoing replies, not specific
-  enough to identify their final row.
+  92/102 seed-1 terminal training rows; the other six terminal cells held the
+  remaining ten rows on both seeds. A cell-local majority is therefore broad
+  enough to trigger inside ongoing replies, not specific enough to identify
+  their final row.
 - **No arm completed an exact reference.** Both seeds had zero exact and zero
   reachable-exact replies in all three termination arms.
 - **This is not the full corpus-trained Hamming/memory/point artifact.** It
@@ -46,9 +46,9 @@ The report schema advances to `uor-r4.cpu-memory-panel-run/3`. The prior
 `--termination-gate` point radius and new `--termination-cell-gate` are
 mutually exclusive.
 
-The change is six tracked files at this REPORT snapshot: four source files,
-the ORDER and the prep sheet. It adds 647 lines and removes 25 before this
-report/evidence and notebook/roadmap records.
+The initially reviewed source, ORDER and prep subset was six files,
+`+738/-22`. The full initial PR was 12 files, `+1087/-22`. This repair changes
+only task records and notebook/roadmap links.
 
 ## Measurements
 
