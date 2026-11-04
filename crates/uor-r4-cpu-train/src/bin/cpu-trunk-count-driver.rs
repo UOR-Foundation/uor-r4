@@ -40,7 +40,7 @@ struct Config {
     select_only: bool,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 struct DecisionReading {
     rows: u64,
     admitted: u64,
@@ -125,7 +125,7 @@ fn parse_args() -> Result<Config, String> {
         evaluation_stride: 2,
         max_evaluation: 512,
         seed: 1,
-        workers: rayon::current_num_threads(),
+        workers: default_workers(),
         select_only: false,
     };
     while let Some(flag) = values.next() {
@@ -174,6 +174,12 @@ fn parse_args() -> Result<Config, String> {
 
 fn number<T: std::str::FromStr>(value: &str) -> Result<T, String> {
     value.parse().map_err(|_| format!("not a number: {value}"))
+}
+
+fn default_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
 }
 
 fn hex(value: &str) -> Result<String, String> {
@@ -604,41 +610,48 @@ fn sparse_tables(
 fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionReading, String> {
     let cpu = CpuDiscreteTrunkReader::from_bytes(artifact).map_err(|error| error.to_string())?;
     let served = IntegerDiscreteModel::from_bytes(artifact).map_err(|error| error.to_string())?;
-    let outcomes = samples
-        .par_iter()
-        .map(|sample| {
-            let (decision, admitted, top1, top8) = cpu
-                .observe_target(&sample.input, sample.target)
-                .map_err(|error| error.to_string())?;
-            let serving = served
-                .evaluate_prefix(&sample.input)
-                .map_err(|error| error.to_string())?;
-            let query_coordinate_mismatches = decision
-                .query
-                .iter()
-                .zip(&serving.read_vector)
-                .filter(|(left, right)| left != right)
-                .count() as u64;
-            let admitted_cell_mismatches =
-                u64::from(decision.admitted_cells != serving.admitted_cells);
-            let mut served_top8 = [u32::MAX; 8];
-            for (slot, &token) in serving.top8.iter().take(8).enumerate() {
-                served_top8[slot] = token;
-            }
-            Ok(DecisionOutcome {
-                admitted,
-                top1,
-                top8,
-                token_mismatches: u64::from(decision.token != serving.prediction),
-                top8_mismatches: u64::from(decision.top8 != served_top8),
-                query_coordinate_mismatches,
-                admitted_cell_mismatches,
-                query: decision.query.to_vec(),
-                top8_tokens: decision.top8,
-                token: decision.token,
-            })
+    let outcomes = collect_decision_outcomes(samples, |sample| {
+        let (decision, admitted, top1, top8) = cpu
+            .observe_target(&sample.input, sample.target)
+            .map_err(|error| error.to_string())?;
+        let serving = served
+            .evaluate_prefix(&sample.input)
+            .map_err(|error| error.to_string())?;
+        let query_coordinate_mismatches = decision
+            .query
+            .iter()
+            .zip(&serving.read_vector)
+            .filter(|(left, right)| left != right)
+            .count() as u64;
+        let admitted_cell_mismatches = u64::from(decision.admitted_cells != serving.admitted_cells);
+        let mut served_top8 = [u32::MAX; 8];
+        for (slot, &token) in serving.top8.iter().take(8).enumerate() {
+            served_top8[slot] = token;
+        }
+        Ok(DecisionOutcome {
+            admitted,
+            top1,
+            top8,
+            token_mismatches: u64::from(decision.token != serving.prediction),
+            top8_mismatches: u64::from(decision.top8 != served_top8),
+            query_coordinate_mismatches,
+            admitted_cell_mismatches,
+            query: decision.query.to_vec(),
+            top8_tokens: decision.top8,
+            token: decision.token,
         })
-        .collect::<Result<Vec<_>, String>>()?;
+    })?;
+    Ok(summarize_decision_outcomes(outcomes))
+}
+
+fn collect_decision_outcomes(
+    samples: &[RankMarginSample],
+    evaluate: impl Fn(&RankMarginSample) -> Result<DecisionOutcome, String> + Send + Sync,
+) -> Result<Vec<DecisionOutcome>, String> {
+    samples.par_iter().map(evaluate).collect()
+}
+
+fn summarize_decision_outcomes(outcomes: Vec<DecisionOutcome>) -> DecisionReading {
     let mut reading = DecisionReading::default();
     for outcome in outcomes {
         reading.rows += 1;
@@ -676,7 +689,7 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
             .wrapping_add(u64::from(outcome.token));
         reading.row_checksums.push(row_checksum);
     }
-    Ok(reading)
+    reading
 }
 
 fn changed_rows(left: &DecisionReading, right: &DecisionReading) -> Result<usize, String> {
@@ -722,6 +735,54 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_outcome(sample: &RankMarginSample) -> Result<DecisionOutcome, String> {
+        let query = (0..=sample.target % 5)
+            .map(|coordinate| sample.target as i32 + coordinate as i32)
+            .collect::<Vec<_>>();
+        let top8_tokens = std::array::from_fn(|slot| sample.target + slot as u32);
+        Ok(DecisionOutcome {
+            admitted: sample.target.is_multiple_of(2),
+            top1: sample.target.is_multiple_of(3),
+            top8: sample.target.is_multiple_of(5),
+            query,
+            top8_tokens,
+            token: sample.target,
+            query_coordinate_mismatches: 0,
+            admitted_cell_mismatches: 0,
+            top8_mismatches: 0,
+            token_mismatches: 0,
+        })
+    }
+
+    #[test]
+    fn ordered_decision_fold_is_identical_across_worker_counts() {
+        let samples = (0u32..64)
+            .map(|target| RankMarginSample {
+                input: vec![target, target + 1],
+                target,
+            })
+            .collect::<Vec<_>>();
+        let expected = summarize_decision_outcomes(
+            samples
+                .iter()
+                .map(test_outcome)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        for workers in [1usize, 8, 16, 32] {
+            let pool = ThreadPoolBuilder::new()
+                .num_threads(workers)
+                .build()
+                .unwrap();
+            let reading = pool.install(|| {
+                summarize_decision_outcomes(
+                    collect_decision_outcomes(&samples, test_outcome).unwrap(),
+                )
+            });
+            assert_eq!(reading, expected, "{workers} workers");
+        }
+    }
 
     #[test]
     fn shuffled_targets_are_deterministic_and_non_vacuous() {

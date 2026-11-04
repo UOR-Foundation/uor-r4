@@ -4484,8 +4484,13 @@ mod tests {
                     .map(|prefix| {
                         let cpu = reader.decide(prefix).unwrap();
                         let served = served.evaluate_prefix(prefix).unwrap();
+                        let mut top8 = [u32::MAX; 8];
+                        for (slot, &token) in served.top8.iter().take(8).enumerate() {
+                            top8[slot] = token;
+                        }
                         assert_eq!(cpu.query, served.read_vector.as_slice());
                         assert_eq!(cpu.admitted_cells, served.admitted_cells);
+                        assert_eq!(cpu.top8, top8);
                         assert_eq!(cpu.token, served.prediction);
                     })
                     .collect::<Vec<_>>();
