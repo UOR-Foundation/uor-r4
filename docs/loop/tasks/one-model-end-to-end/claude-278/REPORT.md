@@ -19,12 +19,15 @@ Lab: claude. [ORDER](./ORDER.md). PR #3672, item #3407. Plan step: Casey's plan 
 ## What did not work
 
 1. **The first pod run's negatives test (G3) failed,** at `887274c24`. Flipping the lowest bit of one value of layer 0's carried scan state left all three steps' points bit-equal to the clean run's.
-   - **Classified as instrument.** That run's compare looked at the points only. A 1-ulp change in one state component enters the next state through `T ⊗ held`, scaled by components of `T`, and is then summed with the other lanes. It rounds away before the points.
+   - **Classified as instrument.** That run's compare looked at the points only, so it could not see the state itself.
+   - **The likely cause (a hypothesis, not measured):** the change rounds away before the points. A 1-ulp change in one state component enters the next state through `T ⊗ held`, scaled by components of `T`, and mixes with the other lanes later, through the output projection.
+     - Component 0's value was not recorded. If it was zero or subnormal, a flush to zero downstream would erase the flip just as well.
+     - Rerunning the old flip under the new carry compare would settle it (Still open, item 2).
    - **Not a fault in the cache:** the same run's step-equals-full gate (G1) passed in all 48 cases.
    - **The fix,** `2d34cba13`, has two parts:
      - the compare now also checks every layer's carries against the ones a prefill of that whole window captures, bit for bit;
      - G3 flips the top mantissa bit (bit 22) of the largest value in layer 0's carried state.
-   - **The rerun's G3 passes.** The lowest-bit flip is no longer a test case: a flip that small can round away within one step, so its being unseen says nothing about the compare.
+   - **The rerun's G3 passes.** Run 2 does not show which of the two parts made it pass, because the test adds point and carry differences into one count. The lowest-bit flip is no longer a test case: a flip that small can round away within one step, so its being unseen would say nothing about the compare.
 2. **The first run's G1 proved the points equal, not the carried state.** Equal points do not imply an equal state, for the reason in item 1. The rerun's G1 proves both.
 3. **Refused, so not tested** (each is a typed refusal, never a silent second path):
    - bf16 storage;
@@ -96,7 +99,7 @@ The later commits change doc comments and `cfg(feature = "cuda")` test code only
 - **`loop report --check` and `loop pr-check --local`** were run at the head before review.
 - **Reviews, each in a fresh context:**
   - two code reviews of `8d0f0ffa1..887274c24`, split in half: APPROVE WITH CHANGES and APPROVE. Their doc findings are folded into `d1560863d`; the others are What did not work, items 4 and 5;
-  - a third review of the test change `2d34cba13` and of this REPORT, recorded on PR #3672 by `loop review`.
+  - a third review of the test change `2d34cba13` and of this REPORT: APPROVE WITH CHANGES. Its wording findings are folded in, and its one code finding is Still open, item 2. It is recorded on PR #3672 by `loop review`.
 
 ## Skills used
 
@@ -109,8 +112,11 @@ None applied.
    - the switch of the scorer's decode loops to the step where the window fits, with a full re-run when the window slides;
    - reply rows named in step rows;
    - decode tok/s against today's files, byte for byte.
-2. **The process-wide retention reading** and multi-threaded CUDA tests: a test lock, or one test thread enforced by the harness (What did not work, item 5).
-3. **Then, as #2028 orders:** P2b's classification, the real-text corpus, P4, P5 and P6.
+2. **Two test checks for unit 2's pod, at no extra pod:**
+   - rerun the old lowest-bit flip under the carry compare, to settle What did not work, item 1;
+   - assert that the stepped and captured caches hold the same number of layers and input rows before the carry compare zips them. A truncated cache would otherwise compare fewer items without error.
+3. **The process-wide retention reading** and multi-threaded CUDA tests: a test lock, or one test thread enforced by the harness (What did not work, item 5).
+4. **Then, as #2028 orders:** P2b's classification, the real-text corpus, P4, P5 and P6.
 
 ## Plain summary
 
