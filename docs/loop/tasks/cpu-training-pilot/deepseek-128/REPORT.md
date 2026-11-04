@@ -118,12 +118,20 @@ artifact copy.
 - Full `uor-r4-cpu-train` release suite: **237 tests passed, 0 failed, 4
   release benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
+- Package formatting for `uor-r4-cpu-train` and `uor-r4-discrete`: passed.
 - Focused consolidated D11 success/mismatch, ordered-fold, stage fail-closed
   and RSS tests: passed.
 - All eight attempt-2 runs passed artifact, table, decision, normalized-report,
   21-stage accounting, timeout, worker, source, binary and strict-RSS gates.
-- Prep shell syntax, JSON parsing, evidence checksum reconstruction and
+- Prep check, shell syntax, JSON parsing, evidence checksum reconstruction and
   `git diff --check`: passed.
+- Full loop gates: **11/11 green**. Report check and local policy check passed;
+  the policy warnings are advisory D76 scope/commit-order and pre-existing
+  FILEMAP rows.
+- Roadmap check: **139 items**; documentation catalog: **1,175 records**, no
+  missing paths; state formats: **8/8 ok**; D23/D25/D32 ratchets unchanged.
+- `uor-harness check`: **0 errors, 136 warnings**, chiefly pre-existing stale
+  claims, presence and merged branches outside this unit.
 
 ## Skills used
 
