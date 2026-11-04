@@ -15410,6 +15410,9 @@ mod tests {
         let device = Device::new_cuda(0)?;
         let mut model = build_fbs_model(FbsArm::OneAtomActive, 1, &device)?;
         model.set_context(16)?;
+        // The arm the scorer sets on every pass (`score_rows`); the guard clears it and the reads.
+        arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+        let _guard = ArmGuard;
         let width = hs::SHEET_WIDTH;
         crate::flock_read_hamming::set_hamming_reads(Some(
             crate::flock_read_hamming::HammingReads::new(4, width, &device)?.randomized(2793)?,

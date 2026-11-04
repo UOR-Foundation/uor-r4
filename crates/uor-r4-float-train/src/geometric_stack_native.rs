@@ -1601,7 +1601,12 @@ impl StackModel {
         if crate::hamilton_sheet::is_instrumenting_snaps() {
             return Some(CacheRefusal::SnapInstrument);
         }
-        if crate::spiralcore_fbs_arms::fbs_arm().is_some() {
+        // The scorer sets the one-atom arm on every pass (`score_rows`), and that arm projects
+        // through the same `plan.forward` as no arm (`spiralcore_fbs_arms::project`). The other
+        // arms run their own kernels.
+        if crate::spiralcore_fbs_arms::fbs_arm()
+            .is_some_and(|arm| arm != crate::spiralcore_fbs_arms::FbsArm::OneAtomActive)
+        {
             return Some(CacheRefusal::FbsArm);
         }
         None
@@ -3429,6 +3434,20 @@ mod decode_cache_tests {
             .map(|name| Some(CacheRefusal::ReadHook(name)))
         );
         assert_eq!(model.prefill_refusal(&ids(4), 1, 4), None);
+        // claude-279's first pod run: the scorer's one-atom arm refused every prefill. That arm
+        // is carried; the arms with kernels of their own are refused.
+        use crate::spiralcore_fbs_arms::{set_fbs_arm, FbsArm};
+        let arms = FbsArm::ALL.map(|arm| {
+            set_fbs_arm(Some(arm));
+            let refusal = (
+                model.prefill_refusal(&ids(4), 1, 4),
+                model.step_refusal(&cache, &[1, 2]),
+            );
+            set_fbs_arm(None);
+            refusal
+        });
+        let own = || (Some(CacheRefusal::FbsArm), Some(CacheRefusal::FbsArm));
+        assert_eq!(arms, [(None, None), own(), own(), own()]);
         cache.position = 16;
         assert_eq!(
             model.step_refusal(&cache, &[1, 2]),
