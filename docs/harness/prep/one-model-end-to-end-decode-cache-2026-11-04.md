@@ -16,7 +16,7 @@ RUN 1 (4 Nov, 18:17–18:34Z, `vast-59143240`, about $0.30): EXIT 5 at I-2, an i
 OUTCOME: **Exact and faster** (run 2, 18:49–19:57Z, EXIT 0). See the [REPORT](../../loop/tasks/one-model-end-to-end/claude-279/REPORT.md).
 - **G** held at L192, S192 and L2048, and **G0** at L192 and S192. I-0 to I-4 hold.
 - **The 2,048 queries files:** 98.66 and 98.81 tok/s with the cache on, against 16.68 and 16.75 off.
-- **Steps:** 99.2% of the L2048 forwards.
+- **Steps:** 99.2% of the L2048 forwards after the prefills.
 - **`--decode-cache`** stays at its default, 1.
 - **Run 2's seal:** `claude-279/run2/`, 335 files, read back 335 of 335. `SHA256SUMS.files` has SHA-256 `2f184e2ec21631075d6497236e380a5486c555ffec5f4aa8320f31d877f8c20b`.
 
