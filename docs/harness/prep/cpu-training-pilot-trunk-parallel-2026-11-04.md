@@ -141,7 +141,7 @@ run() {
   check_pins
   test "$(jq -er '.threads' "$out/report.json")" -eq "$workers"
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -gt 0
-  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 2097152
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -lt 2097152
   test "$(jq -er '.artifacts.exact_sha256' "$out/report.json")" = "$EXPECTED_EXACT"
   test "$(jq -er '.artifacts.shuffled_sha256' "$out/report.json")" = "$EXPECTED_SHUFFLED"
   if cmp -s "$out/exact.uorlut" "$DATA/t16-frozen-zero-seed1-trunk.d11"; then exit 1; fi
