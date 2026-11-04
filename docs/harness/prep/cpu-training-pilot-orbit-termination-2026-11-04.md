@@ -17,7 +17,7 @@ rule, use reply text as a classifier, or train on evaluation rows.
 D84 CPU development research in `uor-r4-cpu-train` on the local Ryzen 9
 9950X. It is not GPU qualification and cannot establish language capability.
 
-## Source and inputs
+## Base artifact
 
 | Input | Identity |
 |---|---|
@@ -49,6 +49,14 @@ trajectory, and 16 generated tokens per reply.
 The trained artifact and trained no-gate reply digest must reproduce before a
 new gate result is used. Corpus EOS remains normalized to one trailing
 reference marker; decoder BOS remains the generated stop marker.
+
+## Minimum test power
+
+Two published model seeds are tested on the same fixed, document-disjoint
+evaluation set of 114 prompts. The prior replay establishes 82 training
+documents and 91 evaluation documents, with 102 training and 114 evaluation
+examples. The bar is applied independently within each seed and must pass both.
+This is bounded development evidence, not fresh-phrasing or language evidence.
 
 ## Orbit signature and gate
 
@@ -85,7 +93,7 @@ On each seed, evaluate the same 114 prompts with:
 Every arm uses the trained memory artifact, the exact integer writer and the
 shared `reply_stop` contract with a 16-token cap.
 
-## Commands
+## Steps
 
 The following is one executable session. It refuses source drift and any
 existing output root before the first run, fixes all three run orders, binds
@@ -96,7 +104,7 @@ set -euo pipefail
 SOURCE_PIN=d143e8bafc9376cd755072a784d4adfe5b8b72ab
 ROOT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/inner-cell-orbit/2026-11-04-attempt-1
 test -z "$(git status --porcelain)"
-git diff --quiet "$SOURCE_PIN" -- crates/uor-r4-cpu-train
+git diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock third_party
 CARGO_TARGET_DIR="$PWD/target" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-memory-panel-driver
 BIN="$PWD/target/release/cpu-memory-panel-driver"
@@ -119,6 +127,11 @@ run() {
     --steps 32 --keys 16 --per-key 16 --key-tokens 8 --reply-turn 8 \
     --reply-cap 16 --seed "$seed" --termination-orbit-gate
   test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  wall_ms=$(jq -er '.wall_elapsed_ms | floor' "$out/report.json")
+  peak_rss_kib=$(jq -er '.peak_rss_kib' "$out/report.json")
+  test "$wall_ms" -le 600000
+  test "$peak_rss_kib" -gt 0
+  test "$peak_rss_kib" -le 2097152
   sha256sum "$BIN" >"$out/binary.sha256"
   find "$out" -type f ! -name SHA256SUMS -print0 |
     sort -z | xargs -0 sha256sum >"$out/SHA256SUMS"
