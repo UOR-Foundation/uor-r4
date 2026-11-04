@@ -4996,6 +4996,35 @@ fn last_openings(windows: &[CausalWindow], mask: &[u8], samples: usize) -> Vec<C
     sample_windows(&cut, mask, samples).into_iter().cloned().collect()
 }
 
+/// The scoring flags whose TRAIN table or trace read 192-token windows (claude-274): at any other
+/// `context`, each one asked for is refused by name, before the checkpoint loads.
+fn window_bound_flags(
+    context: usize,
+    keys: bool,
+    served: bool,
+    keyed: bool,
+    traces: bool,
+    forces: bool,
+) -> Result<()> {
+    let named: Vec<&str> = [
+        (keys, "--opening-keys"),
+        (served, "--served-key"),
+        (keyed, "--keyed-decode"),
+        (traces, "--decision-trace"),
+        (forces, "--decision-force"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    if context == SHEET_CONTEXT || named.is_empty() {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "--context {context}: {} read 192-token windows; score them at 192",
+        named.join(", ")
+    )))
+}
+
 fn greedy_reply_with_mode(
     model: &StackModel,
     objective: PointObjective,
@@ -6521,8 +6550,9 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 ///
 /// **The window (claude-274).** Every `panels` split is cut into `context`-token windows, at most
 /// the checkpoint's own; DEV and Fresh V2 keep [`SHEET_CONTEXT`]'s. Every decode slides over the
-/// model's own window. Off [`SHEET_CONTEXT`], `keys` and `traces`, whose TRAIN table and trace
-/// read 192-token windows, are refused. With `last_opening`, each sample decodes from its window's
+/// model's own window. Off [`SHEET_CONTEXT`], `keys`, `served_arm`, `keyed`, `traces` and
+/// `forces`, whose TRAIN table and trace read 192-token windows, are refused by name
+/// ([`window_bound_flags`]). With `last_opening`, each sample decodes from its window's
 /// last reply opening ([`last_openings`]) in place of its first.
 #[allow(clippy::too_many_arguments)]
 pub fn score_rows(
@@ -6555,11 +6585,14 @@ pub fn score_rows(
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
     training_context(context)?;
-    if context != SHEET_CONTEXT && (keys || !traces.is_empty()) {
-        return Err(invalid(format!(
-            "--context {context}: --opening-keys and --decision-trace read 192-token windows; score them at 192"
-        )));
-    }
+    window_bound_flags(
+        context,
+        keys,
+        served_arm,
+        !keyed.is_empty(),
+        !traces.is_empty(),
+        !forces.is_empty(),
+    )?;
     if served_arm && !keys {
         return Err(invalid("--served-key reads the opening keys, so it needs --opening-keys 1"));
     }
@@ -15303,6 +15336,31 @@ mod tests {
             r#"{"file":"rows-p-dev-on.json","rows":3,"nearest_hits":1}"#
         );
         assert!(serde_json::to_string(&file(2048)).unwrap().ends_with(r#","context":2048}"#));
+    }
+
+    /// claude-274: off 192, each flag that reads 192-token windows is refused by its own name; at
+    /// 192, or with none of them, scoring goes ahead.
+    #[test]
+    fn each_192_bound_flag_is_refused_by_name_off_192() {
+        assert!(window_bound_flags(SHEET_CONTEXT, true, true, true, true, true).is_ok());
+        assert!(window_bound_flags(2048, false, false, false, false, false).is_ok());
+        let names = [
+            "--opening-keys",
+            "--served-key",
+            "--keyed-decode",
+            "--decision-trace",
+            "--decision-force",
+        ];
+        for (i, name) in names.iter().enumerate() {
+            let on = |j: usize| i == j;
+            let err = window_bound_flags(2048, on(0), on(1), on(2), on(3), on(4))
+                .expect_err(name)
+                .to_string();
+            assert!(err.contains(name) && err.contains("--context 2048"), "{err}");
+            for other in names.iter().filter(|o| *o != name) {
+                assert!(!err.contains(other), "{err} names {other}");
+            }
+        }
     }
 
     /// claude-208 (review): a panel name is one file-name part, and never DEV or Fresh V2.
