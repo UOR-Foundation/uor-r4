@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -223,6 +223,27 @@ First fresh-context non-author review: NOT FIT at docs head
 `ddcfdfd3170988620ebab696f2289b5c26516dc5`. The reviewer required a finite
 test that imports and checks real trunk artifacts, direct hashes of every
 generated artifact against the accepted oracle, and removal of the conflicting
-premature FIT status. Those defects are addressed at the reviewed head.
+premature FIT status.
 
-TEST FITNESS: pending second fresh-context non-author review.
+Second fresh-context non-author review: NOT FIT at docs head
+`5b4149dc4d831e8df7b2660ea28842f07a9b622e`. The reviewer found that the source
+pin covered only the CPU crate although the implementation also touched
+`crates/uor-r4-discrete`. The source gate now covers all `crates/**` and both
+root Cargo manifests.
+
+TEST FITNESS: FIT - M2 #2030 public 19-table CPU verification consolidation
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-verify-2026-11-04.md`
+docs head: `840ae00303d92c45c2688ae8f402991a98e45ae2`
+implementation pin: `9717f52ba4b60eab6eae39273dbc7ee7a0239c3c`
+baseline binary: `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada`
+optimized binary: `c92e2d2a101b64c13751fda099c41f8e88994ebc1627046332b863cdececba04`
+reviewer: Codex third fresh-context non-author session
+note: four verification imports; exact source tables moved into reconstruction
+and shuffled expectations independently rebuilt from a fresh source import;
+actual D11 finite success and mismatch controls; direct artifact oracles on all
+eight runs; full-crates source pin; mirrored one/sixteen-worker order; 21
+finite stages; strict positive RSS below 2,097,152 KiB; 600-second timeout;
+10-percent wall and 20-percent verification bars; instrument-only claim
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
