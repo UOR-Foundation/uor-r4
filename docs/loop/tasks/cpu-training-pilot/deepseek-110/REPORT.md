@@ -45,8 +45,9 @@ No artifact, prompt, reply or throughput reading is reported here.
 
 ## Checks run at the head
 
-- Five focused reply-evaluator tests passed.
-- Full CPU release suite: 168 library tests passed, 4 release benchmarks
+- Six focused reply-evaluator tests passed, including deterministic evaluation
+  of an exported synthetic CPU artifact.
+- Full CPU release suite: 169 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - `cargo fmt -p uor-r4-cpu-train -- --check`: passed.

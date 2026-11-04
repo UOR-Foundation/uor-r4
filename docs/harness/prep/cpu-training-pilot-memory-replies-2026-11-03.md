@@ -125,7 +125,8 @@ post-observation change to arms, cap, keys, steps or controls.
 
 ## TEST FITNESS
 
-Author self-check only. The five finite evaluator tests pass. No non-author
+Author self-check only. The six finite evaluator tests pass, including a
+deterministic complete-reply run over an exported synthetic artifact. No non-author
 review has been recorded, so public compute is not authorized by this sheet.
 
 TEST FITNESS: PENDING

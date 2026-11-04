@@ -240,6 +240,28 @@ fn add_count(left: u64, right: u64) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+
+    fn artifact() -> Vec<u8> {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            931,
+            FbsSynth {
+                vocab: crate::VOCABULARY,
+                d: 64,
+                mlp: 64,
+                layers: 1,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.25,
+                decay_step: 0.0625,
+            },
+        );
+        snapshot.memory = None;
+        export_fbs_trunk_uorlut01(&snapshot).unwrap()
+    }
 
     #[test]
     fn bounded_reply_feeds_only_generated_tokens_and_stops_at_bos() {
@@ -339,5 +361,25 @@ mod tests {
         let mut changed_stop = rows;
         changed_stop[0].0.stop = "cap";
         assert_ne!(first, reply_sequence_sha256(&changed_stop));
+    }
+
+    #[test]
+    fn complete_reply_evaluation_runs_the_exported_cpu_path_deterministically() {
+        let artifact = artifact();
+        let samples = vec![MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, 77, 99],
+        }];
+        let first = evaluate_replies(&artifact, &samples, 4).unwrap();
+        let second = evaluate_replies(&artifact, &samples, 4).unwrap();
+        assert_eq!(first.reading, second.reading);
+        assert_eq!(first.reply_sha256, second.reply_sha256);
+        assert_eq!(first.reading.replies, 1);
+        assert_eq!(first.reading.non_empty, 1);
+        let generated = generate_reply(&artifact, &samples[0].prompt, 4).unwrap();
+        assert_eq!(
+            generated.tokens.len() as u64,
+            first.reading.generated_tokens
+        );
     }
 }
