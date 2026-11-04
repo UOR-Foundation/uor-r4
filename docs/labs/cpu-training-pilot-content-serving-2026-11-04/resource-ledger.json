@@ -15,13 +15,12 @@
   "previous_ledger": "cpu-training-pilot-content-serving-2026-11-04/attempt-4-resource-ledger.json",
   "previous_ledger_seconds": 35608.877487699,
   "ledger_chain": [
-    "cpu-training-pilot-content-serving-2026-11-04/attempt-1-resource-ledger.json",
     "cpu-training-pilot-content-serving-2026-11-04/attempt-2-resource-ledger.json",
     "cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json",
     "cpu-training-pilot-content-serving-2026-11-04/attempt-4-resource-ledger.json",
     "cpu-training-pilot-content-serving-2026-11-04/resource-ledger.json"
   ],
-  "ledger_chain_note": "Attempt 3 is preserved byte-for-byte; its generic previous_ledger path named the ledger that held attempt 2 at that time, now preserved separately as attempt-2-resource-ledger.json.",
+  "ledger_chain_note": "Attempt 2 is the cumulative snapshot for attempts 1 and 2 (82.33 = 40.61 + 41.72), so its preserved attempt-1 ledger is not an additional predecessor charge. Attempt 3 is also preserved byte-for-byte; its generic previous_ledger path named the ledger that held attempt 2 at that time, now preserved as attempt-2-resource-ledger.json.",
   "admitted_increment_seconds": 2100,
   "admitted_cumulative_projection_seconds": 52027.677487699,
   "cost_kind": "local CPU measured compute accounting, not an invoice",
