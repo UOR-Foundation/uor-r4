@@ -4,6 +4,9 @@
   "description": "Grants Tauri core:default IPC for the main Studio window while folder allowlists (GrantedFolders with symlink refusal), durable store path confinement, host-owned terminal command approval, and SHA-256 UORLUT01 release-pin checks are enforced in DesktopBackend (src-tauri/src/lib.rs).",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-message",
+    "dialog:allow-confirm"
   ]
 }

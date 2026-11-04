@@ -7,10 +7,10 @@ use std::process::Command;
 
 use serde_json::json;
 use uor_r4_desktop_client::{
-    build_synthetic_stack_artifact, generate_launch_token, handle_rpc_line,
-    handle_studio_http_request, run_self_test_receipt, sha256_bytes, DesktopBackend,
-    DesktopClientError, PinRegistry, TerminalCommandRequest, SYNTHETIC_STANDIN_FILE_NAME,
-    SYNTHETIC_STANDIN_SEED,
+    build_synthetic_stack_artifact, dispatch_rpc_command, generate_launch_token, handle_rpc_line,
+    handle_studio_http_request, run_self_test_receipt, sha256_bytes, validate_terminal_program,
+    DesktopBackend, DesktopClientError, PinRegistry, TerminalCommandRequest,
+    SYNTHETIC_STANDIN_FILE_NAME, SYNTHETIC_STANDIN_SEED,
 };
 
 const EXPECTED_SYNTHETIC_32: [u32; 32] = [
@@ -52,6 +52,7 @@ fn native_list_local_models_returns_synthetic_standin_and_refuses_tampered_hash(
         1,
         "add_model_search_dir must deduplicate repeated directory registrations"
     );
+    backend.native_grant_folder(&tmp).expect("grant model directory");
 
     let listed = backend
         .native_list_local_models()
@@ -423,6 +424,105 @@ fn terminal_command_requires_host_approval_and_confines_arguments_to_granted_fol
 }
 
 #[test]
+fn model_discovery_and_loading_require_granted_directories() {
+    let root = unique_temp_dir("model-grants");
+    let model_dir = root.join("models");
+    let outside_dir = root.join("outside");
+    fs::create_dir_all(&model_dir).expect("create model dir");
+    fs::create_dir_all(&outside_dir).expect("create outside dir");
+    let bytes = build_synthetic_stack_artifact(SYNTHETIC_STANDIN_SEED);
+    let model_path = model_dir.join(SYNTHETIC_STANDIN_FILE_NAME);
+    let outside_path = outside_dir.join(SYNTHETIC_STANDIN_FILE_NAME);
+    fs::write(&model_path, &bytes).expect("write granted model");
+    fs::write(&outside_path, &bytes).expect("write outside model");
+
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let err = backend
+        .native_load_model(&outside_path, None)
+        .expect_err("model file outside every grant must be refused before reading");
+    assert!(matches!(err, DesktopClientError::PathNotGranted(_)), "{err:?}");
+    let refused = dispatch_rpc_command(
+        &mut backend,
+        "native_list_local_models",
+        &json!({ "modelDir": outside_dir }),
+    ).expect_err("page-supplied model directory outside every grant must be refused");
+    assert!(refused.contains("PathNotGranted"), "{refused}");
+
+    backend.grant_model_search_dir(&model_dir).expect("host-granted model directory");
+    let models = backend.native_list_local_models().expect("list granted models");
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].path, fs::canonicalize(&model_path).expect("canonical model path").to_string_lossy());
+    backend.native_load_model(&model_path, None).expect("load model inside grant");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn git_status_and_diff_are_nul_safe_hardened_and_bounded() {
+    let root = unique_temp_dir("bounded-git");
+    let repo = root.join("repo");
+    fs::create_dir_all(&repo).expect("create repo");
+    let run_git = |args: &[&str]| {
+        let output = Command::new("git").args(args).current_dir(&repo).output().expect("run git fixture");
+        assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
+    };
+    run_git(&["init"]);
+    run_git(&["config", "user.email", "studio@example.invalid"]);
+    run_git(&["config", "user.name", "Studio Fixture"]);
+    fs::write(repo.join("tracked.txt"), "before\n").expect("write tracked file");
+    run_git(&["add", "tracked.txt"]);
+    run_git(&["commit", "-m", "fixture"]);
+    fs::write(repo.join("tracked.txt"), "after\n").expect("modify tracked file");
+    fs::write(repo.join("line\nbreak.txt"), "nul-safe status\n").expect("write newline filename");
+    let marker = root.join("external-command-ran");
+    let hook = repo.join("external.sh");
+    fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).expect("write external marker hook");
+    run_git(&["config", "diff.external", &hook.to_string_lossy()]);
+    run_git(&["config", "core.fsmonitor", &hook.to_string_lossy()]);
+    run_git(&["config", "core.pager", &hook.to_string_lossy()]);
+
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend.native_grant_folder(&repo).expect("grant repository");
+    let status = backend.native_git_status(&repo).expect("nul-safe status");
+    assert!(status.untracked_files.contains(&"line\nbreak.txt".to_string()), "{status:?}");
+    let diff = backend.native_git_diff(&repo).expect("hardened working-tree diff");
+    assert!(diff.diff.contains("before") && diff.diff.contains("after"), "{}", diff.diff);
+    assert!(!diff.truncated);
+    assert!(!marker.exists(), "external diff, pager or fsmonitor executed");
+
+    fs::write(repo.join("tracked.txt"), format!("after\n{}\n", "x".repeat(70_000))).expect("write large diff");
+    let bounded = backend.native_git_diff(&repo).expect("bounded diff");
+    assert!(bounded.truncated, "large diff must report truncation");
+    assert!(bounded.diff.len() <= 65_536, "diff exceeded its byte cap: {}", bounded.diff.len());
+    assert!(!marker.exists(), "bounded diff executed an external command");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn terminal_allowlist_and_output_cap_are_enforced() {
+    for refused in ["bash", "sh", "python3", "osascript", "env", "./script.sh"] {
+        assert!(validate_terminal_program(refused).is_err(), "{refused} must be refused before spawn");
+    }
+    assert!(validate_terminal_program("pwd").is_ok());
+
+    let root = unique_temp_dir("bounded-terminal");
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend.native_grant_folder(&root).expect("grant terminal cwd");
+    backend.native_set_terminal_enabled(true);
+    let command = format!("echo {}", "x".repeat(70_000));
+    backend.host_approve_terminal_command(&root, &command).expect("approve long echo");
+    let request = TerminalCommandRequest {
+        cwd: root.clone(),
+        command: command.clone(),
+        user_confirmed: true,
+        confirmed_command: command,
+    };
+    let output = backend.native_run_terminal_command(&request).expect("bounded echo output");
+    assert!(output.contains("truncated"), "output must say it was truncated: {output:?}");
+    assert!(output.len() < 70_000, "output was not bounded: {} bytes", output.len());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn rpc_and_loopback_http_studio_host_serve_commands_and_static_assets() {
     let receipt = run_self_test_receipt().expect("self-test receipt");
     assert_eq!(receipt["verdict"], json!("PASS"));
@@ -596,6 +696,36 @@ fn rpc_and_loopback_http_studio_host_serve_commands_and_static_assets() {
     assert_eq!(parsed["id"], json!(7));
     assert_eq!(parsed["ok"], json!(true));
     assert_eq!(parsed["result"]["artifact_bytes"], json!(469_252));
+}
+
+#[cfg(feature = "gui")]
+#[test]
+fn native_picker_grants_share_project_model_and_git_state() {
+    use uor_r4_desktop_client::tauri_gui::TauriDesktopState;
+
+    let root = unique_temp_dir("native-picker-state");
+    let project = root.join("project");
+    let models = root.join("models");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&models).expect("create models");
+    fs::write(project.join("note.txt"), "granted\n").expect("write project file");
+    fs::write(models.join(SYNTHETIC_STANDIN_FILE_NAME), build_synthetic_stack_artifact(SYNTHETIC_STANDIN_SEED)).expect("write model");
+    let init = Command::new("git").arg("init").current_dir(&project).output().expect("init project");
+    assert!(init.status.success());
+
+    let backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let state = TauriDesktopState::new(backend);
+    state.grant_project_folder(&project).expect("project picker grant");
+    state.grant_model_folder(&models).expect("model picker grant");
+    let read = state.with_backend(|backend| backend.native_read_file(&project.join("note.txt")).map_err(|error| error.to_string())).expect("read through picker grant");
+    assert_eq!(read, "granted\n");
+    let listed = state.with_backend(|backend| backend.native_list_local_models().map_err(|error| error.to_string())).expect("models through picker grant");
+    assert_eq!(listed.len(), 1);
+    let status = state.git_status(&project).expect("status outside backend lock");
+    assert!(!status.is_clean);
+    let diff = state.git_diff(&project).expect("diff outside backend lock");
+    assert!(!diff.truncated);
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[cfg(feature = "gui")]

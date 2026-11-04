@@ -1,6 +1,5 @@
-// UOR-R4 Studio v2 — workspace files, editor tabs and disk save.
-// Browser-only: File System Access API when available; import-files fallback is read-only.
-// No network, no external assets. Loaded before studio_ui.js.
+// UOR-R4 Studio v2 — shared native/browser workspace files, editor tabs and disk save.
+// Tauri uses granted host folders; browsers use File System Access or read-only imports.
 
 (function () {
     'use strict';
@@ -13,8 +12,9 @@
 
     var state = {
         rootHandle: null,
+        rootPath: '',
         rootName: '',
-        mode: 'none', // none | directory | imported | demo
+        mode: 'none', // none | native | directory | imported | demo
         tree: [],
         files: {}, // path -> {path,name,kind,handle? , content?, size?}
         tabs: [],
@@ -42,6 +42,7 @@
     function summary() {
         return {
             mode: state.mode,
+            rootPath: state.rootPath,
             rootName: state.rootName,
             fileCount: Object.keys(state.files).length,
             tabs: state.tabs.map(function (tab) { return { path: tab.path, dirty: Boolean(tab.dirty) }; }),
@@ -140,6 +141,33 @@
     }
 
     async function openFolder() {
+        var desktop = window.UORDesktopActions;
+        if (desktop && desktop.available) {
+            try {
+                var selected = await desktop.chooseProjectFolder();
+                if (!selected) return;
+                var rootPath = String(selected.path || '');
+                var paths = await desktop.listDirectory(rootPath, MAX_DEPTH);
+                var samples = {};
+                paths.slice(0, MAX_FILES).forEach(function (path) {
+                    if (path && !path.startsWith('/') && !path.split('/').includes('..')) samples[path] = '';
+                });
+                state.rootHandle = null;
+            state.rootPath = '';
+                state.rootPath = rootPath;
+                state.rootName = baseName(rootPath) || rootPath;
+                state.mode = 'native';
+                buildDemoTree(samples);
+                updateWorkspaceUI();
+                renderTree();
+                emit();
+                toast('Opened ' + state.rootName + ' (' + Object.keys(state.files).length + ' files).', 'success');
+            } catch (error) {
+                if (error && error.name === 'AbortError') return;
+                toast('Could not open that folder: ' + (error && error.message ? error.message : error), 'error');
+            }
+            return;
+        }
         if (!window.showDirectoryPicker) {
             importFiles('This browser does not expose the File System Access API. Import files instead.');
             return;
@@ -147,6 +175,7 @@
         try {
             var handle = await window.showDirectoryPicker({ mode: 'readwrite' });
             state.rootHandle = handle;
+            state.rootPath = '';
             state.rootName = handle.name;
             state.mode = 'directory';
             state.files = {};
@@ -172,6 +201,7 @@
             var files = Array.prototype.slice.call(input.files || []);
             if (!files.length) { input.remove(); return; }
             state.rootHandle = null;
+            state.rootPath = '';
             state.mode = 'imported';
             state.files = {};
             state.tree = [];
@@ -266,6 +296,7 @@
         state.tabs = [];
         state.activePath = null;
         state.rootHandle = null;
+            state.rootPath = '';
         state.rootName = 'uor-r4';
         state.mode = 'demo';
         buildDemoTree(demoSamples());
@@ -365,6 +396,9 @@
     async function readPath(path) {
         var record = state.files[path];
         if (!record) return null;
+        if (state.mode === 'native') {
+            return window.UORDesktopActions.readFile(state.rootPath.replace(/[\\/]+$/, '') + '/' + path);
+        }
         if (record.handle) {
             var file = await record.handle.getFile();
             if (file.size > TEXT_LIMIT) throw new Error('File is larger than 2 MB.');
@@ -389,7 +423,7 @@
                 name: baseName(path),
                 content: content,
                 dirty: false,
-                mode: record.handle ? 'directory' : (state.mode === 'demo' ? 'demo' : (record.file ? 'imported' : 'local')),
+                mode: state.mode === 'native' ? 'native' : (record.handle ? 'directory' : (state.mode === 'demo' ? 'demo' : (record.file ? 'imported' : 'local'))),
                 handle: record.handle || null
             });
             addRecent(path);
@@ -459,20 +493,20 @@
         state.loadingTab = false;
         if (!silent) {
             var meta = document.getElementById('editorSavedBadge');
-            if (meta) meta.textContent = tab.dirty ? 'Unsaved changes' : (tab.mode === 'directory' ? 'Saved to disk' : 'Local tab');
+            if (meta) meta.textContent = tab.dirty ? 'Unsaved changes' : ((tab.mode === 'directory' || tab.mode === 'native') ? 'Saved to disk' : 'Local tab');
         }
     }
 
     function updateEditorHeader(tab) {
         var badge = document.getElementById('editorSavedBadge');
         if (badge) {
-            badge.textContent = tab.dirty ? 'Unsaved changes' : (tab.mode === 'directory' ? 'Saved to disk' : (tab.mode === 'demo' ? 'Demo file' : 'Local tab'));
+            badge.textContent = tab.dirty ? 'Unsaved changes' : ((tab.mode === 'directory' || tab.mode === 'native') ? 'Saved to disk' : (tab.mode === 'demo' ? 'Demo file' : 'Local tab'));
             badge.setAttribute('data-state', tab.dirty ? 'dirty' : 'saved');
         }
         var unsaved = document.getElementById('editorUnsaved');
         if (unsaved) unsaved.textContent = tab.dirty ? 'Unsaved changes' : 'Saved';
         var state = document.getElementById('editorSaveState');
-        if (state) state.textContent = tab.dirty ? 'Unsaved' : (tab.mode === 'directory' ? 'Saved to disk' : 'Saved (local)');
+        if (state) state.textContent = tab.dirty ? 'Unsaved' : ((tab.mode === 'directory' || tab.mode === 'native') ? 'Saved to disk' : 'Saved (local)');
         var stateBottom = document.getElementById('editorSaveStateBottom');
         if (stateBottom) stateBottom.textContent = tab.dirty ? '● unsaved' : 'saved';
     }
@@ -548,7 +582,7 @@
         var index = 1;
         var name = 'untitled.md';
         while (state.tabs.some(function (tab) { return tab.path === name; })) { index += 1; name = 'untitled-' + index + '.md'; }
-        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local'), handle: null });
+        state.tabs.push({ path: name, name: name, content: '', dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null });
         state.activePath = name;
         loadTabIntoEditor(name, false);
         renderTabs();
@@ -562,6 +596,22 @@
         if (!tab) { toast('No file tab open. Open a file in Files first.', 'info'); return false; }
         var text = document.getElementById('editorText');
         tab.content = text ? text.value : tab.content;
+        if (tab.mode === 'native') {
+            try {
+                if (!state.rootPath || !window.UORDesktopActions?.available) throw new Error('The native folder grant is unavailable; reopen the folder.');
+                await window.UORDesktopActions.writeFile(state.rootPath.replace(/[\\/]+$/, '') + '/' + tab.path, tab.content);
+                tab.dirty = false;
+                updateEditorHeader(tab);
+                renderTabs();
+                persistTabs();
+                emit();
+                toast('Saved ' + tab.path + ' to disk.', 'success');
+                return true;
+            } catch (error) {
+                toast('Save failed: ' + (error && error.message ? error.message : error), 'error');
+                return false;
+            }
+        }
         if (tab.mode === 'directory' && tab.handle) {
             try {
                 if (tab.handle.queryPermission) {
@@ -662,7 +712,7 @@
             existing.dirty = true;
             state.activePath = existing.path;
         } else {
-            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local'), handle: null });
+            state.tabs.push({ path: tabName, name: tabName, content: text, dirty: true, mode: state.mode === 'native' ? 'native' : (state.mode === 'directory' ? 'directory' : (state.mode === 'demo' ? 'demo' : 'local')), handle: null });
             state.activePath = tabName;
         }
         loadTabIntoEditor(state.activePath, false);
@@ -703,9 +753,9 @@
         var statusWorkspace = document.getElementById('statusWorkspaceLabel');
         if (statusWorkspace) statusWorkspace.textContent = displayLabel;
         if (ctxLabel) ctxLabel.textContent = displayLabel;
-        if (meta) meta.textContent = state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree · QA state' : (state.mode === 'imported' ? 'imported · read-only session' : 'browser workspace · open folder'));
-        if (ctxMeta) ctxMeta.textContent = state.mode === 'directory' ? 'Read/write access to this folder in this tab.' : (state.mode === 'demo' ? 'Demo tree for screenshots; open a real folder for disk access.' : (state.mode === 'imported' ? 'Imported read-only copies; save downloads a copy.' : 'Open a folder in Files to enable editor tabs and save.'));
-        if (badge) badge.textContent = state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree' : (state.mode === 'imported' ? 'imported · read-only' : 'browser workspace'));
+        if (meta) meta.textContent = state.mode === 'native' ? 'Native grant · read/write' : (state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree · QA state' : (state.mode === 'imported' ? 'imported · read-only session' : 'browser workspace · open folder')));
+        if (ctxMeta) ctxMeta.textContent = state.mode === 'native' ? 'Read/write access through the native host grant.' : (state.mode === 'directory' ? 'Read/write access to this folder in this tab.' : (state.mode === 'demo' ? 'Demo tree for screenshots; open a real folder for disk access.' : (state.mode === 'imported' ? 'Imported read-only copies; save downloads a copy.' : 'Open a folder in Files to enable editor tabs and save.')));
+        if (badge) badge.textContent = state.mode === 'native' ? 'Native grant · read/write' : (state.mode === 'directory' ? 'File System Access · read/write' : (state.mode === 'demo' ? 'demo tree' : (state.mode === 'imported' ? 'imported · read-only' : 'browser workspace')));
         document.dispatchEvent(new CustomEvent('uor-workspace-changed', { detail: summary() }));
     }
 
@@ -733,7 +783,21 @@
         });
         var reload = document.getElementById('btnReloadTree');
         if (reload) reload.addEventListener('click', async function () {
-            if (state.mode === 'directory' && state.rootHandle) {
+            if (state.mode === 'native' && state.rootPath) {
+                try {
+                    var paths = await window.UORDesktopActions.listDirectory(state.rootPath, MAX_DEPTH);
+                    var samples = {};
+                    paths.slice(0, MAX_FILES).forEach(function (path) {
+                        if (path && !path.startsWith('/') && !path.split('/').includes('..')) samples[path] = '';
+                    });
+                    buildDemoTree(samples);
+                    renderTree();
+                    emit();
+                    toast('Workspace tree reloaded.', 'success');
+                } catch (error) {
+                    toast('Could not reload the folder: ' + String(error && error.message || error), 'error');
+                }
+            } else if (state.mode === 'directory' && state.rootHandle) {
                 state.files = {};
                 state.tree = await readDirectory(state.rootHandle, '', 0);
                 renderTree();

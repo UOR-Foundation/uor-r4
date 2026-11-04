@@ -12,6 +12,7 @@ list_files() {
         'assets/css/router_demo_offline.css' \
         'assets/css/uor_offline_fonts.css' \
         'assets/js/composer_input.js' \
+        'assets/js/desktop_actions.js' \
         'assets/js/desktop_openai.js' \
         'assets/js/image_input.js' \
         'assets/js/model_sources.js' \
