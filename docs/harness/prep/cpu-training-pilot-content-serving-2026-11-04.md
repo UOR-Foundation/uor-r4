@@ -25,13 +25,18 @@ SHA-256. Attempt 3 ran under pin
 control assertion, but its test builds grew the chat target to 2,246,424,310
 bytes, above the registered 2 GiB ceiling. It is retained as instrument
 evidence. Attempt 4 reruns the same source pin with a separate 3 GiB control
-target and post-control target-size checks.
+target and post-control target-size checks. Exact-head review then found that
+the serving selector allocated per token, the raw-step isolation test did not
+exercise the attached model's raw APIs, and the report did not include the
+required serving efficiency measurements. Attempt 5 runs the allocation-free
+selector with caller-owned session scratch and records the added checks,
+throughput and candidate/byte cost.
 
 ## Base artifacts
 
 | Input | Identity |
 |---|---|
-| implementation source | `8194823789244096e2db317bb45954d5a7eeaf8f` |
+| implementation source | `486932e24692f4ca0447dec48606d33e9972f81f` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -147,12 +152,13 @@ replies, fresh phrasing or useful chat.
 - Builds: 16 jobs, 4 GiB RSS, 2 GiB target maximum each.
 - Runs: 32 Rayon workers, 1 GiB RSS, 600 s each.
 - Focused controls: 4 GiB RSS and a separate 3 GiB target maximum.
-- Retained evidence: 224 MiB maximum for every attempt.
+- Retained evidence: 256 MiB maximum for every attempt, raised from 224 MiB
+  only to preserve the fifth post-review attempt.
 - Previous ledger:
-  `cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json`
-  at `35,534.827487699 s` measured and `47,827.677487699 s` admitted
+  `cpu-training-pilot-content-serving-2026-11-04/resource-ledger.json`
+  at `35,608.877487699 s` measured and `49,927.677487699 s` admitted
   cumulative.
-- Admitted cumulative projection: **49,927.677487699 s**.
+- Admitted cumulative projection: **52,027.677487699 s**.
 
 ## Steps
 
@@ -162,13 +168,13 @@ After FIT and a fresh GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-content-readout-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-4
-BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-4
-CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-4
-CONTROL_BUILD=$SOURCE/target/deepseek/content-readout-serving-controls-140-attempt-4
+PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-5
+BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-5
+CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-5
+CONTROL_BUILD=$SOURCE/target/deepseek/content-readout-serving-controls-140-attempt-5
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=8194823789244096e2db317bb45954d5a7eeaf8f
+IMPL_PIN=486932e24692f4ca0447dec48606d33e9972f81f
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -276,16 +282,61 @@ jq -e --arg path "$PIPELINE/seed-1/content-readout-sidecar.json" \
   .content_readout_sha256 == $sha and
   (.reply_ids | length) == 1' \
   "$PIPELINE/seed-1.chat-one-shot.json" >/dev/null
+for repeat in 1 2 3; do
+  "$CHAT" --stack "$PIPELINE/seed-1/serving.uorlut" \
+    --tokenizer "$DUAL/tokenizer-seed-1.json" \
+    --content-readout "$PIPELINE/seed-1/content-readout-sidecar.json" \
+    --threads 1 --prompt-ids 0,7,11 --max-tokens 32 \
+    >"$PIPELINE/seed-1.sidecar-throughput-$repeat.json"
+  "$CHAT" --stack "$PIPELINE/seed-1/serving.uorlut" \
+    --tokenizer "$DUAL/tokenizer-seed-1.json" \
+    --threads 1 --prompt-ids 0,7,11 --max-tokens 32 \
+    >"$PIPELINE/seed-1.no-readout-throughput-$repeat.json"
+  jq -e '(.generated_ids | length) == 32 and
+    .generation_seconds > 0 and .generated_tokens_per_second > 0' \
+    "$PIPELINE/seed-1.sidecar-throughput-$repeat.json" >/dev/null
+  jq -e '.content_readout == null and
+    (.generated_ids | length) == 32 and
+    .generation_seconds > 0 and .generated_tokens_per_second > 0' \
+    "$PIPELINE/seed-1.no-readout-throughput-$repeat.json" >/dev/null
+done
+ROWS=$(jq '.readout.rows | length' \
+  "$PIPELINE/seed-1/content-readout-sidecar.json")
+SIDECAR_MEDIAN_TP=$(jq -s 'map(.generated_tokens_per_second) | sort | .[1]' \
+  "$PIPELINE"/seed-1.sidecar-throughput-*.json)
+NO_READOUT_MEDIAN_TP=$(jq -s 'map(.generated_tokens_per_second) | sort | .[1]' \
+  "$PIPELINE"/seed-1.no-readout-throughput-*.json)
+jq -n --argjson rows "$ROWS" --argjson sidecar_tp "$SIDECAR_MEDIAN_TP" \
+  --argjson no_readout_tp "$NO_READOUT_MEDIAN_TP" \
+  '{schema:"uor-r4.content-readout-serving-efficiency/1",
+    generated_tokens_per_run:32, repeats:3, threads:1,
+    sidecar_rows_scanned_per_decision:$rows,
+    sidecar_signature_bytes_scanned_per_decision:($rows*32*8),
+    vote_targets_scanned_per_decision:4096,
+    vote_scratch_bytes_resident:32768,
+    sidecar_median_generated_tokens_per_second:$sidecar_tp,
+    no_readout_median_generated_tokens_per_second:$no_readout_tp,
+    relative_sidecar_throughput:($sidecar_tp/$no_readout_tp)}' \
+  >"$PIPELINE/efficiency.json"
 printf 'hello\n/quit\n' | "$CHAT" \
   --stack "$PIPELINE/seed-1/serving.uorlut" \
   --tokenizer "$DUAL/tokenizer-seed-1.json" \
   --content-readout "$PIPELINE/seed-1/content-readout-sidecar.json" \
   --max-tokens 1 >"$PIPELINE/seed-1.chat-repl.txt"
 grep -q '1 id(s)' "$PIPELINE/seed-1.chat-repl.txt"
+PIPELINE_BYTES=$(du -sb "$PIPELINE" | cut -f1)
+PREVIOUS_EVIDENCE_BYTES=$(find \
+  "$SOURCE/docs/labs/cpu-training-pilot-content-serving-2026-11-04" \
+  -mindepth 1 -maxdepth 1 -type d -name 'evidence*' \
+  -exec du -sb {} + | awk '{ total += $1 } END { print total }')
+test $((PREVIOUS_EVIDENCE_BYTES + PIPELINE_BYTES)) -le 268435456
+printf '{"previous_bytes":%s,"pipeline_bytes":%s,"total_bytes":%s}\n' \
+  "$PREVIOUS_EVIDENCE_BYTES" "$PIPELINE_BYTES" \
+  "$((PREVIOUS_EVIDENCE_BYTES + PIPELINE_BYTES))" \
+  >"$PIPELINE/retained-evidence-summary.json"
 (cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
   sort -z | xargs -0 sha256sum >SHA256SUMS &&
   sha256sum -c SHA256SUMS --quiet)
-test "$(du -sb "$PIPELINE" | cut -f1)" -le 234881024
 ```
 
 Any source, input, binary, sidecar, parity, worker-order, repeat or resource
@@ -293,10 +344,10 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 CPU content-readout serving attempt 4
+TEST FITNESS: FIT - M2 #2030 CPU content-readout serving attempt 5
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-reviewer: codex-exact-fit-attempt-4
-note: Attempt 3 target breach preserved; attempt 4 isolates controls, gates final target sizes, checks one-shot and REPL, preserves prior charges, and explicitly limits restore evidence to the synthetic no-memory FBS control.
+reviewer: codex-exact-fit-attempt-5
+note: Attempt 4 and its review findings remain preserved. Attempt 5 removes per-token heap allocation, directly tests raw and no-readout serving paths, records per-decision candidate/bytes cost and retained throughput, and raises the retained evidence ceiling to 256 MiB solely for the fifth tree.
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
