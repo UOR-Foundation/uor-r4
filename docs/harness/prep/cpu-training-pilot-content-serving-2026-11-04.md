@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** FIT
+**Status:** PENDING RE-FIT
 
 ## Question
 
@@ -17,14 +17,17 @@ Local CPU development on the Ryzen 9 9950X; no GPU, pod, paid API, upload or
 external model execution.
 
 Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
-Final audit added canonical readout identity to serialized sessions; attempt 2
-reruns under pin `fe253c5ca`.
+Final audit added canonical readout identity to serialized sessions. Attempt 2
+at pin `fe253c5ca` passed both public seeds but was superseded after
+exact-head review found that loopback JSON omitted the sidecar path and file
+SHA-256. Attempt 3 reruns under pin `1be885d9d`; only loopback metadata and
+its tests changed.
 
 ## Base artifacts
 
 | Input | Identity |
 |---|---|
-| implementation source | `fe253c5ca89647264fb3e72cd38a962f1259a6d5` |
+| implementation source | `1be885d9d78e7549059e76aadc8c30091fbe018a` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -76,6 +79,11 @@ The content driver runs the same 103 evaluation samples through:
 Every decision compares chosen token, native/point fallback, packed 2,048-bit
 signature, nearest distance, readout-fired state and complete reply tokens.
 
+The loopback service exposes `content_readout` and
+`content_readout_sha256` on health, model, capability, generation and final
+stream JSON. A real CLI launch must load the sidecar and report those exact
+values.
+
 ## Arms and bar
 
 Run public seed 1, seed 2 and a seed-1 repeat.
@@ -103,6 +111,8 @@ Both seeds must pass:
 - No UORLUT byte changes when the sidecar is attached.
 - No CUDA, float-training, softmax, dense matmul or Claude-owned path changes.
 - `uor-chat --content-readout` loads the sidecar in the public smoke.
+- Real loopback metadata and the CLI test identify the exact path and file
+  SHA-256.
 
 ## Stop rules
 
@@ -142,12 +152,12 @@ After FIT and a fresh GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-content-readout-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-2
-BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-2
-CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-2
+PIPELINE=$SHARED/local/deepseek/content-readout-serving/2026-11-04-attempt-3
+BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-3
+CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-3
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=fe253c5ca89647264fb3e72cd38a962f1259a6d5
+IMPL_PIN=1be885d9d78e7549059e76aadc8c30091fbe018a
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -233,11 +243,12 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 content-readout serving sidecar:
+TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: e87afda2b98ad996631c5d1fd36a1eee3252575f
-implementation pin: fe253c5ca89647264fb3e72cd38a962f1259a6d5
-reviewer: independent-subagent content_readout_serving_fit_6
+head: 1be885d9d78e7549059e76aadc8c30091fbe018a
+implementation pin: 1be885d9d78e7549059e76aadc8c30091fbe018a
+reviewer: pending
 date: 2026-11-04
 
-A FIT verdict clears compute for this configuration only (D22).
+A FIT verdict clears compute for this configuration only (D22). The attempt-2
+FIT does not carry to the loopback-identity binary.
