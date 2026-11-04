@@ -133,6 +133,15 @@ teacher-forced top-1 loss; nondeterminism; or any need to change serving,
 integer-session, CUDA or Claude-owned files. An eligibility failure is
 retained as an insufficiency result without training compute.
 
+## Decision consequence
+
+A pass makes generated-prefix writer training a supported CPU candidate for the
+next content-training unit and justifies bringing the same mechanism to a GPU
+qualification sheet. A fail closes only this K=1, 80-attempt, generated-prefix
+configuration and redirects work to admission/query training or another
+content mechanism. An eligibility failure changes no mechanism status. No
+outcome changes integer serving or closes #3506.
+
 ## Cost
 
 | Component | Projection |
@@ -154,12 +163,81 @@ retained as an insufficiency result without training compute.
 
 ## Steps
 
-After FIT and a fresh GO, build `cpu-generated-prefix-driver` in a fresh
-source-bound target. Run selection on both seeds. Proceed only if the
-eligibility gate passes on both. Then run seeds 1 and 2 plus a seed-1 repeat in
-fresh roots under `RAYON_NUM_THREADS=32`, with 600-second timeouts, exact input
-pins, a 1-GiB RSS stop and per-root checksums. Preserve every arm artifact and
-the compact report.
+After this FIT and a fresh GO, run this exact recipe from the named worktree:
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4-generated-prefix
+SHARED=/home/callard/projects/codex-playground/uor-r4
+PIPELINE=$SHARED/local/deepseek/generated-prefix/2026-11-04-attempt-1
+BUILD=$SOURCE/target/deepseek/generated-prefix-133
+DEV=$SHARED/local/deepseek/public-m1-parity
+DUAL=$SHARED/local/deepseek/public-fbs-dual
+test "$(git -C "$SOURCE" rev-parse HEAD)" = \
+  63a3a92303706f08133b0dd1fc41e915cae4aac1
+test ! -e "$PIPELINE"
+test ! -e "$BUILD"
+mkdir -p "$PIPELINE/selection"
+CARGO_TARGET_DIR=$BUILD cargo build --locked --release \
+  -p uor-r4-cpu-train --bin cpu-generated-prefix-driver
+BIN=$BUILD/release/cpu-generated-prefix-driver
+for seed in 1 2; do
+  case "$seed" in
+    1) artifact=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd ;;
+    2) artifact=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 ;;
+  esac
+  "$BIN" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
+    "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" "$DEV/dev-manifest.json" \
+    "$PIPELINE/selection/seed-$seed.out" \
+    --expected-artifact-sha256 "$artifact" \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
+    --reply-cap 16 --attempts 80 --seed 1 --select-only \
+    >"$PIPELINE/selection/seed-$seed.json"
+  jq -e '.preflight.eligible_decisions >= 640
+    and .preflight.prompts >= 16 and .preflight.target_cells >= 8
+    and .preflight.same_cell_shuffle_pairs >= 64
+    and .shuffled_preflight.eligible_decisions >= 640
+    and .shuffled_preflight.prompts >= 16
+    and .shuffled_preflight.target_cells >= 8
+    and .shuffled_preflight.same_cell_shuffle_pairs >= 64' \
+    "$PIPELINE/selection/seed-$seed.json" >/dev/null
+done
+run() {
+  seed=$1 label=$2 artifact=$3
+  out=$PIPELINE/$label
+  /usr/bin/time -v -o "$PIPELINE/$label.time.txt" \
+    timeout 600s env RAYON_NUM_THREADS=32 \
+    "$BIN" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
+      "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" "$DEV/dev-manifest.json" \
+      "$out" --expected-artifact-sha256 "$artifact" \
+      --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+      --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+      --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+      --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
+      --reply-cap 16 --attempts 80 --seed 1 \
+      >"$PIPELINE/$label.stdout.json"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
+  jq -e '.bar.all_parity_exact == true
+    and .bar.static_shuffled_accepted > 0
+    and .bar.dynamic_shuffled_accepted > 0' "$out/report.json" >/dev/null
+}
+run 1 seed-1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run 2 seed-2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run 1 seed-1-repeat a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+jq 'del(.wall_elapsed_ms, .peak_rss_kib)' \
+  "$PIPELINE/seed-1/report.json" >"$PIPELINE/seed-1.normalized.json"
+jq 'del(.wall_elapsed_ms, .peak_rss_kib)' \
+  "$PIPELINE/seed-1-repeat/report.json" >"$PIPELINE/seed-1-repeat.normalized.json"
+cmp "$PIPELINE/seed-1.normalized.json" "$PIPELINE/seed-1-repeat.normalized.json"
+```
+
+Compare every `.uorlut` artifact by filename between seed 1 and its repeat,
+then write a recursive `SHA256SUMS` for the retained pipeline. Any source,
+input, binary, split, control, parity or deterministic mismatch is an
+instrument fault requiring a new FIT before retry.
 
 ## TEST FITNESS
 
