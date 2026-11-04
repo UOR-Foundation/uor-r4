@@ -20,7 +20,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `d3238dbb6f8ac65940d6f853e84d238bdb56421d` |
+| implementation source | `266de4a06ae7e50ecd849950495cb3a2f4b95b4a` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -132,7 +132,7 @@ PIPELINE=$SHARED/local/deepseek/query-admission/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/query-admission-135
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=d3238dbb6f8ac65940d6f853e84d238bdb56421d
+IMPL_PIN=266de4a06ae7e50ecd849950495cb3a2f4b95b4a
 MIN_FREE_KIB=31588352
 MAX_BUILD_BYTES=2147483648
 MAX_PIPELINE_BYTES=67108864
