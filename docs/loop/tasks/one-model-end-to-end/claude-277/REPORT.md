@@ -148,3 +148,37 @@ No code. This unit adds:
 - **One watcher event.** At 15:04:54Z the laptop watcher's 45-minute no-change rule stopped the watcher during D (`local/claude/p3/watch-277.log`, lines 81–82). D writes no file until a 2,048 pass ends, and the GPU read 99%.
   - The watcher was re-armed with a 120-minute rule.
   - The job and the pod were not touched.
+
+## Checks run at the head
+
+- **No code changed** since the pin: only this unit's ORDER and REPORT, the sheet's FIT, PRE-RUN and outcome lines, the notebook row and the item paragraph.
+- **The seal,** checked twice: on the pod before upload, and on the laptop after a full read-back from the store, 456 of 456 OK. `SHA256SUMS.files` has SHA-256 `dd13fa1d835a6b87d7a2fae4396767cb3a78143a6675eb68a84fa7aced9117b7`.
+- **The store:** `caseyallard/uor-r4-store:results/claude/one-model-end-to-end-side-by-side-2026-11-04/run/` holds 460 files: the 456 sealed files, their `SHA256SUMS.files`, and the run's `DONE`, `EXIT` and `job.log`. The inputs are left out; they are P2b's sealed checkpoints and claude-275's inputs, already in the store.
+- **The pod** was released and deleted after the read-back and the MPS probe.
+- **`loop report --check` and `loop pr-check --local`** were run at the head before review.
+- **Reviews:**
+  - the sheet's FIT, in two rounds, and the pre-run review, in two rounds, all before launch (the sheet's FIT and PRE-RUN lines);
+  - the claims review of this REPORT read APPROVE WITH CHANGES, and its six findings are folded in. It is recorded on PR #3664 by `loop review`.
+
+## Skills used
+
+None applied.
+
+## Still open
+
+1. **P3's next unit: the exact decode cache, unit 1 of 2.** It carries each layer's scan and convolution state across decode steps, gated byte for byte against today's full re-run.
+2. **The serial schedule at 192 is not closed.** P5's pod repeats one A and one B pair, as the Bar's Inconclusive rule says.
+3. **The cross-pod file difference** (What did not work, item 5). Kernels compiled ahead to `sm_120` machine code are the candidate fix; untested.
+4. **P2b's classification,** instrument or mechanism, comes after the cache, and before P4.
+
+## Plain summary
+
+Scoring a trained model means making it write many answers and checking them, and that is slow. This unit tried a cheap speed-up: run two or four scoring jobs on one graphics card at the same time instead of one after another.
+
+It never changed a single result: every file the jobs wrote was identical either way. But it didn't clearly save time. Two jobs at once took about as long as running them in turn, and the same job run twice in a row varied by almost a third, which is more than any saving. On the longest conversations, two jobs at once were slower.
+
+The measurements show where the time goes: almost all of it is spent writing answers, because each new word re-reads the whole conversation. So the next step is a cache, which lets each new word reuse the work already done on the words before it. It will be checked to give exactly the same answers as today.
+
+The run cost about $2.45.
+
+References #3407.
