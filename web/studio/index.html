@@ -69,12 +69,14 @@
                         <button class="icon-btn icon-btn-sm" id="btnNavCollapse" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
                     </div>
                 </div>
-                <nav class="nav-section" aria-label="Sections">
+                <nav class="nav-section harness-nav" aria-label="Sections">
                     <span class="nav-section-title">WORKSPACE</span>
-                    <button class="nav-item" id="navAgent" type="button" data-section="agent" aria-current="page"><span class="nav-item-icon" aria-hidden="true">◈</span><span class="nav-item-text"><span class="nav-item-label">Agent <kbd class="nav-kbd">⌘1</kbd></span><span class="nav-item-desc">Chat, context and build tasks</span></span></button>
-                    <button class="nav-item" id="navWorkspace" type="button" data-section="workspace"><span class="nav-item-icon" aria-hidden="true">▤</span><span class="nav-item-text"><span class="nav-item-label">Workspace <kbd class="nav-kbd">⌘2</kbd></span><span class="nav-item-desc">File tree, editor tabs, save</span></span></button>
-                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">UOR Chat, custom providers, diagnostics</span></span></button>
-                    <button class="nav-item" id="navGuide" type="button" data-section="guide"><span class="nav-item-icon" aria-hidden="true">▸</span><span class="nav-item-text"><span class="nav-item-label">Guide <kbd class="nav-kbd">⌘4</kbd></span><span class="nav-item-desc">Workflows, shortcuts, limits</span></span></button>
+                    <button class="nav-item" id="navAgent" type="button" data-section="agent" aria-current="page"><span class="nav-item-icon" aria-hidden="true">◈</span><span class="nav-item-text"><span class="nav-item-label">Chat <kbd class="nav-kbd">⌘1</kbd></span><span class="nav-item-desc">Sessions, context and build tasks</span></span></button>
+                    <button class="nav-item" id="navWorkspace" type="button" data-section="workspace"><span class="nav-item-icon" aria-hidden="true">▤</span><span class="nav-item-text"><span class="nav-item-label">Files <kbd class="nav-kbd">⌘2</kbd></span><span class="nav-item-desc">Local folders and editor</span></span></button>
+                    <button class="nav-item" id="navChanges" type="button" data-section="changes"><span class="nav-item-icon" aria-hidden="true">±</span><span class="nav-item-text"><span class="nav-item-label">Changes <kbd class="nav-kbd">⌘4</kbd></span><span class="nav-item-desc">Git status and working-tree diff</span></span></button>
+                    <button class="nav-item" id="navTerminal" type="button" data-section="terminal"><span class="nav-item-icon" aria-hidden="true">›</span><span class="nav-item-text"><span class="nav-item-label">Terminal <kbd class="nav-kbd">⌘5</kbd></span><span class="nav-item-desc">Approved commands only</span></span></button>
+                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">Models, MCP and API providers</span></span></button>
+                    <button class="nav-item" id="navSettings" type="button" data-action="open-settings"><span class="nav-item-icon" aria-hidden="true">⚙</span><span class="nav-item-text"><span class="nav-item-label">Settings <kbd class="nav-kbd">⌘,</kbd></span><span class="nav-item-desc">Appearance, data and About</span></span></button>
                 </nav>
                 <section class="nav-sessions" id="sessionSection" aria-label="Sessions">
                     <div class="nav-sessions-head"><span class="nav-section-title">SESSIONS</span><button class="new-session-btn" id="btnNewChat" type="button">New session</button></div>
@@ -136,7 +138,7 @@
                                         <button class="tool-btn" id="btnBuildTask" type="button" aria-haspopup="menu" aria-expanded="false" title="Insert a build-task prompt template">
                                             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>Build task
                                         </button>
-                                        <div class="template-menu" id="templateMenu" role="menu" aria-label="Build task templates" hidden>
+                                        <div class="template-menu harness-menu" id="templateMenu" role="menu" aria-label="Build task templates" hidden>
                                             <div class="template-menu-label">BUILD TEMPLATES</div>
                                             <button class="template-item" type="button" role="menuitem" data-template="ux"><span class="template-title">Studio UX improvement brief</span><span class="template-desc">Plan and implement a focused Studio UX change.</span></button>
                                             <button class="template-item" type="button" role="menuitem" data-template="api"><span class="template-title">API integration checklist</span><span class="template-desc">Plan an OpenAI-compatible API integration (API lab owns the code).</span></button>
@@ -228,7 +230,7 @@
 
                 <section class="view workspace-view" id="workspaceView" data-view="workspace" aria-label="Workspace">
                     <header class="view-head">
-                        <div class="view-head-text"><h1 class="panel-title">Workspace</h1><p class="view-subtitle">Open a local folder, edit files in tabs, and save back to disk.</p></div>
+                        <div class="view-head-text"><h1 class="panel-title">Files</h1><p class="view-subtitle">Open a local folder, edit files in tabs, and save back to disk.</p></div>
                         <div class="view-head-actions">
                             <button class="ghost-btn" id="btnReloadTree" type="button">Reload tree</button>
                             <button class="ghost-btn" id="btnImportFiles" type="button">Import files…</button>
@@ -269,6 +271,60 @@
                     <input class="visually-hidden" id="editorFileInput" type="file" accept=".md,.txt,.rs,.json,.html,.css,.js,.toml,.yml,.yaml">
                 </section>
 
+                <section class="view changes-view" id="changesView" data-view="changes" aria-label="Changes">
+                    <header class="view-head">
+                        <div class="view-head-text">
+                            <h1 class="panel-title">Changes</h1>
+                            <p class="view-subtitle">Repository status and working-tree diff, inside your chosen project.</p>
+                        </div>
+                        <div class="view-head-actions">
+                            <button class="ghost-btn" id="btnRefreshChanges" type="button" disabled title="Native Git integration is wired in the desktop task">Refresh</button>
+                        </div>
+                    </header>
+                    <div class="harness-view-body">
+                        <section class="harness-card" aria-labelledby="repositoryStatusTitle">
+                            <h2 id="repositoryStatusTitle">Repository status</h2>
+                            <p id="gitStatusSummary">Open a project folder in Files to inspect its branch and working tree.</p>
+                        </section>
+                        <section class="harness-card harness-diff-card" aria-labelledby="workingTreeDiffTitle">
+                            <div class="harness-card-head">
+                                <h2 id="workingTreeDiffTitle">Working-tree diff</h2>
+                                <button class="ghost-btn" id="btnCopyDiff" type="button" disabled title="Native Git integration is wired in the desktop task">Copy diff</button>
+                            </div>
+                            <pre id="gitDiffOutput">No repository selected.</pre>
+                        </section>
+                    </div>
+                </section>
+
+                <section class="view terminal-view" id="terminalView" data-view="terminal" aria-label="Terminal">
+                    <header class="view-head">
+                        <div class="view-head-text">
+                            <h1 class="panel-title">Terminal</h1>
+                            <p class="view-subtitle">Run only explicitly approved commands inside a granted project folder.</p>
+                        </div>
+                    </header>
+                    <div class="harness-view-body">
+                        <section class="harness-card" aria-labelledby="terminalCommandTitle">
+                            <h2 id="terminalCommandTitle">Approved command</h2>
+                            <p id="terminalConsentState">Terminal is disabled. Native host confirmation is required before any command runs.</p>
+                            <div class="harness-form-grid">
+                                <label for="terminalCwd">Working directory</label>
+                                <input id="terminalCwd" type="text" placeholder="Choose a project folder in Files" autocomplete="off" spellcheck="false">
+                                <label for="terminalCommand">Command</label>
+                                <input id="terminalCommand" type="text" placeholder="For example: cargo test" autocomplete="off" spellcheck="false">
+                            </div>
+                            <div class="harness-card-actions">
+                                <button class="ghost-btn" id="btnTerminalEnable" type="button" disabled title="Native host confirmation is wired in the desktop task">Enable terminal</button>
+                                <button class="primary-btn" id="btnRunTerminal" type="button" disabled title="Native host confirmation is wired in the desktop task">Run command</button>
+                            </div>
+                        </section>
+                        <section class="harness-card" aria-labelledby="terminalOutputTitle">
+                            <h2 id="terminalOutputTitle">Output</h2>
+                            <pre id="terminalOutput">No command has run.</pre>
+                        </section>
+                    </div>
+                </section>
+
                 <section class="view guide-view" id="guideView" data-view="guide" aria-label="Studio guide">
                     <header class="view-head">
                         <div class="view-head-text">
@@ -277,7 +333,7 @@
                         </div>
                         <div class="view-head-actions">
                             <span class="badge">read me first</span>
-                            <button class="ghost-btn" id="btnGuideAgent" type="button">Start in Agent →</button>
+                            <button class="ghost-btn" id="btnGuideAgent" type="button">Start in Chat →</button>
                         </div>
                     </header>
                     <div class="guide-body">
@@ -289,11 +345,11 @@
                         <div class="guide-grid">
                             <section class="guide-card">
                                 <span class="micro-label">01 · QUICK START</span>
-                                <h3>Open a workspace, then ask the agent</h3>
+                                <h3>Open Files and start chatting</h3>
                                 <ol class="guide-list">
-                                    <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Workspace</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
+                                    <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Files</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
                                     <li>Click a file to open an editor tab; save edits back to disk with <kbd class="kbd">⌘S</kbd>.</li>
-                                    <li>In <button class="inline-link" data-guide-nav="agent" type="button">Agent</button>, attach the active file as context and describe the task.</li>
+                                    <li>In <button class="inline-link" data-guide-nav="agent" type="button">Chat</button>, attach the active file as context and describe the task.</li>
                                     <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Connections</button> when a custom OpenAI-compatible endpoint is configured; until then the local engine serves next-token prediction only.</li>
                                 </ol>
                             </section>
@@ -405,7 +461,7 @@
     </div>
 
     <div class="modal-backdrop" id="settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
-        <div class="modal">
+        <div class="modal harness-modal">
             <header class="modal-head"><div><span class="micro-label">STUDIO</span><h2 id="settingsTitle">Settings</h2><p class="modal-sub">Stored in this browser only. Nothing is uploaded.</p></div><button class="icon-btn" id="btnCloseSettings" type="button" aria-label="Close settings" title="Close">×</button></header>
             <div class="modal-body">
                 <section class="settings-section"><h3>Appearance</h3>
@@ -904,7 +960,7 @@
         }
 
         function setView(view, options) {
-            if (view !== 'chat' && view !== 'model' && view !== 'workspace' && view !== 'editor' && view !== 'files' && view !== 'guide') return;
+            if (view !== 'chat' && view !== 'model' && view !== 'workspace' && view !== 'changes' && view !== 'terminal' && view !== 'editor' && view !== 'files' && view !== 'guide') return;
             if (view === 'editor' || view === 'files') view = 'workspace';
             document.body.dataset.view = view;
             ['Chat', 'Model', 'Editor'].forEach(function (name) {

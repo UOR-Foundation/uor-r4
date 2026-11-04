@@ -88,8 +88,10 @@
 
     /* navigation */
     var SECTIONS = {
-        agent: { view: 'chat', label: 'Agent', purpose: 'Chat with the agent, manage sessions, attach context and run build tasks.' },
-        workspace: { view: 'workspace', label: 'Workspace', purpose: 'Open a folder, edit files in tabs and save them back to disk.' },
+        agent: { view: 'chat', label: 'Chat', purpose: 'Chat with the agent, manage sessions, attach context and run build tasks.' },
+        workspace: { view: 'workspace', label: 'Files', purpose: 'Open a folder, edit files in tabs and save them back to disk.' },
+        changes: { view: 'changes', label: 'Changes', purpose: 'Inspect repository status and the working-tree diff.' },
+        terminal: { view: 'terminal', label: 'Terminal', purpose: 'Run explicitly approved commands inside a granted folder.' },
         models: { view: 'model', label: 'Connections', purpose: 'UOR Chat, custom API providers, and artifact diagnostics.' },
         guide: { view: 'guide', label: 'Guide', purpose: 'Quick start, the build-this-studio workflow, shortcuts and honest limits.' }
     };
@@ -221,8 +223,10 @@
             sections.appendChild(verifyNote);
         }
         var nativeGuide = mount.querySelector('#nativeRunnerGuide');
-        if (nativeGuide && nativeGuide.parentElement !== sections) {
-            sections.insertBefore(nativeGuide, sections.firstChild);
+        if (nativeGuide) {
+            var previousGuide = sections.querySelector('#nativeRunnerGuide');
+            if (previousGuide && previousGuide !== nativeGuide) previousGuide.remove();
+            if (nativeGuide.parentElement !== sections) sections.insertBefore(nativeGuide, sections.firstChild);
         }
         var freshGroups = mount.querySelectorAll('.source-group');
         if (freshGroups.length > 1) {
@@ -951,10 +955,11 @@
     function on(id, event, handler) { var node = document.getElementById(id); if (node) node.addEventListener(event, handler); }
 
     function wire() {
-        ['navAgent', 'navWorkspace', 'navModels', 'navGuide'].forEach(function (id) {
+        ['navAgent', 'navWorkspace', 'navChanges', 'navTerminal', 'navModels', 'navGuide'].forEach(function (id) {
             var name = id.replace('nav', '').toLowerCase();
             on(id, 'click', function () { activateSection(name); });
         });
+        on('navSettings', 'click', openSettings);
         on('btnToggleNav', 'click', function () { toggleChrome('nav'); });
         on('btnNavCollapse', 'click', function () { toggleChrome('nav'); });
         on('btnMobileNav', 'click', function () { toggleChrome('nav'); });
@@ -1041,10 +1046,10 @@
             var typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
             var templateMenuState = document.getElementById('templateMenu');
             var overlayActive = paletteOpen || sessionPopover || (templateMenuState && !templateMenuState.hidden) || document.querySelector('.modal-backdrop:not([hidden])');
-            if (overlayActive && meta && ['1', '2', '3', '4', 'b', 'B', 'i', 'I'].indexOf(event.key) >= 0) { event.preventDefault(); return; }
+            if (overlayActive && meta && ['1', '2', '3', '4', '5', '6', 'b', 'B', 'i', 'I'].indexOf(event.key) >= 0) { event.preventDefault(); return; }
             if (meta && (event.key === 'k' || event.key === 'K')) { event.preventDefault(); if (paletteOpen) closePalette(); else openPalette(); return; }
             if (meta && event.key === ',') { event.preventDefault(); openSettings(); return; }
-            if (meta && ['1', '2', '3', '4'].indexOf(event.key) >= 0 && !event.shiftKey && !event.altKey) { event.preventDefault(); activateSection({ '1': 'agent', '2': 'workspace', '3': 'models', '4': 'guide' }[event.key]); return; }
+            if (meta && ['1', '2', '3', '4', '5', '6'].indexOf(event.key) >= 0 && !event.shiftKey && !event.altKey) { event.preventDefault(); activateSection({ '1': 'agent', '2': 'workspace', '3': 'models', '4': 'changes', '5': 'terminal', '6': 'guide' }[event.key]); return; }
             if (meta && (event.key === 'b' || event.key === 'B')) { event.preventDefault(); toggleChrome('nav'); return; }
             if (meta && (event.key === 'i' || event.key === 'I')) { event.preventDefault(); toggleChrome('inspector'); return; }
             if (!typing && !event.metaKey && !event.ctrlKey && event.key === '?') { event.preventDefault(); openHelp(); return; }
