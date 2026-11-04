@@ -13,16 +13,18 @@ Base: `a66028b0e`.
 - **The second FIT review rejected the reachability test.** Reachability was a
   supplied boolean, not a tested computation. A pure boundary helper now tests
   exact cap/context, cap plus one and context plus one.
-- **The point vote does not propagate into complete replies.** Both seeds have
-  vote opening top-1 `3/60`, but all four arms have zero exact-reference and
-  zero BOS-complete replies. All 60 replies in every arm hit the 16-token cap.
+- **The point vote's measured correctness gain does not propagate into
+  complete replies.** Both seeds have vote opening top-1 `3/60`, but all four
+  arms have zero exact-reference and zero BOS-complete replies. All 60 replies
+  in every arm hit the 16-token cap.
 - **Seed 1 gets worse under the vote on some reply statistics.** Vote produces
   4 distinct non-empty replies and 57 repeated-4-gram replies, against nearest
   row's 10 and 55 and point-off's 2 and 22. Fewer distinct replies with more
   repetition is not a chat improvement.
 - **Exact-reference coverage is bounded.** Nine of 60 stored references are
-  longer than the registered 16-token cap, leaving 51 reachable references.
-  Even among those, no arm matches an exact complete reply.
+  unreachable under the combined 16-token/remaining-context rule, leaving 51
+  reachable references. Even among those, no arm matches an exact complete
+  reply.
 
 ## What changed
 
@@ -44,7 +46,7 @@ the shared integer `reply_stop` contract, and records:
 - overlapping repeated 4-grams;
 - generated/reference tokens, wall time and aggregate generated tokens/s.
 
-The finite suite is 12 tests. The source change is confined to the existing
+The finite suite is 13 tests. The source change is confined to the existing
 point-transfer driver and task records.
 
 ## Measurements
@@ -53,23 +55,30 @@ Both seeds used 16 Rayon workers concurrently on the Ryzen 9 9950X.
 
 | Seed | Arm | Exact | BOS | Cap | Opening | Distinct | Repeat 4-gram | Generated tok/s |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | point-off | 0 | 0 | 60 | 0 | 2 | 22 | 18,333 |
-| 1 | nearest | 0 | 0 | 60 | 2 | 10 | 55 | 18,814 |
-| 1 | vote | 0 | 0 | 60 | 3 | 4 | 57 | 17,870 |
-| 1 | shuffled vote | 0 | 0 | 60 | 0 | 11 | 46 | 17,389 |
-| 2 | point-off | 0 | 0 | 60 | 0 | 2 | 40 | 18,511 |
-| 2 | nearest | 0 | 0 | 60 | 1 | 12 | 37 | 19,283 |
-| 2 | vote | 0 | 0 | 60 | 3 | 5 | 22 | 19,288 |
-| 2 | shuffled vote | 0 | 0 | 60 | 3 | 8 | 6 | 18,251 |
+| 1 | point-off | 0 | 0 | 60 | 0 | 2 | 22 | 18,509 |
+| 1 | nearest | 0 | 0 | 60 | 2 | 10 | 55 | 19,607 |
+| 1 | vote | 0 | 0 | 60 | 3 | 4 | 57 | 20,677 |
+| 1 | shuffled vote | 0 | 0 | 60 | 0 | 11 | 46 | 19,053 |
+| 2 | point-off | 0 | 0 | 60 | 0 | 2 | 40 | 19,880 |
+| 2 | nearest | 0 | 0 | 60 | 1 | 12 | 37 | 20,402 |
+| 2 | vote | 0 | 0 | 60 | 3 | 5 | 22 | 17,719 |
+| 2 | shuffled vote | 0 | 0 | 60 | 3 | 8 | 6 | 18,703 |
 
-Wall times were 1.672 s and 1.606 s. The tokens/s figures are aggregate
+Wall times were 1.593 s and 1.547 s. The tokens/s figures are aggregate
 generated tokens divided by each arm's wall interval over all 60 prompts; they
 are not single-stream decode rates.
 
-The seed-1 repeat reproduced every complete-reply reading exactly after timing
-fields were removed. Every teacher-forced arm retained zero query-coordinate,
-token and kept-cell mismatches over 2,110 positions, 540,160 Q12 coordinates,
-2,110 decisions and 16,880 kept cells.
+The seed-1 repeat reproduced every complete-reply reading and every per-arm
+ordered-token SHA-256 exactly after timing fields were removed. Digests are:
+
+- seed 1 point-off `ea9a314d…8eeb`, nearest `b4fff629…38e4`, vote
+  `7bf63e47…d1ea9`, shuffled vote `7e2e32b4…b134`;
+- seed 2 point-off `11f8e912…d878`, nearest `faa0386b…467e`, vote
+  `69e4fd0e…9d7b`, shuffled vote `6767a039…e5c3`.
+
+Every teacher-forced arm retained zero query-coordinate, token and kept-cell
+mismatches over 2,110 positions, 540,160 Q12 coordinates, 2,110 decisions and
+16,880 kept cells.
 
 Artifact hashes remain identical to deepseek-106:
 
@@ -88,11 +97,11 @@ point votes or all complete-reply training; it closes this fixed 60/60,
 
 ## Checks run at the head
 
-- Focused point-transfer driver tests: 12 passed before public compute.
+- Focused point-transfer driver tests: 13 passed before public compute.
 - FIT: non-author review, FIT before public compute.
 - Both public seeds and a seed-1 exact repeat: passed.
 - Full CPU release tests: 163 library tests passed with 4 release benchmarks
-  ignored; all binary suites passed, including point transfer `12/12`.
+  ignored; all binary suites passed, including point transfer `13/13`.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - Package formatting, diff whitespace, FIT schema, evidence checksum and JSON
   validation: passed.

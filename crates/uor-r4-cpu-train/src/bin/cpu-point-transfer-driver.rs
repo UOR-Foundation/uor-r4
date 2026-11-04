@@ -76,9 +76,10 @@ struct ReplyReading {
     reference_tokens: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 struct TimedReplyReading {
     reading: ReplyReading,
+    reply_sha256: String,
     wall_elapsed_us: u64,
     generated_tokens_per_second: f64,
 }
@@ -772,10 +773,12 @@ fn evaluate_replies(
             Ok((generated, reference, reachable))
         })
         .collect::<Result<Vec<_>, String>>()?;
+    let reply_sha256 = reply_sequence_sha256(&rows);
     let reading = summarize_replies(rows)?;
     let elapsed = started.elapsed();
     Ok(TimedReplyReading {
         reading,
+        reply_sha256,
         wall_elapsed_us: elapsed.as_micros().try_into().unwrap_or(u64::MAX),
         generated_tokens_per_second: reading.generated_tokens as f64
             / elapsed.as_secs_f64().max(1e-12),
@@ -893,6 +896,25 @@ fn bounded_reply(
 fn has_repeated_4gram(tokens: &[u32]) -> bool {
     let mut seen = BTreeSet::new();
     tokens.windows(4).any(|window| !seen.insert(window))
+}
+
+fn reply_sequence_sha256(rows: &[(GeneratedReply, Vec<u32>, bool)]) -> String {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&(rows.len() as u64).to_le_bytes());
+    for (reply, _, _) in rows {
+        let stop = match reply.stop {
+            "bos" => 0u8,
+            "cap" => 1,
+            "context" => 2,
+            _ => 3,
+        };
+        bytes.push(stop);
+        bytes.extend_from_slice(&(reply.tokens.len() as u64).to_le_bytes());
+        for token in &reply.tokens {
+            bytes.extend_from_slice(&token.to_le_bytes());
+        }
+    }
+    uor_r4_discrete::corpus::sha256(&bytes)
 }
 
 fn normalized_reference(reference: &[u32]) -> &[u32] {
@@ -1254,6 +1276,27 @@ mod tests {
         assert_eq!(empty.exact_reference, 1);
         assert_eq!(empty.opening_correct, 0, "two absent openings do not match");
         assert_eq!(empty.non_empty, 0);
+        assert!(add_count(u64::MAX, 1).is_err(), "counter overflow");
+    }
+
+    #[test]
+    fn reply_sequence_digest_tracks_tokens_and_stop_markers() {
+        let rows = vec![(
+            GeneratedReply {
+                tokens: vec![5, 6, 7],
+                stop: "bos",
+            },
+            vec![5, 6, 7],
+            true,
+        )];
+        let first = reply_sequence_sha256(&rows);
+        assert_eq!(first, reply_sequence_sha256(&rows));
+        let mut changed_token = rows.clone();
+        changed_token[0].0.tokens[1] = 8;
+        assert_ne!(first, reply_sequence_sha256(&changed_token));
+        let mut changed_stop = rows;
+        changed_stop[0].0.stop = "cap";
+        assert_ne!(first, reply_sequence_sha256(&changed_stop));
     }
 
     fn opening_token(artifact: &[u8], prompt: &[u32]) -> u32 {

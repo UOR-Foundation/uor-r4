@@ -7,7 +7,7 @@
   "schedule": "two seeds concurrently",
   "exact_reference_rule": "remove exactly one trailing BOS from the stored reference; compare remaining ids",
   "seed_1": {
-    "wall_elapsed_ms": 1672.030643,
+    "wall_elapsed_ms": 1593.435949,
     "opening_top1": {
       "point_off": 0,
       "nearest": 2,
@@ -25,8 +25,9 @@
         "repeated_4gram": 22,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 52363,
-        "generated_tokens_per_second": 18333.421690240648
+        "wall_elapsed_us": 51865,
+        "generated_tokens_per_second": 18509.417697768164,
+        "reply_sha256": "ea9a314d3aed13030caba7228d5d8495ae74fbe637f633879ca54acf57c18eeb"
       },
       "nearest": {
         "exact_reference": 0,
@@ -38,8 +39,9 @@
         "repeated_4gram": 55,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 51026,
-        "generated_tokens_per_second": 18813.934673981657
+        "wall_elapsed_us": 48962,
+        "generated_tokens_per_second": 19606.67498629626,
+        "reply_sha256": "b4fff629ec7e83ed924583f2151d14e833c102544523898555d38a8f2d8f38e4"
       },
       "vote": {
         "exact_reference": 0,
@@ -51,8 +53,9 @@
         "repeated_4gram": 57,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 53721,
-        "generated_tokens_per_second": 17870.034478183916
+        "wall_elapsed_us": 46428,
+        "generated_tokens_per_second": 20676.85290286538,
+        "reply_sha256": "7bf63e474d4ffa857a699ed7445154a0c74a35037a6b82b726487f64952d1ea9"
       },
       "random_vote": {
         "exact_reference": 0,
@@ -64,13 +67,14 @@
         "repeated_4gram": 46,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 55208,
-        "generated_tokens_per_second": 17388.542341680222
+        "wall_elapsed_us": 50384,
+        "generated_tokens_per_second": 19053.444335789092,
+        "reply_sha256": "7e2e32b47ded9379d262ac0623f8ea12142bd3428a4dd2df86eb282f1fccb134"
       }
     }
   },
   "seed_2": {
-    "wall_elapsed_ms": 1606.151878,
+    "wall_elapsed_ms": 1546.848182,
     "opening_top1": {
       "point_off": 0,
       "nearest": 1,
@@ -88,8 +92,9 @@
         "repeated_4gram": 40,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 51862,
-        "generated_tokens_per_second": 18510.600095144484
+        "wall_elapsed_us": 48288,
+        "generated_tokens_per_second": 19880.44439171525,
+        "reply_sha256": "11f8e912ec4f9130c5696505d5e9dd8c0afd9349dd1ced8ef883f0b71344d878"
       },
       "nearest": {
         "exact_reference": 0,
@@ -101,8 +106,9 @@
         "repeated_4gram": 37,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 49783,
-        "generated_tokens_per_second": 19283.495220284407
+        "wall_elapsed_us": 47054,
+        "generated_tokens_per_second": 20401.733943367846,
+        "reply_sha256": "faa0386baa7eaca8a24acd5df1d200b257a9db3bcade7a9fd2d2d7c64cbd467e"
       },
       "vote": {
         "exact_reference": 0,
@@ -114,8 +120,9 @@
         "repeated_4gram": 22,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 49772,
-        "generated_tokens_per_second": 19287.7999943543
+        "wall_elapsed_us": 54177,
+        "generated_tokens_per_second": 17719.375045763518,
+        "reply_sha256": "69e4fd0eeec338d96ca8ab41860e2849959895a9231db7401c79a083ec989d7b"
       },
       "random_vote": {
         "exact_reference": 0,
@@ -127,8 +134,9 @@
         "repeated_4gram": 6,
         "reference_reachable": 51,
         "generated_tokens": 960,
-        "wall_elapsed_us": 52600,
-        "generated_tokens_per_second": 18250.924547160816
+        "wall_elapsed_us": 51328,
+        "generated_tokens_per_second": 18703.204727889606,
+        "reply_sha256": "6767a039608bae70da4bd3b3ad347c71b899221cd47dbb20930f770a939ee5c3"
       }
     }
   },
@@ -139,5 +147,5 @@
     "token_mismatches": 0,
     "kept_cell_mismatches": 0
   },
-  "verdict": "No propagation. The vote changes only the opening row; it produces no exact complete reply and no BOS-complete reply on either seed."
+  "verdict": "No correctness propagation. The vote improves opening correctness on the fixed screen but produces no exact-reference or BOS-complete reply on either seed."
 }
