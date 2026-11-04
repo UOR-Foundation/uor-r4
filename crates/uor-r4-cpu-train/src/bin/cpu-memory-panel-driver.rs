@@ -7,11 +7,11 @@ use uor_r4_cpu_train::{
     derive_turn_memory, evaluate_memory_target_replies, evaluate_memory_weight_samples,
     evaluate_replies, evaluate_replies_memory_off, evaluate_termination_diagnostics,
     evaluate_termination_gate_replies, memory_key_coverage, memory_target_shuffle_audit,
-    replace_memory_weight_table, shuffle_memory_targets, validate_corpus_manifest,
-    CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer, MemoryWeightConfig,
-    MemoryWeightSample, MemoryWeightTable, TimedReplyReading,
+    normalized_reference, replace_memory_weight_table, shuffle_memory_targets,
+    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer,
+    MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable, TimedReplyReading,
 };
-use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
+use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
 
 #[derive(Clone)]
 struct Config {
@@ -649,11 +649,7 @@ fn reference_shape(
     let mut within_cap = 0usize;
     let mut within_cap_and_context = 0usize;
     for sample in samples {
-        let length = sample
-            .reply
-            .strip_suffix(&[POINT_KEY_BOS])
-            .unwrap_or(&sample.reply)
-            .len();
+        let length = normalized_reference(&sample.reply).len();
         *histogram.entry(length).or_default() += 1;
         token_total += length;
         max = max.max(length);
@@ -891,7 +887,7 @@ mod tests {
     use uor_r4_cpu_train::{ReplyReading, ReplyRowReading};
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::{
-        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable,
+        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, POINT_KEY_BOS,
     };
 
     fn bare_artifact() -> Vec<u8> {
@@ -934,6 +930,20 @@ mod tests {
         assert_eq!(shape["within_reply_cap_and_context"], 1);
         assert_eq!(shape["length_histogram"]["3"], 1);
         assert_eq!(shape["length_histogram"]["5"], 1);
+    }
+
+    #[test]
+    fn reference_shape_normalizes_corpus_eos() {
+        let samples = vec![MemoryWeightSample {
+            prompt: vec![10, 11],
+            reply: vec![20, 21, 22, 1],
+        }];
+        let shape = reference_shape(&samples, 3, 5);
+        assert_eq!(shape["token_total"], 3);
+        assert_eq!(shape["max_tokens"], 3);
+        assert_eq!(shape["within_reply_cap"], 1);
+        assert_eq!(shape["within_reply_cap_and_context"], 1);
+        assert_eq!(shape["length_histogram"]["3"], 1);
     }
 
     #[test]

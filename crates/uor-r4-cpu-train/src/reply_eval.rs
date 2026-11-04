@@ -13,6 +13,7 @@ use crate::memory_train::memory_reply_key;
 use crate::{invalid, CpuFbsForward, CpuFbsHead, CpuTrainError, MemoryWeightSample};
 
 type Result<T> = std::result::Result<T, CpuTrainError>;
+const CORPUS_EOS: u32 = 1;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -426,10 +427,12 @@ fn summarize_termination(steps: &[TerminationStepReading]) -> Result<Termination
 /// Derive a geometric termination-point gate from training examples and a
 /// matched random nonterminal-point control.
 ///
-/// Terminal points that exactly equal a nonterminal training query are removed
-/// as ambiguous. The radius is bounded by the farthest terminal point's nearest
-/// terminal neighbour and one unit below the nearest nonterminal training
-/// query.
+/// Training replies end in corpus EOS. The query immediately before that EOS is
+/// retained as the terminal point and an accepted match names the shared
+/// decoder BOS stop sentinel. Terminal points that exactly equal a nonterminal
+/// training query are removed as ambiguous. The radius is bounded by the
+/// farthest terminal point's nearest terminal neighbour and one unit below the
+/// nearest nonterminal training query.
 pub fn derive_termination_point_gates(
     artifact: &[u8],
     samples: &[MemoryWeightSample],
@@ -447,9 +450,11 @@ pub fn derive_termination_point_gates(
     for sample in samples {
         if sample.prompt.is_empty()
             || sample.reply.len() < 2
-            || sample.reply.last() != Some(&POINT_KEY_BOS)
+            || sample.reply.last() != Some(&CORPUS_EOS)
         {
-            return Err(invalid("termination gate training reply must end in BOS"));
+            return Err(invalid(
+                "termination gate training reply must end in corpus EOS",
+            ));
         }
         let sequence = sample
             .prompt
@@ -924,9 +929,13 @@ fn reply_sequence_sha256(rows: &[(GeneratedReply, Vec<u32>, bool)]) -> String {
     uor_r4_discrete::corpus::sha256(&bytes)
 }
 
-fn normalized_reference(reference: &[u32]) -> &[u32] {
+/// Remove one decoder stop marker from a complete-reply reference. Corpus
+/// references use EOS id 1; retaining BOS removal keeps synthetic and older
+/// callers compatible.
+pub fn normalized_reference(reference: &[u32]) -> &[u32] {
     reference
-        .strip_suffix(&[POINT_KEY_BOS])
+        .strip_suffix(&[CORPUS_EOS])
+        .or_else(|| reference.strip_suffix(&[POINT_KEY_BOS]))
         .unwrap_or(reference)
 }
 
@@ -1028,7 +1037,7 @@ mod tests {
                     tokens: vec![9, 8],
                     stop: "context",
                 },
-                vec![1],
+                vec![5],
                 false,
             ),
         ];
@@ -1067,6 +1076,7 @@ mod tests {
         let first = reply_sequence_sha256(&rows);
         assert_eq!(first, reply_sequence_sha256(&rows));
         assert_eq!(normalized_reference(&rows[0].1), &[4, 5]);
+        assert_eq!(normalized_reference(&[4, 5, CORPUS_EOS]), &[4, 5]);
 
         let mut changed_token = rows.clone();
         changed_token[0].0.tokens[1] = 6;
@@ -1083,11 +1093,11 @@ mod tests {
         let samples = vec![
             MemoryWeightSample {
                 prompt: vec![10, 11, 12],
-                reply: vec![42, POINT_KEY_BOS],
+                reply: vec![42, CORPUS_EOS],
             },
             MemoryWeightSample {
                 prompt: vec![10, 11, 12],
-                reply: vec![42, 77, POINT_KEY_BOS],
+                reply: vec![42, 77, CORPUS_EOS],
             },
         ];
         let training = derive_termination_point_gates(&artifact, &samples, true, 1).unwrap();
@@ -1135,6 +1145,11 @@ mod tests {
             training.random.points
         );
         assert_ne!(training.trained, training.random);
+        let bad = [MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, POINT_KEY_BOS],
+        }];
+        assert!(derive_termination_point_gates(&artifact, &bad, true, 1).is_err());
     }
 
     #[test]

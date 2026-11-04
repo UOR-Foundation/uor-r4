@@ -1,14 +1,15 @@
 # CPU geometric termination-point gate
 
-**Status:** FIT
+**Status:** DRAFT
 
 ## Question
 
-Can training-derived Q12 writer query points predict BOS strongly enough to
-terminate complete replies? At served decode, name BOS when a generated query
-lies inside a deterministic L1 radius around a terminal training point. Compare
-the learned gate with the existing no-gate reply and an equal-size control
-drawn from nonterminal training queries.
+Can training-derived Q12 writer query points predict reply termination strongly
+enough to stop complete replies? Corpus replies end in EOS id 1. At served
+decode, remap an accepted terminal decision to the shared BOS id 0 stop sentinel
+when a generated query lies inside a deterministic L1 radius around a terminal
+training point. Compare the learned gate with the existing no-gate reply and an
+equal-size control drawn from nonterminal training queries.
 
 This tests the termination representation directly. It does not repeat memory
 movement training, rank margin, exact-target arbitration, or point voting.
@@ -42,7 +43,8 @@ qualification.
 Replay deepseek-109 exactly:
 
 - 16 repeated opening keys, up to 16 examples per key;
-- 102 training and 114 evaluation examples, with one trailing BOS per reply;
+- 102 training and 114 evaluation examples, with one trailing corpus EOS per
+  reply;
 - the fixed deepseek-109 corpus split and selected key order;
 - 32 attempted Q24 opening/reply movement-coordinate updates, update seed 1;
 - 32 Rayon workers and cached exact trajectory;
@@ -56,15 +58,18 @@ seed before the gate readings are used.
 
 Two public model seeds and 114 document-disjoint evaluation examples per seed,
 including the 104 references reachable within the registered cap and context.
+The corrected model-free reference census has 1,212 content tokens and a
+maximum of 35 after removing one trailing EOS per reply.
 This is a bounded readiness screen, not a decisive capability run.
 
 ## Gate derivation
 
 For each training sample, run the trained artifact with its turn-memory reads
-enabled over the prompt and all reply tokens except the final BOS:
+enabled over the prompt and all reply tokens except the final EOS:
 
 - the query at every prompt-final or reply-content row is a nonterminal query;
-- the query at the final reply-content row predicts BOS and is a terminal query;
+- the query at the final reply-content row predicts corpus EOS and is a terminal
+  query;
 - remove every terminal point exactly equal to any nonterminal training point;
 - for each remaining terminal point find its nearest distinct terminal point;
 - let `max_terminal_neighbor_distance` be the maximum of those distances;
@@ -87,17 +92,18 @@ model seed. It uses the same radius.
 Evaluate three arms on the same 114 evaluation prompts for each model seed:
 
 1. `no_gate`: the existing trained memory artifact and exact writer;
-2. `trained_gate`: replace each writer choice with BOS when the generated
-   query's minimum L1 distance to a retained terminal point is at most the
-   derived radius;
+2. `trained_gate`: replace each writer choice with the BOS stop sentinel when
+   the generated query's minimum L1 distance to a retained terminal point is at
+   most the derived radius;
 3. `random_gate`: apply the identical replacement rule to the equal-size
    nonterminal-point control.
 
 Every arm uses the shared integer `reply_stop` contract and the same 16-token
 cap. A BOS marker is removed from generated tokens and counted as a complete
-reply. A BOS stop whose generated tokens differ from the reference is counted
-as premature. References longer than the cap/context remain unreachable and
-are not counted as misses.
+reply. One trailing corpus EOS (or legacy trailing BOS) is normalized from the
+reference, not generated output. A BOS stop whose generated tokens differ from
+the normalized reference is counted as premature. References longer than the
+cap/context remain unreachable and are not counted as misses.
 
 ## Steps
 
@@ -128,7 +134,8 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 ## Instrument bar
 
 - Training and selection reproduce the deepseek-109 trained artifact and the
-  deepseek-110 no-gate reply digest exactly.
+  deepseek-110 no-gate reply digest exactly. The digest binds generated tokens
+  and stops, so the EOS reference normalization does not alter the pin.
 - Every gate coordinate is a training-derived Q12 query of the model width and
   every radius and distance is deterministic.
 - The random control has the same point count and radius as the trained gate
@@ -138,7 +145,7 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
   radius, gate hashes, trained artifact hash and ordered reply digests.
 - The seed-1 repeat reproduces all gate counts, radii, hashes, reply counters,
   per-row outcomes and ordered reply digests.
-- A malformed/empty/non-BOS training sample, width mismatch, non-`i16`
+- A malformed/empty/non-EOS training sample, width mismatch, non-`i16`
   coordinate or counter overflow refuses the run rather than truncating.
 
 ## Candidate bar
@@ -166,22 +173,4 @@ nondeterministic repeat, an unavailable dependency or a counter overflow.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030  
-sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`  
-head: `1dd53c193351db3b2429e403297be4264621f147`  
-reviewer: Codex fresh-context non-author review  
-note: bounded two-seed D84 CPU termination experiment; fixed deepseek-109
-16-key / 102-training / 114-evaluation selection and 32-update replay; three
-arms (no gate, training-derived terminal-point gate, equal-size random
-nonterminal-point control); deterministic training-only L1 gate derivation with
-exact collision removal and radius bounds; 114 prompts, 16-token cap, 32 Rayon
-workers, deepseek-110 no-gate digest pins, strict candidate bar, seed-1 repeat
-and 30-minute stop. The driver enforces trained-artifact and no-gate reply
-hashes before gate evaluation and reports gate counts, distances, gates,
-artifact hash, ordered reply digests and paired BOS/premature-stop/exact
-results.  
-date: 2026-11-04
-
-This FIT clears only this registered configuration at this exact source head.
-Any change to source, hashes, selection, arms, bar, controls, cap or gate rule
-requires re-review.
+Pending fresh-context non-author FIT at the repaired source head.
