@@ -51,7 +51,7 @@ Both seeds must pass:
 
 - at least **26/103 (25%)** terminal rows stop correctly;
 - nonterminal false stops are at most **1%**, and the gate fires at least once;
-- true beats shuffled terminal stops by
+- true beats no-gate and shuffled terminal stops by
   `max(2, ceil(2 * sqrt(b + c)))`; and
 - every ungated decision is exactly the writer token; every gated decision is
   exactly BOS.

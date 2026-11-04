@@ -61,9 +61,19 @@ pub struct StopSignatureReading {
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct StopSignatureDecision {
+    pub terminal: bool,
+    pub writer_token: u32,
+    pub fired: bool,
+    pub chosen_token: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StopSignatureEvaluation {
     pub reading: StopSignatureReading,
     pub terminal_rows: Vec<bool>,
+    pub decisions: Vec<StopSignatureDecision>,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -334,9 +344,20 @@ pub fn evaluate_stop_signature_rows(
     }
     let mut reading = StopSignatureReading::default();
     let mut terminal_rows = Vec::new();
+    let mut decisions = Vec::with_capacity(rows.len());
     for row in rows {
         reading.decisions = checked_add(reading.decisions, 1, "stop decision count")?;
         let fires = gate_fires(gate, &row.signature);
+        let chosen_token = if fires {
+            POINT_KEY_BOS
+        } else {
+            row.writer_token
+        };
+        reading.ungated_token_mismatches = checked_add(
+            reading.ungated_token_mismatches,
+            u64::from(!fires && chosen_token != row.writer_token),
+            "ungated token mismatch count",
+        )?;
         if row.terminal {
             reading.terminal_decisions =
                 checked_add(reading.terminal_decisions, 1, "terminal decision count")?;
@@ -356,6 +377,12 @@ pub fn evaluate_stop_signature_rows(
             reading.writer_fallbacks =
                 checked_add(reading.writer_fallbacks, 1, "writer fallback count")?;
         }
+        decisions.push(StopSignatureDecision {
+            terminal: row.terminal,
+            writer_token: row.writer_token,
+            fired: fires,
+            chosen_token,
+        });
     }
     if reading.terminal_decisions == 0 || reading.nonterminal_decisions == 0 {
         return Err(invalid("stop evaluation needs both classes"));
@@ -363,6 +390,48 @@ pub fn evaluate_stop_signature_rows(
     Ok(StopSignatureEvaluation {
         reading,
         terminal_rows,
+        decisions,
+    })
+}
+
+pub fn evaluate_stop_signature_no_gate(
+    rows: &[StopSignatureRow],
+) -> Result<StopSignatureEvaluation> {
+    let mut reading = StopSignatureReading::default();
+    let mut terminal_rows = Vec::new();
+    let mut decisions = Vec::with_capacity(rows.len());
+    for row in rows {
+        reading.decisions = checked_add(reading.decisions, 1, "stop decision count")?;
+        let bos = row.writer_token == POINT_KEY_BOS;
+        if row.terminal {
+            reading.terminal_decisions =
+                checked_add(reading.terminal_decisions, 1, "terminal decision count")?;
+            reading.terminal_stops += u64::from(bos);
+            terminal_rows.push(bos);
+        } else {
+            reading.nonterminal_decisions = checked_add(
+                reading.nonterminal_decisions,
+                1,
+                "nonterminal decision count",
+            )?;
+            reading.nonterminal_stops += u64::from(bos);
+        }
+        reading.writer_fallbacks =
+            checked_add(reading.writer_fallbacks, 1, "writer fallback count")?;
+        decisions.push(StopSignatureDecision {
+            terminal: row.terminal,
+            writer_token: row.writer_token,
+            fired: false,
+            chosen_token: row.writer_token,
+        });
+    }
+    if reading.terminal_decisions == 0 || reading.nonterminal_decisions == 0 {
+        return Err(invalid("no-gate stop evaluation needs both classes"));
+    }
+    Ok(StopSignatureEvaluation {
+        reading,
+        terminal_rows,
+        decisions,
     })
 }
 
@@ -473,6 +542,9 @@ fn checked_add(value: u64, amount: u64, name: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::evaluate_replies;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     fn signature(bit: usize) -> StopSignature {
         let mut signature = [0u64; STOP_SIGNATURE_WORDS];
@@ -508,6 +580,33 @@ mod tests {
                 writer_token: 11,
             },
         ]
+    }
+
+    fn artifact() -> Vec<u8> {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            1321,
+            FbsSynth {
+                vocab: crate::VOCABULARY,
+                d: STOP_SIGNATURE_BITS,
+                mlp: 64,
+                layers: 1,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.25,
+                decay_step: 0.0625,
+            },
+        );
+        snapshot.memory = None;
+        export_fbs_trunk_uorlut01(&snapshot).unwrap()
+    }
+
+    fn samples() -> Vec<MemoryWeightSample> {
+        vec![MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, 77, 1],
+        }]
     }
 
     #[test]
@@ -562,6 +661,7 @@ mod tests {
         let training = fit_stop_signature_gate(&rows(), 2).unwrap();
         let evaluation = evaluate_stop_signature_rows(&rows(), &training.gate).unwrap();
         assert_eq!(evaluation.terminal_rows.len(), 2);
+        assert_eq!(evaluation.decisions.len(), rows().len());
         assert_eq!(
             evaluation.reading.terminal_stops,
             evaluation
@@ -575,5 +675,56 @@ mod tests {
             evaluation.reading.terminal_stops + evaluation.reading.nonterminal_stops
         );
         assert_eq!(evaluation.reading.ungated_token_mismatches, 0);
+    }
+
+    #[test]
+    fn full_query_rows_mark_only_the_final_reply_content_row_terminal() {
+        let rows = derive_stop_signature_rows(&artifact(), &samples(), false).unwrap();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(
+            rows.iter().map(|row| row.terminal).collect::<Vec<_>>(),
+            vec![false, false, true]
+        );
+    }
+
+    #[test]
+    fn no_gate_preserves_writer_tokens_and_gate_fit_is_deterministic() {
+        let rows = derive_stop_signature_rows(&artifact(), &samples(), false).unwrap();
+        let no_gate = evaluate_stop_signature_no_gate(&rows).unwrap();
+        assert!(no_gate
+            .decisions
+            .iter()
+            .all(|decision| { !decision.fired && decision.chosen_token == decision.writer_token }));
+        let first = fit_stop_signature_gate(&rows, 2).unwrap();
+        let second = fit_stop_signature_gate(&rows, 2).unwrap();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn gated_free_replies_match_no_gate_or_fire_exactly_at_bos() {
+        let artifact = artifact();
+        let samples = samples();
+        let rows = derive_stop_signature_rows(&artifact, &samples, false).unwrap();
+        let base = fit_stop_signature_gate(&rows, 2).unwrap().gate;
+        let no_gate = evaluate_replies(&artifact, &samples, 4).unwrap();
+        let never = StopSignatureGate {
+            margin: i64::MAX,
+            ..base.clone()
+        };
+        let never_reading =
+            evaluate_stop_signature_replies(&artifact, &samples, 4, false, &never).unwrap();
+        assert_eq!(never_reading.reading.reading, no_gate.reading);
+        assert_eq!(never_reading.reading.reply_sha256, no_gate.reply_sha256);
+        assert_eq!(never_reading.reading.rows, no_gate.rows);
+        assert_eq!(never_reading.fired, 0);
+
+        let always = StopSignatureGate {
+            margin: i64::MIN,
+            ..base
+        };
+        let always_reading =
+            evaluate_stop_signature_replies(&artifact, &samples, 4, false, &always).unwrap();
+        assert!(always_reading.fired > 0);
+        assert_eq!(always_reading.reading.reading.bos_complete, 1);
     }
 }

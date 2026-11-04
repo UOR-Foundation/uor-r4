@@ -91,8 +91,8 @@ Both seeds must pass:
 - at least **26/103** terminal rows stop correctly;
 - nonterminal false stops are at most **10/1,085** and the true gate fires at
   least once;
-- true terminal stops beat shuffled terminal stops by
-  `max(2, ceil(2 * sqrt(b + c)))`; and
+- true terminal stops beat no-gate writer and shuffled-gate terminal stops
+  by `max(2, ceil(2 * sqrt(b + c)))`; and
 - every ungated decision is exactly its recorded writer token.
 
 Prompt-final rows are nonterminal. Free generation reports BOS, premature BOS,

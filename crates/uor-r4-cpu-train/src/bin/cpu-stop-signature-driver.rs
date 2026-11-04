@@ -4,9 +4,9 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, derive_stop_signature_rows, derive_turn_memory, evaluate_replies,
-    evaluate_stop_signature_replies, evaluate_stop_signature_rows, fit_stop_signature_gate,
-    shuffle_stop_signature_rows, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
-    MemoryWeightSample, StopSignatureEvaluation,
+    evaluate_stop_signature_no_gate, evaluate_stop_signature_replies, evaluate_stop_signature_rows,
+    fit_stop_signature_gate, shuffle_stop_signature_rows, validate_corpus_manifest,
+    CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample, StopSignatureEvaluation,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
 
@@ -256,10 +256,13 @@ fn run() -> Result<serde_json::Value, String> {
     let shuffled_evaluation =
         evaluate_stop_signature_rows(&evaluation_rows, &shuffled_training.gate)
             .map_err(|error| error.to_string())?;
+    let no_gate_evaluation =
+        evaluate_stop_signature_no_gate(&evaluation_rows).map_err(|error| error.to_string())?;
+    let vs_no_gate = paired_terminal_comparison(&true_evaluation, &no_gate_evaluation)?;
     let vs_shuffled = paired_terminal_comparison(&true_evaluation, &shuffled_evaluation)?;
     let terminal_required = true_evaluation.reading.terminal_decisions.div_ceil(4);
     let nonterminal_limit = true_evaluation.reading.nonterminal_decisions / 100;
-    let no_gate = evaluate_replies(&memory_artifact, &evaluation_samples, config.reply_cap)
+    let free_no_gate = evaluate_replies(&memory_artifact, &evaluation_samples, config.reply_cap)
         .map_err(|error| error.to_string())?;
     let true_gate = evaluate_stop_signature_replies(
         &memory_artifact,
@@ -286,15 +289,19 @@ fn run() -> Result<serde_json::Value, String> {
         "nonterminal_pass": true_evaluation.reading.nonterminal_stops <= nonterminal_limit,
         "gate_exposed": true_gate.gated_decisions > 0,
         "gate_fired": true_gate.fired > 0,
+        "vs_no_gate": vs_no_gate,
         "vs_shuffled": vs_shuffled,
         "ungated_token_mismatches": true_evaluation.reading.ungated_token_mismatches,
         "passes": true_evaluation.reading.terminal_stops >= terminal_required
             && true_evaluation.reading.nonterminal_stops <= nonterminal_limit
             && true_gate.gated_decisions > 0
             && true_gate.fired > 0
+            && vs_no_gate["passes"].as_bool() == Some(true)
             && vs_shuffled["passes"].as_bool() == Some(true)
             && true_evaluation.reading.ungated_token_mismatches == 0,
     });
+    let true_gate_sha256 = serialized_sha(&true_training.gate)?;
+    let shuffled_gate_sha256 = serialized_sha(&shuffled_training.gate)?;
     std::fs::write(
         config.out.join("true-gate.json"),
         serde_json::to_vec_pretty(&true_training).map_err(|error| error.to_string())?,
@@ -332,15 +339,18 @@ fn run() -> Result<serde_json::Value, String> {
         "training": {
             "prototypes_requested": config.prototypes,
             "true": true_training,
+            "true_gate_sha256": true_gate_sha256,
             "label_shuffled": shuffled_training,
+            "label_shuffled_gate_sha256": shuffled_gate_sha256,
         },
         "evaluation": {
+            "no_gate": no_gate_evaluation,
             "true": true_evaluation,
             "label_shuffled": shuffled_evaluation,
         },
         "bar": bar,
         "free_generation": {
-            "no_gate": no_gate,
+            "no_gate": free_no_gate,
             "true_gate": true_gate,
             "label_shuffled_gate": shuffled_gate,
         },
@@ -493,6 +503,12 @@ fn create_fresh_output(out: &Path) -> Result<(), String> {
     std::fs::create_dir(out).map_err(|error| format!("{}: {error}", out.display()))
 }
 
+fn serialized_sha<T: serde::Serialize>(value: &T) -> Result<String, String> {
+    serde_json::to_vec(value)
+        .map(|bytes| uor_r4_discrete::corpus::sha256(&bytes))
+        .map_err(|error| error.to_string())
+}
+
 fn peak_rss_kib() -> u64 {
     std::fs::read_to_string("/proc/self/status")
         .ok()
@@ -525,6 +541,7 @@ mod tests {
                 ungated_token_mismatches: 0,
             },
             terminal_rows: rows,
+            decisions: Vec::new(),
         }
     }
 
