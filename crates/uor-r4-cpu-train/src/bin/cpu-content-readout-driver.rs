@@ -3,18 +3,17 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, content_continuation_gate_fires,
-    content_continuation_gate_prediction, content_mapping_sha256, content_stop_density_gate_fires,
-    content_stop_gate_fires, content_target_mapping, derive_content_continuation_rows,
-    derive_content_readout, derive_content_stop_readout, derive_content_stop_rows,
-    derive_turn_memory, evaluate_content_continuation_gate, evaluate_content_readout,
-    evaluate_content_stop_density_gate, evaluate_content_stop_gate, fit_content_continuation_gate,
-    fit_content_stop_density_gate, fit_content_stop_gate, shuffle_content_continuation_rows,
-    shuffle_content_stop_rows, shuffle_content_targets, validate_corpus_manifest,
-    verify_content_readout_serving, ContentContinuationGate, ContentContinuationRow,
-    ContentPromptReading, ContentReadout, ContentSignatureMode, ContentStopDensityGate,
-    ContentStopGate, ContentStopRow, CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample,
-    CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
+    add_turn_memory_uorlut01, content_continuation_loo_prediction, content_mapping_sha256,
+    content_stop_density_gate_fires, content_stop_gate_fires, content_target_mapping,
+    derive_content_continuation_rows, derive_content_readout, derive_content_stop_readout,
+    derive_content_stop_rows, derive_turn_memory, evaluate_content_continuation_gate,
+    evaluate_content_readout, evaluate_content_stop_density_gate, evaluate_content_stop_gate,
+    fit_content_continuation_gate, fit_content_stop_density_gate, fit_content_stop_gate,
+    shuffle_content_continuation_rows, shuffle_content_stop_rows, shuffle_content_targets,
+    validate_corpus_manifest, verify_content_readout_serving, ContentContinuationRow,
+    ContentContinuationTraining, ContentPromptReading, ContentReadout, ContentSignatureMode,
+    ContentStopDensityGate, ContentStopGate, ContentStopRow, CpuConversationSample,
+    CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
 };
 use uor_r4_integer::stack::{
     read_memory_uorlut01, IntegerStackModel, STACK_CONTENT_READOUT_SCHEMA,
@@ -369,14 +368,17 @@ fn run() -> Result<serde_json::Value, String> {
     let horizon_prediction_changes = match (
         horizon_rows.as_ref(),
         horizon_training.as_ref(),
+        horizon_shuffled_rows.as_ref(),
         horizon_shuffled_training.as_ref(),
     ) {
-        (Some(rows), Some(training), Some(shuffled)) => Some(horizon_predictions_changed(
-            rows,
-            &training.gate,
-            rows,
-            &shuffled.gate,
-        )?),
+        (Some(rows), Some(training), Some(shuffled_rows), Some(shuffled)) => {
+            Some(horizon_predictions_changed(
+                rows,
+                training.gate.neighbors,
+                shuffled_rows,
+                shuffled.gate.neighbors,
+            )?)
+        }
         _ => None,
     };
     let sign_shuffled = shuffle_content_targets(&sign_training.readout, config.seed)
@@ -708,8 +710,11 @@ fn run() -> Result<serde_json::Value, String> {
             let lengths = bos_length_counts(&horizon_prompts);
             let terminal_comparison = paired_terminal_continuation_rows(
                 horizon_rows,
-                &horizon_training.gate,
-                &horizon_shuffled_training.gate,
+                horizon_training,
+                horizon_shuffled_rows
+                    .as_ref()
+                    .ok_or_else(|| "shuffled continuation rows are missing".to_owned())?,
+                horizon_shuffled_training,
             )?;
             let prediction_changes = horizon_prediction_changes.unwrap_or(0);
             let hashes_differ = horizon_sha256 != horizon_shuffled_sha256;
@@ -1303,21 +1308,31 @@ fn paired_terminal_density_rows(
 
 fn paired_terminal_continuation_rows(
     rows: &[ContentContinuationRow],
-    candidate: &ContentContinuationGate,
-    control: &ContentContinuationGate,
+    candidate: &ContentContinuationTraining,
+    shuffled_rows: &[ContentContinuationRow],
+    control: &ContentContinuationTraining,
 ) -> Result<serde_json::Value, String> {
+    if rows.len() != shuffled_rows.len() {
+        return Err("continuation terminal row counts differ".to_owned());
+    }
     let mut candidate_only = 0u64;
     let mut control_only = 0u64;
     let mut candidate_sum = 0u64;
     let mut control_sum = 0u64;
-    for row in rows.iter().filter(|row| row.remaining == 0) {
+    for (index, _row) in rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.remaining == 0)
+    {
         let left = u64::from(
-            content_continuation_gate_fires(candidate, &row.signature, row.offset)
-                .map_err(|error| error.to_string())?,
+            content_continuation_loo_prediction(rows, index, candidate.gate.neighbors)
+                .map_err(|error| error.to_string())?
+                == Some(0),
         );
         let right = u64::from(
-            content_continuation_gate_fires(control, &row.signature, row.offset)
-                .map_err(|error| error.to_string())?,
+            content_continuation_loo_prediction(shuffled_rows, index, control.gate.neighbors)
+                .map_err(|error| error.to_string())?
+                == Some(0),
         );
         candidate_sum += left;
         control_sum += right;
@@ -1337,28 +1352,22 @@ fn paired_terminal_continuation_rows(
 
 fn horizon_predictions_changed(
     rows: &[ContentContinuationRow],
-    candidate: &ContentContinuationGate,
+    candidate_neighbors: usize,
     comparison_rows: &[ContentContinuationRow],
-    control: &ContentContinuationGate,
+    control_neighbors: usize,
 ) -> Result<u64, String> {
     if rows.len() != comparison_rows.len() {
         return Err("continuation prediction row counts differ".to_owned());
     }
     rows.iter()
         .zip(comparison_rows)
-        .try_fold(0u64, |changed, (candidate_row, control_row)| {
-            let left = content_continuation_gate_prediction(
-                candidate,
-                &candidate_row.signature,
-                candidate_row.offset,
-            )
-            .map_err(|error| error.to_string())?;
-            let right = content_continuation_gate_prediction(
-                control,
-                &control_row.signature,
-                control_row.offset,
-            )
-            .map_err(|error| error.to_string())?;
+        .enumerate()
+        .try_fold(0u64, |changed, (index, _)| {
+            let left = content_continuation_loo_prediction(rows, index, candidate_neighbors)
+                .map_err(|error| error.to_string())?;
+            let right =
+                content_continuation_loo_prediction(comparison_rows, index, control_neighbors)
+                    .map_err(|error| error.to_string())?;
             Ok(changed + u64::from(left != right))
         })
 }
@@ -1511,25 +1520,6 @@ mod tests {
         }
     }
 
-    fn continuation_gate(terminal: Vec<u64>, nonterminal: Vec<u64>) -> ContentContinuationGate {
-        ContentContinuationGate {
-            signature_bits: uor_r4_cpu_train::CONTENT_CODE_SIGNATURE_BITS,
-            rows: vec![
-                uor_r4_cpu_train::ContentContinuationPoint {
-                    signature: terminal,
-                    remaining: 0,
-                    offset: 4,
-                },
-                uor_r4_cpu_train::ContentContinuationPoint {
-                    signature: nonterminal,
-                    remaining: 1,
-                    offset: 4,
-                },
-            ],
-            neighbors: 1,
-        }
-    }
-
     #[test]
     fn content_non_inferiority_uses_both_ordered_metrics() {
         assert!(non_inferior(73, 73, 64, 64));
@@ -1610,15 +1600,23 @@ mod tests {
                 offset: 4,
             },
         ];
-        let candidate = continuation_gate(signature(0), signature(100));
-        let control = continuation_gate(signature(100), signature(0));
-        let paired = paired_terminal_continuation_rows(&rows, &candidate, &control).unwrap();
+        let shuffled = shuffle_content_continuation_rows(&rows, 1).unwrap();
+        let candidate = fit_content_continuation_gate(&rows, 1).unwrap();
+        let control = fit_content_continuation_gate(&shuffled, 1).unwrap();
+        let paired =
+            paired_terminal_continuation_rows(&rows, &candidate, &shuffled, &control).unwrap();
         assert_eq!(paired["candidate_only"], 2);
         assert_eq!(paired["control_only"], 0);
         assert_eq!(paired["threshold"], 2);
         assert_eq!(paired["passes"], true);
         assert_eq!(
-            horizon_predictions_changed(&rows, &candidate, &rows, &control).unwrap(),
+            horizon_predictions_changed(
+                &rows,
+                candidate.gate.neighbors,
+                &shuffled,
+                control.gate.neighbors,
+            )
+            .unwrap(),
             4
         );
     }

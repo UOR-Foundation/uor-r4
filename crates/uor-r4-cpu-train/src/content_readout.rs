@@ -1064,6 +1064,26 @@ fn continuation_prediction(
     Ok(horizons.get((neighbors - 1) / 2).copied())
 }
 
+pub fn content_continuation_loo_prediction(
+    rows: &[ContentContinuationRow],
+    index: usize,
+    neighbors: usize,
+) -> Result<Option<i16>> {
+    let row = rows
+        .get(index)
+        .ok_or_else(|| invalid("content continuation query row is out of bounds"))?;
+    if neighbors == 0 || neighbors > 16 {
+        return Err(invalid("content continuation neighbors are out of bounds"));
+    }
+    if rows
+        .iter()
+        .any(|row| row.signature.len() != CONTENT_CODE_SIGNATURE_BITS / 64)
+    {
+        return Err(invalid("content continuation signature width differs"));
+    }
+    continuation_prediction(rows, Some(index), &row.signature, row.offset, neighbors)
+}
+
 pub fn content_continuation_gate_prediction(
     gate: &ContentContinuationGate,
     signature: &ContentSignature,
