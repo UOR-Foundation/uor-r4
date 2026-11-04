@@ -82,7 +82,7 @@
     "chat_binary_bytes": 3429792,
     "driver_binary_sha256": "811da311338b477c62a9c0f628cf86b7c4e2737be1e37b6973b035b939b75d29",
     "chat_binary_sha256": "31f562fd07e1c2993e8363ee2ec3b1a54f291296b99a92e459bd5d65dc727c96",
-    "retained_pipeline_bytes": 197982490
+    "retained_pipeline_bytes": 197982559
   },
   "threads": {
     "build": 16,
@@ -103,7 +103,7 @@
     "driver_build_target_bytes": 266917268,
     "chat_build_target_bytes": 104717444,
     "control_target_bytes": 2141709077,
-    "retained_pipeline_bytes": 197982490,
+    "retained_pipeline_bytes": 197982559,
     "post_run_floor_kib": 31588352,
     "absolute_floor": "30 GiB plus 128 MiB"
   },
@@ -123,7 +123,8 @@
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-140/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md",
     "implementation_pin": "8194823789244096e2db317bb45954d5a7eeaf8f",
-    "evidence_sums_sha256": "7f18ffa272e7aad6681e3714fb83118fa244335decf0d5ed2b364b40a030286b",
+    "rebased_runtime_pin": "881b8ad95d4f37f1e183c7c384f079b8da63d162",
+    "evidence_sums_sha256": "15cd38a930e17025d4227568d1b4d1b48740ed6f266c682599cc85565a209262",
     "attempt_1_report": "docs/labs/cpu-training-pilot-content-serving-2026-11-04/attempt-1-report.md",
     "attempt_1_ledger": "docs/labs/cpu-training-pilot-content-serving-2026-11-04/attempt-1-resource-ledger.json",
     "attempt_3_ledger": "docs/labs/cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json"

@@ -64,6 +64,11 @@ with its own [resource ledger](../../../../labs/cpu-training-pilot-content-servi
 Attempt 4 at the same implementation pin isolated the controls and is the
 deciding run below.
 
+After deepseek-141 merged the item scope, this branch rebased onto fresh
+`main`. The measured runtime source is now commit `881b8ad95`; its crate source
+outside tests is identical to executed pin `819482378`. The later `d847ba71c`
+review-repair commit adds parser-refusal tests and records only.
+
 The preserved attempt-3 metadata records the registration timestamps; the
 evidence directory's filesystem birth and final-manifest mtimes were
 `2026-11-04T18:51:47Z` and `2026-11-04T18:53:02Z`. Its sentence about checking
@@ -121,14 +126,14 @@ Build and runs:
   `811da311338b477c62a9c0f628cf86b7c4e2737be1e37b6973b035b939b75d29`
   and
   `31f562fd07e1c2993e8363ee2ec3b1a54f291296b99a92e459bd5d65dc727c96`;
-- committed deciding evidence: **49,502,485 bytes**; all four attempt trees
-  retain **197,982,490 bytes**, below the registered 224 MiB limit;
+- committed deciding evidence: **49,502,554 bytes**; all four attempt trees
+  retain **197,982,559 bytes**, below the registered 224 MiB limit;
 - evidence `SHA256SUMS`:
-  `7f18ffa272e7aad6681e3714fb83118fa244335decf0d5ed2b364b40a030286b`.
+  `15cd38a930e17025d4227568d1b4d1b48740ed6f266c682599cc85565a209262`.
 
 Compact evidence:
 [comparison.json](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence/comparison.json).
-The source pipeline occupied **49,502,485 bytes**.
+The source pipeline occupied **49,502,554 bytes**.
 
 ## Checks run at the head
 
@@ -145,6 +150,10 @@ The source pipeline occupied **49,502,485 bytes**.
   raw-step isolation, complete CPU/serving parity, same-readout session
   restore, missing/different-readout refusal, legacy `UR4SESS1` and
   `UR4SESS2` codec identity.
+- The post-run parser-refusal suite directly covers wrong schema, sign mode,
+  empty rows, malformed and oversized thresholds, unknown readout/row fields,
+  trailing input and the 64 MiB bound; the full integer suite passes **462**
+  tests with one expected ignore.
 - Strict `uor-r4-cpu-train` Clippy with `--no-deps -D warnings`, targeted
   `rustfmt --check` on every touched Rust file, and the source/docs-scoped
   `git diff --check` passed. The complete evidence diff retains the captured

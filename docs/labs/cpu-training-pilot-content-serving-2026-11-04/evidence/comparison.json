@@ -4,6 +4,7 @@
   "qualification": "gpu-required",
   "both_seeds_pass": true,
   "implementation_pin": "8194823789244096e2db317bb45954d5a7eeaf8f",
+  "rebased_runtime_pin": "881b8ad95d4f37f1e183c7c384f079b8da63d162",
   "inputs": {
     "seed_1_artifact_sha256": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd",
     "seed_2_artifact_sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1",
