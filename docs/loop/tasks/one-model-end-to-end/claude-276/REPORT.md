@@ -25,7 +25,7 @@ Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 t
   - **(S) at 192:** 0.1253 and 0.1255 s a step, 24,524 and 24,473 positions a second.
 
   A training position costs 1.93× as much at 2,048. Against claude-273's 0.6026 s and 0.1349 s, (L) is 7% slower and (S) 7% faster; that is one pass each, on other pods.
-- **Wall time:** (L) trained in 5,283 s and 5,279 s, (S) in 2,736 s and 2,742 s. The score passes took 2,624 s and 2,622 s at 2,048, and 148 s and 138 s for each pass at 192.
+- **Time:** by the trainer clock, (L) trained for 5,283 s and 5,279 s, and (S) for 2,736 s and 2,742 s. At seed 1, job.log's step stamps span 5,405 s and 2,882 s, which includes loading. The score passes took 2,624 s and 2,622 s at 2,048, and 148 s and 138 s for each pass at 192.
 - **Memory peaks:** training 20,048 and 20,112 MiB for (L), 11,664 and 11,600 MiB for (S). Every scoring pass peaked at 5,296 MiB.
 - These are the float scorer's speeds, not the served integer model's.
 
@@ -40,7 +40,7 @@ Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 t
 
    - b + c is under 10 at both seeds, so R1 cannot pass. The Bar pre-registers this as Negative.
    - **Unclassified.** The Bar says "The next unit classifies it first: instrument or mechanism". This REPORT names no cause.
-2. **The model fails even where both windows see the note.** In the under-192 bin, 23 queries whose note is fewer than 192 tokens back, (L) states 0 of 23 at either window at seed 1, and 1 at 2,048 against 0 at 192 at seed 2. The failure is not only one of distance. This agrees with claude-205: "Neither trunk puts a rare value from the prompt into the reply."
+2. **The model fails even where both windows see the note.** In the under-192 bin, 23 queries whose note is fewer than 192 tokens back, (L) states 0 of 23 at either window at seed 1, and 1 at 2,048 against 0 at 192 at seed 2. So distance is probably not the whole story; that is a lead for the classification, not a finding. At counts this small, the bin cannot do its job on the sheet, which is to tell a scorer broken at 192 from a failing model. I-4 is what checks the grader: all 609 references state their answer. This agrees with claude-205: "Neither trunk puts a rare value from the prompt into the reply."
 3. **No other reading separates anything.**
    - **R2 (memory on against out, at 2,048):** seed 1 states 0 and 0; seed 2 states 1 and 1, the same query (b 0, c 0).
    - **R2b (the same at 192):** 0 and 0 at both seeds.
@@ -50,7 +50,7 @@ Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 t
 4. **Most replies do not answer the query. These are counts I made after the outputs existed: descriptive, not readings, and no bar rests on them.**
    - **What (L) says at 2,048, memory on, seed 1:**
      - 162 of 609 replies contain "remember": the commonest, " Okay, I'll remember all of that." (82), is TRAIN's acknowledgement of a note turn;
-     - next come greetings and mood replies, " I'm good, thanks for asking." (19) and " I'm sorry you feel nervous…" (35 in its two commonest variants);
+     - next come greetings and mood replies, " I'm good, thanks for asking." (19) and " I'm sorry you feel nervous…" (18 and 11 in its two commonest variants; 44 replies mention "nervous");
      - then " It's green." (16) and " I'm not sure, you didn't tell me." (9).
    - **Replies whose first token is the reference's,** at (L) 2,048, (L) 192 and (S) 192: 43, 24 and 14 at seed 1; 61, 43 and 22 at seed 2.
    - These suggest the trunk often answers a different kind of turn than the one asked. That is a lead for the classification, not a finding.
