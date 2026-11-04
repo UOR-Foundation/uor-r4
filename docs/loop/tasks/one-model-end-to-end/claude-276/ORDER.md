@@ -1,81 +1,69 @@
-# ORDER: one-model-end-to-end, claude-276
+# ORDER: one-model-end-to-end, claude-276 (P2b's run: the one model trained at the 2,048 window)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `e1ad88afc`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `e1ad88afc`. Draft PR #3657.
 
 ## Goal
 
-The item's done-when reads:
+Run [P2b's sheet](../../../../harness/prep/one-model-end-to-end-long-context-2026-11-04.md) as pre-registered (FIT, round 1).
+- Train the one model at the 2,048-token window on the long TRAIN (arm (L)), beside arm (S) at 192 for equal positions.
+- Seeds 1 and 2 run on one RTX 5090 pod each.
+- Score recall across turns on p-long with the window open and shut, memory on and out (L-010), and time both windows.
+- Grade R1 to R5 on the laptop and apply the sheet's Bar.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+- **Plan step:** Casey's 4 November plan, P2b, the run unit (bound: 1 unit).
+- **What it changes in the model:** this is the first model on this line trained on conversations longer than 258 tokens. Its window sees a note up to about 2,000 tokens before the note is asked for. On a positive or partial result, its checkpoints are the candidates P4 (#3471) takes as its base.
+- **The pin** is `e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde`, claude-275's merge commit on `main`, as the sheet's Base artifact names it.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. Is the pin on `origin/main`, and does the sheet there match the FIT'd text?
+2. Are both input folders in the store, each with a `SHA256SUMS`?
+3. Do the caps hold two more pods (at most 4 pods and $8/h across all labs)?
+4. Does any open order hold these files, or does another lab run this question?
+5. Does the job file follow the sheet's Steps, arms, flags and checks, with no reading left to choose after outputs exist?
+
+**Result, at `e1ad88afc`: not cancelled.**
+1. Yes. `origin/main` is `e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde`. Since the FIT at `3d466b3a9`, the sheet has changed only in:
+   - the FIT line;
+   - the four minors that review named (R4's source, (S)'s positions, I-6, the under-192 row);
+   - `860e303a2`'s wording, which names the census 6 as a departure from the stop rule.
+
+   No bar, arm or reading moved.
+2. Yes. `uor-store ls` lists `inputs/p-long/` (6 files with `SHA256SUMS`) and `inputs/train-long/` (7 files, `train/` included, with `SHA256SUMS`). claude-275 read both back, 11 of 11 OK.
+3. Yes. `uor-pod status`: 0 pods running, $0/h of $8/h, and 14 verified 5090 offers from $0.563/h.
+4. No. The only open PR on this item is this unit's draft, #3657.
+5. The job file and the grade are written before any output exists, and the pre-run review (done-when 1) checks the job against the sheet line by line:
+   - **The job:** `local/claude/p2/job-p2b.sh`, SHA-256 `da1938f7e685a2c88a8ace48f6237115be2f0e2ef85ec296405c5e5089b8997e` at this ORDER. It changes only if the pre-run review finds a fault, and the REPORT records the launch SHA-256.
+   - **The grade:** `local/claude/p2/grade-p2b.sh`, SHA-256 `cfac639d4e783dc98786642b9f9f9d75f7af4a424c8b34947656b267b7c5a4a3`, fixed. It was tested on a synthetic seed folder built from p-long's `queries.json`:
+     - its b and c match an independent count (334 and 26 overall, 283 and 24 far);
+     - two passing seeds read Positive;
+     - identical windows read Negative;
+     - disagreeing seeds read Inconclusive;
+     - a pass at the wrong window reads Unread.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/loop/tasks/one-model-end-to-end/claude-276/**`
+- `docs/harness/prep/one-model-end-to-end-long-context-2026-11-04.md` (only the PRE-RUN line, the pin and the outcome; no bar moves)
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
-- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
-- `crates/uor-r4-training/Cargo.toml`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-training/src/milestone_world_v2.rs`
+
+No code. A repair that needs code is a new unit at a new pin.
 
 ## Done when
 
-To fill in.
+1. **The pre-run review (D67)** is posted on #3407 before any pod.
+   - **The reviewer:** fresh and non-author, given only the sheet, the job file, the grade and this ORDER.
+   - **What it covers:** the whole-project chain; that every tool and input exists; what each outcome unlocks; the FIT; and the lease inside the caps.
+   - **Before launch:** what it finds is fixed.
+2. **Both seeds ran the job,** or each failure is classed instrument or mechanism, with its exit code and logs. A watcher is armed on every pod in the same turn as its launch.
+3. **Every output is sealed** with `SHA256SUMS` under `results/claude/one-model-end-to-end-long-context-2026-11-04/sN/`, and read back before its pod goes down.
+4. **The laptop grade** runs `grade-p2b.sh` at the SHA-256 above. It checks I-4 to I-6; computes R1 (overall and the far bin), R2, R2b, R3, R4 (tok/s first) and R5; and applies the Bar per seed and across both.
+5. **The REPORT** leads with tok/s, puts negatives first, and gives one notebook row.
 
 ## Stop and ask if
 
-To fill in.
+Stop and decide; never stop and wait.
+- **An instrument check fails** (I-0 to I-6): the readings stay unread. Class the fault, and repair it at a new pin in the next unit.
+- **(L) projects past 3 hours** (I-2): the job cuts both arms to equal positions, as pre-registered, and records it.
+- **A pod is lost mid-run:** relaunch that seed on a new pod into a new folder (L-002), inside the caps.
