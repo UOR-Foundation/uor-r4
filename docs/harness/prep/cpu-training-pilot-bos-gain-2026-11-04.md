@@ -1,6 +1,6 @@
 # Direct final-gain training for reply termination
 
-**Status:** READY FOR FIT REVIEW
+**Status:** FIT
 
 ## Question
 
@@ -35,9 +35,11 @@ Artifacts:
 
 Hardware: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
 
-The public manifest says `split=train`. "Held-out" means odd-ordinal documents
-and learned evaluation keys are absent from training memory; base-model
-exposure is not claimed to be zero.
+The public manifest says `split=train`. Every selected eight-token key family
+has both even-document training examples and odd-document evaluation examples.
+"Held-out" therefore means document-disjoint evaluation through the same key
+families, not unseen keys, fresh phrasing or fresh-model generalization. The
+base model and corpus exposure are not claimed to be zero.
 
 ## Data split
 
@@ -160,6 +162,12 @@ free_kib() {
 }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
+test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN rustc --version)" = \
+  "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN cargo --version)" = \
+  "cargo 1.97.1 (c980f4866 2026-06-30)"
+test "$(lscpu | awk -F: '/Model name/ { sub(/^[ \t]+/, "", $2); print $2; exit }')" = \
+  "AMD Ryzen 9 9950X 16-Core Processor"
 "$HARNESS" budget show --json | jq -e \
   '.model_time_ledger.present == false
    and .resource_ledger.chain.head == "cpu-training-pilot-bos-gain-2026-11-04/resource-ledger.json"
@@ -245,9 +253,10 @@ retained rather than retried with a changed threshold.
 ## Claim boundary
 
 A positive supports only this final-gain direct-BOS objective on the fixed
-public split and two public seeds. A negative closes only this eight-move,
-one-code configuration. Neither outcome changes GPU qualification or
-establishes complete replies, fresh phrasing or useful chat.
+repeated-key, document-disjoint public split and two public seeds. A negative
+closes only this eight-move, one-code configuration. Neither outcome changes
+GPU qualification or establishes unseen-key transfer, complete replies,
+fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
