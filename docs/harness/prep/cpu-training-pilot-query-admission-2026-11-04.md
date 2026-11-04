@@ -1,6 +1,6 @@
 # Generated-query final-gain admission training
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -206,6 +206,15 @@ deterministic mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 generated-query final-gain admission training
+sheet: docs/harness/prep/cpu-training-pilot-query-admission-2026-11-04.md
+head: 5f65d260f26c8850b9ec9c73a7e1a4d29982ec3d
+implementation pin: 266de4a06ae7e50ecd849950495cb3a2f4b95b4a
+reviewer: independent-subagent query-admission-fit-2
+note: actual generated-trajectory final-gain objective, fixed 32-coordinate
+family, cross-cell target permutation with mapping audit, equal-move random
+control with per-move identity, 640-row/64-pair readiness, depth and teacher
+non-loss, gain-only isolation, parity and deterministic repeat
+date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
