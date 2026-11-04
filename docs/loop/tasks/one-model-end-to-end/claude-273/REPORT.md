@@ -3,16 +3,16 @@
 Lab: claude. [ORDER](./ORDER.md). PR #3646, item #3407. Plan step: Casey's plan of 4 November, P2 unit 3 ("the window as a setting"). It also gives P2b its first number: a training step at 2,048 against 192.
 
 **In one paragraph.** `train-in-space --context N` now trains at an N-token window, from 2 to 4,096; 192 stays the default.
-- **Unchanged at 192:** a run without the flag, or with `--context 192`, writes the same `config.json` as before, because the field is left out at 192.
+- **At 192:** at the head, a run without the flag and one with `--context 192` write the same run `config.json` apart from `batch`, because the field is left out at 192. That this matches the base rests on that serde skip and its negative gate: no training at 192 was compared with the base.
 - **The training path uses the window's own length** everywhere:
   - TRAIN's cut, and the model's `config.context`, set through the new `StackModel::set_context`;
   - `assemble`, `trained_points`, `cut_census` and `gradient_norms`;
   - the turn memory's rows and its whole-window check, and the throughput line.
 - **What stays at 192:** DEV's evaluation during training, `--score-rows` scoring and every decode. Every mode but training and `--grad-norms 1` now refuses another window by name.
 - **A new guard:** `choose_sorted` refuses any Hamming-read tensor of 2³² elements or more, where candle 0.9.2's 32-bit launch size would wrap.
-- **The GPU check:** one RTX 5090 (`vast-59067333`, $0.975/h, up 06:23–06:37Z, about $0.23) ran 48 steps of claude-266's (b) recipe at each of 192 × 4, 2,048 × 4 and 192 × 16.
+- **The GPU check:** one RTX 5090 (`vast-59067333`, $0.975/h, up from about 06:24Z, $0.18 spent by the job's end at 06:34Z, then saved and destroyed) ran 48 steps of claude-266's (b) recipe at each of 192 × 4, 2,048 × 4 and 192 × 16.
   - A step at 2,048 × 4 takes 0.603 s, against 0.104 s at 192 × 4: 5.8× the time for 10.7× the window positions.
-  - Its GPU memory peaks at 20,012 MiB of the card's 32,607.
+  - Its sampled GPU memory peak is 20,012 MiB of the card's 32,607.
   - Every loss was finite. The crate's CUDA library suite passed on the same pod: 318 passed, 0 failed.
 
 ## Tokens per second first
@@ -27,16 +27,16 @@ A 2,048 window trains 1.84× as many positions a second as a 192 window at the s
 ## What did not work
 
 1. **The memory figure is `nvidia-smi`'s, not the pool's own peak.** The ORDER asked for "the memory pool's peak", but `run_long` reads no pool attribute (claude-272 read `CU_MEMPOOL_ATTR_USED_MEM_HIGH` inside a test). The job sampled `memory.used` (140 ms apart on average, at most 271 ms) and split each run at its step-0 line.
-   - **Before the step-0 line** the process has only built the model and run one DEV pass. That span tops out at 5,612–5,676 MiB in all three runs.
+   - **Before the step-0 line** the process has built the model and the turn-memory tables and run one DEV pass. That span tops out at 5,612–5,676 MiB in all three runs.
    - **After it**, training lifts the maximum to 8,076, 20,012 and 11,628 MiB. So training, not DEV, sets each peak.
-   - **It is an upper bound on the pool's bytes in use:** it includes the CUDA context and any memory the pool keeps cached. A spike shorter than about 0.14 s could be missed.
+   - **At each sample it is an upper bound on the pool's bytes in use:** it includes the CUDA context and any memory the pool keeps cached. Between samples it bounds nothing: a spike shorter than the 271 ms largest gap could be missed.
 2. **TRAIN at 2,048 is mostly padding, so the loss here is not a learning result.** `mw-balp/train`'s documents run to about 258 tokens (claude-271's REPORT). `build_document_windows` puts one document in each window and pads it with BOS to the window. So each 2,048 window holds at most about 13% text.
    - The run's own epoch counts show it: 59,937 windows at 2,048 against 68,218 at 192, where documents past 192 tokens split into two windows.
    - **What the step time does measure:** a 2,048-position window's compute, because the read and the trunk run over every position.
-   - **What it does not show:** that a model learns anything at 2,048. In 48 steps no run's training loss moved by more than 0.0003 (from 1.0044 to 1.0041–1.0043). That needs the long corpus, which is P2b's.
+   - **What it does not show:** that a model learns anything at 2,048. Between steps 16 and 48 no run's training loss moved by more than about 0.0003 (from 1.0044 to 1.00410–1.00435). That needs the long corpus, which is P2b's.
 3. **At the GPU pin, `--context` was ignored by `--score-rows` and every other non-training mode** (found by the scout for the next unit). A model scored with `--context 2048` would have been scored on 192-token windows without a word.
    - **The fix:** at `aa46d1273` the bin refuses the flag there by name (`context_applies`), as `--train-as-served` and `--served-forward` already are. The new test `a_window_other_than_192_is_a_training_setting` FAILS when the refusal is set aside.
-   - **The pod ran at `7bc88fc31`.** The head differs from it only in that check in `train-in-space.rs`, which the training runs pass.
+   - **The pod ran at `7bc88fc31`.** The head differs from it only in that check in `train-in-space.rs`, a check that training mode does not trigger; the pod's binary predates it.
 4. **`set_context`'s shape check cannot fire on today's trunk.** `validate_native_config` admits only `r` layers, so no native model has a weight sized by its window (the ORDER's cancel probe, 3). The check guards a future layer kind. No test trips it, and only the accept path ran (on the GPU, at 2,048).
 5. **The launch guard did not fire on the GPU.** At 2,048 × 4 the largest checked tensors are each difference chunk, at 4 × 128 × 2,048 × 64 = 2²⁶ elements under claude-272's 256 MiB budget, and the `(batch · time, time)` tensors, at 2²⁴. The refusal at 2³² rests on the host test of its arithmetic.
 6. **The job script's first draft had three faults,** found by its fresh pre-run review (PASS) and fixed before it shipped:
@@ -87,21 +87,21 @@ On the RTX 5090 (32,607 MiB, driver 595.71.05), release build at `7bc88fc31`, bi
   - c192-b4 and c192-b16 write no `context` in their run `config.json`. The two files are equal apart from `batch`, so the flag at 192 and no flag write the same file.
   - c2048-b4's run config has `"context": 2048`.
   - Each saved model's own `config.json` (`models/step-000048`) carries its window: 192, 2,048 and 192.
-- **DEV**, at 192 in every run: `dev_loss` 2.794–2.820, top-1 at most 10 of 14,287 rows. Nothing was learned in 48 steps, and none was expected.
+- **DEV**, at 192 in every run: `dev_loss` 2.794–2.820, top-1 at most 10 of 14,287 rows. DEV's top-1 moved by no more than 9 rows; no noise band was measured, and no learning is claimed.
 - **The ratio the ORDER's stop rule reads:** 0.6026 / 0.1042 = 5.78×, under its ~20×. No step at 2,048 failed.
 
 ## What this shows, and what it does not
 
 - **It shows:**
-  - a model trains at a 2,048 window on one 5090 at batch 4: 0.60 s a step and at most 19.5 GiB, which leaves 12.3 GiB of the card;
-  - the read and the trunk at 2,048 cost 5.8× a 192 step, not the 10.7× of the positions, so a step at 192 × 4 is far from filling the card;
-  - at 192 the setting changes nothing: the same `config.json`, and the host tests and negative gates on the row layout.
+  - a model trains at a 2,048 window on one 5090 at batch 4: 0.60 s a step, with a sampled peak of 20,012 MiB (19.5 GiB) of the card's 31.8 GiB;
+  - the read and the trunk at 2,048 cost 5.8× a 192 step, not the 10.7× of the positions, which suggests the GPU is under-used at 192 × 4;
+  - at 192, the flag and no flag write the same run `config.json` at the head, apart from `batch`. That this matches the base rests on the serde skip, the row-layout test and their negative gates; no training at 192 was compared with the base.
 - **It does not show:**
   - that a model learns, or recalls across turns, at 2,048 (What did not work, 2);
   - batch 8 or more at 2,048, which is untested;
   - the pool's own peak (What did not work, 1);
   - any scoring or decode at a window.
-- **A projection for P2b, not a measurement:** P2b's 8,192 steps at 2,048 × 4 would take about 8,192 × 0.603 ≈ 4,900 s of training steps, plus its DEV passes.
+- **A projection for P2b, not a measurement:** P2b's 8,192 steps at 2,048 × 4 would take about 8,192 × 0.6026 ≈ 4,940 s (82 min) of training steps, plus its DEV passes.
 
 ## Next
 
@@ -149,9 +149,9 @@ None applied.
 
 ## Plain summary
 
-The model used to train on pieces of conversation 192 word pieces long, because that length was fixed in the code. Now it can be set when training starts, anywhere from 2 to 4,096, and leaving it at 192 changes nothing.
+The model used to train on pieces of conversation 192 word pieces long, because that length was fixed in the code. Now it can be set when training starts, anywhere from 2 to 4,096, and leaving it at 192 writes the same settings as before.
 
-On one gaming GPU, a training step on 2,048 word pieces took 0.6 seconds and used about 20 GB of the card's 32 GB. That is about six times as long as a step on 192 for nearly eleven times as much text, so the longer setting fits on one card and uses it better.
+On one gaming GPU, a training step on 2,048 word pieces took 0.6 seconds and ran in about 20 GB of the card's 32 GB, four pieces of conversation at a time. That is about six times as long as a step on 192 for nearly eleven times as many positions, which suggests the card is under-used at the short setting.
 
 This does not show that the model learns to remember across a long conversation. The test data is short, so the long pieces were mostly empty filler. The next units build long practice conversations and a way to score at the long length, and then train on them.
 
