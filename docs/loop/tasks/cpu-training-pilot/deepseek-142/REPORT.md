@@ -94,7 +94,7 @@ registered question.
 The exact stopped output, input hashes and recursive manifest are under
 [`evidence-attempt-1/`](../../../../labs/cpu-training-pilot-stop-density-2026-11-04/evidence-attempt-1/).
 The evidence `SHA256SUMS` file is
-`ef995315ce7076f28d8840ce7caa64ac51024e12d7cd4f815759b0757360ead1`.
+`28c30f1a0c0b0937052f488210c62b937ee53fa2ae1967ad36c621cb6f382725`.
 Measured and admitted accounting is in the
 [resource ledger](../../../../labs/cpu-training-pilot-stop-density-2026-11-04/resource-ledger.json).
 
