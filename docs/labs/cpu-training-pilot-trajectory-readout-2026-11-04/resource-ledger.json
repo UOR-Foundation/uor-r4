@@ -22,6 +22,7 @@
   "build_projection_seconds": 600,
   "controls_evaluation_projection_seconds": 600,
   "checkpointing_projection_seconds": 0,
+  "run_projection_seconds": 1200,
   "delivery_projection_seconds": 300,
   "retry_projection_seconds": 0,
   "accounting": {

@@ -21,9 +21,9 @@ failure byte-for-byte:
 | Ambiguous rows | 277 | 254 |
 | Fitted radius | 537 | 1,080 |
 
-Both seeds' target mapping hashes and the 632/633 changed-assignment count also
-match attempt 1. The registered preflight therefore stopped before seed 2,
-generation and the repeat.
+The code and trajectory target-mapping hashes and the 632/633
+changed-assignment count also match attempt 1. The registered preflight
+therefore stopped before seed 2, generation and the repeat.
 
 Attempt 1 remains unchanged at its original seal. Attempt 2 is under
 [`evidence-attempt-2/`](evidence-attempt-2/); its `SHA256SUMS` is
