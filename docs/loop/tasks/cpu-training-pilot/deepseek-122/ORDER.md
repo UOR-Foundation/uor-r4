@@ -53,8 +53,9 @@ proposed here.
    non-premature BOS-gain / exact-non-loss bar plus cap, context and cost stops.
 3. Both public seeds run the trained gate, no gate and matched control over the
    existing 114-prompt / 16-token panel; seed 1 repeats without timing.
-4. Every served arm retains exact CPU/integer parity and records artifacts and
-   report hashes.
+4. The fully-served base forward used by every gate arm retains exact
+   CPU/integer parity for Q12 queries, tokens and kept cells; the orbit rule is
+   a deterministic post-process of those audited Q12 values.
 5. Focused and full CPU release tests, strict Clippy, formatting, report,
    roadmap, catalog and loop gates pass.
 6. Fresh exact-head review, protected merge and fresh-main verification pass.
