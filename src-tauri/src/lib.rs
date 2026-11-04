@@ -12,6 +12,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+pub mod sidecar;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -1887,8 +1889,8 @@ pub fn handle_studio_http_request(
             expected_token
         );
         let injected = html.replacen(
-            "<script src=\"./assets/js/uor_offline_vendor.js\"></script>",
-            &bootstrap,
+            "<script type=\"module\">",
+            &format!("{bootstrap}\n    <script type=\"module\">"),
             1,
         );
         bytes = injected.into_bytes();
@@ -1913,21 +1915,54 @@ pub fn handle_studio_http_request(
 /// `tauri::Builder` over [`DesktopBackend`].
 #[cfg(feature = "gui")]
 pub mod tauri_gui {
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
-    use serde_json::{json, Value};
-    use super::{dispatch_rpc_command, DesktopBackend};
+    use std::time::Duration;
 
-    /// Thread-safe managed state holding [`DesktopBackend`] inside a Tauri v2 application.
+    use serde_json::{json, Value};
+    use super::sidecar::{NativeChatEvent, NativeProxyResponse, SidecarProcess};
+    use super::{dispatch_rpc_command, DesktopBackend, PinRegistry};
+
     #[derive(Clone)]
     pub struct TauriDesktopState {
         inner: Arc<Mutex<DesktopBackend>>,
+        sidecar: Option<SidecarProcess>,
     }
 
     impl TauriDesktopState {
         pub fn new(backend: DesktopBackend) -> Self {
             Self {
                 inner: Arc::new(Mutex::new(backend)),
+                sidecar: None,
             }
+        }
+
+        pub fn with_sidecar(binary: &Path, stack: &Path, tokenizer: &Path) -> Result<Self, String> {
+            Self::with_backend_and_sidecar(
+                DesktopBackend::new(PinRegistry::with_synthetic_standin()),
+                binary,
+                stack,
+                tokenizer,
+            )
+        }
+
+        pub fn with_backend_and_sidecar(
+            backend: DesktopBackend,
+            binary: &Path,
+            stack: &Path,
+            tokenizer: &Path,
+        ) -> Result<Self, String> {
+            Ok(Self {
+                inner: Arc::new(Mutex::new(backend)),
+                sidecar: Some(SidecarProcess::start(binary, stack, tokenizer)?),
+            })
+        }
+
+        pub fn sidecar(&self) -> Result<SidecarProcess, String> {
+            self.sidecar
+                .clone()
+                .ok_or_else(|| "The native uor-chat sidecar is unavailable.".to_string())
         }
 
         pub fn with_backend<T>(
@@ -1942,6 +1977,31 @@ pub mod tauri_gui {
         }
     }
 
+    fn sidecar_input_paths() -> Result<(PathBuf, PathBuf, PathBuf), String> {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let development = (
+            root.join("binaries/uor-chat-aarch64-apple-darwin"),
+            root.join("runtime/studio/pkg/synthetic-stack.lut"),
+            root.join("runtime/studio/pkg/tokenizer.json"),
+        );
+        if [&development.0, &development.1, &development.2]
+            .iter()
+            .all(|path| path.is_file())
+        {
+            return Ok(development);
+        }
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        let macos = executable
+            .parent()
+            .ok_or_else(|| "The packaged executable has no parent directory.".to_string())?;
+        let resources = macos.join("../Resources");
+        Ok((
+            macos.join("uor-chat"),
+            resources.join("pkg/synthetic-stack.lut"),
+            resources.join("pkg/tokenizer.json"),
+        ))
+    }
+
     /// Test helper that dispatches a command name and JSON payload through [`TauriDesktopState`].
     pub fn invoke_tauri_command_for_test(
         state: &TauriDesktopState,
@@ -1949,6 +2009,80 @@ pub mod tauri_gui {
         args: Value,
     ) -> Result<Value, String> {
         state.with_backend(|b| dispatch_rpc_command(b, cmd, &args))
+    }
+
+    #[tauri::command]
+    pub fn native_models(state: tauri::State<'_, TauriDesktopState>) -> Result<NativeProxyResponse, String> {
+        state.sidecar()?.models()
+    }
+
+    #[tauri::command]
+    pub fn native_decompose_image(
+        state: tauri::State<'_, TauriDesktopState>,
+        width: u32,
+        height: u32,
+        columns: u32,
+        rows: u32,
+        rgba: Vec<u8>,
+    ) -> Result<NativeProxyResponse, String> {
+        state.sidecar()?.decompose(width, height, columns, rows, &rgba)
+    }
+
+    #[tauri::command]
+    pub fn host_cancel_chat(
+        state: tauri::State<'_, TauriDesktopState>,
+        request_id: String,
+    ) -> Result<(), String> {
+        state.sidecar()?.cancel(&request_id)
+    }
+
+    #[tauri::command]
+    pub fn native_chat_completions(
+        state: tauri::State<'_, TauriDesktopState>,
+        request_id: String,
+        request: String,
+        on_event: tauri::ipc::Channel<NativeChatEvent>,
+    ) -> Result<NativeProxyResponse, String> {
+        let sidecar = state.sidecar()?;
+        let canceller = sidecar.clone();
+        let cancellation_id = request_id.clone();
+        let (initial_sender, initial_receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut initial_sender = Some(initial_sender);
+            let mut last_response = None;
+            let events = on_event.clone();
+            let result = sidecar.stream_chat(&request_id, &request, |event| {
+                last_response = Some((event.status, event.headers.clone()));
+                if let Some(sender) = initial_sender.take() {
+                    let _ = sender.send(Ok(NativeProxyResponse {
+                        status: event.status,
+                        headers: event.headers.clone(),
+                        body: Vec::new(),
+                    }));
+                }
+                let _ = on_event.send(event);
+            });
+            if let Err(error) = result {
+                let (status, headers) = last_response.unwrap_or((500, BTreeMap::new()));
+                if let Some(sender) = initial_sender.take() {
+                    let _ = sender.send(Err(error.clone()));
+                }
+                let _ = events.send(NativeChatEvent {
+                    status,
+                    headers,
+                    body_chunk: Vec::new(),
+                    terminal: true,
+                    error: Some(error),
+                });
+            }
+        });
+        match initial_receiver.recv_timeout(Duration::from_secs(15)) {
+            Ok(result) => result,
+            Err(_) => {
+                canceller.cancel(&cancellation_id)?;
+                Err("The native chat request did not return its initial response.".to_string())
+            }
+        }
     }
 
     #[tauri::command]
@@ -2208,11 +2342,15 @@ pub mod tauri_gui {
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 16 `native_*` `#[tauri::command]` handlers registered.
+    /// 20 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .manage(state)
             .invoke_handler(tauri::generate_handler![
+                native_models,
+                native_decompose_image,
+                native_chat_completions,
+                host_cancel_chat,
                 native_list_local_models,
                 native_load_synthetic_standin,
                 native_load_model,
@@ -2234,7 +2372,8 @@ pub mod tauri_gui {
 
     /// Launch the native Tauri v2 desktop window wrapping `web/studio/`.
     pub fn run_tauri_gui(backend: DesktopBackend) -> Result<(), String> {
-        let state = TauriDesktopState::new(backend);
+        let (binary, stack, tokenizer) = sidecar_input_paths()?;
+        let state = TauriDesktopState::with_backend_and_sidecar(backend, &binary, &stack, &tokenizer)?;
         build_tauri_app_builder(state)
             .run(tauri::generate_context!())
             .map_err(|e| e.to_string())

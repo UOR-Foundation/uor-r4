@@ -469,7 +469,7 @@ fn rpc_and_loopback_http_studio_host_serve_commands_and_static_assets() {
     assert_eq!(status, 200);
     assert_eq!(ctype, "text/html; charset=utf-8");
     let html_str = String::from_utf8_lossy(&html_bytes);
-    assert!(html_str.contains("Developer Studio"));
+    assert!(html_str.contains("UOR-R4 Studio — local chat"));
     assert!(html_str.contains(&token));
 
     // 3. GET / with foreign Host header (DNS rebinding) or traversal path is refused with 403:
