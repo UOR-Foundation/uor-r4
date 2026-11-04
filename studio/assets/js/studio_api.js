@@ -7,7 +7,7 @@
  * here runs, fetches or imports anything at page load.
  *
  * Configuration (base URL, model, API key) is owned by assets/js/model_sources.js and
- * persisted in this browser's localStorage under "uor.studio.modelSources.v1". API keys
+ * persisted in this browser's localStorage under "uor.studio.modelSources.v1" except for the ephemeral native bootstrap, which stays in memory. API keys
  * are never bundled in the repository and never leave this browser except as the
  * Authorization header of a request the user triggered.
  *
@@ -65,7 +65,7 @@ function configFromObject(config) {
         baseUrl: String(baseUrl),
         model: String(config.model || config.modelId || config.model_id || ''),
         apiKey: typeof config.apiKey === 'string' ? config.apiKey : (typeof config.api_key === 'string' ? config.api_key : ''),
-        maxTokens: Number(config.maxTokens) > 0 ? Math.min(4096, Number(config.maxTokens)) : 768,
+        maxTokens: Number(config.maxTokens) > 0 ? Math.min(4096, Number(config.maxTokens)) : (config.ephemeral ? undefined : 768),
         temperature: Number.isFinite(Number(config.temperature)) ? Math.max(0, Math.min(2, Number(config.temperature))) : 0.7,
     };
 }
@@ -107,6 +107,91 @@ function requestHeaders(config) {
     const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
     if (config.apiKey) headers.Authorization = 'Bearer ' + config.apiKey;
     return headers;
+}
+
+function toHex(bytes) {
+    let value = '';
+    for (const byte of bytes) value += byte.toString(16).padStart(2, '0');
+    return value;
+}
+
+export function imageUrlPart(image) {
+    const dataUrl = String(image && image.dataUrl || '');
+    if (!/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
+        throw failure('A bounded image data URL is required.');
+    }
+    return { type: 'image_url', image_url: { url: dataUrl } };
+}
+
+export async function decomposeNativeImage({ config, image, grid, signal } = {}) {
+    const resolved = requireConfig(config);
+    const width = Number(image && image.width);
+    const height = Number(image && image.height);
+    const rgba = image && image.rgba;
+    const columns = Number(grid && grid.columns);
+    const rows = Number(grid && grid.rows);
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 256 || height > 256) {
+        throw failure('Native image dimensions must be within 1..256.');
+    }
+    if (!rgba || Number(rgba.length) !== width * height * 4) {
+        throw failure('Native image decomposition requires exact RGBA bytes.');
+    }
+    if (!Number.isInteger(columns) || !Number.isInteger(rows) || columns < 1 || rows < 1 || columns > width || rows > height) {
+        throw failure('Native image grid must fit the image.');
+    }
+    const url = endpoint(resolved.baseUrl, '/images/decompose') +
+        '?width=' + width + '&height=' + height + '&columns=' + columns + '&rows=' + rows;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { ...requestHeaders(resolved), 'Content-Type': 'application/octet-stream', Accept: 'application/octet-stream' },
+        body: rgba,
+        signal,
+        cache: 'no-store',
+    });
+    if (!response.ok) {
+        const bodyText = await response.text();
+        throw describeHttpError(response, bodyText);
+    }
+    const header = (name) => {
+        const value = response.headers.get(name);
+        if (!value) throw failure('The native server returned an invalid decomposition response.');
+        return value;
+    };
+    const schema = header('x-uor-image-schema');
+    const sourceBlake3 = header('x-uor-source-blake3');
+    const decompositionId = header('x-uor-decomposition-id');
+    const responseWidth = Number(header('x-uor-image-width'));
+    const responseHeight = Number(header('x-uor-image-height'));
+    const responseColumns = Number(header('x-uor-grid-columns'));
+    const responseRows = Number(header('x-uor-grid-rows'));
+    const patchCount = Number(header('x-uor-patch-count'));
+    if (schema !== 'uor-r4.image-decomposition/1'
+        || !/^[0-9a-f]{64}$/.test(sourceBlake3)
+        || decompositionId.length > 128
+        || responseWidth !== width
+        || responseHeight !== height
+        || responseColumns !== columns
+        || responseRows !== rows
+        || patchCount !== columns * rows) {
+        throw failure('The native server returned an invalid decomposition response.');
+    }
+    const canonical = new Uint8Array(await response.arrayBuffer());
+    const magic = [82, 52, 73, 77, 71, 48, 48, 49];
+    if (canonical.length < magic.length
+        || canonical.length > 52 + 32 * 32 * 40
+        || magic.some((byte, index) => canonical[index] !== byte)) {
+        throw failure('The native server returned an invalid decomposition response.');
+    }
+    return {
+        type: 'uor_r4_image',
+        schema,
+        canonical_hex: toHex(canonical),
+        source_blake3: sourceBlake3,
+        width,
+        height,
+        grid: { columns, rows },
+        decomposition_id: decompositionId,
+    };
 }
 
 function timeoutSignal(parentSignal, timeoutMs) {
@@ -197,11 +282,16 @@ export async function testConnection(config) {
     }
 }
 
-function normaliseMessages(messages) {
+async function normaliseMessages(messages) {
     if (!Array.isArray(messages) || messages.length === 0) throw failure('At least one chat message is required.');
-    return messages
-        .filter((message) => message && typeof message.content === 'string' && message.content.length > 0)
-        .map((message) => ({ role: ['system', 'user', 'assistant'].includes(message.role) ? message.role : 'user', content: message.content }));
+    const normalized = [];
+    for (const message of messages) {
+        if (!message) continue;
+        const content = await message.content;
+        if (!((typeof content === 'string' && content.length > 0) || (Array.isArray(content) && content.length > 0))) continue;
+        normalized.push({ role: ['system', 'user', 'assistant'].includes(message.role) ? message.role : 'user', content });
+    }
+    return normalized;
 }
 
 /** Parse one SSE event block ("data: {...}") into an OpenAI streaming chunk. */
@@ -216,7 +306,7 @@ function parseSseBlock(block) {
     try {
         return { chunk: JSON.parse(payload) };
     } catch (_error) {
-        return null;
+        return { error: failure('The API returned malformed SSE JSON.') };
     }
 }
 
@@ -225,19 +315,69 @@ function parseSseBlock(block) {
  * Calls onDelta(text, meta) for each content fragment and resolves when the stream ends.
  */
 export async function streamChatCompletions({ config, messages, signal, onDelta, onDone, onError, options = {} } = {}) {
+    let errorReported = false;
+    const reportError = (error) => {
+        if (errorReported) return;
+        errorReported = true;
+        if (typeof onError === 'function') onError(error);
+    };
     let resolved;
     try {
         resolved = requireConfig(config);
     } catch (error) {
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     }
     const body = {
         model: resolved.model || 'default',
-        messages: normaliseMessages(messages),
+        messages: await normaliseMessages(messages),
         stream: true,
+        stream_options: { include_usage: true },
         temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : resolved.temperature,
         max_tokens: Number(options.maxTokens) > 0 ? Math.min(4096, Number(options.maxTokens)) : resolved.maxTokens,
+    };
+    let text = '';
+    let usage;
+    let uor;
+    let finishReason = null;
+    const complete = (stopped) => {
+        const result = { ok: !stopped, stopped, text, usage, uor, finishReason };
+        if (typeof onDone === 'function') onDone(result);
+        return result;
+    };
+    const emit = (delta, meta = {}) => {
+        const hasToken = meta.uor && Number.isFinite(Number(meta.uor.token_id));
+        if (!delta && !hasToken) return;
+        text += delta;
+        if (typeof onDelta === 'function') onDelta(delta, { ...meta, text });
+    };
+    const applyChunk = (chunk) => {
+        if (chunk && chunk.error) {
+            const detail = chunk.error;
+            const message = typeof detail === 'string' ? detail : (detail.message || detail.code || 'unknown API error');
+            const error = failure('The API returned an error event: ' + message, {
+                status: Number.isFinite(Number(detail.status)) ? Number(detail.status) : 500,
+                code: detail.code,
+                param: detail.param,
+                errorType: detail.type,
+            });
+            reportError(error);
+            throw error;
+        }
+        if (chunk && chunk.usage && typeof chunk.usage === 'object') usage = chunk.usage;
+        if (chunk && chunk.uor && typeof chunk.uor === 'object' && !Array.isArray(chunk.uor.token_id)) uor = chunk.uor;
+        const choice = chunk && chunk.choices && chunk.choices[0];
+        if (choice) {
+            finishReason = choice.finish_reason || finishReason;
+            const delta = choice.delta && typeof choice.delta.content === 'string'
+                ? choice.delta.content
+                : (choice.message && typeof choice.message.content === 'string'
+                    ? choice.message.content
+                    : (typeof choice.text === 'string' ? choice.text : ''));
+            emit(delta, { finishReason, model: chunk.model || resolved.model, uor: chunk.uor });
+            return;
+        }
+        if (chunk && chunk.uor && typeof chunk.uor.stop === 'string') finishReason = finishReason || chunk.uor.stop;
     };
     let response;
     try {
@@ -248,11 +388,8 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
             body: JSON.stringify(body),
         });
     } catch (error) {
-        if (error && error.name === 'AbortError') {
-            if (typeof onDone === 'function') onDone({ stopped: true, text: '' });
-            return { ok: false, stopped: true };
-        }
-        if (typeof onError === 'function') onError(error);
+        if (error && error.name === 'AbortError') return complete(true);
+        reportError(error);
         throw error;
     }
     if (!response.ok) {
@@ -263,73 +400,64 @@ export async function streamChatCompletions({ config, messages, signal, onDelta,
             /* ignore */
         }
         const error = describeHttpError(response, bodyText);
-        if (typeof onError === 'function') onError(error);
+        reportError(error);
         throw error;
     }
 
-    let text = '';
-    const emit = (delta, meta) => {
-        if (!delta) return;
-        text += delta;
-        if (typeof onDelta === 'function') onDelta(delta, { ...meta, text });
-    };
-
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes(STREAM_HEADER) || !response.body) {
-        // Some gateways ignore stream=true and return one JSON object.
         const bodyText = await response.text();
-        let parsed = null;
+        let parsed;
         try {
             parsed = JSON.parse(bodyText);
         } catch (_error) {
-            throw failure('The API returned a non-JSON chat completion.');
+            const error = failure('The API returned a non-JSON chat completion.');
+            reportError(error);
+            throw error;
         }
-        const content = parsed?.choices?.[0]?.message?.content ?? parsed?.choices?.[0]?.text ?? '';
-        emit(String(content || ''));
-        if (typeof onDone === 'function') onDone({ stopped: false, text });
-        return { ok: true, text };
+        applyChunk(parsed);
+        return complete(false);
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const nextBoundary = () => {
+        const match = /\r?\n\r?\n/.exec(buffer);
+        return match ? { index: match.index, length: match[0].length } : null;
+    };
     try {
         for (;;) {
             const { value, done } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            let boundary = buffer.indexOf('\n\n');
-            while (boundary !== -1) {
-                const block = buffer.slice(0, boundary);
-                buffer = buffer.slice(boundary + 2);
+            let boundary = nextBoundary();
+            while (boundary) {
+                const block = buffer.slice(0, boundary.index);
+                buffer = buffer.slice(boundary.index + boundary.length);
                 const parsed = parseSseBlock(block);
-                if (parsed && parsed.done) {
-                    if (typeof onDone === 'function') onDone({ stopped: false, text });
-                    return { ok: true, text };
+                if (parsed && parsed.done) return complete(false);
+                if (parsed && parsed.error) {
+                    reportError(parsed.error);
+                    throw parsed.error;
                 }
-                const choice = parsed && parsed.chunk && parsed.chunk.choices && parsed.chunk.choices[0];
-                if (choice) {
-                    const delta = choice.delta && typeof choice.delta.content === 'string'
-                        ? choice.delta.content
-                        : (choice.message && typeof choice.message.content === 'string' ? choice.message.content : '');
-                    emit(delta, { finishReason: choice.finish_reason || null, model: parsed.chunk.model || resolved.model });
-                }
-                boundary = buffer.indexOf('\n\n');
+                if (parsed && parsed.chunk) applyChunk(parsed.chunk);
+                boundary = nextBoundary();
             }
         }
+        buffer += decoder.decode();
         if (buffer.trim()) {
             const parsed = parseSseBlock(buffer.trim());
-            const choice = parsed && parsed.chunk && parsed.chunk.choices && parsed.chunk.choices[0];
-            if (choice && choice.delta && typeof choice.delta.content === 'string') emit(choice.delta.content);
+            if (parsed && parsed.error) {
+                reportError(parsed.error);
+                throw parsed.error;
+            }
+            if (parsed && parsed.chunk) applyChunk(parsed.chunk);
         }
-        if (typeof onDone === 'function') onDone({ stopped: false, text });
-        return { ok: true, text };
+        return complete(false);
     } catch (error) {
-        if (error && error.name === 'AbortError') {
-            if (typeof onDone === 'function') onDone({ stopped: true, text });
-            return { ok: false, stopped: true, text };
-        }
-        if (typeof onError === 'function') onError(error);
+        if (error && error.name === 'AbortError') return complete(true);
+        reportError(error);
         throw error;
     } finally {
         try {
@@ -348,7 +476,7 @@ export async function completeChatCompletions({ config, messages, options = {} }
         headers: requestHeaders(resolved),
         body: JSON.stringify({
             model: resolved.model || 'default',
-            messages: normaliseMessages(messages),
+            messages: await normaliseMessages(messages),
             stream: false,
             temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : resolved.temperature,
             max_tokens: Number(options.maxTokens) > 0 ? Math.min(4096, Number(options.maxTokens)) : resolved.maxTokens,
@@ -366,6 +494,8 @@ const api = {
     configFromSources,
     listModels,
     testConnection,
+    decomposeNativeImage,
+    imageUrlPart,
     streamChatCompletions,
     completeChatCompletions,
 };

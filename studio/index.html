@@ -51,7 +51,7 @@
                 <button class="icon-btn" id="btnToggleInspectorTop" type="button" aria-label="Toggle context panel" aria-expanded="true" title="Toggle context panel">▤</button>
                 <div class="visually-hidden" role="group" aria-label="Legacy view switch compatibility">
                     <button id="viewBtnChat" type="button" aria-pressed="true">Agent</button>
-                    <button id="viewBtnModel" type="button" aria-pressed="false">Models</button>
+                    <button id="viewBtnModel" type="button" aria-pressed="false">Connections</button>
                     <button id="viewBtnEditor" type="button" aria-pressed="false">Workspace</button>
                     <button id="btnNewChatTop" type="button">New session</button>
                     <button id="btnToggleRail" type="button">Rail</button>
@@ -73,7 +73,7 @@
                     <span class="nav-section-title">WORKSPACE</span>
                     <button class="nav-item" id="navAgent" type="button" data-section="agent" aria-current="page"><span class="nav-item-icon" aria-hidden="true">◈</span><span class="nav-item-text"><span class="nav-item-label">Agent <kbd class="nav-kbd">⌘1</kbd></span><span class="nav-item-desc">Chat, context and build tasks</span></span></button>
                     <button class="nav-item" id="navWorkspace" type="button" data-section="workspace"><span class="nav-item-icon" aria-hidden="true">▤</span><span class="nav-item-text"><span class="nav-item-label">Workspace <kbd class="nav-kbd">⌘2</kbd></span><span class="nav-item-desc">File tree, editor tabs, save</span></span></button>
-                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Models <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">Local engine, M1, API providers</span></span></button>
+                    <button class="nav-item" id="navModels" type="button" data-section="models"><span class="nav-item-icon" aria-hidden="true">◇</span><span class="nav-item-text"><span class="nav-item-label">Connections <kbd class="nav-kbd">⌘3</kbd></span><span class="nav-item-desc">UOR Chat, custom providers, diagnostics</span></span></button>
                     <button class="nav-item" id="navGuide" type="button" data-section="guide"><span class="nav-item-icon" aria-hidden="true">▸</span><span class="nav-item-text"><span class="nav-item-label">Guide <kbd class="nav-kbd">⌘4</kbd></span><span class="nav-item-desc">Workflows, shortcuts, limits</span></span></button>
                 </nav>
                 <section class="nav-sessions" id="sessionSection" aria-label="Sessions">
@@ -98,6 +98,7 @@
                     </div>
                 </div>
             </aside>
+            <button class="nav-scrim" id="btnNavScrim" type="button" aria-label="Close navigation" hidden></button>
 
             <main class="main-column" id="mainColumn" tabindex="-1">
                 <section class="view chat-panel" id="chatPanel" data-view="chat" aria-label="Chat">
@@ -120,7 +121,7 @@
                             <div class="composer-inner">
                                 <div class="composer-box">
                                     <span class="composer-prompt" aria-hidden="true">›</span>
-                                    <label class="visually-hidden" for="chatInput">Message</label>
+                                    <label class="sr-only" for="chatInput">Message</label>
                                     <textarea id="chatInput" rows="1" placeholder="Ask the model, or run a command with ⌘K"></textarea>
                                     <button class="send-btn" id="btnSend" type="button" aria-label="Send message" title="Send (Enter)"><span class="send-label">Send</span><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button>
                                     <button class="stop-btn" id="btnStop" type="button" hidden>Stop</button>
@@ -130,6 +131,8 @@
                                         <button class="tool-btn" id="btnAttachContext" type="button" title="Attach the active file or a workspace file as agent context">
                                             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5 5 8a2.1 2.1 0 0 0 3 3l4.5-4.5a3.2 3.2 0 0 0-4.5-4.5L3 6.5a4.3 4.3 0 0 0 6 6l4-4"/></svg>Attach context
                                         </button>
+                                        <button class="tool-btn" id="btnAttachFiles" type="button" title="Attach text, source, or image files" aria-label="Attach text, source, or image files">Attach files</button>
+                                        <input class="visually-hidden" id="chatFileInput" type="file" multiple aria-label="Choose text, source, or image files" accept="text/*,image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif,.md,.markdown,.rs,.json,.html,.css,.js,.mjs,.ts,.tsx,.toml,.yml,.yaml,.py,.sh,.csv,.xml,.svg,.sql">
                                         <button class="tool-btn" id="btnBuildTask" type="button" aria-haspopup="menu" aria-expanded="false" title="Insert a build-task prompt template">
                                             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>Build task
                                         </button>
@@ -188,11 +191,11 @@
                     </div>
                 </section>
 
-                <section class="view model-view" id="modelView" data-view="model" aria-label="Models">
+                <section class="view model-view" id="modelView" data-view="model" aria-label="Connections">
                     <header class="view-head">
                         <div class="view-head-text">
-                            <h1 class="panel-title">Models</h1>
-                            <p class="view-subtitle">Local WASM artifacts, published trained models and OpenAI-compatible APIs</p>
+                            <h1 class="panel-title">Connections</h1>
+                            <p class="view-subtitle">Experimental UOR Chat, custom providers, and artifact diagnostics</p>
                         </div>
                         <div class="view-head-actions">
                             <span class="badge">on-device first</span>
@@ -200,11 +203,11 @@
                         </div>
                     </header>
                     <div class="model-view-body" id="modelViewMount">
-                        <aside class="model-sources-panel" id="modelSourcesPanel" aria-label="Model sources">
+                        <aside class="model-sources-panel" id="modelSourcesPanel" aria-label="Connections">
                             <div class="providers-head">
                                 <div>
                                     <span class="micro-label">PROVIDERS</span>
-                                    <p class="hint">Load a local artifact or the published M1 trunk; a remote model or API is contacted only after your explicit click.</p>
+                                    <p class="hint">Connect UOR Chat, choose a custom API provider, or open Artifact diagnostics; a remote model or API is contacted only after your explicit click.</p>
                                 </div>
                                 <span class="badge">on-device first</span>
                             </div>
@@ -281,7 +284,7 @@
                                     <li>Open <button class="inline-link" data-guide-nav="workspace" type="button">Workspace</button> and choose <strong>Open folder…</strong> (File System Access API).</li>
                                     <li>Click a file to open an editor tab; save edits back to disk with <kbd class="kbd">⌘S</kbd>.</li>
                                     <li>In <button class="inline-link" data-guide-nav="agent" type="button">Agent</button>, attach the active file as context and describe the task.</li>
-                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Models</button> when Claude's API endpoint is available; until then the local engine serves next-token prediction only.</li>
+                                    <li>Configure an API provider under <button class="inline-link" data-guide-nav="models" type="button">Connections</button> when a custom OpenAI-compatible endpoint is configured; until then the local engine serves next-token prediction only.</li>
                                 </ol>
                             </section>
                             <section class="guide-card">
@@ -320,7 +323,7 @@
                             <h3>Shortcuts</h3>
                             <dl class="guide-shortcut-grid">
                                 <div><dt><kbd class="kbd">⌘K</kbd></dt><dd>Command palette</dd></div>
-                                <div><dt><kbd class="kbd">⌘1–4</kbd></dt><dd>Agent / Workspace / Models / Guide</dd></div>
+                                <div><dt><kbd class="kbd">⌘1–4</kbd></dt><dd>Agent / Workspace / Connections / Guide</dd></div>
                                 <div><dt><kbd class="kbd">⌘B</kbd></dt><dd>Toggle navigation</dd></div>
                                 <div><dt><kbd class="kbd">⌘I</kbd></dt><dd>Toggle context panel</dd></div>
                                 <div><dt><kbd class="kbd">⌘S</kbd></dt><dd>Save active file</dd></div>
@@ -346,9 +349,9 @@
                     <section class="ctx-card" aria-label="Active model">
                         <div class="ctx-card-head"><span class="micro-label">ACTIVE MODEL</span><span class="dot dot-muted" id="ctxModelDot" aria-hidden="true"></span></div>
                         <p class="ctx-model-label" id="ctxModelLabel">No model loaded</p>
-                        <p class="ctx-model-meta" id="ctxModelMeta">Load the synthetic demo or the M1 trunk in Models.</p>
+                        <p class="ctx-model-meta" id="ctxModelMeta">Load the synthetic demo or the M1 trunk in Connections.</p>
                         <p class="ctx-model-sha" id="ctxModelSha" hidden></p>
-                        <div class="ctx-actions"><button class="ghost-btn" id="ctxLoadModel" type="button">Open Models</button></div>
+                        <div class="ctx-actions"><button class="ghost-btn" id="ctxLoadModel" type="button">Open Connections</button></div>
                     </section>
                     <details class="ctx-card ctx-details"><summary><span class="micro-label">RUNTIME DETAILS</span></summary>
                         <dl class="ctx-rows">
@@ -369,7 +372,7 @@
                     <details class="ctx-card ctx-details"><summary><span class="micro-label">SHORTCUTS</span></summary>
                         <ul class="shortcut-list">
                             <li><kbd class="kbd">⌘K</kbd><span>Command palette</span></li>
-                            <li><kbd class="kbd">⌘1–4</kbd><span>Agent / Workspace / Models / Guide</span></li>
+                            <li><kbd class="kbd">⌘1–4</kbd><span>Agent / Workspace / Connections / Guide</span></li>
                             <li><kbd class="kbd">⌘S</kbd><span>Save active file</span></li>
                             <li><kbd class="kbd">⇧⌘S</kbd><span>Save as a copy</span></li>
                             <li><kbd class="kbd">Esc</kbd><span>Close dialog / stop generation</span></li>
@@ -428,7 +431,7 @@
                 <table class="help-table">
                     <tbody>
                         <tr><td><kbd class="kbd">⌘K</kbd></td><td>Command palette</td></tr>
-                        <tr><td><kbd class="kbd">⌘1 ⌘2 ⌘3 ⌘4</kbd></td><td>Agent / Workspace / Models / Guide</td></tr>
+                        <tr><td><kbd class="kbd">⌘1 ⌘2 ⌘3 ⌘4</kbd></td><td>Agent / Workspace / Connections / Guide</td></tr>
                         <tr><td><kbd class="kbd">⌘B</kbd></td><td>Toggle navigation sidebar</td></tr>
                         <tr><td><kbd class="kbd">⌘I</kbd></td><td>Toggle context panel</td></tr>
                         <tr><td><kbd class="kbd">⌘S</kbd></td><td>Save active file</td></tr>
@@ -449,7 +452,7 @@
         <div class="palette" role="document">
             <div class="palette-input-row">
                 <span class="palette-prompt" aria-hidden="true">›</span>
-                <label class="visually-hidden" for="paletteInput">Search or run a command</label>
+                <label class="sr-only" for="paletteInput">Search or run a command</label>
                 <input id="paletteInput" type="text" placeholder="Search commands, files, sessions…" autocomplete="off" spellcheck="false" aria-controls="paletteList" aria-autocomplete="list">
                 <kbd class="kbd">Esc</kbd>
             </div>
@@ -466,7 +469,7 @@
     <div class="legacy-compat" id="legacyCompat" hidden aria-hidden="true">
         <nav id="rail" aria-label="Legacy navigation compatibility">
             <button id="railChat" type="button">Chat</button>
-            <button id="railModel" type="button">Models</button>
+            <button id="railModel" type="button">Connections</button>
             <button id="railEditor" type="button">Editor</button>
             <button id="railPalette" type="button">Commands</button>
             <button id="railTheme" type="button">Theme</button>
@@ -489,8 +492,12 @@
     <script type="module">
 
         import { mountModelSources, ModelSources } from './assets/js/model_sources.js';
-        import { configFromSources, streamChatCompletions } from './assets/js/studio_api.js';
+        import { configFromSources, normalizeBaseUrl, streamChatCompletions } from './assets/js/studio_api.js';
+        import { decomposeNativeImage, imageUrlPart } from './assets/js/studio_api.js';
+        import { isImageFile, readImageFiles } from './assets/js/image_input.js';
         import { encodeTextWithArtifact } from './assets/js/uor_tokenizer_artifact.js';
+        import { createComposerInput, readTextFiles } from './assets/js/composer_input.js';
+        import { createStreamMetrics } from './assets/js/stream_metrics.js';
 
         var CONVERSATIONS_KEY = 'uor.studio.conversations.v1';
         var EDITOR_KEY = 'uor.studio.editor.v1';
@@ -508,7 +515,7 @@
             'The local engine runs a UORLUT01 stack artifact in a Web Worker.',
             'The bundled seed-5 stack is a synthetic stand-in for the serving',
             'engine, not a language model. An OpenAI-compatible API can be',
-            'configured under Model sources; prompts then leave this device.',
+            'configured under Connections; prompts then leave this device.',
         ].join('\n');
 
         var app = {
@@ -524,6 +531,9 @@
             mode: 'wasm',
             apiConfig: null,
             activeStreamId: null,
+            chatRequests: {},
+            activeChatRequestId: null,
+            predictionRequests: {},
             editorSaveTimer: null,
             booted: false,
             tokenizerArtifact: null,
@@ -531,6 +541,11 @@
             modelMeta: null,
             maxNewTokens: MAX_NEW_TOKENS,
             lastWorkerError: '',
+            composerInput: null,
+            apiCompletionIds: [],
+            apiStartedNs: null,
+            apiFirstTokenNs: null,
+            apiMetrics: null,
         };
 
         function $(selector, root) {
@@ -585,6 +600,8 @@
                     checkpoint: typeof conversation.checkpoint === 'string' ? conversation.checkpoint : null,
                     lastToken: typeof conversation.lastToken === 'number' ? conversation.lastToken : null,
                     sourceKind: conversation.sourceKind === 'api' ? 'api' : 'wasm',
+                    promptHistory: Array.isArray(conversation.promptHistory) ? conversation.promptHistory.filter(function (prompt) { return typeof prompt === 'string'; }) : [],
+                    draft: typeof conversation.draft === 'string' ? conversation.draft : '',
                 };
             });
             var storedActive = readJson('uor.studio.activeConversation.v1', null);
@@ -614,10 +631,13 @@
                 checkpoint: null,
                 lastToken: null,
                 sourceKind: app.mode,
+                promptHistory: [],
+                draft: '',
             };
             app.conversations.unshift(conversation);
             if (switchTo !== false) {
                 app.activeConversationId = conversation.id;
+                if (app.composerInput) app.composerInput.reset(conversation.draft);
                 if (app.mode === 'wasm' && app.caps && app.worker) {
                     app.worker.postMessage({ action: 'close_session', payload: { conversationId: conversation.id } });
                 }
@@ -653,10 +673,10 @@
         function deleteConversation(id) {
             if (app.generating) {
                 toast('Stop the current reply before deleting a conversation.', 'warn');
-                return;
+                return false;
             }
             var conversation = app.conversations.find(function (item) { return item.id === id; });
-            if (!conversation) return;
+            if (!conversation) return false;
             if (app.worker && app.mode === 'wasm') {
                 app.worker.postMessage({ action: 'close_session', payload: { conversationId: id } });
             }
@@ -668,20 +688,23 @@
             renderConversationList();
             renderMessages();
             restoreActiveConversation();
+            return true;
         }
 
         function selectConversation(id) {
             if (app.generating) {
                 toast('Stop the current reply before switching conversations.', 'warn');
-                return;
+                return false;
             }
-            if (!app.conversations.some(function (conversation) { return conversation.id === id; })) return;
+            if (!app.conversations.some(function (conversation) { return conversation.id === id; })) return false;
             app.activeConversationId = id;
+            if (app.composerInput) app.composerInput.reset(activeConversation().draft || '');
             persistConversations();
             renderConversationList();
             renderMessages();
             restoreActiveConversation();
             setView('chat');
+            return true;
         }
 
         function restoreActiveConversation() {
@@ -756,6 +779,7 @@
 
         function appendMessageElement(role, content, meta) {
             var container = $('#chatMessages');
+            if (!container) return null;
             var existingEmpty = container.querySelector('.chat-empty');
             if (existingEmpty) existingEmpty.remove();
             var wrapper = document.createElement('article');
@@ -765,7 +789,7 @@
             head.className = 'msg-head';
             var roleLabel = document.createElement('span');
             roleLabel.className = 'msg-role';
-            roleLabel.textContent = role === 'assistant' ? (app.mode === 'api' ? 'API' : 'Local model') : role;
+            roleLabel.textContent = role === 'assistant' ? (isNativeLoopback(app.apiConfig) ? 'Native uor-chat' : (app.mode === 'api' ? 'API' : 'Local model')) : role;
             head.appendChild(roleLabel);
             if (meta) {
                 var metaNode = document.createElement('span');
@@ -786,26 +810,35 @@
             var empty = document.createElement('div');
             empty.className = 'chat-empty';
             empty.id = 'chatEmptyState';
+            var ready = chatReadiness();
+            empty.dataset.readiness = ready ? 'ready' : 'unavailable';
             var mark = document.createElement('div');
             mark.className = 'empty-mark';
-            mark.textContent = '\u25c8';
+            mark.textContent = '◈';
             mark.setAttribute('aria-hidden', 'true');
+            var native = isNativeLoopback(app.apiConfig);
             var headline = document.createElement('h2');
             headline.className = 'empty-headline';
-            headline.textContent = app.mode === 'api' ? 'Agent ready — external baseline mode.' : 'A workable agent workspace for UOR-R4.';
+            headline.textContent = native && ready
+                ? 'Native uor-chat loopback ready.'
+                : (app.mode === 'api' && ready
+                    ? 'API configured — external baseline mode.'
+                    : (ready ? 'Local synthetic continuation ready.' : 'Build with your files. Connect an agent when ready.'));
             var copy = document.createElement('p');
             copy.className = 'empty-desc';
-            copy.textContent = app.mode === 'api'
-                ? 'Prompts are sent to the configured API provider and leave this device. UOR-R4 is pre-alpha: treat every reply as an external baseline, not a project result.'
-                : 'Use this Studio to work on the repository files with an OpenAI-compatible agent. No external requests are made while the page loads, and nothing leaves this device until you choose an API provider.';
+            copy.textContent = native && ready
+                ? 'Prompts go to the native StackChat service on this device. This is protocol evidence, not a useful conversation.'
+                : (app.mode === 'api' && ready
+                    ? 'Prompts will be sent to the configured API provider when you send them and will leave this device. Configuration does not prove reachability; treat every reply as an external baseline, not a project result.'
+                    : (ready
+                    ? 'A supported non-discrete stack is loaded. Its generated continuation is synthetic engine evidence, not a useful conversation.'
+                    : 'No conversational model is configured. Explore the demo workspace or open your own files, then configure a chat-capable source under Connections. M1 provides next-token prediction only.'));
             var steps = document.createElement('ol');
             steps.className = 'empty-steps';
             [
-                'In Models, load the synthetic demo or the M1 trunk, or add an API provider to talk to an agent.',
-                'In Workspace, open a local folder and click a file to open an editor tab.',
-                'Attach the active file (or several) as context in the composer.',
-                'Ask a question or pick a Build task template, then send it.',
-                'Insert useful replies into the editor and save them back to disk.'
+                'Choose a demo tree or open a local folder, then open files in editor tabs.',
+                'Attach the active file or pasted text as explicit agent context.',
+                'Configure an API provider for chat, or use M1 next-token prediction.'
             ].forEach(function (text) {
                 var item = document.createElement('li');
                 item.className = 'empty-step';
@@ -822,12 +855,21 @@
                 button.addEventListener('click', onClick);
                 quick.appendChild(button);
             }
-            quickButton('Open Models', function () { setView('model'); });
-            quickButton('Open Workspace', function () { setView('workspace'); });
-            quickButton('New session', function () { startNewChat(); });
+            function go(section, view) {
+                var ui = window.__studioUi;
+                if (ui && typeof ui.activateSection === 'function') ui.activateSection(section);
+                else setView(view);
+            }
+            quickButton('Open Connections', function () { go('models', 'model'); });
+            quickButton('Open Workspace', function () { go('workspace', 'workspace'); });
+            quickButton('Explore demo workspace', function () {
+                if (!window.__studioFiles || typeof window.__studioFiles.openDemo !== 'function') return;
+                if (window.__studioFiles.openDemo() !== false) go('workspace', 'workspace');
+            });
+            quickButton('New session', function () { if (startNewChat() !== false) go('agent', 'chat'); });
             var note = document.createElement('p');
             note.className = 'empty-note';
-            note.textContent = 'Pre-alpha \u00b7 M1 complete \u00b7 1 of 8 milestones \u00b7 the M1 trunk serves next-token prediction only; a useful conversation is not established yet.';
+            note.textContent = 'Pre-alpha · M1 complete · 1 of 8 milestones · the M1 trunk serves next-token prediction only; a useful conversation is not established yet.';
             empty.appendChild(mark);
             empty.appendChild(headline);
             empty.appendChild(copy);
@@ -852,7 +894,7 @@
             }
         }
 
-        function setView(view) {
+        function setView(view, options) {
             if (view !== 'chat' && view !== 'model' && view !== 'workspace' && view !== 'editor' && view !== 'files' && view !== 'guide') return;
             if (view === 'editor' || view === 'files') view = 'workspace';
             document.body.dataset.view = view;
@@ -860,7 +902,7 @@
                 var button = $('#viewBtn' + name);
                 if (button) button.setAttribute('aria-pressed', name.toLowerCase() === view ? 'true' : 'false');
             });
-            if (view === 'chat') {
+            if (view === 'chat' && (!options || options.focus !== false)) {
                 var input = $('#chatInput');
                 if (input && window.matchMedia('(max-width: 780px)').matches) input.focus();
             }
@@ -929,6 +971,15 @@
         }
 
         function renderDiscretePrediction(message) {
+            var predictionGenerationId = app.predictionRequests[message.id];
+            if (message.id === app.activePredictionRequestId && predictionGenerationId !== undefined) {
+                delete app.predictionRequests[message.id];
+                app.activePredictionRequestId = null;
+                if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
+                app.generating = false;
+                updateComposerState();
+                document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
+            }
             var result = $('#predictorResult');
             var list = $('#predictorTop');
             var status = $('#predictorStatus');
@@ -971,22 +1022,30 @@
             document.documentElement.dataset.predictorDecoded = JSON.stringify(decoded);
         }
 
-        function runPrediction() {
+        function runPrediction(providedPrompt) {
             var status = $('#predictorStatus');
+            if (app.activePredictionRequestId) {
+                toast('Wait for the current prediction to finish.', 'warn');
+                return false;
+            }
+            if (app.generating) {
+                toast('Stop the current reply before predicting.', 'warn');
+                return false;
+            }
             if (!app.worker || !app.caps || !isDiscreteCapabilities(app.caps)) {
-                toast('Load the M1 discrete model first under Model sources.', 'warn');
-                return;
+                toast('Load the M1 discrete model first under Connections.', 'warn');
+                return false;
             }
             if (!app.tokenizerArtifact) {
                 toast('This model has no stack-bound tokenizer loaded; prediction needs it to encode the prompt.', 'error');
                 if (status) status.textContent = 'No stack-bound tokenizer is loaded for this artifact.';
-                return;
+                return false;
             }
             var input = $('#predictorInput');
-            var prompt = input ? input.value : '';
+            var prompt = typeof providedPrompt === 'string' ? providedPrompt : (input ? input.value : '');
             if (!prompt || !prompt.trim()) {
                 toast('Type a prompt to predict from.', 'warn');
-                return;
+                return false;
             }
             var vocab = discreteVocabSize();
             var tokenIds;
@@ -995,18 +1054,26 @@
             } catch (error) {
                 toast('Tokenizer could not encode the prompt: ' + error, 'error');
                 if (status) status.textContent = 'Tokenizer error: ' + error;
-                return;
+                return false;
             }
             if (!tokenIds || tokenIds.length === 0) {
                 toast('The tokenizer returned no token ids for that prompt.', 'error');
-                return;
+                return false;
             }
             if (status) status.textContent = 'Predicting from ' + tokenIds.length + ' prompt tokens…';
+            nextGenerationId();
+            var predictionRequestId = 'predict-' + Date.now().toString(36);
+            app.activePredictionRequestId = predictionRequestId;
+            app.predictionRequests[predictionRequestId] = app.activeGenerationId;
+            app.activeGenerationKind = 'wasm';
+            app.generating = true;
+            updateComposerState();
             app.worker.postMessage({
                 action: 'predict_discrete',
-                id: 'predict-' + Date.now().toString(36),
+                id: predictionRequestId,
                 payload: { tokenIds: tokenIds, topK: 8 },
             });
+            return true;
         }
 
         /* ------------------------------------------------------------ status & toasts */
@@ -1048,13 +1115,24 @@
         }
 
         function updatePrivacyStatus() {
-            if (app.mode === 'api') {
+            var native = isNativeLoopback(app.apiConfig);
+            if (native) {
+                setChip('#privacyStatus', 'ok', 'Native loopback', 'Native uor-chat on this device: prompts and replies stay local.');
+            } else if (app.mode === 'api' || (app.generating && app.activeGenerationKind === 'api')) {
                 setChip('#privacyStatus', 'warn', 'API mode: prompts leave this device', 'Chat requests go to the configured OpenAI-compatible endpoint.');
             } else {
                 setChip('#privacyStatus', 'ok', 'Local only', 'Local WASM mode: prompts and replies stay in this tab.');
             }
             var badge = $('#chatSourceBadge');
-            if (badge) badge.textContent = app.mode === 'api' ? 'API' : 'Local WASM';
+            if (badge) badge.textContent = native ? 'Native uor-chat' : (app.mode === 'api' ? 'API' : 'Local WASM');
+        }
+
+        function chatReadiness() {
+            if (app.mode === 'api') {
+                if (!app.apiConfig) return false;
+                try { return Boolean(normalizeBaseUrl(app.apiConfig.baseUrl)); } catch (_error) { return false; }
+            }
+            return Boolean(app.caps) && app.caps.synthetic === true && app.caps.engine_supported !== false && app.caps.can_generate !== false && !isDiscreteCapabilities(app.caps);
         }
 
         function updateComposerState() {
@@ -1062,10 +1140,11 @@
             var stop = $('#btnStop');
             if (!send || !stop) return;
             send.hidden = app.generating;
-            stop.hidden = !app.generating;
-            var ready = app.mode === 'api' ? Boolean(app.apiConfig) : Boolean(app.caps);
-            send.disabled = app.generating;
-            send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Load a model source first.');
+            stop.hidden = !app.generating || Boolean(app.activePredictionRequestId);
+            stop.disabled = Boolean(app.activePredictionRequestId);
+            var ready = chatReadiness();
+            send.disabled = app.generating || !ready;
+            send.title = app.generating ? 'A reply is in progress.' : (ready ? 'Send the prompt.' : 'Configure a chat-capable model or API provider under Connections.');
         }
 
         /* ------------------------------------------------------------ metrics */
@@ -1204,7 +1283,7 @@
                 return;
             }
             if (message.action === 'generate_error') {
-                finishGenerationWithError(message.error || 'Generation failed.');
+                finishGenerationWithError(message.error || 'Generation failed.', message.id, app.chatRequests[message.id]);
                 return;
             }
             if (message.action === 'session_exported') {
@@ -1236,6 +1315,15 @@
                         : workerError;
                     setEngineStatus('unavailable', 'err', 'Engine unavailable: ' + reason);
                 }
+                var failedPredictionId = app.predictionRequests[message.id];
+                if (message.id === app.activePredictionRequestId && failedPredictionId !== undefined) {
+                    delete app.predictionRequests[message.id];
+                    app.activePredictionRequestId = null;
+                    if (app.activeGenerationId === failedPredictionId) app.activeGenerationId = null;
+                    app.generating = false;
+                    updateComposerState();
+                    document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: failedPredictionId, error: workerError } }));
+                }
                 toast(workerError, 'error');
                 return;
             }
@@ -1249,13 +1337,42 @@
             return null;
         }
 
-        function beginGeneration(conversation) {
+        function nextGenerationId() {
+            app.generationSerial = (app.generationSerial || 0) + 1;
+            app.activeGenerationId = app.generationSerial;
+            return app.activeGenerationId;
+        }
+
+        function chatRequestMatches(requestId, generationId) {
+            return !app.activePredictionRequestId
+                && requestId === app.activeChatRequestId
+                && app.chatRequests[requestId] === generationId
+                && app.chatGenerationId === generationId;
+        }
+
+        function clearChatRequest(requestId) {
+            delete app.chatRequests[requestId];
+            if (app.activeChatRequestId === requestId) app.activeChatRequestId = null;
+        }
+
+        function beginGeneration(conversation, requestId) {
+            nextGenerationId();
+            app.chatGenerationId = app.activeGenerationId;
+            app.activeChatRequestId = requestId === undefined ? app.chatGenerationId : requestId;
+            app.chatRequests[app.activeChatRequestId] = app.chatGenerationId;
+            app.activeGenerationKind = app.mode;
             app.generating = true;
             app.assistantBuffer = '';
+            app.apiCompletionIds = [];
+            app.apiStartedNs = Math.round(window.performance.now() * 1000000);
+            app.apiFirstTokenNs = null;
+            app.apiMetrics = createStreamMetrics();
             updateComposerState();
             var placeholder = appendMessageElement('assistant', '', 'streaming…');
-            placeholder.wrapper.dataset.streaming = 'true';
-            app.streamingBodyEl = placeholder.body;
+            if (placeholder) {
+                placeholder.wrapper.dataset.streaming = 'true';
+                app.streamingBodyEl = placeholder.body;
+            }
             setMetrics('Waiting for the first token…');
             scrollChat(true);
             var button = $('#btnSend');
@@ -1264,10 +1381,15 @@
         }
 
         function finishLocalGeneration(message) {
+            var localGenerationId = app.chatRequests[message.id];
+            if (!chatRequestMatches(message.id, localGenerationId)) return;
             var conversation = activeConversation();
             if (!conversation) {
+                clearChatRequest(message.id);
+                app.chatGenerationId = null;
                 app.generating = false;
                 updateComposerState();
+                document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete', generationId: localGenerationId } }));
                 return;
             }
             var text = typeof message.fullText === 'string' ? message.fullText : app.assistantBuffer;
@@ -1303,9 +1425,13 @@
             requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
+            clearChatRequest(message.id);
+            app.chatGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: message.stoppedBy === 'cancelled' ? 'stopped' : 'complete', generationId: localGenerationId } }));
         }
 
-        function finishGenerationWithError(errorText) {
+        function finishGenerationWithError(errorText, requestId, generationId) {
+            if (!chatRequestMatches(requestId, generationId)) return false;
             var friendlyError = String(errorText);
             if (/ContextFull/i.test(friendlyError)) {
                 friendlyError = 'The bundled demo has a 64-token context. Shorten the prompt, or load the M1 trunk / an API provider for a longer context.';
@@ -1328,10 +1454,15 @@
             app.generating = false;
             app.streamingBodyEl = null;
             app.assistantBuffer = '';
+            updatePrivacyStatus();
             updateComposerState();
             setMetrics('Error');
             toast(String(errorText), 'error');
             scrollChat(true);
+            clearChatRequest(requestId);
+            app.chatGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'error', generationId: generationId, error: String(errorText) } }));
+            return true;
         }
 
         function generationTokenLimit() {
@@ -1347,14 +1478,15 @@
 
         function sendViaWorker(prompt, conversation) {
             if (!app.worker || !app.caps) {
-                toast('Load a local model first under Model sources.', 'warn');
+                toast('Load a local model first under Connections.', 'warn');
                 setView('model');
                 return false;
             }
-            beginGeneration(conversation);
+            var requestId = makeId('gen');
+            beginGeneration(conversation, requestId);
             app.worker.postMessage({
                 action: 'generate',
-                id: makeId('gen'),
+                id: requestId,
                 payload: {
                     conversationId: conversation.id,
                     messages: [{ role: 'user', content: prompt }],
@@ -1364,13 +1496,73 @@
             return true;
         }
 
-        async function sendViaApi(prompt, conversation) {
+        function isNativeLoopback(config) {
+            return Boolean(config && config.id === 'native-loopback' && config.ephemeral === true);
+        }
+
+        function apiMessages(conversation) {
+            var visibleMessages = conversation.messages
+                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; });
+            var lastIndex = visibleMessages.length - 1;
+            var messages = visibleMessages
+                .map(function (message, index) {
+                    var content = message.content;
+                    // Image bytes are intentionally memory-only. Preserve a truthful,
+                    // non-empty history marker after reload instead of sending a blank
+                    // historical user turn that the native API rejects. The final turn
+                    // remains empty so a live image-only request has no text part.
+                    if (message.role === 'user' && content === '' && index !== lastIndex) content = '[Image patch input]';
+                    return { role: message.role, content: content };
+                });
+            var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function'
+                ? window.__studioUi.getAttachments()
+                : [];
+            var recalledImages = window.__studioUi && typeof window.__studioUi.getImageRecallCount === 'function'
+                ? window.__studioUi.getImageRecallCount()
+                : 0;
+            var textAttachments = attachments.filter(function (item) { return item.kind !== 'image'; });
+            if (textAttachments.length) {
+                var context = textAttachments.map(function (item) {
+                    return '--- ' + String(item.name || 'attachment.txt') + ' ---\n' + String(item.content || '');
+                }).join('\n\n');
+                messages.unshift({ role: 'user', content: 'Workspace context:\n' + context });
+            }
+            var images = attachments.filter(function (item) { return item.kind === 'image'; });
+            if (images.length) {
+                var last = messages[messages.length - 1];
+                if (!last || last.role !== 'user') {
+                    throw new Error('Image context requires a final user message.');
+                }
+                var text = typeof last.content === 'string' ? last.content : '';
+                var native = app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true;
+                last.content = (async function () {
+                    var parts = text ? [{ type: 'text', text: text }] : [];
+                    for (var image of images) {
+                        if (app.abortController && app.abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
+                        if (native) {
+                            parts.push(await decomposeNativeImage({
+                                config: app.apiConfig,
+                                image: image,
+                                grid: image.grid || { columns: 1, rows: 1 },
+                                signal: app.abortController ? app.abortController.signal : undefined,
+                            }));
+                        } else {
+                            parts.push(imageUrlPart(image));
+                        }
+                    }
+                    return parts;
+                }());
+            }
+            return messages;
+        }
+
+        async function sendViaApi(prompt, conversation, preparedMessages) {
             beginGeneration(conversation);
+            var apiRequestId = app.activeChatRequestId;
+            var apiGenerationId = app.chatGenerationId;
             app.abortController = new AbortController();
-            var messages = conversation.messages
-                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
-                .map(function (message) { return { role: message.role, content: message.content }; });
             try {
+                var messages = preparedMessages || apiMessages(conversation);
                 await streamChatCompletions({
                     config: app.apiConfig || configFromSources(),
                     messages: messages,
@@ -1378,43 +1570,111 @@
                     onDelta: function (delta, meta) {
                         app.assistantBuffer += delta;
                         if (app.streamingBodyEl) app.streamingBodyEl.textContent = app.assistantBuffer;
-                        setMetrics('API stream · ' + app.assistantBuffer.length + ' chars');
+                        var tokenId = meta.uor && Number(meta.uor.token_id);
+                        if (Number.isFinite(tokenId)) app.apiCompletionIds.push(tokenId);
+                        var nowNs = Math.round(window.performance.now() * 1000000);
+                        if (app.apiFirstTokenNs === null) app.apiFirstTokenNs = Math.max(0, nowNs - app.apiStartedNs);
+                        app.apiMetrics.update({
+                            uor: app.apiCompletionIds.length ? { completion_ids: app.apiCompletionIds } : undefined,
+                            elapsedNs: Math.max(0, nowNs - app.apiStartedNs),
+                            firstTokenNs: app.apiFirstTokenNs,
+                            chars: app.assistantBuffer.length,
+                        });
+                        setMetrics(app.apiMetrics.text());
                         scrollChat(false);
                     },
                     onDone: function (result) {
+                        if (!chatRequestMatches(apiRequestId, apiGenerationId)) return;
                         var text = app.assistantBuffer;
+                        var nowNs = Math.round(window.performance.now() * 1000000);
+                        app.apiMetrics.update({
+                            usage: result && result.usage,
+                            uor: result && result.uor,
+                            elapsedNs: Math.max(0, nowNs - app.apiStartedNs),
+                            firstTokenNs: app.apiFirstTokenNs,
+                            finishReason: result && result.stopped ? 'stopped' : result && result.finishReason,
+                            chars: text.length,
+                        });
+                        var finalMetrics = app.apiMetrics.text();
                         var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
                         if (placeholder) {
                             placeholder.dataset.streaming = 'false';
                             var body = placeholder.querySelector('.msg-body');
                             if (body) body.textContent = text || (result && result.stopped ? '[stopped]' : '');
                             var metaNode = placeholder.querySelector('.msg-meta');
-                            if (metaNode) metaNode.textContent = result && result.stopped ? 'stopped' : 'API response';
+                            if (metaNode) metaNode.textContent = finalMetrics;
                         }
-                        conversation.messages.push({ role: 'assistant', content: text, meta: result && result.stopped ? 'stopped' : 'API response' });
+                        conversation.messages.push({ role: 'assistant', content: text, meta: finalMetrics });
                         conversation.sourceKind = 'api';
                         touchConversation(conversation);
                         app.generating = false;
                         app.streamingBodyEl = null;
                         app.abortController = null;
+                        updatePrivacyStatus();
                         updateComposerState();
-                        setMetrics('API response · ' + text.length + ' chars');
+                        setMetrics(finalMetrics);
                         renderConversationList();
                         scrollChat(false);
+                        clearChatRequest(apiRequestId);
+                        app.chatGenerationId = null;
+                        document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: result && result.stopped ? 'stopped' : 'complete', generationId: apiGenerationId } }));
                     },
                     onError: function (error) {
-                        finishApiWithError(error);
+                        finishApiWithError(error, apiRequestId, apiGenerationId);
                     },
                 });
             } catch (error) {
                 if (!app.generating) return;
-                finishApiWithError(error);
+                finishApiWithError(error, apiRequestId, apiGenerationId);
             }
         }
 
-        function finishApiWithError(error) {
-            finishGenerationWithError(error && error.message ? error.message : String(error));
+        function finishApiStopped(requestId, generationId) {
+            if (!chatRequestMatches(requestId, generationId)) return false;
+            var conversation = activeConversation();
+            var text = app.assistantBuffer;
+            var nowNs = Math.round(window.performance.now() * 1000000);
+            app.apiMetrics.update({
+                elapsedNs: Math.max(0, nowNs - app.apiStartedNs),
+                firstTokenNs: app.apiFirstTokenNs,
+                finishReason: 'stopped',
+                chars: text.length,
+            });
+            var finalMetrics = app.apiMetrics.text();
+            var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
+            if (placeholder) {
+                placeholder.dataset.streaming = 'false';
+                var body = placeholder.querySelector('.msg-body');
+                if (body) body.textContent = text || '[stopped]';
+                var metaNode = placeholder.querySelector('.msg-meta');
+                if (metaNode) metaNode.textContent = finalMetrics;
+            }
+            if (conversation) {
+                conversation.messages.push({ role: 'assistant', content: text, meta: finalMetrics });
+                conversation.sourceKind = 'api';
+                touchConversation(conversation);
+            }
+            app.generating = false;
+            app.streamingBodyEl = null;
             app.abortController = null;
+            updatePrivacyStatus();
+            updateComposerState();
+            setMetrics(finalMetrics);
+            renderConversationList();
+            scrollChat(false);
+            clearChatRequest(requestId);
+            app.chatGenerationId = null;
+            document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'stopped', generationId: generationId } }));
+            return true;
+        }
+
+        function finishApiWithError(error, requestId, generationId) {
+            if (error && error.name === 'AbortError') {
+                finishApiStopped(requestId, generationId);
+                return;
+            }
+            var finished = finishGenerationWithError(error && error.message ? error.message : String(error), requestId, generationId);
+            if (finished) app.abortController = null;
         }
 
         /* ------------------------------------------------------------ composer */
@@ -1427,54 +1687,129 @@
         }
 
         function stopGeneration() {
+            if (app.activePredictionRequestId) return;
             if (!app.generating) return;
-            if (app.mode === 'api') {
+            if ((app.activeGenerationKind || app.mode) === 'api') {
                 if (app.abortController) app.abortController.abort();
                 return;
             }
             if (app.worker) app.worker.postMessage({ action: 'cancel' });
         }
 
-        function sendFromComposer() {
-            if (app.generating) return;
+        function sendFromComposer(providedPrompt) {
+            if (app.generating) return false;
+            if (app.activePredictionRequestId) {
+                toast('Wait for the current prediction to finish.', 'warn');
+                return false;
+            }
             var input = $('#chatInput');
-            if (!input) return;
-            var prompt = input.value.trim();
-            if (!prompt) {
-                input.focus();
-                return;
+            var prompt = typeof providedPrompt === 'string' ? providedPrompt.trim() : (input ? input.value.trim() : '');
+            var attachments = [];
+            try {
+                attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
+            } catch (error) {
+                toast(String(error && error.message || error), 'error');
+                return false;
             }
-            if (app.mode === 'api' && !app.apiConfig) {
-                toast('Configure an OpenAI-compatible API endpoint under Model sources first.', 'warn');
+            var hasImages = attachments.some(function (item) { return item.kind === 'image'; });
+            if (!prompt && !(hasImages && app.mode === 'api')) {
+                if (hasImages) toast('Image-only Send requires a native or custom API provider.', 'warn');
+                if (input) input.focus();
+                return false;
+            }
+            if (!chatReadiness() || (app.mode === 'wasm' && !app.worker)) {
+                toast('Configure a chat-capable model or API provider under Connections.', 'warn');
                 setView('model');
-                return;
+                return false;
             }
-            if (app.mode === 'wasm' && !app.caps) {
-                toast('Load a local model first under Model sources.', 'warn');
-                setView('model');
-                return;
+            var attachedImages;
+            try {
+                attachedImages = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments().filter(function (item) { return item.kind === 'image'; }) : [];
+            } catch (error) {
+                toast(String(error && error.message || error), 'error');
+                return false;
             }
-            var conversation = ensureConversation();
-            conversation.messages.push({ role: 'user', content: prompt, meta: null });
-            conversation.sourceKind = app.mode;
-            touchConversation(conversation);
-            appendMessageElement('user', prompt, null);
-            input.value = '';
-            autoGrowTextarea();
-            renderConversationList();
-            scrollChat(true);
-            if (app.mode === 'api') {
-                sendViaApi(prompt, conversation);
-            } else {
-                sendViaWorker(prompt, conversation);
+            if (app.mode === 'wasm' && attachedImages.length) {
+                toast('Local WASM does not accept image context; switch to native uor-chat or a custom provider.', 'warn');
+                return false;
+            }
+            var history = app.conversations.map(function (item) {
+                return { conversation: item, messages: item.messages.slice(), title: item.title, updatedAt: item.updatedAt, sourceKind: item.sourceKind };
+            });
+            var activeId = app.activeConversationId;
+            var inputValue = input ? input.value : '';
+            var generationState = {
+                serial: app.generationSerial,
+                activeId: app.activeGenerationId,
+                chatId: app.chatGenerationId,
+                requestId: app.activeChatRequestId,
+                requests: { ...app.chatRequests },
+                kind: app.activeGenerationKind,
+                generating: app.generating,
+                abortController: app.abortController,
+                assistantBuffer: app.assistantBuffer,
+                streamingBodyEl: app.streamingBodyEl,
+            };
+            function rollbackStart() {
+                app.conversations = history.map(function (entry) { return entry.conversation; });
+                history.forEach(function (entry) {
+                    entry.conversation.messages = entry.messages;
+                    entry.conversation.title = entry.title;
+                    entry.conversation.updatedAt = entry.updatedAt;
+                    entry.conversation.sourceKind = entry.sourceKind;
+                });
+                app.activeConversationId = activeId;
+                app.generationSerial = generationState.serial;
+                app.activeGenerationId = generationState.activeId;
+                app.chatGenerationId = generationState.chatId;
+                app.activeChatRequestId = generationState.requestId;
+                app.chatRequests = generationState.requests;
+                app.activeGenerationKind = generationState.kind;
+                app.generating = generationState.generating;
+                app.abortController = generationState.abortController;
+                app.assistantBuffer = generationState.assistantBuffer;
+                app.streamingBodyEl = generationState.streamingBodyEl;
+                if (input) { input.value = inputValue; autoGrowTextarea(); }
+                persistConversations();
+                renderConversationList();
+                renderMessages();
+                updateComposerState();
+                setMetrics('Ready');
+            }
+            try {
+                var conversation = ensureConversation();
+                conversation.messages.push({ role: 'user', content: prompt, meta: null });
+                conversation.sourceKind = app.mode;
+                touchConversation(conversation);
+                appendMessageElement('user', prompt || '[Image patch input]', null);
+                if (input) {
+                    input.value = '';
+                    autoGrowTextarea();
+                }
+                renderConversationList();
+                scrollChat(true);
+                var preparedMessages = app.mode === 'api' && (!app.apiConfig || !isNativeLoopback(app.apiConfig)) ? apiMessages(conversation) : null;
+                var started = app.mode === 'api' ? sendViaApi(prompt, conversation, preparedMessages) : sendViaWorker(prompt, conversation);
+                if (started === false) { rollbackStart(); return false; }
+                if (app.composerInput) app.composerInput.recordSubmitted(inputValue);
+                return app.activeGenerationId;
+            } catch (error) {
+                toast(String(error && error.message || error), 'error');
+                rollbackStart();
+                return false;
             }
         }
 
         /* ------------------------------------------------------------ model sources */
 
+        function abortApiForLocalSource() {
+            if (app.generating && app.activeGenerationKind === 'api' && app.abortController) app.abortController.abort();
+        }
+
         function onModelSourceChanged(event) {
             var detail = event && event.detail ? event.detail : {};
             if (detail.kind === 'wasm' && detail.bytes) {
+                abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
                 app.tokenizerArtifact = detail.tokenizerArtifact || null;
@@ -1509,10 +1844,38 @@
                 updateComposerState();
                 renderMessages();
                 setView('chat');
-                toast('API mode active. Prompts now go to ' + (detail.apiConfig.baseUrl || 'the configured endpoint') + '.', 'warn');
+                if (isNativeLoopback(detail.apiConfig)) {
+                    toast('Native uor-chat loopback active. Prompts stay on this device.', 'success');
+                } else {
+                    toast('API mode active. Prompts now go to ' + (detail.apiConfig.baseUrl || 'the configured endpoint') + '.', 'warn');
+                }
+                return;
+            }
+            if (detail.kind === 'state' && detail.apiConfig) {
+                var active = ModelSources.active();
+                if (active && active.kind === 'api' && active.id === detail.id) {
+                    app.mode = 'api';
+                    app.apiConfig = detail.apiConfig;
+                    setModelStatus('API · ' + (detail.apiConfig.model || detail.apiConfig.label || 'endpoint'), 'accent', detail.apiConfig.baseUrl || '');
+                    updatePrivacyStatus();
+                    updateComposerState();
+                    renderMessages();
+                }
+                return;
+            }
+            if (detail.kind === 'state' && detail.removedActive) {
+                abortApiForLocalSource();
+                app.mode = 'wasm';
+                app.apiConfig = null;
+                app.caps = null;
+                setModelStatus('No model selected; load a local artifact', 'muted');
+                updatePrivacyStatus();
+                updateComposerState();
+                renderMessages();
                 return;
             }
             if (detail.kind === 'wasm') {
+                abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
                 var list = ModelSources.list();
@@ -1523,6 +1886,17 @@
                 renderMessages();
                 if (app.caps) setModelStatus(app.caps.status_label || 'loaded', app.caps.synthetic ? 'warn' : 'ok', describeCapabilities());
             }
+        }
+
+        function onApiConfigChanged(event) {
+            var detail = event && event.detail ? event.detail : {};
+            if (!detail.id) return;
+            app.apiConfig = ModelSources.apiConfig(detail.id);
+            if (app.apiConfig) {
+                setModelStatus('API · ' + (app.apiConfig.model || app.apiConfig.label || 'endpoint'), 'accent', app.apiConfig.baseUrl || '');
+                updatePrivacyStatus();
+            }
+            updateComposerState();
         }
 
         function bindHeader() {
@@ -1538,13 +1912,14 @@
         function startNewChat() {
             if (app.generating) {
                 toast('Stop the current reply before starting a new chat.', 'warn');
-                return;
+                return false;
             }
             newConversation(true);
             restoreActiveConversation();
             setView('chat');
             var input = $('#chatInput');
             if (input) input.focus();
+            return true;
         }
 
         /* ------------------------------------------------------------ editor */
@@ -1702,18 +2077,54 @@
             var input = $('#chatInput');
             var predict = $('#btnPredict');
             if (predict) predict.addEventListener('click', runPrediction);
-            if (send) send.addEventListener('click', sendFromComposer);
+            if (send) send.addEventListener('click', function () { sendFromComposer(); });
             if (stop) stop.addEventListener('click', stopGeneration);
+            var picker = $('#chatFileInput');
+            var attachButton = $('#btnAttachFiles');
+            if (attachButton && picker) attachButton.addEventListener('click', function () { picker.click(); });
             if (input) {
                 input.addEventListener('input', autoGrowTextarea);
                 input.addEventListener('keydown', function (event) {
-                    if (event.key === 'Enter' && !event.shiftKey) {
-                        event.preventDefault();
-                        sendFromComposer();
-                    }
-                    if (event.key === 'Escape') {
-                        stopGeneration();
-                    }
+                    if (event.key === 'Escape') stopGeneration();
+                });
+                app.composerInput = createComposerInput({
+                    textarea: input,
+                    picker: picker,
+                    onSend: function () { sendFromComposer(); },
+                    onFiles: function (files) {
+                        var retained = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
+                        var textFiles = [];
+                        var imageFiles = [];
+                        Array.from(files || []).forEach(function (file) { (isImageFile(file) ? imageFiles : textFiles).push(file); });
+                        Promise.all([
+                            readTextFiles(textFiles, { existingAttachments: retained.filter(function (item) { return item.kind !== 'image'; }) }),
+                            readImageFiles(imageFiles, { existingAttachments: retained.filter(function (item) { return item.kind === 'image'; }) }),
+                        ]).then(function (results) {
+                            results.forEach(function (result) {
+                                result.errors.forEach(function (error) { toast(error, 'error'); });
+                                result.attachments.forEach(function (entry) {
+                                    document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: entry }));
+                                });
+                            });
+                        }).catch(function (error) { toast(String(error && error.message || error), 'error'); });
+                    },
+                    getHistory: function () {
+                        var conversation = activeConversation();
+                        return conversation && Array.isArray(conversation.promptHistory) ? conversation.promptHistory : [];
+                    },
+                    onHistoryChange: function (history) {
+                        var conversation = activeConversation();
+                        if (!conversation) return;
+                        conversation.promptHistory = history;
+                        persistConversations();
+                    },
+                    onDraftChange: function (draft) {
+                        var conversation = activeConversation();
+                        if (!conversation) return;
+                        conversation.draft = draft;
+                        persistConversations();
+                    },
+                    initialDraft: activeConversation() ? activeConversation().draft || '' : '',
                 });
             }
             var list = $('#conversationList');
@@ -1756,6 +2167,7 @@
             bindHeader();
             bindComposer();
             bindEditor();
+            if (window.__UOR_NATIVE_BOOTSTRAP__) ModelSources.registerNativeBootstrap(window.__UOR_NATIVE_BOOTSTRAP__);
             mountModelSources($('#modelSourceMount'));
             var modelList = ModelSources.list();
             var active = modelList.active || { kind: 'wasm', id: 'bundled-demo' };
@@ -1769,8 +2181,9 @@
             renderMessages();
             startWorker();
             updateComposerState();
-            setView('chat');
+            setView('chat', { focus: false });
             document.addEventListener('uor-model-source-changed', onModelSourceChanged);
+            document.addEventListener('uor-api-config-changed', onApiConfigChanged);
             document.documentElement.dataset.studioReady = '1';
             // Narrow diagnostics surface used by the local headless verification helpers.
             window.UORStudioDiagnostics = {
@@ -1845,12 +2258,6 @@
                 if (input) { input.click(); return true; }
                 return false;
             },
-            promptUrl: function () {
-                setView('model');
-                var input = document.querySelector('#modelUrlInput');
-                if (input) { input.focus(); return true; }
-                return false;
-            },
             addApi: function () {
                 var button = document.querySelector('[data-action="add-api"]');
                 if (button) { button.click(); return true; }
@@ -1875,8 +2282,8 @@
                 });
             },
             activeSessionId: function () { return app.activeConversationId; },
-            selectSession: function (id) { selectConversation(id); return true; },
-            newSession: function () { startNewChat(); return true; },
+            selectSession: function (id) { return selectConversation(id); },
+            newSession: function () { return startNewChat(); },
             renameSession: function (id, title) {
                 var conversation = app.conversations.find(function (item) { return item.id === id; });
                 if (!conversation) return false;
@@ -1917,11 +2324,11 @@
                     }
                 }, null, 2);
             },
-            deleteSession: function (id) {
+            deleteSession: function (id, createReplacement) {
                 var wasActive = app.activeConversationId === id;
-                deleteConversation(id);
-                if (wasActive) startNewChat();
-                return true;
+                var deleted = deleteConversation(id);
+                if (wasActive && deleted && createReplacement !== false) startNewChat();
+                return deleted;
             },
             getConversationMessages: function (id) {
                 var conversation = id
@@ -1960,7 +2367,14 @@
                 input.focus();
                 try { input.setSelectionRange(input.value.length, input.value.length); } catch (error) { /* optional */ }
                 return true;
-            }
+            },
+            sendPrompt: function (text) {
+                return sendFromComposer(String(text || ''));
+            },
+            predict: function (text) {
+                return runPrediction(String(text || '')) ? app.activeGenerationId : false;
+            },
+            stopGeneration: stopGeneration
         };
 
         if (document.readyState === 'loading') {

@@ -9,8 +9,8 @@
  *
  * The page makes no external/off-origin request at load: it reads only the same-origin
  * ./models.json catalog and its bundled assets (the static scan and runtime trap enforce
- * external []). API keys are never bundled and are
- * stored only in this browser's localStorage. The exported object is also available at
+ * external []). Ordinary API keys are never bundled and are
+ * stored only in this browser's localStorage; the native bootstrap's ephemeral launch token stays in memory instead. The exported object is also available at
  * window.UORModelSources for other Studio modules; every state change dispatches a
  * "uor-model-source-changed" CustomEvent on the document.
  */
@@ -43,7 +43,30 @@ import { sha256Hex, validateTokenizerArtifact } from './uor_tokenizer_artifact.j
 
 const STORAGE_KEY = 'uor.studio.modelSources.v1';
 const EVENT_NAME = 'uor-model-source-changed';
+export const LOAD_PROGRESS_EVENT = 'uor-model-load-progress';
 const MAX_WASM_BYTES = 128 * 1024 * 1024; // matches the worker's MAX_ARTIFACT_BYTES (M1 trunk is 86.5 MB)
+let latestOperationId = 0;
+let selectionEpoch = 0;
+
+function beginOperation(operation) {
+    if (!operation || !Number.isInteger(operation.operationId) || typeof operation.sourceId !== 'string') return null;
+    latestOperationId = Math.max(latestOperationId, operation.operationId);
+    return { operationId: operation.operationId, sourceId: operation.sourceId, selectionEpoch };
+}
+
+function isStaleOperation(operation) {
+    return Boolean(operation && (operation.operationId < latestOperationId || operation.selectionEpoch !== selectionEpoch));
+}
+
+function emitLoadProgress(detail) {
+    const progress = {
+        loaded: Math.max(0, Number(detail.loaded) || 0),
+        total: Number(detail.total) > 0 ? Number(detail.total) : null,
+        phase: detail.phase,
+    };
+    if (Number.isInteger(detail.operationId)) progress.operationId = detail.operationId;
+    document.dispatchEvent(new CustomEvent(LOAD_PROGRESS_EVENT, { detail: progress }));
+}
 const BUNDLED_DEMO_URL = './pkg/synthetic-stack.lut';
 const BUNDLED_DEMO_LABEL = 'Synthetic demo (seed 5)';
 const MODELS_CATALOG_URL = './models.json';
@@ -107,6 +130,12 @@ function nextId(prefix) {
     return prefix + '-' + Date.now().toString(36) + '-' + idCounter.toString(36);
 }
 
+function requireApiBaseUrl(value) {
+    let url;
+    try { url = new URL(String(value || '').trim()); } catch (_error) { throw new Error('Only HTTP(S) API endpoints are supported.'); }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only HTTP(S) API endpoints are supported.');
+}
+
 function apiEntry(input) {
     return {
         id: input.id || nextId('api'),
@@ -115,6 +144,8 @@ function apiEntry(input) {
         baseUrl: String(input.baseUrl || '').trim(),
         model: String(input.model || '').trim(),
         apiKey: typeof input.apiKey === 'string' ? input.apiKey : '',
+        temperature: Number.isFinite(Number(input.temperature)) ? Number(input.temperature) : undefined,
+        ephemeral: input.ephemeral === true,
         createdAt: input.createdAt || Date.now(),
     };
 }
@@ -143,8 +174,9 @@ function loadState() {
         let active = parsed.active && (parsed.active.kind === 'wasm' || parsed.active.kind === 'api')
             ? { kind: parsed.active.kind, id: parsed.active.id || null }
             : fallback.active;
-        if (active.kind === 'api' && !api.some((item) => item.id === active.id)) {
-            active = fallback.active;
+        if (active.kind === 'api') {
+            const selected = api.find((item) => item.id === active.id);
+            try { requireApiBaseUrl(selected && selected.baseUrl); } catch (_error) { active = fallback.active; }
         }
         return { wasm, api, active };
     } catch (_error) {
@@ -163,9 +195,16 @@ let editing = null; // { id: string|null, values: {...} }
 
 function persist() {
     try {
-        globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        const activeEntry = state.active.kind === 'api' ? findApi(state.active.id) : null;
+        const persisted = Object.assign({}, state, {
+            api: state.api.filter((entry) => !entry.ephemeral),
+            active: activeEntry && activeEntry.ephemeral ? { kind: 'wasm', id: state.wasm.id || 'bundled-demo' } : state.active,
+        });
+        globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+        return true;
     } catch (_error) {
         setMessage('error', 'Could not persist model sources: browser storage is unavailable or full.');
+        return false;
     }
 }
 
@@ -212,7 +251,7 @@ function activeApi() {
 
 function publicConfig(entry) {
     if (!entry) return null;
-    return { id: entry.id, label: entry.label, preset: entry.preset, baseUrl: entry.baseUrl, model: entry.model, apiKey: entry.apiKey };
+    return { id: entry.id, label: entry.label, preset: entry.preset, baseUrl: entry.baseUrl, model: entry.model, apiKey: entry.apiKey, temperature: entry.temperature, ephemeral: entry.ephemeral };
 }
 
 function setActive(next) {
@@ -222,9 +261,17 @@ function setActive(next) {
     if (next.kind === 'api' && !findApi(next.id)) {
         throw new Error('That API endpoint no longer exists.');
     }
+    if (next.kind === 'api') requireApiBaseUrl(findApi(next.id).baseUrl);
+    const previous = clone(state.active);
+    const activeEntry = next.kind === 'api' ? findApi(next.id) : null;
+    selectionEpoch += 1;
     state.active = { kind: next.kind, id: next.kind === 'api' ? next.id : (next.id || 'bundled-demo') };
-    persist();
-    message = { tone: 'muted', text: '' };
+    if (!persist() && !(activeEntry && activeEntry.ephemeral)) {
+        state.active = previous;
+        selectionEpoch -= 1;
+        throw new Error(message.text);
+    }
+    setMessage('muted', '');
     if (mounted) mounted.render();
     emit({ kind: state.active.kind, id: state.active.id, apiConfig: state.active.kind === 'api' ? publicConfig(activeApi()) : null });
     return publicList();
@@ -288,6 +335,7 @@ function parseUorLutHeader(input) {
 
 async function readArtifact(bytes, fileName, origin, options) {
     const extra = options || {};
+    if (isStaleOperation(extra.operation)) return { stale: true };
     const parsed = parseUorLutHeader(bytes);
     const meta = {
         kind: origin.kind,
@@ -322,7 +370,7 @@ async function readArtifact(bytes, fileName, origin, options) {
         format: meta.format,
         meta: clone(meta),
     });
-    return { bytes, fileName, header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
+    return { bytes, fileName, expectedSha256: extra.expectedSha256 || '', header: parsed.header, tokenizerArtifact: extra.tokenizerArtifact || null, meta: clone(meta), source: { kind: 'wasm', id: meta.id } };
 }
 
 function getBundledDemo() {
@@ -424,6 +472,7 @@ async function loadModelCatalog() {
             });
         });
         catalog.models = published;
+        document.dispatchEvent(new CustomEvent('uor-model-catalog-changed'));
         if (mounted) mounted.render();
     } catch (_error) {
         // A publish catalog is optional; a missing or malformed one is ignored.
@@ -525,7 +574,8 @@ async function fetchTokenizerArtifact(entry, stackSha256, vocabSize) {
 }
 
 /** Load a published catalog entry: user-initiated download, hash/size check, tokenizer binding. */
-async function loadPublished(idOrEntry) {
+async function loadPublished(idOrEntry, operation) {
+    const currentOperation = beginOperation(operation);
     var entry = typeof idOrEntry === 'string'
         ? catalog.models.find(function (item) { return item.id === idOrEntry; })
         : idOrEntry;
@@ -536,8 +586,10 @@ async function loadPublished(idOrEntry) {
         expectedBytes: entry.sizeBytes,
         onProgress: function (pct, loaded, total) {
             setMessage('info', 'Downloading ' + entry.label + ' from ' + host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+            emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded, total, phase: 'downloading' });
         },
     });
+    emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
     var stackSha256 = await sha256Hex(bytes);
     if (entry.sha256 && stackSha256 !== entry.sha256) {
         throw new Error('sha256 mismatch for ' + entry.label + ': expected ' + shortSha(entry.sha256) + ', got ' + shortSha(stackSha256) + '; refusing to load.');
@@ -557,8 +609,9 @@ async function loadPublished(idOrEntry) {
         sizeBytes: entry.sizeBytes || bytes.byteLength,
         format: entry.format || 'UORLUT01',
         sha256: stackSha256,
+        operation: currentOperation,
     });
-    setMessage('success', 'Loaded ' + entry.label + ' from ' + host + ' (' + formatBytes(bytes.byteLength) + ', ' + parsed.schema + (tokenizerArtifact ? ', tokenizer bound' : ', no tokenizer') + ').');
+    if (!result.stale) setMessage('success', 'Loaded ' + entry.label + ' from ' + host + ' (' + formatBytes(bytes.byteLength) + ', ' + parsed.schema + (tokenizerArtifact ? ', tokenizer bound' : ', no tokenizer') + ').');
     return result;
 }
 
@@ -597,19 +650,48 @@ const api = {
         return loadModelCatalog();
     },
 
-    loadPublished(idOrEntry) {
-        return loadPublished(idOrEntry);
+    loadPublished(idOrEntry, operation) {
+        return loadPublished(idOrEntry, operation);
     },
 
     setActive(next) {
         return setActive(next);
     },
 
+    registerNativeBootstrap(input) {
+        if (!input || input.ephemeral !== true) throw new Error('The native bootstrap must be ephemeral.');
+        if (input.protocol !== 'openai') throw new Error('The native bootstrap must use the OpenAI protocol.');
+        if (Number(input.temperature) !== 0) throw new Error('The native bootstrap must use temperature zero.');
+        if (typeof input.token !== 'string' || !input.token) throw new Error('The native bootstrap token is missing.');
+        const baseUrl = new URL(String(input.baseUrl || ''), document.baseURI);
+        if (baseUrl.origin !== new URL(document.baseURI).origin) throw new Error('The native bootstrap must be same-origin.');
+        const id = 'native-loopback';
+        const existing = state.api.findIndex((entry) => entry.id === id);
+        if (existing >= 0) state.api.splice(existing, 1);
+        const entry = this.addApi({
+            id,
+            preset: 'local-uor',
+            label: 'UOR Chat — native loopback',
+            baseUrl: baseUrl.toString(),
+            model: String(input.model || 'uor-chat'),
+            apiKey: input.token,
+            temperature: 0,
+            ephemeral: true,
+        });
+        this.setActive({ kind: 'api', id });
+        return entry;
+    },
+
     addApi(input) {
         const entry = apiEntry(input || {});
         if (!entry.baseUrl) throw new Error('An API base URL is required.');
+        requireApiBaseUrl(entry.baseUrl);
         state.api.push(entry);
-        persist();
+        if (!persist() && !entry.ephemeral) {
+            state.api.pop();
+            throw new Error(message.text);
+        }
+        setMessage('muted', '');
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);
@@ -618,8 +700,19 @@ const api = {
     updateApi(id, patch) {
         const entry = findApi(id);
         if (!entry) throw new Error('No API endpoint with that id.');
+        const previous = clone(entry);
         Object.assign(entry, apiEntry(Object.assign({}, entry, patch, { id: entry.id, createdAt: entry.createdAt })));
-        persist();
+        try {
+            requireApiBaseUrl(entry.baseUrl);
+        } catch (error) {
+            Object.assign(entry, previous);
+            throw error;
+        }
+        if (!persist()) {
+            Object.assign(entry, previous);
+            throw new Error(message.text);
+        }
+        setMessage('muted', '');
         if (mounted) mounted.render();
         emit({ kind: 'state', id: entry.id, apiConfig: publicConfig(entry) });
         return clone(entry);
@@ -628,13 +721,21 @@ const api = {
     removeApi(id) {
         const index = state.api.findIndex((item) => item.id === id);
         if (index < 0) return publicList();
+        const removed = state.api[index];
+        const previousActive = clone(state.active);
+        const removedActive = previousActive.kind === 'api' && previousActive.id === id;
         state.api.splice(index, 1);
-        if (state.active.kind === 'api' && state.active.id === id) {
+        if (removedActive) {
             state.active = { kind: 'wasm', id: state.wasm.id || 'bundled-demo' };
         }
-        persist();
+        if (!persist()) {
+            state.api.splice(index, 0, removed);
+            state.active = previousActive;
+            throw new Error(message.text);
+        }
+        setMessage('muted', '');
         if (mounted) mounted.render();
-        emit({ kind: 'state', id: null });
+        emit({ kind: 'state', id: null, removedActive });
         return publicList();
     },
 
@@ -647,7 +748,8 @@ const api = {
         return globalThis.UORStudioApi.testConnection(config);
     },
 
-    async loadLocalFile(file) {
+    async loadLocalFile(file, operation) {
+        const currentOperation = beginOperation(operation);
         if (!file) throw new Error('Choose a .lut/.bin stack artifact first.');
         if (file.size > MAX_WASM_BYTES) {
             throw new Error('That model file is larger than the ' + Math.round(MAX_WASM_BYTES / (1024 * 1024)) + ' MB browser limit for this Studio.');
@@ -655,23 +757,31 @@ const api = {
         if (file.size === 0) throw new Error('The selected model file is empty.');
         setMessage('info', 'Reading ' + file.name + '…');
         const bytes = await file.arrayBuffer();
-        const result = await readArtifact(bytes, file.name, { kind: 'local-file', id: 'local-file', label: file.name });
-        setMessage('success', 'Loaded ' + file.name + '.');
+        emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
+        const result = await readArtifact(bytes, file.name, { kind: 'local-file', id: 'local-file', label: file.name }, { operation: currentOperation });
+        if (!result.stale) setMessage('success', 'Loaded ' + file.name + '.');
         return result;
     },
 
-    async loadFromUrl(rawUrl) {
+    async loadFromUrl(rawUrl, operation) {
+        const currentOperation = beginOperation(operation);
         const url = resolveModelUrl(rawUrl);
         setMessage('info', 'Downloading ' + (url.pathname.split('/').pop() || 'model') + ' from ' + url.host + '…');
         const bytes = await fetchArtifactWithProgress(url.href, {
             onProgress: function (pct, loaded, total) {
                 setMessage('info', 'Downloading from ' + url.host + '… ' + pct + '% (' + formatBytes(loaded) + (total ? ' / ' + formatBytes(total) : '') + ')');
+                emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded, total, phase: 'downloading' });
             },
         });
+        emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
         const fileName = url.pathname.split('/').pop() || 'downloaded-stack.lut';
-        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName, host: url.host });
-        setMessage('success', 'Loaded ' + fileName + ' (' + formatBytes(bytes.byteLength) + ').');
+        const result = await readArtifact(bytes, fileName, { kind: 'url', id: 'url', label: fileName, host: url.host }, { operation: currentOperation });
+        if (!result.stale) setMessage('success', 'Loaded ' + fileName + ' (' + formatBytes(bytes.byteLength) + ').');
         return result;
+    },
+
+    loadBundled(operation) {
+        return loadBundled(operation);
     },
 
     mount(container) {
@@ -763,7 +873,7 @@ function renderAll(container) {
 
     const remote = el('section', 'source-group');
     remote.appendChild(el('h3', null, 'OpenAI-compatible API'));
-    remote.appendChild(el('p', 'hint', 'Optional. When an API source is active, prompts are sent to that endpoint and leave this device. Keys are stored only in this browser and are never committed.'));
+    remote.appendChild(el('p', 'hint', 'Optional. Custom API sources send prompts to their configured endpoint; native loopback stays on this device. Ordinary keys are stored only in this browser and are never committed.'));
     for (const entry of state.api) remote.appendChild(apiCard(entry));
     if (state.api.length === 0) remote.appendChild(el('p', 'empty-note', 'No API endpoints configured.'));
     remote.appendChild(button('Add API endpoint', 'add-api', { className: 'btn-primary btn-small' }));
@@ -828,7 +938,7 @@ function localFileCard() {
     input.type = 'file';
     input.accept = '.lut,.bin,application/octet-stream';
     input.id = 'modelFileInput';
-    input.className = 'visually-hidden';
+    input.className = 'sr-only';
     input.dataset.role = 'model-file';
     const label = el('label', 'btn btn-secondary btn-small', 'Choose model file');
     label.htmlFor = 'modelFileInput';
@@ -972,7 +1082,7 @@ async function onClick(event) {
                 target.removeAttribute('aria-busy');
             }
         } else if (action === 'load-url') {
-            const input = mounted.container.querySelector('#modelUrlInput');
+            const input = document.querySelector('#modelUrlInput');
             await api.loadFromUrl(input.value);
         } else if (action === 'add-api') {
             editing = { id: null, values: { preset: 'local-uor', label: API_PRESETS[0].label, baseUrl: API_PRESETS[0].baseUrl, model: API_PRESETS[0].model, apiKey: '' } };
@@ -1005,7 +1115,8 @@ async function onClick(event) {
     }
 }
 
-async function loadBundled() {
+async function loadBundled(operation) {
+    const currentOperation = beginOperation(operation);
     const demo = getBundledDemo();
     setMessage('info', 'Loading the bundled synthetic demo…');
     const url = new URL(demo.url, document.baseURI);
@@ -1014,9 +1125,10 @@ async function loadBundled() {
         throw new Error('The bundled demo model is not present in this build (HTTP ' + response.status + '). A wasm build must produce pkg/synthetic-stack.lut first.');
     }
     const bytes = await response.arrayBuffer();
+    emitLoadProgress({ operationId: currentOperation && currentOperation.operationId, loaded: bytes.byteLength, total: null, phase: 'finalizing' });
     const fileName = url.pathname.split('/').pop() || 'synthetic-stack.lut';
-    const result = await readArtifact(bytes, fileName, { kind: 'bundled', id: 'bundled-demo', label: demo.label });
-    setMessage('success', 'Bundled synthetic demo loaded (' + Math.round(bytes.byteLength / 1024) + ' KB).');
+    const result = await readArtifact(bytes, fileName, { kind: 'bundled', id: 'bundled-demo', label: demo.label }, { operation: currentOperation });
+    if (!result.stale) setMessage('success', 'Bundled synthetic demo loaded (' + Math.round(bytes.byteLength / 1024) + ' KB).');
     return result;
 }
 
