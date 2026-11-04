@@ -1,38 +1,39 @@
 /* UOR-R4 Studio — agent console design system.
-   Offline-first: no external fonts, images or stylesheets. Theme: warm graphite + ember. */
+   Offline-first: no external fonts, images or stylesheets. Theme: neutral graphite + system blue. */
 
 /* ------------------------------------------------------------ tokens */
 
 :root,
 html[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #0b0a09;
-    --bg-elevated: #100e0c;
-    --surface-1: #14110e;
-    --surface-2: #1a1612;
-    --surface-3: #221c16;
-    --surface-hover: #2a231b;
-    --border: rgba(244, 228, 208, 0.10);
-    --border-strong: rgba(244, 228, 208, 0.20);
-    --border-focus: rgba(232, 137, 74, 0.55);
-    --text: #f0e9df;
-    --text-soft: #cabfae;
-    --text-muted: #97897a;
-    --text-faint: #a3948a;
-    --accent: #e8894a;
-    --accent-bright: #ffa268;
-    --accent-dim: #b8672f;
-    --accent-soft: rgba(232, 137, 74, 0.12);
-    --accent-line: rgba(232, 137, 74, 0.38);
-    --on-accent: #1a0f07;
-    --ok: #7fbf8a;
-    --warn: #d9a45b;
-    --err: #e0705f;
-    --violet: #a99be0;
-    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
-    --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.4);
-    --grid-line: rgba(244, 228, 208, 0.045);
-    --selection: rgba(232, 137, 74, 0.28);
+    accent-color: var(--accent);
+    --bg: #000000;
+    --bg-elevated: #1c1c1e;
+    --surface-1: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --surface-hover: #48484a;
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
+    --border-focus: rgba(100, 210, 255, 0.65);
+    --text: #f5f5f7;
+    --text-soft: #d1d1d6;
+    --text-muted: #a1a1a6;
+    --text-faint: #8e8e93;
+    --accent: #006ee6;
+    --accent-bright: #64d2ff;
+    --accent-dim: #409cff;
+    --accent-soft: rgba(10, 132, 255, 0.16);
+    --accent-line: rgba(100, 210, 255, 0.45);
+    --on-accent: #ffffff;
+    --ok: #30d158;
+    --warn: #ffd60a;
+    --err: #ff453a;
+    --violet: #98989f;
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.36);
+    --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.28);
+    --grid-line: rgba(255, 255, 255, 0.05);
+    --selection: rgba(10, 132, 255, 0.32);
 }
 
 html[data-theme="light"] {
@@ -3297,7 +3298,7 @@ button, .nav-item, .tree-button, .editor-tab { -webkit-tap-highlight-color: tran
 /* ================================================================ v2 critique fixes ================================================================ */
 
 /* contrast + type scale: no text below 11px for labels/status, AA colours */
-:root { --text-faint: #a3948a; }
+:root { --text-faint: #8e8e93; }
 html[data-theme="light"] { --text-faint: #7a6753; }
 .micro-label, .field-label, .source-group > h3, .ctx-rows dt, .env-rows dt { font-size: 11px; letter-spacing: 0.12em; color: var(--text-muted); }
 .nav-section-title { font-size: 11px; color: var(--text-muted); letter-spacing: 0.14em; }

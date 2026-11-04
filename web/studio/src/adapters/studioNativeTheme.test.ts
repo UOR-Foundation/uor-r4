@@ -21,6 +21,16 @@ function declaration(style: HTMLStyleElement, selector: string): CSSStyleDeclara
     return rule.style;
 }
 
+function contrast(foreground: string, background: string): number {
+    const luminance = (hex: string) => {
+        const channels = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255)
+            .map((value) => value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4));
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    };
+    const [high, low] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (high + 0.05) / (low + 0.05);
+}
+
 afterEach(() => {
     document.querySelectorAll('style').forEach((node) => node.remove());
     document.body.innerHTML = '';
@@ -98,5 +108,29 @@ describe('Mac-inspired Studio visual system', () => {
         const label = document.querySelector<HTMLLabelElement>('label[for="modelFileInput"]')!;
         expect(parseFloat(getComputedStyle(label).minBlockSize)).toBeGreaterThanOrEqual(24);
         expect(parseFloat(declaration(style, '#modelFileInput:focus-visible + label').outline)).toBeGreaterThanOrEqual(2);
+    });
+
+    it('uses refined graphite and system blue with AA text contrast', () => {
+        const style = installTheme('dark');
+        const tokens = declaration(style, 'html[data-theme="dark"]');
+        expect(tokens.getPropertyValue('--bg')).toBe('#000000');
+        expect(tokens.getPropertyValue('--surface-1')).toBe('#1c1c1e');
+        expect(tokens.getPropertyValue('--surface-2')).toBe('#2c2c2e');
+        expect(tokens.getPropertyValue('--accent-bright')).toBe('#64d2ff');
+        expect(tokens.getPropertyValue('--on-accent')).toBe('#ffffff');
+        for (const [foreground, background] of [
+            ['#f5f5f7', '#000000'],
+            ['#d1d1d6', '#2c2c2e'],
+            ['#a1a1a6', '#2c2c2e'],
+            ['#8e8e93', '#1c1c1e'],
+            ['#64d2ff', '#1c1c1e'],
+            ['#ffffff', '#006ee6'],
+        ]) {
+            expect(contrast(foreground, background), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+        }
+        document.querySelectorAll('style').forEach((node) => node.remove());
+        const light = declaration(installTheme('light'), 'html[data-theme="light"]');
+        expect(light.getPropertyValue('--surface-1')).toBe('#fffdf8');
+        expect(light.getPropertyValue('--accent')).toBe('#b2521c');
     });
 });
