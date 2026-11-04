@@ -120,6 +120,8 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 - Exact-reference comparisons report both the full 114-reply panel and the 104
   references reachable under the fixed cap/context rule.
 - The seed-1 repeat reproduces every complete-reply counter and digest.
+- Every arm reports ordered per-row reachability/exactness, and every registered
+  paired comparison reports `b`, `c`, gain, integer threshold and pass status.
 - The shuffled control keeps every key and weight while changing at least one
   stored target value. At least half of exercised opening mappings and half of
   exercised reply mappings must change: changed ≥

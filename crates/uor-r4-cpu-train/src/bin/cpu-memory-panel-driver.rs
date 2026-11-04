@@ -8,6 +8,7 @@ use uor_r4_cpu_train::{
     memory_key_coverage, memory_target_shuffle_audit, replace_memory_weight_table,
     shuffle_memory_targets, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
     CpuMemoryWeightTrainer, MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
+    TimedReplyReading,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
 
@@ -413,6 +414,36 @@ fn run() -> Result<serde_json::Value, String> {
         }
         complete_replies
     };
+    let paired_reply_comparisons = if complete_replies.is_empty() {
+        BTreeMap::new()
+    } else {
+        let comparison = |candidate: &str, control: &str| -> Result<_, String> {
+            paired_reply_comparison(
+                complete_replies
+                    .get(candidate)
+                    .ok_or_else(|| format!("missing reply arm {candidate}"))?,
+                complete_replies
+                    .get(control)
+                    .ok_or_else(|| format!("missing reply arm {control}"))?,
+            )
+        };
+        [
+            ("trained_vs_frozen", "trained", "frozen"),
+            ("trained_vs_random", "trained", "random"),
+            ("trained_vs_memory_off", "trained", "memory_off"),
+            ("target_trained_vs_trained", "target_trained", "trained"),
+            (
+                "target_trained_vs_target_shuffled",
+                "target_trained",
+                "target_shuffled",
+            ),
+        ]
+        .into_iter()
+        .map(|(name, candidate, control)| {
+            comparison(candidate, control).map(|reading| (name, reading))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?
+    };
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-memory-panel-run/1",
         "substrate": "cpu-development-research",
@@ -483,6 +514,7 @@ fn run() -> Result<serde_json::Value, String> {
                 .map(uor_r4_discrete::corpus::sha256),
         },
         "complete_replies": complete_replies,
+        "paired_reply_comparisons": paired_reply_comparisons,
         "target_shuffle_audit": shuffle_audit,
         "reply_cap": config.reply_cap,
         "parity": parity,
@@ -590,6 +622,86 @@ fn select_groups(examples: &[CpuConversationSample], config: &Config) -> Vec<Key
     groups
 }
 
+fn paired_reply_comparison(
+    candidate: &TimedReplyReading,
+    control: &TimedReplyReading,
+) -> Result<serde_json::Value, String> {
+    if candidate.rows.len() != control.rows.len() {
+        return Err("paired reply arms report different row counts".to_owned());
+    }
+    let (mut rows, mut candidate_exact, mut control_exact, mut b, mut c) =
+        (0u64, 0u64, 0u64, 0u64, 0u64);
+    for (left, right) in candidate.rows.iter().zip(&control.rows) {
+        if left.row != right.row {
+            return Err(format!(
+                "paired reply row identity differs: {} vs {}",
+                left.row, right.row
+            ));
+        }
+        if left.reachable != right.reachable {
+            return Err(format!(
+                "paired reply reachability differs at row {}",
+                left.row
+            ));
+        }
+        if !left.reachable {
+            continue;
+        }
+        rows = rows
+            .checked_add(1)
+            .ok_or_else(|| "paired reply row count overflows".to_owned())?;
+        candidate_exact = candidate_exact
+            .checked_add(u64::from(left.exact))
+            .ok_or_else(|| "paired candidate count overflows".to_owned())?;
+        control_exact = control_exact
+            .checked_add(u64::from(right.exact))
+            .ok_or_else(|| "paired control count overflows".to_owned())?;
+        b = b
+            .checked_add(u64::from(left.exact && !right.exact))
+            .ok_or_else(|| "paired candidate-only count overflows".to_owned())?;
+        c = c
+            .checked_add(u64::from(!left.exact && right.exact))
+            .ok_or_else(|| "paired control-only count overflows".to_owned())?;
+    }
+    let discordant = b
+        .checked_add(c)
+        .ok_or_else(|| "paired discordant count overflows".to_owned())?;
+    let threshold = 2u64.max(ceil_sqrt(
+        discordant
+            .checked_mul(4)
+            .ok_or_else(|| "paired margin input overflows".to_owned())?,
+    ));
+    let gain = i128::from(candidate_exact) - i128::from(control_exact);
+    let passes_margin = gain >= i128::from(threshold);
+    let passes_bos = candidate.reading.bos_complete >= control.reading.bos_complete;
+    Ok(serde_json::json!({
+        "rows": rows,
+        "candidate_exact": candidate_exact,
+        "control_exact": control_exact,
+        "candidate_only": b,
+        "control_only": c,
+        "discordant": discordant,
+        "gain": gain,
+        "threshold": threshold,
+        "candidate_bos": candidate.reading.bos_complete,
+        "control_bos": control.reading.bos_complete,
+        "passes_margin": passes_margin,
+        "passes_bos": passes_bos,
+        "passes": passes_margin && passes_bos,
+    }))
+}
+
+fn ceil_sqrt(value: u64) -> u64 {
+    let mut root = (value as f64).sqrt() as u64;
+    while u128::from(root) * u128::from(root) < u128::from(value) {
+        root += 1;
+    }
+    while root > 0 && u128::from(root - 1) * u128::from(root - 1) >= u128::from(value) {
+        root -= 1;
+    }
+    root
+}
+
 fn random_control(
     artifact: &[u8],
     moves: usize,
@@ -643,6 +755,7 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_cpu_train::{ReplyReading, ReplyRowReading};
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::{
         export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable,
@@ -691,6 +804,88 @@ mod tests {
     }
 
     #[test]
+    fn paired_reply_margin_uses_asymmetric_disagreements_and_skips_unreachable() {
+        let rows = vec![
+            ReplyRowReading {
+                row: 0,
+                reachable: true,
+                exact: true,
+            },
+            ReplyRowReading {
+                row: 1,
+                reachable: true,
+                exact: false,
+            },
+            ReplyRowReading {
+                row: 2,
+                reachable: true,
+                exact: true,
+            },
+            ReplyRowReading {
+                row: 3,
+                reachable: false,
+                exact: false,
+            },
+            ReplyRowReading {
+                row: 4,
+                reachable: true,
+                exact: true,
+            },
+        ];
+        let control_rows = vec![
+            ReplyRowReading {
+                row: 0,
+                reachable: true,
+                exact: false,
+            },
+            ReplyRowReading {
+                row: 1,
+                reachable: true,
+                exact: true,
+            },
+            ReplyRowReading {
+                row: 2,
+                reachable: true,
+                exact: true,
+            },
+            ReplyRowReading {
+                row: 3,
+                reachable: false,
+                exact: true,
+            },
+            ReplyRowReading {
+                row: 4,
+                reachable: true,
+                exact: false,
+            },
+        ];
+        let reading = |rows: Vec<ReplyRowReading>, bos: u64| TimedReplyReading {
+            rows,
+            reading: ReplyReading {
+                replies: 5,
+                bos_complete: bos,
+                ..ReplyReading::default()
+            },
+            reply_sha256: String::new(),
+            wall_elapsed_us: 0,
+            generated_tokens_per_second: 0.0,
+        };
+        let comparison = paired_reply_comparison(&reading(rows, 2), &reading(control_rows, 1))
+            .expect("the paired reading is valid");
+        assert_eq!(comparison["rows"], 4);
+        assert_eq!(comparison["candidate_exact"], 3);
+        assert_eq!(comparison["control_exact"], 2);
+        assert_eq!(comparison["candidate_only"], 2);
+        assert_eq!(comparison["control_only"], 1);
+        assert_eq!(comparison["discordant"], 3);
+        assert_eq!(comparison["threshold"], 4);
+        assert_eq!(comparison["gain"], 1);
+        assert_eq!(comparison["passes_margin"], false);
+        assert_eq!(comparison["passes_bos"], true);
+        assert_eq!(comparison["passes"], false);
+    }
+
+    #[test]
     fn shuffled_target_control_changes_values_but_not_keys() {
         let memory = FbsMemorySnapshot {
             k: 3,
@@ -713,7 +908,7 @@ mod tests {
                     value: 4,
                 },
             ],
-            opening_weight: vec![0.25; 64],
+            opening_weight: vec![0.0; 64],
             reply: Some(FbsReplyTable {
                 turn: 3,
                 entries: vec![
@@ -734,7 +929,7 @@ mod tests {
                         value: 8,
                     },
                 ],
-                weight: vec![0.25; 64],
+                weight: vec![0.0; 64],
             }),
         };
         let shuffled = shuffle_memory_targets(&memory, 17).unwrap();
@@ -766,13 +961,26 @@ mod tests {
         );
 
         let artifact = bare_artifact();
-        let original = add_turn_memory_uorlut01(&artifact, &memory).unwrap();
-        let control = add_turn_memory_uorlut01(&artifact, &shuffled).unwrap();
+        let opening_weight = vec![1 << 20; 64];
+        let reply_weight = vec![-(1 << 20); 64];
+        let mut original = add_turn_memory_uorlut01(&artifact, &memory).unwrap();
+        original =
+            replace_memory_weight_table(&original, MemoryWeightTable::Opening, &opening_weight)
+                .unwrap();
+        original = replace_memory_weight_table(&original, MemoryWeightTable::Reply, &reply_weight)
+            .unwrap();
+        let mut control = add_turn_memory_uorlut01(&artifact, &shuffled).unwrap();
+        control =
+            replace_memory_weight_table(&control, MemoryWeightTable::Opening, &opening_weight)
+                .unwrap();
+        control =
+            replace_memory_weight_table(&control, MemoryWeightTable::Reply, &reply_weight).unwrap();
         let original = read_memory_uorlut01(&original).unwrap().unwrap();
         let control = read_memory_uorlut01(&control).unwrap().unwrap();
         assert_eq!(original.opening.keys, control.opening.keys);
         assert_eq!(original.opening.weight, control.opening.weight);
         assert_ne!(original.opening.values, control.opening.values);
+        assert_eq!(original.opening.weight, opening_weight);
         assert_eq!(
             original.reply.as_ref().unwrap().keys,
             control.reply.as_ref().unwrap().keys
@@ -785,6 +993,7 @@ mod tests {
             original.reply.as_ref().unwrap().values,
             control.reply.as_ref().unwrap().values
         );
+        assert_eq!(original.reply.as_ref().unwrap().weight, reply_weight);
         let audit = memory_target_shuffle_audit(
             &memory,
             &shuffled,

@@ -27,7 +27,10 @@ Added a bounded complete-reply evaluator to `uor-r4-cpu-train`:
 - generated tokens are fed back until shared integer BOS, cap or context stop;
 - one trailing BOS is removed from the reference;
 - exact-reference, reachability, opening, distinct-text, repeated-4-gram,
-  generated-token and digest counters are deterministic.
+  generated-token and digest counters are deterministic;
+- ordered per-row reachability/exactness survive into the report, allowing
+  paired `b/c`, gain, integer threshold and pass fields for every registered
+  comparison.
 
 `cpu-memory-panel-driver` now accepts:
 
@@ -108,8 +111,8 @@ not widen the coordinate sweep.
 - Two-seed replay and seed-1 repeat.
 - Comparison against frozen, random, memory-off and trained-memory-off.
 - A materially different credit rule if complete-reply propagation is negative.
-- Exact-memory target arbitration versus query-only movement as the next
-  mechanism comparison.
+- The pending matched replay comparing exact-memory target arbitration with
+  query-only movement.
 - Complete replies, fresh phrasing, useful chat and GPU qualification.
 
 ## Plain summary

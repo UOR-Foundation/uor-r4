@@ -35,9 +35,18 @@ pub struct ReplyReading {
 #[serde(deny_unknown_fields)]
 pub struct TimedReplyReading {
     pub reading: ReplyReading,
+    pub rows: Vec<ReplyRowReading>,
     pub reply_sha256: String,
     pub wall_elapsed_us: u64,
     pub generated_tokens_per_second: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplyRowReading {
+    pub row: usize,
+    pub reachable: bool,
+    pub exact: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -139,11 +148,21 @@ fn evaluate_generated(
             Ok((generated, reference, reachable))
         })
         .collect::<Result<Vec<_>>>()?;
+    let row_readings = rows
+        .iter()
+        .enumerate()
+        .map(|(row, (generated, reference, reachable))| ReplyRowReading {
+            row,
+            reachable: *reachable,
+            exact: generated.tokens == normalized_reference(reference),
+        })
+        .collect::<Vec<_>>();
     let reply_sha256 = reply_sequence_sha256(&rows);
     let reading = summarize_replies(rows)?;
     let elapsed = started.elapsed();
     Ok(TimedReplyReading {
         reading,
+        rows: row_readings,
         reply_sha256,
         wall_elapsed_us: elapsed.as_micros().try_into().unwrap_or(u64::MAX),
         generated_tokens_per_second: reading.generated_tokens as f64

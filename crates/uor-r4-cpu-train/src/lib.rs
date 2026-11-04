@@ -66,7 +66,7 @@ pub use quant_shadow::{
 };
 pub use reply_eval::{
     evaluate_memory_target_replies, evaluate_replies, generate_reply, GeneratedReply, ReplyReading,
-    TimedReplyReading,
+    ReplyRowReading, TimedReplyReading,
 };
 pub use served_forward::{
     audit_served_forward, exact_fbs_contract, read_uort_token_slice, ExactFbsContract,
