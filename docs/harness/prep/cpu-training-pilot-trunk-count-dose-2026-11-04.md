@@ -18,7 +18,7 @@ paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `1ca202ef217918d4c8444499ebaabc3a91e1878a` |
+| implementation source | `09c4f4abb5c864ec7ac11b98cbfb4e1059394081` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -74,8 +74,61 @@ panel and dose. A negative closes only this 4,096-row additive configuration.
 
 ## Steps
 
-The final FIT revision must include the exact executable build/run recipe,
-binary hash receipt, output checksum inventory and repeat canonicalization.
+Run only after FIT:
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-count-dose
+SHARED=/home/callard/projects/codex-playground/uor-r4
+SOURCE_PIN=09c4f4abb5c864ec7ac11b98cbfb4e1059394081
+PIPELINE=$SHARED/local/deepseek/trunk-count-dose/2026-11-04-attempt-1
+BUILD=$SOURCE/target/deepseek/trunk-count-dose-build-125
+DATA=$SHARED/local/deepseek/public-m1-parity
+test -z "$(git -C "$SOURCE" status --porcelain)"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
+test ! -e "$PIPELINE"
+test ! -e "$BUILD"
+(
+  cd "$SOURCE"
+  CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+    -p uor-r4-cpu-train --bin cpu-trunk-count-driver
+)
+BIN="$BUILD/release/cpu-trunk-count-driver"
+BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+run() {
+  out=$1
+  test ! -e "$out"
+  /usr/bin/time -v timeout 600s "$BIN" \
+    "$DATA/t16-frozen-zero-seed1-trunk.d11" \
+    "$DATA/dev-tokens.u16" "$DATA/dev-response-mask.u8" \
+    "$DATA/dev-manifest.json" "$out" \
+    --expected-artifact-sha256 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d \
+    --expected-tokens-sha256 0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b \
+    --expected-mask-sha256 a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
+    --expected-manifest-sha256 ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab \
+    --train-rows 4096 --evaluation-stride 2 --max-evaluation 512 \
+    --seed 1 >/dev/null
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 2097152
+  printf '%s  cpu-trunk-count-driver\n' "$BIN_SHA" >"$out/binary.sha256"
+  (
+    cd "$out"
+    find . -type f ! -name SHA256SUMS -print0 |
+      sort -z | xargs -0 sha256sum >SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+run "$PIPELINE/seed-1"
+run "$PIPELINE/seed-1-repeat"
+cmp "$PIPELINE/seed-1/exact.uorlut" "$PIPELINE/seed-1-repeat/exact.uorlut"
+cmp "$PIPELINE/seed-1/shuffled.uorlut" "$PIPELINE/seed-1-repeat/shuffled.uorlut"
+diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
+  <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
+```
+
+The report schema has only top-level timing/resource fields, so those are the
+complete normalization. Anything else changing across the repeat is an
+instrument fault.
 
 ## Minimum test power
 
@@ -85,9 +138,14 @@ and parity were established on that artifact in deepseek-124.
 
 ## Cost and stop
 
-Local workstation only. Final storage/time bounds are fixed before FIT. Stop on
-cap failure, source drift, a required code change, count/parity mismatch,
-nondeterminism or an evaluation-tuned dose.
+Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
+7.0.0-42-generic x86_64. At registration the project filesystem had
+548,723,466,240 bytes free and `/tmp` had 26,339,098,624 bytes free. The fresh
+build is capped below 3 GiB temporary storage. Each output root retains below
+200 MiB; two roots stay below 400 MiB, leaving the 128 MiB reserve intact.
+Each run has a 600-second timeout and 2 GiB peak-RSS cap. Stop on cap failure,
+source drift, a required code change, count/parity mismatch, nondeterminism or
+an evaluation-tuned dose.
 
 ## Claim boundary
 
