@@ -18,7 +18,7 @@ paid API. This is not GPU qualification or language-quality evidence.
 
 | Input | Identity |
 |---|---|
-| implementation source | `bdf26f616af32ce0c643cbd93a69f8aa8b364d5d` |
+| implementation source | `4372c5b1f55fb5e1111bbfe80cc5ffc364a93736` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -87,7 +87,7 @@ separate:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-count-training
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=bdf26f616af32ce0c643cbd93a69f8aa8b364d5d
+SOURCE_PIN=4372c5b1f55fb5e1111bbfe80cc5ffc364a93736
 PIPELINE=$SHARED/local/deepseek/trunk-count/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/trunk-count-build-124
 DATA=$SHARED/local/deepseek/public-m1-parity
