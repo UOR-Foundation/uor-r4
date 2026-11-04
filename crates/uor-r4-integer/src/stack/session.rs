@@ -27,6 +27,8 @@
 
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
+
 use crate::bitcode::{BitCode, BITCODE_LANES};
 
 use super::content_readout::ContentReadout;
@@ -556,6 +558,8 @@ pub struct IntegerStackModel {
     /// An optional artifact-bound nearest-example content override used by
     /// [`IntegerStackSession::serve_step`], never by the raw step paths.
     content_readout: Option<Box<ContentReadout>>,
+    /// Canonical hash of `content_readout`, bound into session snapshots.
+    content_readout_sha256: Option<String>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
     gelu_table: Vec<i32>,
@@ -979,6 +983,7 @@ impl IntegerStackModel {
             fbs,
             memory,
             content_readout: None,
+            content_readout_sha256: None,
             exp_table,
             silu_table,
             gelu_table,
@@ -1081,12 +1086,20 @@ impl IntegerStackModel {
             ));
         }
         readout.validate(self.shape.vocab)?;
+        let bytes = serde_json::to_vec(&readout).map_err(|error| {
+            StackError::ContentReadout(format!("cannot hash attached readout: {error}"))
+        })?;
+        self.content_readout_sha256 = Some(hex::encode(Sha256::digest(bytes)));
         self.content_readout = Some(Box::new(readout));
         Ok(())
     }
 
     pub fn content_readout(&self) -> Option<&ContentReadout> {
         self.content_readout.as_deref()
+    }
+
+    pub fn content_readout_sha256(&self) -> Option<&str> {
+        self.content_readout_sha256.as_deref()
     }
 
     /// The same model with its Hamming reads dropped, for timing the session without them
@@ -1583,6 +1596,9 @@ pub struct SerializedStackSession {
     /// equals vocab when position > 0).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mixture: Vec<i32>,
+    /// Canonical content-readout attachment hash, when one was active.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_readout_sha256: Option<String>,
     /// Per-layer state snapshots.
     pub layers: Vec<SerializedStackLayerState>,
 }
@@ -2307,6 +2323,7 @@ impl IntegerStackSession<'_> {
             pointer_keys,
             pointer_lifts,
             mixture,
+            content_readout_sha256: self.model.content_readout_sha256.clone(),
             layers,
         }
     }
@@ -2351,6 +2368,11 @@ impl IntegerStackSession<'_> {
                 "session artifact SHA-256 mismatch: session has '{}', model has '{}'",
                 saved.artifact_sha256, self.model.sha256
             )));
+        }
+        if saved.content_readout_sha256 != self.model.content_readout_sha256 {
+            return Err(StackError::ContentReadout(
+                "session content-readout identity differs from the attached sidecar".to_owned(),
+            ));
         }
         let position = usize::try_from(saved.position).map_err(|_| StackError::SessionState)?;
         let cache_at = usize::try_from(saved.cache_at).map_err(|_| StackError::SessionState)?;
@@ -5045,8 +5067,18 @@ mod fbs_stage_tests {
         assert_eq!(margin, 0);
         assert_eq!(content_session.last_native_token(), Some(raw.token));
         assert_eq!(content_session.last_query_q12(), Some(raw.query_q12.as_slice()));
-        assert_eq!(plain_session.save_state(), content_session.save_state());
         assert_eq!(plain_session.tokens(), content_session.tokens());
+        let saved = content_session.save_state();
+        let plain_state = plain_session.save_state();
+        let mut content_state = saved.clone();
+        assert!(content_state.content_readout_sha256.take().is_some());
+        assert_eq!(plain_state, content_state);
+        drop(content_session);
+        let mut restored = candidate.session();
+        restored.restore_state(&saved).expect("content session restores");
+        drop(plain_session);
+        let mut plain_restored = plain.session();
+        assert!(plain_restored.restore_state(&saved).is_err());
     }
 
     /// Every writer row's score to `q` (`-L1` at Q12), sorted by score descending then id

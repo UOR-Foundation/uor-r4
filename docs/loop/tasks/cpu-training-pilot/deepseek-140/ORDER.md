@@ -52,6 +52,11 @@ unchanged. A loadable sidecar must be exposed through `uor-chat
 --content-readout PATH` for one-shot, REPL, prompt-id and OpenAI-loopback
 serving. JSON outputs must identify the sidecar path and SHA-256.
 
+Session snapshots bind the canonical attached-readout hash. Restore succeeds
+only when source and destination carry the same readout; otherwise it refuses
+before changing state. The integer `UR4SESS2` codec carries this identity while
+legacy `UR4SESS1` snapshots remain readable when both sides have no readout.
+
 The CPU content driver must emit this sidecar beside `code-true-readout.json`
 and verify complete generated replies against an integer
 `IntegerStackModel` carrying the same sidecar.
@@ -71,7 +76,9 @@ Both seeds must pass:
   decision: chosen token, native/point fallback, packed signature, nearest
   distance and whether the readout fired;
 - each seed checks **103 prompts** and at least one readout override;
-- every malformed/foreign sidecar production is refused before a step; and
+- every malformed/foreign sidecar production is refused before a step;
+- same-readout session restore succeeds while a missing or different readout
+  is refused before state mutation; and
 - the seed-1 normalized report and sidecar match the repeat byte-for-byte.
 
 Report sidecar hash, row/target counts, threshold, decisions, readout fires,
@@ -84,6 +91,8 @@ RSS.
 - `crates/uor-r4-integer/src/stack/content_readout.rs`
 - `crates/uor-r4-integer/src/stack/mod.rs`
 - `crates/uor-r4-integer/src/stack/session.rs`
+- `crates/uor-r4-integer/src/session_codec.rs`
+- `crates/uor-r4-integer/tests/session_codec_interop_fixture.rs`
 - `crates/uor-r4-integer/src/stack/chat.rs`
 - `crates/uor-r4-integer/src/bin/uor-chat.rs`
 - `crates/uor-r4-integer/Cargo.toml`

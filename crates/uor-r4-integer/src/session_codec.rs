@@ -25,6 +25,7 @@
 //! pointer_keys     v64 len + i32 each
 //! pointer_lifts    v64 len + u64 each
 //! mixture          v64 len + i32 each
+//! content hash     u32 len + bytes (v2 only)
 //! layers           v64 count, then per layer:
 //!   kind           u8 (0 recurrence, 1 read)
 //!   recurrence:    state v64 len + i64 each; history v64 len + i32 each
@@ -42,6 +43,7 @@
 use crate::stack::{SerializedStackLayerState, SerializedStackSession};
 
 const MAGIC: &[u8; 8] = b"UR4SESS1";
+const MAGIC_CONTENT: &[u8; 8] = b"UR4SESS2";
 
 fn put_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
@@ -99,7 +101,11 @@ fn put_u64s(out: &mut Vec<u8>, xs: &[u64]) {
 /// segment (the snapshot is small — the read caches dominate).
 pub fn encode(state: &SerializedStackSession) -> Vec<u8> {
     let mut out = Vec::new();
-    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(if state.content_readout_sha256.is_some() {
+        MAGIC_CONTENT
+    } else {
+        MAGIC
+    });
     put_str(&mut out, &state.schema);
     put_u32(&mut out, state.version);
     put_str(&mut out, &state.artifact_sha256);
@@ -119,6 +125,9 @@ pub fn encode(state: &SerializedStackSession) -> Vec<u8> {
     put_i32s(&mut out, &state.pointer_keys);
     put_u64s(&mut out, &state.pointer_lifts);
     put_i32s(&mut out, &state.mixture);
+    if let Some(sha256) = &state.content_readout_sha256 {
+        put_str(&mut out, sha256);
+    }
     put_v64(&mut out, state.layers.len() as u64);
     for layer in &state.layers {
         match layer {
@@ -246,7 +255,8 @@ impl<'a> Reader<'a> {
 /// declaration (the engine's `restore_state` re-checks everything else).
 pub fn decode(bytes: &[u8]) -> Result<SerializedStackSession, String> {
     let mut r = Reader { buf: bytes, at: 0 };
-    if r.take(8)? != MAGIC {
+    let magic = r.take(8)?;
+    if magic != MAGIC && magic != MAGIC_CONTENT {
         return Err("session codec: bad magic".to_string());
     }
     let schema = r.string()?;
@@ -266,6 +276,11 @@ pub fn decode(bytes: &[u8]) -> Result<SerializedStackSession, String> {
     let pointer_keys = r.i32s()?;
     let pointer_lifts = r.u64s()?;
     let mixture = r.i32s()?;
+    let content_readout_sha256 = if magic == MAGIC_CONTENT {
+        Some(r.string()?)
+    } else {
+        None
+    };
     let layer_count = r.checked_count(0)?;
     let mut layers = Vec::with_capacity(layer_count);
     for _ in 0..layer_count {
@@ -305,6 +320,7 @@ pub fn decode(bytes: &[u8]) -> Result<SerializedStackSession, String> {
         pointer_keys,
         pointer_lifts,
         mixture,
+        content_readout_sha256,
         layers,
     })
 }
@@ -432,6 +448,7 @@ mod tests {
             pointer_keys: vec![1, -2, 3],
             pointer_lifts: vec![u64::MAX, 0, 1 << 62],
             mixture: vec![9, -9],
+            content_readout_sha256: None,
             layers: vec![
                 SerializedStackLayerState::Recurrence {
                     state: vec![i64::MIN, -1, 0, 1, i64::MAX],
@@ -452,6 +469,15 @@ mod tests {
         let bytes = encode(&s);
         let back = decode(&bytes).expect("decode");
         assert_eq!(s, back);
+    }
+
+    #[test]
+    fn content_readout_identity_round_trips_in_version_2() {
+        let mut s = sample();
+        s.content_readout_sha256 = Some("cd".repeat(32));
+        let bytes = encode(&s);
+        assert_eq!(&bytes[..8], MAGIC_CONTENT);
+        assert_eq!(decode(&bytes).expect("decode"), s);
     }
 
     #[test]
