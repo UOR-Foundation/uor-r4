@@ -1,0 +1,143 @@
+{
+  "schema": "uor-r4.cpu-point-vote-replies/1",
+  "substrate": "cpu-development-research",
+  "qualification": "gpu-required",
+  "cap": 16,
+  "threads_per_seed": 16,
+  "schedule": "two seeds concurrently",
+  "exact_reference_rule": "remove exactly one trailing BOS from the stored reference; compare remaining ids",
+  "seed_1": {
+    "wall_elapsed_ms": 1672.030643,
+    "opening_top1": {
+      "point_off": 0,
+      "nearest": 2,
+      "vote": 3,
+      "random_vote": 2
+    },
+    "complete_reply": {
+      "point_off": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 0,
+        "distinct_non_empty": 2,
+        "repeated_4gram": 22,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 52363,
+        "generated_tokens_per_second": 18333.421690240648
+      },
+      "nearest": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 2,
+        "distinct_non_empty": 10,
+        "repeated_4gram": 55,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 51026,
+        "generated_tokens_per_second": 18813.934673981657
+      },
+      "vote": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 3,
+        "distinct_non_empty": 4,
+        "repeated_4gram": 57,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 53721,
+        "generated_tokens_per_second": 17870.034478183916
+      },
+      "random_vote": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 0,
+        "distinct_non_empty": 11,
+        "repeated_4gram": 46,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 55208,
+        "generated_tokens_per_second": 17388.542341680222
+      }
+    }
+  },
+  "seed_2": {
+    "wall_elapsed_ms": 1606.151878,
+    "opening_top1": {
+      "point_off": 0,
+      "nearest": 1,
+      "vote": 3,
+      "random_vote": 3
+    },
+    "complete_reply": {
+      "point_off": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 0,
+        "distinct_non_empty": 2,
+        "repeated_4gram": 40,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 51862,
+        "generated_tokens_per_second": 18510.600095144484
+      },
+      "nearest": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 1,
+        "distinct_non_empty": 12,
+        "repeated_4gram": 37,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 49783,
+        "generated_tokens_per_second": 19283.495220284407
+      },
+      "vote": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 3,
+        "distinct_non_empty": 5,
+        "repeated_4gram": 22,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 49772,
+        "generated_tokens_per_second": 19287.7999943543
+      },
+      "random_vote": {
+        "exact_reference": 0,
+        "bos_complete": 0,
+        "cap_stopped": 60,
+        "context_stopped": 0,
+        "opening_correct": 3,
+        "distinct_non_empty": 8,
+        "repeated_4gram": 6,
+        "reference_reachable": 51,
+        "generated_tokens": 960,
+        "wall_elapsed_us": 52600,
+        "generated_tokens_per_second": 18250.924547160816
+      }
+    }
+  },
+  "parity": {
+    "arms": 4,
+    "seeds": 2,
+    "query_coordinate_mismatches": 0,
+    "token_mismatches": 0,
+    "kept_cell_mismatches": 0
+  },
+  "verdict": "No propagation. The vote changes only the opening row; it produces no exact complete reply and no BOS-complete reply on either seed."
+}
