@@ -642,7 +642,7 @@ mod tests {
                 terminal_content_top1: 0,
                 nonterminal_bos_top1: nonterminal_bos,
                 nonterminal_content_top1: content,
-                nonterminal_target_distance_sum: 0,
+                nonterminal_bos_distance_sum: 0,
             },
             terminal_rows: rows,
         }

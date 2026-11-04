@@ -82,7 +82,7 @@ pub struct TerminationGainReading {
     pub terminal_content_top1: u64,
     pub nonterminal_bos_top1: u64,
     pub nonterminal_content_top1: u64,
-    pub nonterminal_target_distance_sum: u64,
+    pub nonterminal_bos_distance_sum: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -287,9 +287,9 @@ pub fn termination_gain_labels(samples: &[MemoryWeightSample]) -> Result<Vec<boo
     }
     let mut labels = Vec::new();
     for (sample_index, sample) in samples.iter().enumerate() {
-        if sample.reply.is_empty() {
+        if sample.prompt.is_empty() || sample.reply.is_empty() {
             return Err(invalid(format!(
-                "termination sample {sample_index} has an empty reply"
+                "termination sample {sample_index} has an empty prompt or reply"
             )));
         }
         let tokens = sample
@@ -301,6 +301,16 @@ pub fn termination_gain_labels(samples: &[MemoryWeightSample]) -> Result<Vec<boo
         if tokens.len() < 2 {
             return Err(invalid(format!(
                 "termination sample {sample_index} has no decision"
+            )));
+        }
+        if sample.reply.last() != Some(&CORPUS_EOS) {
+            return Err(invalid(format!(
+                "termination sample {sample_index} reply does not end in EOS"
+            )));
+        }
+        if tokens[..tokens.len() - 1].contains(&CORPUS_EOS) {
+            return Err(invalid(format!(
+                "termination sample {sample_index} has EOS before the final reply token"
             )));
         }
         let mut sample_labels = Vec::with_capacity(tokens.len() - 1);
@@ -477,7 +487,7 @@ fn summarize_termination(
         terminal_content_top1: 0,
         nonterminal_bos_top1: 0,
         nonterminal_content_top1: 0,
-        nonterminal_target_distance_sum: 0,
+        nonterminal_bos_distance_sum: 0,
     };
     let mut terminal_rows = Vec::new();
     for outcome in outcomes {
@@ -511,8 +521,8 @@ fn summarize_termination(
                 checked_increment(reading.nonterminal_decisions, "nonterminal decision count")?;
             reading.nonterminal_bos_top1 += u64::from(outcome.chosen == POINT_KEY_BOS);
             reading.nonterminal_content_top1 += u64::from(outcome.chosen == outcome.target);
-            reading.nonterminal_target_distance_sum = reading
-                .nonterminal_target_distance_sum
+            reading.nonterminal_bos_distance_sum = reading
+                .nonterminal_bos_distance_sum
                 .checked_add(distance)
                 .ok_or_else(|| invalid("nonterminal BOS distance sum overflows"))?;
         }
@@ -1224,7 +1234,7 @@ mod tests {
             terminal_content_top1: 0,
             nonterminal_bos_top1: 0,
             nonterminal_content_top1: 8,
-            nonterminal_target_distance_sum: 100,
+            nonterminal_bos_distance_sum: 100,
         }
     }
 
@@ -1248,6 +1258,10 @@ mod tests {
         let mut no_eos = samples;
         no_eos[1].reply.pop();
         assert!(termination_gain_labels(&no_eos).is_err());
+
+        let mut internal_eos = termination_samples();
+        internal_eos[0].reply = vec![42, CORPUS_EOS, 77, CORPUS_EOS];
+        assert!(termination_gain_labels(&internal_eos).is_err());
     }
 
     #[test]
