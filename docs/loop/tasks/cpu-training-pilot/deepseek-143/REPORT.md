@@ -35,8 +35,8 @@ Focused pre-run checks passed:
 
 - continuation horizon/offset derivation: **6 focused library tests**, including
   the matching prior continuation test;
-- driver tests: **7 passed**, including the continuation terminal-pairing
-  control;
+- driver tests: **8 passed**, including the continuation terminal-pairing and
+  self-exclusion controls;
 - strict scoped Clippy with `-D warnings`;
 - targeted rustfmt.
 
