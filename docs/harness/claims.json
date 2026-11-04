@@ -1,4 +1,11 @@
 {
+  "deepseek/admission-headroom": {
+    "branch": "deepseek/admission-headroom",
+    "claimed_at": "2026-11-04T15:20:00-05:00",
+    "head": "6ad57102a",
+    "lab": "deepseek",
+    "note": "generated-state cell-rank and K=8 versus K=16 admission headroom"
+  },
   "deepseek/audit-export-gate": {
     "branch": "deepseek/audit-export-gate",
     "claimed_at": "2026-11-03T01:55:46-05:00",
@@ -17,6 +24,13 @@
     "branch": "deepseek/bos-admission",
     "claimed_at": "2026-11-04T00:28:14-05:00",
     "head": "ed5f0d6b2",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/bos-writer-training": {
+    "branch": "deepseek/bos-writer-training",
+    "claimed_at": "2026-11-04T08:03:14-05:00",
+    "head": "7a77bce37",
     "lab": "deepseek",
     "note": ""
   },
@@ -45,6 +59,34 @@
     "branch": "deepseek/chat-protocol2-default",
     "claimed_at": "2026-11-02T22:19:36-05:00",
     "head": "7394c344d",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/content-code": {
+    "branch": "deepseek/content-code",
+    "claimed_at": "2026-11-04T11:02:37-05:00",
+    "head": "8cf088bd9",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/content-readout": {
+    "branch": "deepseek/content-readout",
+    "claimed_at": "2026-11-04T16:20:00-05:00",
+    "head": "d861d7fdb",
+    "lab": "deepseek",
+    "note": "generated-state full-query Hamming nearest-example content readout"
+  },
+  "deepseek/content-stop": {
+    "branch": "deepseek/content-stop",
+    "claimed_at": "2026-11-04T11:20:16-05:00",
+    "head": "11f8303cc",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/content-stop-gate": {
+    "branch": "deepseek/content-stop-gate",
+    "claimed_at": "2026-11-04T11:40:41-05:00",
+    "head": "202aa1e29",
     "lab": "deepseek",
     "note": ""
   },
@@ -160,6 +202,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/generated-prefix": {
+    "branch": "deepseek/generated-prefix",
+    "claimed_at": "2026-11-04T15:00:00-05:00",
+    "head": "4a437d33d",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/generated-replies": {
     "branch": "deepseek/generated-replies",
     "claimed_at": "2026-11-03T08:14:18-05:00",
@@ -272,12 +321,26 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/point-prototypes": {
+    "branch": "deepseek/point-prototypes",
+    "claimed_at": "2026-11-04T06:48:33-05:00",
+    "head": "6f653f2b4",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/public-chat-baseline": {
     "branch": "deepseek/public-chat-baseline",
     "claimed_at": "2026-11-02T14:45:17-05:00",
     "head": "b44402e0c",
     "lab": "deepseek",
     "note": ""
+  },
+  "deepseek/query-admission": {
+    "branch": "deepseek/query-admission",
+    "claimed_at": "2026-11-04T16:00:00-05:00",
+    "head": "e197f22c1",
+    "lab": "deepseek",
+    "note": "generated-query final-gain training toward K8 target-cell admission"
   },
   "deepseek/reply-termination": {
     "branch": "deepseek/reply-termination",
@@ -311,6 +374,13 @@
     "branch": "deepseek/served-rounding-item",
     "claimed_at": "2026-11-02T23:38:15-05:00",
     "head": "a9d0461e2",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/stop-signature": {
+    "branch": "deepseek/stop-signature",
+    "claimed_at": "2026-11-04T08:31:51-05:00",
+    "head": "e3959b140",
     "lab": "deepseek",
     "note": ""
   },

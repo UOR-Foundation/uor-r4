@@ -94,6 +94,13 @@ pub struct RankMarginStep {
     pub after: RankMarginReading,
 }
 
+pub(crate) struct WriterUpdateProposal {
+    pub(crate) artifact: Vec<u8>,
+    pub(crate) forward: CpuFbsForward,
+    pub(crate) coordinates: Vec<usize>,
+    pub(crate) rival: u32,
+}
+
 #[derive(Clone)]
 pub struct CpuRankMarginTrainer {
     artifact: Vec<u8>,
@@ -365,71 +372,9 @@ impl CpuRankMarginTrainer {
             });
         }
 
-        let width = self.forward.width();
-        let table = self.forward.token_table();
-        let target_row = &table[target as usize * width..][..width];
-        let rival_row = &table[rival as usize * width..][..width];
-        let interior_start = 8;
-        let interior_end = width.saturating_sub(8);
-        if interior_start >= interior_end {
-            return Err(invalid("table has no mutable interior coordinate"));
-        }
-        let selected = if self.config.coordinates_per_step == 1 {
-            let coordinate = (interior_start..interior_end)
-                .map(|coordinate| {
-                    (
-                        i64::from(query[coordinate].abs_diff(i32::from(target_row[coordinate])))
-                            + i64::from(
-                                query[coordinate].abs_diff(i32::from(rival_row[coordinate])),
-                            ),
-                        coordinate,
-                    )
-                })
-                .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
-                .map(|(_, coordinate)| coordinate);
-            let Some(coordinate) = coordinate else {
-                return Err(invalid("table has no mutable interior coordinate"));
-            };
-            if query[coordinate] == i32::from(target_row[coordinate])
-                && query[coordinate] == i32::from(rival_row[coordinate])
-            {
-                return Ok(RankMarginStep {
-                    sample: sample_index,
-                    target,
-                    updated: false,
-                    coordinate: Some(coordinate),
-                    coordinates: Vec::new(),
-                    rival: Some(rival),
-                    before: before.clone(),
-                    after: before,
-                });
-            }
-            vec![coordinate]
-        } else {
-            let mut coordinates = (interior_start..interior_end)
-                .map(|coordinate| {
-                    (
-                        i64::from(query[coordinate].abs_diff(i32::from(target_row[coordinate])))
-                            + i64::from(
-                                query[coordinate].abs_diff(i32::from(rival_row[coordinate])),
-                            ),
-                        coordinate,
-                    )
-                })
-                .filter(|&(_, coordinate)| {
-                    query[coordinate] != i32::from(target_row[coordinate])
-                        || query[coordinate] != i32::from(rival_row[coordinate])
-                })
-                .collect::<Vec<_>>();
-            coordinates
-                .sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
-            coordinates.truncate(self.config.coordinates_per_step);
-            coordinates
-                .iter()
-                .map(|&(_, coordinate)| coordinate)
-                .collect::<Vec<_>>()
-        };
-        if selected.is_empty() {
+        let Some(proposal) =
+            propose_writer_update(&self.artifact, &self.forward, self.config, query, target)?
+        else {
             return Ok(RankMarginStep {
                 sample: sample_index,
                 target,
@@ -440,29 +385,13 @@ impl CpuRankMarginTrainer {
                 before: before.clone(),
                 after: before,
             });
-        }
-
-        let mut proposed = table.to_vec();
-        for &coordinate in &selected {
-            proposed[target as usize * width + coordinate] = move_toward(
-                target_row[coordinate],
-                query[coordinate],
-                self.config.step_q12,
-                self.config.parameter_limit_q12,
-            );
-            proposed[rival as usize * width + coordinate] = move_away(
-                rival_row[coordinate],
-                query[coordinate],
-                self.config.step_q12,
-                self.config.parameter_limit_q12,
-            );
-        }
-        let patched = patch_writer_table(&self.artifact, &proposed)?;
-        let forward = CpuFbsForward::from_artifact(&patched)
-            .map_err(|error| invalid(format!("patched rank-margin artifact: {error}")))?;
+        };
+        let selected = proposal.coordinates;
+        let rival = proposal.rival;
+        let patched = proposal.artifact;
         let mut probe = Self {
             artifact: patched.clone(),
-            forward,
+            forward: proposal.forward,
             samples: self.samples.clone(),
             sample_fingerprint: self.sample_fingerprint,
             config: self.config,
@@ -497,6 +426,99 @@ impl CpuRankMarginTrainer {
     }
 }
 
+pub(crate) fn propose_writer_update(
+    artifact: &[u8],
+    forward: &CpuFbsForward,
+    config: RankMarginConfig,
+    query: &[i32],
+    target: u32,
+) -> Result<Option<WriterUpdateProposal>> {
+    let before = reading_from_forward(forward, config, query, target)?;
+    let Some(rival) = before.top8.iter().copied().find(|&token| token != target) else {
+        return Ok(None);
+    };
+    if before.margin_loss == 0 || !before.target_admitted {
+        return Ok(None);
+    }
+    let width = forward.width();
+    let table = forward.token_table();
+    let target_row = &table[target as usize * width..][..width];
+    let rival_row = &table[rival as usize * width..][..width];
+    let interior_start = 8;
+    let interior_end = width.saturating_sub(8);
+    if interior_start >= interior_end {
+        return Err(invalid("table has no mutable interior coordinate"));
+    }
+    let selected = if config.coordinates_per_step == 1 {
+        let coordinate = (interior_start..interior_end)
+            .map(|coordinate| {
+                (
+                    i64::from(query[coordinate].abs_diff(i32::from(target_row[coordinate])))
+                        + i64::from(query[coordinate].abs_diff(i32::from(rival_row[coordinate]))),
+                    coordinate,
+                )
+            })
+            .max_by(|left, right| left.0.cmp(&right.0).then_with(|| right.1.cmp(&left.1)))
+            .map(|(_, coordinate)| coordinate);
+        let Some(coordinate) = coordinate else {
+            return Err(invalid("table has no mutable interior coordinate"));
+        };
+        if query[coordinate] == i32::from(target_row[coordinate])
+            && query[coordinate] == i32::from(rival_row[coordinate])
+        {
+            return Ok(None);
+        }
+        vec![coordinate]
+    } else {
+        let mut coordinates = (interior_start..interior_end)
+            .map(|coordinate| {
+                (
+                    i64::from(query[coordinate].abs_diff(i32::from(target_row[coordinate])))
+                        + i64::from(query[coordinate].abs_diff(i32::from(rival_row[coordinate]))),
+                    coordinate,
+                )
+            })
+            .filter(|&(_, coordinate)| {
+                query[coordinate] != i32::from(target_row[coordinate])
+                    || query[coordinate] != i32::from(rival_row[coordinate])
+            })
+            .collect::<Vec<_>>();
+        coordinates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+        coordinates.truncate(config.coordinates_per_step);
+        coordinates
+            .iter()
+            .map(|&(_, coordinate)| coordinate)
+            .collect::<Vec<_>>()
+    };
+    if selected.is_empty() {
+        return Ok(None);
+    }
+    let mut proposed = table.to_vec();
+    for &coordinate in &selected {
+        proposed[target as usize * width + coordinate] = move_toward(
+            target_row[coordinate],
+            query[coordinate],
+            config.step_q12,
+            config.parameter_limit_q12,
+        );
+        proposed[rival as usize * width + coordinate] = move_away(
+            rival_row[coordinate],
+            query[coordinate],
+            config.step_q12,
+            config.parameter_limit_q12,
+        );
+    }
+    let artifact = patch_writer_table(artifact, &proposed)?;
+    let patched_forward = CpuFbsForward::from_artifact(&artifact)
+        .map_err(|error| invalid(format!("patched rank-margin artifact: {error}")))?;
+    Ok(Some(WriterUpdateProposal {
+        artifact,
+        forward: patched_forward,
+        coordinates: selected,
+        rival,
+    }))
+}
+
 impl CpuRankMarginEvaluator {
     pub(crate) fn config(&self) -> RankMarginConfig {
         self.config
@@ -525,11 +547,67 @@ fn query_for_forward(forward: &mut CpuFbsForward, sample: &RankMarginSample) -> 
         .ok_or_else(|| invalid("training sample input is empty"))
 }
 
-fn reading_from_forward(
+pub(crate) fn reading_from_forward(
     forward: &CpuFbsForward,
     config: RankMarginConfig,
     query: &[i32],
     target: u32,
+) -> Result<RankMarginReading> {
+    reading_from_forward_at_kept(forward, config, query, target, forward.kept_cell_count())
+}
+
+pub(crate) fn reading_from_forward_at_kept(
+    forward: &CpuFbsForward,
+    config: RankMarginConfig,
+    query: &[i32],
+    target: u32,
+    kept_cells: usize,
+) -> Result<RankMarginReading> {
+    if query.len() != forward.width() {
+        return Err(invalid("rank-margin query width differs from the table"));
+    }
+    if target as usize >= forward.vocabulary() {
+        return Err(invalid("rank-margin target is outside the vocabulary"));
+    }
+    if !(1..=16).contains(&kept_cells) {
+        return Err(invalid("rank-margin kept-cell override is out of bounds"));
+    }
+    let admitted = forward
+        .writer_cell_order(query)
+        .map_err(|error| invalid(format!("rank-margin writer cells: {error}")))?
+        .into_iter()
+        .take(kept_cells)
+        .collect::<Vec<_>>();
+    reading_from_admitted_cells(forward, config, query, target, &admitted)
+}
+
+pub(crate) fn reading_from_forward_cells(
+    forward: &CpuFbsForward,
+    config: RankMarginConfig,
+    query: &[i32],
+    target: u32,
+    admitted: &[u32],
+) -> Result<RankMarginReading> {
+    if admitted.is_empty()
+        || admitted.len() > 16
+        || admitted.iter().any(|cell| *cell >= CELL_COUNT as u32)
+        || admitted
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != admitted.len()
+    {
+        return Err(invalid("rank-margin admitted-cell override differs"));
+    }
+    reading_from_admitted_cells(forward, config, query, target, admitted)
+}
+
+fn reading_from_admitted_cells(
+    forward: &CpuFbsForward,
+    config: RankMarginConfig,
+    query: &[i32],
+    target: u32,
+    admitted: &[u32],
 ) -> Result<RankMarginReading> {
     if query.len() != forward.width() {
         return Err(invalid("rank-margin query width differs from the table"));
@@ -557,28 +635,6 @@ fn reading_from_forward(
         })
         .count();
 
-    let mut cells = Vec::with_capacity(CELL_COUNT);
-    for cell in 0..CELL_COUNT {
-        let first = ((query[..8].iter().zip(&forward.writer_roots()[cell / 16]))
-            .fold(0i64, |sum, (&value, &point)| {
-                sum.wrapping_add(i64::from(value.abs_diff(point)))
-            }))
-        .wrapping_neg();
-        let last = ((query[width - 8..]
-            .iter()
-            .zip(&forward.writer_roots()[cell % 16]))
-        .fold(0i64, |sum, (&value, &point)| {
-            sum.wrapping_add(i64::from(value.abs_diff(point)))
-        }))
-        .wrapping_neg();
-        cells.push((first.wrapping_add(last), cell));
-    }
-    cells.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
-    let admitted: Vec<u32> = cells
-        .iter()
-        .take(forward.kept_cell_count())
-        .map(|&(_, cell)| cell as u32)
-        .collect();
     let target_cell = (target % CELL_COUNT as u32) as u16;
     let target_admitted = admitted.contains(&u32::from(target_cell));
 
@@ -607,7 +663,7 @@ fn reading_from_forward(
         top8,
         target_admitted,
         target_cell,
-        admitted_cells: admitted,
+        admitted_cells: admitted.to_vec(),
     })
 }
 

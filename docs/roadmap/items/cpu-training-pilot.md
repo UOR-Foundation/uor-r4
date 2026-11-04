@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -200,6 +200,118 @@ beat its shuffled medoid by only one against a threshold of two. This closes
 the fixed 48-to-18 target-medoid construction, while leaving target-specific
 local neighborhoods open. See
 [deepseek-123](../../loop/tasks/cpu-training-pilot/deepseek-123/REPORT.md).
+
+The next point comparison prospectively fixed a two-row target representation:
+the observed within-target L1 medoid plus the remaining observed point with
+maximum minimum L1 distance. On the same 60/60 unseen-key panel, this reduced
+48 raw rows to 25 prototype rows. Seed 1 tied point-off at 0/60 and lost to the
+shuffled-target prototype control at 3/60. Seed 2 reached 3/60 and beat both
+controls by three, below the required paired margin of four. Every arm kept
+exact CPU/integer parity and all treatment openings changed. This closes the
+fixed target-balanced `k=2` construction, not target-local point geometry
+generally. See
+[deepseek-130](../../loop/tasks/cpu-training-pilot/deepseek-130/REPORT.md).
+
+The next termination unit trained the final gain itself, rather than deciding
+after the writer query. At the final reply-content row it aimed decoder BOS at
+top-1; every other row protected content and rejected added BOS. Both seeds
+accepted all eight one-code moves, changed the held-out query distance and kept
+exact CPU/integer parity. BOS still stayed outside top-8 and reached 0/103
+held-out terminal top-1; seed 2 also lost two nonterminal content rows. Every
+free reply hit the 16-token cap. This closes the fixed final-gain coordinate
+schedule; it does not reject geometric termination or a direct serving-level
+BOS candidate. See
+[deepseek-131](../../loop/tasks/cpu-training-pilot/deepseek-131/REPORT.md).
+
+A different termination unit bypassed writer admission with a CPU-only
+two-class Hamming classifier over the complete 256-coordinate writer query.
+Eight observed prototypes per class and a training-fitted margin recognized
+held-out reference endings at 97/103 on both seeds with 8/1,085 false stops,
+and beat the no-gate and shuffled-label gates by 97 paired rows. Free
+generation did not transfer: seed 1 stopped all 103 replies prematurely and
+seed 2 stopped 43/103 prematurely, with no exact replies. This is promising
+evidence that the query separates reference terminal rows, but not a usable
+stop mechanism or serving change. It requires a generated-trajectory
+discriminator and later coordinated integer parity. See
+[deepseek-132](../../loop/tasks/cpu-training-pilot/deepseek-132/REPORT.md).
+
+The admission follow-up ranked every target cell across all 256 writer cells
+and ran independent K=8 and K=16 generated trajectories. K=16 preserved every
+table payload byte and exact CPU/integer parity, but seed 1 fell from 30 to 17
+positive-margin training rows and seed 2 rose only from 32 to 52, with 6 and
+17 same-cell pairs against a 64-pair readiness gate. Held-out admission added
+32 and 49 against 128; the equal-budget random-cell control was no weaker.
+This closes the existing 8→16 admission-budget configuration and makes direct
+generated-query/admission training the next mechanism. See
+[deepseek-134](../../loop/tasks/cpu-training-pilot/deepseek-134/REPORT.md).
+
+Direct final-gain admission training then moved the query on actual generated
+trajectories instead of relying on post-admission ranking. The fixed
+32-coordinate, ±32, 12-move objective accepted only one move on seed 1 and two
+on seed 2. Training eligibility reached 36 and 49 rows against 640; held-out
+admission fell 53→47 and rose 48→55; teacher-forced top-1 fell on both seeds.
+Cross-cell permutation and equal-move random controls were not beaten. This
+closes the fixed final-gain schedule, not direct query geometry generally. See
+[deepseek-135](../../loop/tasks/cpu-training-pilot/deepseek-135/REPORT.md).
+
+The next pivot bypassed writer admission with an exact nearest-example readout
+over the complete generated 256-Q12 query. The true readout raised aligned
+top-1 to 67 and 42 against writer 22 and 7 and a behaviorally distinct
+shuffled control 4 and 18; matching-prefix depth rose to 60 and 33. Both seeds
+met the prompt-paired bars. The zero-distance threshold covered 99% of
+training rows, but leave-one-out target accuracy was only 199/894 and 201/894,
+and the readout fired on just 103 and 117 generated decisions. Every reply hit
+the 16-token cap with zero exact or BOS-complete results. This is a supported
+sparse geometric content override and a serving-contract candidate, not useful
+chat. See
+[deepseek-136](../../loop/tasks/cpu-training-pilot/deepseek-136/REPORT.md).
+
+The follow-up compared the sign code with a 2,048-bit modulo-256 code over the
+same generated states. The code reduced ambiguous leave-one-out rows from 892
+to 277 and 879 to 262 and raised hits from 199 to 300 and 201 to 284. Generated
+top-1 rose from sign/writer 67/22 to 73 on seed 1 and from 42/7 to 58 on seed
+2; matching depth rose from 60 to 64 and 33 to 39. Every code-to-writer,
+code-to-shuffle and code-to-sign paired comparison passed. All replies still
+hit the cap with zero exact or BOS-complete outputs, so the code is a stronger
+serving-contract candidate but not completion or chat evidence. See
+[deepseek-137](../../loop/tasks/cpu-training-pilot/deepseek-137/REPORT.md).
+
+The next readout variant added BOS only for generated training states at the
+normalized reference endpoint. The augmented table raised leave-one-out hits
+from 300 to 325 and 284 to 315, but selected BOS on none of the held-out
+replies. Seed 1 also lost content, 73→60 top-1 and 64→46 depth; seed 2 was
+unchanged at 58/39. Every true stop arm still hit the 16-token cap, while the
+shuffled endpoint controls stopped 2 and 27 replies prematurely. This closes
+shared content-table endpoint rows. A separate two-class generated-state stop
+gate was the next termination direction; the positive content code remained
+intact. See
+[deepseek-138](../../loop/tasks/cpu-training-pilot/deepseek-138/REPORT.md).
+
+The separate stop gate trained terminal and nonterminal code-signature
+prototypes without changing content targets. It stayed inside the 1% false-stop
+limit but recalled only 8/84 and 9/84 training endpoints. The true arms stopped
+10 and 11 replies, none exact; seed 1 had 4 shorter, 2 at-reference and 4
+longer stops, while seed 2 had 5 shorter, 4 at-reference and 2 longer. The
+shuffled controls stopped 9 and 21 replies. Corrected control-only paired
+thresholds made seed 1 pass at 10 versus 9 and seed 2 fail at 11 versus 21, so
+the shuffled gain did not replicate. Content stayed exactly 73/64 and 58/39
+with zero ungated token mismatches. A wider prototype preflight did not
+approach the training bar. This closes the fixed eight-prototype
+code-signature gate at the 1% false-stop limit; another termination
+representation or continuation objective is required. See
+[deepseek-139](../../loop/tasks/cpu-training-pilot/deepseek-139/REPORT.md).
+
+The next writer unit tested training on the model's own generated prefixes
+instead of reference prefixes. Its exact scan fed self-generated tokens through
+FBS, Hamming and opening/reply memory, aligned live queries with reference
+content at the same offset, and prepared reference, static/dynamic and
+same-cell shuffled controls. The registered preflight stopped before any
+update: seed 1 found only 30 true / 33 shuffled eligible admitted decisions and
+seed 2 found 32 / 32, against 640; same-cell pairs were only 11-12 against 64.
+Prompt and cell coverage were otherwise ample. This is an insufficiency result,
+not a writer-training negative: the next content mechanism must expose far more
+admitted generated-state targets before ranking can be tested. See
+[deepseek-133](../../loop/tasks/cpu-training-pilot/deepseek-133/REPORT.md).
 
 The public 19-table M1 trunk is now additively trainable and writable on CPU,
 rather than read-only. One bounded run added 128 exact teacher-forced rows to

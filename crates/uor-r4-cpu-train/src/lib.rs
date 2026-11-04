@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
+mod content_readout;
 mod corpus;
 mod counterfactual;
 mod discrete_route;
@@ -20,9 +21,21 @@ mod memory_train;
 mod panel;
 mod quant_shadow;
 mod reply_eval;
+mod self_prefix;
 mod served_forward;
+mod stop_signature;
 mod train;
 
+pub use content_readout::{
+    content_hamming, content_mapping_sha256, content_stop_gate_fires, content_target_mapping,
+    derive_content_readout, derive_content_stop_readout, derive_content_stop_rows,
+    evaluate_content_readout, evaluate_content_stop_gate, fit_content_stop_gate,
+    pack_content_signature, shuffle_content_stop_rows, shuffle_content_targets, ContentExample,
+    ContentPromptReading, ContentReadout, ContentReadoutReading, ContentReadoutTraining,
+    ContentSignature, ContentSignatureMode, ContentStopGate, ContentStopRow, ContentStopTraining,
+    CONTENT_CODE_SIGNATURE_BITS, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
+    CONTENT_SIGNATURE_BITS,
+};
 pub use corpus::{
     validate_corpus_manifest, CpuConversationSample, CpuCorpusIdentity, CpuCorpusSplit,
     CpuMaskedCorpus,
@@ -46,8 +59,11 @@ pub use fbs::{
     CPU_FBS_SESSION_CHECKPOINT_SCHEMA,
 };
 pub use gain_train::{
-    random_gain_control, read_gain, replace_final_gain, CpuServedGainTrainer, ServedGainConfig,
-    ServedGainMove, ServedGainStep, CPU_SERVED_GAIN_TRAINER_SCHEMA,
+    evaluate_termination_gain_samples, random_gain_control, read_gain, replace_final_gain,
+    shuffle_termination_gain_labels, termination_gain_labels, CpuServedGainTrainer,
+    CpuTerminationGainTrainer, ServedGainConfig, ServedGainMove, ServedGainStep,
+    TerminationGainConfig, TerminationGainEvaluation, TerminationGainReading, TerminationGainStep,
+    CPU_SERVED_GAIN_TRAINER_SCHEMA, CPU_TERMINATION_GAIN_TRAINER_SCHEMA,
 };
 pub use memory_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
@@ -76,11 +92,27 @@ pub use reply_eval::{
     TerminationOrbitTraining, TerminationPointGate, TerminationReading, TerminationStepReading,
     TimedReplyReading, TimedTerminationReading,
 };
+pub use self_prefix::{
+    audit_self_prefix_generated, audit_self_prefix_target_permutation, evaluate_self_prefix,
+    evaluate_self_prefix_admission, evaluate_self_prefix_cell_objective,
+    evaluate_self_prefix_prompts, patch_kept_cells, CellKReading, CpuQueryAdmissionTrainer,
+    CpuSelfPrefixTrainer, QueryAdmissionStep, RandomCellReading, SelfPrefixAdmissionCensus,
+    SelfPrefixCellObjective, SelfPrefixConfig, SelfPrefixDecision, SelfPrefixEligibility,
+    SelfPrefixMode, SelfPrefixPromptReading, SelfPrefixReading, SelfPrefixTargetPermutationAudit,
+    SelfPrefixTargets, SelfPrefixTrainStep, SELF_PREFIX_SCHEMA,
+};
 pub use served_forward::{
     audit_served_forward, exact_fbs_contract, read_uort_token_slice, ExactFbsContract,
     GradientTreatment, ServedForwardAuditConfig, ServedForwardAuditError, ServedForwardAuditReport,
     ServedForwardManifest, ServedForwardParity, ServedForwardStageCost, ServedForwardTokenSource,
     SurrogateOperation, UortTokenSlice, CPU_SERVED_FORWARD_AUDIT_SCHEMA,
+};
+pub use stop_signature::{
+    derive_stop_signature_rows, evaluate_stop_signature_no_gate, evaluate_stop_signature_replies,
+    evaluate_stop_signature_rows, fit_stop_signature_gate, hamming_distance, pack_stop_signature,
+    shuffle_stop_signature_rows, StopSignature, StopSignatureDecision, StopSignatureEvaluation,
+    StopSignatureGate, StopSignatureReading, StopSignatureReplyReading, StopSignatureRow,
+    StopSignatureTraining, STOP_SIGNATURE_BITS, STOP_SIGNATURE_WORDS,
 };
 pub use train::{
     CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,
