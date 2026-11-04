@@ -47,6 +47,12 @@ Use deepseek-109's fixed selection without change:
 The trained artifact hash must match the corresponding pin above before any
 complete-reply reading is used.
 
+The model-free selection census records 1,326 reference tokens across the 114
+evaluation replies. The maximum reference is 36 tokens. **104 of 114**
+references fit both the registered 16-token reply cap and the 192-token artifact
+context; the remaining ten are 26 to 36 tokens and are unreachable under the
+registered cap.
+
 ## Arms
 
 For each model seed, evaluate five matched artifacts on the 114 evaluation
@@ -89,6 +95,8 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 - Reference matching removes one trailing BOS and no other token.
 - A reference longer than the cap or remaining context is counted as
   unreachable, not as a model miss.
+- Exact-reference comparisons report both the full 114-reply panel and the 104
+  references reachable under the fixed cap/context rule.
 - The seed-1 repeat reproduces every complete-reply counter and digest.
 
 ## Candidate bar

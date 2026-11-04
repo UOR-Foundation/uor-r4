@@ -8,7 +8,7 @@ use uor_r4_cpu_train::{
     validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer,
     MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
 };
-use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
+use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
 
 #[derive(Clone)]
 struct Config {
@@ -225,6 +225,11 @@ fn run() -> Result<serde_json::Value, String> {
             "per_key": config.per_key,
             "training_samples": training_samples.len(),
             "evaluation_samples": evaluation_samples.len(),
+            "evaluation_reference_shape": reference_shape(
+                &evaluation_samples,
+                config.reply_cap,
+                shape.context,
+            ),
             "keys": groups.iter().map(|group| serde_json::json!({
                 "key": group.key,
                 "training": group.training.len(),
@@ -420,6 +425,46 @@ fn memory_sample(sample: &CpuConversationSample) -> MemoryWeightSample {
     }
 }
 
+fn reference_shape(
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    context: usize,
+) -> serde_json::Value {
+    let mut histogram = BTreeMap::<usize, usize>::new();
+    let mut token_total = 0usize;
+    let mut max = 0usize;
+    let mut within_cap = 0usize;
+    let mut within_cap_and_context = 0usize;
+    for sample in samples {
+        let length = sample
+            .reply
+            .strip_suffix(&[POINT_KEY_BOS])
+            .unwrap_or(&sample.reply)
+            .len();
+        *histogram.entry(length).or_default() += 1;
+        token_total += length;
+        max = max.max(length);
+        within_cap += usize::from(cap > 0 && length <= cap);
+        within_cap_and_context += usize::from(
+            cap > 0
+                && length <= cap
+                && sample
+                    .prompt
+                    .len()
+                    .checked_add(length)
+                    .is_some_and(|total| total <= context),
+        );
+    }
+    serde_json::json!({
+        "replies": samples.len(),
+        "token_total": token_total,
+        "max_tokens": max,
+        "within_reply_cap": within_cap,
+        "within_reply_cap_and_context": within_cap_and_context,
+        "length_histogram": histogram,
+    })
+}
+
 fn select_groups(examples: &[CpuConversationSample], config: &Config) -> Vec<KeyGroup> {
     let mut groups =
         BTreeMap::<Vec<u32>, (Vec<CpuConversationSample>, Vec<CpuConversationSample>)>::new();
@@ -514,4 +559,31 @@ fn peak_rss_kib() -> u64 {
             })
         })
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reference_shape_normalizes_bos_and_counts_reachability() {
+        let samples = vec![
+            MemoryWeightSample {
+                prompt: vec![10, 11],
+                reply: vec![20, 21, 22, POINT_KEY_BOS],
+            },
+            MemoryWeightSample {
+                prompt: vec![10, 11],
+                reply: vec![30, 31, 32, 33, 34],
+            },
+        ];
+        let shape = reference_shape(&samples, 4, 6);
+        assert_eq!(shape["replies"], 2);
+        assert_eq!(shape["token_total"], 8);
+        assert_eq!(shape["max_tokens"], 5);
+        assert_eq!(shape["within_reply_cap"], 1);
+        assert_eq!(shape["within_reply_cap_and_context"], 1);
+        assert_eq!(shape["length_histogram"]["3"], 1);
+        assert_eq!(shape["length_histogram"]["5"], 1);
+    }
 }

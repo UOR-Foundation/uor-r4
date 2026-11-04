@@ -40,8 +40,18 @@ memory-off and trained-memory-off.
 
 ## Measurements
 
-**NOT RUN.** The public seed replay is blocked by the missing non-author FIT.
-No artifact, prompt, reply or throughput reading is reported here.
+**Model replay NOT RUN.** The public seed replay is blocked by the missing
+non-author FIT. No model decision, generated reply or throughput reading is
+reported here.
+
+The model-free selection census is complete. The 114 evaluation references
+hold 1,326 tokens after one trailing BOS is removed. The longest is 36 tokens.
+**104 of 114** references fit the registered 16-token reply cap and 192-token
+context; ten references of 26–36 tokens are unreachable under the fixed cap.
+This means 104 prompts can still be judged for exact complete reply once FIT
+clears the replay.
+
+The pinned census is [reference-census.json](evidence/reference-census.json).
 
 ## Checks run at the head
 
@@ -54,6 +64,8 @@ No artifact, prompt, reply or throughput reading is reported here.
 - `git diff --check`: passed.
 - `uor-harness prep-check`: sheet is complete but `PENDING`, not cleared for
   compute.
+- Model-free `--select-only --reply-cap 16` reproduced 16 keys, 102 training
+  examples, 114 evaluation examples and the 104-reachable-reference census.
 
 ## Skills used
 
