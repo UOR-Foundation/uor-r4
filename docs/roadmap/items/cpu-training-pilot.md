@@ -201,6 +201,17 @@ the fixed 48-to-18 target-medoid construction, while leaving target-specific
 local neighborhoods open. See
 [deepseek-123](../../loop/tasks/cpu-training-pilot/deepseek-123/REPORT.md).
 
+The next point comparison prospectively fixed a two-row target representation:
+the observed within-target L1 medoid plus the remaining observed point with
+maximum minimum L1 distance. On the same 60/60 unseen-key panel, this reduced
+48 raw rows to 25 prototype rows. Seed 1 tied point-off at 0/60 and lost to the
+shuffled-target prototype control at 3/60. Seed 2 reached 3/60 and beat both
+controls by three, below the required paired margin of four. Every arm kept
+exact CPU/integer parity and all treatment openings changed. This closes the
+fixed target-balanced `k=2` construction, not target-local point geometry
+generally. See
+[deepseek-130](../../loop/tasks/cpu-training-pilot/deepseek-130/REPORT.md).
+
 The public 19-table M1 trunk is now additively trainable and writable on CPU,
 rather than read-only. One bounded run added 128 exact teacher-forced rows to
 the unigram and all 12 sparse sufficient-statistic tables, exported and
