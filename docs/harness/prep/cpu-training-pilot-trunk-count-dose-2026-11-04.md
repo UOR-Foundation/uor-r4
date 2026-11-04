@@ -1,6 +1,6 @@
 # 4,096-row public 19-table count training
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -158,4 +158,19 @@ qualification.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 public-19-table-count-dose
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-count-dose-2026-11-04.md`
+head: `0c108f6c8c78c6d9e8ca596680a7741754fc2072`
+implementation pin: `09c4f4abb5c864ec7ac11b98cbfb4e1059394081`
+reviewer: deepseek fresh-context non-author subagent
+note: fixed 4,096-row additive count dose, 512 document-disjoint public DEV
+rows, exact/no-update/shuffled arms, paired top-1 margin, admitted/top-8
+non-loss, independent full table reconstruction, exact CPU/serving parity,
+fresh roots, binary/output checksums, 600-second/2-GiB bounds and deterministic
+repeat
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone
+before compute.

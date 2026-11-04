@@ -12,6 +12,14 @@ This is the in-progress record. No public comparison has run. Deepseek-124
 established writeback correctness but its 128-row dose changed no held-out
 decision.
 
+The first FIT review returned **NOT_FIT** because the dose rationale and the
+public DEV panel's freshness boundary were stated imprecisely. The sheet now
+states that the 128-row null motivates a larger test while 4,096 was fixed
+independently as the existing driver ceiling, and that the 512 rows are
+document-disjoint bounded development rather than a fresh-transfer panel. The
+second review returned FIT at docs head
+`0c108f6c8c78c6d9e8ca596680a7741754fc2072`.
+
 ## What changed
 
 No source change is planned. This unit increases the additive training dose to
