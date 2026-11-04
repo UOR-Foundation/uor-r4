@@ -69,7 +69,8 @@ Run seed 1 first with `--stop-phase-neighbors 8`. Proceed to seed 2 only if:
   decisions;
 - true phase density recalls at least 26/84 terminal rows;
 - true phase density emits at most 14/1,484 false stops;
-- the shuffled-label gate differs from the true gate; and
+- the shuffled-label gate changes at least one leave-one-out firing decision;
+- both pinned FBS artifact files and the three shared corpus files match; and
 - source and all five public inputs match.
 
 Preserve and seal the preflight even when it stops.
@@ -82,8 +83,8 @@ density over complete 16-token replies on both seeds.
 Both seeds must:
 
 - recall at least 26/84 terminal rows and emit at most 14/1,484 false stops;
-- beat the shuffled-label terminal arm by the prompt-level paired two-sigma
-  stopping rule;
+- beat the shuffled-label terminal arm and the code arm by the prompt-level
+  paired two-sigma stopping rule;
 - keep every ungated content decision equal to code;
 - produce at least 9 exact references and 9 BOS-complete replies, including at
   least 8 stops within the reference length;
@@ -91,8 +92,8 @@ Both seeds must:
 - reproduce every non-timing field in a one-worker seed-1 repeat.
 
 Report terminal/false counts, threshold, selected neighbours, gate hashes,
-exact-reference/BOS counts, top-1/depth, openings, distinct/repeated replies,
-workers, wall, RSS and transition latency.
+leave-one-out prediction changes, exact-reference/BOS counts, top-1/depth,
+openings, distinct/repeated replies, workers, wall and RSS.
 
 ## Instrument gates
 
@@ -158,12 +159,22 @@ CONTROL_BUILD=$SOURCE/target/deepseek/phase-termination-controls-146
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
 IMPL_PIN=e50cdea82
+MIN_FREE_KIB=31588352
+free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 
+test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
 test ! -e "$CONTROL_BUILD"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
   .cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party
+sha256sum -c <(printf '%s\n' \
+  'a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  '"$DUAL"'/dual-c131-seed-1-raw_both.uorlut' \
+  'da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  '"$DUAL"'/dual-c131-seed-2-raw_both.uorlut' \
+  '0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  '"$DEV"'/dev-tokens.u16' \
+  'a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  '"$DEV"'/dev-response-mask.u8' \
+  'ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab  '"$DEV"'/dev-manifest.json') --quiet
 mkdir -p "$PIPELINE"
 
 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
@@ -186,6 +197,9 @@ BIN=$BUILD/release/cpu-content-readout-driver
   --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
   --reply-cap 16 --stop-phase-neighbors 8 --seed 1 --select-only \
   >"$PIPELINE/seed-1.preflight.json"
+
+test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 ```
 
 Stop before seed 2 when any preflight condition fails. Seal every generated

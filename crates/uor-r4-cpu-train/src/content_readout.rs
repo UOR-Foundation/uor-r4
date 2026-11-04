@@ -795,6 +795,13 @@ pub struct ContentStopDensityTraining {
     pub leave_one_out_neighbors: usize,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentStopPhaseAudit {
+    pub decisions: u64,
+    pub mismatches: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContentContinuationRow {
@@ -1504,6 +1511,76 @@ pub fn evaluate_content_stop_phase_density_gate(
     })
 }
 
+pub fn audit_content_stop_phase_content_prefix(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+) -> Result<ContentStopPhaseAudit> {
+    validate_content_readout(readout)?;
+    validate_content_stop_density_gate(gate)?;
+    let audits = samples
+        .par_iter()
+        .map(|sample| {
+            let (code, _) = generate_with_readout(
+                artifact,
+                sample,
+                cap,
+                memory_enabled,
+                ContentSignatureMode::Code,
+                false,
+                Some(readout),
+            )?;
+            let (phase, _) = generate_with_content_density_gate(
+                artifact,
+                sample,
+                cap,
+                memory_enabled,
+                readout,
+                gate,
+                true,
+            )?;
+            let prefix = phase
+                .iter()
+                .position(|decision| decision.gate_fired)
+                .unwrap_or(phase.len());
+            if code.len() < prefix {
+                return Err(invalid("phase content prefix exceeds the code arm"));
+            }
+            let mismatches = code
+                .iter()
+                .zip(&phase[..prefix])
+                .filter(|(code, phase)| {
+                    code.offset != phase.offset
+                        || code.chosen != phase.chosen
+                        || code.content_chosen != phase.content_chosen
+                        || code.writer_chosen != phase.writer_chosen
+                        || code.signature != phase.signature
+                })
+                .count() as u64;
+            Ok(ContentStopPhaseAudit {
+                decisions: prefix as u64,
+                mismatches,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    audits
+        .into_iter()
+        .try_fold(ContentStopPhaseAudit::default(), |mut total, audit| {
+            total.decisions = total
+                .decisions
+                .checked_add(audit.decisions)
+                .ok_or_else(|| invalid("phase content decision count overflows"))?;
+            total.mismatches = total
+                .mismatches
+                .checked_add(audit.mismatches)
+                .ok_or_else(|| invalid("phase content mismatch count overflows"))?;
+            Ok(total)
+        })
+}
+
 pub fn evaluate_content_continuation_gate(
     artifact: &[u8],
     samples: &[MemoryWeightSample],
@@ -1779,6 +1856,42 @@ pub fn content_stop_density_gate_fires(
         return Err(invalid("content stop density query width differs"));
     }
     content_stop_density_fires(gate, signature, offset)
+}
+
+pub fn content_stop_density_predictions_changed(
+    rows: &[ContentStopRow],
+    candidate: &ContentStopDensityGate,
+    control: &ContentStopDensityGate,
+) -> Result<u64> {
+    validate_content_stop_density_gate(candidate)?;
+    validate_content_stop_density_gate(control)?;
+    rows.iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let candidate_score = content_stop_density_score(
+                rows,
+                Some(index),
+                row.offset,
+                &row.signature,
+                candidate.neighbors,
+                candidate.offset_radius,
+            )?;
+            let control_score = content_stop_density_score(
+                rows,
+                Some(index),
+                row.offset,
+                &row.signature,
+                control.neighbors,
+                control.offset_radius,
+            )?;
+            Ok(u64::from(
+                (candidate_score >= candidate.margin) != (control_score >= control.margin),
+            ))
+        })
+        .try_fold(0u64, |sum, changed| {
+            sum.checked_add(changed?)
+                .ok_or_else(|| invalid("content stop density prediction count overflows"))
+        })
 }
 
 fn generate_with_content_gate(
@@ -2860,6 +2973,11 @@ mod tests {
         assert_eq!(
             shuffled.iter().filter(|row| row.terminal).count(),
             rows.iter().filter(|row| row.terminal).count()
+        );
+        let mut never = training.gate.clone();
+        never.margin = i64::MAX;
+        assert!(
+            content_stop_density_predictions_changed(&rows, &training.gate, &never).unwrap() > 0
         );
     }
 

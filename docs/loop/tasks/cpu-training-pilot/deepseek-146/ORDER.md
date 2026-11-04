@@ -59,6 +59,7 @@ replies on both seeds. A pass requires:
   false stops on each seed;
 - phase density beats its shuffled terminal-label control by the prompt-level
   paired two-sigma rule;
+- phase-density BOS completions beat code by the same paired two-sigma rule;
 - ungated content decisions remain byte-identical to code;
 - phase stopping yields at least 9 exact references and 9 BOS-complete replies,
   with at least 8 stops within the reference length;
