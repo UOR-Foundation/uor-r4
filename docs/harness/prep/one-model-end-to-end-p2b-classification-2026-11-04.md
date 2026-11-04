@@ -65,14 +65,14 @@ No model output was read to set any panel, query, reading or bar.
 
 ## Arms
 
-Each seed's (L) is scored in two passes of P2b's scoring command:
+Each seed's (L) is scored in four passes of P2b's scoring command, one panel a pass:
 
 `--data-root DATA --score-rows CKPT --out DIR --samples 16 --reply-tokens 32 --retain-rates 1 --seed S --context 2048 --panel NAME=DIR --panel-queries NAME=DIR/queries.json`
 
-- **Pass p:** P2b's own p-long pass, the same command and flags, unchanged. I-1 then compares P2b's sealed recall files with the output of the very same command.
-- **Pass q:** the same command with the three new panels, q-tt, q-td and q-dt, each given by its own `--panel` and `--panel-queries`, in place of p-long.
+- **p-long's pass:** P2b's own, the same command and flags, unchanged. I-1 then compares P2b's sealed recall files with the output of the very same command.
+- **q-tt's, q-td's and q-dt's passes:** the same command, each with its own panel in place of p-long. One panel a pass, as in P2b, so no panel's grade can depend on another scored before it in the same pass.
 
-`--seed` is the seed's own, as in P2b. The four passes run serially on GPU 0, on one pod with one binary, and each writes memory on and out.
+`--seed` is the seed's own, as in P2b. The eight passes run serially on GPU 0, on one pod with one binary, and each writes memory on and out.
 
 ## Readings
 
@@ -133,7 +133,7 @@ Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrum
 ## Instrument checks
 
 - **I-0:** the float crate's CUDA library suite at the pin passes, `--no-fail-fast`, with claude-275's query tests and claude-279's decode-cache tests named. That includes `the_decode_cache_decodes_the_same_replies_through_a_window_slide`, which carries this unit's tests for the row cut and `first_refusal`. **I-0n:** that test also fails with the row-cut fix set aside, by a reverse patch of the fix's own lines, and passes again once it is restored.
-- **I-1 (the scorer did not move):** the re-scored `recall-p-long-{memory,no-memory}.json` equal P2b's sealed ones byte for byte, seed by seed. Only the recall grades are compared across pods: claude-279 found that 19 of 609 query replies and 0.13–0.28% of top-1 picks differ between this lab's 5090 pods, while the recall files stayed identical. Every cell-against-cell reading is scored on one pod with one binary, so no reading crosses pods. p-long's pass is P2b's own command, so I-1 never depends on whether more panels in a pass move p-long's files.
+- **I-1 (the scorer did not move):** the re-scored `recall-p-long-{memory,no-memory}.json` equal P2b's sealed ones byte for byte, seed by seed. Only the recall grades are compared across pods: claude-279 found that 19 of 609 query replies and 0.13–0.28% of top-1 picks differ between this lab's 5090 pods, while the recall files stayed identical. Every cell-against-cell reading is scored on one pod with one binary, so no reading crosses pods. p-long's pass is P2b's own command, so I-1 never depends on what other panels in a pass would do.
 - **I-2 (the panels):** `check-queries` passed for each panel on the laptop (Data split). On the pod, every SHA-256 in the Data split equals its file's.
 - **I-3 (the grade can see a pass):** in every `recall-*.json`, `total.reference_states` equals `total.decoded`.
 - **I-4 (the cache ran):** each pass's `decode_forwards` has `steps` > 0. Its `first_refusal` is reported.
@@ -142,14 +142,15 @@ Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrum
   - **The second grade,** by `jq`: the query's answer as a whole word (no letter or digit beside it) in `reply_text` before its first `<|eos|>`.
   - **Any disagreement** is listed and classed before any reading is made.
   - **Tested on P2b's sealed p-long queries files:** it agrees on 609 of 609 at each seed, seed 2's one stated reply (" That's 97.", query 20) included.
+- **I-7 (the passes repeat), reported only:** each pass also scores `dev`. Its five `dev` files (`rows-dev-*`, `samples-memory.json`, `samples-no-memory.json`, `samples-dev-flock-memory.json`) are compared byte for byte across a seed's four passes on one pod with one binary. A difference is reported and classed. It is not in the Bar.
 
 ## Steps
 
 1. On the pod, fetch the pin, build the float crate's `train-in-space` with `--features cuda`, record the binary's SHA-256, and run I-0, then I-0n (set aside, run, restore, rebuild).
 2. Fetch the inputs: the three panels, p-long, the census, both seeds' checkpoints and the pinned driver data. Check every `SHA256SUMS`, and run I-2.
-3. Score seed 1's (L), then seed 2's, at 2,048, each in pass p and then pass q (Arms). After each pass p, check I-1 on the pod and stop on a mismatch.
+3. Score seed 1's (L), then seed 2's, at 2,048, one panel a pass: p-long, q-tt, q-td, q-dt (Arms). After each p-long pass, check I-1 on the pod and stop on a mismatch.
 4. Seal every output with `SHA256SUMS` under `results/claude/one-model-end-to-end-p2b-classification-2026-11-04/`, read it back, and only then take the pod down.
-5. On the laptop: check I-1 and I-3 to I-6, compute R1 to R5 and the bins, and apply the Bar.
+5. On the laptop: check I-1 and I-3 to I-7, compute R1 to R5 and the bins, and apply the Bar.
 
 ## Minimum test power
 
@@ -177,13 +178,13 @@ Each refusal returns the group to the whole-window re-run, and the census field 
 
 - **The laptop:** three panels and the census, done (about a minute each).
 - **The pod:** one RTX 5090.
-  - Four passes at 2,048, with the cache: for each seed, P2b's p-long pass and one pass over the three new panels. The scale is claude-279's on-L2048 pass, 441 s, with the queries file about 98% of it. So a seed takes about 4 × 441 s ≈ 30 min, and both seeds about 1 h.
+  - Eight passes at 2,048, with the cache, four per seed, one panel each. The scale is claude-279's on-L2048 pass, 441 s, with the queries file about 98% of it. So a seed takes about 4 × 441 s ≈ 30 min, and both seeds about 1 h.
   - Building, I-0 and I-0n add about 20 min.
   - About 1.4 h at up to $1/h is about $1.40, inside a $3 bound.
 
 ## Stop rule
 
-The run stops when all four passes are scored, the files sealed and read back, and the pod is down. A failed instrument check is repaired and re-run once inside the bound. Nothing is trained.
+The run stops when all eight passes are scored, the files sealed and read back, and the pod is down. A failed instrument check is repaired and re-run once inside the bound. Nothing is trained.
 
 ## Changes after FIT round 1
 
@@ -218,3 +219,14 @@ The first pre-run review, at `1a96a5c4f`, ran out of context before it finished.
 - **What it leaves unchanged:** no panel, reading, bar or line of code, so the FIT stands and the pin's I-0 and I-0n are unchanged.
 - **The cost:** the same, about 1.4 h on one 5090.
 - **The next step:** a fresh pre-run review reads this sheet and the job.
+
+The second pre-run review, at `cdd4f9ec8`, was split into four narrow reviewers.
+- **The chain:** GO.
+- **The scorer:** GO. It left one point open: in a pass over three panels, state left by one panel could reach the next and bias R2's gaps, though not R1.
+  - **The fix:** one panel a pass, as in P2b. This also costs nothing, since the queries file is about 98% of a pass.
+  - **New, reported only:** I-7, from the `dev` files every pass also writes.
+- **The pod side:** FIX FIRST, with two cheap majors, both now fixed in the job:
+  - the job checks for `jq` before the build;
+  - the watcher stops, and wakes the session, when a lease renewal fails, since a lapsed lease lets the reaper take an idle pod before its results are saved.
+
+None of this changes a panel, reading, bar or line of code.
