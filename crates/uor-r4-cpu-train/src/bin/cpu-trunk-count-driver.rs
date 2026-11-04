@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use serde_json::json;
 use uor_r4_cpu_train::{
     validate_corpus_manifest, CpuDiscreteTrunkReader, CpuMaskedCorpus, RankMarginSample,
@@ -18,6 +20,34 @@ use uor_r4_discrete::trunk::{
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
 const SCHEMA: &str = "uor-r4.cpu-trunk-count-run/1";
+const REQUIRED_STAGES: [&str; 21] = [
+    "control_rows",
+    "corpus_split",
+    "decision_reduction",
+    "exact_evaluation",
+    "exact_hash_write",
+    "exact_update_export",
+    "exact_verify",
+    "input_read_hash",
+    "input_validate",
+    "no_update_evaluation",
+    "output_prepare",
+    "parity_reduction",
+    "reader_load",
+    "resource_measure",
+    "shuffled_evaluation",
+    "shuffled_hash_write",
+    "shuffled_reader_load",
+    "shuffled_update_export",
+    "shuffled_verify",
+    "table_verification",
+    "training_row_derivation",
+];
+type TrunkSemantics = (
+    Vec<u8>,
+    uor_r4_discrete::position_mechanism::PositionStepTable,
+    uor_r4_discrete::normalization_mechanism::NormFrameTable,
+);
 
 #[derive(Clone)]
 struct Config {
@@ -34,10 +64,11 @@ struct Config {
     evaluation_stride: usize,
     max_evaluation: usize,
     seed: u64,
+    workers: usize,
     select_only: bool,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 struct DecisionReading {
     rows: u64,
     admitted: u64,
@@ -52,14 +83,90 @@ struct DecisionReading {
     row_checksums: Vec<u64>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct DecisionOutcome {
+    admitted: bool,
+    top1: bool,
+    top8: bool,
+    query: Vec<i32>,
+    top8_tokens: [u32; 8],
+    token: u32,
+    query_coordinate_mismatches: u64,
+    admitted_cell_mismatches: u64,
+    top8_mismatches: u64,
+    token_mismatches: u64,
+}
+
 #[derive(PartialEq, Eq, serde::Serialize)]
 struct TableReading {
     total: u64,
     distinct_keys: usize,
 }
 
+#[derive(Debug)]
+struct StageClock {
+    last: Instant,
+    elapsed_ms: BTreeMap<&'static str, f64>,
+}
+
+impl StageClock {
+    fn new(started: Instant) -> Self {
+        Self {
+            last: started,
+            elapsed_ms: BTreeMap::new(),
+        }
+    }
+
+    fn lap(&mut self, name: &'static str) -> Result<(), String> {
+        let now = Instant::now();
+        if self.elapsed_ms.contains_key(name) {
+            return Err(format!("stage {name} was recorded twice"));
+        }
+        self.elapsed_ms
+            .insert(name, now.duration_since(self.last).as_secs_f64() * 1_000.0);
+        self.last = now;
+        Ok(())
+    }
+
+    fn attributed_ms(&self) -> f64 {
+        self.elapsed_ms.values().sum()
+    }
+
+    fn reading(&self, wall_elapsed_ms: f64) -> Result<serde_json::Value, String> {
+        if self.elapsed_ms.len() != REQUIRED_STAGES.len()
+            || REQUIRED_STAGES
+                .iter()
+                .any(|stage| !self.elapsed_ms.contains_key(stage))
+        {
+            return Err("stage set differs from the required profile".to_owned());
+        }
+        let attributed = self.attributed_ms();
+        if !attributed.is_finite()
+            || !wall_elapsed_ms.is_finite()
+            || attributed < 0.0
+            || attributed > wall_elapsed_ms + 0.001
+        {
+            return Err(format!(
+                "stage accounting differs: attributed={attributed}, wall={wall_elapsed_ms}"
+            ));
+        }
+        Ok(json!({
+            "elapsed_ms": self.elapsed_ms,
+            "attributed_ms": attributed,
+            "unattributed_ms": (wall_elapsed_ms - attributed).max(0.0),
+        }))
+    }
+}
+
 fn main() {
-    match run() {
+    let result = parse_args().and_then(|config| {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(config.workers)
+            .build()
+            .map_err(|error| format!("cannot build {}-worker pool: {error}", config.workers))?;
+        pool.install(|| run(config))
+    });
+    match result {
         Ok(report) => println!(
             "{}",
             serde_json::to_string_pretty(&report).expect("the report serializes")
@@ -76,7 +183,7 @@ fn usage() -> String {
      --expected-artifact-sha256 HEX --expected-tokens-sha256 HEX \
      --expected-mask-sha256 HEX --expected-manifest-sha256 HEX \
      [--train-rows N] [--evaluation-stride N] [--max-evaluation N] \
-     [--seed N] [--select-only]"
+     [--seed N] [--workers N] [--select-only]"
         .to_owned()
 }
 
@@ -101,6 +208,7 @@ fn parse_args() -> Result<Config, String> {
         evaluation_stride: 2,
         max_evaluation: 512,
         seed: 1,
+        workers: default_workers(),
         select_only: false,
     };
     while let Some(flag) = values.next() {
@@ -120,6 +228,7 @@ fn parse_args() -> Result<Config, String> {
             "--evaluation-stride" => config.evaluation_stride = number(&value)?,
             "--max-evaluation" => config.max_evaluation = number(&value)?,
             "--seed" => config.seed = number(&value)?,
+            "--workers" => config.workers = number(&value)?,
             _ => return Err(format!("unknown argument {flag}\n{}", usage())),
         }
     }
@@ -138,14 +247,22 @@ fn parse_args() -> Result<Config, String> {
         || config.evaluation_stride < 2
         || config.max_evaluation == 0
         || config.max_evaluation > 16_384
+        || config.workers == 0
+        || config.workers > 256
     {
-        return Err("training, split and evaluation bounds differ".to_owned());
+        return Err("training, split, evaluation or worker bounds differ".to_owned());
     }
     Ok(config)
 }
 
 fn number<T: std::str::FromStr>(value: &str) -> Result<T, String> {
     value.parse().map_err(|_| format!("not a number: {value}"))
+}
+
+fn default_workers() -> usize {
+    std::thread::available_parallelism()
+        .map(std::num::NonZeroUsize::get)
+        .unwrap_or(1)
 }
 
 fn hex(value: &str) -> Result<String, String> {
@@ -157,8 +274,7 @@ fn hex(value: &str) -> Result<String, String> {
     }
 }
 
-fn run() -> Result<serde_json::Value, String> {
-    let config = parse_args()?;
+fn run(config: Config) -> Result<serde_json::Value, String> {
     if !config.select_only && config.out.exists() {
         return Err(format!(
             "output root already exists: {}",
@@ -166,10 +282,12 @@ fn run() -> Result<serde_json::Value, String> {
         ));
     }
     let started = Instant::now();
+    let mut stages = StageClock::new(started);
     let artifact = read_hashed(&config.artifact, &config.expected_artifact_sha256)?;
     let tokens = read_hashed(&config.tokens, &config.expected_tokens_sha256)?;
     let mask = read_hashed(&config.mask, &config.expected_mask_sha256)?;
     let manifest = read_hashed(&config.manifest, &config.expected_manifest_sha256)?;
+    stages.lap("input_read_hash")?;
     let identity =
         validate_corpus_manifest(&manifest, &tokens, &mask).map_err(|error| error.to_string())?;
     let serving = IntegerDiscreteModel::from_bytes(&artifact).map_err(|error| error.to_string())?;
@@ -182,12 +300,13 @@ fn run() -> Result<serde_json::Value, String> {
     identity
         .validate_context(context)
         .map_err(|error| error.to_string())?;
-    drop(serving);
+    stages.lap("input_validate")?;
     let corpus = CpuMaskedCorpus::from_bytes(&tokens, &mask, vocabulary, context, 0)
         .map_err(|error| error.to_string())?;
     let split = corpus
         .split(config.evaluation_stride, config.max_evaluation)
         .map_err(|error| error.to_string())?;
+    stages.lap("corpus_split")?;
     if split.training.len() < config.train_rows {
         return Err(format!(
             "training split has {} rows, fewer than requested {}",
@@ -210,10 +329,12 @@ fn run() -> Result<serde_json::Value, String> {
 
     let reader =
         CpuDiscreteTrunkReader::from_bytes(&artifact).map_err(|error| error.to_string())?;
+    stages.lap("reader_load")?;
     let training = split
         .training
-        .iter()
-        .take(config.train_rows)
+        .get(..config.train_rows)
+        .ok_or_else(|| "training split is shorter than requested".to_owned())?
+        .par_iter()
         .enumerate()
         .map(|(index, sample)| {
             reader
@@ -225,6 +346,10 @@ fn run() -> Result<serde_json::Value, String> {
                 .map_err(|error| error.to_string())
         })
         .collect::<Result<Vec<_>, _>>()?;
+    stages.lap("training_row_derivation")?;
+    let no_update = evaluate_with_models(&reader, &serving, &split.evaluation)?;
+    stages.lap("no_update_evaluation")?;
+    drop(serving);
     let shuffled_targets = shuffled_targets(
         &training
             .iter()
@@ -243,52 +368,77 @@ fn run() -> Result<serde_json::Value, String> {
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    stages.lap("control_rows")?;
     std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
+    stages.lap("output_prepare")?;
     let exact_artifact = reader
         .add_training_rows_consuming(&training)
         .map_err(|error| error.to_string())?;
+    stages.lap("exact_update_export")?;
     let exact_sha256 = uor_r4_discrete::corpus::sha256(&exact_artifact);
     let exact_bytes = exact_artifact.len();
     std::fs::write(config.out.join("exact.uorlut"), &exact_artifact)
         .map_err(|error| error.to_string())?;
     drop(exact_artifact);
+    stages.lap("exact_hash_write")?;
 
     let shuffled_reader =
         CpuDiscreteTrunkReader::from_bytes(&artifact).map_err(|error| error.to_string())?;
+    stages.lap("shuffled_reader_load")?;
     let shuffled_artifact = shuffled_reader
         .add_training_rows_consuming(&shuffled)
         .map_err(|error| error.to_string())?;
+    stages.lap("shuffled_update_export")?;
     let shuffled_sha256 = uor_r4_discrete::corpus::sha256(&shuffled_artifact);
     let shuffled_bytes = shuffled_artifact.len();
     std::fs::write(config.out.join("shuffled.uorlut"), &shuffled_artifact)
         .map_err(|error| error.to_string())?;
     drop(shuffled_artifact);
+    stages.lap("shuffled_hash_write")?;
     if exact_sha256 == shuffled_sha256 {
         return Err("exact and shuffled count training produced the same artifact".to_owned());
     }
 
-    let source_semantics = semantics(&artifact)?;
+    let (source_semantics, source_trunk_tables) = trunk_reading(&artifact)?;
+    let source_tables = table_reading(&source_trunk_tables);
+    let expected_exact_tables = expected_count_tables(source_trunk_tables, &training)?;
     let exact_artifact =
         std::fs::read(config.out.join("exact.uorlut")).map_err(|error| error.to_string())?;
-    if semantics(&exact_artifact)? != source_semantics {
-        return Err("count training changed a non-count trunk section".to_owned());
-    }
-    if trunk_tables(&exact_artifact)? != expected_count_tables(&artifact, &training)? {
-        return Err("decoded count tables differ from the independent tally".to_owned());
-    }
-    let source_tables = table_reading(&artifact)?;
-    let exact_tables = table_reading(&exact_artifact)?;
+    let (exact_semantics, exact_trunk_tables) = trunk_reading(&exact_artifact)?;
+    require_same(
+        &exact_semantics,
+        &source_semantics,
+        "count training changed a non-count trunk section",
+    )?;
+    require_same(
+        &exact_trunk_tables,
+        &expected_exact_tables,
+        "decoded count tables differ from the independent tally",
+    )?;
+    let exact_tables = table_reading(&exact_trunk_tables);
+    drop(exact_trunk_tables);
+    drop(expected_exact_tables);
     drop(exact_artifact);
+    stages.lap("exact_verify")?;
+    let expected_shuffled_tables = expected_count_tables(trunk_tables(&artifact)?, &shuffled)?;
     let shuffled_artifact =
         std::fs::read(config.out.join("shuffled.uorlut")).map_err(|error| error.to_string())?;
-    if semantics(&shuffled_artifact)? != source_semantics {
-        return Err("shuffled count training changed a non-count trunk section".to_owned());
-    }
-    if trunk_tables(&shuffled_artifact)? != expected_count_tables(&artifact, &shuffled)? {
-        return Err("shuffled count tables differ from the independent tally".to_owned());
-    }
-    let shuffled_tables = table_reading(&shuffled_artifact)?;
+    let (shuffled_semantics, shuffled_trunk_tables) = trunk_reading(&shuffled_artifact)?;
+    require_same(
+        &shuffled_semantics,
+        &source_semantics,
+        "shuffled count training changed a non-count trunk section",
+    )?;
+    require_same(
+        &shuffled_trunk_tables,
+        &expected_shuffled_tables,
+        "shuffled count tables differ from the independent tally",
+    )?;
+    let shuffled_tables = table_reading(&shuffled_trunk_tables);
+    drop(shuffled_trunk_tables);
+    drop(expected_shuffled_tables);
     drop(shuffled_artifact);
+    stages.lap("shuffled_verify")?;
     for (name, source) in &source_tables {
         let exact = &exact_tables[name];
         if name == "unigram" {
@@ -302,16 +452,18 @@ fn run() -> Result<serde_json::Value, String> {
     if source_tables == exact_tables || source_tables == shuffled_tables {
         return Err("a count-training arm left every table unchanged".to_owned());
     }
+    stages.lap("table_verification")?;
 
-    let no_update = evaluate(&artifact, &split.evaluation)?;
     let exact_artifact =
         std::fs::read(config.out.join("exact.uorlut")).map_err(|error| error.to_string())?;
     let exact = evaluate(&exact_artifact, &split.evaluation)?;
     drop(exact_artifact);
+    stages.lap("exact_evaluation")?;
     let shuffled_artifact =
         std::fs::read(config.out.join("shuffled.uorlut")).map_err(|error| error.to_string())?;
     let shuffled_reading = evaluate(&shuffled_artifact, &split.evaluation)?;
     drop(shuffled_artifact);
+    stages.lap("shuffled_evaluation")?;
     for (name, reading) in [
         ("no_update", &no_update),
         ("exact", &exact),
@@ -325,6 +477,14 @@ fn run() -> Result<serde_json::Value, String> {
             return Err(format!("{name} lost CPU/serving parity"));
         }
     }
+    stages.lap("parity_reduction")?;
+    let exact_vs_no_update_rows = changed_rows(&exact, &no_update)?;
+    let shuffled_vs_no_update_rows = changed_rows(&shuffled_reading, &no_update)?;
+    let exact_vs_shuffled_rows = changed_rows(&exact, &shuffled_reading)?;
+    stages.lap("decision_reduction")?;
+    let peak_rss_kib = peak_rss_kib()?;
+    stages.lap("resource_measure")?;
+    let wall_elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
 
     let report = json!({
         "schema": SCHEMA,
@@ -364,13 +524,14 @@ fn run() -> Result<serde_json::Value, String> {
             "shuffled": reading_json(&shuffled_reading),
         },
         "changed_decisions": {
-            "exact_vs_no_update_rows": changed_rows(&exact, &no_update)?,
-            "shuffled_vs_no_update_rows": changed_rows(&shuffled_reading, &no_update)?,
-            "exact_vs_shuffled_rows": changed_rows(&exact, &shuffled_reading)?,
+            "exact_vs_no_update_rows": exact_vs_no_update_rows,
+            "shuffled_vs_no_update_rows": shuffled_vs_no_update_rows,
+            "exact_vs_shuffled_rows": exact_vs_shuffled_rows,
         },
-        "threads": 1,
-        "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
-        "peak_rss_kib": peak_rss_kib(),
+        "stages": stages.reading(wall_elapsed_ms)?,
+        "threads": rayon::current_num_threads(),
+        "wall_elapsed_ms": wall_elapsed_ms,
+        "peak_rss_kib": peak_rss_kib,
         "claim": "CPU development-research writeback test; not GPU qualification or language capability",
     });
     std::fs::write(
@@ -412,27 +573,32 @@ fn shuffled_targets(targets: &[u32], seed: u64) -> Result<Vec<u32>, String> {
     Ok(out)
 }
 
-fn semantics(
-    artifact: &[u8],
-) -> Result<
-    (
-        Vec<u8>,
-        uor_r4_discrete::position_mechanism::PositionStepTable,
-        uor_r4_discrete::normalization_mechanism::NormFrameTable,
-    ),
-    String,
-> {
-    let (snapshot, steps, norms, _) =
+fn trunk_reading(artifact: &[u8]) -> Result<(TrunkSemantics, TrunkTables), String> {
+    let (snapshot, steps, norms, tables) =
         import_trunk_d11(artifact).map_err(|error| error.to_string())?;
     Ok((
-        serde_json::to_vec(&snapshot).map_err(|error| error.to_string())?,
-        steps,
-        norms,
+        (
+            serde_json::to_vec(&snapshot).map_err(|error| error.to_string())?,
+            steps,
+            norms,
+        ),
+        tables,
     ))
 }
 
-fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, String> {
-    let tables = trunk_tables(artifact)?;
+fn require_same<T: PartialEq>(
+    actual: &T,
+    expected: &T,
+    mismatch: &'static str,
+) -> Result<(), String> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(mismatch.to_owned())
+    }
+}
+
+fn table_reading(tables: &TrunkTables) -> BTreeMap<String, TableReading> {
     let mut out = BTreeMap::new();
     out.insert(
         "unigram".to_owned(),
@@ -449,7 +615,7 @@ fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, Stri
                 .count(),
         },
     );
-    for (name, table) in sparse_tables(&tables) {
+    for (name, table) in sparse_tables(tables) {
         out.insert(
             name.to_owned(),
             TableReading {
@@ -458,7 +624,7 @@ fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, Stri
             },
         );
     }
-    Ok(out)
+    out
 }
 
 fn trunk_tables(artifact: &[u8]) -> Result<TrunkTables, String> {
@@ -467,8 +633,10 @@ fn trunk_tables(artifact: &[u8]) -> Result<TrunkTables, String> {
         .map_err(|error| error.to_string())
 }
 
-fn expected_count_tables(artifact: &[u8], rows: &[TrunkTrainRow]) -> Result<TrunkTables, String> {
-    let mut tables = trunk_tables(artifact)?;
+fn expected_count_tables(
+    mut tables: TrunkTables,
+    rows: &[TrunkTrainRow],
+) -> Result<TrunkTables, String> {
     for row in rows {
         let target = usize::from(row.target_token);
         if target >= tables.unigram_counts.len() {
@@ -576,35 +744,69 @@ fn sparse_tables(
 fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionReading, String> {
     let cpu = CpuDiscreteTrunkReader::from_bytes(artifact).map_err(|error| error.to_string())?;
     let served = IntegerDiscreteModel::from_bytes(artifact).map_err(|error| error.to_string())?;
-    let mut reading = DecisionReading::default();
-    for sample in samples {
+    evaluate_with_models(&cpu, &served, samples)
+}
+
+fn evaluate_with_models(
+    cpu: &CpuDiscreteTrunkReader,
+    served: &IntegerDiscreteModel,
+    samples: &[RankMarginSample],
+) -> Result<DecisionReading, String> {
+    let outcomes = collect_decision_outcomes(samples, |sample| {
         let (decision, admitted, top1, top8) = cpu
             .observe_target(&sample.input, sample.target)
             .map_err(|error| error.to_string())?;
         let serving = served
             .evaluate_prefix(&sample.input)
             .map_err(|error| error.to_string())?;
-        reading.rows += 1;
-        reading.admitted += u64::from(admitted);
-        reading.top1 += u64::from(top1);
-        reading.top8 += u64::from(top8);
-        reading.query_coordinates += decision.query.len() as u64;
-        reading.query_coordinate_mismatches += decision
+        let query_coordinate_mismatches = decision
             .query
             .iter()
             .zip(&serving.read_vector)
             .filter(|(left, right)| left != right)
             .count() as u64;
-        reading.admitted_cell_mismatches +=
-            u64::from(decision.admitted_cells != serving.admitted_cells);
+        let admitted_cell_mismatches = u64::from(decision.admitted_cells != serving.admitted_cells);
         let mut served_top8 = [u32::MAX; 8];
         for (slot, &token) in serving.top8.iter().take(8).enumerate() {
             served_top8[slot] = token;
         }
-        reading.top8_mismatches += u64::from(decision.top8 != served_top8);
-        reading.token_mismatches += u64::from(decision.token != serving.prediction);
+        Ok(DecisionOutcome {
+            admitted,
+            top1,
+            top8,
+            token_mismatches: u64::from(decision.token != serving.prediction),
+            top8_mismatches: u64::from(decision.top8 != served_top8),
+            query_coordinate_mismatches,
+            admitted_cell_mismatches,
+            query: decision.query.to_vec(),
+            top8_tokens: decision.top8,
+            token: decision.token,
+        })
+    })?;
+    Ok(summarize_decision_outcomes(outcomes))
+}
+
+fn collect_decision_outcomes(
+    samples: &[RankMarginSample],
+    evaluate: impl Fn(&RankMarginSample) -> Result<DecisionOutcome, String> + Send + Sync,
+) -> Result<Vec<DecisionOutcome>, String> {
+    samples.par_iter().map(evaluate).collect()
+}
+
+fn summarize_decision_outcomes(outcomes: Vec<DecisionOutcome>) -> DecisionReading {
+    let mut reading = DecisionReading::default();
+    for outcome in outcomes {
+        reading.rows += 1;
+        reading.admitted += u64::from(outcome.admitted);
+        reading.top1 += u64::from(outcome.top1);
+        reading.top8 += u64::from(outcome.top8);
+        reading.query_coordinates += outcome.query.len() as u64;
+        reading.query_coordinate_mismatches += outcome.query_coordinate_mismatches;
+        reading.admitted_cell_mismatches += outcome.admitted_cell_mismatches;
+        reading.top8_mismatches += outcome.top8_mismatches;
+        reading.token_mismatches += outcome.token_mismatches;
         let mut row_checksum = 0u64;
-        for &coordinate in &decision.query {
+        for &coordinate in &outcome.query {
             reading.checksum = reading
                 .checksum
                 .rotate_left(7)
@@ -613,7 +815,7 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
                 .rotate_left(7)
                 .wrapping_add(coordinate as u32 as u64);
         }
-        for &token in &decision.top8 {
+        for &token in &outcome.top8_tokens {
             reading.checksum = reading
                 .checksum
                 .rotate_left(7)
@@ -623,13 +825,13 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
         reading.checksum = reading
             .checksum
             .rotate_left(7)
-            .wrapping_add(u64::from(decision.token));
+            .wrapping_add(u64::from(outcome.token));
         row_checksum = row_checksum
             .rotate_left(7)
-            .wrapping_add(u64::from(decision.token));
+            .wrapping_add(u64::from(outcome.token));
         reading.row_checksums.push(row_checksum);
     }
-    Ok(reading)
+    reading
 }
 
 fn changed_rows(left: &DecisionReading, right: &DecisionReading) -> Result<usize, String> {
@@ -659,22 +861,291 @@ fn reading_json(reading: &DecisionReading) -> serde_json::Value {
     })
 }
 
-fn peak_rss_kib() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|status| {
-            status.lines().find_map(|line| {
-                line.strip_prefix("VmHWM:")
-                    .and_then(|value| value.split_whitespace().next())
-                    .and_then(|value| value.parse().ok())
-            })
+fn peak_rss_kib() -> Result<u64, String> {
+    let status = std::fs::read_to_string("/proc/self/status")
+        .map_err(|error| format!("cannot measure peak RSS: {error}"))?;
+    parse_peak_rss_kib(&status)
+}
+
+fn parse_peak_rss_kib(status: &str) -> Result<u64, String> {
+    let peak = status
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("VmHWM:")
+                .and_then(|value| value.split_whitespace().next())
+                .and_then(|value| value.parse().ok())
         })
-        .unwrap_or(0)
+        .ok_or_else(|| "peak RSS measurement is unavailable".to_owned())?;
+    if peak == 0 {
+        return Err("peak RSS measurement is zero".to_owned());
+    }
+    Ok(peak)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_discrete::metadata::BinderPlan;
+    use uor_r4_discrete::q4_import::{
+        COMPOSITION_KAPPA as COMPILED_COMPOSITION_KAPPA, OPERATOR_KAPPA as COMPILED_OPERATOR_KAPPA,
+    };
+    use uor_r4_discrete::snapshot::Snapshot;
+    use uor_r4_discrete::trunk::{
+        build_trunk_norm_frames, build_trunk_step_table, export_trunk_d11,
+    };
+    use uor_r4_discrete::w2_capacity::root_vector;
+    use uor_r4_discrete::{ObjectivePolicy, ReadInitialization, ReadSpec, Spec, SCHEMA};
+
+    fn test_outcome(sample: &RankMarginSample) -> Result<DecisionOutcome, String> {
+        let query = (0..=sample.target % 5)
+            .map(|coordinate| sample.target as i32 + coordinate as i32)
+            .collect::<Vec<_>>();
+        let top8_tokens = std::array::from_fn(|slot| sample.target + slot as u32);
+        Ok(DecisionOutcome {
+            admitted: sample.target.is_multiple_of(2),
+            top1: sample.target.is_multiple_of(3),
+            top8: sample.target.is_multiple_of(5),
+            query,
+            top8_tokens,
+            token: sample.target,
+            query_coordinate_mismatches: 0,
+            admitted_cell_mismatches: 0,
+            top8_mismatches: 0,
+            token_mismatches: 0,
+        })
+    }
+
+    #[test]
+    fn stage_clock_requires_the_complete_profile() {
+        let started = Instant::now();
+        let mut clock = StageClock::new(started);
+        for stage in REQUIRED_STAGES {
+            clock.lap(stage).unwrap();
+        }
+        let wall_elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        let reading = clock.reading(wall_elapsed_ms).unwrap();
+        let elapsed = reading["elapsed_ms"].as_object().unwrap();
+        assert_eq!(elapsed.len(), REQUIRED_STAGES.len());
+        assert!(elapsed.values().all(|value| {
+            value
+                .as_f64()
+                .is_some_and(|milliseconds| milliseconds.is_finite() && milliseconds >= 0.0)
+        }));
+        assert!(reading["attributed_ms"].as_f64().unwrap() <= wall_elapsed_ms + 0.001);
+        assert!(reading["unattributed_ms"].as_f64().unwrap() >= 0.0);
+        assert!(clock.lap(REQUIRED_STAGES[0]).is_err());
+
+        let mut missing = StageClock::new(Instant::now());
+        for stage in REQUIRED_STAGES.iter().take(REQUIRED_STAGES.len() - 1) {
+            missing.lap(stage).unwrap();
+        }
+        assert!(missing
+            .reading(started.elapsed().as_secs_f64() * 1_000.0)
+            .is_err());
+
+        let mut extra = StageClock::new(Instant::now());
+        for stage in REQUIRED_STAGES {
+            extra.lap(stage).unwrap();
+        }
+        extra.lap("extra").unwrap();
+        assert!(extra
+            .reading(started.elapsed().as_secs_f64() * 1_000.0)
+            .is_err());
+    }
+
+    fn synthetic_trunk(epoch: u64, rows: &[TrunkTrainRow]) -> Vec<u8> {
+        let spec = Spec {
+            vocabulary: 4096,
+            blocks: 4,
+            context: 1,
+            kept_cells: 8,
+        };
+        let read_spec = ReadSpec::Route;
+        let stages = BinderPlan::new(spec.context as usize).unwrap().stages() as u32;
+        let table = (0u16..4096)
+            .flat_map(|token| {
+                root_vector([
+                    ((token >> 12) & 15) as u8,
+                    ((token >> 8) & 15) as u8,
+                    ((token >> 4) & 15) as u8,
+                    (token & 15) as u8,
+                ])
+            })
+            .collect();
+        let snapshot = Snapshot {
+            schema: SCHEMA.to_owned(),
+            spec,
+            read_spec,
+            objective_policy: ObjectivePolicy::NearestAddressMarginV1,
+            read_initialization: ReadInitialization::ZeroGatesV1,
+            normalization_mode: Default::default(),
+            position: None,
+            address_metric: Default::default(),
+            seed: 1,
+            epoch,
+            table,
+            routes: vec![0; (spec.blocks * stages) as usize],
+            gates: vec![0; read_spec.gate_count(spec.blocks, stages).unwrap() as usize],
+            operator_kappa: COMPILED_OPERATOR_KAPPA.to_owned(),
+            composition_kappa: COMPILED_COMPOSITION_KAPPA.to_owned(),
+            kernel_sha256: "11".repeat(32),
+            source_sha256: "22".repeat(32),
+            geometry_sha256: "33".repeat(32),
+        };
+        let steps = build_trunk_step_table(spec.blocks, 0).unwrap();
+        let norms = build_trunk_norm_frames(spec.blocks, 0).unwrap();
+        export_trunk_d11(
+            &snapshot,
+            &steps,
+            &norms,
+            &TrunkTables::build(rows).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn consolidated_verification_imports_checks_and_rejects_mismatches() {
+        let source_row = TrunkTrainRow {
+            read_code: 1,
+            rec_code: 2,
+            rec_shuf_code: 3,
+            rec_unit_code: 4,
+            query_token: 5,
+            target_token: 6,
+        };
+        let added_row = TrunkTrainRow {
+            read_code: 7,
+            rec_code: 8,
+            rec_shuf_code: 9,
+            rec_unit_code: 10,
+            query_token: 11,
+            target_token: 12,
+        };
+        let source_artifact = synthetic_trunk(1, &[source_row]);
+        let exact_artifact = synthetic_trunk(1, &[source_row, added_row]);
+        let changed_semantics = synthetic_trunk(2, &[source_row, added_row]);
+        let wrong_tables = synthetic_trunk(
+            1,
+            &[
+                source_row,
+                TrunkTrainRow {
+                    target_token: 13,
+                    ..added_row
+                },
+            ],
+        );
+
+        let (source_semantics, source_trunk_tables) = trunk_reading(&source_artifact).unwrap();
+        let source_summary = table_reading(&source_trunk_tables);
+        let expected = expected_count_tables(source_trunk_tables, &[added_row]).unwrap();
+        let (exact_semantics, exact_trunk_tables) = trunk_reading(&exact_artifact).unwrap();
+        require_same(
+            &exact_semantics,
+            &source_semantics,
+            "count training changed a non-count trunk section",
+        )
+        .unwrap();
+        require_same(
+            &exact_trunk_tables,
+            &expected,
+            "decoded count tables differ from the independent tally",
+        )
+        .unwrap();
+        assert_eq!(source_summary.len(), 13);
+        require_same(
+            &table_reading(&exact_trunk_tables),
+            &table_reading(&expected),
+            "summaries differ",
+        )
+        .unwrap();
+        assert_eq!(table_reading(&expected)["unigram"].total, 2);
+
+        let (_, shuffled_source_tables) = trunk_reading(&source_artifact).unwrap();
+        let shuffled_expected =
+            expected_count_tables(shuffled_source_tables, &[added_row]).unwrap();
+        require_same(
+            &shuffled_expected,
+            &expected,
+            "fresh source reconstruction differs",
+        )
+        .unwrap();
+
+        let (wrong_semantics, _) = trunk_reading(&changed_semantics).unwrap();
+        assert!(require_same(
+            &wrong_semantics,
+            &source_semantics,
+            "count training changed a non-count trunk section",
+        )
+        .is_err());
+        let (_, wrong_tables_decoded) = trunk_reading(&wrong_tables).unwrap();
+        assert!(require_same(
+            &wrong_tables_decoded,
+            &expected,
+            "decoded count tables differ from the independent tally",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn preloaded_evaluation_matches_independent_reload() {
+        let artifact = synthetic_trunk(
+            1,
+            &[TrunkTrainRow {
+                read_code: 1,
+                rec_code: 2,
+                rec_shuf_code: 3,
+                rec_unit_code: 4,
+                query_token: 5,
+                target_token: 6,
+            }],
+        );
+        let samples = vec![RankMarginSample {
+            input: vec![5],
+            target: 6,
+        }];
+        let cpu = CpuDiscreteTrunkReader::from_bytes(&artifact).unwrap();
+        let served = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+        let preloaded = evaluate_with_models(&cpu, &served, &samples).unwrap();
+        let reloaded = evaluate(&artifact, &samples).unwrap();
+        assert_eq!(preloaded, reloaded);
+    }
+
+    #[test]
+    fn ordered_decision_fold_is_identical_across_worker_counts() {
+        let samples = (0u32..64)
+            .map(|target| RankMarginSample {
+                input: vec![target, target + 1],
+                target,
+            })
+            .collect::<Vec<_>>();
+        let expected = summarize_decision_outcomes(
+            samples
+                .iter()
+                .map(test_outcome)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        for workers in [1usize, 8, 16, 32] {
+            let pool = ThreadPoolBuilder::new()
+                .num_threads(workers)
+                .build()
+                .unwrap();
+            let reading = pool.install(|| {
+                summarize_decision_outcomes(
+                    collect_decision_outcomes(&samples, test_outcome).unwrap(),
+                )
+            });
+            assert_eq!(reading, expected, "{workers} workers");
+        }
+    }
+
+    #[test]
+    fn peak_rss_measurement_fails_closed() {
+        assert_eq!(parse_peak_rss_kib("VmHWM:\t1234 kB\n").unwrap(), 1234);
+        assert!(parse_peak_rss_kib("VmRSS:\t1234 kB\n").is_err());
+        assert!(parse_peak_rss_kib("VmHWM:\t0 kB\n").is_err());
+        assert!(parse_peak_rss_kib("VmHWM:\tnot-a-number kB\n").is_err());
+    }
 
     #[test]
     fn shuffled_targets_are_deterministic_and_non_vacuous() {

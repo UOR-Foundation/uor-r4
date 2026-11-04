@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/prep/cpu-training-pilot*, docs/labs/cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -201,6 +201,17 @@ the fixed 48-to-18 target-medoid construction, while leaving target-specific
 local neighborhoods open. See
 [deepseek-123](../../loop/tasks/cpu-training-pilot/deepseek-123/REPORT.md).
 
+The next point comparison prospectively fixed a two-row target representation:
+the observed within-target L1 medoid plus the remaining observed point with
+maximum minimum L1 distance. On the same 60/60 unseen-key panel, this reduced
+48 raw rows to 25 prototype rows. Seed 1 tied point-off at 0/60 and lost to the
+shuffled-target prototype control at 3/60. Seed 2 reached 3/60 and beat both
+controls by three, below the required paired margin of four. Every arm kept
+exact CPU/integer parity and all treatment openings changed. This closes the
+fixed target-balanced `k=2` construction, not target-local point geometry
+generally. See
+[deepseek-130](../../loop/tasks/cpu-training-pilot/deepseek-130/REPORT.md).
+
 The public 19-table M1 trunk is now additively trainable and writable on CPU,
 rather than read-only. One bounded run added 128 exact teacher-forced rows to
 the unigram and all 12 sparse sufficient-statistic tables, exported and
@@ -217,6 +228,51 @@ update changed four held-out decisions, but admitted/top-1/top-8 each fell by
 one while the shuffled control changed nothing, so the registered comparison
 is negative. This closes the fixed 4,096-row additive dose, not other count
 schedules. See [deepseek-125](../../loop/tasks/cpu-training-pilot/deepseek-125/REPORT.md).
+
+The count driver now uses one explicit local Rayon pool for ordered training-row
+derivation and held-out CPU/integer evaluation. Eight fresh runs in mirrored
+worker order reproduced every deepseek-125 artifact, table, decision and
+checksum exactly while recording a strict positive peak RSS. The best mean
+speedup was **1.065x** at 16 workers, below the pre-registered 1.5x bar; 32
+workers was slightly slower. Flat wall time and roughly one-core process
+utilization suggest the two parallel loops are a small share of total driver
+work; stage timing is required before naming the remaining bottleneck. This is
+a performance/instrument negative, not a model result. See
+[deepseek-126](../../loop/tasks/cpu-training-pilot/deepseek-126/REPORT.md).
+
+The count driver now reports and validates a complete 21-stage profile, failing
+closed on duplicate, missing or extra stages. Four mirrored runs at one and
+sixteen workers reproduced every deepseek-125/126 artifact and non-stage report
+field while accounting for all measured wall time. `exact_verify` was the
+largest stage at both worker counts, at **26.70%/28.27%**, and exact plus
+shuffled verification consumed **45.32%/48.05%** of wall time. Held-out
+evaluation consumed another **32.20%/32.02%**. The measured next target is to
+remove repeated full-trunk decoding from verification without weakening its
+independent full-table check. This is diagnostic evidence, not a speed or
+capability gain. See
+[deepseek-127](../../loop/tasks/cpu-training-pilot/deepseek-127/REPORT.md).
+
+The next CPU implementation comparison removed six of the ten full-trunk
+imports in exact and shuffled verification. The source table set is moved into
+exact expected-count reconstruction, each exported arm is decoded once, and
+the shuffled expectation still uses a separate fresh source import. Eight
+mirrored runs at one and sixteen workers reduced mean wall time by
+**19.77%/22.28%** and exact-plus-shuffled verification time by
+**49.94%/50.46%**. Every artifact, table, decision, checksum and normalized
+report remained byte-identical, and peak RSS stayed below 1.546 GiB. This is a
+CPU implementation speedup, not a model or capability result. See
+[deepseek-128](../../loop/tasks/cpu-training-pilot/deepseek-128/REPORT.md).
+
+The next CPU implementation step reused the integer model already loaded for
+input validation and the CPU trunk reader already loaded for teacher-forced
+row derivation when evaluating the unchanged arm. Exact and shuffled arms
+continue to reload independently. Eight mirrored runs at one and sixteen
+workers reduced mean wall time by **16.01%/18.36%** and the no-update
+evaluation stage by **92.68%/99.42%**, with every artifact, table, decision,
+checksum and normalized report identical. Peak RSS remained below 1.55 GiB of
+the strict 2-GiB stop. This is CPU implementation performance evidence, not a
+capability result. See
+[deepseek-129](../../loop/tasks/cpu-training-pilot/deepseek-129/REPORT.md).
 
 ## Done when
 
