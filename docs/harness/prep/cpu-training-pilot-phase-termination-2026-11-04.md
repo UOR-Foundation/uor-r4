@@ -20,7 +20,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `e50cdea82` |
+| implementation source | `5b8d0e17f` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -158,7 +158,7 @@ BUILD=$SOURCE/target/deepseek/phase-termination-146
 CONTROL_BUILD=$SOURCE/target/deepseek/phase-termination-controls-146
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=e50cdea82
+IMPL_PIN=5b8d0e17f
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 
@@ -198,6 +198,10 @@ BIN=$BUILD/release/cpu-content-readout-driver
   --reply-cap 16 --stop-phase-neighbors 8 --seed 1 --select-only \
   >"$PIPELINE/seed-1.preflight.json"
 
+jq -e '.modes.gate_density.predictions_changed > 0' \
+  "$PIPELINE/seed-1.preflight.json" >/dev/null
+jq -e '.modes.gate_density.rows == 1568' \
+  "$PIPELINE/seed-1.preflight.json" >/dev/null
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 ```
