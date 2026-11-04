@@ -556,7 +556,11 @@ fn run() -> Result<serde_json::Value, String> {
                 && serving_parity.readout_fires > 0
                 && serving_parity.token_mismatches == 0
                 && serving_parity.decision_mismatches == 0
-                && serving_parity.cpu_decision_sha256 == serving_parity.serving_decision_sha256,
+                && serving_parity.cpu_decision_sha256 == serving_parity.serving_decision_sha256
+                && code_training.rows >= CONTENT_MIN_TRAINING_ROWS as u64
+                && code_training.target_values >= CONTENT_MIN_TARGET_VALUES as u64
+                && code_training.readout.max_distance
+                    <= uor_r4_cpu_train::CONTENT_CODE_SIGNATURE_BITS as u32,
         },
         "gate": {
             "training": gate_training,

@@ -27,15 +27,15 @@ Use sidecar schema `uor-r4.stack-content-readout/1`:
     "mode": "code",
     "signature_bits": 2048,
     "includes_reference_end": false,
-    "rows": [{"signature": [32 u64s], "target": 0}],
+    "rows": [{"signature": [32 u64s], "target": 1}],
     "max_distance": 0
   }
 }
 ```
 
 The loader must reject a wrong schema or artifact, sign mode, reference-end
-rows, wrong width, malformed threshold, empty rows, out-of-vocabulary targets,
-unknown fields, or trailing/oversized input.
+rows, BOS target 0, wrong width, malformed threshold, empty rows,
+out-of-vocabulary targets, unknown fields, or trailing/oversized input.
 
 `IntegerStackModel::set_content_readout` attaches one validated readout to an
 FBS model. `IntegerStackSession::serve_step` retains the native writer and
