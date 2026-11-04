@@ -13,6 +13,14 @@ teacher-forced next-token decisions?
 This is a replay of the exact deepseek-109 training configuration. It is not a
 new credit rule and does not extend the closed coordinate-sweep search.
 
+## Compute class
+
+This is CPU development research under the owner-authorized D84 program in
+`uor-r4-cpu-train`. It uses the local Ryzen 9 9950X, the same deterministic
+evaluator as the CPU development path, and matched controls. CPU output cannot
+substitute for GPU qualification, and every result remains development
+research.
+
 ## Base artifacts and inputs
 
 | Input | Identity |
