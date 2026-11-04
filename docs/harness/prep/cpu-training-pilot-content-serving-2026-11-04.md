@@ -267,3 +267,12 @@ date: 2026-11-04
 A FIT verdict clears compute for the configuration in that sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
+
+## Pre-run GO
+
+GO - reviewer `codex-exact-go-attempt-3`, 2026-11-04. HEAD was clean at
+`c208aaf3e`; the exact implementation pin and all public inputs matched, the
+three run/build roots were absent, free space exceeded the stop floor, and no
+execution blocker was found. Delivery must replace attempt-2 status claims,
+record the 1,800-to-2,100-second control extension, and keep the absent shared
+model-time ledger unknown rather than zero.
