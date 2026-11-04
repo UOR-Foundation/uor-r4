@@ -68,11 +68,12 @@ The full record is [comparison.json](evidence/comparison.json).
 ## Reading
 
 The dense training objective and held-out ranking both moved in the right
-direction on both seeds. The gain grew from deepseek-95's +13/+5 top-1 to
-+19/+43, but still did not clear the registered three-sigma threshold. This is
-a stronger positive mechanism result and a negative ranking-signal result for
-the tested budget. It does not justify a capability claim or a larger run
-without a different hypothesis.
+direction on both seeds. The expanded panel produced larger raw top-1 gains
+than deepseek-95's +13/+5 (+19/+43 here), but the key set, example count and
+step count all changed, so this is not a matched growth comparison. The
+registered three-sigma threshold still failed. This is a positive mechanism
+result and a negative ranking-signal result for the tested budget. It does not
+justify a capability claim or a larger run without a different hypothesis.
 
 ## Checks run at the head
 
