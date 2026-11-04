@@ -22,7 +22,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `98f7d04e1a0fd96ac0bee560365f9cc3e7e8f642` |
+| implementation source | `49a81fe9d415fedf5c96bd2b91dcff108e569df5` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -111,8 +111,8 @@ observing results.
 - The prototype table has at least two targets, contains only observed points,
   has at most two rows per target and is strictly smaller than the raw table.
 - The treatment is deterministic across two builds.
-- The shuffled control preserves the point multiset and target counts and
-  changes every target assignment used by the served image.
+- The shuffled control preserves the point multiset and target-value multiset,
+  changes the target vector, and changes at least one treatment opening.
 - Point fallback changes all 60 treatment openings relative to point-off.
 - The shuffled-target prototype control changes at least one treatment opening.
 - Opening target distance is identical row by row for every arm.
@@ -132,16 +132,21 @@ then a seed-1 repeat with build B, into fresh output roots under
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-point-prototypes
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=98f7d04e1a0fd96ac0bee560365f9cc3e7e8f642
+SOURCE_PIN=49a81fe9d415fedf5c96bd2b91dcff108e569df5
 PIPELINE=$SHARED/local/deepseek/point-prototypes/2026-11-04-attempt-1
 BUILD_A=$SOURCE/target/deepseek/point-prototypes-build-130-a
 BUILD_B=$SOURCE/target/deepseek/point-prototypes-build-130-b
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-MIN_BUILD_FREE_KIB=8388608
-MIN_RESERVE_KIB=131072
+MIN_BUILD_FREE_KIB=37748736
+MIN_RESERVE_KIB=31522816
+MAX_BUILD_BYTES=5368709120
 MAX_RETAINED_BYTES=67108864
-test "$(df -Pk "$SOURCE" | awk 'NR == 2 { print $4 }')" -ge "$MIN_BUILD_FREE_KIB"
+free_kib() {
+  df -Pk "$1" | awk 'NR == 2 { print $4 }'
+}
+test "$(free_kib "$SOURCE")" -ge "$MIN_BUILD_FREE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_BUILD_FREE_KIB"
 test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
 git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
 test ! -e "$PIPELINE"
@@ -150,10 +155,14 @@ test ! -e "$BUILD_B"
 for build in "$BUILD_A" "$BUILD_B"; do
   (
     cd "$SOURCE"
-    CARGO_TARGET_DIR="$build" cargo build --locked --release \
+    CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$build" cargo build --locked --release \
       -p uor-r4-cpu-train --bin cpu-point-transfer-driver
   )
 done
+BUILD_BYTES=$(( $(du -sb "$BUILD_A" | cut -f1) + $(du -sb "$BUILD_B" | cut -f1) ))
+test "$BUILD_BYTES" -le "$MAX_BUILD_BYTES"
+test "$(free_kib "$SOURCE")" -ge "$MIN_RESERVE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_RESERVE_KIB"
 BIN_A="$BUILD_A/release/cpu-point-transfer-driver"
 BIN_B="$BUILD_B/release/cpu-point-transfer-driver"
 BIN_A_SHA=$(sha256sum "$BIN_A" | cut -d' ' -f1)
@@ -195,7 +204,8 @@ test "$(jq -er '.target_prototypes.artifact_sha256' "$PIPELINE/seed-1/report.jso
 test "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1/report.json")" \
   = "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1-repeat/report.json")"
 test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
-test "$(df -Pk "$SOURCE" | awk 'NR == 2 { print $4 }')" -ge "$MIN_RESERVE_KIB"
+test "$(free_kib "$SOURCE")" -ge "$MIN_RESERVE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_RESERVE_KIB"
 test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_RETAINED_BYTES"
 ```
 
@@ -212,14 +222,27 @@ exploratory evidence, not a capability bar.
 ## Cost and stop
 
 Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
-7.0.0-42-generic x86_64. At registration the project filesystem had at least
-490 GiB free. The two fresh builds allocate below 5 GiB combined; three roots
-retain below 64 MiB. The recipe requires 8 GiB free before build, at least the
-128 MiB reserve after the runs and no more than 64 MiB retained under the
-pipeline. Expected runtime is under two minutes total at 32 workers and peak
-RSS below 1 GiB. Stop on input drift, nondeterminism, a malformed or unchanged
-control, memory-key overlap, CPU/serving divergence, a non-reducing prototype
-table, a storage-floor breach or evaluation-time tuning.
+7.0.0-42-generic x86_64. At the repaired review, the project filesystem had
+513,053,864 KiB (489.287 GiB) free. The shared model-time ledger is absent, so
+this unit records local CPU time without claiming a cumulative model-ledger
+balance.
+
+| Stage | Projection |
+|---|---|
+| preparation and FIT | local inspection only; no model compute |
+| builds | two fresh release targets, 16 Cargo jobs each, under 5 GiB combined and under five minutes total |
+| training | none |
+| controls and evaluation | seed 1, seed 2 and a seed-1 cross-build repeat, 32 Rayon workers, under two minutes total, peak RSS below 1 GiB |
+| retry | none; an instrument fault requires a new FIT |
+| retained output | three sealed roots below 64 MiB total |
+| rebuildable output | the two fresh target directories remain available for audit and hygiene rather than being deleted |
+
+The recipe requires 36 GiB free before building and at least the project's
+30 GiB plus 128 MiB floor after builds and after the runs, on both the source
+and shared output filesystems. Three roots must stay below 64 MiB. Stop on
+input drift, nondeterminism, a malformed or unchanged control, memory-key
+overlap, CPU/serving divergence, a non-reducing prototype table, a
+storage-floor breach or evaluation-time tuning.
 
 ## Claim boundary
 
