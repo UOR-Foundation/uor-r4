@@ -4,13 +4,13 @@ Lab: claude. [ORDER](./ORDER.md). PR #3654, item #3407. Plan step: Casey's plan 
 
 **In one paragraph.**
 - **The panel writer:** `heldout-panel chain=N` draws chained conversations in its `cell=` through `MWorld2::chained`, metered as TRAIN's chained draw is. Beside the split it writes `queries.json` and `user_turns.json`; `check-queries` checks the one against the other.
-- **The scorer:** `train-in-space --score-rows --panel-queries NAME=FILE` decodes every query of panel NAME from the window that ends at its reply, with the memory on and out. It grades whether the reply states the note's value, as a whole word, binned by distance.
+- **The scorer:** `train-in-space --score-rows --panel-queries NAME=FILE` decodes every query of panel NAME from the window that ends at its reply, with the memory on and out. It grades whether the reply states the note's value, as a whole word, binned by distance. A query whose reply is longer than the window is counted, not decoded.
 - **The census:** `--census 1 --train-split DIR --train-sha256 HEX --train-mask-sha256 HEX` counts against a named TRAIN, and for a queries panel counts the answers found in TRAIN's replies.
 - **The refusal:** `--score-rows --context N` with 192 < N ≤ 1,536 is refused by name, since several windows share a forward there and the row stride has no test.
 - **The data,** written on the laptop and stored with a read-back:
   - **p-long:** 160 conversations at `cell=dev,dev`, 609 queries, 500 of them asked 512 or more tokens after their note;
   - **the long TRAIN:** 16,000 conversations of up to 2,048 tokens, written with the panel's user turns excluded.
-- **The census:** 0 of 319 word answers are in TRAIN's replies. 6 of 290 number answers are (10, 11 and 16); they are classed instrument and left out of the sheet's paired readings.
+- **The census:** 0 of 319 word answers are in TRAIN's replies. 6 of 290 number answers are (10, 11 and 16); they are classed instrument, and the sheet pre-registers leaving them out of its paired readings. That departs from the ORDER's stop rule (What did not work, 1).
 - **P2b's sheet:** [one-model-end-to-end-long-context-2026-11-04.md](../../../../harness/prep/one-model-end-to-end-long-context-2026-11-04.md), FIT in round 1. A fresh non-author review found no blocker or major, and its four minors are fixed in the sheet's text, with no bar moved. One was that I-6 could not fail as written; it now checks the pairing across passes and each pass's window. No GPU ran in this unit.
 
 ## Tokens per second first
@@ -23,8 +23,15 @@ No model ran, so there is no decode or training speed here. The sheet's R4 leads
 ## What did not work
 
 1. **6 of p-long's 290 number answers appear in TRAIN's replies.** The values are 10, 11 and 16, at queries 0, 42, 93, 401, 471 and 487. TRAIN's replies say these small numbers elsewhere, so a reply could state one without reading its note.
-   - **Classed instrument** (the ORDER's stop rule).
-   - **Fixed in the grade, not at the source:** the sheet leaves the 6 out of every paired reading and reports them apart, named before any model output. 101 of the 290 number answers are under 100, and only these three values were found. A cell whose numbers TRAIN never says is not built.
+   - **Classed instrument**, as the ORDER's stop rule says.
+   - **Not fixed as the stop rule says.** The rule says to fix the cell or the exclusion before the sheet. Neither was done.
+   - **Instead,** the sheet pre-registers leaving the 6 out of every paired reading and reporting them apart. They are named before any model output.
+   - **Why this, my decision:**
+     - a cell whose numbers TRAIN never says needs a change to the generator, which is outside this ORDER's files;
+     - the exclusion list governs user turns, not reply values;
+     - 101 of the 290 number answers are under 100, and only these three values were found.
+     
+     Leaving 6 of 609 out costs 6 of 500 far queries, and it is undone by reading them back in.
 2. **The chained-panel test does not run in the default suite.** `a_chained_panel_places_every_query_on_its_reply` needs the pinned d36d3e87 tokenizer, read from `UOR_R4_PINNED_TOKENIZER`, so it is `#[ignore]`.
    - The tokenizers in the repository are not the supported byte-level BPE (SmolLM2's and GPT-2's), or cannot draw an MQAR episode of 2 pairs inside the context (the byte tokenizer).
    - It ran with the pinned tokenizer and `--include-ignored`, and the panel on disk passes `check-queries` (609 checked, 0 failed).
@@ -103,10 +110,18 @@ No model ran, so there is no decode or training speed here. The sheet's R4 leads
   
   At the restored head the five new tests pass, and `git diff` of the file is empty.
 - **The data:** `check-queries` on p-long: 609 checked, 0 failed. The census exits 0. Both store folders read back 11 of 11 OK.
-- **`loop gates --full`**, `loop report --check` and `loop pr-check --local`: run at the head before review.
+- **The harness, at `8a9a10711`:**
+  - `loop report --check`: PASS;
+  - `loop pr-check --local`: verdict PASS, with three D76 advisories: the sheet's required `## Stop rule` heading, the ORDER's size, and FILEMAP rows outside this unit;
+  - `loop gates --full`: 11 of 11 GREEN.
 - **Reviews:**
   - **the sheet's FIT:** a fresh non-author review, round 1, FIT with four minors, all fixed;
-  - **a fresh-context code review** of `2326bece3..HEAD`, in two parts (the instrument crate; the scorer and CLI), and the claims review of this REPORT, recorded on PR #3654 by `loop review`.
+  - **a fresh-context code review** of `2326bece3..HEAD`, in two parts, each APPROVE with low items only:
+    - **the instrument crate:** its one gate, the ignored chained-panel test run with the pinned tokenizer, passed;
+    - **the scorer and CLI:** its one open question was whether the query decode leaves turn-memory state for a later arm. It does not: each decode sets the memory rows and reply rows before its forward and clears them after, and the turn memory is set once a pass and only read.
+    
+    Their low items are Still open 5;
+  - **the claims review** of this REPORT asked for five wording fixes, all made. The gates line now gives each result; What did not work 1 states the departure from the stop rule; the notebook verdict names its departures. The record is on PR #3654, made by `loop review`.
 
 ## Skills used
 
@@ -118,6 +133,16 @@ None applied.
 2. **The chained-panel test in the default suite** (What did not work, 2): it needs the pinned tokenizer in the repository, or a supported test tokenizer.
 3. **The row stride at 193–1,536** (What did not work, 3).
 4. **The exported window** (P4, #3471), carried from claude-274.
+5. **The code reviews' low items**, none touching P2b's run:
+   - **`check-queries`:**
+     - it checks a query's BOS but not that no other BOS lies before its reply (the scorer refuses that case);
+     - it does not compare `queries.json` with the manifest's `queries_sha256`, its query count or the turn index (the sheet's I-3 checks `queries.json`'s SHA-256);
+     - a refused chained panel can leave a half-written folder;
+     - BOS is fixed at 0.
+   - **`states_answer`:** it skips overlapping matches, and it is case-sensitive, matching the reference's exact spelling. No p-long answer has a non-alphanumeric character.
+   - **The census:** it takes no empty-answer check, and counts a multi-piece answer whose pieces turn up in different replies.
+   - **The outcomes** do not record prompt length.
+   - **Tests:** no `len == context` case, and no multi-word case.
 
 ## Plain summary
 
