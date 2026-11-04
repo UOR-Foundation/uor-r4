@@ -58,3 +58,21 @@ Nothing of Kimi's or DeepSeek's is edited, closed or pushed to.
 
 - the review finds a cited count or line wrong. Then fix the item before the issue is opened, or edit the issue body with the next sync;
 - another open order holds a file in the scope. Then narrow the scope, or order the units.
+
+## Cancel probe result (4 Nov, about 20:40Z)
+
+- **No item covers it.** On `origin/main`, only `served-rounding-cost` (#3594) names `activation_quantize16`, and as a source: its done-when repairs the served graph's measured cost, the export rounding first. No item names `KERNEL_ENTRY_POINTS`, `EXPECTED_KERNELS` or a fused kernel. The new item names #3594 and leaves the export rounding to it.
+- **No open order holds a file in the scope.** The only other open PR, Kimi's #3675, changes none of them.
+- **The scope's paths are real.** Each named file exists on `origin/main`. `fused_quantize*.rs`, `tests/fused_*.rs`, the prep sheet and the task folder are globs for files the item's units create.
+- **A fresh fact-check** of the draft item against `origin/main` read REQUEST CHANGES with seven fixes. Every one is applied before the first commit of the item:
+  - the dispatch check also scans `spiralcore_fbs_arms.cu`, whose two kernels launch through `launch_prebuilt`;
+  - `build.rs`'s line ranges;
+  - claude-157 shows a host-bound step, not a launch-bound one;
+  - the flag's home: a thread-local in `hamilton_sheet.rs`, set from `train-in-space.rs`, added to the scope;
+  - `act_t` lives at `cuda_stack.cu:61-84`;
+  - the PTX load is a check too;
+  - the literal 26 in doc comments and messages.
+
+  It also found `activation_quantize16` runs once a layer, not twice, and that is corrected.
+- **The sync's plan:** it creates this issue, and it re-renders five generated bodies from their merged item files: #3506, #3440, #3407, #3608 and #3392. Each carries the "Edit that file in a PR, not this issue" footer, so applying changes no hand-written text.
+- **Classed:** instrument. Nothing cancels the unit.
