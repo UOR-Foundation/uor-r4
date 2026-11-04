@@ -1,9 +1,15 @@
-import { readTextFiles } from './composer_input.js';
-import { normalizeBaseUrl } from './studio_api.js';
-
 export const IMAGE_LABEL = 'R4 patch input — experimental; not visual understanding';
-export const MAX_IMAGE_DIMENSION = 256;
-export const MAX_IMAGE_FILE_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 256;
+const DEFAULT_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const DEFAULT_MAX_TOTAL_IMAGE_BYTES = 16 * 1024 * 1024;
+const IMAGE_MIME_TYPES = new Set([
+    'image/avif',
+    'image/bmp',
+    'image/gif',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+]);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif']);
 
 function extension(name) {
@@ -11,191 +17,146 @@ function extension(name) {
     return parts.length > 1 ? parts[parts.length - 1] : '';
 }
 
-export function isImageFile(file) {
-    const type = String(file && file.type || '').toLowerCase();
-    if (type === 'image/svg+xml' || extension(file && file.name) === 'svg') return false;
-    return type.startsWith('image/') || IMAGE_EXTENSIONS.has(extension(file && file.name));
+function positiveLimit(value, fallback) {
+    return Number.isFinite(Number(value)) && Number(value) > 0 ? Math.floor(Number(value)) : fallback;
 }
 
-async function loadSource(file) {
-    if (typeof createImageBitmap === 'function') {
-        try {
-            const source = await createImageBitmap(file);
-            return {
-                source,
-                cleanup: () => {
-                    if (typeof source.close === 'function') source.close();
-                },
-            };
-        } catch (_error) {
-            // Fall through to the HTML image decoder.
-        }
+export function isImageFile(file) {
+    const type = String(file && file.type || '').toLowerCase();
+    if (type) return IMAGE_MIME_TYPES.has(type);
+    return IMAGE_EXTENSIONS.has(extension(file && file.name));
+}
+
+export function downsampleDimensions(width, height, maxDimension = MAX_IMAGE_DIMENSION) {
+    const sourceWidth = Number(width);
+    const sourceHeight = Number(height);
+    const bound = positiveLimit(maxDimension, MAX_IMAGE_DIMENSION);
+    if (!Number.isInteger(sourceWidth) || !Number.isInteger(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
+        throw new Error('Image dimensions must be positive integers.');
     }
-    const objectUrl = URL.createObjectURL(file);
+    const scale = Math.min(1, bound / Math.max(sourceWidth, sourceHeight));
+    return {
+        width: Math.max(1, Math.round(sourceWidth * scale)),
+        height: Math.max(1, Math.round(sourceHeight * scale)),
+    };
+}
+
+async function loadImageElement(file) {
+    if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+        throw new Error('Image decoding requires a browser document.');
+    }
+    const url = URL.createObjectURL(file);
     try {
         const image = new Image();
-        image.src = objectUrl;
-        await image.decode();
-        return {
-            source: image,
-            cleanup: () => URL.revokeObjectURL(objectUrl),
-        };
+        image.decoding = 'async';
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('The browser could not decode this image.'));
+            image.src = url;
+        });
+        return { source: image, close: () => URL.revokeObjectURL(url) };
     } catch (error) {
-        URL.revokeObjectURL(objectUrl);
+        URL.revokeObjectURL(url);
         throw error;
     }
 }
 
 export async function decodeImageFile(file, options = {}) {
-    if (!isImageFile(file)) throw new Error(String(file && file.name || 'attachment') + ' is not a supported raster image.');
-    const size = Number(file && file.size || 0);
-    if (size <= 0) throw new Error(String(file && file.name || 'image') + ' is empty.');
-    const maxBytes = Number(options.maxBytes) > 0 ? Number(options.maxBytes) : MAX_IMAGE_FILE_BYTES;
-    if (size > maxBytes) throw new Error(String(file && file.name || 'image') + ' exceeds the ' + maxBytes + '-byte image limit (4 MiB).');
-    const maxDimension = Number(options.maxDimension) > 0 ? Math.min(MAX_IMAGE_DIMENSION, Math.floor(Number(options.maxDimension))) : MAX_IMAGE_DIMENSION;
-    const loaded = await loadSource(file);
+    const maxDimension = positiveLimit(options.maxDimension, MAX_IMAGE_DIMENSION);
+    let decoded;
+    if (typeof createImageBitmap === 'function') {
+        decoded = { source: await createImageBitmap(file), close: null };
+    } else {
+        decoded = await loadImageElement(file);
+    }
     try {
-        const sourceWidth = Number(loaded.source.naturalWidth || loaded.source.width);
-        const sourceHeight = Number(loaded.source.naturalHeight || loaded.source.height);
-        if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
-            throw new Error(String(file.name || 'image') + ' has no readable dimensions.');
-        }
-        const scale = Math.min(1, maxDimension / sourceWidth, maxDimension / sourceHeight);
-        const width = Math.max(1, Math.round(sourceWidth * scale));
-        const height = Math.max(1, Math.round(sourceHeight * scale));
-        const grid = Number(options.grid) > 0 ? Math.floor(Number(options.grid)) : Math.min(2, width, height);
+        const dimensions = downsampleDimensions(decoded.source.width, decoded.source.height, maxDimension);
         const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        if (!context) throw new Error('Canvas RGBA decoding is unavailable in this browser.');
-        context.clearRect(0, 0, width, height);
-        context.drawImage(loaded.source, 0, 0, width, height);
-        const pixels = context.getImageData(0, 0, width, height);
-        const rgba = new Uint8Array(pixels.data.buffer.slice(0));
-        if (rgba.length !== width * height * 4) throw new Error('Canvas returned an invalid RGBA buffer.');
+        canvas.width = dimensions.width;
+        canvas.height = dimensions.height;
+        const context = canvas.getContext('2d', { alpha: true, willReadFrequently: true });
+        if (!context) throw new Error('Canvas 2D context is unavailable.');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+        const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
         return {
-            name: String(file.name || 'image'),
+            width: pixels.width,
+            height: pixels.height,
+            rgba: new Uint8Array(pixels.data),
+            dataUrl: canvas.toDataURL('image/png'),
+        };
+    } finally {
+        if (typeof decoded.source.close === 'function') decoded.source.close();
+        if (typeof decoded.close === 'function') decoded.close();
+    }
+}
+
+export async function readImageFiles(files, options = {}) {
+    const maxFileBytes = positiveLimit(options.maxFileBytes, DEFAULT_MAX_IMAGE_BYTES);
+    const maxTotalBytes = positiveLimit(options.maxTotalBytes, DEFAULT_MAX_TOTAL_IMAGE_BYTES);
+    const maxDimension = positiveLimit(options.maxDimension, MAX_IMAGE_DIMENSION);
+    const decodeImage = typeof options.decodeImage === 'function' ? options.decodeImage : decodeImageFile;
+    const retained = new Map();
+    for (const entry of options.existingAttachments || []) {
+        if (!entry || entry.kind !== 'image') continue;
+        retained.set(String(entry.name || 'image'), Number(entry.size) || 0);
+    }
+    let totalBytes = Array.from(retained.values()).reduce((sum, size) => sum + size, 0);
+    const attachments = [];
+    const errors = [];
+    for (const file of Array.from(files || [])) {
+        const name = String(file && file.name || 'image');
+        const size = Number(file && file.size || 0);
+        if (!isImageFile(file)) {
+            errors.push(name + ' is not a supported image; it was not attached.');
+            continue;
+        }
+        if (size > maxFileBytes) {
+            errors.push(name + ' exceeds the ' + maxFileBytes + '-byte image limit (' + size + ' bytes).');
+            continue;
+        }
+        const nextTotal = totalBytes - (retained.get(name) || 0) + size;
+        if (nextTotal > maxTotalBytes) {
+            errors.push(name + ' exceeds the total image limit (' + maxTotalBytes + ' bytes).');
+            continue;
+        }
+        let image;
+        try {
+            image = await decodeImage(file, { maxDimension });
+        } catch (error) {
+            errors.push(name + ' could not be decoded: ' + String(error && error.message || error));
+            continue;
+        }
+        const width = Number(image && image.width);
+        const height = Number(image && image.height);
+        const rgba = image && image.rgba;
+        if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > maxDimension || height > maxDimension) {
+            errors.push(name + ' decoded to invalid or oversized dimensions.');
+            continue;
+        }
+        if (!rgba || Number(rgba.length) !== width * height * 4) {
+            errors.push(name + ' did not decode to exact RGBA bytes.');
+            continue;
+        }
+        const dataUrl = typeof image.dataUrl === 'string' ? image.dataUrl : '';
+        if (!dataUrl.startsWith('data:image/')) {
+            errors.push(name + ' has no bounded image preview.');
+            continue;
+        }
+        attachments.push({
+            name,
             kind: 'image',
             content: '',
             source: 'file',
             size,
             width,
             height,
-            grid,
-            rgba,
-            previewUrl: canvas.toDataURL('image/png'),
-            imageUrl: canvas.toDataURL('image/png'),
-            mime: 'image/png',
-        };
-    } finally {
-        loaded.cleanup();
-    }
-}
-
-export async function readComposerFiles(files, options = {}) {
-    const images = [];
-    const text = [];
-    for (const file of Array.from(files || [])) {
-        (isImageFile(file) ? images : text).push(file);
-    }
-    const result = await readTextFiles(text, options);
-    const attachments = result.attachments.slice();
-    const errors = result.errors.slice();
-    for (const file of images) {
-        try {
-            attachments.push(await decodeImageFile(file, options));
-        } catch (error) {
-            errors.push(String(file && file.name || 'image') + ' could not be decoded: ' + String(error && error.message || error));
-        }
+            rgba: rgba instanceof Uint8Array ? rgba : new Uint8Array(rgba),
+            dataUrl,
+            grid: { columns: Math.min(1, width), rows: Math.min(1, height) },
+        });
+        totalBytes = nextTotal;
+        retained.set(name, size);
     }
     return { attachments, errors };
-}
-
-function invalidResponse() {
-    return new Error('The native server returned an invalid decomposition response.');
-}
-
-function toHex(bytes) {
-    let value = '';
-    for (const byte of bytes) value += byte.toString(16).padStart(2, '0');
-    return value;
-}
-
-export async function decomposeNativeImage({ config, image, signal } = {}) {
-    if (!config || !image || !(image.rgba instanceof Uint8Array)) throw new Error('A decoded RGBA image and native configuration are required.');
-    const width = Number(image.width);
-    const height = Number(image.height);
-    const columns = Number(image.grid);
-    const rows = columns;
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 256 || height > 256) {
-        throw new Error('Native image dimensions must be within 1..256.');
-    }
-    if (image.rgba.length !== width * height * 4) throw new Error('Native image decomposition requires exact RGBA bytes.');
-    if (!Number.isInteger(columns) || columns < 1 || columns > width || rows > height) {
-        throw new Error('Native image grid must fit the image.');
-    }
-    const headers = {
-        'Content-Type': 'application/octet-stream',
-        Accept: 'application/octet-stream',
-    };
-    if (config.apiKey) headers.Authorization = 'Bearer ' + config.apiKey;
-    const url = normalizeBaseUrl(config.baseUrl) + '/images/decompose?width=' + width + '&height=' + height + '&columns=' + columns + '&rows=' + rows;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: image.rgba,
-        signal,
-        cache: 'no-store',
-    });
-    if (!response.ok) {
-        const body = await response.text();
-        let message = body;
-        try {
-            const payload = JSON.parse(body);
-            message = payload && payload.error && payload.error.message || body;
-        } catch (_error) {
-            // A non-JSON error body is already the most faithful available message.
-        }
-        throw new Error(String(message || 'Native image decomposition failed with HTTP ' + response.status + '.'));
-    }
-    const header = (name) => {
-        const value = response.headers.get(name);
-        if (!value) throw invalidResponse();
-        return value;
-    };
-    const schema = header('x-uor-image-schema');
-    const sourceBlake3 = header('x-uor-source-blake3');
-    const decompositionId = header('x-uor-decomposition-id');
-    const responseWidth = Number(header('x-uor-image-width'));
-    const responseHeight = Number(header('x-uor-image-height'));
-    const responseColumns = Number(header('x-uor-grid-columns'));
-    const responseRows = Number(header('x-uor-grid-rows'));
-    const patchCount = Number(header('x-uor-patch-count'));
-    if (schema !== 'uor-r4.image-decomposition/1'
-        || !/^[0-9a-f]{64}$/.test(sourceBlake3)
-        || decompositionId.length > 128
-        || responseWidth !== width
-        || responseHeight !== height
-        || responseColumns !== columns
-        || responseRows !== rows
-        || patchCount !== columns * rows) {
-        throw invalidResponse();
-    }
-    const canonical = new Uint8Array(await response.arrayBuffer());
-    const magic = [82, 52, 73, 77, 71, 48, 48, 49];
-    if (canonical.length < magic.length
-        || canonical.length > 52 + 32 * 32 * 40
-        || magic.some((byte, index) => canonical[index] !== byte)) {
-        throw invalidResponse();
-    }
-    return {
-        schema,
-        canonical_hex: toHex(canonical),
-        source_blake3: sourceBlake3,
-        width,
-        height,
-        grid: { columns, rows },
-        decomposition_id: decompositionId,
-    };
 }

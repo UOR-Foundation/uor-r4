@@ -83,6 +83,7 @@ function pageHooks() {
                 options.onError(new Error(message));
                 return;
             }
+            for (const message of options.messages || []) await message.content;
             apiRequests.push(options);
         }), vi.fn(() => null), 32,
         () => conversation, vi.fn(),
@@ -345,8 +346,8 @@ describe('actual page prediction hooks', () => {
         const { app, hooks, conversation } = pageHooks();
         app.mode = 'api';
         app.apiConfig = { id: 'native-loopback', ephemeral: true, baseUrl: 'http://127.0.0.1:8765/v1' } as { baseUrl: string };
-        const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<Record<string, unknown>> } };
-        legacy.__studioUi = { getAttachments: () => [{ name: 'old.png', kind: 'image', content: '', reattachRequired: true }] };
+        const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<Record<string, unknown>>; getImageRecallCount?(): number } };
+        legacy.__studioUi = { getAttachments: () => [], getImageRecallCount: () => 1 };
         try {
             await hooks.sendViaApi('Hi', conversation);
             expect(app.generating).toBe(false);
@@ -362,7 +363,8 @@ describe('actual page prediction hooks', () => {
         app.mode = 'api';
         app.apiConfig = { id: 'native-loopback', ephemeral: true, baseUrl: 'http://127.0.0.1:8765/v1' } as { baseUrl: string };
         const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<Record<string, unknown>> } };
-        legacy.__studioUi = { getAttachments: () => [{ name: 'pixel.png', kind: 'image', content: '', rgba: new Uint8Array(4), width: 1, height: 1, grid: 1 }] };
+        legacy.__studioUi = { getAttachments: () => [{ name: 'pixel.png', kind: 'image', content: '', rgba: new Uint8Array(4), width: 1, height: 1, grid: { columns: 1, rows: 1 } }] };
+        conversation.messages.push({ role: 'user', content: 'Hi' });
         const completed = vi.fn();
         const dispose = events('uor-generation-finished', completed);
         try {

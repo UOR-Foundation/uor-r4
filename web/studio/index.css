@@ -3061,6 +3061,7 @@ body[data-view="model"] #modelView { display: flex; }
 .attachment-chip:has(.attachment-chip-preview) { max-width: 100%; border-radius: 8px; }
 .attachment-chip-preview { inline-size: 32px; block-size: 32px; object-fit: cover; border-radius: 4px; }
 .attachment-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip-preview { width: 18px; height: 18px; border-radius: 3px; object-fit: cover; background: var(--surface-2); }
 .attachment-chip-meta { color: var(--text-faint); font-size: 8.5px; }
 .attachment-chip-remove { display: grid; place-items: center; width: 14px; height: 14px; border: none; border-radius: 50%; background: transparent; color: var(--text-faint); font-size: 11px; line-height: 1; }
 .attachment-chip-remove:hover { background: var(--surface-hover); color: var(--err); }

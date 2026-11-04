@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error The plain-JavaScript image controller has no declaration file.
-import { decodeImageFile, decomposeNativeImage, isImageFile, readComposerFiles, IMAGE_LABEL } from '../../assets/js/image_input.js';
+import { decodeImageFile, isImageFile, readImageFiles, IMAGE_LABEL } from '../../assets/js/image_input.js';
+// @ts-expect-error The plain-JavaScript API has no declaration file.
+import { decomposeNativeImage } from '../../assets/js/studio_api.js';
+// @ts-expect-error The plain-JavaScript composer controller has no declaration file.
+import { readTextFiles } from '../../assets/js/composer_input.js';
 
 function canvasFixture(width = 256, height = 128) {
     const context = {
         clearRect: vi.fn(),
         drawImage: vi.fn(),
-        getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(width * height * 4) })),
+        getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(width * height * 4), width, height })),
     };
     const canvas = {
         width: 0,
@@ -25,7 +29,7 @@ afterEach(() => {
 });
 
 describe('image file decoding and composer intake', () => {
-    it('downsamples proportionally, bounds RGBA/grid, and closes the bitmap', async () => {
+    it('downsamples proportionally, bounds RGBA, and closes the bitmap', async () => {
         const { context } = canvasFixture();
         const bitmap = { width: 512, height: 256, close: vi.fn() };
         vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
@@ -33,11 +37,8 @@ describe('image file decoding and composer intake', () => {
         const image = await decodeImageFile(file);
         expect(image.width).toBe(256);
         expect(image.height).toBe(128);
-        expect(image.grid).toBe(2);
         expect(image.rgba).toHaveLength(256 * 128 * 4);
-        expect(image.previewUrl).toBe('data:image/png;base64,preview');
-        expect(image.kind).toBe('image');
-        expect(image.content).toBe('');
+        expect(image.dataUrl).toBe('data:image/png;base64,preview');
         expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 256, 128);
         expect(bitmap.close).toHaveBeenCalledOnce();
         expect(IMAGE_LABEL).toBe('R4 patch input — experimental; not visual understanding');
@@ -47,28 +48,32 @@ describe('image file decoding and composer intake', () => {
         canvasFixture(1, 1);
         const bitmap = { width: 1, height: 1, close: vi.fn() };
         vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
-        const result = await readComposerFiles([
-            new File(['hello'], 'note.txt', { type: 'text/plain' }),
-            new File([new Uint8Array(4)], 'pixel.png', { type: 'image/png' }),
-        ]);
+        const text = await readTextFiles([new File(['hello'], 'note.txt', { type: 'text/plain' })]);
+        const images = await readImageFiles([new File([new Uint8Array(4)], 'pixel.png', { type: 'image/png' })]);
+        const result = { attachments: [...text.attachments, ...images.attachments], errors: [...text.errors, ...images.errors] };
         expect(result.errors).toEqual([]);
         expect(result.attachments).toHaveLength(2);
         expect(result.attachments[0].kind).toBe('text');
         expect(result.attachments[1].kind).toBe('image');
-        expect(result.attachments[1].grid).toBe(1);
+        expect(result.attachments[1].grid).toEqual({ columns: 1, rows: 1 });
         expect(result.attachments[1].rgba).toHaveLength(4);
         expect(isImageFile(new File(['x'], 'x.svg', { type: 'image/svg+xml' }))).toBe(false);
     });
 
     it('refuses oversized input and revokes fallback object URLs on decode failure', async () => {
-        await expect(decodeImageFile({ name: 'huge.png', type: 'image/png', size: 4 * 1024 * 1024 + 1 })).rejects.toThrow('4 MiB');
-        vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('unsupported')));
-        const decode = vi.fn().mockRejectedValue(new Error('broken image'));
-        vi.stubGlobal('Image', class { decode = decode; });
+        const oversized = await readImageFiles([{ name: 'huge.png', type: 'image/png', size: 4 * 1024 * 1024 + 1 }], { maxFileBytes: 4 * 1024 * 1024 });
+        expect(oversized.attachments).toEqual([]);
+        expect(oversized.errors.join(' ')).toContain('4194304-byte image limit');
+        vi.stubGlobal('createImageBitmap', undefined);
+        vi.stubGlobal('Image', class {
+            onload: (() => void) | null = null;
+            onerror: ((error: Error) => void) | null = null;
+            set src(_value: string) { this.onerror?.(new Error('broken image')); }
+        });
         const create = vi.fn(() => 'blob:fixture');
         const revoke = vi.fn();
         vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke }));
-        await expect(decodeImageFile(new File(['bad'], 'bad.png', { type: 'image/png' }))).rejects.toThrow('broken image');
+        await expect(decodeImageFile(new File(['bad'], 'bad.png', { type: 'image/png' }))).rejects.toThrow('The browser could not decode this image.');
         expect(revoke).toHaveBeenCalledWith('blob:fixture');
     });
 });
@@ -91,9 +96,11 @@ describe('native image decomposition transport', () => {
         const rgba = new Uint8Array([12, 20, 28, 255]);
         const result = await decomposeNativeImage({
             config: { baseUrl: 'http://127.0.0.1:8765/v1/', apiKey: 'secret' },
-            image: { rgba, width: 1, height: 1, grid: 1 },
+            image: { rgba, width: 1, height: 1 },
+            grid: { columns: 1, rows: 1 },
         });
         expect(result).toEqual({
+            type: 'uor_r4_image',
             schema: 'uor-r4.image-decomposition/1',
             canonical_hex: '5234494d4730303166697874757265',
             source_blake3: 'a'.repeat(64),
@@ -115,9 +122,10 @@ describe('native image decomposition transport', () => {
     });
 
     it('surfaces native error envelopes and rejects invalid success responses', async () => {
+        const input = { config: { baseUrl: 'http://localhost/v1' }, image: { rgba: new Uint8Array(4), width: 1, height: 1 }, grid: { columns: 1, rows: 1 } };
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: 'dimension refused' } }), { status: 400 })));
-        await expect(decomposeNativeImage({ config: { baseUrl: 'http://localhost/v1' }, image: { rgba: new Uint8Array(4), width: 1, height: 1, grid: 1 } })).rejects.toThrow('dimension refused');
+        await expect(decomposeNativeImage(input)).rejects.toThrow('dimension refused');
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new Uint8Array([0]), { status: 200 })));
-        await expect(decomposeNativeImage({ config: { baseUrl: 'http://localhost/v1' }, image: { rgba: new Uint8Array(4), width: 1, height: 1, grid: 1 } })).rejects.toThrow('invalid decomposition');
+        await expect(decomposeNativeImage(input)).rejects.toThrow('invalid decomposition');
     });
 });

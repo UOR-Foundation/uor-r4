@@ -816,6 +816,13 @@ fn native_r4_image_parts_validate_and_pass_context_preflight() {
         "max_tokens": 1
     });
     let image_request = image_chat_request(part.clone(), 1);
+    let validated = serving
+        .validate_request(GenerationFamily::Chat, &image_request)
+        .unwrap();
+    assert!(validated.messages[0].content.contains("R4IMG1/1x1/1x1/1:"));
+    assert!(!validated.messages[0]
+        .content
+        .contains(part["source_blake3"].as_str().unwrap()));
 
     let server = LoopbackServer::spawn(server_config).unwrap();
     let (status, text) = post_json(server.port(), "/v1/chat/completions", text_request);
@@ -1256,7 +1263,9 @@ fn http_busy_preflight_disconnect_and_header_bounds() {
         .write_all(wire(server.port()).as_bytes())
         .unwrap();
     disconnect.read(&mut role).unwrap();
-    disconnect.shutdown(std::net::Shutdown::Both).unwrap();
+    if let Err(error) = disconnect.shutdown(std::net::Shutdown::Both) {
+        assert_eq!(error.kind(), std::io::ErrorKind::NotConnected, "{error}");
+    }
     let generation_request = json!({"model": "uor-chat", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 1});
     let mut next = post_json(
         server.port(),

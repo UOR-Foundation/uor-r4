@@ -132,7 +132,7 @@
                                             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5 5 8a2.1 2.1 0 0 0 3 3l4.5-4.5a3.2 3.2 0 0 0-4.5-4.5L3 6.5a4.3 4.3 0 0 0 6 6l4-4"/></svg>Attach context
                                         </button>
                                         <button class="tool-btn" id="btnAttachFiles" type="button" title="Attach text, source, or image files" aria-label="Attach text, source, or image files">Attach files</button>
-                                        <input class="visually-hidden" id="chatFileInput" type="file" multiple aria-label="Choose text, source, or image files" accept="text/*,image/*,.md,.markdown,.rs,.json,.html,.css,.js,.mjs,.ts,.tsx,.toml,.yml,.yaml,.py,.sh,.csv,.xml,.svg,.sql">
+                                        <input class="visually-hidden" id="chatFileInput" type="file" multiple aria-label="Choose text, source, or image files" accept="text/*,image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif,.md,.markdown,.rs,.json,.html,.css,.js,.mjs,.ts,.tsx,.toml,.yml,.yaml,.py,.sh,.csv,.xml,.svg,.sql">
                                         <button class="tool-btn" id="btnBuildTask" type="button" aria-haspopup="menu" aria-expanded="false" title="Insert a build-task prompt template">
                                             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h10M3 12h6"/></svg>Build task
                                         </button>
@@ -493,9 +493,10 @@
 
         import { mountModelSources, ModelSources } from './assets/js/model_sources.js';
         import { configFromSources, normalizeBaseUrl, streamChatCompletions } from './assets/js/studio_api.js';
+        import { decomposeNativeImage, imageUrlPart } from './assets/js/studio_api.js';
+        import { isImageFile, readImageFiles } from './assets/js/image_input.js';
         import { encodeTextWithArtifact } from './assets/js/uor_tokenizer_artifact.js';
-        import { createComposerInput } from './assets/js/composer_input.js';
-        import { readComposerFiles, decomposeNativeImage } from './assets/js/image_input.js';
+        import { createComposerInput, readTextFiles } from './assets/js/composer_input.js';
         import { createStreamMetrics } from './assets/js/stream_metrics.js';
 
         var CONVERSATIONS_KEY = 'uor.studio.conversations.v1';
@@ -1500,12 +1501,26 @@
         }
 
         function apiMessages(conversation) {
-            var messages = conversation.messages
-                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; })
-                .map(function (message) { return { role: message.role, content: message.content }; });
+            var visibleMessages = conversation.messages
+                .filter(function (message) { return message.role === 'user' || message.role === 'assistant'; });
+            var lastIndex = visibleMessages.length - 1;
+            var messages = visibleMessages
+                .map(function (message, index) {
+                    var content = message.content;
+                    // Image bytes are intentionally memory-only. Preserve a truthful,
+                    // non-empty history marker after reload instead of sending a blank
+                    // historical user turn that the native API rejects. The final turn
+                    // remains empty so a live image-only request has no text part.
+                    if (message.role === 'user' && content === '' && index !== lastIndex) content = '[Image patch input]';
+                    return { role: message.role, content: content };
+                });
             var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function'
                 ? window.__studioUi.getAttachments()
                 : [];
+            var recalledImages = window.__studioUi && typeof window.__studioUi.getImageRecallCount === 'function'
+                ? window.__studioUi.getImageRecallCount()
+                : 0;
+            if (recalledImages > 0) throw new Error('Reattach the previous image after reload; image bytes are not persisted.');
             var textAttachments = attachments.filter(function (item) { return item.kind !== 'image'; });
             if (textAttachments.length) {
                 var context = textAttachments.map(function (item) {
@@ -1515,62 +1530,31 @@
             }
             var images = attachments.filter(function (item) { return item.kind === 'image'; });
             if (images.length) {
-                var target = messages.length - 1;
-                while (target >= 0 && messages[target].role !== 'user') target -= 1;
-                if (target < 0) throw new Error('An image requires a user prompt.');
-                var content = messages[target].content;
-                var parts = typeof content === 'string' ? [{ type: 'text', text: content }] : (Array.isArray(content) ? content.slice() : []);
-                var native = isNativeLoopback(app.apiConfig);
-                images.forEach(function (item) {
-                    if (item.reattachRequired) throw new Error('Reattach ' + String(item.name || 'the image') + ' after reload; image bytes are not persisted.');
-                    if (native) {
-                        var decomposition = item.decomposition;
-                        if (!decomposition
-                            || decomposition.schema !== 'uor-r4.image-decomposition/1'
-                            || typeof decomposition.canonical_hex !== 'string'
-                            || !/^[0-9a-f]+$/.test(decomposition.canonical_hex)
-                            || !/^[0-9a-f]{64}$/.test(decomposition.source_blake3)
-                            || !Number.isInteger(decomposition.width)
-                            || !Number.isInteger(decomposition.height)
-                            || !decomposition.grid
-                            || !Number.isInteger(decomposition.grid.columns)
-                            || !Number.isInteger(decomposition.grid.rows)
-                            || typeof decomposition.decomposition_id !== 'string'
-                            || !decomposition.decomposition_id) {
-                            throw new Error('Reattach ' + String(item.name || 'the image') + '; its native R4 decomposition is unavailable.');
+                var last = messages[messages.length - 1];
+                if (!last || last.role !== 'user') {
+                    throw new Error('Image context requires a final user message.');
+                }
+                var text = typeof last.content === 'string' ? last.content : '';
+                var native = app.apiConfig && app.apiConfig.id === 'native-loopback' && app.apiConfig.ephemeral === true;
+                last.content = (async function () {
+                    var parts = text ? [{ type: 'text', text: text }] : [];
+                    for (var image of images) {
+                        if (app.abortController && app.abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
+                        if (native) {
+                            parts.push(await decomposeNativeImage({
+                                config: app.apiConfig,
+                                image: image,
+                                grid: image.grid || { columns: 1, rows: 1 },
+                                signal: app.abortController ? app.abortController.signal : undefined,
+                            }));
+                        } else {
+                            parts.push(imageUrlPart(image));
                         }
-                        parts.push({
-                            type: 'uor_r4_image',
-                            schema: decomposition.schema,
-                            canonical_hex: decomposition.canonical_hex,
-                            source_blake3: decomposition.source_blake3,
-                            width: decomposition.width,
-                            height: decomposition.height,
-                            grid: { columns: decomposition.grid.columns, rows: decomposition.grid.rows },
-                            decomposition_id: decomposition.decomposition_id,
-                        });
-                    } else {
-                        if (!item.imageUrl) throw new Error('Reattach ' + String(item.name || 'the image') + ' before sending it to this provider.');
-                        parts.push({ type: 'image_url', image_url: { url: item.imageUrl } });
                     }
-                });
-                messages[target].content = parts;
+                    return parts;
+                }());
             }
             return messages;
-        }
-
-        async function prepareApiMessages(conversation) {
-            if (isNativeLoopback(app.apiConfig)) {
-                var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
-                for (const image of attachments.filter(function (item) { return item.kind === 'image' && !item.decomposition; })) {
-                    if (app.abortController && app.abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
-                    if (image.reattachRequired || !image.rgba) throw new Error('Reattach ' + String(image.name || 'the image') + ' after reload; image bytes are not persisted.');
-                    image.decomposition = await decomposeNativeImage({ config: app.apiConfig || configFromSources(), image: image, signal: app.abortController && app.abortController.signal });
-                    image.rgba = null;
-                    document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: image }));
-                }
-            }
-            return apiMessages(conversation);
         }
 
         async function sendViaApi(prompt, conversation, preparedMessages) {
@@ -1579,7 +1563,7 @@
             var apiGenerationId = app.chatGenerationId;
             app.abortController = new AbortController();
             try {
-                var messages = preparedMessages || (isNativeLoopback(app.apiConfig) ? await prepareApiMessages(conversation) : apiMessages(conversation));
+                var messages = preparedMessages || apiMessages(conversation);
                 await streamChatCompletions({
                     config: app.apiConfig || configFromSources(),
                     messages: messages,
@@ -1721,7 +1705,16 @@
             }
             var input = $('#chatInput');
             var prompt = typeof providedPrompt === 'string' ? providedPrompt.trim() : (input ? input.value.trim() : '');
-            if (!prompt) {
+            var attachments = [];
+            try {
+                attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
+            } catch (error) {
+                toast(String(error && error.message || error), 'error');
+                return false;
+            }
+            var hasImages = attachments.some(function (item) { return item.kind === 'image'; });
+            if (!prompt && !(hasImages && app.mode === 'api')) {
+                if (hasImages) toast('Image-only Send requires a native or custom API provider.', 'warn');
                 if (input) input.focus();
                 return false;
             }
@@ -1789,7 +1782,7 @@
                 conversation.messages.push({ role: 'user', content: prompt, meta: null });
                 conversation.sourceKind = app.mode;
                 touchConversation(conversation);
-                appendMessageElement('user', prompt, null);
+                appendMessageElement('user', prompt || '[Image patch input]', null);
                 if (input) {
                     input.value = '';
                     autoGrowTextarea();
@@ -2101,10 +2094,18 @@
                     onSend: function () { sendFromComposer(); },
                     onFiles: function (files) {
                         var retained = window.__studioUi && typeof window.__studioUi.getAttachments === 'function' ? window.__studioUi.getAttachments() : [];
-                        readComposerFiles(files, { existingAttachments: retained }).then(function (result) {
-                            result.errors.forEach(function (error) { toast(error, 'error'); });
-                            result.attachments.forEach(function (entry) {
-                                document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: entry }));
+                        var textFiles = [];
+                        var imageFiles = [];
+                        Array.from(files || []).forEach(function (file) { (isImageFile(file) ? imageFiles : textFiles).push(file); });
+                        Promise.all([
+                            readTextFiles(textFiles, { existingAttachments: retained.filter(function (item) { return item.kind !== 'image'; }) }),
+                            readImageFiles(imageFiles, { existingAttachments: retained.filter(function (item) { return item.kind === 'image'; }) }),
+                        ]).then(function (results) {
+                            results.forEach(function (result) {
+                                result.errors.forEach(function (error) { toast(error, 'error'); });
+                                result.attachments.forEach(function (entry) {
+                                    document.dispatchEvent(new CustomEvent('uor-attach-file', { detail: entry }));
+                                });
                             });
                         }).catch(function (error) { toast(String(error && error.message || error), 'error'); });
                     },

@@ -60,20 +60,19 @@ describe('actual studio UI image attachments', () => {
             kind: 'image',
             content: '',
             size: 4,
-            previewUrl: 'data:image/png;base64,preview',
-            imageUrl: 'data:image/png;base64,preview',
+            dataUrl: 'data:image/png;base64,preview',
             rgba: new Uint8Array([1, 2, 3, 255]),
         } as never);
         const preview = document.querySelector<HTMLImageElement>('#attachmentChips img')!;
         expect(preview).not.toBeNull();
         expect(preview.alt).toBe('');
         expect(document.querySelector('#attachmentChips')!.textContent).toContain('pixel.png');
-        expect(document.querySelector('#attachmentChips')!.textContent).toContain('R4 patch input — experimental; not visual understanding');
+        expect(document.querySelector('#inspectorAttachments')!.textContent).toContain('R4 patch input — experimental; not visual understanding');
         expect(JSON.parse(window.localStorage.getItem('uor.studio.attachments.v1') || '[]')).toEqual([]);
-        expect(window.localStorage.getItem('uor.studio.imagesReattach.v1')).toBe('1');
+        expect(window.sessionStorage.getItem('uor.studio.attachments.images.v1')).toBe('1');
         expect(ui.getAttachments()[0].rgba).toBeDefined();
         ui.clearAttachments();
-        expect(window.localStorage.getItem('uor.studio.imagesReattach.v1')).toBe('0');
+        expect(window.sessionStorage.getItem('uor.studio.attachments.images.v1')).toBeNull();
         document.querySelector('#attachmentChips')!.remove();
         document.querySelector('#attachmentBar')!.remove();
         document.querySelector('#inspectorAttachments')!.remove();
