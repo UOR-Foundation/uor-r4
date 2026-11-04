@@ -190,9 +190,11 @@ content parts with exact canonical and source-hash validation. The browser
 Studio accepts pasted, dropped and selected raster images, downsamples them to
 at most 256 by 256, previews/removes them and keeps the image data memory-only.
 Native Send adds R4 patch context only after the explicit action; custom
-providers receive ordinary <code>image_url</code>. This is experimental data plumbing,
-not a trained visual reader; native ordinary <code>image_url</code> and image
-generation/edit families still return 501.</p>
+providers receive ordinary <code>image_url</code>. Native parts also carry a server-issued
+decomposition ID and must match one of at most 64 exact records, so altered or
+expired content is refused. This is experimental data plumbing, not a trained
+visual reader; native ordinary <code>image_url</code> and image generation/edit families
+still return 501.</p>
 <p><strong>Initial Studio publish and interface history (superseded).</strong> The initial 30 October publish at gh-pages <code>d8e67c66</code> established the clean responsive page, self-hosted integer wasm engine, local-file/URL/API model sources, <code>/1</code>–<code>/6</code> serving at the initial publish, with <code>/7</code> added by #3446, and discrete next-token prediction, followed by the public M1, Stage-T and FBS releases described above. DeepSeek's #3447 agent-console shell then superseded that interface before the current v2 below; the engine, worker and API layer remained intact.</p>
 <p><strong>Current v2 interface (#3448).</strong> DeepSeek then rebuilt the Studio into a workable AI studio around one labeled navigation sidebar: Agent / Workspace / Connections / Guide plus a permanent Sessions section, a File System Access workspace with editor tabs and save, agent context attachments/build templates/message actions, organized connection sections, Settings and Guide views, an eight-group command palette and a labeled mobile drawer; the same engine/API layer and verifier contracts are preserved. See <a href="https://github.com/UOR-Foundation/uor-r4/issues/3440">#3440</a> and <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/m7-studio-live-model-sources.md">the item</a>.</p>
 <p><strong>Live follow-up verified:</strong> the current gh-pages <code>454bb30fc</code> publish serves the 626,889-byte M1-capable bundle (sha256 <code>d7bcaf40…</code>), and the live <code>models.json</code> lists both M1 seeds. This is verification of the existing publish, not a deployment by this documentation unit.</p>
