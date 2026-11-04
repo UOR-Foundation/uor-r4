@@ -93,11 +93,15 @@ RSS.
 - `crates/uor-r4-integer/src/stack/session.rs`
 - `crates/uor-r4-integer/src/session_codec.rs`
 - `crates/uor-r4-integer/tests/session_codec_interop_fixture.rs`
+- `crates/uor-r4-integer/tests/openai_loopback.rs`
 - `crates/uor-r4-integer/src/stack/chat.rs`
 - `crates/uor-r4-integer/src/bin/uor-chat.rs`
+- `crates/uor-r4-integer/src/openai.rs`
+- `crates/uor-r4-integer/README.md`
 - `crates/uor-r4-integer/Cargo.toml`
 - `docs/harness/claims.json`
 - `docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md`
+- `docs/integration/current-state.md`
 - `docs/labs/cpu-training-pilot-content-serving-2026-11-04/**`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-140/**`
 - `docs/research/notebook/cpu-training.md`

@@ -56,9 +56,9 @@ struct CliArgs {
     say: Option<String>,
     /// One-shot raw token-ID prompt (`--prompt-ids 0,7,19,31`) for `--stack` parity verification.
     prompt_ids: Option<Vec<u32>>,
-    /// Path to write a `UR4SESS1` binary session snapshot after a `--stack` step batch.
+    /// Path to write a `UR4SESS1` binary session snapshot (`UR4SESS2` with a content readout) after a `--stack` step batch.
     save_session: Option<PathBuf>,
-    /// Path to read a `UR4SESS1` binary session snapshot before a `--stack` step batch.
+    /// Path to read a `UR4SESS1` binary session snapshot (`UR4SESS2` with a content readout) before a `--stack` step batch.
     restore_session: Option<PathBuf>,
     /// Loopback OpenAI service address (`127.0.0.1:<port>`), only with `--stack`.
     serve: Option<String>,
@@ -241,10 +241,10 @@ fn print_usage() {
     );
     eprintln!("                              print JSON and exit");
     eprintln!(
-        "      --save-session <PATH>   write UR4SESS1 session snapshot bytes after --prompt-ids"
+        "      --save-session <PATH>   write UR4SESS1/UR4SESS2 snapshot bytes after --prompt-ids"
     );
     eprintln!(
-        "      --restore-session <P>   restore UR4SESS1 session snapshot bytes before --prompt-ids"
+        "      --restore-session <P>   restore UR4SESS1/UR4SESS2 snapshot bytes before --prompt-ids"
     );
     eprintln!("      --serve <ADDR>          serve OpenAI-compatible JSON/SSE on 127.0.0.1:<port>");
     eprintln!("                              loads the same --stack artifact; no CLI subprocess");
@@ -1662,12 +1662,16 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     model.set_threads(cli.threads)?;
     #[cfg(target_arch = "wasm32")]
     let _ = cli.threads;
-    let content_readout_sha256 = if let Some(path) = cli.content_readout_path.as_deref() {
+    let content_readout_identity = if let Some(path) = cli.content_readout_path.as_deref() {
+        let path_string = path
+            .to_str()
+            .ok_or_else(|| StackCliError::Usage("--content-readout path must be UTF-8".into()))?
+            .to_owned();
         let bytes = std::fs::read(path)?;
         let readout =
             ContentReadout::from_sidecar(&bytes, model.artifact_sha256(), model.shape().vocab)?;
         model.set_content_readout(readout)?;
-        Some(hex::encode(Sha256::digest(&bytes)))
+        Some((path_string, hex::encode(Sha256::digest(&bytes))))
     } else {
         None
     };
@@ -1681,7 +1685,10 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
         let port = port
             .parse::<u16>()
             .map_err(|_| StackCliError::Usage("--serve port must be a u16".into()))?;
-        let serving = OpenAiServing::new(model, std::fs::read(tokenizer_path)?, cli.protocol)?;
+        let mut serving = OpenAiServing::new(model, std::fs::read(tokenizer_path)?, cli.protocol)?;
+        if let Some((path, sha256)) = content_readout_identity {
+            serving = serving.with_content_readout_identity(path, sha256);
+        }
         let mut config = LoopbackConfig::new(serving)
             .map_err(|error| StackCliError::Usage(error.to_string()))?;
         config.host = host.to_owned();
@@ -1741,8 +1748,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "artifact": artifact,
             "artifact_sha256": model.artifact_sha256(),
             "tokenizer": tokenizer_path,
-            "content_readout": cli.content_readout_path,
-            "content_readout_sha256": content_readout_sha256,
+            "content_readout": content_readout_identity.as_ref().map(|(path, _)| path),
+            "content_readout_sha256": content_readout_identity.as_ref().map(|(_, sha256)| sha256),
             "tokenizer_cid": chat.protocol().tokenizer_cid,
             "protocol": chat.protocol(),
             "context": chat.context(),
@@ -1779,8 +1786,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "artifact": artifact,
             "artifact_sha256": model.artifact_sha256(),
             "tokenizer": tokenizer_path,
-            "content_readout": cli.content_readout_path,
-            "content_readout_sha256": content_readout_sha256,
+            "content_readout": content_readout_identity.as_ref().map(|(path, _)| path),
+            "content_readout_sha256": content_readout_identity.as_ref().map(|(_, sha256)| sha256),
             "tokenizer_cid": chat.protocol().tokenizer_cid,
             "protocol": chat.protocol(),
             "context": chat.context(),
