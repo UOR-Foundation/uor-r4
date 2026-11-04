@@ -6,25 +6,48 @@ Order: [ORDER.md](ORDER.md). Base: `7dfd96644`.
 
 ## Status
 
-The ORDER and branch claim are committed. Implementation, FIT, GO, preflight
-and public comparison are pending; no capability claim is made.
+The ORDER, branch claim, implementation and pre-registration are committed.
+TEST FITNESS, GO, preflight and the public comparison are pending; no
+capability claim is made.
 
 ## What did not work
 
-Not yet measured. This section will lead with the preflight or public-run
-negatives in the completed report.
+No model or public compute has run. The pre-run report will lead with the
+preflight or public-run negatives once measured.
 
 ## What changed
 
-Nothing beyond the ORDER and claim yet.
+The CPU content driver now has a separate `--stop-horizon-neighbors` arm. It
+derives signed remaining-reference horizons for every generated code-signature
+state, predicts with the lower median of exact-offset Hamming neighbours, fits
+k by terminal recall/false stops/horizon error, and emits BOS only for a
+predicted zero. A within-offset horizon rotation is the matched control.
+
+The arm is isolated from the earlier prototype and density gates and does not
+change serving.
 
 ## Measurements
 
-No compute has run.
+Focused pre-run checks passed:
+
+- continuation horizon/offset derivation: **6 focused library tests**, including
+  the matching prior continuation test;
+- driver tests: **7 passed**, including the continuation terminal-pairing
+  control;
+- strict scoped Clippy with `-D warnings`;
+- targeted rustfmt.
+
+No release build, public preflight or generation has run.
 
 ## Checks run at the head
 
-The ORDER/claim push policy will be checked before the draft PR is opened.
+- `cargo test --locked -p uor-r4-cpu-train --lib continuation`: passed.
+- `cargo test --locked -p uor-r4-cpu-train --bin cpu-content-readout-driver`:
+  passed.
+- `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D
+  warnings`: passed.
+- `cargo fmt -p uor-r4-cpu-train -- --check`: passed.
+- `git diff --check`: passed before the pre-registration commit.
 
 ## Skills used
 
@@ -38,4 +61,5 @@ No system-provided Codex skill applies.
 
 ## Plain summary
 
-This is the pre-run record for a continuation-horizon termination experiment.
+The pre-run record and implementation are ready for independent TEST FITNESS
+review. No model result exists yet.
