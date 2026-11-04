@@ -15550,13 +15550,32 @@ mod tests {
             }
         }
         // claude-281: a row cut left on the thread neither refuses the prefill nor changes a
-        // reply; the decode clears it before it asks.
-        let (uncut, clear) = decode(DecodeRule::Greedy, false, true);
+        // reply; the decode clears it before it asks. Every forward clears the cut after it, so
+        // the cut meets only the first group's first step: the 3-position prompt is left out, as
+        // its prefill is refused as a short prompt before the cut is asked about.
+        let decode_cut = || {
+            set_decode_cache(true);
+            let replies = decode_replies_with_mode(
+                &model,
+                PointObjective::Cell,
+                &prompts[1..],
+                &masks[1..],
+                14,
+                17,
+                DecodeRule::Greedy,
+                None,
+                ReadScope::Full,
+                false,
+                true,
+            );
+            (replies, take_decode_forwards())
+        };
+        let (uncut, clear) = decode_cut();
         crate::flock_read_hamming::set_row_cut(Some((
             crate::flock_read_hamming::ReadScope::Copy,
             vec![2; 4],
         )));
-        let (cut, left) = decode(DecodeRule::Greedy, false, true);
+        let (cut, left) = decode_cut();
         assert!(!crate::flock_read_hamming::row_cut_set(), "the row cut outlived its decode");
         assert_eq!(left, clear, "a row cut left on the thread changed the forwards");
         assert!(left.prefills > 0, "a row cut left on the thread refused the prefill: {left:?}");
