@@ -1,0 +1,219 @@
+{
+  "schema": "uor-r4.cpu-trunk-stage-profile-comparison/1",
+  "status": "valid",
+  "substrate": "cpu-development-research",
+  "qualification": "gpu-required",
+  "source": {
+    "source_commit": "c0c6392480dff59d3ab3b9b519e72028846db962",
+    "prep_head": "182155a6394bdc7530278adf56fe9b0d6edf4e0e",
+    "fit_head": "db71dfdb79d5cda1ba41463b965f858bf8662bde",
+    "binary_sha256": "9fbe1cc802bfbfe2296d111cc3b68cdfd79d2bc4fad17fccf1868287e0b40447",
+    "rust": "1.97.1",
+    "host": "AMD Ryzen 9 9950X, 16 cores / 32 threads",
+    "os": "Linux 7.0.0-42-generic x86_64"
+  },
+  "inputs": {
+    "public_trunk_sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
+    "tokens_sha256": "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b",
+    "mask_sha256": "a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078",
+    "manifest_sha256": "ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab"
+  },
+  "selection": {
+    "training_documents": 200,
+    "evaluation_documents": 193,
+    "training_targets": 7080,
+    "evaluation_targets": 512,
+    "selected_training_rows": 4096,
+    "evaluation_stride": 2,
+    "seed": 1
+  },
+  "protocol": {
+    "forward_run_order": [1, 16],
+    "reverse_run_order": [16, 1],
+    "fresh_output_roots": 4,
+    "aggregation": "mean of the forward and reverse runs at each worker count"
+  },
+  "artifacts": {
+    "exact_sha256": "db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2",
+    "shuffled_sha256": "19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd",
+    "exact_bytes": 86815864,
+    "shuffled_bytes": 87042864,
+    "all_runs_byte_identical": true
+  },
+  "held_out": {
+    "rows": 512,
+    "q12_query_coordinates_per_arm": 16384,
+    "arms": {
+      "no_update": {
+        "admitted": 332,
+        "top1": 246,
+        "top8": 270,
+        "checksum": "c707e1bebfe590b0"
+      },
+      "exact": {
+        "admitted": 331,
+        "top1": 245,
+        "top8": 269,
+        "checksum": "351b70cab8d7cbc9"
+      },
+      "shuffled": {
+        "admitted": 332,
+        "top1": 246,
+        "top8": 270,
+        "checksum": "c707e1bebfe590b0"
+      }
+    },
+    "changed_decisions": {
+      "exact_vs_no_update_rows": 4,
+      "shuffled_vs_no_update_rows": 0,
+      "exact_vs_shuffled_rows": 4
+    },
+    "query_coordinate_mismatches": 0,
+    "admitted_cell_mismatches": 0,
+    "top8_mismatches": 0,
+    "token_mismatches": 0
+  },
+  "equivalence": {
+    "normalized_report_sha256": "64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f",
+    "all_normalized_reports_identical": true,
+    "all_artifact_pairs_byte_identical": true,
+    "all_stage_accounting_valid": true,
+    "required_stages": 21
+  },
+  "runs": [
+    {
+      "pass": "forward",
+      "workers": 1,
+      "wall_elapsed_ms": 12620.559988,
+      "peak_rss_kib": 1540880
+    },
+    {
+      "pass": "forward",
+      "workers": 16,
+      "wall_elapsed_ms": 11792.993398,
+      "peak_rss_kib": 1543696
+    },
+    {
+      "pass": "reverse",
+      "workers": 16,
+      "wall_elapsed_ms": 11483.463778,
+      "peak_rss_kib": 1543952
+    },
+    {
+      "pass": "reverse",
+      "workers": 1,
+      "wall_elapsed_ms": 12626.47296,
+      "peak_rss_kib": 1542120
+    }
+  ],
+  "profile": {
+    "1": {
+      "mean_wall_elapsed_ms": 12623.516474,
+      "mean_stage_elapsed_ms": {
+        "control_rows": 0.0207445,
+        "corpus_split": 1.598071,
+        "decision_reduction": 0.0021445,
+        "exact_evaluation": 1294.8970115,
+        "exact_hash_write": 73.5281515,
+        "exact_update_export": 253.729429,
+        "exact_verify": 3629.870564,
+        "input_read_hash": 58.7580185,
+        "input_validate": 720.481694,
+        "no_update_evaluation": 1172.0888505,
+        "output_prepare": 0.0681645,
+        "parity_reduction": 0.0018385,
+        "reader_load": 560.9216975,
+        "resource_measure": 0.053061,
+        "shuffled_evaluation": 1513.4672975,
+        "shuffled_hash_write": 71.574844,
+        "shuffled_reader_load": 363.9197975,
+        "shuffled_update_export": 270.1354645,
+        "shuffled_verify": 2382.3830215,
+        "table_verification": 0.0058265,
+        "training_row_derivation": 256.0104415
+      },
+      "stage_share": {
+        "control_rows": 0.000001643321814704038,
+        "corpus_split": 0.00012659475695947825,
+        "decision_reduction": 0.00000016988134838790088,
+        "exact_evaluation": 0.10257815357289961,
+        "exact_hash_write": 0.005824696442662558,
+        "exact_update_export": 0.02009974237547781,
+        "exact_verify": 0.28754828905846125,
+        "input_read_hash": 0.004654647428949043,
+        "input_validate": 0.05707456361180648,
+        "no_update_evaluation": 0.09284963131422931,
+        "output_prepare": 0.00000539980283151647,
+        "parity_reduction": 0.00000014564087620011926,
+        "reader_load": 0.04443466277049673,
+        "resource_measure": 0.000004203345407698955,
+        "shuffled_evaluation": 0.11989268605282924,
+        "shuffled_hash_write": 0.005669960834401333,
+        "shuffled_reader_load": 0.028828718071509364,
+        "shuffled_update_export": 0.02139938305276378,
+        "shuffled_verify": 0.18872578226573158,
+        "table_verification": 0.0000004615591869349985,
+        "training_row_derivation": 0.020280437865890334
+      },
+      "verification_group_share": 0.47627407132419285,
+      "evaluation_group_share": 0.31532047093935816
+    },
+    "16": {
+      "mean_wall_elapsed_ms": 11638.228588,
+      "mean_stage_elapsed_ms": {
+        "control_rows": 0.0384235,
+        "corpus_split": 2.9749255,
+        "decision_reduction": 0.0017885,
+        "exact_evaluation": 1162.701728,
+        "exact_hash_write": 49.785075,
+        "exact_update_export": 293.160123,
+        "exact_verify": 3460.0382365,
+        "input_read_hash": 59.8469745,
+        "input_validate": 673.548421,
+        "no_update_evaluation": 1092.8503655,
+        "output_prepare": 0.091464,
+        "parity_reduction": 0.0019335,
+        "reader_load": 395.883649,
+        "resource_measure": 0.1722885,
+        "shuffled_evaluation": 1407.1286615,
+        "shuffled_hash_write": 50.8649235,
+        "shuffled_reader_load": 362.0974185,
+        "shuffled_update_export": 277.6318545,
+        "shuffled_verify": 2327.9103585,
+        "table_verification": 0.0065225,
+        "training_row_derivation": 21.492642
+      },
+      "stage_share": {
+        "control_rows": 0.000003301490403755936,
+        "corpus_split": 0.000255616692652643,
+        "decision_reduction": 0.000000153674589434005,
+        "exact_evaluation": 0.09990366826089357,
+        "exact_hash_write": 0.004277719295815569,
+        "exact_update_export": 0.02518941098151938,
+        "exact_verify": 0.29729938798998945,
+        "input_read_hash": 0.005142275222339876,
+        "input_validate": 0.05787379203863424,
+        "no_update_evaluation": 0.09390177871457354,
+        "output_prepare": 0.000007858927955265214,
+        "parity_reduction": 0.00000016613353014853153,
+        "reader_load": 0.0340157993982168,
+        "resource_measure": 0.000014803670395135906,
+        "shuffled_evaluation": 0.12090574187130751,
+        "shuffled_hash_write": 0.004370503905761573,
+        "shuffled_reader_load": 0.031112760482583497,
+        "shuffled_update_export": 0.02385516424606593,
+        "shuffled_verify": 0.2000227389329913,
+        "table_verification": 0.0000005604375228310303,
+        "training_row_derivation": 0.0018467279481140912
+      },
+      "verification_group_share": 0.49732212692298075,
+      "evaluation_group_share": 0.3147111888467746
+    }
+  },
+  "result": {
+    "hotspot": "exact_verify",
+    "stable_at_both_worker_counts": true,
+    "next_target": "remove repeated full-trunk parsing and reconstruction from exact and shuffled verification"
+  },
+  "storage_bytes": 695462223
+}
