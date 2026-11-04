@@ -19,6 +19,9 @@ Base: `79843cca8`.
 - **The first focused test target hit the repository's known duplicate**
   `uor-r4-integer` artifact collision. A fresh target produced the valid 8/8
   focused result.
+- **The first full gate run hit the known fake-`gh` `ETXTBSY` flake** in
+  `loop_drive`; 27 of 28 gate tests passed. The immediate rerun passed all 11
+  gates. Both attempts are retained.
 - **This rule is not served.** It is an offline screen over the same 48
   artifact rows. No integer artifact field, schema, session path or browser
   path implements eighth-nearest voting yet.
@@ -83,8 +86,12 @@ conversation.
   8 focused tests.
 - Strict package Clippy with `--all-targets --no-deps -- -D warnings`, package
   formatting, evidence checksums and FIT validation passed.
-- Report validation, repository gates and local PR policy are recorded after
-  the documentation head is frozen.
+- `uor-harness loop gates --full`: all 11 gates passed on the immediate rerun
+  after the retained `ETXTBSY` flake.
+- Report validation and local PR policy are recorded after the documentation
+  head is frozen.
+
+The gate attempts are retained in [evidence/loop-gates.txt](evidence/loop-gates.txt).
 
 ## Skills used
 
