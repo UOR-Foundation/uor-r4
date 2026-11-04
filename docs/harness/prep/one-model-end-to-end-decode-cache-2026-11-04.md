@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). This is P3 (faster scoring) of Casey's 4 November plan, cache unit 2 of 2: scoring's decode steps from [claude-278](../../loop/tasks/one-model-end-to-end/claude-278/REPORT.md)'s exact step cache wherever the window fits.
 
-TEST FITNESS: pending (a fresh non-author review of this sheet).
+TEST FITNESS: FIT WITH CHANGES, from a fresh non-author review of this sheet at `15a60735` ([#3407, 6638239076](https://github.com/UOR-Foundation/uor-r4/issues/3407#issuecomment-6638239076)). It found no blockers and five instrument SHOULDs, all folded in here: I-4 (coverage), I-3b (a failure is not noise), the logs beside `--out`, plain-text lines, and what the gate leaves out.
 
 PRE-RUN: pending (a fresh non-author review of this sheet, the ORDER, the job and the grade).
 
@@ -15,7 +15,9 @@ The build ([ORDER](../../loop/tasks/one-model-end-to-end/claude-279/ORDER.md)) a
 - the decode switch in the batched decode, which prefills each group's prompt, steps while the window fits, and re-runs the whole window from the first step that would slide it, or that the cache refuses;
 - `--decode-cache 0|1` on `train-in-space`, default 1.
 
-Each is exact by construction: a step runs the same ops on the same tensors as the whole window, and cuts only the query rows. This run checks that on the GPU, bit for bit in the tests and byte for byte in the scored files. It re-scores P2b's sealed seed-1 checkpoints, unchanged, with P2b's commands. No training runs. The object is the scorer's decode, not the model, and no model reading rests on this run.
+Each is exact by construction: a step runs the same ops on the same tensors as the whole window, and cuts only the query rows. This run checks that on the GPU, bit for bit in the tests and byte for byte in the scored files.
+
+**What the gate leaves out.** The serial decode (`decode_reply_with_mode`) keeps the full re-run. It serves the forced, keyed and served arms (files named `samples-*-forced-*`, `samples-*-keyed-*` and `samples-*-served-*`) and the read scopes. G compares their files too, which confirms they did not change, but it does not test the cache on them. R3 gives their share of the pass's decode seconds. It re-scores P2b's sealed seed-1 checkpoints, unchanged, with P2b's commands. No training runs. The object is the scorer's decode, not the model, and no model reading rests on this run.
 
 ## Question
 
@@ -61,24 +63,28 @@ The base runs first, so it takes the driver's cold start of the PTX (built ahead
 ## Readings
 
 - **G (the gate): on equals off, byte for byte.** For each of L192, S192 and L2048, take the SHA-256 of every file under on's `--out` folder and off's. They must be equal file for file, with the same file names.
-  - Each pass's printed lines (`scored.jsonl`) must also be equal, once each line's `decode[1]` and `search[1]` are dropped. Those are the wall seconds of a samples file's decode and of a served key's searches. Every other field is a count, a hash or a window.
+  - Each pass's printed lines (`scored.jsonl`) must also be equal, once each line's `decode[1]` and `search[1]` are dropped. Those are the wall seconds of a samples file's decode and of a served key's searches. Every other field is a count, a hash or a window. A printed line that is not a JSON object (`[recall] ...`, `[trace] ...`) is compared as it stands.
   - **No clock reading is inside `--out`.** At the base, `score_rows` writes its files only through `write_new(&out.join(..))`: positions, targets, picks, reply texts and recall counts. The seconds go to stdout. claude-277 checked this for the same command and the same 19 files.
+  - **The logs sit beside `--out`, never inside it.** Each pass's stdout, stderr, exit code and clock readings go to `DIR.log/`, next to its `--out` folder `DIR`.
+  - The laptop's grade recomputes every SHA-256 from the files read back off the pod. It never trusts the pod's own lists, and a missing or empty folder never compares as the same.
 - **G0: the whole window is as before.** base-L192 equals off-L192, and base-S192 equals off-S192, byte for byte, with the same rule as G. The pin's Hamming read routes a whole window through the call the base makes, and the rest of the whole-window path is unchanged, so G0 checks that nothing else moved.
 - **R1 (tok/s first): decode tok/s per file, both sides.** Each samples and queries file prints a `decode` pair (tokens, seconds). R1 gives tok/s = tokens / seconds for every file of every pass, and on's tok/s over off's per file.
   - **The deciding reading is L2048's two `p-long` queries files.** P2b timed one pass at 2,048 within 2 s across two pods, so a single pair reads cleanly there.
   - At 192, P3(a)'s two serial repeats differed by 31% (claude-277), so the 192 ratios are reported but decide nothing.
-- **R2: the forwards.** Each pass of the pin prints `decode_forwards` on stderr: the cache's prefills, its steps, and the whole-window forwards. On each on pass, steps / (steps + whole) is set against the count from `queries.json` (99.2% of steps after the first at 2,048, 32% at 192). On each off pass, prefills and steps must both be 0 (I-2).
-- **R3: the whole pass.** Each pass's wall seconds and GPU memory peak, on against off.
+- **R2: the forwards.** Each pass of the pin prints `decode_forwards` on stderr: the cache's prefills, its steps, and the whole-window forwards. On each on pass, steps / (steps + whole) is set against the count from `queries.json` (99.2% of steps after the first at 2,048, 32% at 192). On each off pass, prefills and steps must both be 0 (I-2). I-4 gates the coverage these counts show.
+- **R3: the whole pass.** Each pass's wall seconds and GPU memory peak, on against off, and the serial decode's share of its decode seconds.
+- **Reported, not gated:** base-L192, base-S192 and off-L2048 against P2b's sealed files from another pod (claude-277 found two 5090 pods disagreeing on 26 of 15,961 top-1 picks with one binary).
 
 ## Bar
 
 The first outcome that applies is the reading.
 
-- **Unread (instrument):** I-0 to I-3 fails. No reading counts. The REPORT classifies the failure. The fault is repaired, and the run is repeated.
-- **The cache is not exact (G fails):** any scored file or printed line differs between on and off.
+- **Unread (instrument):** I-0 to I-3, or I-3b, fails. No reading counts. The REPORT classifies the failure. The fault is repaired, and the run is repeated.
+- **The cache is not exact (G fails):** any scored file or printed line differs between on and off, at a window whose off pass repeats itself (I-3 at L192, I-3b at S192 and L2048).
   - `--decode-cache` defaults to 0 in this unit's PR, and the REPORT names the first file and row that differ.
   - P4 scores with the full re-run.
   - The cache is repaired in a new unit, and this run is repeated there.
+- **Unread (coverage) (G holds, I-4 fails):** the on passes did not step as the switch predicts, so G did not test the cache where it claims to. `--decode-cache` defaults to 0, and the REPORT names the refusal that took the steps, from R2.
 - **The whole window moved (G0 fails, G holds):** the pin's off pass differs from the base. Since I-3 holds, the scorer is deterministic on this pod, so the build changed a whole-window result.
   - The PR does not merge until the cause is found and fixed, and the run is repeated.
   - The REPORT names the first file and row.
@@ -112,8 +118,14 @@ Whatever the outcome:
   - every pass exits 0;
   - each pass's `scored.jsonl` holds a `decode` pair for both `p-long` queries files;
   - each pin pass's stderr holds one `decode_forwards` line;
-  - each off pass reads 0 prefills and 0 steps, and each on pass more than 0 steps.
+  - each off pass reads 0 prefills and 0 steps, and each on pass more than 0 steps. The zero is a hard check, not a formality: the switch and its counts are per thread, so a decode moved onto another thread would ignore `--decode-cache 0`, and only this check would show it.
 - **I-3 (the gate can read):** off-L192 and off-L192-again are byte-identical, file for file, by G's rule. If they are not, neither G nor G0 can tell the cache or the build apart from the scorer's own noise.
+- **I-3b (a failure is not noise):** S192 and L2048 have no repeated off pass by default. If G or G0 fails at either window, the job runs one more off pass there (off-S192-again, off-L2048-again) before the seal. If it differs from the first off pass, the scorer is not deterministic at that window, and the run is unread. If it equals it, the failure stands.
+- **I-4 (the gate tested the cache):** read only where G holds.
+  - On each window, the on pass takes as many forwards as the off pass, one per decode step: prefills + steps + whole on equals whole off.
+  - At 2,048, at least 90% of on-L2048's forwards after the prefills are steps, as predicted: the queries files are about 98% of the pass and 99.2% of their steps fit.
+  - At 192, more than 0 steps (I-2). The REPORT gives the share.
+- **The base is a different binary:** the job stops if the base's `train-in-space` is byte-identical to the pin's, so a stale copy in the shared target folder cannot pass as the base.
 - **The signal trap.** If the job is stopped, it first stops the pass that is running, waits for it, and only then seals what it wrote.
 
 ## Data split
@@ -159,9 +171,10 @@ The pod takes about:
 - 5 minutes to fetch the inputs and checkpoints;
 - 15 minutes for the six passes at 192;
 - 5 to 20 minutes for on-L2048, and 45 for off-L2048 (P2b's pass took 2,624 s);
-- 15 minutes to seal and read back.
+- 15 minutes to seal and read back;
+- only if G or G0 fails at S192 or L2048 (I-3b): 5 more minutes for off-S192-again, and 45 for off-L2048-again.
 
-That is about 2 to 2.2 hours. Verified 5090 offers ran from about $1 an hour at this sheet's writing, so it costs about $2 to $2.4, inside the ORDER's $3. `uor-pod status` is read at launch, inside 4 pods and $8 an hour. The watcher's wall limit is 4 hours (`MAXSEC=14400`), its spend limit $4, and the lease is taken for 4 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
+That is about 2 to 2.2 hours, or about 3 if I-3b runs both repeats. Verified 5090 offers ran from about $1 an hour at this sheet's writing, so it costs about $2 to $2.4, inside the ORDER's $3. `uor-pod status` is read at launch, inside 4 pods and $8 an hour. The watcher's wall limit is 4 hours (`MAXSEC=14400`), its spend limit $4, and the lease is taken for 4 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
 
 ## Stop rule
 
