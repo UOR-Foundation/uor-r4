@@ -10,7 +10,9 @@ Base: `5707380fe`.
 - **The first completion run had an invalid memory-off arm.** It passed the
   trained artifact to a complete-reply evaluator that always loaded memory, so
   `trained_memory_off` duplicated `trained`. The exact-head review caught this.
-  The first raw roots are retained as invalid; a genuine
+  The first raw roots are retained as
+  `local/deepseek/memory-replies/deepseek-110/{seed-1,seed-2,seed-1-repeat}-invalid-memory-off`;
+  a genuine
   `CpuFbsForward::disable_memory` path and point-key regression were added
   before rerun.
 - **Neither memory arm produced a complete reply.** Every one of the 114 prompts
@@ -70,14 +72,30 @@ Training reproduced deepseek-109 exactly on both seeds. Both runs accepted all
 `c856ce21…b88de4` and `10f91f73…40e6`. Teacher-forced top-1 remained
 `507→526` and `441→484`, with distances below frozen and random.
 
-**Invalid first-run readings — retained, superseded, and not used as evidence:**
+Source was `bccbf9295d011727d005e827f47cb1d0afde2c81`; release binary
+`867a118bb21ced8f884d1a011d60a19bc129cc2b1c0ec559b79b4ed0994bdf01`;
+host was the AMD Ryzen 9 9950X on Linux 7.0.0-42-generic with Rust 1.97.1.
+
+Corrected complete-reply readings:
 
 | Seed | Arm | Exact | BOS | Cap | Opening | Distinct | Repeated 4-gram |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 1 | frozen / trained / random | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 0 / 14 / 0 | 2 / 3 / 2 | 26 / 91 / 26 |
-| 1 | target frozen / trained / shuffled | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 50 / 50 / 10 | 15 / 15 / 15 | 76 / 76 / 81 |
-| 2 | frozen / trained / random | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 4 / 4 / 4 | 2 / 2 / 2 | 48 / 48 / 48 |
-| 2 | target frozen / trained / shuffled | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 50 / 50 / 10 | 15 / 15 / 16 | 37 / 37 / 61 |
+| 1 | frozen | 0 | 0 | 114 | 0 | 2 | 26 |
+| 1 | trained | 0 | 0 | 114 | 14 | 3 | 91 |
+| 1 | random | 0 | 0 | 114 | 0 | 2 | 26 |
+| 1 | memory-off | 0 | 0 | 114 | 0 | 2 | 26 |
+| 1 | trained-memory-off | 0 | 0 | 114 | 0 | 2 | 26 |
+| 1 | target-frozen | 0 | 0 | 114 | 50 | 15 | 76 |
+| 1 | target-trained | 0 | 0 | 114 | 50 | 15 | 76 |
+| 1 | target-shuffled | 0 | 0 | 114 | 10 | 15 | 81 |
+| 2 | frozen | 0 | 0 | 114 | 4 | 2 | 48 |
+| 2 | trained | 0 | 0 | 114 | 4 | 2 | 48 |
+| 2 | random | 0 | 0 | 114 | 4 | 2 | 48 |
+| 2 | memory-off | 0 | 0 | 114 | 4 | 2 | 48 |
+| 2 | trained-memory-off | 0 | 0 | 114 | 4 | 2 | 48 |
+| 2 | target-frozen | 0 | 0 | 114 | 50 | 15 | 37 |
+| 2 | target-trained | 0 | 0 | 114 | 50 | 15 | 37 |
+| 2 | target-shuffled | 0 | 0 | 114 | 10 | 16 | 61 |
 
 Every paired exact-reference comparison covered 104 reachable rows, had
 `b+c=0`, gain 0 against a threshold of 2, and failed the registered margin.
@@ -87,9 +105,10 @@ decisions, 1,109,248 Q12 coordinates and 34,664 kept cells per seed.
 The shuffle control changed **102/114** exercised opening mappings and
 **773/795** exercised reply mappings while preserving keys and weights.
 
-Walls were 37.028 s and 37.276 s; peak RSS was 410,784 and 398,500 KiB. A fresh
+Walls were 37.762 s and 38.007 s; peak RSS was 395,808 and 386,892 KiB. A fresh
 seed-1 process reproduced the complete report with all timing fields removed,
-and reproduced every artifact hash byte for byte.
+reproduced every artifact hash byte for byte, and ran in 38.099 s at 390,156
+KiB peak RSS.
 
 The detailed record is [comparison.json](evidence/comparison.json);
 [SHA256SUMS](evidence/SHA256SUMS) binds the binary and generated artifacts. The
@@ -107,8 +126,8 @@ model-free ceiling remains in [reference-census.json](evidence/reference-census.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - `cargo fmt -p uor-r4-cpu-train -- --check`: passed.
 - `git diff --check`: passed.
-- `uor-harness prep-check`: sheet completed at `FIT`; the source correction
-  requires a fresh FIT before rerun.
+- `uor-harness prep-check`: sheet completed at `FIT`; the corrected rerun ran
+  against the exact FIT-reviewed source.
 - Model-free `--select-only --reply-cap 16` reproduced 16 keys, 102 training
   examples, 114 evaluation examples and the 104-reachable-reference census.
 - Both public seeds and the fresh seed-1 repeat completed under FIT.

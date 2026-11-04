@@ -1,12 +1,11 @@
 {
   "schema": "uor-r4.cpu-memory-replies-comparison/1",
-  "status": "invalid-first-run",
-  "invalid_reason": "trained_memory_off used a complete-reply path that always loaded memory",
+  "status": "valid",
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "source": {
-    "commit": "cfbf66ba893c1c7907e22e983a7686071bfd5088",
-    "binary_sha256": "0bd1645bec10fcc76f9fbe4523d30ddac91cecbbe96048240a67b9903e7a5026",
+    "commit": "bccbf9295d011727d005e827f47cb1d0afde2c81",
+    "binary_sha256": "867a118bb21ced8f884d1a011d60a19bc129cc2b1c0ec559b79b4ed0994bdf01",
     "rust": "1.97.1",
     "host": "AMD Ryzen 9 9950X, 16 cores / 32 threads",
     "os": "Linux 7.0.0-42-generic x86_64"
@@ -61,7 +60,7 @@
         "trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 14, "distinct": 3, "repeated_4gram": 91},
         "random": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
         "memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
-        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 14, "distinct": 3, "repeated_4gram": 91},
+        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
         "target_frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76},
         "target_trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76},
         "target_shuffled": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 10, "distinct": 15, "repeated_4gram": 81}
@@ -73,8 +72,8 @@
         "target_trained_vs_trained": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false},
         "target_trained_vs_target_shuffled": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false}
       },
-      "wall_elapsed_ms": 37027.84,
-      "peak_rss_kib": 410784
+      "wall_elapsed_ms": 37762.09,
+      "peak_rss_kib": 395808
     },
     {
       "seed": 2,
@@ -114,8 +113,8 @@
         "target_trained_vs_trained": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false},
         "target_trained_vs_target_shuffled": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false}
       },
-      "wall_elapsed_ms": 37276.00,
-      "peak_rss_kib": 398500
+      "wall_elapsed_ms": 38007.10,
+      "peak_rss_kib": 386892
     }
   ],
   "repeat": {
@@ -124,8 +123,8 @@
     "trained_artifact_sha256": "c856ce21cf46a4be5a0cc02e033d9c7d0cd674bc4ab96a1185a1b9ccf3b88de4",
     "random_artifact_sha256": "5d8ff860d974f828bb9ec5f16f6362b77a192386075e41b3fc525a90f2d8cf9a",
     "target_shuffled_artifact_sha256": "aaf1fac6fd83454c6316a73a0413b73e714f0928057349b6ce492b6ad56c9a2a",
-    "wall_elapsed_ms": 40055.91,
-    "peak_rss_kib": 407896
+    "wall_elapsed_ms": 38098.72,
+    "peak_rss_kib": 390156
   },
   "verdict": {
     "query_movement_complete_reply": "negative",
