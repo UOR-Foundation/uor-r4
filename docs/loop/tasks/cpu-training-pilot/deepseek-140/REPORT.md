@@ -23,7 +23,7 @@ Order: [ORDER.md](ORDER.md). Base: `70f45367d`.
   grew to 2,246,424,310 bytes against the registered 2 GiB limit. Attempt 4
   uses a separate control target and preserves attempt 3 as evidence.
 
-## What worked
+## What changed
 
 The positive modulo-256 content readout now has an exact integer serving path.
 `IntegerStackModel::serve_step` obtains the normal native writer or point-key
