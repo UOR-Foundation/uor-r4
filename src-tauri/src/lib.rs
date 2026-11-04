@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+pub mod mcp;
 pub mod sidecar;
 
 use serde::{Deserialize, Serialize};
@@ -2190,6 +2191,7 @@ pub mod tauri_gui {
     use std::time::Duration;
 
     use serde_json::{json, Value};
+    use super::mcp::McpManager;
     use super::sidecar::{NativeChatEvent, NativeProxyResponse, SidecarProcess};
     use super::{
         dispatch_rpc_command, git_diff_at, git_status_at, run_prepared_terminal_command,
@@ -2201,6 +2203,7 @@ pub mod tauri_gui {
     pub struct TauriDesktopState {
         inner: Arc<Mutex<DesktopBackend>>,
         sidecar: Option<SidecarProcess>,
+        mcp: McpManager,
     }
 
     impl TauriDesktopState {
@@ -2208,6 +2211,7 @@ pub mod tauri_gui {
             Self {
                 inner: Arc::new(Mutex::new(backend)),
                 sidecar: None,
+                mcp: McpManager::default(),
             }
         }
 
@@ -2229,6 +2233,7 @@ pub mod tauri_gui {
             Ok(Self {
                 inner: Arc::new(Mutex::new(backend)),
                 sidecar: Some(SidecarProcess::start(binary, stack, tokenizer)?),
+                mcp: McpManager::default(),
             })
         }
 
@@ -2291,6 +2296,25 @@ pub mod tauri_gui {
                 backend.prepare_terminal_command(request).map_err(|error| error.to_string())
             })?;
             run_prepared_terminal_command(&prepared).map_err(|error| error.to_string())
+        }
+
+        pub fn connect_mcp_remote(&self, url: &str, credential: &str) -> Result<String, String> {
+            self.mcp.connect_remote(url, credential, super::mcp::McpLimits::default())
+        }
+
+        pub fn connect_mcp_stdio(&self, executable: &Path, args: &[String], cwd: &Path) -> Result<String, String> {
+            let canonical_cwd = self.with_backend(|backend| {
+                backend.verify_granted_existing_path(cwd).map_err(|error| error.to_string())
+            })?;
+            self.mcp.connect_stdio(executable, args, &canonical_cwd, super::mcp::McpLimits::default())
+        }
+
+        pub fn list_mcp_tools(&self, session_id: &str) -> Result<Vec<Value>, String> {
+            self.mcp.list_tools(session_id)
+        }
+
+        pub fn call_mcp_tool(&self, session_id: &str, name: &str, args: &Value) -> Result<Value, String> {
+            self.mcp.call_tool(session_id, name, args)
         }
     }
 
@@ -2727,8 +2751,60 @@ pub mod tauri_gui {
         Ok(Value::String(state.run_terminal_command(&request)?))
     }
 
+    #[tauri::command]
+    pub fn native_mcp_connect_remote(
+        state: tauri::State<'_, TauriDesktopState>,
+        url: String,
+        credential: String,
+    ) -> Result<Value, String> {
+        let session_id = state.connect_mcp_remote(&url, &credential)?;
+        Ok(json!({ "sessionId": session_id }))
+    }
+
+    #[tauri::command]
+    pub fn native_mcp_list_tools(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+    ) -> Result<Value, String> {
+        serde_json::to_value(state.list_mcp_tools(&session_id)?).map_err(|error| error.to_string())
+    }
+
+    #[tauri::command]
+    pub fn native_mcp_call_tool(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+        name: String,
+        args: Value,
+    ) -> Result<Value, String> {
+        state.call_mcp_tool(&session_id, &name, &args)
+    }
+
+    #[tauri::command]
+    pub fn native_mcp_connect_stdio(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, TauriDesktopState>,
+        executable: String,
+        args: Vec<String>,
+        cwd: String,
+    ) -> Result<Value, String> {
+        let confirmed = app
+            .dialog()
+            .message(format!(
+                "Start this MCP stdio server?\n\nExecutable:\n{executable}\n\nArguments:\n{args:?}\n\nWorking directory:\n{cwd}"
+            ))
+            .title("Approve MCP stdio server")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancel)
+            .blocking_show();
+        if !confirmed {
+            return Ok(Value::Null);
+        }
+        let session_id = state.connect_mcp_stdio(Path::new(&executable), &args, Path::new(&cwd))?;
+        Ok(json!({ "sessionId": session_id }))
+    }
+
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 25 native/host `#[tauri::command]` handlers registered.
+    /// 29 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
@@ -2759,6 +2835,10 @@ pub mod tauri_gui {
                 native_enable_terminal,
                 native_confirm_terminal_command,
                 native_run_terminal_command,
+                native_mcp_connect_remote,
+                native_mcp_list_tools,
+                native_mcp_call_tool,
+                native_mcp_connect_stdio,
             ])
     }
 

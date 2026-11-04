@@ -161,7 +161,39 @@ export function createMcpClient(options = {}) {
     };
 }
 
+function declaredNativeInvoke() {
+    const invoke = globalThis.__TAURI__?.core?.invoke;
+    return typeof invoke === 'function' ? invoke.bind(globalThis.__TAURI__.core) : null;
+}
+
+function nativeSession(sessionId, invoke) {
+    return {
+        listTools: () => invoke('native_mcp_list_tools', { sessionId }),
+        callTool: (name, args = {}) => invoke('native_mcp_call_tool', { sessionId, name, args }),
+    };
+}
+
+export async function connectNativeStdio(config = {}) {
+    const invoke = declaredNativeInvoke();
+    if (!invoke) throw mcpError('MCP stdio is unavailable in the browser build; use the desktop app.');
+    const selected = await invoke('native_mcp_connect_stdio', {
+        executable: String(config.executable || ''),
+        args: Array.isArray(config.args) ? config.args.map(String) : [],
+        cwd: String(config.cwd || ''),
+    });
+    if (!selected) return null;
+    return nativeSession(selected.sessionId, invoke);
+}
+
 export async function connectRemote(config = {}) {
+    const invoke = declaredNativeInvoke();
+    if (invoke) {
+        const selected = await invoke('native_mcp_connect_remote', {
+            url: String(config.url || ''),
+            credential: String(config.credential || ''),
+        });
+        return nativeSession(selected.sessionId, invoke);
+    }
     const client = createMcpClient(config);
     return client.connectRemote(config);
 }
@@ -208,44 +240,82 @@ export function mountMcpConnections({ root = globalThis.document, connectRemote:
     args.setAttribute('aria-label', 'Tool arguments as JSON');
     const result = element('pre', 'mcp-result', 'No tool result.');
     result.id = 'mcpResultOutput';
-    const stdio = element('button', 'btn btn-ghost btn-small', 'Stdio unavailable in browser build');
+    const native = declaredNativeInvoke();
+    const stdio = element('button', 'btn btn-ghost btn-small', native ? 'Connect stdio with native approval' : 'Stdio unavailable in browser build');
     stdio.id = 'mcpStdioButton';
     stdio.type = 'button';
-    stdio.disabled = true;
-    section.append(url, credential, connectButton, status, tools, args, result, stdio);
+    stdio.disabled = !native;
+    section.append(url, credential, connectButton, status, tools, args, result);
+    let executable;
+    let stdioArgs;
+    let cwd;
+    if (native) {
+        executable = element('input', 'input');
+        executable.id = 'mcpStdioExecutable';
+        executable.placeholder = '/absolute/path/to/mcp-server';
+        executable.setAttribute('aria-label', 'MCP stdio executable');
+        stdioArgs = element('input', 'input');
+        stdioArgs.id = 'mcpStdioArgs';
+        stdioArgs.placeholder = 'Optional JSON argument array, for example ["--safe"]';
+        stdioArgs.setAttribute('aria-label', 'MCP stdio arguments');
+        cwd = element('input', 'input');
+        cwd.id = 'mcpStdioCwd';
+        cwd.placeholder = '/granted/project';
+        cwd.setAttribute('aria-label', 'MCP stdio working directory');
+        section.append(executable, stdioArgs, cwd);
+    }
+    section.appendChild(stdio);
     mount.appendChild(section);
 
-    connectButton.addEventListener('click', async () => {
-        connectButton.disabled = true;
+    function renderTools(listed) {
+        tools.textContent = '';
+        for (const tool of listed) {
+            const button = element('button', 'btn btn-secondary btn-small mcp-tool-button', `${tool.name} — ${tool.description || 'No description'}`);
+            button.type = 'button';
+            button.addEventListener('click', async () => {
+                try {
+                    const parsed = JSON.parse(args.value || '{}');
+                    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw mcpError('Tool arguments must be a JSON object.');
+                    result.textContent = 'Calling ' + tool.name + '…';
+                    const called = await session.callTool(tool.name, parsed);
+                    result.textContent = JSON.stringify(called, null, 2);
+                } catch (error) {
+                    result.textContent = String(error?.message || error);
+                }
+            });
+            tools.appendChild(button);
+        }
+    }
+
+    async function connectWith(button, action) {
+        button.disabled = true;
         status.textContent = 'Connecting…';
         tools.textContent = '';
         try {
-            session = await connect({ url: url.value.trim(), credential: credential.value });
+            session = await action();
+            if (!session) {
+                status.textContent = 'Connection approval was cancelled; nothing started.';
+                return;
+            }
             const listed = await session.listTools();
             status.textContent = `Connected · ${listed.length} tool${listed.length === 1 ? '' : 's'}`;
-            for (const tool of listed) {
-                const button = element('button', 'btn btn-secondary btn-small mcp-tool-button', `${tool.name} — ${tool.description || 'No description'}`);
-                button.type = 'button';
-                button.addEventListener('click', async () => {
-                    try {
-                        const parsed = JSON.parse(args.value || '{}');
-                        if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw mcpError('Tool arguments must be a JSON object.');
-                        result.textContent = 'Calling ' + tool.name + '…';
-                        const called = await session.callTool(tool.name, parsed);
-                        result.textContent = JSON.stringify(called, null, 2);
-                    } catch (error) {
-                        result.textContent = String(error?.message || error);
-                    }
-                });
-                tools.appendChild(button);
-            }
+            renderTools(listed);
         } catch (error) {
             session = null;
             status.textContent = String(error?.message || error);
         } finally {
-            connectButton.disabled = false;
+            button.disabled = false;
         }
-    });
+    }
+
+    connectButton.addEventListener('click', () => connectWith(connectButton, () => connect({ url: url.value.trim(), credential: credential.value })));
+    if (native) {
+        stdio.addEventListener('click', () => connectWith(stdio, () => {
+            const parsed = stdioArgs.value.trim() ? JSON.parse(stdioArgs.value) : [];
+            if (!Array.isArray(parsed)) throw mcpError('MCP stdio arguments must be a JSON array.');
+            return connectNativeStdio({ executable: executable.value.trim(), args: parsed, cwd: cwd.value.trim() });
+        }));
+    }
     return section;
 }
 
