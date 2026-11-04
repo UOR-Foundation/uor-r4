@@ -173,13 +173,31 @@ PIPELINE=$SHARED/local/deepseek/generated-prefix/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/generated-prefix-133
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-test "$(git -C "$SOURCE" rev-parse HEAD)" = \
-  63a3a92303706f08133b0dd1fc41e915cae4aac1
+IMPL_PIN=77524f3e47422a4c86578b2798bc98cd6d6d83b1
+MIN_FREE_KIB=31588352
+MAX_BUILD_BYTES=2147483648
+MAX_PIPELINE_BYTES=67108864
+free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
+test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
+test -z "$(git -C "$SOURCE" status --porcelain -- crates docs/harness/prep)"
+git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- crates/uor-r4-cpu-train
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
 mkdir -p "$PIPELINE/selection"
-CARGO_TARGET_DIR=$BUILD cargo build --locked --release \
-  -p uor-r4-cpu-train --bin cpu-generated-prefix-driver
+BUILD_STARTED=$(date -u +%s)
+/usr/bin/time -v -o "$PIPELINE/build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR=$BUILD \
+  cargo build --locked --release \
+    -p uor-r4-cpu-train --bin cpu-generated-prefix-driver
+BUILD_SECONDS=$(( $(date -u +%s) - BUILD_STARTED ))
+BUILD_BYTES=$(du -sb "$BUILD" | cut -f1)
+BUILD_RSS=$(awk -F': ' '/Maximum resident set size/ { print $2 }' \
+  "$PIPELINE/build.time.txt")
+test "$BUILD_BYTES" -le "$MAX_BUILD_BYTES"
+test "$BUILD_RSS" -le 4194304
+printf '{"jobs":16,"wall_seconds":%s,"peak_rss_kib":%s,"target_bytes":%s}\n' \
+  "$BUILD_SECONDS" "$BUILD_RSS" "$BUILD_BYTES" >"$PIPELINE/build-summary.json"
 BIN=$BUILD/release/cpu-generated-prefix-driver
 for seed in 1 2; do
   case "$seed" in
@@ -223,6 +241,8 @@ run() {
   jq -e '.bar.all_parity_exact == true
     and .bar.static_shuffled_accepted > 0
     and .bar.dynamic_shuffled_accepted > 0' "$out/report.json" >/dev/null
+  test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
+  test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 }
 run 1 seed-1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 run 2 seed-2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
@@ -232,12 +252,19 @@ jq 'del(.wall_elapsed_ms, .peak_rss_kib)' \
 jq 'del(.wall_elapsed_ms, .peak_rss_kib)' \
   "$PIPELINE/seed-1-repeat/report.json" >"$PIPELINE/seed-1-repeat.normalized.json"
 cmp "$PIPELINE/seed-1.normalized.json" "$PIPELINE/seed-1-repeat.normalized.json"
+(cd "$PIPELINE/seed-1" && sha256sum ./*.uorlut) >"$PIPELINE/seed-1.artifacts.sha256"
+(cd "$PIPELINE/seed-1-repeat" && sha256sum ./*.uorlut) \
+  >"$PIPELINE/seed-1-repeat.artifacts.sha256"
+cmp "$PIPELINE/seed-1.artifacts.sha256" \
+  "$PIPELINE/seed-1-repeat.artifacts.sha256"
+(cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
+  sort -z | xargs -0 sha256sum >SHA256SUMS &&
+  sha256sum -c SHA256SUMS --quiet)
+test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_PIPELINE_BYTES"
 ```
 
-Compare every `.uorlut` artifact by filename between seed 1 and its repeat,
-then write a recursive `SHA256SUMS` for the retained pipeline. Any source,
-input, binary, split, control, parity or deterministic mismatch is an
-instrument fault requiring a new FIT before retry.
+Any source, input, binary, split, control, parity or deterministic mismatch is
+an instrument fault requiring a new FIT before retry.
 
 ## TEST FITNESS
 
