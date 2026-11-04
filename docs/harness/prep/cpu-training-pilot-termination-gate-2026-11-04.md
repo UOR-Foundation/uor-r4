@@ -1,6 +1,6 @@
 # CPU geometric termination-point gate
 
-**Status:** DRAFT
+**Status:** FIT
 
 ## Question
 
@@ -175,4 +175,18 @@ nondeterministic repeat, an unavailable dependency or a counter overflow.
 
 ## TEST FITNESS
 
-Pending fresh-context non-author FIT at the corrected success-accounting head.
+TEST FITNESS: FIT - M2 #2030
+sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`
+head: `8af603b074bed0dc1f0485f0512fb91d3837fd99`
+reviewer: Codex fresh-context non-author review
+note: repaired success accounting now compares non-premature BOS completion
+`bos_complete - premature_stop`, rejects underflow, and retains raw BOS,
+premature-stop and exact-reference readings. A finite regression proves an
+all-premature candidate cannot pass. Mechanism, EOS/BOS boundary, training
+replay, selection, gates, radius, arms, cap, candidate bar, seed-1 repeat and
+30-minute stop remain fixed.
+date: 2026-11-04
+
+This FIT clears only the repaired comparison source at the exact head. Any
+source, hash, selection, arm, cap, bar, control or gate-rule change requires
+re-review.
