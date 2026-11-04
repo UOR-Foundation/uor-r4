@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -19,9 +19,9 @@ paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `436d2208fc9a83d8ee5cf0838a871ef06e9b22b0` |
+| implementation source | `9717f52ba4b60eab6eae39273dbc7ee7a0239c3c` |
 | baseline driver | `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada` |
-| optimized driver | `6553a049f1244e0401c301dec1d54c87509bd1aff04a0fe144e18b112f427639` |
+| optimized driver | `c92e2d2a101b64c13751fda099c41f8e88994ebc1627046332b863cdececba04` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -30,7 +30,7 @@ paid API.
 Inputs are under
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/`.
 The optimized binary was built with
-`CARGO_TARGET_DIR=target/deepseek/trunk-verify-optimized cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
+`CARGO_TARGET_DIR=target/deepseek/trunk-verify-optimized-final cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
 
 ## Data split
 
@@ -97,10 +97,10 @@ SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
 PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-verify/2026-11-04-attempt-1
 OLD_BIN="$SOURCE/target/deepseek/trunk-verify-baseline/release/cpu-trunk-count-driver"
-NEW_BIN="$SOURCE/target/deepseek/trunk-verify-optimized/release/cpu-trunk-count-driver"
-SOURCE_PIN=436d2208fc9a83d8ee5cf0838a871ef06e9b22b0
+NEW_BIN="$SOURCE/target/deepseek/trunk-verify-optimized-final/release/cpu-trunk-count-driver"
+SOURCE_PIN=9717f52ba4b60eab6eae39273dbc7ee7a0239c3c
 OLD_SHA=e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada
-NEW_SHA=6553a049f1244e0401c301dec1d54c87509bd1aff04a0fe144e18b112f427639
+NEW_SHA=c92e2d2a101b64c13751fda099c41f8e88994ebc1627046332b863cdececba04
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
 EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
@@ -156,6 +156,8 @@ run() {
   ' "$out/report.json" >/dev/null
   test "$(jq -S '.threads = 1 | del(.wall_elapsed_ms, .peak_rss_kib, .stages)' \
     "$out/report.json" | sha256sum | cut -d' ' -f1)" = "$EXPECTED_REPORT"
+  test "$(sha256sum "$out/exact.uorlut" | cut -d' ' -f1)" = "$EXPECTED_EXACT"
+  test "$(sha256sum "$out/shuffled.uorlut" | cut -d' ' -f1)" = "$EXPECTED_SHUFFLED"
 }
 run forward baseline 1
 run forward optimized 1
@@ -218,4 +220,10 @@ training quality, language capability or GPU qualification.
 
 ## TEST FITNESS
 
-TEST FITNESS: pending fresh-context non-author review.
+First fresh-context non-author review: NOT FIT at docs head
+`ddcfdfd3170988620ebab696f2289b5c26516dc5`. The reviewer required a finite
+test that imports and checks real trunk artifacts, direct hashes of every
+generated artifact against the accepted oracle, and removal of the conflicting
+premature FIT status. Those defects are addressed at the reviewed head.
+
+TEST FITNESS: pending second fresh-context non-author review.
