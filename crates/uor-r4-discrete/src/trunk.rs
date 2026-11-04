@@ -45,8 +45,6 @@ pub const TRUNK_ARM_SCHEMA: &str = "uor-r4.trunk-arm-report/v1";
 pub const TRUNK_GRADE_SCHEMA: &str = "uor-r4.trunk-grade-report/v1";
 pub const TRUNK_ARTIFACT_SCHEMA: &str = "uor-r4.trunk-integer-artifact/v1";
 pub const TRUNK_LUT_SCHEMA: &str = "uor-r4.lut-discrete-trunk/1";
-pub const COMPILED_OPERATOR_KAPPA: &str = geometry::OPERATOR_KAPPA;
-pub const COMPILED_COMPOSITION_KAPPA: &str = geometry::COMPOSITION_KAPPA;
 
 pub const FRESH_V2_ROWS: usize = 14_287;
 pub const FRESH_V2_VISITED_TARGETS: usize = 1_049_856;

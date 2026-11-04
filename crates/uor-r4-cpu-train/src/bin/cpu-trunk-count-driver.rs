@@ -878,10 +878,12 @@ fn parse_peak_rss_kib(status: &str) -> Result<u64, String> {
 mod tests {
     use super::*;
     use uor_r4_discrete::metadata::BinderPlan;
+    use uor_r4_discrete::q4_import::{
+        COMPOSITION_KAPPA as COMPILED_COMPOSITION_KAPPA, OPERATOR_KAPPA as COMPILED_OPERATOR_KAPPA,
+    };
     use uor_r4_discrete::snapshot::Snapshot;
     use uor_r4_discrete::trunk::{
         build_trunk_norm_frames, build_trunk_step_table, export_trunk_d11,
-        COMPILED_COMPOSITION_KAPPA, COMPILED_OPERATOR_KAPPA,
     };
     use uor_r4_discrete::w2_capacity::root_vector;
     use uor_r4_discrete::{ObjectivePolicy, ReadInitialization, ReadSpec, Spec, SCHEMA};
