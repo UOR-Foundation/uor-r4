@@ -87,13 +87,20 @@ sets.
 
 - Four fresh-context non-author reviews; the first three returned NOT_FIT and
   the repaired sheet returned FIT.
-- Full `uor-r4-cpu-train` release suite: 198 library tests passed, 4 release
-  benchmarks ignored, plus all binary suites.
+- Full `uor-r4-cpu-train` release suite: **235 tests passed, 0 failed, 4 release
+  benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
+- Package formatting: passed.
 - Focused ordered-fold, row/artifact/parity and fail-closed RSS tests: passed at
   workers 1, 8, 16 and 32.
-- Prep shell syntax, evidence checksum reconstruction and `git diff --check`:
-  passed.
+- Prep check: complete and FIT; prep shell syntax, report check, roadmap check
+  (139 items), documentation catalog (1,175 records), D23/D25/D32 ratchets and
+  evidence checksum reconstruction passed.
+- Full loop gates: **11/11 green**. The first attempt found only unlinked
+  equivalence wording in the ORDER; that phrase was repaired and the complete
+  gate set passed.
+- `uor-harness check`: 0 errors and 135 pre-existing warnings, chiefly stale
+  claims, old merged branches and old presence records outside this unit.
 
 ## Skills used
 
