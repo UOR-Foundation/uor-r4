@@ -17,8 +17,8 @@ Local CPU development research under D84. No GPU, pod or paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `d21951f75a2ed696c22fcde1fcd6c69ee11db2fe` |
-| driver binary | `53162874aed67e6d3665918affafdac1670f511626d5a23d2b68a0167e4adb20` |
+| implementation source | `e4bc08361c95b1b2c78a357c755c9c9812e42abe` |
+| driver binary | `577195fb21f29b36ef2c49bc2b02af19d0eaa8a10a04d062abe8bb4005333b5e` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -27,7 +27,7 @@ Local CPU development research under D84. No GPU, pod or paid API.
 Inputs are under
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity/`.
 The binary was built cleanly with
-`CARGO_TARGET_DIR=target/deepseek/trunk-parallel-build-126-repair cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
+`CARGO_TARGET_DIR=target/deepseek/trunk-parallel-build-126-timing cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
 
 ## Fixed run
 
@@ -37,11 +37,14 @@ Replay the accepted deepseek-125 split and dose exactly:
 - evaluation stride 2, at most 512 held-out rows;
 - seed 1;
 - no-update, exact additive-count and shuffled-target arms;
-- workers 1, 8, 16 and 32, each in a fresh output root.
+- workers 1, 8, 16 and 32, each in a fresh output root;
+- two passes in opposite worker order: `1,8,16,32` then `32,16,8,1`,
+  each with eight fresh roots and no concurrent runs.
 
-Only `threads`, `wall_elapsed_ms` and `peak_rss_kib` may differ between worker
-reports. Exact and shuffled artifact bytes, table readings, decision readings,
-checksums, changed-row lists and all other report fields must be identical.
+Only `threads`, `wall_elapsed_ms` and `peak_rss_kib` may differ between the
+eight reports. Exact and shuffled artifact bytes, table readings, decision
+readings, checksums, changed-row lists and all other report fields must be
+identical.
 
 The accepted deepseek-125 result is the regression oracle, not merely another
 worker run:
@@ -62,8 +65,9 @@ worker run:
 
 Primary performance bar:
 
-- at least one of 8, 16 or 32 workers completes in at most two-thirds of the
-  one-worker wall time, a speedup of at least 1.5 times;
+- average each worker's two opposite-order `wall_elapsed_ms` values;
+- at least one of 8, 16 or 32 workers has an average at most two-thirds of the
+  one-worker average, a speedup of at least 1.5 times;
 - every worker count satisfies all equivalence and resource gates below.
 
 This is performance/instrument evidence only. A slower result closes no model
@@ -74,6 +78,8 @@ mechanism and says nothing about language capability.
 - source and binary pins hold before and after each run;
 - all four input hashes match the table above;
 - fresh output roots and no source drift;
+- finite tests reproduce rows, artifacts, decisions and the ordered checksum
+  fold at workers 1, 8, 16 and 32, and RSS parsing rejects missing or zero data;
 - exact and shuffled artifacts differ within every run;
 - all 13 count tables increase by exactly 4,096 entries;
 - independent full decoded table contents match every arm;
@@ -81,9 +87,10 @@ mechanism and says nothing about language capability.
 - every arm has zero query-coordinate, admitted-cell, top-8 and token
   mismatches;
 - each report records its requested worker count;
-- exact and shuffled artifacts are byte-identical across all four workers;
-- normalized reports are identical across all four workers;
-- every run stays below 600 seconds and 2,097,152 KiB peak RSS.
+- exact and shuffled artifacts are byte-identical across all eight runs;
+- normalized reports are identical across all eight runs;
+- every run records positive peak RSS below 2,097,152 KiB and stays below the
+  600-second timeout.
 
 ## Steps
 
@@ -94,9 +101,9 @@ set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-parallel
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
 PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-parallel/2026-11-04-attempt-1
-BIN="$SOURCE/target/deepseek/trunk-parallel-build-126-repair/release/cpu-trunk-count-driver"
-SOURCE_PIN=d21951f75a2ed696c22fcde1fcd6c69ee11db2fe
-BIN_SHA=53162874aed67e6d3665918affafdac1670f511626d5a23d2b68a0167e4adb20
+BIN="$SOURCE/target/deepseek/trunk-parallel-build-126-timing/release/cpu-trunk-count-driver"
+SOURCE_PIN=e4bc08361c95b1b2c78a357c755c9c9812e42abe
+BIN_SHA=577195fb21f29b36ef2c49bc2b02af19d0eaa8a10a04d062abe8bb4005333b5e
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
 EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
@@ -117,8 +124,9 @@ check_pins() {
 check_pins
 test ! -e "$PIPELINE"
 run() {
-  workers=$1
-  out="$PIPELINE/workers-$workers"
+  pass=$1
+  workers=$2
+  out="$PIPELINE/$pass/workers-$workers"
   check_pins
   /usr/bin/time -v timeout 600s "$BIN" \
     "$DATA/t16-frozen-zero-seed1-trunk.d11" \
@@ -132,6 +140,7 @@ run() {
     --seed 1 --workers "$workers" >/dev/null
   check_pins
   test "$(jq -er '.threads' "$out/report.json")" -eq "$workers"
+  test "$(jq -er '.peak_rss_kib' "$out/report.json")" -gt 0
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 2097152
   test "$(jq -er '.artifacts.exact_sha256' "$out/report.json")" = "$EXPECTED_EXACT"
   test "$(jq -er '.artifacts.shuffled_sha256' "$out/report.json")" = "$EXPECTED_SHUFFLED"
@@ -167,24 +176,58 @@ run() {
     (.changed_decisions.exact_vs_shuffled_rows == 4)
   ' "$out/report.json" >/dev/null
 }
-run 1
-run 8
-run 16
-run 32
-for workers in 8 16 32; do
-  cmp "$PIPELINE/workers-1/exact.uorlut" "$PIPELINE/workers-$workers/exact.uorlut"
-  cmp "$PIPELINE/workers-1/shuffled.uorlut" "$PIPELINE/workers-$workers/shuffled.uorlut"
+run forward 1
+run forward 8
+run forward 16
+run forward 32
+run reverse 32
+run reverse 16
+run reverse 8
+run reverse 1
+for pass in forward reverse; do
+  for workers in 8 16 32; do
+    cmp "$PIPELINE/$pass/workers-1/exact.uorlut" \
+      "$PIPELINE/$pass/workers-$workers/exact.uorlut"
+    cmp "$PIPELINE/$pass/workers-1/shuffled.uorlut" \
+      "$PIPELINE/$pass/workers-$workers/shuffled.uorlut"
+  done
 done
+for workers in 1 8 16 32; do
+  cmp "$PIPELINE/forward/workers-$workers/exact.uorlut" \
+    "$PIPELINE/reverse/workers-$workers/exact.uorlut"
+  cmp "$PIPELINE/forward/workers-$workers/shuffled.uorlut" \
+    "$PIPELINE/reverse/workers-$workers/shuffled.uorlut"
+done
+wall() {
+  jq -er '.wall_elapsed_ms' "$PIPELINE/$1/workers-$2/report.json"
+}
+mean_wall() {
+  jq -n --argjson forward "$1" --argjson reverse "$2" \
+    '($forward + $reverse) / 2'
+}
+one_worker=$(mean_wall "$(wall forward 1)" "$(wall reverse 1)")
+speedup_passed=0
+for workers in 8 16 32; do
+  mean=$(mean_wall "$(wall forward "$workers")" "$(wall reverse "$workers")")
+  speedup=$(jq -n --argjson one "$one_worker" --argjson worker "$mean" \
+    '$one / $worker')
+  printf 'workers=%s mean_wall_ms=%s speedup=%s\n' \
+    "$workers" "$mean" "$speedup"
+  if jq -e -n --argjson speedup "$speedup" '$speedup >= 1.5' >/dev/null; then
+    speedup_passed=1
+  fi
+done
+test "$speedup_passed" -eq 1
 ```
 
-After the four runs, compare artifact hashes and normalized reports; write the
+After the eight runs, compare artifact hashes and normalized reports; write the
 comparison and checksum inventory under the task evidence folder.
 
 ## Cost and stop
 
 Local workstation only. Rust 1.97.1 on Linux 7.0.0-42-generic x86_64. At
 registration the project filesystem had 508 GiB free and `/tmp` had 25 GiB
-free. Four output roots retain about 700 MiB total. Each run has a 600-second
+free. Eight output roots retain about 1.4 GiB total. Each run has a 600-second
 timeout and 2-GiB peak-RSS cap. Stop on cap failure, source drift, a worker
 count mismatch, any artifact/decision/checksum mismatch, a non-vacuous control
 failure or nested Rayon pools.
