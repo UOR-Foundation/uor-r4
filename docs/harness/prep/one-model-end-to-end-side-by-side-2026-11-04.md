@@ -2,12 +2,12 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). This is step P3(a) of Casey's 4 November plan: run a seed's scoring passes side by side on one GPU instead of one after another.
 
-TEST FITNESS: PENDING - a fresh non-author adversarial review of this sheet is under way.
+TEST FITNESS: FIT - claude lab, 4 Nov. A first fresh non-author adversarial review read NOT FIT on one MAJOR (Inconclusive changed no decision) and six MINORs. A second fresh review of the fixed sheet read FIT: the Bar now covers every case exactly once, and each outcome names a decision. Its five MINORs are folded in: pooling across pods, a G failure only in D, the cost's low end, this line, and the width resting on one C.
 
 **What this run measures.** In P2b (claude-276), each seed scored its checkpoints in three passes, one after another, on one RTX 5090:
 - 2,624 s for (L) at 2,048, then 148 s for (L) at 192 and 138 s for (S) at 192;
 - each pass peaked at 5,296 MiB of 32 GiB;
-- seed 1's GPU trace shows a kernel running in 99% of samples over the 2,048 pass, but in only 74% on average over (S)'s pass at 192, with a quarter of its samples under 50%.
+- seed 1's GPU trace (`s1/smi.log`, SHA-256 `fcbb1ca670983b4c31e64d67b7efa6996125ccb9012a71bc0d10dcd8f7059224` in P2b's seal) reads utilization at 99% or above in 99% of samples over the 2,048 pass, but 74% on average over (S)'s pass at 192, with a quarter of its samples under 50%. That reading is the share of time a kernel was running, not how much of the GPU it used, so it cannot say whether the 2,048 pass fills the GPU. R3 asks that.
 
 This run re-scores P2b's sealed seed-1 checkpoints, unchanged, with the same commands at the same pin. It times the passes serial against side by side, and checks that every scored file is byte-identical either way. No training runs, and no recall or model reading is taken. The object is the scoring job's schedule, not the model.
 
@@ -41,29 +41,39 @@ The order on the pod is A1, B1, A2, B2, C, D. Interleaving A and B spreads any d
 ## Readings
 
 - **G (the gate): byte-identity.** For every pass, take the SHA-256 of every file under its `--out` folder. Each pass at 192 must equal A1's pass of the same checkpoint. D's two passes must equal each other.
+  - **No clock reading is inside `--out`.** P2b's seal lists the 19 files the command wrote to a 192 folder: `rows-*`, `samples-*` and `recall-*`. At the pin, `score_rows` writes these only through `write_new(&out.join(..))`. They hold positions, targets, picks, reply texts and recall counts. The decode seconds go to stdout, which the job saves as `scored.jsonl` beside `--out`, not inside it. The one file with millisecond fields, `keys-{split}.json`, is not written by this command.
   - Reported beside it, not part of the gate: A1 and D against P2b's sealed files, which come from another 5090.
 - **R1 (deciding): the pair's wall time at 192.** For each of A1, A2, B1 and B2, the seconds from the phase's first start to its last end, from the job's millisecond stamps. The speedup is mean(A) / mean(B). Both repeats are shown.
-- **R2: four at once.** C's wall time against 2 × mean(A), the serial time of its four passes. Reported only.
+  - A1 alone runs with cold caches, which makes A look slower. A2 against B2, both warm, is reported beside the means. A1 cannot produce a Positive on its own, because both B repeats must also beat A2.
+  - **What a Positive is worth.** P2b's two passes at 192 took 286 s of a 2,048 seed's 2,910 s of scoring, so a Positive saves at most about 143 s there. The saving that matters is for P5 and P6, which score many arms at 192. For P3's order, R3 matters most.
+- **R2: four at once.** C's wall time against 2 × mean(A), the serial time of its four passes, and against 2 × mean(B), two B pairs back to back. It sets the width on a Positive (see the Bar).
 - **R3: room at 2,048.** r = D's wall time / 2,624 s.
   - 2,624 s is P2b's seed-1 (L) pass at 2,048: the same pin, the same checkpoint, on another 5090. The seed-2 pass took 2,622 s.
+  - **Known bias: D is set against another pod.** P2b's two pods timed the 2,048 pass within 2 s of each other, but trained up to 7% apart. A 7% shift moves r by about 0.07, small beside the 1.3 / 1.7 split. r = 1 means the two passes overlap completely, and r = 2 means they queue completely. The REPORT names this bias.
   - Beside it: each D pass's decode tok/s against P2b's 15.2.
 - **R4 (tok/s first):** every pass's decode tok/s for each queries file, from the `decode` pair (tokens, seconds) that `--score-rows` prints, in every phase. Also every phase's GPU memory peak and its utilization trace.
 
 ## Bar
 
-- **Positive:**
-  - G holds in every pass;
-  - both B repeats finish faster than both A repeats;
-  - mean(A) / mean(B) ≥ 1.2.
+The outcomes are read in this order, and the first that applies is the reading.
 
-  From here on, the job scripts on this line (P4 to P6) run a seed's scoring passes side by side, at most as wide as R2 shows still gains.
-- **Negative:** G holds, but B does not beat A by that margin. The passes stay serial. This closes this schedule on this pod type only.
-- **Unread (instrument):** G fails anywhere. No speed reading counts. The REPORT then classifies the failure:
-  - if A1 and A2 differ too, the scorer itself is not deterministic on one pod;
+- **Unread (instrument):** G or I-3 fails anywhere. No speed reading counts. The REPORT then classifies the failure:
+  - if A1 and A2 differ (I-3), the scorer itself is not deterministic on one pod;
   - otherwise, running passes side by side changes a scored file.
 
-  The schedule is not adopted until this is repaired.
-- **Inconclusive:** the repeats disagree; one B is faster than an A and the other is not.
+  The schedule is not adopted until this is repaired, and the run is repeated at the repaired job.
+
+  If G fails only in D's pair, only R3 is unread: R1 and R2 stand, the passes at 192 are read by the outcomes below, and D is run again alone, as when the pod dies during D.
+- **Positive:**
+  - G holds in every pass;
+  - B1 and B2 are both below min(A1, A2);
+  - mean(A) / mean(B) ≥ 1.2.
+
+  From here on, the job scripts on this line (P4 to P6) run a seed's passes at 192 side by side. They run four at once only if C ≤ 2 × mean(B) / 1.2, that is, if four at once beats two B pairs back to back by the same 1.2× floor. Otherwise they run two at once. C runs once, so a width of four is provisional until a later pod times it again.
+- **Inconclusive:** exactly one of B1 and B2 is below min(A1, A2). This takes precedence over Negative.
+
+  The passes stay serial for now, but the schedule is not closed. The next unit that already scores passes at 192 on its own pod (P5's scale probe) repeats one A and one B pair there, at no extra pod. It adopts the schedule only if, on each of the two pods, both B are below that pod's min(A), and the mean of the two pods' mean(A) / mean(B) is at least 1.2. Raw seconds from two pods are never pooled, since they carry the bias R3 names.
+- **Negative:** G holds, and neither of the above applies. The passes stay serial. This closes this schedule on this pod type only.
 
 **R3 sets P3's next unit, whatever R1 reads:**
 - r ≤ 1.3: the 2,048 forward leaves the GPU room. P3(c) is next: memory on and off in one forward. Its rows are the same prompt at the same length, so they batch with no padding.
@@ -83,7 +93,8 @@ Whatever the outcome:
   - `sha256sum -c SHA256SUMS` passes in each input folder;
   - every SHA-256 named in the Data split equals its file's;
   - each of the ten checkpoint files matches its line in P2b's seal.
-- **I-2 (the passes):** every pass exits 0, and its `scored.jsonl` holds a `decode` pair for each p-long queries file it decodes. A pass that runs out of memory fails here.
+- **I-2 (the passes):** each phase holds the number of passes it started (2, 2, 2, 2, 4 and 2), every pass exits 0, and each pass's `scored.jsonl` holds a `decode` pair for each p-long queries file it decodes. A pass that runs out of memory fails here.
+- **The signal trap.** If the job is stopped, it first stops every pass still running (one that has written no exit code), waits for them, and only then seals what it wrote. The seal never races a writer.
 - **I-3 (the gate can read):** A1 and A2 are byte-identical, pass for pass. If they are not, G cannot tell running side by side apart from the scorer's own noise.
 
 ## Data split
@@ -116,7 +127,7 @@ Nothing is held out and nothing is graded for recall, so no split is spent.
 
 ## Minimum test power
 
-Each arm runs twice. "Both B repeats faster than both A repeats" happens by chance in 1 of the 6 orderings of four equal times. The 1.2× floor keeps a gain inside timing noise from counting. P2b's two pods timed the same pass within 2 s of each other at 2,048 and 10 s at 192. That noise is far under the 1.2× floor at 192, about 57 s on a 286 s pair.
+Each arm runs twice. "Both B repeats faster than both A repeats" happens by chance in 1 of the 6 orderings of four equal times. The 1.2× floor keeps a gain inside timing noise from counting. P2b's two pods timed the same pass within 2 s of each other at 2,048 and 10 s at 192. That noise is far under the 1.2× floor at 192. On a 286 s pair, the floor means B takes at most 238 s, a gain of at least 48 s.
 
 ## Cost
 
@@ -129,7 +140,7 @@ The pod takes about:
 - 45 to 90 minutes for D;
 - 15 minutes to seal and read back.
 
-That is about 1.8 to 2.7 hours. Verified 5090 offers ran from $0.975 an hour at this sheet's writing, against $0.563 for P2b's pods, so it costs about $1–2.7. `uor-pod status` is read at launch, inside 4 pods and $8 an hour. The watcher's wall limit is 4 hours (`MAXSEC=14400`), its spend limit $4, and the lease is taken for 4 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
+That is about 1.8 to 2.7 hours. Verified 5090 offers ran from $0.975 an hour at this sheet's writing, against $0.563 for P2b's pods, so it costs about $1.8–2.7. `uor-pod status` is read at launch, inside 4 pods and $8 an hour. The watcher's wall limit is 4 hours (`MAXSEC=14400`), its spend limit $4, and the lease is taken for 4 hours and renewed. A budget or time stop wakes the session to extend a healthy run, never to cancel it.
 
 ## Stop rule
 
