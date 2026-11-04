@@ -383,6 +383,68 @@ mod tests {
     }
 
     #[test]
+    fn parser_refuses_every_remaining_registered_sidecar_fault() {
+        let sha = "a".repeat(64);
+        let valid = serde_json::json!({
+            "schema": STACK_CONTENT_READOUT_SCHEMA,
+            "artifact_sha256": sha,
+            "readout": readout(
+                vec![ContentExample {
+                    signature: signature(0),
+                    target: 1,
+                }],
+                8,
+            ),
+        });
+        let mut cases = Vec::new();
+
+        let mut wrong_schema = valid.clone();
+        wrong_schema["schema"] = serde_json::json!("uor-r4.stack-content-readout/2");
+        cases.push(wrong_schema);
+
+        let mut sign_mode = valid.clone();
+        sign_mode["readout"]["mode"] = serde_json::json!("sign");
+        cases.push(sign_mode);
+
+        let mut no_rows = valid.clone();
+        no_rows["readout"]["rows"] = serde_json::json!([]);
+        cases.push(no_rows);
+
+        let mut wide_threshold = valid.clone();
+        wide_threshold["readout"]["max_distance"] =
+            serde_json::json!(CONTENT_CODE_SIGNATURE_BITS as u32 + 1);
+        cases.push(wide_threshold);
+
+        let mut malformed_threshold = valid.clone();
+        malformed_threshold["readout"]["max_distance"] = serde_json::json!("many");
+        cases.push(malformed_threshold);
+
+        let mut unknown_readout = valid.clone();
+        unknown_readout["readout"]["extra"] = serde_json::json!(true);
+        cases.push(unknown_readout);
+
+        let mut unknown_row = valid.clone();
+        unknown_row["readout"]["rows"][0]["extra"] = serde_json::json!(true);
+        cases.push(unknown_row);
+
+        for case in cases {
+            assert!(ContentReadout::from_sidecar(
+                &serde_json::to_vec(&case).expect("json"),
+                &"a".repeat(64),
+                2
+            )
+            .is_err());
+        }
+
+        let mut trailing = serde_json::to_vec(&valid).expect("json");
+        trailing.extend_from_slice(b"x");
+        assert!(ContentReadout::from_sidecar(&trailing, &"a".repeat(64), 2).is_err());
+
+        let oversized = vec![b' '; MAX_CONTENT_READOUT_BYTES as usize + 1];
+        assert!(ContentReadout::from_sidecar(&oversized, &"a".repeat(64), 2).is_err());
+    }
+
+    #[test]
     fn validation_refuses_unsafe_serving_tables() {
         let valid = readout(
             vec![ContentExample {

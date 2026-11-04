@@ -64,6 +64,13 @@ with its own [resource ledger](../../../../labs/cpu-training-pilot-content-servi
 Attempt 4 at the same implementation pin isolated the controls and is the
 deciding run below.
 
+The preserved attempt-3 metadata records the registration timestamps; the
+evidence directory's filesystem birth and final-manifest mtimes were
+`2026-11-04T18:51:47Z` and `2026-11-04T18:53:02Z`. Its sentence about checking
+all targets was a pre-run plan; the attempt-4 recipe actually rechecks the
+control and chat targets after tests, while the isolated driver target is
+checked immediately after its build.
+
 ## Measurements
 
 Both seeds used the registered 98-training/103-evaluation split with 1,120 and
@@ -139,7 +146,9 @@ The source pipeline occupied **49,502,485 bytes**.
   restore, missing/different-readout refusal, legacy `UR4SESS1` and
   `UR4SESS2` codec identity.
 - Strict `uor-r4-cpu-train` Clippy with `--no-deps -D warnings`, targeted
-  `rustfmt --check` on every touched Rust file, and `git diff --check` passed.
+  `rustfmt --check` on every touched Rust file, and the source/docs-scoped
+  `git diff --check` passed. The complete evidence diff retains the captured
+  test outputs' leading/trailing blank lines.
 - The integer crate's blanket all-warning Clippy still reports 51 pre-existing
   diagnostics outside this unit. Its no-dependency Clippy correctness gate
   passed, all-target compilation and the full serving library tests passed,
