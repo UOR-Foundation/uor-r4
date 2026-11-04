@@ -159,7 +159,7 @@ seeds, but every stop was premature and no reference became exact. This closes
 the fixed single-radius point-gate configuration, not geometric termination;
 the next attempt must change the representation or compare terminal against
 nonterminal density. See
-[deepseek-117](../../loop/tasks/cpu-training-pilot/deepseek-117/REPORT.md).
+[deepseek-118](../../loop/tasks/cpu-training-pilot/deepseek-118/REPORT.md).
 
 ## Done when
 

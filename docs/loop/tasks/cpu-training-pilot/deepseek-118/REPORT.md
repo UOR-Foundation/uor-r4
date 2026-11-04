@@ -1,8 +1,9 @@
-# REPORT: cpu-training-pilot, deepseek-117 (geometric termination-point gate)
+# REPORT: cpu-training-pilot, deepseek-118 (geometric termination-point gate)
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
-(#3506). Active order: [deepseek-117](ORDER.md); preceding:
-[deepseek-116](../deepseek-116/ORDER.md), [deepseek-115](../deepseek-115/ORDER.md) and
+(#3506). Active order: [deepseek-118](ORDER.md); preceding:
+[deepseek-117](../deepseek-117/ORDER.md), [deepseek-116](../deepseek-116/ORDER.md),
+[deepseek-115](../deepseek-115/ORDER.md) and
 [deepseek-114](../deepseek-114/ORDER.md). Prep:
 [termination gate](../../../harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md).
 Base: `ed5f0d6b2`.
@@ -56,9 +57,9 @@ function was added. Gate lookup is exact integer L1 over training-derived Q12
 points.
 
 The code change spans three files, `+653/-22` lines against `ed5f0d6b2`,
-including the regression tests. The unit also adds three ORDERS, the prep
-sheet, final REPORT/evidence, one notebook row and one roadmap update. The
-roadmap item does not state a size estimate.
+including the regression tests. The unit also adds five ORDERS, the prep sheet,
+final REPORT/evidence, one notebook row and one roadmap update. The roadmap
+item does not state a size estimate.
 
 ## Measurements
 
@@ -117,7 +118,7 @@ generated artifacts. The refused deepseek-114 artifacts remain recoverable at
 - Both public seeds and the fresh seed-1 repeat ran under the FIT command.
 - `uor-harness check`: **0 errors**; all remaining findings were pre-existing
   coordination/state warnings.
-- `loop report --check --order .../deepseek-117/ORDER.md`: passed.
+- `loop report --check --order .../deepseek-118/ORDER.md`: passed.
 - `cargo run -p xtask -- roadmap check`: 139 items OK.
 - `cargo run -p xtask -- docs-catalog --check`: 1,175 records, zero missing
   paths.
