@@ -742,6 +742,7 @@ fn run() -> Result<serde_json::Value, String> {
                 &density_shuffled_training.gate,
             )?;
             let hashes_differ = gate_density_sha256 != gate_density_shuffled_sha256;
+            let predictions_changed = gate_density_prediction_changes.unwrap_or(0);
             let rows_match = density_training.gate.terminal_rows.len() as u64
                 == density_training.terminal_rows
                 && density_training.gate.nonterminal_rows.len() as u64
@@ -751,6 +752,7 @@ fn run() -> Result<serde_json::Value, String> {
                 && density_training.terminal_stops >= 26
                 && density_training.nonterminal_stops <= density_training.nonterminal_stop_limit
                 && hashes_differ
+                && (config.stop_phase_neighbors.is_none() || predictions_changed > 0)
                 && rows_match
                 && phase_content_audit
                     .as_ref()
@@ -783,6 +785,7 @@ fn run() -> Result<serde_json::Value, String> {
                     "shuffled_sha256": gate_density_shuffled_sha256.as_ref(),
                     "structural_pass": structural,
                     "hashes_differ": hashes_differ,
+                    "predictions_changed": predictions_changed,
                     "gate_rows_match_training": rows_match,
                     "phase_content_audit": phase_content_audit,
                     "terminal_rows_vs_shuffled": terminal_comparison,

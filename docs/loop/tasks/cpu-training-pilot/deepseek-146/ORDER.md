@@ -45,7 +45,7 @@ Run seed 1 first with `--stop-phase-neighbors 8`. Stop before seed 2 if:
 - generated terminal rows are below 84 or nonterminal rows below 1,484;
 - true phase density recalls fewer than 26/84 terminal rows;
 - true phase density emits more than 14/1,484 false stops;
-- the shuffled-label gate is identical to the true gate; or
+- the shuffled-label gate produces no changed leave-one-out firing decision; or
 - source, inputs, split, transition width or history differ.
 
 If seed 1 passes, run seed 2 and the complete public generation comparison.
