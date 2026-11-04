@@ -4,7 +4,7 @@ Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-e
 
 TEST FITNESS: FIT WITH CHANGES, from a fresh non-author review of this sheet at `15a60735` ([#3407, 6638239076](https://github.com/UOR-Foundation/uor-r4/issues/3407#issuecomment-6638239076)). It found no blockers and five instrument SHOULDs, all folded in here: I-4 (coverage), I-3b (a failure is not noise), the logs beside `--out`, plain-text lines, and what the gate leaves out.
 
-PRE-RUN: pending (a fresh non-author review of this sheet, the ORDER, the job and the grade).
+PRE-RUN: GO in round 2, from fresh non-author reviews of this sheet, the ORDER, the job and the grade ([#3407, 6638389538](https://github.com/UOR-Foundation/uor-r4/issues/3407#issuecomment-6638389538)). Round 1 was NO GO, until I-3b and I-4 were in the scripts. Round 2 read the sheet at `58fa1523`, the job `c0d48b27`, the grade `7188e1db` and the watcher `7735c645`.
 
 OUTCOME: pending.
 
@@ -34,7 +34,7 @@ Each is exact by construction: a step runs the same ops on the same tensors as t
   - (S) `S/models/step-021845/`.
 
   The seal file `SHA256SUMS.files` there has SHA-256 `ca0b8aeda4e23a6f793df8b503534a48ff090724632dc384c66a0b4b27424b23`. The pod checks the ten checkpoint files against its lines.
-- **The outputs** go under `results/claude/one-model-end-to-end-decode-cache-2026-11-04/`.
+- **The outputs** go under `results/claude/one-model-end-to-end-decode-cache-2026-11-04/claude-279/`, a new folder beside claude-278's sealed `run1/` and `run2/`, which stay untouched.
 
 ## Arms
 
