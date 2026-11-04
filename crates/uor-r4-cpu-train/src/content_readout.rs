@@ -116,6 +116,8 @@ pub struct ContentPromptReading {
     pub stop: String,
     pub generated_tokens: u64,
     pub reference_tokens: u64,
+    pub generated_ids: Vec<u32>,
+    pub decision_sha256: String,
 }
 
 pub fn pack_content_signature(
@@ -470,12 +472,18 @@ fn evaluate_generated(
             stop: reply.stop.to_owned(),
             generated_tokens: reply.tokens.len() as u64,
             reference_tokens: reference.len() as u64,
+            generated_ids: reply.tokens.clone(),
+            decision_sha256: uor_r4_discrete::corpus::sha256(
+                &serde_json::to_vec(&(&decisions, &reply.tokens, reply.stop))
+                    .map_err(|error| invalid(format!("content decision trace: {error}")))?,
+            ),
         });
     }
     reading.distinct_non_empty = distinct.len() as u64;
     Ok((reading, prompts))
 }
 
+#[derive(serde::Serialize)]
 struct Decision {
     offset: usize,
     chosen: u32,
@@ -2028,6 +2036,21 @@ mod tests {
             !content_stop_density_gate_fires(&training.gate, &code_signature(0), 2)
                 .unwrap_or(false)
         );
+        let mut reordered = rows.clone();
+        reordered.reverse();
+        assert_eq!(
+            fit_content_stop_density_gate(&reordered, 8, 0).unwrap(),
+            training
+        );
+        let shuffled = shuffle_content_stop_rows(&rows, 3).unwrap();
+        assert_eq!(
+            shuffled.iter().map(|row| row.offset).collect::<Vec<_>>(),
+            rows.iter().map(|row| row.offset).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            shuffled.iter().filter(|row| row.terminal).count(),
+            rows.iter().filter(|row| row.terminal).count()
+        );
     }
 
     #[test]
@@ -2206,9 +2229,18 @@ mod tests {
             offset_radius: 0,
             margin: 1,
         };
-        let (reading, prompts) =
-            evaluate_content_stop_density_gate(&artifact, &samples, 4, false, &content, &gate)
+        let evaluate = |threads| {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
                 .unwrap();
+            pool.install(|| {
+                evaluate_content_stop_density_gate(&artifact, &samples, 4, false, &content, &gate)
+                    .unwrap()
+            })
+        };
+        let (reading, prompts) = evaluate(1);
+        assert_eq!(evaluate(32), evaluate(1));
         assert_eq!(reading.gate_fires, 1);
         assert_eq!(reading.gated_decisions, 1);
         assert_eq!(reading.ungated_token_mismatches, 0);

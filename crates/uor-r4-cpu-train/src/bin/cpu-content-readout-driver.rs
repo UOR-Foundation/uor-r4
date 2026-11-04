@@ -515,10 +515,17 @@ fn run() -> Result<serde_json::Value, String> {
                 &density_training.gate,
                 &density_shuffled_training.gate,
             )?;
+            let hashes_differ = gate_density_sha256 != gate_density_shuffled_sha256;
+            let rows_match = density_training.gate.terminal_rows.len() as u64
+                == density_training.terminal_rows
+                && density_training.gate.nonterminal_rows.len() as u64
+                    == density_training.nonterminal_rows;
             let structural = density_training.terminal_rows >= 84
-                && density_training.nonterminal_rows > 0
+                && density_training.nonterminal_rows >= 1_484
                 && density_training.terminal_stops >= 26
-                && density_training.nonterminal_stops <= density_training.nonterminal_stop_limit;
+                && density_training.nonterminal_stops <= density_training.nonterminal_stop_limit
+                && hashes_differ
+                && rows_match;
             let passes = structural
                 && non_inferior
                 && density_arm.ungated_token_mismatches == 0
@@ -541,6 +548,8 @@ fn run() -> Result<serde_json::Value, String> {
                     "true_sha256": gate_density_sha256.as_ref(),
                     "shuffled_sha256": gate_density_shuffled_sha256.as_ref(),
                     "structural_pass": structural,
+                    "hashes_differ": hashes_differ,
+                    "gate_rows_match_training": rows_match,
                     "terminal_rows_vs_shuffled": terminal_comparison,
                     "exact_reference": density_arm.exact_reference,
                     "bos_complete": density_arm.bos_stopped,
@@ -822,7 +831,7 @@ fn run() -> Result<serde_json::Value, String> {
         "schema": "uor-r4.cpu-content-readout-run/2",
         "substrate": "cpu-development-research",
         "qualification": "gpu-required",
-        "claim": "CPU sign and modulo-256 nearest-example content readout with exact integer-serving sidecar parity; no language claim",
+        "claim": "CPU generated-state content and density-stop research with exact integer-serving parity; no language claim",
         "inputs": {
             "artifact": config.artifact,
             "artifact_sha256": config.expected_artifact_sha256,
@@ -1300,6 +1309,8 @@ mod tests {
             stop: "cap".to_owned(),
             generated_tokens: 16,
             reference_tokens: 16,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
         };
         let candidate = (0..19)
             .map(|sample| reading(sample, u64::from(sample < 10)))
@@ -1326,6 +1337,8 @@ mod tests {
             stop: stop.to_owned(),
             generated_tokens,
             reference_tokens,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
         };
         let prompts = vec![
             prompt("bos", 2, 3),
