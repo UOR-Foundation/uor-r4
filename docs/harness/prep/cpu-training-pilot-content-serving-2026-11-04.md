@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -20,7 +20,7 @@ external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `a463a1c8d028348fed0c95494e5282eac7c5756e` |
+| implementation source | `b7e0bc35ac941f05630092ab06c06a828355c7b1` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -59,6 +59,11 @@ to `IntegerStackModel`. `IntegerStackSession::serve_step` first obtains the
 native writer or point-key fallback, then applies the nearest-example override.
 `step` and `step_native` remain unchanged.
 
+Session snapshots bind the canonical attached-readout hash. Same-readout
+restore must reproduce state; a destination with no readout or a different
+readout must refuse before mutation. `UR4SESS2` carries the identity, while
+legacy `UR4SESS1` stays byte-compatible when no readout is attached.
+
 The content driver runs the same 103 evaluation samples through:
 
 1. its CPU `CpuFbsForward` code readout; and
@@ -80,7 +85,9 @@ Both seeds must pass:
 - each seed checks 103 prompts and at least one content-readout override;
 - malformed, foreign, wrong-width, terminal and out-of-vocabulary sidecars are
   refused before a step;
-- raw `step`/`step_native` state remains unchanged with a readout attached; and
+- raw `step`/`step_native` state remains unchanged with a readout attached;
+- same-readout session restore succeeds while a missing or different readout
+  is refused before state mutation; and
 - the seed-1 normalized report, sidecar and serving artifact repeat
   byte-for-byte.
 
@@ -136,7 +143,7 @@ BUILD=$SOURCE/target/deepseek/content-readout-serving-140
 CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=a463a1c8d028348fed0c95494e5282eac7c5756e
+IMPL_PIN=b7e0bc35ac941f05630092ab06c06a828355c7b1
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -222,11 +229,11 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 content-readout serving sidecar:
+TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: 92504acd7679e73c46d3eea4d5a47584b6033fb4
-implementation pin: a463a1c8d028348fed0c95494e5282eac7c5756e
-reviewer: independent-subagent content_readout_serving_fit_2
+head: pending
+implementation pin: b7e0bc35ac941f05630092ab06c06a828355c7b1
+reviewer: pending
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
