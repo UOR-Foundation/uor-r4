@@ -224,8 +224,9 @@ worker order reproduced every deepseek-125 artifact, table, decision and
 checksum exactly while recording a strict positive peak RSS. The best mean
 speedup was **1.065x** at 16 workers, below the pre-registered 1.5x bar; 32
 workers was slightly slower. Flat wall time and roughly one-core process
-utilization point to the serial update/export/reload path as the next
-bottleneck. This is a performance/instrument negative, not a model result. See
+utilization suggest the two parallel loops are a small share of total driver
+work; stage timing is required before naming the remaining bottleneck. This is
+a performance/instrument negative, not a model result. See
 [deepseek-126](../../loop/tasks/cpu-training-pilot/deepseek-126/REPORT.md).
 
 ## Done when

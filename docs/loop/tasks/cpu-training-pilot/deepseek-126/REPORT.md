@@ -85,8 +85,8 @@ sets.
 
 ## Checks run at the head
 
-- Four fresh-context non-author reviews; the first three returned NOT_FIT and
-  the repaired sheet returned FIT.
+- Four fresh-context non-author fitness reviews; the first three returned
+  NOT_FIT and the repaired sheet returned FIT.
 - Full `uor-r4-cpu-train` release suite: **235 tests passed, 0 failed, 4 release
   benchmarks ignored**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`: passed.
@@ -109,8 +109,8 @@ No system-provided skill applied.
 ## Still open
 
 - Add stage timing before changing another performance threshold. The next
-  useful target is the serial artifact update/export/reload path now indicated
-  by the flat wall time and roughly one-core utilization.
+  useful analysis is to measure how much of the flat wall time lies outside
+  the two parallel loops, including artifact update/export/reload.
 - Do not retune this failed 1.5x bar after seeing the result. A later unit needs
   a fresh FIT and a different registered target.
 - Complete replies, fresh phrasing, useful local chat and GPU qualification.
@@ -120,6 +120,7 @@ No system-provided skill applied.
 The driver now uses up to 32 local workers while preserving every accepted
 artifact and decision exactly. On this workload that did not make training
 1.5x faster: the best measured gain was about 6.5%, and using 16 workers was
-slightly better than 32. The expensive remaining work is serial full-artifact
-processing, so the next design should target that path rather than add more
-threads.
+slightly better than 32. The flat wall time and roughly one-core utilization
+suggest that the two parallel loops are a small share of this driver's total
+work. Stage timing is required before naming the remaining bottleneck or
+changing the design to target it.
