@@ -30,7 +30,11 @@ preserved as a resource-stop attempt at
 `local/deepseek/trunk-count/2026-11-04-attempt-1/`; its outputs are not accepted
 as this unit's evidence. Source `d5108222a` drops the source serving model and
 the training reader before later verification and evaluation. Attempt 2 uses a
-fresh build and output root and requires a new FIT.
+fresh build and output root.
+
+The third review returned FIT at docs head
+`e94f21783e10e1a1d570d34d634698ea870657a0`, bound to source
+`d5108222aef6882007aba31eeadc95796b9c8aca`.
 
 ## What changed
 
@@ -40,7 +44,7 @@ re-import the complete 19-table artifact.
 
 ## Measurements
 
-None yet. The pre-registration is PENDING and must be FIT before public compute.
+None yet.
 
 ## Checks run at the head
 
