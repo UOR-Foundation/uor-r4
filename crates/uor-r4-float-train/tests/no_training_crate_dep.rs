@@ -2,7 +2,8 @@
 //! 1. `cargo tree -p uor-r4-float-train` must never list `uor-r4-training` or `candle-nn`.
 //! 2. Each PTX module's generated kernel list (`uor_r4_float_train::kernel_lists`, written by
 //!    `build.rs`) is exactly the entry points this test finds in that module's sources itself,
-//!    every `src/*.cu` file is in some module, and no source carries a banned token.
+//!    no kernel sits inside a conditional block, every `src/*.cu` file is in some module, and no
+//!    source carries a banned token.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -64,6 +65,28 @@ fn declared_kernels(text: &str) -> Vec<String> {
     found
 }
 
+/// The lines of one source that name `__global__` inside an `#if`, `#ifdef` or `#ifndef`
+/// block, counted here rather than by `build.rs`. A kernel there may be compiled by one build
+/// and not another, so neither scan may list it.
+fn globals_inside_conditionals(text: &str) -> Vec<usize> {
+    let mut depth = 0i32;
+    let mut inside = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        if let Some(directive) = line.trim_start().strip_prefix('#') {
+            let directive = directive.trim_start();
+            if directive.starts_with("endif") {
+                depth -= 1;
+            } else if directive.starts_with("if") {
+                depth += 1;
+            }
+        }
+        if depth > 0 && line.contains("__global__") {
+            inside.push(index + 1);
+        }
+    }
+    inside
+}
+
 #[test]
 fn kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -81,6 +104,11 @@ fn kernel_entry_points_match_cuda_sources_and_pass_d29_scan() {
             let path = manifest_dir.join(source);
             let body = std::fs::read_to_string(&path)
                 .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+            let inside = globals_inside_conditionals(&body);
+            assert!(
+                inside.is_empty(),
+                "{source}: `__global__` inside a conditional block at lines {inside:?}"
+            );
             text.push_str(&body);
             text.push('\n');
         }

@@ -21,8 +21,10 @@
 //! The source is compiled without `--use_fast_math`, so `expf`, `logf`,
 //! `tanhf`, division and `sqrtf` are the accurate CUDA functions.
 //!
-//! This module contains the crate's only `unsafe` code (kernel launches and a
-//! `DeviceRepr`-free argument list); it exists only with the `cuda` feature.
+//! Its `cuda` submodule, built only with the `cuda` feature, contains the
+//! crate's only `unsafe` code (kernel launches and a `DeviceRepr`-free argument
+//! list). The kernel-list check ([`admit_launch`]) sits outside it, so CPU
+//! builds compile it and CPU tests cover it.
 
 use crate::kernel_lists;
 
@@ -527,5 +529,24 @@ mod tests {
         for name in ["spiralcore_fbs_arm_fwd", "spiralcore_fbs_arm_bwd"] {
             assert!(arms.contains(&name), "the arms list must hold {name}");
         }
+    }
+
+    #[test]
+    fn dispatch_module_checks_the_list_before_it_loads() {
+        // `dispatch_module` is the crate's only PTX load; the refusal tests above cover
+        // `admit_launch`, and this pins that the load calls it first. The needles are split
+        // so this test's own text does not match them.
+        let source = include_str!("cuda_stack_kernels.rs");
+        let start = source
+            .find(concat!("fn dispatch", "_module("))
+            .expect("cuda_stack_kernels.rs defines dispatch_module");
+        let body = &source[start..];
+        let load = body
+            .find(concat!("get_or_load", "_custom_func("))
+            .expect("dispatch_module loads its PTX");
+        assert!(
+            body[..load].contains(concat!("super::admit", "_launch(module, name)")),
+            "dispatch_module must call admit_launch before it loads the kernel"
+        );
     }
 }

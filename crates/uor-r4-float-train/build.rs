@@ -103,15 +103,32 @@ fn main() {
 const DECLARATION: &str = "extern \"C\" __global__ void ";
 
 /// The entry points of one module's sources, in declaration order. Every line that names
-/// `__global__` must be a declaration this scan reads, so no kernel nvcc compiles is missed.
+/// `__global__` must be a declaration this scan reads, so no kernel nvcc compiles is missed,
+/// and none may sit inside an `#if`, `#ifdef` or `#ifndef` block: one build may compile such a
+/// kernel and another not, which a text scan cannot tell apart.
 fn kernels_of(module: &Module) -> Vec<String> {
     let mut kernels = Vec::new();
     for source in module.sources {
         let text = fs::read_to_string(source)
             .unwrap_or_else(|error| panic!("cannot read kernel source {source}: {error}"));
+        let mut depth = 0usize;
         for (index, line) in text.lines().enumerate() {
+            if let Some(directive) = line.trim_start().strip_prefix('#').map(str::trim_start) {
+                if directive.starts_with("endif") {
+                    depth = depth.saturating_sub(1);
+                } else if directive.starts_with("if") {
+                    depth += 1;
+                }
+            }
             if !line.contains("__global__") {
                 continue;
+            }
+            if depth > 0 {
+                panic!(
+                    "{source}:{}: a kernel inside an `#if` block; one build may compile it and \
+                     another not, which the kernel list's text scan cannot tell, so it refuses it",
+                    index + 1
+                );
             }
             let name: String = line
                 .trim_start()
