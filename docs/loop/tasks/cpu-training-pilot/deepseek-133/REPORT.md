@@ -52,7 +52,9 @@ evaluation** samples on both seeds.
 | 2 | same-cell shuffled | 32 | 25 | 11 | 12 |
 
 The fresh release build took **18 s**, peaked at **1,204,616 KiB** and occupied
-**262,784,458 bytes**. The two 32-worker selection processes each took **1.00
+**262,784,458 bytes**. The driver SHA-256 was
+`332399b07045706829fae23660dd26e5082249d56775c752d5fdec5ab55718ae`.
+The two 32-worker selection processes each took **1.00
 s**; peak RSS was **221,740 / 202,712 KiB**. The retained pipeline is
 **14,420 bytes**.
 
@@ -85,8 +87,8 @@ no writer-training attempt ran.
   prep shape, `git diff --check` and `loop pr-check --local`: passed.
 - All five public input hashes matched. The implementation tree matches pin
   `77524f3e47422a4c86578b2798bc98cd6d6d83b1`.
-- Both fresh selection roots exited 0 and passed the retained recursive
-  checksum verification.
+- Both fresh selection processes exited 0 and the retained recursive checksum
+  verification passed.
 
 ## Skills used
 

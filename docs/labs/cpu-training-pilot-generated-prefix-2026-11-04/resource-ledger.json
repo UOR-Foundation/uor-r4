@@ -47,6 +47,7 @@
     "selection_peak_rss_kib": 221740,
     "build_target_bytes": 262784458,
     "binary_bytes": 2749528,
+    "binary_sha256": "332399b07045706829fae23660dd26e5082249d56775c752d5fdec5ab55718ae",
     "retained_pipeline_bytes": 14420,
     "writer_training_attempts": 0
   },
