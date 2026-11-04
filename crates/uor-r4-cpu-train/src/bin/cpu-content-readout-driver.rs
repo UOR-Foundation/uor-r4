@@ -1510,6 +1510,25 @@ mod tests {
         }
     }
 
+    fn continuation_gate(terminal: Vec<u64>, nonterminal: Vec<u64>) -> ContentContinuationGate {
+        ContentContinuationGate {
+            signature_bits: uor_r4_cpu_train::CONTENT_CODE_SIGNATURE_BITS,
+            rows: vec![
+                uor_r4_cpu_train::ContentContinuationPoint {
+                    signature: terminal,
+                    remaining: 0,
+                    offset: 4,
+                },
+                uor_r4_cpu_train::ContentContinuationPoint {
+                    signature: nonterminal,
+                    remaining: 1,
+                    offset: 4,
+                },
+            ],
+            neighbors: 1,
+        }
+    }
+
     #[test]
     fn content_non_inferiority_uses_both_ordered_metrics() {
         assert!(non_inferior(73, 73, 64, 64));
@@ -1560,6 +1579,47 @@ mod tests {
         assert_eq!(paired["control_only"], 0);
         assert_eq!(paired["threshold"], 2);
         assert_eq!(paired["passes"], true);
+    }
+
+    #[test]
+    fn continuation_terminal_pairing_uses_the_same_control_rule() {
+        let rows = vec![
+            ContentContinuationRow {
+                signature: signature(0),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(1),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(100),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(101),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+        ];
+        let candidate = continuation_gate(signature(0), signature(100));
+        let control = continuation_gate(signature(100), signature(0));
+        let paired = paired_terminal_continuation_rows(&rows, &candidate, &control).unwrap();
+        assert_eq!(paired["candidate_only"], 2);
+        assert_eq!(paired["control_only"], 0);
+        assert_eq!(paired["threshold"], 2);
+        assert_eq!(paired["passes"], true);
+        assert_eq!(
+            horizon_predictions_changed(&rows, &candidate, &rows, &control).unwrap(),
+            4
+        );
     }
 
     #[test]
