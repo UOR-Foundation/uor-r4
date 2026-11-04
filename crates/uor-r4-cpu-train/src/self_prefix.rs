@@ -15,8 +15,9 @@ use crate::train::{
     reading_from_forward_cells, RankMarginConfig,
 };
 use crate::{
-    audit_memory_weight_samples, audit_served_forward, invalid, CpuFbsForward, CpuFbsHead,
-    CpuTrainError, MemoryWeightParityReading, MemoryWeightSample, ServedForwardAuditConfig,
+    audit_memory_weight_samples, audit_served_forward, invalid, read_gain, replace_final_gain,
+    CpuFbsForward, CpuFbsHead, CpuTrainError, MemoryWeightParityReading, MemoryWeightSample,
+    ServedForwardAuditConfig,
 };
 
 type Result<T> = std::result::Result<T, CpuTrainError>;
@@ -37,6 +38,7 @@ pub enum SelfPrefixMode {
 pub enum SelfPrefixTargets {
     TrueLabels,
     SameCellShuffled,
+    CrossCellPermuted,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -152,6 +154,201 @@ pub struct SelfPrefixAdmissionCensus {
     pub minimum_k_histogram: BTreeMap<usize, u64>,
     pub readings: Vec<CellKReading>,
     pub random_extra: RandomCellReading,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelfPrefixCellObjective {
+    pub fixed_horizon_decisions: u64,
+    pub observed_decisions: u64,
+    pub missing_decisions: u64,
+    pub target_admitted: u64,
+    pub admitted_cells: u64,
+    pub admitted_pairs: u64,
+    pub target_rank_sum: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QueryAdmissionStep {
+    pub index: u64,
+    pub updated: bool,
+    pub coordinate: Option<usize>,
+    pub before_code: Option<i16>,
+    pub after_code: Option<i16>,
+    pub before: SelfPrefixCellObjective,
+    pub after: SelfPrefixCellObjective,
+    pub parity: Option<MemoryWeightParityReading>,
+}
+
+#[derive(Clone)]
+pub struct CpuQueryAdmissionTrainer {
+    initial_artifact: Vec<u8>,
+    artifact: Vec<u8>,
+    samples: Vec<MemoryWeightSample>,
+    config: SelfPrefixConfig,
+    step_code: i16,
+    steps: u64,
+    accepted: u64,
+}
+
+impl std::fmt::Debug for CpuQueryAdmissionTrainer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CpuQueryAdmissionTrainer")
+            .field("artifact_bytes", &self.artifact.len())
+            .field("samples", &self.samples.len())
+            .field("config", &self.config)
+            .field("step_code", &self.step_code)
+            .field("steps", &self.steps)
+            .field("accepted", &self.accepted)
+            .finish()
+    }
+}
+
+impl CpuQueryAdmissionTrainer {
+    pub fn from_artifact(
+        artifact: &[u8],
+        samples: Vec<MemoryWeightSample>,
+        config: SelfPrefixConfig,
+        step_code: i16,
+    ) -> Result<Self> {
+        validate_config(config)?;
+        if samples.is_empty() || step_code <= 0 {
+            return Err(invalid("query-admission trainer inputs are empty"));
+        }
+        let _ = read_gain(artifact)?;
+        evaluate_self_prefix_cell_objective(artifact, &samples, config)?;
+        Ok(Self {
+            initial_artifact: artifact.to_vec(),
+            artifact: artifact.to_vec(),
+            samples,
+            config,
+            step_code,
+            steps: 0,
+            accepted: 0,
+        })
+    }
+
+    pub fn artifact(&self) -> &[u8] {
+        &self.artifact
+    }
+
+    pub fn initial_artifact(&self) -> &[u8] {
+        &self.initial_artifact
+    }
+
+    pub fn steps(&self) -> u64 {
+        self.steps
+    }
+
+    pub fn accepted(&self) -> u64 {
+        self.accepted
+    }
+
+    pub fn reading(&self) -> Result<SelfPrefixCellObjective> {
+        evaluate_self_prefix_cell_objective(&self.artifact, &self.samples, self.config)
+    }
+
+    pub fn train_steps(&mut self, count: usize) -> Result<Vec<QueryAdmissionStep>> {
+        let mut steps = Vec::with_capacity(count);
+        for _ in 0..count {
+            steps.push(self.train_step()?);
+        }
+        Ok(steps)
+    }
+
+    pub fn train_step(&mut self) -> Result<QueryAdmissionStep> {
+        let index = self.steps;
+        let before = self.reading()?;
+        let gain = read_gain(&self.artifact)?;
+        let mut candidates = Vec::new();
+        for coordinate in (0..gain.len()).step_by(8) {
+            let original = gain[coordinate];
+            for delta in [self.step_code, -self.step_code] {
+                if let Some(after) = original.checked_add(delta) {
+                    candidates.push((coordinate, original, after));
+                }
+            }
+        }
+        let evaluated = candidates
+            .par_iter()
+            .map(|&(coordinate, before_code, after_code)| {
+                let mut trial = gain.clone();
+                trial[coordinate] = after_code;
+                let artifact = replace_final_gain(&self.artifact, &trial)?;
+                let reading =
+                    evaluate_self_prefix_cell_objective(&artifact, &self.samples, self.config)?;
+                if reading.missing_decisions > before.missing_decisions
+                    || !cell_objective_better(&reading, &before)
+                {
+                    return Ok(None);
+                }
+                Ok(Some(QueryAdmissionCandidate {
+                    coordinate,
+                    before_code,
+                    after_code,
+                    artifact,
+                    reading,
+                }))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let best = evaluated
+            .into_iter()
+            .flatten()
+            .reduce(|current, candidate| {
+                if cell_objective_better(&candidate.reading, &current.reading) {
+                    candidate
+                } else {
+                    current
+                }
+            });
+        self.steps = self
+            .steps
+            .checked_add(1)
+            .ok_or_else(|| invalid("query-admission step counter exhausted"))?;
+        let Some(best) = best else {
+            return Ok(QueryAdmissionStep {
+                index,
+                updated: false,
+                coordinate: None,
+                before_code: None,
+                after_code: None,
+                before: before.clone(),
+                after: before,
+                parity: None,
+            });
+        };
+        let parity = audit_self_prefix_generated(&best.artifact, &self.samples, self.config)?;
+        if !parity.is_exact() {
+            return Err(invalid(
+                "query-admission update lost generated CPU/serving parity",
+            ));
+        }
+        self.artifact = best.artifact;
+        self.accepted = self
+            .accepted
+            .checked_add(1)
+            .ok_or_else(|| invalid("query-admission accepted counter exhausted"))?;
+        Ok(QueryAdmissionStep {
+            index,
+            updated: true,
+            coordinate: Some(best.coordinate),
+            before_code: Some(best.before_code),
+            after_code: Some(best.after_code),
+            before,
+            after: best.reading,
+            parity: Some(parity),
+        })
+    }
+}
+
+struct QueryAdmissionCandidate {
+    coordinate: usize,
+    before_code: i16,
+    after_code: i16,
+    artifact: Vec<u8>,
+    reading: SelfPrefixCellObjective,
 }
 
 #[derive(Clone)]
@@ -501,6 +698,74 @@ pub fn evaluate_self_prefix_admission(
     })
 }
 
+pub fn evaluate_self_prefix_cell_objective(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    config: SelfPrefixConfig,
+) -> Result<SelfPrefixCellObjective> {
+    let scan = scan(artifact, samples, &config)?;
+    let targets = mapped_targets(&scan, samples, config)?;
+    let forward = CpuFbsForward::from_artifact(artifact)
+        .map_err(|error| invalid(format!("query-admission forward: {error}")))?;
+    let mut fixed_horizon_decisions = 0u64;
+    let mut observed_decisions = 0u64;
+    let mut target_admitted = 0u64;
+    let mut target_rank_sum = 0u64;
+    let mut admitted_target_cells = BTreeMap::<u32, u64>::new();
+    for (sample_index, (sample, scan)) in samples.iter().zip(&scan.samples).enumerate() {
+        let reference = normalized_reference(&sample.reply);
+        fixed_horizon_decisions = checked_add(
+            fixed_horizon_decisions,
+            reference.len().min(config.reply_cap) as u64,
+            "query-admission horizon",
+        )?;
+        for decision in &scan.decisions {
+            observed_decisions = checked_add(observed_decisions, 1, "query-admission observed")?;
+            let target = targets[&(sample_index, decision.reply_offset)];
+            let target_cell = target % TARGET_CELLS;
+            let rank = forward
+                .writer_cell_order(&decision.query_q12)
+                .map_err(|error| invalid(format!("query-admission cell order: {error}")))?
+                .iter()
+                .position(|cell| *cell == target_cell)
+                .ok_or_else(|| invalid("query-admission lost target cell"))?
+                + 1;
+            target_rank_sum =
+                checked_add(target_rank_sum, rank as u64, "query-admission target rank")?;
+            if rank <= 8 {
+                target_admitted = checked_add(target_admitted, 1, "query-admission admitted")?;
+                *admitted_target_cells.entry(target_cell).or_default() += 1;
+            }
+        }
+    }
+    Ok(SelfPrefixCellObjective {
+        fixed_horizon_decisions,
+        observed_decisions,
+        missing_decisions: fixed_horizon_decisions.saturating_sub(observed_decisions),
+        target_admitted,
+        admitted_cells: admitted_target_cells.len() as u64,
+        admitted_pairs: admitted_target_cells.values().map(|count| count / 2).sum(),
+        target_rank_sum,
+    })
+}
+
+fn cell_objective_better(
+    candidate: &SelfPrefixCellObjective,
+    control: &SelfPrefixCellObjective,
+) -> bool {
+    (
+        candidate.target_admitted,
+        std::cmp::Reverse(candidate.target_rank_sum),
+        candidate.admitted_cells,
+        candidate.admitted_pairs,
+    ) > (
+        control.target_admitted,
+        std::cmp::Reverse(control.target_rank_sum),
+        control.admitted_cells,
+        control.admitted_pairs,
+    )
+}
+
 pub fn patch_kept_cells(artifact: &[u8], kept_cells: usize) -> Result<Vec<u8>> {
     if !(1..=16).contains(&kept_cells) {
         return Err(invalid("kept-cell patch must be in 1..=16"));
@@ -784,8 +1049,25 @@ fn mapped_targets(
             return Err(invalid("self-prefix decision sample index differs"));
         }
     }
-    if config.targets == SelfPrefixTargets::TrueLabels {
-        return Ok(targets);
+    match config.targets {
+        SelfPrefixTargets::TrueLabels => return Ok(targets),
+        SelfPrefixTargets::CrossCellPermuted => {
+            let mut rows = targets
+                .iter()
+                .map(|(&key, &target)| (key, target))
+                .collect::<Vec<_>>();
+            let row_count = rows.len();
+            let shift = 1 + config.shuffle_seed as usize % (rows.len() - 1);
+            let rotated = rows.iter().map(|&(_, target)| target).collect::<Vec<_>>();
+            for (index, (_, target)) in rows.iter_mut().enumerate() {
+                *target = rotated[(index + row_count - shift) % row_count];
+            }
+            if rows.iter().all(|&(key, target)| targets[&key] == target) {
+                return Err(invalid("cross-cell target permutation is vacuous"));
+            }
+            return Ok(rows.into_iter().collect());
+        }
+        SelfPrefixTargets::SameCellShuffled => {}
     }
     let mut cells = BTreeMap::<u32, Vec<((usize, usize), u32)>>::new();
     for (&key, &target) in &targets {
@@ -1570,6 +1852,53 @@ mod tests {
             differed,
             "K=8 and K=16 never changed a synthetic generated trajectory"
         );
+    }
+
+    #[test]
+    fn cross_cell_permutation_changes_assignments_and_preserves_counts() {
+        let artifact = artifact_with_memory();
+        let scan_config = config(SelfPrefixMode::StaticGenerated, true);
+        let scan = scan(&artifact, &[sample()], &scan_config).unwrap();
+        let samples = [sample()];
+        let true_targets = mapped_targets(&scan, &samples, scan_config).unwrap();
+        let permuted = mapped_targets(
+            &scan,
+            &samples,
+            SelfPrefixConfig {
+                targets: SelfPrefixTargets::CrossCellPermuted,
+                ..scan_config
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            true_targets.values().copied().collect::<BTreeSet<_>>(),
+            permuted.values().copied().collect::<BTreeSet<_>>()
+        );
+        assert!(true_targets
+            .iter()
+            .any(|(key, target)| permuted[key] != *target));
+    }
+
+    #[test]
+    fn query_admission_trainer_executes_actual_path_candidates() {
+        let artifact = artifact_with_memory();
+        let mut trainer = CpuQueryAdmissionTrainer::from_artifact(
+            &artifact,
+            vec![sample()],
+            SelfPrefixConfig {
+                reply_cap: 2,
+                ..config(SelfPrefixMode::DynamicGenerated, true)
+            },
+            32,
+        )
+        .unwrap();
+        let step = trainer.train_steps(1).unwrap().remove(0);
+        assert_eq!(step.index, 0);
+        IntegerStackModel::parse(trainer.artifact()).unwrap();
+        if step.updated {
+            assert_eq!(trainer.accepted(), 1);
+            assert!(step.parity.unwrap().is_exact());
+        }
     }
 
     #[test]
