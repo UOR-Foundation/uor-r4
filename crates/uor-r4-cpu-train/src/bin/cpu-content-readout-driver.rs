@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, derive_content_readout, derive_turn_memory, evaluate_content_readout,
-    shuffle_content_targets, validate_corpus_manifest, ContentPromptReading, ContentReadout,
-    CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES,
-    CONTENT_MIN_TRAINING_ROWS,
+    add_turn_memory_uorlut01, content_mapping_sha256, content_target_mapping,
+    derive_content_readout, derive_turn_memory, evaluate_content_readout, shuffle_content_targets,
+    validate_corpus_manifest, ContentPromptReading, ContentReadout, CpuConversationSample,
+    CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
 
@@ -222,6 +222,17 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     let shuffled = shuffle_content_targets(&training.readout, config.seed)
         .map_err(|error| error.to_string())?;
+    let true_mapping =
+        content_target_mapping(&training.readout).map_err(|error| error.to_string())?;
+    let shuffled_mapping = content_target_mapping(&shuffled).map_err(|error| error.to_string())?;
+    let changed_mapping_assignments = true_mapping
+        .iter()
+        .filter(|(signature, target)| shuffled_mapping.get(*signature) != Some(*target))
+        .count();
+    let true_mapping_sha256 =
+        content_mapping_sha256(&training.readout).map_err(|error| error.to_string())?;
+    let shuffled_mapping_sha256 =
+        content_mapping_sha256(&shuffled).map_err(|error| error.to_string())?;
     if config.select_only {
         return Ok(serde_json::json!({
             "schema": "uor-r4.cpu-content-readout-selection/1",
@@ -230,6 +241,14 @@ fn run() -> Result<serde_json::Value, String> {
             "selection": selection_json(&groups, &training_samples, &evaluation_samples),
             "training": training,
             "shuffled_readout_sha256": readout_sha(&shuffled)?,
+            "mapping": {
+                "signature_entries": true_mapping.len(),
+                "changed_assignments": changed_mapping_assignments,
+                "differs": changed_mapping_assignments > 0
+                    && true_mapping_sha256 != shuffled_mapping_sha256,
+                "true_sha256": true_mapping_sha256,
+                "shuffled_sha256": shuffled_mapping_sha256,
+            },
         }));
     }
     create_fresh_output(&config.out)?;
@@ -281,9 +300,14 @@ fn run() -> Result<serde_json::Value, String> {
         "writer_fallbacks": true_arm.writer_fallbacks,
         "ambiguous_readout_decisions": true_arm.ambiguous_readout_decisions,
         "exposure_pass": true_arm.readout_decisions > 0 && true_arm.writer_fallbacks > 0,
-        "shuffled_mapping_differs": true_readout_sha256 != shuffled_readout_sha256,
+        "signature_entries": true_mapping.len(),
+        "changed_mapping_assignments": changed_mapping_assignments,
+        "shuffled_mapping_differs": changed_mapping_assignments > 0
+            && true_mapping_sha256 != shuffled_mapping_sha256,
         "true_readout_sha256": true_readout_sha256,
         "shuffled_readout_sha256": shuffled_readout_sha256,
+        "true_mapping_sha256": true_mapping_sha256,
+        "shuffled_mapping_sha256": shuffled_mapping_sha256,
         "vs_writer_top1": vs_writer_top1,
         "vs_shuffled_top1": vs_shuffled_top1,
         "vs_writer_depth": vs_writer_depth,
@@ -293,7 +317,8 @@ fn run() -> Result<serde_json::Value, String> {
             && training.covered_rows * 10 >= training.rows * 9
             && true_arm.readout_decisions > 0
             && true_arm.writer_fallbacks > 0
-            && true_readout_sha256 != shuffled_readout_sha256
+            && changed_mapping_assignments > 0
+            && true_mapping_sha256 != shuffled_mapping_sha256
             && vs_writer_top1["passes"].as_bool() == Some(true)
             && vs_shuffled_top1["passes"].as_bool() == Some(true)
             && vs_writer_depth["passes"].as_bool() == Some(true)
@@ -327,6 +352,8 @@ fn run() -> Result<serde_json::Value, String> {
         "selection": selection_json(&groups, &training_samples, &evaluation_samples),
         "training": training,
         "shuffled_readout_sha256": readout_sha(&shuffled)?,
+        "true_mapping_sha256": true_mapping_sha256,
+        "shuffled_mapping_sha256": shuffled_mapping_sha256,
         "arms": {
             "writer": { "reading": writer, "prompts": writer_prompts },
             "true": { "reading": true_arm, "prompts": true_prompts },

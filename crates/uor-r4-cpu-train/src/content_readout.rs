@@ -200,6 +200,7 @@ pub fn shuffle_content_targets(readout: &ContentReadout, seed: u64) -> Result<Co
     if readout.rows.len() < 2 {
         return Err(invalid("content target shuffle needs at least two rows"));
     }
+    let original_mapping = content_target_mapping(readout)?;
     let mut targets = readout
         .rows
         .iter()
@@ -214,7 +215,7 @@ pub fn shuffle_content_targets(readout: &ContentReadout, seed: u64) -> Result<Co
     {
         return Err(invalid("content target shuffle is vacuous"));
     }
-    Ok(ContentReadout {
+    let shuffled = ContentReadout {
         rows: readout
             .rows
             .iter()
@@ -226,7 +227,44 @@ pub fn shuffle_content_targets(readout: &ContentReadout, seed: u64) -> Result<Co
             })
             .collect(),
         max_distance: readout.max_distance,
-    })
+    };
+    if content_target_mapping(&shuffled)? == original_mapping {
+        return Err(invalid(
+            "content target shuffle leaves the effective mapping unchanged",
+        ));
+    }
+    Ok(shuffled)
+}
+
+pub fn content_target_mapping(readout: &ContentReadout) -> Result<BTreeMap<ContentSignature, u32>> {
+    validate_content_readout(readout)?;
+    let signatures = readout
+        .rows
+        .iter()
+        .map(|row| row.signature)
+        .collect::<BTreeSet<_>>();
+    signatures
+        .into_iter()
+        .map(|signature| {
+            let target = nearest_target(&readout.rows, readout.rows.len(), &signature)?
+                .ok_or_else(|| invalid("content readout has no effective target"))?
+                .target;
+            Ok((signature, target))
+        })
+        .collect()
+}
+
+pub fn content_mapping_sha256(readout: &ContentReadout) -> Result<String> {
+    let mapping = content_target_mapping(readout)?;
+    let mut bytes = Vec::with_capacity(mapping.len() * (CONTENT_SIGNATURE_BITS + 4));
+    bytes.extend_from_slice(&(mapping.len() as u64).to_le_bytes());
+    for (signature, target) in mapping {
+        for word in signature {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        bytes.extend_from_slice(&target.to_le_bytes());
+    }
+    Ok(uor_r4_discrete::corpus::sha256(&bytes))
 }
 
 pub fn evaluate_content_readout(
@@ -600,6 +638,11 @@ mod tests {
             1
         )
         .is_err());
+        let repeated = ContentReadout {
+            rows: vec![row(0, 9), row(0, 7), row(0, 9), row(0, 7)],
+            max_distance: 0,
+        };
+        assert!(shuffle_content_targets(&repeated, 2).is_err());
     }
 
     #[test]
