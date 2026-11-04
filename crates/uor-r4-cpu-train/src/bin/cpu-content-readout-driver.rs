@@ -3,15 +3,17 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, content_mapping_sha256, content_stop_density_gate_fires,
-    content_stop_gate_fires, content_target_mapping, derive_content_readout,
-    derive_content_stop_readout, derive_content_stop_rows, derive_turn_memory,
+    add_turn_memory_uorlut01, content_continuation_gate_fires, content_mapping_sha256,
+    content_stop_density_gate_fires, content_stop_gate_fires, content_target_mapping,
+    derive_content_continuation_rows, derive_content_readout, derive_content_stop_readout,
+    derive_content_stop_rows, derive_turn_memory, evaluate_content_continuation_gate,
     evaluate_content_readout, evaluate_content_stop_density_gate, evaluate_content_stop_gate,
-    fit_content_stop_density_gate, fit_content_stop_gate, shuffle_content_stop_rows,
-    shuffle_content_targets, validate_corpus_manifest, verify_content_readout_serving,
-    ContentPromptReading, ContentReadout, ContentSignatureMode, ContentStopDensityGate,
-    ContentStopGate, ContentStopRow, CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample,
-    CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
+    fit_content_continuation_gate, fit_content_stop_density_gate, fit_content_stop_gate,
+    shuffle_content_continuation_rows, shuffle_content_stop_rows, shuffle_content_targets,
+    validate_corpus_manifest, verify_content_readout_serving, ContentContinuationGate,
+    ContentContinuationRow, ContentPromptReading, ContentReadout, ContentSignatureMode,
+    ContentStopDensityGate, ContentStopGate, ContentStopRow, CpuConversationSample,
+    CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
 };
 use uor_r4_integer::stack::{
     read_memory_uorlut01, IntegerStackModel, STACK_CONTENT_READOUT_SCHEMA,
@@ -32,6 +34,7 @@ struct Config {
     stop_prototypes: usize,
     stop_density_neighbors: Option<usize>,
     stop_density_offset_radius: u16,
+    stop_horizon_neighbors: Option<usize>,
     seed: u64,
     select_only: bool,
     expected_artifact_sha256: String,
@@ -66,7 +69,8 @@ fn usage() -> String {
      --expected-mask-sha256 HEX --expected-manifest-sha256 HEX \
      [--keys N] [--per-key N] [--key-tokens N] [--reply-turn N] \
      [--reply-cap N] [--stop-prototypes N] [--stop-density-neighbors N] \
-     [--stop-density-offset-radius N] [--seed N] [--select-only]"
+     [--stop-density-offset-radius N] [--stop-horizon-neighbors N] \
+     [--seed N] [--select-only]"
         .to_owned()
 }
 
@@ -91,6 +95,7 @@ fn parse_args() -> Result<Config, String> {
         stop_prototypes: 8,
         stop_density_neighbors: None,
         stop_density_offset_radius: 2,
+        stop_horizon_neighbors: None,
         seed: 1,
         select_only: false,
         expected_artifact_sha256: String::new(),
@@ -119,6 +124,9 @@ fn parse_args() -> Result<Config, String> {
             "--stop-density-offset-radius" => {
                 config.stop_density_offset_radius = number(&value)?;
             }
+            "--stop-horizon-neighbors" => {
+                config.stop_horizon_neighbors = Some(number(&value)?);
+            }
             "--seed" => config.seed = number(&value)?,
             "--expected-artifact-sha256" => config.expected_artifact_sha256 = hex(&value)?,
             "--expected-tokens-sha256" => config.expected_tokens_sha256 = hex(&value)?,
@@ -145,6 +153,9 @@ fn parse_args() -> Result<Config, String> {
         || !(1..=1024).contains(&config.stop_prototypes)
         || config
             .stop_density_neighbors
+            .is_some_and(|neighbors| !(1..=16).contains(&neighbors))
+        || config
+            .stop_horizon_neighbors
             .is_some_and(|neighbors| !(1..=16).contains(&neighbors))
         || config.stop_density_offset_radius > 16
     {
@@ -304,6 +315,69 @@ fn run() -> Result<serde_json::Value, String> {
         .as_ref()
         .map(|training| json_sha(&training.gate))
         .transpose()?;
+    let horizon_rows = config
+        .stop_horizon_neighbors
+        .map(|_| {
+            derive_content_continuation_rows(
+                &memory_artifact,
+                &training_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+            )
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let horizon_shuffled_rows = horizon_rows
+        .as_ref()
+        .map(|rows| shuffle_content_continuation_rows(rows, config.seed))
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let horizon_training = config
+        .stop_horizon_neighbors
+        .map(|neighbors| {
+            fit_content_continuation_gate(
+                horizon_rows
+                    .as_ref()
+                    .ok_or_else(|| "continuation rows are missing".to_owned())?,
+                neighbors,
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
+    let horizon_shuffled_training = config
+        .stop_horizon_neighbors
+        .map(|neighbors| {
+            fit_content_continuation_gate(
+                horizon_shuffled_rows
+                    .as_ref()
+                    .ok_or_else(|| "shuffled continuation rows are missing".to_owned())?,
+                neighbors,
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
+    let horizon_sha256 = horizon_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let horizon_shuffled_sha256 = horizon_shuffled_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let horizon_prediction_changes = match (
+        horizon_rows.as_ref(),
+        horizon_training.as_ref(),
+        horizon_shuffled_training.as_ref(),
+    ) {
+        (Some(rows), Some(training), Some(shuffled)) => Some(horizon_predictions_changed(
+            rows,
+            &training.gate,
+            rows,
+            &shuffled.gate,
+        )?),
+        _ => None,
+    };
     let sign_shuffled = shuffle_content_targets(&sign_training.readout, config.seed)
         .map_err(|error| error.to_string())?;
     let code_shuffled = shuffle_content_targets(&code_training.readout, config.seed)
@@ -359,6 +433,17 @@ fn run() -> Result<serde_json::Value, String> {
                         "shuffled_training": gate_density_shuffled_training,
                         "true_sha256": gate_density_sha256,
                         "shuffled_sha256": gate_density_shuffled_sha256,
+                    })
+                }),
+                "gate_horizon": horizon_training.as_ref().map(|training| {
+                    serde_json::json!({
+                        "rows": horizon_rows.as_ref().map(Vec::len),
+                        "max_neighbors": config.stop_horizon_neighbors,
+                        "training": training,
+                        "shuffled_training": horizon_shuffled_training,
+                        "true_sha256": horizon_sha256,
+                        "shuffled_sha256": horizon_shuffled_sha256,
+                        "predictions_changed": horizon_prediction_changes,
                     })
                 }),
             },
@@ -570,6 +655,121 @@ fn run() -> Result<serde_json::Value, String> {
         } else {
             (None, None)
         };
+    let (gate_horizon_arms, gate_horizon_bar) =
+        if let (Some(horizon_rows), Some(horizon_training), Some(horizon_shuffled_training)) = (
+            horizon_rows.as_ref(),
+            horizon_training.as_ref(),
+            horizon_shuffled_training.as_ref(),
+        ) {
+            let (horizon_arm, horizon_prompts) = evaluate_content_continuation_gate(
+                &memory_artifact,
+                &evaluation_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+                &horizon_training.gate,
+            )
+            .map_err(|error| error.to_string())?;
+            let (horizon_shuffled_arm, horizon_shuffled_prompts) =
+                evaluate_content_continuation_gate(
+                    &memory_artifact,
+                    &evaluation_samples,
+                    config.reply_cap,
+                    true,
+                    &code_training.readout,
+                    &horizon_shuffled_training.gate,
+                )
+                .map_err(|error| error.to_string())?;
+            let vs_code_top1 = paired(&horizon_prompts, &code_prompts, |row| row.top1)?;
+            let vs_code_depth = paired(&horizon_prompts, &code_prompts, |row| {
+                row.matched_prefix_depth as u64
+            })?;
+            let vs_code_bos = paired(&horizon_prompts, &code_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let vs_shuffled_bos = paired(&horizon_prompts, &horizon_shuffled_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let non_inferior = non_inferior(
+                vs_code_top1["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "horizon top-1 sum differs".to_owned())?,
+                vs_code_top1["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code top-1 sum differs".to_owned())?,
+                vs_code_depth["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "horizon depth sum differs".to_owned())?,
+                vs_code_depth["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code depth sum differs".to_owned())?,
+            );
+            let lengths = bos_length_counts(&horizon_prompts);
+            let terminal_comparison = paired_terminal_continuation_rows(
+                horizon_rows,
+                &horizon_training.gate,
+                &horizon_shuffled_training.gate,
+            )?;
+            let prediction_changes = horizon_prediction_changes.unwrap_or(0);
+            let hashes_differ = horizon_sha256 != horizon_shuffled_sha256;
+            let rows_match = horizon_training.gate.rows.len() as u64 == horizon_training.rows;
+            let horizon_error_better =
+                horizon_training.horizon_abs_error < horizon_shuffled_training.horizon_abs_error;
+            let structural = horizon_training.rows >= 1_568
+                && horizon_training.terminal_rows >= 84
+                && horizon_training.nonterminal_rows >= 1_484
+                && horizon_training.terminal_stops >= 26
+                && horizon_training.nonterminal_stops <= horizon_training.nonterminal_stop_limit
+                && horizon_error_better
+                && hashes_differ
+                && prediction_changes > 0
+                && rows_match;
+            let passes = structural
+                && non_inferior
+                && horizon_arm.ungated_token_mismatches == 0
+                && horizon_arm.bos_stopped >= 9
+                && lengths.within_reference() >= 8
+                && horizon_arm.exact_reference >= 8
+                && vs_code_bos["passes"].as_bool() == Some(true)
+                && vs_shuffled_bos["passes"].as_bool() == Some(true)
+                && terminal_comparison["passes"].as_bool() == Some(true);
+            (
+                Some(serde_json::json!({
+                    "reading": horizon_arm,
+                    "prompts": horizon_prompts,
+                    "shuffled_reading": horizon_shuffled_arm,
+                    "shuffled_prompts": horizon_shuffled_prompts,
+                })),
+                Some(serde_json::json!({
+                    "training": horizon_training,
+                    "shuffled_training": horizon_shuffled_training,
+                    "true_sha256": horizon_sha256.as_ref(),
+                    "shuffled_sha256": horizon_shuffled_sha256.as_ref(),
+                    "prediction_changes": prediction_changes,
+                    "structural_pass": structural,
+                    "hashes_differ": hashes_differ,
+                    "gate_rows_match_training": rows_match,
+                    "horizon_error_better": horizon_error_better,
+                    "terminal_rows_vs_shuffled": terminal_comparison,
+                    "exact_reference": horizon_arm.exact_reference,
+                    "bos_complete": horizon_arm.bos_stopped,
+                    "bos_within_reference": lengths.within_reference(),
+                    "bos_at_reference_length": lengths.at_reference_length,
+                    "bos_shorter": lengths.shorter,
+                    "bos_longer": lengths.longer,
+                    "gate_fires": horizon_arm.gate_fires,
+                    "ungated_token_mismatches": horizon_arm.ungated_token_mismatches,
+                    "non_inferior_to_code": non_inferior,
+                    "vs_code_top1": vs_code_top1,
+                    "vs_code_depth": vs_code_depth,
+                    "vs_code_bos": vs_code_bos,
+                    "vs_shuffled_bos": vs_shuffled_bos,
+                    "passes": passes,
+                })),
+            )
+        } else {
+            (None, None)
+        };
     let serving_parity = verify_content_readout_serving(
         &memory_artifact,
         &evaluation_samples,
@@ -766,6 +966,9 @@ fn run() -> Result<serde_json::Value, String> {
     if let Some(density) = gate_density_bar.as_ref() {
         bar["gate_density"] = density.clone();
     }
+    if let Some(horizon) = gate_horizon_bar.as_ref() {
+        bar["gate_horizon"] = horizon.clone();
+    }
     let sign_mapping_sha256 = mapping_json(&sign_training.readout, &sign_shuffled, sign_changes)?;
     let code_mapping_sha256 = mapping_json(&code_training.readout, &code_shuffled, code_changes)?;
     std::fs::write(
@@ -827,6 +1030,28 @@ fn run() -> Result<serde_json::Value, String> {
         )
         .map_err(|error| error.to_string())?;
     }
+    if let (Some(training), Some(shuffled)) = (&horizon_training, &horizon_shuffled_training) {
+        std::fs::write(
+            config.out.join("content-continuation-rows.json"),
+            serde_json::to_vec_pretty(
+                horizon_rows
+                    .as_ref()
+                    .ok_or_else(|| "continuation rows are missing".to_owned())?,
+            )
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("content-continuation-gate.json"),
+            serde_json::to_vec_pretty(training).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("content-continuation-gate-shuffled.json"),
+            serde_json::to_vec_pretty(shuffled).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-content-readout-run/2",
         "substrate": "cpu-development-research",
@@ -851,6 +1076,8 @@ fn run() -> Result<serde_json::Value, String> {
             "gate_shuffled": gate_shuffled_training,
             "gate_density": gate_density_training.as_ref(),
             "gate_density_shuffled": gate_density_shuffled_training.as_ref(),
+            "gate_horizon": horizon_training.as_ref(),
+            "gate_horizon_shuffled": horizon_shuffled_training.as_ref(),
         },
         "serving": {
             "artifact": "serving.uorlut",
@@ -881,6 +1108,7 @@ fn run() -> Result<serde_json::Value, String> {
                 "prompts": gate_shuffled_prompts
             },
             "gate_density": gate_density_arms,
+            "gate_horizon": gate_horizon_arms,
         },
         "bar": bar,
         "rayon_workers": rayon::current_num_threads(),
@@ -1070,6 +1298,68 @@ fn paired_terminal_density_rows(
         "threshold": threshold,
         "passes": candidate_sum > control_sum && candidate_only >= threshold,
     }))
+}
+
+fn paired_terminal_continuation_rows(
+    rows: &[ContentContinuationRow],
+    candidate: &ContentContinuationGate,
+    control: &ContentContinuationGate,
+) -> Result<serde_json::Value, String> {
+    let mut candidate_only = 0u64;
+    let mut control_only = 0u64;
+    let mut candidate_sum = 0u64;
+    let mut control_sum = 0u64;
+    for row in rows.iter().filter(|row| row.remaining == 0) {
+        let left = u64::from(
+            content_continuation_gate_fires(candidate, &row.signature, row.offset)
+                .map_err(|error| error.to_string())?,
+        );
+        let right = u64::from(
+            content_continuation_gate_fires(control, &row.signature, row.offset)
+                .map_err(|error| error.to_string())?,
+        );
+        candidate_sum += left;
+        control_sum += right;
+        candidate_only += u64::from(left > right);
+        control_only += u64::from(right > left);
+    }
+    let threshold = ceil_two_sqrt(control_only).max(2);
+    Ok(serde_json::json!({
+        "candidate_only": candidate_only,
+        "control_only": control_only,
+        "candidate_sum": candidate_sum,
+        "control_sum": control_sum,
+        "threshold": threshold,
+        "passes": candidate_sum > control_sum && candidate_only >= threshold,
+    }))
+}
+
+fn horizon_predictions_changed(
+    rows: &[ContentContinuationRow],
+    candidate: &ContentContinuationGate,
+    comparison_rows: &[ContentContinuationRow],
+    control: &ContentContinuationGate,
+) -> Result<u64, String> {
+    if rows.len() != comparison_rows.len() {
+        return Err("continuation prediction row counts differ".to_owned());
+    }
+    rows.iter()
+        .zip(comparison_rows)
+        .try_fold(0u64, |changed, (candidate_row, control_row)| {
+            let left = content_continuation_gate_fires(
+                candidate,
+                &candidate_row.signature,
+                candidate_row.offset,
+            )
+            .map_err(|error| error.to_string())?;
+            let right = content_continuation_gate_fires(
+                control,
+                &control_row.signature,
+                control_row.offset,
+            )
+            .map_err(|error| error.to_string())?;
+            Ok(changed + u64::from(left != right))
+        })
 }
 
 fn ceil_three_sqrt(value: u64) -> u64 {
