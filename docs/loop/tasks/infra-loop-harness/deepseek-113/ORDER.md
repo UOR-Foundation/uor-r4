@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, deepseek-113 (close the delivered Studio direction)
 
-Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `1968430e3`.
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 2 (owner-direction record maintenance). Base: `1968430e3`.
 
 ## Goal
 
@@ -18,7 +18,7 @@ completed direction and hides later model work.
 - Do not change a bar, technical rule, roadmap item status, capability claim or
   production boundary.
 
-## Cancel probes
+## Cancel probe (run first)
 
 - The owner direction is still marked `open` and `loop next` selects it.
 - Recovered Studio, native loopback, composer history/Enter, exact stream
