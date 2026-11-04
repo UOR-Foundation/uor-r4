@@ -6,6 +6,13 @@ TEST FITNESS: FIT WITH CHANGES, from a fresh non-author review of this sheet at 
 
 PRE-RUN: GO in round 2, from fresh non-author reviews of this sheet, the ORDER, the job and the grade ([#3407, 6638389538](https://github.com/UOR-Foundation/uor-r4/issues/3407#issuecomment-6638389538)). Round 1 was NO GO, until I-3b and I-4 were in the scripts. Round 2 read the sheet at `58fa1523`, the job `c0d48b27`, the grade `7188e1db` and the watcher `7735c645`.
 
+RUN 1 (4 Nov, 18:17–18:34Z, `vast-59143240`, about $0.30): EXIT 5 at I-2, an instrument fault. `on-L192` decoded with 0 prefills and 0 steps (6,797 whole-window forwards), so the cache never ran.
+- **Cause:** the scorer sets the one-atom FBS arm on every pass (`score_rows`), and the cache refused any arm. The GPU tests had left the arm unset.
+- **Repair (`11aed950`):** that arm projects through the same `plan.forward` as no arm (`spiralcore_fbs_arms::project`), so the cache now carries it, and refuses only the arms with kernels of their own. The CPU refusal test fails with the repair set aside. The CUDA decode-switch test now sets the arm as the scorer does.
+- **What held:** I-0 (the CUDA library suite: 338 passed, 0 failed, 8 ignored; the 17 named tests) and I-1.
+- **Sealed** in the store under `claude-279/run1/`: 155 files, read back 152 of 152 against `SHA256SUMS.files` (SHA-256 `e5151c7626bbf641fdcdfb2f2634e4f929937e5bb6fff700cc6cb02f6f257a6e`).
+- **Run 2** runs the new pin on the same pod, into fresh folders and under `claude-279/run2/`, after a fresh pre-run review of the change.
+
 OUTCOME: pending.
 
 **What this run measures.** Today every decode step of a scoring pass re-runs the model over the whole window: 2,048 positions at P2b's long window, to compute one new position. At 2,048 the two `p-long` queries files are about 98% of a pass (claude-277). Of their 18,879 decode steps after the first, 18,721 (99.2%) fit the window, so they can step from the cache instead; at 192, 6,105 (32%) do.
@@ -27,14 +34,14 @@ Each is exact by construction: a step runs the same ops on the same tensors as t
 
 ## Base artifact
 
-- **The pin** is `06b225d17eb9f9bdaac30fa27efe8953aa50c57e`, the build's commit on draft PR #3673. `train-in-space` is built there with `--locked --features cuda`. The pod checks that the commit is that one and clean, and records the binary's SHA-256. A later commit on the PR that touches only docs needs no rebuild. One that touches code moves the pin, and this sheet names the new one before the job runs.
+- **The pin** is `11aed950ae7a1ae83f9fff672d27c54f02b33590`, the build's commit on draft PR #3673. Run 1 ran the first pin, `06b225d17eb9f9bdaac30fa27efe8953aa50c57e`; the repair above moved it. `train-in-space` is built there with `--locked --features cuda`. The pod checks that the commit is that one and clean, and records the binary's SHA-256. A later commit on the PR that touches only docs needs no rebuild. One that touches code moves the pin, and this sheet names the new one before the job runs.
 - **The base** is `f34f0b17c76cac6c28e82fbc754163023948ba65`, `main` at claude-278's merge, the ORDER's base. Its `train-in-space` has no `--decode-cache`: it re-runs the whole window at every step, and its Hamming read has no step. It is built into the same target folder after the pin's binary is copied out.
 - **The checkpoints** are P2b's seed 1, under `results/claude/one-model-end-to-end-long-context-2026-11-04/s1/`:
   - (L) `L/models/step-008192/`;
   - (S) `S/models/step-021845/`.
 
   The seal file `SHA256SUMS.files` there has SHA-256 `ca0b8aeda4e23a6f793df8b503534a48ff090724632dc384c66a0b4b27424b23`. The pod checks the ten checkpoint files against its lines.
-- **The outputs** go under `results/claude/one-model-end-to-end-decode-cache-2026-11-04/claude-279/`, a new folder beside claude-278's sealed `run1/` and `run2/`, which stay untouched.
+- **The outputs** go under `results/claude/one-model-end-to-end-decode-cache-2026-11-04/claude-279/` (`run1/`, `run2/`), a new folder beside claude-278's sealed `run1/` and `run2/`, which stay untouched.
 
 ## Arms
 
