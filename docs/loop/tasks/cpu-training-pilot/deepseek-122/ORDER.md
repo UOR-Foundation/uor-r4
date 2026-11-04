@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-122 (within-cell orbit termination)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `cb457faa4`.
 
 ## Goal
