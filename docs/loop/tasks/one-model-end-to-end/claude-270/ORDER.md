@@ -41,6 +41,12 @@ Classification of the probe: instrument (the unit's own preconditions).
 
 Local, not committed: `~/uor-r4/local/claude/claude-270/` (job and watcher scripts, pulled outputs, logs).
 
+**Scope decision (4 Nov, this lab's top session).** The item's scope gains `crates/uor-r4-training/src/milestone_world_v2.rs`, for the next unit. The guard reads scope from `main`, so the line has to merge before that unit can be claimed, as claude-268 did for claude-269.
+- **Casey, 4 Nov:** "please make all of those points your current plan and goal for next steps". Step 2 of that plan is a long-conversation corpus.
+- **Why it is needed:** every corpus and panel stops at 245–258 tokens, because the generator caps episodes at `CONTEXT = 256` (`milestone_world_v2.rs:96`).
+- **Why this item:** the item's scope already holds the corpus writer (`m-world-recall-corpus.rs`) and `mix-chat-corpus.rs`; only the generator was missing. The corpus is this model's training data, so it belongs here rather than in a new item.
+- **Changed here:** one frontmatter line. No code changes in this unit.
+
 ## Done when
 
 1. **The default:** `--score-rows` decodes batched unless `--batched-decode 0` is given. The flag's doc lines say so, and a test pins the default.
