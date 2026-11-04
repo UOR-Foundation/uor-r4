@@ -1,6 +1,6 @@
 # CPU geometric termination-point gate
 
-**Status:** DRAFT
+**Status:** FIT
 
 ## Question
 
@@ -166,4 +166,22 @@ nondeterministic repeat, an unavailable dependency or a counter overflow.
 
 ## TEST FITNESS
 
-Pending fresh-context non-author FIT at the final source head.
+TEST FITNESS: FIT - M2 #2030  
+sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`  
+head: `1dd53c193351db3b2429e403297be4264621f147`  
+reviewer: Codex fresh-context non-author review  
+note: bounded two-seed D84 CPU termination experiment; fixed deepseek-109
+16-key / 102-training / 114-evaluation selection and 32-update replay; three
+arms (no gate, training-derived terminal-point gate, equal-size random
+nonterminal-point control); deterministic training-only L1 gate derivation with
+exact collision removal and radius bounds; 114 prompts, 16-token cap, 32 Rayon
+workers, deepseek-110 no-gate digest pins, strict candidate bar, seed-1 repeat
+and 30-minute stop. The driver enforces trained-artifact and no-gate reply
+hashes before gate evaluation and reports gate counts, distances, gates,
+artifact hash, ordered reply digests and paired BOS/premature-stop/exact
+results.  
+date: 2026-11-04
+
+This FIT clears only this registered configuration at this exact source head.
+Any change to source, hashes, selection, arms, bar, controls, cap or gate rule
+requires re-review.
