@@ -182,4 +182,16 @@ language capability or GPU qualification.
 
 ## TEST FITNESS
 
-TEST FITNESS: pending fresh-context non-author review.
+TEST FITNESS: FIT - M2 #2030 public 19-table CPU count stage profile
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-stages-2026-11-04.md`
+head: `db71dfdb79d5cda1ba41463b965f858bf8662bde`
+implementation pin: `c0c6392480dff59d3ab3b9b519e72028846db962`
+binary pin: `9fbe1cc802bfbfe2296d111cc3b68cdfd79d2bc4fad17fccf1868287e0b40447`
+reviewer: Codex fresh-context non-author session
+note: 21 contiguous monotonic stages; exact deepseek-126 artifact and
+normalized non-stage report pins; mirrored one/sixteen-worker runs; finite
+accounting; strict positive RSS below 2,097,152 KiB; 600-second timeout;
+predeclared hotspot rule and instrument-only claim
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
