@@ -72,6 +72,7 @@ pub struct ContentReadoutTraining {
 pub struct ContentReadoutReading {
     pub prompts: u64,
     pub decisions: u64,
+    pub generated_decisions: u64,
     pub readout_decisions: u64,
     pub writer_fallbacks: u64,
     pub top1: u64,
@@ -480,6 +481,7 @@ fn evaluate_generated(
             _ => return Err(invalid("content readout stop differs")),
         }
         reading.generated_tokens += reply.tokens.len() as u64;
+        reading.generated_decisions += decisions.len() as u64;
         if !reply.tokens.is_empty() {
             distinct.insert(reply.tokens.clone());
         }
@@ -2465,6 +2467,40 @@ mod tests {
             };
             assert_eq!(evaluate(1), evaluate(32), "{mode:?}");
         }
+    }
+
+    #[test]
+    fn capped_generation_counts_decisions_past_the_reference_horizon() {
+        let sample = sample();
+        let (reading, prompts) = evaluate_generated(std::slice::from_ref(&sample), 4, |_| {
+            let decisions = (0..4)
+                .map(|offset| Decision {
+                    offset,
+                    chosen: 7 + offset as u32,
+                    content_chosen: 7 + offset as u32,
+                    writer_chosen: 7 + offset as u32,
+                    gate_fired: false,
+                    signature: signature(offset),
+                    reference_target: (offset < 2).then_some(42),
+                    nearest_distance: Some(1),
+                    ambiguous_nearest: false,
+                    used_readout: true,
+                })
+                .collect();
+            Ok((
+                decisions,
+                Generated {
+                    tokens: vec![7, 8, 9, 10],
+                    stop: "cap",
+                },
+            ))
+        })
+        .unwrap();
+        assert_eq!(prompts[0].stop, "cap");
+        assert_eq!(reading.decisions, 2);
+        assert_eq!(reading.generated_decisions, 4);
+        assert_eq!(reading.readout_decisions, 4);
+        assert_eq!(reading.writer_fallbacks, 0);
     }
 
     #[test]

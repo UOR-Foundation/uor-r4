@@ -1314,7 +1314,7 @@ fn non_inferior(
 }
 
 fn readout_fallback_accounting(reading: &ContentReadoutReading) -> bool {
-    reading.decisions == reading.readout_decisions + reading.writer_fallbacks
+    reading.generated_decisions == reading.readout_decisions + reading.writer_fallbacks
 }
 
 fn paired(
@@ -1687,14 +1687,16 @@ mod tests {
     #[test]
     fn trajectory_readout_fallback_accounts_for_every_decision() {
         let reading = ContentReadoutReading {
-            decisions: 10,
+            decisions: 2,
+            generated_decisions: 10,
             readout_decisions: 3,
             writer_fallbacks: 7,
             ..ContentReadoutReading::default()
         };
         assert!(readout_fallback_accounting(&reading));
         assert!(!readout_fallback_accounting(&ContentReadoutReading {
-            decisions: 10,
+            decisions: 2,
+            generated_decisions: 10,
             readout_decisions: 3,
             writer_fallbacks: 6,
             ..ContentReadoutReading::default()
