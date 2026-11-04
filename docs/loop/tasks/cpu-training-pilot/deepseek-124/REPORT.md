@@ -139,7 +139,6 @@ No system-provided skill applied.
 
 ## Still open
 
-- Implement and FIT-review the writeback path.
 - Determine a larger but still bounded count-training dose that changes served
   decisions without the discarded 128-row result being retuned.
 - Complete replies, fresh phrasing, useful local chat and GPU qualification.
