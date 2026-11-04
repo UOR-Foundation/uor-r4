@@ -190,11 +190,15 @@ impl<'a> Reader<'a> {
     }
     fn u64(&mut self) -> Result<u64, String> {
         let b = self.take(8)?;
-        Ok(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(u64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
     fn i64(&mut self) -> Result<i64, String> {
         let b = self.take(8)?;
-        Ok(i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]))
+        Ok(i64::from_le_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
     fn v64(&mut self) -> Result<u64, String> {
         let mut acc = 0u64;
@@ -391,9 +395,7 @@ pub fn export_scope(
 
 /// Decode a `UORMEM01` binary envelope (rebuilt from `uor-r4-object-store::Store`)
 /// back into its [`ScopedSessionIdent`] and [`SerializedStackSession`].
-pub fn import_scope(
-    bytes: &[u8],
-) -> Result<(ScopedSessionIdent, SerializedStackSession), String> {
+pub fn import_scope(bytes: &[u8]) -> Result<(ScopedSessionIdent, SerializedStackSession), String> {
     let mut r = Reader { buf: bytes, at: 0 };
     if r.take(8)? != DURABLE_SCOPE_MAGIC {
         return Err("session codec: bad UORMEM01 magic".to_string());
@@ -530,8 +532,7 @@ mod tests {
         let scope = ScopedSessionIdent::new("user-1", "proj-m3", "sess-42").expect("valid scope");
         let envelope = export_scope(&scope, &s).expect("export_scope");
         assert_eq!(&envelope[..8], DURABLE_SCOPE_MAGIC);
-        let (restored_scope, restored_session) =
-            import_scope(&envelope).expect("import_scope");
+        let (restored_scope, restored_session) = import_scope(&envelope).expect("import_scope");
         assert_eq!(restored_scope, scope);
         assert_eq!(restored_session, s);
 

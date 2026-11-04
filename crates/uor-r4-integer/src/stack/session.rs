@@ -1518,6 +1518,23 @@ impl IntegerStackModel {
                 cells: vec![0; if self.fbs.is_some() { 256 } else { 0 }],
                 native_kept: vec![0; self.fbs.as_ref().map_or(0, |f| f.kept_cells)],
                 native_token: 0,
+                content_votes: vec![
+                    0;
+                    if self.content_readout.is_some() {
+                        s.vocab
+                    } else {
+                        0
+                    }
+                ],
+                content_vote_epochs: vec![
+                    0;
+                    if self.content_readout.is_some() {
+                        s.vocab
+                    } else {
+                        0
+                    }
+                ],
+                content_vote_epoch: 0,
                 point_tied: Vec::with_capacity(
                     self.memory
                         .as_ref()
@@ -1779,6 +1796,11 @@ struct Buffers {
     cells: Vec<i64>,
     native_kept: Vec<u32>,
     native_token: u32,
+    /// Reused per-target vote counts and epochs for the optional content
+    /// readout. Allocated with the session, never inside `serve_step`.
+    content_votes: Vec<u32>,
+    content_vote_epochs: Vec<u32>,
+    content_vote_epoch: u32,
     /// The point key's `(distance, row, target)` candidates, at the table's row count, so its
     /// search allocates nothing.
     point_tied: Vec<(i64, usize, u32)>,
@@ -2851,7 +2873,15 @@ impl IntegerStackSession<'_> {
             self.step(token)?;
             let mut next = self.b.native_token;
             if let Some(readout) = self.model.content_readout.as_deref() {
-                next = readout.select(&self.b.query_q12, next)?.token;
+                next = readout
+                    .select_into(
+                        &self.b.query_q12,
+                        next,
+                        &mut self.b.content_votes,
+                        &mut self.b.content_vote_epochs,
+                        &mut self.b.content_vote_epoch,
+                    )?
+                    .token;
             }
             return Ok((next, 0));
         }
@@ -5178,6 +5208,43 @@ mod fbs_stage_tests {
         different
             .set_content_readout(different_readout)
             .expect("attach different readout");
+
+        let mut plain_raw_step = plain.session();
+        let mut content_raw_step = candidate.session();
+        assert_eq!(
+            plain_raw_step.step(prompt).expect("plain step").to_vec(),
+            content_raw_step
+                .step(prompt)
+                .expect("content step")
+                .to_vec()
+        );
+        assert_eq!(
+            plain_raw_step.last_native_token(),
+            content_raw_step.last_native_token()
+        );
+        assert_eq!(
+            plain_raw_step.last_query_q12(),
+            content_raw_step.last_query_q12()
+        );
+
+        let mut plain_raw_native = plain.session();
+        let mut content_raw_native = candidate.session();
+        assert_eq!(
+            plain_raw_native
+                .step_native(prompt)
+                .expect("plain native step"),
+            content_raw_native
+                .step_native(prompt)
+                .expect("content native step")
+        );
+        let mut no_readout_serve = plain.session();
+        assert_eq!(
+            no_readout_serve
+                .serve_step(prompt)
+                .expect("no-readout served step"),
+            (native, 0)
+        );
+
         let mut plain_session = plain.session();
         let mut content_session = candidate.session();
         let raw = plain_session.step_native(prompt).expect("raw step");

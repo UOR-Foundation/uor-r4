@@ -5,7 +5,6 @@
 //! consults it only after the native writer and point-key fallback have
 //! selected a token.
 
-use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::Path;
 
@@ -18,6 +17,7 @@ use super::StackError;
 pub const STACK_CONTENT_READOUT_SCHEMA: &str = "uor-r4.stack-content-readout/1";
 /// The only serving signature supported by this sidecar version.
 pub const CONTENT_CODE_SIGNATURE_BITS: usize = 2_048;
+const CONTENT_CODE_SIGNATURE_WORDS: usize = CONTENT_CODE_SIGNATURE_BITS / 64;
 /// Refuse a sidecar larger than this before JSON parsing.
 pub const MAX_CONTENT_READOUT_BYTES: u64 = 64 << 20;
 
@@ -180,14 +180,16 @@ impl ContentReadout {
     }
 
     /// Pack the low byte of each Q12 coordinate into a 2,048-bit signature.
-    pub fn signature(query_q12: &[i32]) -> Result<ContentSignature, StackError> {
+    fn signature_array(
+        query_q12: &[i32],
+    ) -> Result<[u64; CONTENT_CODE_SIGNATURE_WORDS], StackError> {
         if query_q12.len() * 8 != CONTENT_CODE_SIGNATURE_BITS {
             return Err(StackError::ContentReadout(format!(
                 "content readout needs a 256-coordinate query, got {}",
                 query_q12.len()
             )));
         }
-        let mut signature = vec![0u64; CONTENT_CODE_SIGNATURE_BITS / 64];
+        let mut signature = [0u64; CONTENT_CODE_SIGNATURE_WORDS];
         for (index, &value) in query_q12.iter().enumerate() {
             let bit = index * 8;
             signature[bit / 64] |= u64::from(value as u8) << (bit % 64);
@@ -195,15 +197,59 @@ impl ContentReadout {
         Ok(signature)
     }
 
+    /// Pack the low byte of each Q12 coordinate into a 2,048-bit signature.
+    pub fn signature(query_q12: &[i32]) -> Result<ContentSignature, StackError> {
+        Ok(Self::signature_array(query_q12)?.to_vec())
+    }
+
     /// Select the nearest target within the learned radius.
     ///
     /// Equal minimum distances vote by target. The commonest target wins, and
     /// an exact vote tie goes to the smaller token id.
     pub fn select(&self, query_q12: &[i32], fallback: u32) -> Result<ContentSelection, StackError> {
-        let signature = Self::signature(query_q12)?;
+        let vocab = self
+            .rows
+            .iter()
+            .map(|row| row.target as usize)
+            .max()
+            .map_or(0, |target| target + 1);
+        let mut votes = vec![0; vocab];
+        let mut vote_epochs = vec![0; vocab];
+        let mut epoch = 0;
+        self.select_into(
+            query_q12,
+            fallback,
+            &mut votes,
+            &mut vote_epochs,
+            &mut epoch,
+        )
+    }
+
+    /// Select using caller-owned vote scratch. The serving path calls this
+    /// with buffers allocated by the session so a token step does not allocate.
+    pub fn select_into(
+        &self,
+        query_q12: &[i32],
+        fallback: u32,
+        votes: &mut [u32],
+        vote_epochs: &mut [u32],
+        epoch: &mut u32,
+    ) -> Result<ContentSelection, StackError> {
+        if votes.len() != vote_epochs.len() {
+            return Err(StackError::ContentReadout(
+                "content-readout vote scratch widths differ".to_owned(),
+            ));
+        }
+        let vote_len = votes.len();
+        let signature = Self::signature_array(query_q12)?;
         let mut nearest = u32::MAX;
-        let mut votes = BTreeMap::<u32, u64>::new();
+        let mut nearest_epoch = 0;
         for row in &self.rows {
+            if row.signature.len() != CONTENT_CODE_SIGNATURE_WORDS {
+                return Err(StackError::ContentReadout(
+                    "content-readout row width differs".to_owned(),
+                ));
+            }
             let distance: u32 = signature
                 .iter()
                 .zip(&row.signature)
@@ -212,22 +258,50 @@ impl ContentReadout {
             match distance.cmp(&nearest) {
                 std::cmp::Ordering::Less => {
                     nearest = distance;
-                    votes.clear();
-                    votes.insert(row.target, 1);
+                    nearest_epoch = next_vote_epoch(epoch, vote_epochs);
+                    let target = row.target as usize;
+                    let vote = votes.get_mut(target).ok_or_else(|| {
+                        StackError::ContentReadout(format!(
+                            "content-readout target {} exceeds vote scratch {}",
+                            row.target, vote_len
+                        ))
+                    })?;
+                    *vote = 1;
+                    vote_epochs[target] = nearest_epoch;
                 }
                 std::cmp::Ordering::Equal => {
-                    *votes.entry(row.target).or_default() += 1;
+                    let target = row.target as usize;
+                    let vote = votes.get_mut(target).ok_or_else(|| {
+                        StackError::ContentReadout(format!(
+                            "content-readout target {} exceeds vote scratch {}",
+                            row.target, vote_len
+                        ))
+                    })?;
+                    if vote_epochs[target] != nearest_epoch {
+                        *vote = 1;
+                        vote_epochs[target] = nearest_epoch;
+                    } else {
+                        *vote = vote.checked_add(1).ok_or_else(|| {
+                            StackError::ContentReadout(
+                                "content-readout target vote overflowed".to_owned(),
+                            )
+                        })?;
+                    }
                 }
                 std::cmp::Ordering::Greater => {}
             }
         }
-        let target = votes
-            .into_iter()
-            .max_by(|left, right| left.1.cmp(&right.1).then_with(|| right.0.cmp(&left.0)))
-            .map(|(target, _)| target)
-            .ok_or_else(|| {
-                StackError::ContentReadout("content readout has no effective target".to_owned())
-            })?;
+        let mut target = None;
+        let mut most_votes = 0;
+        for (candidate, &count) in votes.iter().enumerate() {
+            if vote_epochs[candidate] == nearest_epoch && count > most_votes {
+                target = Some(candidate as u32);
+                most_votes = count;
+            }
+        }
+        let target = target.ok_or_else(|| {
+            StackError::ContentReadout("content readout has no effective target".to_owned())
+        })?;
         let fired = nearest <= self.max_distance;
         Ok(ContentSelection {
             token: if fired { target } else { fallback },
@@ -235,6 +309,16 @@ impl ContentReadout {
             readout_fired: fired,
         })
     }
+}
+
+fn next_vote_epoch(epoch: &mut u32, vote_epochs: &mut [u32]) -> u32 {
+    if *epoch == u32::MAX {
+        vote_epochs.fill(0);
+        *epoch = 1;
+    } else {
+        *epoch += 1;
+    }
+    *epoch
 }
 
 #[cfg(test)]
@@ -322,6 +406,49 @@ mod tests {
                 nearest_distance: 1,
                 readout_fired: false,
             }
+        );
+    }
+
+    #[test]
+    fn served_selection_reuses_scratch_and_ignores_stale_votes() {
+        let mut query = vec![0; 256];
+        query[0] = 1;
+        let table = readout(
+            vec![
+                ContentExample {
+                    signature: signature(0),
+                    target: 9,
+                },
+                ContentExample {
+                    signature: signature(0),
+                    target: 9,
+                },
+                ContentExample {
+                    signature: signature(1),
+                    target: 3,
+                },
+            ],
+            0,
+        );
+        let mut votes = [0; 10];
+        let mut vote_epochs = [0; 10];
+        let mut epoch = u32::MAX;
+
+        assert_eq!(
+            table
+                .select_into(&query, 99, &mut votes, &mut vote_epochs, &mut epoch)
+                .expect("first selection")
+                .token,
+            9
+        );
+        let mut second_query = query;
+        second_query[0] = 2;
+        assert_eq!(
+            table
+                .select_into(&second_query, 99, &mut votes, &mut vote_epochs, &mut epoch)
+                .expect("second selection")
+                .token,
+            3
         );
     }
 

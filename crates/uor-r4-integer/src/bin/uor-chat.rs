@@ -1733,10 +1733,17 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             tok = next_prompt_tok;
         }
         let mut generated_ids = Vec::with_capacity(cli.max_tokens);
+        let generation_started = std::time::Instant::now();
         for _ in 0..cli.max_tokens {
             tok = session.serve_step(tok)?.0;
             generated_ids.push(tok);
         }
+        let generation_seconds = generation_started.elapsed().as_secs_f64();
+        let generated_tokens_per_second = if generation_seconds > 0.0 {
+            generated_ids.len() as f64 / generation_seconds
+        } else {
+            0.0
+        };
         let saved_bytes = uor_r4_integer::session_codec::encode(&session.save_state());
         let session_sha256 = hex::encode(Sha256::digest(&saved_bytes));
         if let Some(save_path) = cli.save_session.as_deref() {
@@ -1755,6 +1762,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "decoding": STACK_DECODING,
             "prompt_ids": prompt_ids,
             "generated_ids": generated_ids,
+            "generation_seconds": generation_seconds,
+            "generated_tokens_per_second": generated_tokens_per_second,
             "last_token": tok,
             "position": session.position(),
             "weights_per_token": model.weights_per_token(),
