@@ -20,7 +20,7 @@ external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `4ba330a0c58aff90489a3064993cdf15d058b9a5` |
+| implementation source | `a463a1c8d028348fed0c95494e5282eac7c5756e` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -28,6 +28,23 @@ external model execution.
 | corpus manifest | `ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab` |
 
 Hardware: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
+
+## Data split
+
+Use the deepseek-137 public split unchanged: 16 conversation groups split into
+98 training and 103 evaluation samples for each artifact. The training side
+contains 1,120 content decisions and the evaluation side 1,085 decisions.
+Seed 1, seed 2 and the seed-1 repeat use runner seed `1`.
+
+## Minimum test power
+
+The unit compares two exact implementations of the same deterministic
+integer function over complete generated trajectories. A single differing
+token, fallback, signature, distance or fired decision fails the arm; there is
+no sampling noise to estimate. Two trained artifacts plus a byte-identical
+repeat test transfer across model weights and host repeatability. The result
+does not generalize beyond these artifacts and remains D84 development
+evidence.
 
 ## Fixed construction
 
@@ -119,7 +136,7 @@ BUILD=$SOURCE/target/deepseek/content-readout-serving-140
 CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=4ba330a0c58aff90489a3064993cdf15d058b9a5
+IMPL_PIN=a463a1c8d028348fed0c95494e5282eac7c5756e
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -208,7 +225,7 @@ mismatch is an instrument fault requiring a new FIT.
 TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
 head: pending
-implementation pin: 4ba330a0c58aff90489a3064993cdf15d058b9a5
+implementation pin: a463a1c8d028348fed0c95494e5282eac7c5756e
 reviewer: pending
 date: 2026-11-04
 
