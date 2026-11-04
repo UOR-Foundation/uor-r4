@@ -167,6 +167,8 @@ None applied.
 2. **Cross-episode relation recall and the filler pool** (What did not work, 2 and 4) are the next unit's decisions, before the long TRAIN corpus is written.
 3. **MQAR key repeats across episodes are uncounted** (6).
 4. **claude-270's served-mode parity check** is still owed, by the next GPU unit that scores a served checkpoint.
+5. **The distance test recounts with the code's own call** (`meter.distance` over the same turns, the fresh review's note). So it pins the tag's wiring, not the slice's bounds, which the review read as right. The meter's per-turn costs are checked against the encoder (0 mismatches over the census). A recount from the encoder's token offsets, as the MQAR test does with the pinned tokenizer, is owed.
+6. **Sixteen dropped draws in a row fail the whole corpus** (`chained`'s retry limit, the fresh review's note). The census dropped none, but it excluded nothing (What did not work, 8). The long TRAIN corpus, which must exclude the panel's turns, checks the drop rate first.
 
 ## Plain summary
 
