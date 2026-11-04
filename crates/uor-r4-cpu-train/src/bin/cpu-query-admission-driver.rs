@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, audit_self_prefix_generated, derive_turn_memory,
-    evaluate_memory_weight_samples, evaluate_self_prefix, evaluate_self_prefix_admission,
-    evaluate_self_prefix_prompts, read_gain, replace_final_gain, validate_corpus_manifest,
-    CpuConversationSample, CpuMaskedCorpus, CpuQueryAdmissionTrainer, MemoryWeightSample,
-    RankMarginConfig, SelfPrefixAdmissionCensus, SelfPrefixConfig, SelfPrefixMode,
-    SelfPrefixPromptReading, SelfPrefixReading, SelfPrefixTargets,
+    add_turn_memory_uorlut01, audit_self_prefix_generated, audit_self_prefix_target_permutation,
+    derive_turn_memory, evaluate_memory_weight_samples, evaluate_self_prefix,
+    evaluate_self_prefix_admission, evaluate_self_prefix_prompts, read_gain, replace_final_gain,
+    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuQueryAdmissionTrainer,
+    MemoryWeightSample, RankMarginConfig, SelfPrefixAdmissionCensus, SelfPrefixConfig,
+    SelfPrefixMode, SelfPrefixPromptReading, SelfPrefixReading, SelfPrefixTargets,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
 
@@ -48,8 +48,15 @@ struct ArmReading {
     prompts: Vec<SelfPrefixPromptReading>,
     teacher_top1: u64,
     parity: uor_r4_cpu_train::MemoryWeightParityReading,
-    moves: Vec<uor_r4_cpu_train::QueryAdmissionStep>,
+    moves: serde_json::Value,
     accepted: u64,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct RandomGainMove {
+    coordinate: usize,
+    before_code: i16,
+    after_code: i16,
 }
 
 fn main() {
@@ -268,7 +275,7 @@ fn run() -> Result<serde_json::Value, String> {
         &training_samples,
         &evaluation_samples,
         base,
-        Vec::new(),
+        serde_json::json!([]),
         0,
     )?;
     let mut true_trainer =
@@ -277,12 +284,13 @@ fn run() -> Result<serde_json::Value, String> {
     let true_moves = true_trainer
         .train_steps(config.moves)
         .map_err(|error| error.to_string())?;
+    let true_moves_json = serde_json::to_value(&true_moves).map_err(|error| error.to_string())?;
     let trained = evaluate_arm(
         true_trainer.artifact(),
         &training_samples,
         &evaluation_samples,
         base,
-        true_moves,
+        true_moves_json,
         true_trainer.accepted(),
     )?;
     std::fs::write(config.out.join("true.uorlut"), &trained.artifact)
@@ -301,17 +309,19 @@ fn run() -> Result<serde_json::Value, String> {
     let permuted_moves = permuted_trainer
         .train_steps(config.moves)
         .map_err(|error| error.to_string())?;
+    let permuted_moves_json =
+        serde_json::to_value(&permuted_moves).map_err(|error| error.to_string())?;
     let permuted = evaluate_arm(
         permuted_trainer.artifact(),
         &training_samples,
         &evaluation_samples,
         base,
-        permuted_moves,
+        permuted_moves_json,
         permuted_trainer.accepted(),
     )?;
     std::fs::write(config.out.join("permuted.uorlut"), &permuted.artifact)
         .map_err(|error| error.to_string())?;
-    let random_artifact =
+    let (random_artifact, random_moves) =
         move_random_gain(&base_artifact, trained.accepted as usize, config.seed, 32)
             .map_err(|error| error.to_string())?;
     let random = evaluate_arm(
@@ -319,8 +329,8 @@ fn run() -> Result<serde_json::Value, String> {
         &training_samples,
         &evaluation_samples,
         base,
-        Vec::new(),
-        trained.accepted,
+        serde_json::to_value(&random_moves).map_err(|error| error.to_string())?,
+        random_moves.len() as u64,
     )?;
     std::fs::write(config.out.join("random.uorlut"), &random.artifact)
         .map_err(|error| error.to_string())?;
@@ -331,6 +341,16 @@ fn run() -> Result<serde_json::Value, String> {
     let permuted_eval = k8(&permuted.evaluation)?;
     let random_eval = k8(&random.evaluation)?;
     let gain_only = gain_only_changed(&base_artifact, &trained.artifact);
+    let permuted_gain_only = gain_only_changed(&base_artifact, &permuted.artifact);
+    let random_gain_only = gain_only_changed(&base_artifact, &random.artifact);
+    let permutation_audit = audit_self_prefix_target_permutation(
+        &base_artifact,
+        &training_samples,
+        base,
+        permuted_config,
+    )
+    .map_err(|error| error.to_string())?;
+    let random_control_active = trained.accepted > 0 && random.accepted == trained.accepted;
     let bar = serde_json::json!({
         "training_positive_margin_frozen": frozen_training.positive_margin,
         "training_positive_margin_true": true_training.positive_margin,
@@ -347,11 +367,18 @@ fn run() -> Result<serde_json::Value, String> {
             >= frozen.generated.matched_prefix_depth_sum,
         "teacher_top1_nonloss": trained.teacher_top1 >= frozen.teacher_top1,
         "gain_only": gain_only,
+        "permuted_gain_only": permuted_gain_only,
+        "random_gain_only": random_gain_only,
+        "permutation_assignments": permutation_audit.assignments,
+        "permutation_changed_assignments": permutation_audit.changed_assignments,
+        "permutation_cross_cell_assignments": permutation_audit.cross_cell_assignments,
+        "permutation_sha256": permutation_audit.permutation_sha256,
         "all_parity_exact": frozen.parity.is_exact()
             && trained.parity.is_exact()
             && permuted.parity.is_exact()
             && random.parity.is_exact(),
         "random_moves": random.accepted,
+        "random_control_active": random_control_active,
         "passes": true_training.positive_margin >= 640
             && true_training.positive_margin_pairs >= 64
             && true_eval.target_admitted >= frozen_eval.target_admitted + 128
@@ -361,6 +388,10 @@ fn run() -> Result<serde_json::Value, String> {
                 >= frozen.generated.matched_prefix_depth_sum
             && trained.teacher_top1 >= frozen.teacher_top1
             && gain_only
+            && permuted_gain_only
+            && random_gain_only
+            && permutation_audit.cross_cell_assignments > 0
+            && random_control_active
             && frozen.parity.is_exact()
             && trained.parity.is_exact()
             && permuted.parity.is_exact()
@@ -389,6 +420,7 @@ fn run() -> Result<serde_json::Value, String> {
             "random": arm_json(&random),
         },
         "bar": bar,
+        "permutation": permutation_audit,
         "rayon_workers": rayon::current_num_threads(),
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),
@@ -406,7 +438,7 @@ fn evaluate_arm(
     training: &[MemoryWeightSample],
     evaluation: &[MemoryWeightSample],
     config: SelfPrefixConfig,
-    moves: Vec<uor_r4_cpu_train::QueryAdmissionStep>,
+    moves: serde_json::Value,
     accepted: u64,
 ) -> Result<ArmReading, String> {
     Ok(ArmReading {
@@ -457,10 +489,11 @@ fn move_random_gain(
     count: usize,
     seed: u64,
     step: i16,
-) -> Result<Vec<u8>, String> {
+) -> Result<(Vec<u8>, Vec<RandomGainMove>), String> {
     let mut gain = read_gain(artifact).map_err(|error| error.to_string())?;
     let mut used = BTreeSet::new();
     let mut out = artifact.to_vec();
+    let mut moves = Vec::with_capacity(count);
     let mut state = seed ^ 0xA076_1D64_78BD_642F;
     for _ in 0..count {
         loop {
@@ -473,12 +506,22 @@ fn move_random_gain(
                 continue;
             }
             let delta = if (draw >> 63) == 0 { step } else { -step };
-            gain[coordinate] = gain[coordinate].saturating_add(delta);
+            let before_code = gain[coordinate];
+            let after_code = before_code.saturating_add(delta);
+            if after_code == before_code {
+                continue;
+            }
+            gain[coordinate] = after_code;
             out = replace_final_gain(&out, &gain).map_err(|error| error.to_string())?;
+            moves.push(RandomGainMove {
+                coordinate,
+                before_code,
+                after_code,
+            });
             break;
         }
     }
-    Ok(out)
+    Ok((out, moves))
 }
 
 fn gain_only_changed(before: &[u8], after: &[u8]) -> bool {
@@ -492,6 +535,8 @@ fn gain_only_changed(before: &[u8], after: &[u8]) -> bool {
     before.len() == after.len()
         && before_start == after_start
         && before_end == after_end
+        && before_end <= before.len()
+        && after_end <= after.len()
         && before[..before_start] == after[..after_start]
         && before[before_end..] == after[after_end..]
         && before[before_start..before_end] != after[after_start..after_end]

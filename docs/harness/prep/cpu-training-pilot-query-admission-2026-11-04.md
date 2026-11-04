@@ -173,9 +173,12 @@ run() {
       --keys 16 --per-key 8 --key-tokens 8 --reply-turn 8 \
       --reply-cap 16 --moves 12 --seed 1 >"$PIPELINE/$label.stdout.json"
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
-  jq -e '.bar.gain_only == true and .bar.all_parity_exact == true
-    and .arms.true.artifact_sha256 != .arms.permuted.artifact_sha256
-    and .bar.random_moves == .arms.true.accepted' "$out/report.json" >/dev/null
+  jq -e '.bar.all_parity_exact == true
+    and .bar.permutation_cross_cell_assignments > 0
+    and .bar.random_moves == .arms.true.accepted
+    and (.arms.true.accepted == 0
+      or (.bar.gain_only and .bar.permuted_gain_only and .bar.random_gain_only))' \
+    "$out/report.json" >/dev/null
   test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
   test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 }
