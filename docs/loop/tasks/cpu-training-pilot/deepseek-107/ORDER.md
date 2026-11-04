@@ -38,7 +38,7 @@ Studio file is touched.
 
 ## Design
 
-- Add a default-enabled `native-qualification` feature to `uor-r4-core`, making
+- Add a default-enabled `integer-runtime` feature to `uor-r4-core`, making
   `uor-r4-integer` optional and activated only by that feature.
 - Keep the existing default core API unchanged.
 - Gate only the core modules that need the integer runtime:
@@ -51,7 +51,7 @@ Studio file is touched.
 ## Done when
 
 1. Default `uor-r4-core` keeps its existing exported surface and tests pass.
-2. `uor-r4-core --no-default-features` compiles and exposes the geometry
+2. `uor-r4-core --no-default-features --lib` compiles and exposes the geometry
    metadata used by the discrete build script.
 3. `cargo tree` shows the `uor-r4-discrete` build path no longer reaches
    `uor-r4-integer`.
