@@ -18,7 +18,14 @@ was published.
   passed review, but the run recipe did not pin source drift, persist a binary
   receipt and output checksums, record resource/storage bounds, or name the
   exact repeat fields. The sheet now adds all four before a second FIT.
-- This is the in-progress record. No public comparison has run yet.
+- The second FIT review found that the recipe built and checked the shared
+  `main` checkout rather than this branch worktree. The recipe now separates
+  `SOURCE` from `SHARED`; the third review returned FIT at docs head
+  `3aadd33af6f46af7159eb4a86c51adbf85de8350`.
+- The public manifest says `split=train`. "Unseen-key" therefore means those
+  exact opening keys were absent from the learned memory and point tables, not
+  that base-model exposure is proven zero.
+- No public comparison has run yet.
 
 ## What changed
 

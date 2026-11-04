@@ -1,6 +1,6 @@
 # Target point medoids on unseen opening keys
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -199,4 +199,20 @@ replies, fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 target-point-medoids
+sheet: `docs/harness/prep/cpu-training-pilot-point-medoid-2026-11-04.md`
+head: `3aadd33af6f46af7159eb4a86c51adbf85de8350`
+implementation pin: `b17638480e1b2f264b511c0351639e669fb6bc46`
+reviewer: deepseek fresh-context non-author subagent
+note: two-seed D84 screen; observed training-only target medoids, exact L1
+medoid selection and tie rules, point-off/raw-row/raw-vote/served controls,
+duplicate-safe shuffled medoids, exact CPU/serving parity, paired opening
+margin, full teacher-forced non-loss, clean source-worktree and source-drift
+checks, binary/output checksums, deterministic repeat, resource/storage bounds
+and a fresh-output refusal
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone
+before compute.
