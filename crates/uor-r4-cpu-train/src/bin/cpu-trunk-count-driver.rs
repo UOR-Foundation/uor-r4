@@ -404,7 +404,7 @@ fn run(config: Config) -> Result<serde_json::Value, String> {
         },
         "threads": rayon::current_num_threads(),
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
-        "peak_rss_kib": peak_rss_kib(),
+        "peak_rss_kib": peak_rss_kib()?,
         "claim": "CPU development-research writeback test; not GPU qualification or language capability",
     });
     std::fs::write(
@@ -719,17 +719,25 @@ fn reading_json(reading: &DecisionReading) -> serde_json::Value {
     })
 }
 
-fn peak_rss_kib() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|status| {
-            status.lines().find_map(|line| {
-                line.strip_prefix("VmHWM:")
-                    .and_then(|value| value.split_whitespace().next())
-                    .and_then(|value| value.parse().ok())
-            })
+fn peak_rss_kib() -> Result<u64, String> {
+    let status = std::fs::read_to_string("/proc/self/status")
+        .map_err(|error| format!("cannot measure peak RSS: {error}"))?;
+    parse_peak_rss_kib(&status)
+}
+
+fn parse_peak_rss_kib(status: &str) -> Result<u64, String> {
+    let peak = status
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix("VmHWM:")
+                .and_then(|value| value.split_whitespace().next())
+                .and_then(|value| value.parse().ok())
         })
-        .unwrap_or(0)
+        .ok_or_else(|| "peak RSS measurement is unavailable".to_owned())?;
+    if peak == 0 {
+        return Err("peak RSS measurement is zero".to_owned());
+    }
+    Ok(peak)
 }
 
 #[cfg(test)]
@@ -782,6 +790,14 @@ mod tests {
             });
             assert_eq!(reading, expected, "{workers} workers");
         }
+    }
+
+    #[test]
+    fn peak_rss_measurement_fails_closed() {
+        assert_eq!(parse_peak_rss_kib("VmHWM:\t1234 kB\n").unwrap(), 1234);
+        assert!(parse_peak_rss_kib("VmRSS:\t1234 kB\n").is_err());
+        assert!(parse_peak_rss_kib("VmHWM:\t0 kB\n").is_err());
+        assert!(parse_peak_rss_kib("VmHWM:\tnot-a-number kB\n").is_err());
     }
 
     #[test]
