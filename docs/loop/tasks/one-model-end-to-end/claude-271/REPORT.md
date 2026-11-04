@@ -149,3 +149,27 @@ The turns by category, chained against a default corpus of 2,000 episodes (same 
   - the long TRAIN corpus and a long held-out panel (its own cell, excluded from TRAIN, with a census).
 - **Decide before that corpus is written:** cross-episode relation recall (What did not work, 2) and the filler pool (4).
 - **Then P3:** faster scoring.
+
+## Checks run at the head
+
+- **On the laptop**, at base `3f7f8605b`, code byte-identical to `a5c3f4b2d`: `cargo test -p uor-r4-training --lib --bin m-world-recall-corpus --bin chat-grade --no-fail-fast` gives the library 87 passed (the 7 `chain_tests` among them), `chat-grade` 26 and the writer 8 with 1 ignored, 0 failed. The ignored pinned-tokenizer receipt, run with `UOR_R4_PINNED_TOKENIZER` set to the tokenizer of sha `d36d3e87…`, passes. `rustfmt --check` is clean on both changed files.
+- **Negative gate:** the "all three" patch above, run again at this base: both tests fail; restored byte for byte (`cmp`), all 7 `chain_tests` pass.
+- **`loop gates --full`:** 11 of 11 green.
+- **Review:** a fresh-context review of the diff and this REPORT, recorded on PR #3642 by `loop review`.
+
+## Skills used
+
+None applied.
+
+## Still open
+
+1. **The generator's old test module stays compiled out** (What did not work, 3). Re-enabling it is a separate change.
+2. **Cross-episode relation recall and the filler pool** (What did not work, 2 and 4) are the next unit's decisions, before the long TRAIN corpus is written.
+3. **MQAR key repeats across episodes are uncounted** (6).
+4. **claude-270's served-mode parity check** is still owed, by the next GPU unit that scores a served checkpoint.
+
+## Plain summary
+
+Every conversation the model has trained on or been tested on so far is short: at most about 258 word pieces, a few turns. A chatbot has to remember what was said many turns back. This unit taught the program that writes the training conversations to write long ones. It strings ordinary short conversations together into one of up to 2,048 word pieces, plants a few facts early, and asks about them at the end. A check of 2,000 such conversations found the answers on average 1,190 word pieces before the question, and up to 2,010. Everything the program wrote before is unchanged, byte for byte. No model was trained: today's trainer reads only 192 word pieces at a time, so the next unit widens that window, after checking that the GPU's memory holds it.
+
+References #3407.
