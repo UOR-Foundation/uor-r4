@@ -22,7 +22,7 @@ Updated `current-state.md`, the product page, serving notebook, roadmap item, St
 
 ## Checks run at the head
 
-Report checks and `git diff --check` pass. Independent exact-head record review returned CHANGES for the mobile wording and missing current-state entry, then APPROVE after both were corrected. The local ORDER/REPORT/PR checks and protected merge are run at this final record head.
+Report checks, the local ORDER/REPORT/PR checks and `git diff --check` pass. Independent exact-head record review returned CHANGES for the mobile wording and missing current-state entry, then APPROVE after both were corrected at `82dcafefe`. This record PR's protected merge and fresh-main verification remain pending at this final record head.
 
 ## Skills used
 
