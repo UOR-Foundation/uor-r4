@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -279,5 +279,19 @@ the existing public kappa constants in `uor_r4_discrete::q4_import`, and
 through test-support source and is newly pinned at `e32f99e8…0dd4`; a fresh
 output root and review are required.
 
-TEST FITNESS: pending fifth fresh-context non-author review after in-scope
-test-access revision `be0edd4682409398ebf2e7f86b4b44ec987f8edf`.
+TEST FITNESS: FIT - M2 #2030 in-scope public 19-table verification panel
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-verify-2026-11-04.md`
+docs head: `ba0ca6559502739fed48261403f727e63399b83d`
+implementation pin: `be0edd4682409398ebf2e7f86b4b44ec987f8edf`
+baseline binary: `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada`
+optimized binary: `e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4`
+reviewer: Codex fifth fresh-context non-author session
+note: in-scope test access uses existing q4_import kappa constants; no diff
+from origin/main in `uor-r4-discrete`; four verification imports; independent
+shuffled reconstruction; real D11 success/mismatch test; direct artifact hashes
+on all eight fresh runs; full-crates source pin; mirrored one/sixteen-worker
+order; 21 finite stages; strict positive RSS below 2,097,152 KiB; 600-second
+timeout; 10-percent wall and 20-percent verification bars
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
