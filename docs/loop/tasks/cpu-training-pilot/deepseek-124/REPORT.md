@@ -12,6 +12,14 @@ This is the in-progress record. No public comparison has run. The current CPU
 trunk reader is read-only and the four-table corpus driver correctly refuses
 the 19-table M1 artifact.
 
+The first FIT review returned **NOT_FIT**. Aggregate table totals did not prove
+which `(key, token, count)` entries changed, and the unigram best-token tie had
+no negative test. The driver now independently rebuilds every expected table
+from the training rows and refuses any decoded difference; a finite tie test
+requires the smaller token id, the exact and shuffled artifacts must differ,
+and changed served-decision rows are counted rather than represented only by a
+boolean checksum difference.
+
 ## What changed
 
 Implementation will add exact CPU derivation of trunk training rows and checked
