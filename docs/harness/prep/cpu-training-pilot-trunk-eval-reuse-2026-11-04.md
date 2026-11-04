@@ -1,6 +1,6 @@
 # Reuse loaded trunk models for CPU evaluation
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -17,7 +17,7 @@ paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `1f5fe3c3a4aee2e67de64276a4712cd0fbd23a7f` |
+| implementation source | `83d1bbce86f272d4c396edeea14c1efba4275c6b` |
 | baseline driver | `e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4` |
 | optimized driver | `a29541a5a9cdfdd3e07fbe6992bfbf54cbffe7f46f53fc897331b2b7fcc45d40` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
@@ -95,7 +95,7 @@ DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-par
 PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-eval-reuse/2026-11-04-attempt-1
 OLD_BIN="$SOURCE/target/deepseek/eval-reuse-baseline/release/cpu-trunk-count-driver"
 NEW_BIN="$SOURCE/target/deepseek/eval-reuse-optimized/release/cpu-trunk-count-driver"
-SOURCE_PIN=1f5fe3c3a4aee2e67de64276a4712cd0fbd23a7f
+SOURCE_PIN=83d1bbce86f272d4c396edeea14c1efba4275c6b
 OLD_SHA=e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4
 NEW_SHA=a29541a5a9cdfdd3e07fbe6992bfbf54cbffe7f46f53fc897331b2b7fcc45d40
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
@@ -235,3 +235,12 @@ and 50-percent no-update-evaluation bars; instrument-only claim
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+The first review passed the implementation at source `1f5fe3c3…` and docs
+head `b0f2a7aa…`, but local policy then found that the ORDER's `Item:` link was
+split across lines. The unpublished branch was rebased to repair that
+metadata-only defect; the source tree and both binaries are byte-identical,
+with the source now at `83d1bbce…`. A fresh review is required at the corrected
+head.
+
+TEST FITNESS: pending repaired-metadata review.
