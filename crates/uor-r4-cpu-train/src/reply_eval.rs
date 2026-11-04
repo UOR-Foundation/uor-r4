@@ -952,4 +952,49 @@ mod tests {
         assert_eq!(reading.top1_suppressed, 1);
         assert_eq!(reading.classification, Some(TerminationClass::Mixed));
     }
+
+    #[test]
+    fn termination_classification_covers_every_terminal_branch() {
+        let step = |row, admitted, rank, generated| TerminationStepReading {
+            row,
+            generated_step: 0,
+            generated_token: generated,
+            writer_token: 0,
+            bos_admitted: admitted,
+            bos_rank: rank,
+            bos_top8: rank.is_some_and(|rank| rank <= 8),
+            candidate_count: 8,
+            bos_distance: 10,
+            chosen_distance: 9,
+            bos_minus_chosen_distance: 1,
+        };
+        assert_eq!(
+            summarize_termination(&[]).unwrap().classification,
+            Some(TerminationClass::NoDecisions)
+        );
+        assert_eq!(
+            summarize_termination(&[step(0, false, None, 7), step(1, false, None, 7)])
+                .unwrap()
+                .classification,
+            Some(TerminationClass::NeverAdmitted)
+        );
+        assert_eq!(
+            summarize_termination(&[step(0, true, Some(2), 7), step(1, true, Some(3), 7)])
+                .unwrap()
+                .classification,
+            Some(TerminationClass::AdmittedNotTop1)
+        );
+        assert_eq!(
+            summarize_termination(&[step(0, true, Some(1), 7), step(1, true, Some(1), 7)])
+                .unwrap()
+                .classification,
+            Some(TerminationClass::Top1Suppressed)
+        );
+        assert_eq!(
+            summarize_termination(&[step(0, true, Some(1), 0), step(1, true, Some(1), 0)])
+                .unwrap()
+                .classification,
+            Some(TerminationClass::AllChosenBos)
+        );
+    }
 }

@@ -10,7 +10,9 @@ At every generated decision, why does the served writer choose a non-BOS token?
 Classify whether BOS is absent from the admitted cells, admitted but ranked
 after another token, ranked first but suppressed by a decoder defect, or mixed.
 
-This is a bounded diagnostic. It does not train a model or change serving.
+This is a bounded diagnostic with no new training configuration or
+optimization hypothesis. The exact 32-update replay only reconstructs the
+pinned deepseek-109 artifacts. It does not change serving.
 
 ## Compute class
 
@@ -46,7 +48,7 @@ writer treats BOS before any target override.
 ## Steps
 
 1. Build a fresh release `cpu-memory-panel-driver`.
-2. Pass ten focused reply tests, the writer diagnostic test and the full CPU
+2. Pass eleven focused reply tests, the writer diagnostic test and the full CPU
    suite before public replay.
 3. Run the exact deepseek-109 training replay with:
 
@@ -104,6 +106,12 @@ counts are zero. Declare **Admitted but never first** only when
 only when `top1_suppressed > 0` and the other three are zero. Otherwise report
 **Mixed** with all four exact counts; never force a mixed arm into one label.
 
+`NoDecisions` is an instrument failure for this run: every registered prompt is
+non-empty and has a 16-token cap. `AllChosenBos` is also an instrument/hash
+failure here because the deepseek-110 pins require `chosen_bos = 0` for every
+arm. The implementation classifies both explicitly instead of mislabelling them
+as mixed.
+
 ## Minimum test power
 
 Two model seeds, 114 repeated-key prompts, four query-movement arms and 16
@@ -125,7 +133,7 @@ nondeterministic classification or any post-observation tuning.
 
 ## TEST FITNESS
 
-Author self-check only. Ten focused reply tests and the writer diagnostic test
+Author self-check only. Eleven focused reply tests and the writer diagnostic test
 pass. No non-author review has been recorded, so public compute is not
 authorized.
 

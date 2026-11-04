@@ -13,8 +13,8 @@ Base: `3f7f8605b`.
   Zero BOS stops could mean BOS was absent from admission, admitted but ranked
   below another token, or ranked first and suppressed by the decoder. This unit
   separates those cases.
-- **This is not another memory training run.** It replays the pinned artifacts
-  only to explain the writer's BOS treatment.
+- **This introduces no new training configuration.** The exact 32-update replay
+  reconstructs the pinned artifacts only to explain the writer's BOS treatment.
 
 ## What changed
 
@@ -35,9 +35,9 @@ while preserving the generated reply sequence and digest.
 
 ## Checks run at the head
 
-- Ten focused reply-evaluator tests passed.
+- Eleven focused reply-evaluator tests passed.
 - The writer diagnostic test passed.
-- Full CPU release suite: 175 library tests passed, 4 release benchmarks
+- Full CPU release suite: 176 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy and formatting passed.
 - No public model inference was run.
