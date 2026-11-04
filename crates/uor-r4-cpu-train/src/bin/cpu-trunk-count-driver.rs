@@ -880,11 +880,11 @@ mod tests {
     use uor_r4_discrete::metadata::BinderPlan;
     use uor_r4_discrete::snapshot::Snapshot;
     use uor_r4_discrete::trunk::{
-        COMPILED_COMPOSITION_KAPPA, COMPILED_OPERATOR_KAPPA, build_trunk_norm_frames,
-        build_trunk_step_table, export_trunk_d11,
+        build_trunk_norm_frames, build_trunk_step_table, export_trunk_d11,
+        COMPILED_COMPOSITION_KAPPA, COMPILED_OPERATOR_KAPPA,
     };
     use uor_r4_discrete::w2_capacity::root_vector;
-    use uor_r4_discrete::{ObjectivePolicy, ReadInitialization, ReadSpec, SCHEMA, Spec};
+    use uor_r4_discrete::{ObjectivePolicy, ReadInitialization, ReadSpec, Spec, SCHEMA};
 
     fn test_outcome(sample: &RankMarginSample) -> Result<DecisionOutcome, String> {
         let query = (0..=sample.target % 5)
@@ -975,10 +975,7 @@ mod tests {
             epoch,
             table,
             routes: vec![0; (spec.blocks * stages) as usize],
-            gates: vec![
-                0;
-                read_spec.gate_count(spec.blocks, stages).unwrap() as usize
-            ],
+            gates: vec![0; read_spec.gate_count(spec.blocks, stages).unwrap() as usize],
             operator_kappa: COMPILED_OPERATOR_KAPPA.to_owned(),
             composition_kappa: COMPILED_COMPOSITION_KAPPA.to_owned(),
             kernel_sha256: "11".repeat(32),
@@ -1064,23 +1061,19 @@ mod tests {
         .unwrap();
 
         let (wrong_semantics, _) = trunk_reading(&changed_semantics).unwrap();
-        assert!(
-            require_same(
-                &wrong_semantics,
-                &source_semantics,
-                "count training changed a non-count trunk section",
-            )
-            .is_err()
-        );
+        assert!(require_same(
+            &wrong_semantics,
+            &source_semantics,
+            "count training changed a non-count trunk section",
+        )
+        .is_err());
         let (_, wrong_tables_decoded) = trunk_reading(&wrong_tables).unwrap();
-        assert!(
-            require_same(
-                &wrong_tables_decoded,
-                &expected,
-                "decoded count tables differ from the independent tally",
-            )
-            .is_err()
-        );
+        assert!(require_same(
+            &wrong_tables_decoded,
+            &expected,
+            "decoded count tables differ from the independent tally",
+        )
+        .is_err());
     }
 
     #[test]
