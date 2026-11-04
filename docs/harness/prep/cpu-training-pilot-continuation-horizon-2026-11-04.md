@@ -21,7 +21,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `c6038e6fc3fdc105c69b8bd894efe91c453e2c8e` |
+| implementation source | `f0a011f81311c9d344c96c076ec73552e97c55b2` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -170,7 +170,7 @@ BUILD=$SOURCE/target/deepseek/continuation-horizon-143
 CONTROL_BUILD=$SOURCE/target/deepseek/continuation-horizon-controls-143
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=c6038e6fc3fdc105c69b8bd894efe91c453e2c8e
+IMPL_PIN=f0a011f81311c9d344c96c076ec73552e97c55b2
 MIN_FREE_KIB=31588352
 RUNTIME_PATHS=(.cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party)
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
