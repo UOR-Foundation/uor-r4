@@ -48,7 +48,7 @@ its complete-reply readings are used.
 1. A finite reply evaluator is implemented and tested for prompt/reply
    boundaries, BOS/cap/context stops, exact-reference normalization,
    reachability, distinct replies, repeated 4-grams and deterministic digests.
-2. A TEST FITNESS sheet fixes the five arms, 16-token cap, hashes, bar, cost
+2. A TEST FITNESS sheet fixes the eight arms, 16-token cap, hashes, bar, cost
    and stop before either public seed runs.
 3. Both seeds reproduce the registered teacher-forced readings and artifact
    hashes, with zero CPU/serving parity mismatches.
@@ -63,14 +63,16 @@ its complete-reply readings are used.
 
 ## Candidate bar
 
-On each seed, trained memory carries only if it produces more
-exact-reference complete replies than frozen, equal-move random and memory-off,
-and does not reduce BOS completion. A termination-only improvement is reported
-separately and does not by itself pass the reply-content bar.
+On each seed, trained memory carries only if it exceeds frozen, equal-move
+random and memory-off on exact-reference complete replies over the 104
+cap/context-reachable prompts, and does not reduce BOS completion. For each
+paired comparison, with `b` and `c` the two discordant exact-reference counts,
+the required margin is `max(2, ceil(2*sqrt(b+c)))`.
 
 Direct target arbitration carries only if `target_trained` beats both the
 trained query-movement arm and the shuffled-target artifact on exact-reference
-complete replies on both seeds, without lowering BOS completion.
+complete replies by the same paired margin on both seeds, without lowering BOS
+completion.
 
 The 114 repeated-key prompts are a bounded readiness screen. They do not
 support a three-sigma, unseen-phrasing or useful-chat claim.

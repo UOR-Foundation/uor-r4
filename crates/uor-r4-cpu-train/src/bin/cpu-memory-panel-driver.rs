@@ -5,13 +5,11 @@ use std::time::Instant;
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
     evaluate_memory_target_replies, evaluate_memory_weight_samples, evaluate_replies,
-    memory_key_coverage, replace_memory_weight_table, validate_corpus_manifest,
-    CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer, MemoryWeightConfig,
-    MemoryWeightSample, MemoryWeightTable,
+    memory_key_coverage, memory_target_shuffle_audit, replace_memory_weight_table,
+    shuffle_memory_targets, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
+    CpuMemoryWeightTrainer, MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
 };
-use uor_r4_integer::stack::{
-    read_memory_uorlut01, FbsMemorySnapshot, IntegerStackModel, POINT_KEY_BOS,
-};
+use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
 
 #[derive(Clone)]
 struct Config {
@@ -313,11 +311,27 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     std::fs::write(config.out.join("random.uorlut"), &random_artifact)
         .map_err(|error| error.to_string())?;
-    let shuffled_artifact = if config.reply_cap == 0 {
-        None
+    let (shuffled_artifact, shuffle_audit) = if config.reply_cap == 0 {
+        (None, None)
     } else {
-        let shuffled_memory = shuffled_memory_target_control(&memory, config.seed)
-            .map_err(|error| error.to_string())?;
+        let shuffled_memory =
+            shuffle_memory_targets(&memory, config.seed).map_err(|error| error.to_string())?;
+        let audit = memory_target_shuffle_audit(
+            &memory,
+            &shuffled_memory,
+            &evaluation_samples,
+            config.key_tokens,
+            shape.context,
+            config.reply_turn,
+        )
+        .map_err(|error| error.to_string())?;
+        if audit.opening_changed < audit.opening_exercised.div_ceil(2)
+            || audit.reply_changed < audit.reply_exercised.div_ceil(2)
+        {
+            return Err(format!(
+                "shuffled target control changed too few exercised mappings: {audit:?}"
+            ));
+        }
         let mut shuffled = add_turn_memory_uorlut01(&artifact, &shuffled_memory)
             .map_err(|error| error.to_string())?;
         let trained_memory = read_memory_uorlut01(&trained_artifact)
@@ -336,7 +350,7 @@ fn run() -> Result<serde_json::Value, String> {
         }
         std::fs::write(config.out.join("target-shuffled.uorlut"), &shuffled)
             .map_err(|error| error.to_string())?;
-        Some(shuffled)
+        (Some(shuffled), Some(audit))
     };
     let trained = evaluate_memory_weight_samples(&trained_artifact, &evaluation_samples, true)
         .map_err(|error| error.to_string())?;
@@ -469,6 +483,7 @@ fn run() -> Result<serde_json::Value, String> {
                 .map(uor_r4_discrete::corpus::sha256),
         },
         "complete_replies": complete_replies,
+        "target_shuffle_audit": shuffle_audit,
         "reply_cap": config.reply_cap,
         "parity": parity,
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
@@ -612,49 +627,6 @@ fn random_control(
     Ok(out)
 }
 
-fn shuffled_memory_target_control(
-    memory: &FbsMemorySnapshot,
-    seed: u64,
-) -> Result<FbsMemorySnapshot, String> {
-    let mut shuffled = memory.clone();
-    let mut opening = shuffled
-        .opening
-        .iter()
-        .map(|entry| entry.value)
-        .collect::<Vec<_>>();
-    shuffle_values(&mut opening, seed ^ 0xA5A5_5A5A_D3C1_B79F);
-    for (entry, value) in shuffled.opening.iter_mut().zip(opening) {
-        entry.value = value;
-    }
-    if let Some(reply) = &mut shuffled.reply {
-        let mut values = reply
-            .entries
-            .iter()
-            .map(|entry| entry.value)
-            .collect::<Vec<_>>();
-        shuffle_values(&mut values, seed ^ 0x6C8E_9CF5_4E72_1A37);
-        for (entry, value) in reply.entries.iter_mut().zip(values) {
-            entry.value = value;
-        }
-    }
-    if shuffled == *memory {
-        return Err("shuffled memory-target control is identical to the source".to_owned());
-    }
-    Ok(shuffled)
-}
-
-fn shuffle_values<T>(values: &mut [T], seed: u64) {
-    let mut state = seed | 1;
-    for index in (1..values.len()).rev() {
-        state ^= state >> 12;
-        state ^= state << 25;
-        state ^= state >> 27;
-        let draw = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
-        let swap = usize::try_from(draw % (index as u64 + 1)).expect("bounded shuffle index");
-        values.swap(index, swap);
-    }
-}
-
 fn peak_rss_kib() -> u64 {
     std::fs::read_to_string("/proc/self/status")
         .ok()
@@ -671,7 +643,30 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uor_r4_integer::stack::{FbsMemoryEntry, FbsReplyTable};
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+    use uor_r4_integer::stack::{
+        export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable,
+    };
+
+    fn bare_artifact() -> Vec<u8> {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            931,
+            FbsSynth {
+                vocab: 4096,
+                d: 64,
+                mlp: 64,
+                layers: 1,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.25,
+                decay_step: 0.0625,
+            },
+        );
+        snapshot.memory = None;
+        export_fbs_trunk_uorlut01(&snapshot).unwrap()
+    }
 
     #[test]
     fn reference_shape_normalizes_bos_and_counts_reachability() {
@@ -718,7 +713,7 @@ mod tests {
                     value: 4,
                 },
             ],
-            opening_weight: vec![0.0; 4],
+            opening_weight: vec![0.25; 64],
             reply: Some(FbsReplyTable {
                 turn: 3,
                 entries: vec![
@@ -739,10 +734,10 @@ mod tests {
                         value: 8,
                     },
                 ],
-                weight: vec![0.0; 4],
+                weight: vec![0.25; 64],
             }),
         };
-        let shuffled = shuffled_memory_target_control(&memory, 17).unwrap();
+        let shuffled = shuffle_memory_targets(&memory, 17).unwrap();
         let keys = |table: &FbsMemorySnapshot| {
             table
                 .opening
@@ -769,5 +764,41 @@ mod tests {
             shuffled.reply.as_ref().unwrap().entries,
             memory.reply.as_ref().unwrap().entries
         );
+
+        let artifact = bare_artifact();
+        let original = add_turn_memory_uorlut01(&artifact, &memory).unwrap();
+        let control = add_turn_memory_uorlut01(&artifact, &shuffled).unwrap();
+        let original = read_memory_uorlut01(&original).unwrap().unwrap();
+        let control = read_memory_uorlut01(&control).unwrap().unwrap();
+        assert_eq!(original.opening.keys, control.opening.keys);
+        assert_eq!(original.opening.weight, control.opening.weight);
+        assert_ne!(original.opening.values, control.opening.values);
+        assert_eq!(
+            original.reply.as_ref().unwrap().keys,
+            control.reply.as_ref().unwrap().keys
+        );
+        assert_eq!(
+            original.reply.as_ref().unwrap().weight,
+            control.reply.as_ref().unwrap().weight
+        );
+        assert_ne!(
+            original.reply.as_ref().unwrap().values,
+            control.reply.as_ref().unwrap().values
+        );
+        let audit = memory_target_shuffle_audit(
+            &memory,
+            &shuffled,
+            &[MemoryWeightSample {
+                prompt: vec![10, 11, 12],
+                reply: vec![20, 21, 22],
+            }],
+            3,
+            16,
+            3,
+        )
+        .unwrap();
+        assert_eq!(audit.opening_exercised, 1);
+        assert_eq!(audit.opening_changed, 1);
+        assert_eq!(audit.reply_exercised, 2);
     }
 }

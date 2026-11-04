@@ -59,8 +59,9 @@ hit the derived memory table and **50** stored majority targets are correct.
 For reply rows, **795/1,212** keys hit and **717** stored majority targets are
 already correct, 59.2% of all evaluation reply decisions. Only 44 of 724 reply
 keys, covering 133 of 1,192 training reply decisions, are ambiguous. This is a
-table-content ceiling, not served-model output, but it shows that table absence
-and label ambiguity do not explain deepseek-109's low served top-1.
+table-content ceiling, not served-model output. It shows that missing table
+content is not the sole explanation for deepseek-109's low served top-1; target
+distance, writer rendering and remaining misses can still limit it.
 
 The pinned census is [reference-census.json](evidence/reference-census.json).
 
@@ -69,6 +70,8 @@ The pinned census is [reference-census.json](evidence/reference-census.json).
 - Seven focused reply-evaluator tests passed, including deterministic
   query-movement and direct-target replies over exported synthetic CPU
   artifacts.
+- The driver control test verifies the shuffled snapshot preserves keys and
+  weights through artifact export/read-back while changing exercised targets.
 - Full CPU release suite: 171 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
@@ -93,12 +96,11 @@ about whether trained movement weights affect complete replies or termination.
 The key census changes the next trainer decision. The table already contains a
 correct majority target for 59.2% of teacher-forced held-out reply decisions,
 while deepseek-109's served model named only 12.5% correctly. Increasing the
-coordinate sweep would therefore optimize the wrong bottleneck. If the pending
-replay is negative, the next bounded unit should compare the current
-query-moving memory read against a lawful exact-memory target arbitration that
-uses the stored row directly, with the same target-shaped and shuffled-target
-controls. That is a new mechanism hypothesis, not a wider version of the closed
-coordinate sweep.
+coordinate sweep would therefore optimize the wrong bottleneck. This unit now
+includes the lawful exact-memory target arbitration and matched shuffled-target
+control. If the replay is negative, target arbitration is closed as a
+configuration and the next unit must change the memory key or proposal path,
+not widen the coordinate sweep.
 
 ## Still open
 

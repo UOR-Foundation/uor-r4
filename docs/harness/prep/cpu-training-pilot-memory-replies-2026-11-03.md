@@ -121,23 +121,36 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
   references reachable under the fixed cap/context rule.
 - The seed-1 repeat reproduces every complete-reply counter and digest.
 - The shuffled control keeps every key and weight while changing at least one
-  stored target value.
+  stored target value. At least half of exercised opening mappings and half of
+  exercised reply mappings must change: changed ≥
+  `ceil(exercised / 2)` for each table. The report records all four counts.
 
 ## Candidate bar
 
+Exact-reference candidate comparisons use only the 104 references reachable
+under the fixed cap/context rule. For each candidate-control pair, let `b` be
+the count where the candidate alone is exact and `c` the count where the
+control alone is exact. The candidate must win by:
+
+```text
+max(2, ceil(2 * sqrt(b + c)))
+```
+
+on each seed. Full-panel counts remain reported.
+
 On each model seed, trained memory carries into the reply-content path only if:
 
-- exact-reference complete replies are strictly greater than frozen,
-  equal-accepted-move random and memory-off;
+- exact-reference complete replies exceed frozen, equal-accepted-move random
+  and memory-off by the paired margin;
 - BOS completion is not lower than any of those controls.
 
 A BOS or stopping improvement with no exact-reference gain is reported as a
 termination-only result and does not pass the content bar.
 
 The direct-memory candidate can advance to a larger run only if, on both model
-seeds, `target_trained` produces more exact-reference complete replies than
-`target_shuffled` and the trained query-movement arm, and its BOS completion is
-not lower than `target_shuffled`.
+seeds, `target_trained` exceeds both `target_shuffled` and the trained
+query-movement arm by the paired margin, and its BOS completion is not lower
+than `target_shuffled`.
 
 Two seeds and 114 repeated-key prompts make this a bounded readiness screen.
 No three-sigma, fresh-phrasing, semantic-correctness or useful-chat claim is
@@ -155,8 +168,13 @@ repeated-key readiness screen, not a decisive capability run.
   not enter the chat path.
 - **Termination only:** investigate reply stopping separately; do not call it
   reply content.
-- **Replicated content propagation:** use the trained artifact as the first
-  candidate for a larger fresh-phrasing complete-reply panel.
+- **Query-movement propagation only:** use the trained query-movement artifact
+  as the candidate; direct target arbitration does not advance.
+- **Direct-target pass:** use exact-memory target arbitration as the next
+  candidate for a larger fresh-phrasing complete-reply panel, ahead of
+  query-only movement.
+- **Both pass:** compare their paired exact-reference gain and cost, then carry
+  the stronger arm and retain the other as a control.
 - **Instrument fault:** stop and repair without recording a mechanism negative.
 
 ## Cost and stop

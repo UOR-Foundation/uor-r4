@@ -143,6 +143,15 @@ pub struct MemoryKeyCoverage {
     pub reply_correct: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryTargetShuffleAudit {
+    pub opening_exercised: u64,
+    pub opening_changed: u64,
+    pub reply_exercised: u64,
+    pub reply_changed: u64,
+}
+
 #[derive(Clone)]
 pub struct CpuMemoryWeightTrainer {
     initial_artifact: Vec<u8>,
@@ -894,6 +903,147 @@ pub fn memory_key_coverage(
         }
     }
     Ok(coverage)
+}
+
+/// Audit a shuffled-target control on the evaluation keys actually exercised.
+///
+/// Keys, key metadata and both movement-weight vectors must remain identical.
+/// The returned counts name only evaluation keys present in both tables.
+pub fn memory_target_shuffle_audit(
+    original: &FbsMemorySnapshot,
+    shuffled: &FbsMemorySnapshot,
+    evaluation: &[MemoryWeightSample],
+    k: usize,
+    key_window: usize,
+    reply_turn: usize,
+) -> Result<MemoryTargetShuffleAudit> {
+    if original.k != shuffled.k
+        || original.key_window != shuffled.key_window
+        || original.opening_weight != shuffled.opening_weight
+    {
+        return Err(invalid(
+            "shuffled target control changed opening keys, metadata or weights",
+        ));
+    }
+    let original_opening = opening_targets(original);
+    let shuffled_opening = opening_targets(shuffled);
+    if original_opening.keys().ne(shuffled_opening.keys()) {
+        return Err(invalid("shuffled target control changed opening keys"));
+    }
+    let (original_reply, original_reply_turn) = reply_targets(original)?;
+    let (shuffled_reply, shuffled_reply_turn) = reply_targets(shuffled)?;
+    if original_reply_turn != shuffled_reply_turn
+        || original
+            .reply
+            .as_ref()
+            .zip(shuffled.reply.as_ref())
+            .is_none_or(|(left, right)| left.weight != right.weight)
+        || original_reply.keys().ne(shuffled_reply.keys())
+    {
+        return Err(invalid(
+            "shuffled target control changed reply keys, metadata or weights",
+        ));
+    }
+    let mut audit = MemoryTargetShuffleAudit::default();
+    for sample in evaluation {
+        validate_memory_sample(sample)?;
+        let key = memory_opening_key(sample, k)?;
+        if let (Some(left), Some(right)) = (original_opening.get(&key), shuffled_opening.get(&key))
+        {
+            audit.opening_exercised = checked_audit_count(audit.opening_exercised)?;
+            audit.opening_changed = audit
+                .opening_changed
+                .checked_add(u64::from(left != right))
+                .ok_or_else(|| invalid("shuffled opening count overflows"))?;
+        }
+        for offset in 0..sample.reply.len().saturating_sub(1) {
+            let key = memory_reply_key(sample, offset, reply_turn, key_window)?;
+            if let (Some(left), Some(right)) = (original_reply.get(&key), shuffled_reply.get(&key))
+            {
+                audit.reply_exercised = checked_audit_count(audit.reply_exercised)?;
+                audit.reply_changed = audit
+                    .reply_changed
+                    .checked_add(u64::from(left != right))
+                    .ok_or_else(|| invalid("shuffled reply count overflows"))?;
+            }
+        }
+    }
+    Ok(audit)
+}
+
+/// Return a deterministic shuffled-target control with keys, metadata and
+/// movement weights unchanged.
+pub fn shuffle_memory_targets(memory: &FbsMemorySnapshot, seed: u64) -> Result<FbsMemorySnapshot> {
+    let mut shuffled = memory.clone();
+    let mut opening = shuffled
+        .opening
+        .iter()
+        .map(|entry| entry.value)
+        .collect::<Vec<_>>();
+    shuffle_values(&mut opening, seed ^ 0xA5A5_5A5A_D3C1_B79F);
+    for (entry, value) in shuffled.opening.iter_mut().zip(opening) {
+        entry.value = value;
+    }
+    if let Some(reply) = &mut shuffled.reply {
+        let mut values = reply
+            .entries
+            .iter()
+            .map(|entry| entry.value)
+            .collect::<Vec<_>>();
+        shuffle_values(&mut values, seed ^ 0x6C8E_9CF5_4E72_1A37);
+        for (entry, value) in reply.entries.iter_mut().zip(values) {
+            entry.value = value;
+        }
+    }
+    if shuffled == *memory {
+        return Err(invalid(
+            "shuffled memory-target control is identical to the source",
+        ));
+    }
+    Ok(shuffled)
+}
+
+fn shuffle_values<T>(values: &mut [T], seed: u64) {
+    let mut state = seed | 1;
+    for index in (1..values.len()).rev() {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        let draw = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        let swap = usize::try_from(draw % (index as u64 + 1)).expect("bounded shuffle index");
+        values.swap(index, swap);
+    }
+}
+
+fn checked_audit_count(value: u64) -> Result<u64> {
+    value
+        .checked_add(1)
+        .ok_or_else(|| invalid("shuffled target audit count overflows"))
+}
+
+fn opening_targets(memory: &FbsMemorySnapshot) -> BTreeMap<Vec<u32>, u32> {
+    memory
+        .opening
+        .iter()
+        .map(|entry| (entry.key.clone(), entry.value))
+        .collect()
+}
+
+fn reply_targets(memory: &FbsMemorySnapshot) -> Result<(BTreeMap<Vec<u32>, u32>, usize)> {
+    memory
+        .reply
+        .as_ref()
+        .map(|reply| {
+            (
+                reply
+                    .entries
+                    .iter()
+                    .map(|entry| (entry.key.clone(), entry.value))
+                    .collect(),
+                reply.turn,
+            )
+        })
+        .ok_or_else(|| invalid("shuffled target control needs a reply table"))
 }
 
 fn validate_memory_sample(sample: &MemoryWeightSample) -> Result<()> {
