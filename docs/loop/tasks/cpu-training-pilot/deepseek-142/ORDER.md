@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-142 (offset-conditioned density stop gate)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `ae8fce0b7`.
 
 ## Goal
