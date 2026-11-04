@@ -99,7 +99,7 @@ BIN_SHA=9fbe1cc802bfbfe2296d111cc3b68cdfd79d2bc4fad17fccf1868287e0b40447
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
 EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
-STAGES='["corpus_split","control_rows","decision_reduction","exact_evaluation","exact_hash_write","exact_update_export","exact_verify","input_read_hash","input_validate","no_update_evaluation","output_prepare","parity_reduction","reader_load","resource_measure","shuffled_evaluation","shuffled_hash_write","shuffled_reader_load","shuffled_update_export","shuffled_verify","table_verification","training_row_derivation"]'
+STAGES='["control_rows","corpus_split","decision_reduction","exact_evaluation","exact_hash_write","exact_update_export","exact_verify","input_read_hash","input_validate","no_update_evaluation","output_prepare","parity_reduction","reader_load","resource_measure","shuffled_evaluation","shuffled_hash_write","shuffled_reader_load","shuffled_update_export","shuffled_verify","table_verification","training_row_derivation"]'
 check_pins() {
   test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
   git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- \
