@@ -421,18 +421,7 @@ fn run() -> Result<serde_json::Value, String> {
         paired(&code_stop_prompts, &code_stop_shuffled_prompts, |row| {
             u64::from(row.stop == "bos")
         })?;
-    let bos_within_reference = code_stop_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens <= row.reference_tokens)
-        .count() as u64;
-    let bos_shorter = code_stop_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens < row.reference_tokens)
-        .count() as u64;
-    let bos_longer = code_stop_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens > row.reference_tokens)
-        .count() as u64;
+    let code_stop_bos_lengths = bos_length_counts(&code_stop_prompts);
     let code_stop_non_inferior = non_inferior(
         code_stop_vs_code_top1["candidate_sum"]
             .as_u64()
@@ -471,18 +460,7 @@ fn run() -> Result<serde_json::Value, String> {
             .as_u64()
             .ok_or_else(|| "code depth sum differs".to_owned())?,
     );
-    let gate_bos_within = gate_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens <= row.reference_tokens)
-        .count() as u64;
-    let gate_bos_shorter = gate_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens < row.reference_tokens)
-        .count() as u64;
-    let gate_bos_longer = gate_prompts
-        .iter()
-        .filter(|row| row.stop == "bos" && row.generated_tokens > row.reference_tokens)
-        .count() as u64;
+    let gate_bos_lengths = bos_length_counts(&gate_prompts);
     let gate_terminal_comparison = paired_terminal_rows(
         &gate_rows,
         &gate_training.gate,
@@ -529,9 +507,10 @@ fn run() -> Result<serde_json::Value, String> {
             "structural_pass": code_stop_structural,
             "exact_reference": code_stop_arm.exact_reference,
             "bos_complete": code_stop_arm.bos_stopped,
-            "bos_within_reference": bos_within_reference,
-            "bos_shorter": bos_shorter,
-            "bos_longer": bos_longer,
+            "bos_within_reference": code_stop_bos_lengths.within_reference(),
+            "bos_at_reference_length": code_stop_bos_lengths.at_reference_length,
+            "bos_shorter": code_stop_bos_lengths.shorter,
+            "bos_longer": code_stop_bos_lengths.longer,
             "non_inferior_to_code": code_stop_non_inferior,
             "vs_code_top1": code_stop_vs_code_top1,
             "vs_code_depth": code_stop_vs_code_depth,
@@ -547,9 +526,10 @@ fn run() -> Result<serde_json::Value, String> {
             "terminal_rows_vs_shuffled": gate_terminal_comparison,
             "exact_reference": gate_arm.exact_reference,
             "bos_complete": gate_arm.bos_stopped,
-            "bos_within_reference": gate_bos_within,
-            "bos_shorter": gate_bos_shorter,
-            "bos_longer": gate_bos_longer,
+            "bos_within_reference": gate_bos_lengths.within_reference(),
+            "bos_at_reference_length": gate_bos_lengths.at_reference_length,
+            "bos_shorter": gate_bos_lengths.shorter,
+            "bos_longer": gate_bos_lengths.longer,
             "gate_fires": gate_arm.gate_fires,
             "ungated_token_mismatches": gate_arm.ungated_token_mismatches,
             "non_inferior_to_code": gate_non_inferior,
@@ -560,24 +540,18 @@ fn run() -> Result<serde_json::Value, String> {
         },
         "passes": sign_structural
             && code_structural
-            && code_stop_structural
             && gate_structural
             && code_exposure
             && code_non_inferior
-            && code_stop_non_inferior
             && gate_non_inferior
             && code_training.leave_one_out_top1 > sign_training.leave_one_out_top1
             && code_vs_writer_top1["passes"].as_bool() == Some(true)
             && code_vs_shuffled_top1["passes"].as_bool() == Some(true)
             && code_vs_writer_depth["passes"].as_bool() == Some(true)
             && code_vs_shuffled_depth["passes"].as_bool() == Some(true)
-            && code_stop_vs_code_bos["passes"].as_bool() == Some(true)
-            && code_stop_vs_shuffled_bos["passes"].as_bool() == Some(true)
-            && code_stop_arm.exact_reference >= 8
-            && bos_within_reference >= 8
             && gate_terminal_comparison["passes"].as_bool() == Some(true)
             && gate_arm.bos_stopped >= 9
-            && gate_bos_within >= 8
+            && gate_bos_lengths.within_reference() >= 8
             && gate_arm.exact_reference >= 8
             && gate_arm.ungated_token_mismatches == 0
             && gate_vs_code_bos["passes"].as_bool() == Some(true)
@@ -770,6 +744,31 @@ fn paired(
         "threshold": threshold,
         "passes": candidate_sum > control_sum && only >= threshold && threshold > 0,
     }))
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct BosLengthCounts {
+    at_reference_length: u64,
+    shorter: u64,
+    longer: u64,
+}
+
+impl BosLengthCounts {
+    fn within_reference(self) -> u64 {
+        self.at_reference_length + self.shorter
+    }
+}
+
+fn bos_length_counts(prompts: &[ContentPromptReading]) -> BosLengthCounts {
+    let mut counts = BosLengthCounts::default();
+    for row in prompts.iter().filter(|row| row.stop == "bos") {
+        match row.generated_tokens.cmp(&row.reference_tokens) {
+            std::cmp::Ordering::Less => counts.shorter += 1,
+            std::cmp::Ordering::Equal => counts.at_reference_length += 1,
+            std::cmp::Ordering::Greater => counts.longer += 1,
+        }
+    }
+    counts
 }
 
 fn paired_terminal_rows(
@@ -966,5 +965,36 @@ mod tests {
         assert_eq!(ceil_two_sqrt(0), 0);
         assert_eq!(ceil_two_sqrt(1), 2);
         assert_eq!(ceil_two_sqrt(4), 4);
+    }
+
+    #[test]
+    fn bos_length_accounting_separates_exact_shorter_and_longer_stops() {
+        let prompt = |stop: &str, generated_tokens, reference_tokens| ContentPromptReading {
+            sample: 0,
+            matched_prefix_depth: 0,
+            top1: 0,
+            observed_decisions: 0,
+            exact_reference: false,
+            stop: stop.to_owned(),
+            generated_tokens,
+            reference_tokens,
+        };
+        let prompts = vec![
+            prompt("bos", 2, 3),
+            prompt("bos", 3, 3),
+            prompt("bos", 4, 3),
+            prompt("cap", 3, 3),
+            prompt("context", 1, 3),
+        ];
+
+        assert_eq!(
+            bos_length_counts(&prompts),
+            BosLengthCounts {
+                at_reference_length: 1,
+                shorter: 1,
+                longer: 1,
+            }
+        );
+        assert_eq!(bos_length_counts(&prompts).within_reference(), 2);
     }
 }

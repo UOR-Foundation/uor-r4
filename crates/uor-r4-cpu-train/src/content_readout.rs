@@ -1032,6 +1032,14 @@ mod tests {
         signature
     }
 
+    fn code_signature_bits(bits: impl IntoIterator<Item = usize>) -> ContentSignature {
+        let mut signature = vec![0u64; CONTENT_CODE_SIGNATURE_BITS / 64];
+        for bit in bits {
+            signature[bit / 64] |= 1u64 << (bit % 64);
+        }
+        signature
+    }
+
     fn row(bit: usize, target: u32) -> ContentExample {
         ContentExample {
             signature: if bit == CONTENT_SIGNATURE_BITS {
@@ -1370,6 +1378,77 @@ mod tests {
             .iter()
             .zip(&rows)
             .any(|(left, right)| left.terminal != right.terminal));
+    }
+
+    #[test]
+    fn content_stop_prototype_selection_is_deterministic_on_lexicographic_ties() {
+        let signatures = vec![
+            code_signature(2),
+            code_signature(0),
+            code_signature(1),
+            code_signature(0),
+        ];
+        let expected = vec![code_signature(0), code_signature(1)];
+        assert_eq!(
+            choose_content_prototypes(signatures.clone().into_iter(), 2).unwrap(),
+            expected
+        );
+        assert_eq!(
+            choose_content_prototypes(signatures.into_iter(), 2).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn content_stop_margin_uses_the_full_one_percent_false_stop_boundary() {
+        let terminal_signature = vec![0u64; CONTENT_CODE_SIGNATURE_BITS / 64];
+        let nonterminal_majority = code_signature_bits([100, 101]);
+        let boundary_outlier = code_signature_bits(0..10);
+        let mut rows = (0..100)
+            .map(|_| ContentStopRow {
+                signature: terminal_signature.clone(),
+                terminal: true,
+                writer_token: 7,
+            })
+            .collect::<Vec<_>>();
+        rows.extend((0..99).map(|_| ContentStopRow {
+            signature: nonterminal_majority.clone(),
+            terminal: false,
+            writer_token: 8,
+        }));
+        rows.push(ContentStopRow {
+            signature: boundary_outlier,
+            terminal: false,
+            writer_token: 8,
+        });
+
+        let training = fit_content_stop_gate(&rows, 1).unwrap();
+        assert_eq!(training.nonterminal_stop_limit, 1);
+        assert_eq!(training.terminal_stops, 100);
+        assert_eq!(training.nonterminal_stops, 1);
+        assert_eq!(training.gate.margin, 2);
+    }
+
+    #[test]
+    fn content_stop_margin_refuses_when_every_threshold_exceeds_false_stop_limit() {
+        let shared = vec![0u64; CONTENT_CODE_SIGNATURE_BITS / 64];
+        let mut rows = (0..20)
+            .map(|_| ContentStopRow {
+                signature: shared.clone(),
+                terminal: true,
+                writer_token: 7,
+            })
+            .collect::<Vec<_>>();
+        rows.extend((0..100).map(|_| ContentStopRow {
+            signature: shared.clone(),
+            terminal: false,
+            writer_token: 8,
+        }));
+
+        assert!(fit_content_stop_gate(&rows, 8)
+            .unwrap_err()
+            .to_string()
+            .contains("no margin under the false-stop limit"));
     }
 
     #[test]
