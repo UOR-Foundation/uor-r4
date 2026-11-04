@@ -1373,9 +1373,12 @@ pub(crate) fn choose_sorted(
     choose_sorted_in(query, key, batch, time, neighbours, first, limits, tie, DISTANCE_CHUNK_BYTES)
 }
 
-/// The most bytes one chunk of [`choose_sorted`]'s `(batch, chunk, time, width)` difference may
-/// hold (claude-272): 256 MiB, so a window of 2,048 positions reads at any batch. Below it the
-/// read takes every row at once, as before.
+/// The byte budget for one chunk of [`choose_sorted`]'s `(batch, chunk, time, width)` f32
+/// difference (claude-272): 256 MiB. The difference and its absolute value are alive together,
+/// so a chunk holds about twice this. A chunk takes at least one position, so past batch 512 at
+/// 2,048 × 64 one position alone exceeds it, and the `(batch · time, time)` distance, mask and
+/// sort are not chunked at all. When the whole difference fits, the read takes every row at
+/// once, as before.
 const DISTANCE_CHUNK_BYTES: usize = 1 << 28;
 
 /// How many query positions of each window one chunk takes under `bytes`: at least one, at most

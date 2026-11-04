@@ -3,12 +3,14 @@
 Lab: claude. [ORDER](./ORDER.md). PR #3644, item #3407. Plan step: Casey's plan of 4 November, step P2 ("Run a finite GPU test of the Hamming read's memory and time at 512, 1,024 and 2,048").
 
 **In one paragraph.** The Hamming read's `choose_sorted` now takes its L1 distance in chunks of query positions, under a 256 MiB budget for the `(batch, chunk, time, width)` difference. It also builds the candidate mask on the GPU instead of in a host loop over rows × time.
-- **The test pod:** one RTX 5090, `vast-59063044`, about 10 minutes, about $0.17.
+- **The test pod:** one RTX 5090, `vast-59063044`, on a $0.975/h offer; the job itself took 3.5 minutes (`job.log`, 05:39:07 to 05:42:34).
 - **What it ran:** the timing test at 192, 512, 1,024 and 2,048 positions, at batch 4 and 16 and width 64; the crate's whole CUDA library suite (313 passed, 0 failed); and two negative gates, each failing exactly its own test.
 - **What it found:**
   - The chunked read's peak memory stays at or under 1.33 GiB everywhere.
-  - Where the old read runs, the chunked read picks exactly the same positions and is 2–3× faster.
-  - At 2,048 × 16 the old read cannot run at all.
+  - Wherever the unchunked read runs, the chunked read picks exactly the same positions.
+  - Where it takes more than one chunk, it is 2.05× to 3.09× faster than the unchunked read. Where it takes one chunk, the two are the same speed (within 2.3%).
+  - At 2,048 × 16 the unchunked read cannot run at all.
+- **What "unchunked" means here:** the same new code with no budget, so one chunk and the new device mask. It is not the removed code, whose host mask loop is not timed here. That the new read picks what the removed one picked rests on the two equality tests and on the diff.
 - **Not done:** no model was trained or scored at a long window, and a training step at 2,048 is untimed. Casey added that run to the plan as P2b, right after P2 unit 3.
 
 ## Tokens per second first
@@ -18,12 +20,12 @@ No decode tok/s was measured; this unit times one head's read, not a decode. One
 ## What did not work
 
 1. **The ORDER's CPU test could not run on the CPU.** The project refuses CPU tensor maths (D24/D29); the laptop run of both new tests stopped with "CPU model compute is unavailable; use the admitted CUDA geometric path". Both equality tests moved to the CUDA path (`#[cfg(feature = "cuda")]`) and ran in the pod's library suite. The laptop keeps only the CUDA type-check (stub `nvcc`).
-2. **At 2,048 × 16 the old read failed with `CUDA_ERROR_INVALID_VALUE`, not out of memory.**
-   - Its difference tensor has 16 × 2,048 × 2,048 × 64 = 2³² elements. candle 0.9.2 sizes an element-wise launch with `LaunchConfig::for_num_elems(el as u32)` (`third_party/candle-core-0.9.2/src/cuda_backend/mod.rs:112`). At exactly 2³² the count wraps to 0, so the grid has 0 blocks and the launch is refused.
+2. **At 2,048 × 16 the unchunked read failed with `CUDA_ERROR_INVALID_VALUE`, not out of memory.**
+   - Its difference tensor has 16 × 2,048 × 2,048 × 64 = 2³² elements. candle 0.9.2 sizes every element-wise launch with the same `LaunchConfig::for_num_elems(n as u32)` cast (`third_party/candle-core-0.9.2/src/cuda_backend/mod.rs`, for example `:1102` for the binary map and `:385` for the unary map). The failing launch is most likely the broadcast subtraction's. At exactly 2³² the count wraps to 0, so the grid has 0 blocks and the launch is refused.
    - The memory pool held 16.02 GiB when it failed. The test prints "does not fit" for any error, so that label is the test's, not the cause.
-   - **The hazard:** past 2³² the count wraps to a small number, and a launch would cover only part of the tensor without any error. The chunk budget keeps every tensor in the read at 2²⁶ elements or fewer. Any other path that builds a tensor past 2³² elements on the GPU would be wrong. Still open 1.
+   - **The hazard:** past 2³² the count wraps to a small number, and a launch would cover only part of the tensor without any error. In every case measured here, up to batch 16 at 2,048, each tensor the read builds has at most 2²⁶ elements: the difference chunk under the budget, and each `(rows, time)` tensor exactly 2²⁶. The budget does not bound them at every batch. A chunk takes at least one position, and the `(rows, time)` tensors grow as batch × time², so at 2,048 they reach 2³² at batch 1,024. Any path that builds a tensor past 2³² elements on the GPU would be wrong. Still open 1.
 3. **At 192 (both batches) and at 512 × 4 the budget covers every row,** so the "chunked" read is the whole read in one chunk. Those three rows test the code path, not chunking. Chunking starts at 512 × 16 (128 positions a chunk) and is real in both 2,048 cases (128 and 32).
-4. **The `nvidia-smi` samples cannot resolve one run.** They are 0.1 s apart (1,508 in all), and one run takes 0.77–117 ms. Their maximum, 17,034 MiB, falls in the old read's failed attempt at 2,048 × 16, and it includes the context's own memory. The memory figures below are the pool's own high mark, `CU_MEMPOOL_ATTR_USED_MEM_HIGH`, read and reset around each form's six runs. candle allocates from that pool through `cuMemAllocAsync` (`third_party/cudarc-0.19.10/src/driver/safe/core.rs:866`, `:1605`).
+4. **The `nvidia-smi` samples cannot resolve one run.** They are about 0.14 s apart (1,508 in all; mean 137 ms, from 130 to 259 ms), and one run takes 0.77–117 ms. Their maximum, 17,034 MiB, comes 3 ms after the unchunked read's failed attempt at 2,048 × 16 ended, while its memory was still held, and it includes the context's own memory. The memory figures below are the pool's own high mark, `CU_MEMPOOL_ATTR_USED_MEM_HIGH`, read and reset around each form's six runs. candle allocates from that pool through `cuMemAllocAsync` (`third_party/cudarc-0.19.10/src/driver/safe/core.rs:866`, `:1605`).
 5. **The job script's first draft had two faults,** both found by the pre-run review and fixed before it shipped:
    - its grep would have dropped the first timing line, which libtest prints after the test's name, on the same line;
    - a red test anywhere in the suite would have ended the job before any timing ran.
@@ -41,13 +43,13 @@ No decode tok/s was measured; this unit times one head's read, not a decode. One
 - **Three tests:**
   - `the_read_in_chunks_chooses_as_the_whole_read` (CUDA). The chunked distance equals the whole distance bit for bit at chunks of 1, 7 and 20 of 20. `distance_chunk` returns each chunk size from its byte budget. Picks and the real flags are equal under the tie rule on and off, three limit sets (the window, a cut at 7, per-row limits) and `first` 0 and 1.
   - `the_device_mask_is_the_candidate_rule` (CUDA). The device mask equals `is_candidate` at every entry, for four limit sets (below, at and past the window, and `usize::MAX`) and `first` 0, 1 and 2.
-  - `the_read_at_long_windows` (CUDA, ignored, run on the pod). The timing and pool-peak run below. It asserts equal picks wherever the old read runs.
+  - `the_read_at_long_windows` (CUDA, ignored, run on the pod). The timing and pool-peak run below. It asserts equal picks wherever the unchunked read runs.
 
 ## Measurements
 
-On the RTX 5090 (32,607 MiB, driver 595.71.05), release build at `267c1bc6d`, one head (width 64), `HAMMING_KEPT` picks, tie rule on, `first` 1. Times are the median of five timed runs after one warm-up, each ending in `device.synchronize()`. Memory is the pool's peak bytes in use over each form's six runs.
+On the RTX 5090 (32,607 MiB, driver 595.71.05), release build at `267c1bc6d`, one head (width 64), `HAMMING_KEPT` picks, tie rule on, `first` 1. Times are the median of five timed runs after one warm-up, each ending in `device.synchronize()`. Memory is the pool's peak bytes in use over each form's six runs. The "unchunked (new mask)" columns run `choose_sorted_in` with a `usize::MAX` budget: one chunk, with the device mask. They stand in for the removed read's memory, not its time, since the removed host mask loop is not in them.
 
-| positions × batch | rows a chunk | chunked: ms | chunked: GiB | old read: ms | old read: GiB | same picks |
+| positions × batch | rows a chunk | chunked: ms | chunked: GiB | unchunked (new mask): ms | unchunked (new mask): GiB | same picks |
 |---|---|---|---|---|---|---|
 | 192 × 4 | 192 (one chunk) | 0.770 | 0.07 | 0.753 | 0.07 | yes |
 | 192 × 16 | 192 (one chunk) | 2.991 | 0.29 | 2.998 | 0.29 | yes |
@@ -58,7 +60,7 @@ On the RTX 5090 (32,607 MiB, driver 595.71.05), release build at `267c1bc6d`, on
 | 2,048 × 4 | 128 | 30.584 | 0.57 | 94.493 | 8.13 | yes |
 | 2,048 × 16 | 32 | 116.794 | 1.33 | does not run (What did not work, 2) | 16.02 at the failure | — |
 
-- **The read's other quadratic term is now its memory floor.** The `(rows, time)` distance, mask and sort each take 0.25 GiB at 2,048 × 16, which is why that row peaks at 1.33 GiB. That term does not scale with the width.
+- **The read's other quadratic term is now its memory floor.** The `(rows, time)` tensors are not chunked. At 2,048 × 16 each f32 or u32 one (the distance, its tie-key steps, the masked distance, the sort order) takes 0.25 GiB, and the u8 mask 64 MiB. They do not shrink with the chunk, and they do not scale with the width.
 - **A forward has four heads,** so a read layer at 2,048 × 4 costs about 4 × 30.6 = 122 ms. That figure is projected from one head, not measured.
 - **The other gates, from the same pod and pin:**
   - the CUDA library suite: 313 passed, 0 failed, 8 ignored;
@@ -69,7 +71,8 @@ On the RTX 5090 (32,607 MiB, driver 595.71.05), release build at `267c1bc6d`, on
 
 ## What this shows, and what it does not
 
-- **It shows** that the read now fits on one GPU at 2,048 positions, at the training batch (0.57 GiB) and the scoring batch (1.33 GiB). It picks exactly what the old read picks wherever the old read can run, and it is faster there. The old read cannot run at 2,048 × 16 on candle 0.9.2 on any card.
+- **It shows** that the read now fits on one GPU at 2,048 positions, at the training batch (0.57 GiB) and the scoring batch (1.33 GiB). It picks exactly what the unchunked read picks wherever that can run, and it is 2.05× to 3.09× faster wherever it takes more than one chunk. The unchunked read cannot run at 2,048 × 16 on candle 0.9.2 on any card.
+- **It does not time the removed code.** The unchunked columns use the new device mask, so the gain over the removed host loop is not measured here.
 - **It does not show** that a model trains, or reads usefully, at 2,048:
   - no forward, training step or score was run at a long window;
   - the trainer still cuts 192-token windows (`SHEET_CONTEXT`);
@@ -110,7 +113,7 @@ None applied.
 
 The part of the model that looks back over earlier words used to build one huge table at a time. At 2,048 word pieces that table needed more memory than a top gaming GPU has. Its size also passed a limit in the GPU library, so it could not run at all.
 
-This unit makes the model fill that table in small pieces. The answers are exactly the same, and it now needs at most about 1.3 GB at 2,048 word pieces. It is also faster, because it never writes and rereads the huge table.
+This unit makes the model fill that table in small pieces. The answers are exactly the same, and it now needs at most about 1.3 GB at 2,048 word pieces. At the larger sizes it is also two to three times faster, because it never writes and rereads the huge table.
 
 It does not make long conversations work yet. The model is still trained on pieces of 192 words, and a saved model will not read past the length it was trained on. The next unit lets the window be set. Then, at Casey's request, a training run at 2,048 tests whether the model actually learns to recall across turns.
 
