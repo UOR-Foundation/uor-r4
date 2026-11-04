@@ -1,6 +1,6 @@
 # Generated-state content stop gate
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -223,11 +223,11 @@ or resource mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - M2 #2030 generated-state content stop gate:
+TEST FITNESS: FIT - M2 #2030 generated-state content stop gate:
 docs/harness/prep/cpu-training-pilot-content-gate-2026-11-04.md
-head: pending
+head: 8692fafb89995521354a93d5f53b2805cb12ff84
 implementation pin: 249b296072c2d716019af487dbb0afaa38281e55
-reviewer: pending
+reviewer: independent-subagent content_gate_refit_3
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
