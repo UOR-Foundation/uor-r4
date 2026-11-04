@@ -22,6 +22,13 @@ Base: `2789caa90`.
   formed a permutation. The final control constructs the served artifact,
   proves that a shuffled target changes the opening, rotates once if
   Fisher-Yates is unchanged and refuses an all-equal table.
+- **The first two public runs used the wrong point producer.** A custom training
+  query helper marked reply start before capture. A fresh exact-head review
+  found that production `build_point_key` steps the training window without a
+  reply-start signal, so the first runs were invalid for production-point
+  evidence. The driver now calls `build_point_key` directly. The invalid runs
+  are retained; the corrected rerun produced identical metrics and artifact
+  hashes, as expected from the zero memory move in this configuration.
 - **The required negative-path tests were initially incomplete.** A second FIT
   review caught that the finite unseen-key control and refusal cases were not
   all present. The final focused suite covers unseen exact-key miss, point
@@ -64,10 +71,10 @@ refusal, overlap refusal and malformed point rows.
 | Seed | Arm | Opening top-1 / 60 | Opening distance | Full top-1 / 2,050 | Wall |
 |---:|---|---:|---:|---:|---:|
 | 1 | point-off | 0 | 64,821,741 | 169 | — |
-| 1 | point | **2** | 64,821,741 | **171** | 1.119 s |
+| 1 | point | **2** | 64,821,741 | **171** | 1.049 s |
 | 1 | random | 0 | 64,821,741 | 169 | — |
 | 2 | point-off | 0 | 80,445,779 | 163 | — |
-| 2 | point | 1 | 80,445,779 | 164 | 1.101 s |
+| 2 | point | 1 | 80,445,779 | 164 | 1.044 s |
 | 2 | random | **3** | 80,445,779 | **166** | — |
 
 Seed 1 point improved both opening and complete teacher-forced top-1 over both
@@ -87,6 +94,8 @@ Every arm on both seeds checked:
 The complete reports and local artifact hashes are in
 [comparison.json](evidence/comparison.json). Peak RSS was about 290 MiB and each
 seed used roughly 10 effective CPU cores while evaluating independent samples.
+The evidence record preserves both the invalid first roots and the corrected
+production-builder roots.
 
 ## Reading
 

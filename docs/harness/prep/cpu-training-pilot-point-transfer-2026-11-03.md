@@ -88,11 +88,12 @@ Derive opening/reply memory only from the 60 training examples at key window
 192, reply turn 8 and movement weight zero. Confirm every evaluation opening key
 misses the exact opening table.
 
-Build one point row per distinct training prompt query:
+Build one point row per distinct training prompt query through the production
+point-key builder:
 
-- step the complete training prompt through the exact CPU FBS path;
-- mark reply start on its final token;
-- record that final Q12 query;
+- call `build_point_key` on each training prompt window;
+- do not mark reply start, so no training-time memory move enters the point;
+- record the pre-memory trunk Q12 query at the prompt's final row;
 - target the first reply token;
 - coalesce identical queries by commonest target, ties to the smaller id;
 - sort rows lexicographically by point.
@@ -101,6 +102,13 @@ The random control uses the same points with targets permuted by a deterministic
 Fisher-Yates shuffle at seed 1. If that draw is unchanged, rotate the target
 rows once; if the control is still unchanged because every target is equal,
 refuse the run rather than score a vacuous control.
+
+**Instrument correction before rerun.** The first two public runs used a custom
+query helper that marked reply start while deriving training points. A fresh
+exact-head review found that this captured a memory-moved query, unlike the
+production `build_point_key`. Those runs are retained as invalid for production
+point-transfer evidence. The split, dimensions, point rows, controls and bar
+are unchanged; only the query construction now calls the production builder.
 
 ## Arms
 

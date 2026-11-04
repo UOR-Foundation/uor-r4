@@ -9,7 +9,8 @@ use uor_r4_cpu_train::{
     CpuFbsHead, CpuMaskedCorpus, MemoryWeightSample,
 };
 use uor_r4_integer::stack::{
-    add_point_key_uorlut01, read_memory_uorlut01, IntegerStackModel, PointKeyImage,
+    add_point_key_uorlut01, build_point_key, read_memory_uorlut01, IntegerStackModel,
+    PointKeyImage, PointKeyWindow,
 };
 
 const SCHEMA: &str = "uor-r4.cpu-point-transfer-run/1";
@@ -483,13 +484,29 @@ fn derive_point_table(
     width: usize,
     vocab: usize,
 ) -> Result<PointKeyImage, String> {
+    let model = IntegerStackModel::parse(memory_artifact).map_err(|error| error.to_string())?;
+    let windows = training
+        .iter()
+        .map(|sample| {
+            let target = *sample
+                .reply
+                .first()
+                .ok_or_else(|| "point training sample has no reply".to_owned())?;
+            let at = sample
+                .prompt
+                .len()
+                .checked_sub(1)
+                .ok_or_else(|| "point training prompt is empty".to_owned())?;
+            Ok(PointKeyWindow {
+                input: sample.prompt.clone(),
+                openings: vec![(at, target)],
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let built = build_point_key(&model, &windows).map_err(|error| error.to_string())?;
     let mut targets = BTreeMap::<Vec<i16>, BTreeMap<u32, usize>>::new();
-    for sample in training {
-        let point = prompt_query(memory_artifact, &sample.prompt, width)?;
-        let target = *sample
-            .reply
-            .first()
-            .ok_or_else(|| "point training sample has no reply".to_owned())?;
+    for (point, &target) in built.points.chunks_exact(width).zip(&built.targets) {
+        let point = point.to_vec();
         *targets.entry(point).or_default().entry(target).or_default() += 1;
     }
     let rows = targets
@@ -513,38 +530,6 @@ fn derive_point_table(
     };
     image.check(vocab).map_err(|error| error.to_string())?;
     Ok(image)
-}
-
-fn prompt_query(artifact: &[u8], prompt: &[u32], width: usize) -> Result<Vec<i16>, String> {
-    if prompt.is_empty() {
-        return Err("a point query prompt is empty".to_owned());
-    }
-    let mut forward = CpuFbsForward::from_artifact(artifact).map_err(|error| error.to_string())?;
-    let mut query = None;
-    for (index, &token) in prompt.iter().enumerate() {
-        if index + 1 == prompt.len() {
-            forward.mark_reply_start();
-        }
-        let step = forward
-            .step(token, CpuFbsHead::Writer)
-            .map_err(|error| error.to_string())?;
-        if index + 1 == prompt.len() {
-            query = Some(
-                step.query_q12
-                    .into_iter()
-                    .map(|value| {
-                        i16::try_from(value)
-                            .map_err(|_| format!("point query coordinate {value} does not fit i16"))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
-            );
-        }
-    }
-    let query = query.ok_or_else(|| "a point query prompt has no final row".to_owned())?;
-    if query.len() != width {
-        return Err("point query width differs from the model".to_owned());
-    }
-    Ok(query)
 }
 
 fn shuffled_targets(targets: &[u32], seed: u64) -> Result<Vec<u32>, String> {
