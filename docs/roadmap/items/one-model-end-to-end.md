@@ -209,8 +209,8 @@ failed diagnostic cannot contaminate the next forward on that thread. See
   reply opening. On one RTX 5090, the base and head binaries scored a 192
   checkpoint to byte-identical files. A 2,048 checkpoint's batched and serial
   decodes at 2,048 were identical too. Its decode ran 10.5–12.6 tok/s at
-  prompts of about 1,960 tokens, against 53–55 at about 180, and scoring
-  peaked at 5,356 MiB (5.2 GiB) at either window. The query panel, the long
+  prompts of about 1,960 tokens, against 54–55 at about 180, and scoring's
+  sampled peak was 5,356 MiB (5.2 GiB) at either window. The query panel, the long
   corpus and the sheet are claude-275's.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;

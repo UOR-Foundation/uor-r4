@@ -14,7 +14,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3649, item #3407. Plan step: Casey's plan 
   - **G1:** the 192 checkpoint, scored by the base binary and by the head binary: all 10 files byte-identical, and the manifests equal apart from their seconds;
   - **G2:** the 2,048 checkpoint at `--context 2048 --sample-opening last`, batched and serial: all 10 files byte-identical, and the manifests equal;
   - **G3:** the same checkpoint at 192;
-  - **memory:** every scoring pass peaked at 5,324–5,356 MiB, the 2,048 ones included;
+  - **memory:** every scoring pass's sampled peak was 5,324–5,356 MiB, the 2,048 ones included;
   - **the suite:** the crate's CUDA library suite passed on the same pod, 325 passed and 0 failed.
 
 ## Tokens per second first
@@ -29,9 +29,9 @@ Decode tok/s, per samples file of 16 greedy replies of up to 64 tokens, on one R
 | c192 at 192, `first` (G1, head, batched) | 18 / 32 / 96 | 27.1 | 33.5 |
 | c192 at 192, `first` (G1, base, batched) | the same | 38.1 | 42.9 |
 
-- **On the same checkpoint**, a decode at prompts of about 1,960 tokens runs 10.5–12.6 tok/s. At prompts of about 180 tokens it runs 53–55. That is 4.4–5.3× slower, for about 11× the prompt.
+- **On the same checkpoint**, a decode at prompts of about 1,960 tokens runs 10.5–12.6 tok/s. At prompts of about 180 tokens it runs 54–55 (greedy; the Flock arm 53.3). Paired by memory setting, that is 4.4–5.2× slower, for about 11× the prompt.
 - **The decode recomputes its whole window each step.** At 1,960 tokens a token costs about 85 ms (87.5 s for 1,024 tokens). That is less than the positions alone would predict, so the ORDER's stop rule ("far longer than its positions predict") is not met.
-- **DEV's short prompts (18–186 tokens) on the same checkpoint** decode at 37.4–43.1 tok/s with the 2,048 window (G2, serial) and 38.3–40.1 with the 192 window (G3). The window setting costs nothing when the prompt is short.
+- **DEV's short prompts (18–186 tokens) on the same checkpoint** decode at 32.2–43.1 tok/s with the 2,048 window (G2, serial; 23.9–30.8 batched) and 38.3–40.1 with the 192 window (G3, batched). No cost of the window setting shows beyond the pass-to-pass spread (What did not work, 5); one pass each settles nothing finer.
 - These are the scorer's speeds on a 48-step model, not the served integer model's.
 
 ## What did not work
@@ -56,20 +56,20 @@ Decode tok/s, per samples file of 16 greedy replies of up to 64 tokens, on one R
 4. **The batched decode was no faster at 2,048.**
    - **Why:** its budget, kept at 3,072 positions, fits one long prompt a forward. A prompt of 2,029 tokens reaches 2,048 with its reply.
    - **On the long panel:** the one equal-length pair was split into two single decodes.
-   - **What was batched together:** only DEV's one equal-length pair, in each of two files.
+   - **What was batched together:** only DEV's one equal-length pair (two 186-token prompts), in each of three files: greedy with the memory on and off, and the Flock rank rule. The Flock arms take the batched path too: `can_batch_decode` gates on the objective, scope, forced opening and served key, not on the rule.
    - **Next:** batching long prompts needs a larger positions budget, measured first (P3).
-5. **Two passes of the same code differ by up to about 1.45× in decode time, so no speed difference between passes is established.**
+5. **Two passes of the same decode work differ by up to about 1.45× in decode time, so no speed difference between passes is established.**
    - **G1:** base and head decoded byte-identical files at 192, with every changed decode expression reducing to the old one there. Per file the head took −13% to +45% the base's time (decode 127.1 s against 162.3 s in all), with lower GPU use (23.2% mean against 29.0%).
-   - **G2:** the flock arms decode one prompt at a time in both passes, so they ran identical code twice. They differ too: 24.0 against 32.2 tok/s on DEV, and 11.0 against 12.3 on the panel.
+   - **G2:** at 2,048 every long-panel group held one prompt, so both passes decoded the long arms one prompt a forward, the batched pass through its batched loop. The batched pass was slower on each long arm (10.5 against 11.7, 11.0 against 12.3, 11.3 against 12.6 tok/s); with one pass each, noise and the batched loop's own cost are not separated.
    - **What the run supports:** "no batched arm was faster", not a ratio. One file, DEV with the memory on, ran 23.9 batched against 43.1 serial, past the spread above; with one pass each, it is not established.
    - P3's timings need repeats.
 6. **At the first GPU pin, three of Done-when 3's five flags were refused off 192 only indirectly.**
    - **Which:** `--served-key` and `--keyed-decode` fail on "needs `--opening-keys 1`". `--decision-force` fails only after the checkpoint loads.
    - **The fix, at `2206caecd`:** `window_bound_flags` names each one asked for, before the checkpoint loads. Its test `each_192_bound_flag_is_refused_by_name_off_192` FAILS with the earlier condition put back, and the file was restored to the same sha256 (`d7cee0bd…`).
-7. **The memory figures are `nvidia-smi`'s,** sampled about every 140 ms over each pass, not the pool's own peak. Each is an upper bound at its samples and bounds nothing between them.
+7. **The memory figures are `nvidia-smi`'s,** sampled about every 140 ms over each pass, not the pool's own peak. Each is the highest sample, so a lower bound on the true peak; nothing between samples is seen.
 8. **claude-270's served-mode parity check is covered only thinly.**
    - **What ran:** both checkpoints were trained with `--train-as-served 1`, and the scorer read that from the run config, so every pass scored in served mode. G2 is a batched-against-serial parity at current code in served mode.
-   - **Why it is thin:** only two groups were decoded together (DEV's pair, in two files), and both matched byte for byte.
+   - **Why it is thin:** only three groups were decoded together (DEV's pair, in three files), and all three matched byte for byte.
 
 ## What changed
 
@@ -126,8 +126,8 @@ On the RTX 5090 (32,607 MiB, driver 595.71.05), release builds at `2206caecd` (h
 - **It shows:**
   - at 192, the head scores and decodes exactly as the base did, in served mode, on every file and manifest line;
   - a model trained at 2,048 can be scored and decoded at 2,048, with its batched and serial decodes byte-identical;
-  - on one 5090, scoring at 2,048 needs no more GPU memory than at 192 (5,356 MiB at most), because the positions budget held;
-  - a decode at prompts of about 1,960 tokens runs at 10.5–12.6 tok/s, against 53–55 at about 180 on the same checkpoint;
+  - on one 5090, scoring at 2,048 had the same sampled GPU memory peak as at 192 (5,356 MiB, a lower bound; What did not work, 7), as the positions budget would predict;
+  - a decode at prompts of about 1,960 tokens runs at 10.5–12.6 tok/s, against 54–55 (greedy) at about 180 on the same checkpoint;
   - `last` gives long prompts at a long window.
 - **It does not show:**
   - any learning or recall across turns: the checkpoints are 48 steps on short TRAIN, and the panel is an instrument, not held out;
@@ -190,7 +190,7 @@ None applied.
 
 A model can now be tested at the same length of conversation it was trained on, instead of always in pieces of 192 word pieces. At the old length, the new code gives exactly the same answers as the old code, file for file.
 
-On one gaming GPU, a model trained on 2,048 word pieces was tested at 2,048. Its fast and slow answer-writing paths gave identical answers, and it used no more memory than at 192. With about 2,000 word pieces of conversation before each answer, it wrote about 12 word pieces a second, against about 54 with 180 before it.
+On one gaming GPU, a model trained on 2,048 word pieces was tested at 2,048. Its fast and slow answer-writing paths gave identical answers, and its measured memory peak was the same as at 192. With about 2,000 word pieces of conversation before each answer, it wrote about 12 word pieces a second, against about 54 with 180 before it.
 
 The model here is a tiny 48-step test, so this says nothing yet about whether it remembers across a long conversation. The next unit builds the long test conversations and the long training data for that run.
 
