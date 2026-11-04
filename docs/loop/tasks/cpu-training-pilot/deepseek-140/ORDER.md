@@ -77,8 +77,10 @@ Both seeds must pass:
   distance and whether the readout fired;
 - each seed checks **103 prompts** and at least one readout override;
 - every malformed/foreign sidecar production is refused before a step;
-- same-readout session restore succeeds while a missing or different readout
-  is refused before state mutation; and
+- same-readout session restore succeeds in the synthetic no-turn-memory FBS
+  control while a missing or different readout is refused before state
+  mutation; the public turn-memory artifact keeps its existing restore
+  refusal; and
 - the seed-1 normalized report and sidecar match the repeat byte-for-byte.
 
 Report sidecar hash, row/target counts, threshold, decisions, readout fires,

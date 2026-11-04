@@ -20,16 +20,17 @@ Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
 Final audit added canonical readout identity to serialized sessions. Attempt 2
 at pin `fe253c5ca` passed both public seeds but was superseded after
 exact-head review found that loopback JSON omitted the sidecar path and file
-SHA-256. Attempt 3 reruns under pin `819482378` after the same review also
-required strict refusal of an omitted `includes_reference_end`, rejection of
-readouts on non-256-wide FBS models before any step, bounded sidecar reads,
-and transactional missing/different-readout restore checks.
+SHA-256. Attempt 3 reruns under pin `8194823789244096e2db317bb45954d5a7eeaf8f`
+after the same review also required strict refusal of an omitted
+`includes_reference_end`, rejection of readouts on non-256-wide FBS models
+before any step, bounded sidecar reads, and transactional
+missing/different-readout restore checks.
 
 ## Base artifacts
 
 | Input | Identity |
 |---|---|
-| implementation source | `81948237860d9a655485ebf460b8c6c1b23e264c` |
+| implementation source | `8194823789244096e2db317bb45954d5a7eeaf8f` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -72,6 +73,9 @@ Session snapshots bind the canonical attached-readout hash. Same-readout
 restore must reproduce state; a destination with no readout or a different
 readout must refuse before mutation. `UR4SESS2` carries the identity, while
 legacy `UR4SESS1` stays byte-compatible when no readout is attached.
+This restore control runs on the synthetic no-turn-memory FBS model: the
+public artifact carries turn memory, whose pre-existing restore refusal is
+unchanged and is not represented as a successful public-artifact restore.
 
 The content driver runs the same 103 evaluation samples through:
 
@@ -101,7 +105,7 @@ Both seeds must pass:
   refused before a step;
 - raw `step`/`step_native` state remains unchanged with a readout attached;
 - same-readout session restore succeeds while a missing or different readout
-  is refused before state mutation; and
+  is refused before state mutation in the synthetic no-memory FBS control; and
 - the seed-1 normalized report, sidecar and serving artifact repeat
   byte-for-byte.
 
@@ -134,9 +138,10 @@ replies, fresh phrasing or useful chat.
 |---|---:|
 | preparation and FIT | 600 s |
 | release driver and chat builds | 600 s |
+| focused integer and loopback controls | 300 s |
 | two seeds plus repeat and CLI smoke | 300 s |
 | delivery and evidence | 300 s |
-| total increment | **1,800 s** |
+| total increment | **2,100 s** |
 
 - Builds: 16 jobs, 4 GiB RSS, 2 GiB target maximum each.
 - Runs: 32 Rayon workers, 1 GiB RSS, 600 s each.
@@ -144,7 +149,7 @@ replies, fresh phrasing or useful chat.
 - Previous ledger:
   `cpu-training-pilot-content-gate-2026-11-04/resource-ledger.json` at
   `35,377.977487699 s` measured and `43,927.677487699 s` admitted cumulative.
-- Admitted cumulative projection: **45,727.677487699 s**.
+- Admitted cumulative projection: **46,027.677487699 s**.
 
 ## Steps
 
@@ -159,7 +164,7 @@ BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-3
 CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-3
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=81948237860d9a655485ebf460b8c6c1b23e264c
+IMPL_PIN=8194823789244096e2db317bb45954d5a7eeaf8f
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -195,6 +200,14 @@ test "$CHAT_RSS" -le 4194304
 BIN=$BUILD/release/cpu-content-readout-driver
 CHAT=$CHAT_BUILD/release/uor-chat
 sha256sum "$BIN" "$CHAT" | sed 's# .*/#  #' >"$PIPELINE/binary.sha256"
+/usr/bin/time -v -o "$PIPELINE/control-integer.time.txt" env CARGO_BUILD_JOBS=16 \
+  CARGO_TARGET_DIR="$CHAT_BUILD" cargo test --locked \
+  -p uor-r4-integer --features 'serving-wasm fbs-synthetic' \
+  --lib content_readout >"$PIPELINE/control-integer.txt"
+/usr/bin/time -v -o "$PIPELINE/control-loopback.time.txt" env CARGO_BUILD_JOBS=16 \
+  CARGO_TARGET_DIR="$CHAT_BUILD" cargo test --locked \
+  -p uor-r4-integer --features 'serving-wasm fbs-synthetic' \
+  --test openai_loopback >"$PIPELINE/control-loopback.txt"
 run() {
   seed=$1 label=$2 artifact=$3
   out=$PIPELINE/$label
@@ -247,8 +260,8 @@ mismatch is an instrument fault requiring a new FIT.
 
 TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: 81948237860d9a655485ebf460b8c6c1b23e264c
-implementation pin: 81948237860d9a655485ebf460b8c6c1b23e264c
+head: 8194823789244096e2db317bb45954d5a7eeaf8f
+implementation pin: 8194823789244096e2db317bb45954d5a7eeaf8f
 reviewer: pending
 date: 2026-11-04
 
