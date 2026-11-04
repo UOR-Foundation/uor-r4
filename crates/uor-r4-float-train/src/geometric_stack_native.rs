@@ -528,8 +528,8 @@ pub fn quaternion_scan(transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
 /// `held` back, and the second position applies the scan's step, `T ⊗ held + D`, with this
 /// position's `transition` and `drive`. So the step runs the very instructions the whole-window
 /// scan runs at that position. The one difference: a component of `held` that is exactly −0
-/// enters as +0 (`+0 + −0 = +0`), which can change a bit only where a whole Hamilton product and
-/// the drive beside it are exactly zero.
+/// enters as +0 (`+0 + −0 = +0`). That can change a bit only where every term of a component of
+/// the Hamilton product is zero and the drive component added to it is exactly −0.
 fn quaternion_scan_step(held: &Tensor, transition: &Tensor, drive: &Tensor) -> Result<Tensor> {
     let zero = held.zeros_like()?;
     let both = quaternion_scan(
@@ -1374,7 +1374,8 @@ impl StackModel {
     /// One position per row after the cache's (claude-278): the points `(batch, width)` the
     /// whole-window forward computes at position `cache.position()` of each row's window, through
     /// the same ops in the same order, and the cache advanced by one. A refusal
-    /// ([`Self::step_refusal`]) or an error leaves the cache as it was.
+    /// ([`Self::step_refusal`]) or an error leaves the cache as it was. A turn-memory reply row
+    /// in a step is counted in the step's own rows: row `b` is batch row `b`, not `b * time + t`.
     pub fn step_cached(&self, cache: &mut DecodeCache, ids: &[u32]) -> Result<Tensor> {
         if let Some(refusal) = self.step_refusal(cache, ids) {
             return Err(invalid(format!(

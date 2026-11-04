@@ -73,7 +73,7 @@ Both code paths are in the item's `scope:` list (revised; see below).
    - The step runs the very instructions the whole-window scan runs at that position. A new kernel would be compiled on its own, and nvcc's multiply-add fusing would then have to match the old kernel's for the bits to agree.
    - The 26-kernel extract stays as it is. That keeps D29's compiled-module boundary, `KERNEL_ENTRY_POINTS` and its pin in `tests/no_training_crate_dep.rs`, and every page that counts 26 kernels unchanged.
 
-   **The one difference:** a carried component that is exactly −0 enters as +0. It can change a bit only where a whole Hamilton product and the drive beside it are exactly zero. The CPU test pins it.
+   **The one difference:** a carried component that is exactly −0 enters as +0. It can change a bit only where every term of a component of the Hamilton product is zero and the drive component added to it is exactly −0. The CPU test pins it.
 
    **So done-when 2 and gate 5's kernel line change.** The step's identity is tested on the CPU twin, and on the CUDA kernel itself.
 2. **Files.** The cache's types live in `geometric_stack_native.rs`. One accessor, `is_instrumenting_snaps`, goes in `hamilton_sheet.rs`. Both are in the item's `scope:` list on `main`.
