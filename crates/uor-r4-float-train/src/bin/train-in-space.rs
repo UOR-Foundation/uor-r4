@@ -15,7 +15,8 @@
 //! `--score-rows` also accepts `[--sample-opening first|last]` (claude-274): `first`, the
 //! default, decodes each sampled window from its first scored target, a reply opening; `last`
 //! from its last reply opening with at least 16 tokens of prompt, so a long window gives a long
-//! prompt.
+//! prompt. A `last` reference is the reply's part inside the window, so a reply that runs past
+//! the window's end is cut there: 7 of 16 on claude-274's chained panel at 192, none at 2,048.
 //!
 //! `--train-as-served 1` trains through the graph the integer artifact serves
 //! (one-model-end-to-end, claude-258 and deepseek-4): the trunk's tables, Hamming reads and turn

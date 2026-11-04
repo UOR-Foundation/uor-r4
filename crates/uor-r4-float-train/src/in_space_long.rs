@@ -4974,7 +4974,9 @@ fn sample_windows<'a>(
 /// cut to a clone whose scored lists start at the last such target, and `samples` of those are
 /// taken as [`sample_windows`] takes them. So each prompt is its window's input through that
 /// opening, and its reference, corpus position and input flags follow it. In a chained
-/// conversation that is the latest turn in the window, with the earlier turns before it.
+/// conversation that is the latest turn in the window, with the earlier turns before it. Its
+/// reference is the scored targets left in the window, so a reply that runs past the window's
+/// end is cut there: 7 of 16 on claude-274's chained panel at 192, none at 2,048.
 fn last_openings(windows: &[CausalWindow], mask: &[u8], samples: usize) -> Vec<CausalWindow> {
     let cut: Vec<CausalWindow> = windows
         .iter()
@@ -15255,9 +15257,6 @@ mod tests {
         assert_eq!(keys, later, "each row keeps its own key");
     }
 
-    /// claude-274: the batched decode's budget stays `SHEET_EVAL_BATCH` windows of 192 positions,
-    /// and a group's reach is capped by the model's own window. At 192 a 1,000-token prompt group
-    /// reaches the 192 window, 16 a batch, as before; at 2,048 its 1,064-token reach takes 2.
     /// claude-274: a scoring forward holds the positions of 16 windows of 192, so 16 windows at
     /// 192 as before, and fewer at longer windows.
     #[test]
@@ -15269,6 +15268,9 @@ mod tests {
         assert_eq!(windows_per_forward(4096), 1, "never fewer than 1");
     }
 
+    /// claude-274: the batched decode's budget stays `SHEET_EVAL_BATCH` windows of 192 positions,
+    /// and a group's reach is capped by the model's own window. At 192 a 1,000-token prompt group
+    /// reaches the 192 window, 16 a batch, as before; at 2,048 its 1,064-token reach takes 2.
     #[test]
     fn exact_length_batches_cap_the_reach_at_the_model_s_window() {
         let prompts: Vec<Vec<u32>> = (0..40).map(|seed| vec![seed; 1000]).collect();
