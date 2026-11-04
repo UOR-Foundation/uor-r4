@@ -1,8 +1,8 @@
 # CPU reply termination diagnostic
 
-**Status:** PENDING NON-AUTHOR FIT
+**Status:** FIT
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question
 
@@ -133,8 +133,19 @@ nondeterministic classification or any post-observation tuning.
 
 ## TEST FITNESS
 
-Author self-check only. Eleven focused reply tests and the writer diagnostic test
-pass. No non-author review has been recorded, so public compute is not
-authorized.
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-reply-termination-2026-11-04.md
+head: 4f25240d9d3ba9e30bc24709b8ea04cfba835aa8
+reviewer: Codex fresh-context non-author review
+note: bounded two-seed D84 CPU termination diagnostic; four query-movement arms;
+114 prompts and 16 generated decisions per prompt; pinned deepseek-109 trained
+hashes and deepseek-110 reply digests; writer diagnosis records BOS admission,
+admitted-candidate rank, top-8/top-1 status and exact L1 margins; mutually
+exclusive NeverAdmitted, AdmittedNotTop1, Top1Suppressed, AllChosenBos,
+NoDecisions and Mixed classifications are implemented and tested; 30-minute
+stop and seed-1 repeat registered
+date: 2026-11-04
 
-TEST FITNESS: PENDING
+This FIT clears only the registered configuration at this exact head. Any change
+to source, hashes, selection, arms, cap, controls or classification rules
+requires re-review.
