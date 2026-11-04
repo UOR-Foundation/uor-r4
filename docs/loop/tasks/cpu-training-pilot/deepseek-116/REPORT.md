@@ -1,7 +1,8 @@
-# REPORT: cpu-training-pilot, deepseek-115 (geometric termination-point gate)
+# REPORT: cpu-training-pilot, deepseek-116 (geometric termination-point gate)
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
-(#3506). Active order: [deepseek-115](ORDER.md); preceding:
+(#3506). Active order: [deepseek-116](ORDER.md); preceding:
+[deepseek-115](../deepseek-115/ORDER.md) and
 [deepseek-114](../deepseek-114/ORDER.md). Prep:
 [termination gate](../../../harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md).
 Base: `ed5f0d6b2`.
@@ -26,6 +27,10 @@ Base: `ed5f0d6b2`.
 - **No arm completed an exact reference.** Full-panel and 104-row reachable
   exact counts remained zero for no-gate, trained gate and random gate on both
   seeds. A BOS stop alone was not sufficient to reproduce reply content.
+- **The first exact-head review caught a future success-accounting bug.** The
+  comparator would have accepted an all-premature BOS gain because it used raw
+  BOS completion. Deepseek-116 changes success to non-premature BOS completion
+  and adds a finite regression; it does not change the observed negative.
 
 ## What changed
 
@@ -40,6 +45,8 @@ The termination mechanism adds and tests:
 - an equal-size random nonterminal-point control using the same radius;
 - direct decoder-BOS naming only while a generated query is inside the gate;
 - corpus-EOS reference normalization with legacy BOS compatibility;
+- candidate success based only on `bos_complete - premature_stop`, with
+  underflow refused and raw BOS/premature counts retained in the report;
 - `premature_stop`, gate diagnostics, hashes and per-row complete-reply
   readings in `cpu-memory-panel-driver`;
 - a `/2` report schema and required deepseek-110 no-gate digest pin.
@@ -48,9 +55,10 @@ No trainable float parameter, dense matrix operation, softmax or squashing
 function was added. Gate lookup is exact integer L1 over training-derived Q12
 points.
 
-The branch changes seven tracked files in total, including the two ORDERS and
-the prep sheet. Source plus prep before this REPORT was 944 added and 22 removed
-lines against `ed5f0d6b2`; the roadmap item does not state a size estimate.
+The code change spans three files, `+653/-22` lines against `ed5f0d6b2`,
+including the regression tests. The unit also adds three ORDERS, the prep
+sheet, final REPORT/evidence, one notebook row and one roadmap update. The
+roadmap item does not state a size estimate.
 
 ## Measurements
 
@@ -80,10 +88,10 @@ terminal/nonterminal collisions were found.
 
 Both served-query audits retained zero mismatches over **4,333 decisions,
 1,109,248 Q12 coordinates and 34,664 kept cells** per seed. Walls were
-**38.689/38.461 s** and peak RSS was **391,060/390,560 KiB**. The fresh seed-1
+**41.089/40.903 s** and peak RSS was **389,892/391,248 KiB**. The fresh seed-1
 repeat matched the full report after removing timing and RSS fields, with
 normalized report SHA-256
-`174f88c546bd61d8a9f45deed57eb3b7e25cc9743b1057f385b9997c04fe8ce0`.
+`4fb05455ce88ab4ff009de793729f2df6fc6b545e3347c0e1f5a650bef934de4`.
 
 The detailed record is [comparison.json](evidence/comparison.json);
 [SHA256SUMS](evidence/SHA256SUMS) binds the release binary, raw reports and
@@ -107,7 +115,7 @@ generated artifacts. The refused deepseek-114 artifacts remain recoverable at
   `951ce09c701fd4783ea4f0b8c0de96e6becd387a`.
 - Both public seeds and the fresh seed-1 repeat ran under the FIT command.
 - `uor-harness check`: **0 errors**, 123 pre-existing warnings.
-- `loop report --check --order .../deepseek-115/ORDER.md`: passed.
+- `loop report --check --order .../deepseek-116/ORDER.md`: passed.
 - `cargo run -p xtask -- roadmap check`: 139 items OK.
 - `cargo run -p xtask -- docs-catalog --check`: 1,175 records, zero missing
   paths.
@@ -128,7 +136,7 @@ The registered point-gate candidate is **negative** on both seeds. A nearest
 training-terminal radius did not recognize any evaluation continuation as a
 stop. The nonterminal control shows that a broad nearest-point rule can fire,
 but without selecting the correct terminal state; its all-premature result
-does not count as progress.
+does not count as progress under the repaired comparison.
 
 This closes the fixed 102-point, single-radius, L1-gate configuration under the
 registered split and cap. It does not reject geometric termination. The next

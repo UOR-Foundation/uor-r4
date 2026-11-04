@@ -4,9 +4,9 @@
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "source": {
-    "source_commit": "951ce09c701fd4783ea4f0b8c0de96e6becd387a",
-    "run_head": "c75b378b85edea5722c71c9989f7a2fc1af75bbc",
-    "binary_sha256": "9f6f425f53e0447d84df9a64817301e11c51104303ddb210426bd1122fd9f345",
+    "source_commit": "8af603b074bed0dc1f0485f0512fb91d3837fd99",
+    "run_head": "c3047975cf0325ca52062e2bf810a66b1001611d",
+    "binary_sha256": "43b19c9696d8d894b9972a74e5b027b1460cae47e68845f439a257101d72e3e3",
     "rust": "1.97.1",
     "host": "AMD Ryzen 9 9950X, 16 cores / 32 threads",
     "os": "Linux 7.0.0-42-generic x86_64"
@@ -90,11 +90,13 @@
           "digest": "0855afbc0bb376a8c2627e7ad0d81c7a6271ca0de6931b75e50f83aa9b8a499d"
         }
       },
+      "trained_vs_no_gate_non_premature_bos_strictly_higher": false,
+      "trained_vs_random_non_premature_bos_strictly_higher": false,
       "trained_vs_no_gate_passes": false,
       "trained_vs_random_passes": false,
-      "wall_elapsed_ms": 38689.322003,
-      "peak_rss_kib": 391060,
-      "raw_report_sha256": "fe6d4c8ae4a90108cbfe0cbc7eb043f51b4238c93106b06454968d169b8c8c8d"
+      "wall_elapsed_ms": 41088.532889,
+      "peak_rss_kib": 389892,
+      "raw_report_sha256": "49b09e26fc9166707b9c4aa40849e1a383876cad33b4215c2378b89a90bef4a8"
     },
     {
       "seed": 2,
@@ -140,22 +142,24 @@
           "digest": "0855afbc0bb376a8c2627e7ad0d81c7a6271ca0de6931b75e50f83aa9b8a499d"
         }
       },
+      "trained_vs_no_gate_non_premature_bos_strictly_higher": false,
+      "trained_vs_random_non_premature_bos_strictly_higher": false,
       "trained_vs_no_gate_passes": false,
       "trained_vs_random_passes": false,
-      "wall_elapsed_ms": 38461.256564,
-      "peak_rss_kib": 390560,
-      "raw_report_sha256": "f8fcfc8f12940873966613ad3c553181ab18e18d3e9c6d1b9fce765699f9f9e0"
+      "wall_elapsed_ms": 40902.550988,
+      "peak_rss_kib": 391248,
+      "raw_report_sha256": "6eb4b59fd1a923a941f8ff7fccd3acc86987a826d8ee96683957d6c161c9a21a"
     }
   ],
   "repeat": {
     "seed": 1,
     "notiming_report_equal": true,
-    "normalized_report_sha256": "174f88c546bd61d8a9f45deed57eb3b7e25cc9743b1057f385b9997c04fe8ce0",
-    "raw_report_sha256": "3cd476d6fd2262957746531ae20afc73a8c675d1c1d7d2b9001010ab0e0f6e91",
+    "normalized_report_sha256": "4fb05455ce88ab4ff009de793729f2df6fc6b545e3347c0e1f5a650bef934de4",
+    "raw_report_sha256": "f1423c238cdb9e1c3f694c134b6c7a1b59a9f13f924c803393d6e409a71cff35",
     "trained_artifact_sha256": "c856ce21cf46a4be5a0cc02e033d9c7d0cd674bc4ab96a1185a1b9ccf3b88de4",
     "no_gate_digest": "ea95ef96a4adad3b3964912591ae0b9b9dfecf484aaae85cad9cb4dcbc769eec",
-    "wall_elapsed_ms": 38977.316533,
-    "peak_rss_kib": 392320
+    "wall_elapsed_ms": 40700.290853,
+    "peak_rss_kib": 388808
   },
   "verdict": {
     "trained_gate": "negative",
