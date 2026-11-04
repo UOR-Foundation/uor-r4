@@ -35,8 +35,9 @@ Replay deepseek-124 exactly:
 - 193 evaluation documents / 512 evaluation targets at stride 2;
 - the first 4,096 deterministically ordered training rows.
 
-The dose is the merged driver's existing maximum and was chosen from that
-operational bound, not from observing the 128-row outcome.
+The neutral 128-row result motivates asking for a larger dose. This sheet fixes
+4,096 independently as the merged driver's pre-existing maximum before any
+intermediate dose is observed; it is not chosen from a partial-result sweep.
 
 ## Arms
 
@@ -132,9 +133,11 @@ instrument fault.
 
 ## Minimum test power
 
-The fixed panel has 512 held-out rows, above D22's 200-row floor. One public
-artifact is sufficient for this bounded host comparison because the mechanism
-and parity were established on that artifact in deepseek-124.
+The fixed panel has 512 document-disjoint evaluation rows, above D22's 200-row
+count floor. The public DEV panel is not genuinely fresh with respect to the
+base model, so this is bounded development evidence and does not satisfy a
+fresh-transfer bar. One public artifact is sufficient for this host comparison
+because deepseek-124 established the mechanism and parity on it.
 
 ## Cost and stop
 
