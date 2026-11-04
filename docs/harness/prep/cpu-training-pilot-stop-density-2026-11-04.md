@@ -348,7 +348,7 @@ resource mismatch is an instrument fault requiring a new FIT.
 
 TEST FITNESS: PENDING - M2 #2030 offset-conditioned density stop gate:
 docs/harness/prep/cpu-training-pilot-stop-density-2026-11-04.md
-head: c8180c1576970069dcff395889460defad2a2d6c
+head: 7255d015371fbeb780c16b4b38f74899777b8d11
 implementation pin: c8180c1576970069dcff395889460defad2a2d6c
 reviewer: pending
 date: 2026-11-04
