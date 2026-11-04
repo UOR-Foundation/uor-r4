@@ -1,8 +1,8 @@
-# REPORT: cpu-training-pilot, deepseek-116 (geometric termination-point gate)
+# REPORT: cpu-training-pilot, deepseek-117 (geometric termination-point gate)
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
-(#3506). Active order: [deepseek-116](ORDER.md); preceding:
-[deepseek-115](../deepseek-115/ORDER.md) and
+(#3506). Active order: [deepseek-117](ORDER.md); preceding:
+[deepseek-116](../deepseek-116/ORDER.md), [deepseek-115](../deepseek-115/ORDER.md) and
 [deepseek-114](../deepseek-114/ORDER.md). Prep:
 [termination gate](../../../harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md).
 Base: `ed5f0d6b2`.
@@ -111,11 +111,13 @@ generated artifacts. The refused deepseek-114 artifacts remain recoverable at
 - `git diff --check`: passed.
 - Model-free selection reproduced the fixed 16/102/114 split and corrected
   1,212-token census.
-- The repaired prep sheet carries fresh non-author FIT at source head
-  `951ce09c701fd4783ea4f0b8c0de96e6becd387a`.
+- The EOS repair carries fresh non-author FIT at
+  `951ce09c701fd4783ea4f0b8c0de96e6becd387a`; the non-premature accounting
+  repair carries fresh FIT at `8af603b074bed0dc1f0485f0512fb91d3837fd99`.
 - Both public seeds and the fresh seed-1 repeat ran under the FIT command.
-- `uor-harness check`: **0 errors**, 123 pre-existing warnings.
-- `loop report --check --order .../deepseek-116/ORDER.md`: passed.
+- `uor-harness check`: **0 errors**; all remaining findings were pre-existing
+  coordination/state warnings.
+- `loop report --check --order .../deepseek-117/ORDER.md`: passed.
 - `cargo run -p xtask -- roadmap check`: 139 items OK.
 - `cargo run -p xtask -- docs-catalog --check`: 1,175 records, zero missing
   paths.
