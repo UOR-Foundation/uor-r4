@@ -4,10 +4,11 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_termination_cell_gates,
-    derive_termination_point_gates, derive_turn_memory, evaluate_memory_target_replies,
-    evaluate_memory_weight_samples, evaluate_replies, evaluate_replies_memory_off,
-    evaluate_termination_cell_gate_replies, evaluate_termination_diagnostics,
-    evaluate_termination_gate_replies, memory_key_coverage, memory_target_shuffle_audit,
+    derive_termination_orbit_gates, derive_termination_point_gates, derive_turn_memory,
+    evaluate_memory_target_replies, evaluate_memory_weight_samples, evaluate_replies,
+    evaluate_replies_memory_off, evaluate_termination_cell_gate_replies,
+    evaluate_termination_diagnostics, evaluate_termination_gate_replies,
+    evaluate_termination_orbit_gate_replies, memory_key_coverage, memory_target_shuffle_audit,
     normalized_reference, replace_memory_weight_table, shuffle_memory_targets,
     validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer,
     MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable, TimedReplyReading,
@@ -33,6 +34,7 @@ struct Config {
     termination_diagnostic: bool,
     termination_gate: bool,
     termination_cell_gate: bool,
+    termination_orbit_gate: bool,
     expected_artifact_sha256: String,
     expected_tokens_sha256: String,
     expected_mask_sha256: String,
@@ -68,7 +70,8 @@ fn usage() -> String {
      [--expected-trained-sha256 HEX] [--expected-no-gate-reply-sha256 HEX] \
      [--steps N] [--keys N] [--per-key N] [--key-tokens N] \
      [--reply-turn N] [--reply-cap N] [--seed N] [--select-only] [--reference] \
-     [--termination-diagnostic] [--termination-gate|--termination-cell-gate]"
+     [--termination-diagnostic] \
+     [--termination-gate|--termination-cell-gate|--termination-orbit-gate]"
         .to_owned()
 }
 
@@ -97,6 +100,7 @@ fn parse_args() -> Result<Config, String> {
         termination_diagnostic: false,
         termination_gate: false,
         termination_cell_gate: false,
+        termination_orbit_gate: false,
         expected_artifact_sha256: String::new(),
         expected_tokens_sha256: String::new(),
         expected_mask_sha256: String::new(),
@@ -123,6 +127,10 @@ fn parse_args() -> Result<Config, String> {
         }
         if flag == "--termination-cell-gate" {
             config.termination_cell_gate = true;
+            continue;
+        }
+        if flag == "--termination-orbit-gate" {
+            config.termination_orbit_gate = true;
             continue;
         }
         let value = values
@@ -157,7 +165,16 @@ fn parse_args() -> Result<Config, String> {
             return Err(format!("--expected-{name}-sha256 is required"));
         }
     }
-    let gate_requested = config.termination_gate || config.termination_cell_gate;
+    let gate_requested =
+        config.termination_gate || config.termination_cell_gate || config.termination_orbit_gate;
+    let gate_count = [
+        config.termination_gate,
+        config.termination_cell_gate,
+        config.termination_orbit_gate,
+    ]
+    .into_iter()
+    .filter(|selected| *selected)
+    .count();
     if config.steps == 0
         || config.key_count == 0
         || config.per_key == 0
@@ -165,7 +182,7 @@ fn parse_args() -> Result<Config, String> {
         || !(1..=16).contains(&config.reply_turn)
         || config.reply_cap > 64
         || ((config.termination_diagnostic || gate_requested) && config.reply_cap == 0)
-        || (config.termination_gate && config.termination_cell_gate)
+        || gate_count > 1
         || (gate_requested != config.expected_no_gate_reply_sha256.is_some())
     {
         return Err("training and group dimensions must be positive and bounded".to_owned());
@@ -501,7 +518,8 @@ fn run() -> Result<serde_json::Value, String> {
         })
         .collect::<Result<BTreeMap<_, _>, _>>()?
     };
-    let gate_requested = config.termination_gate || config.termination_cell_gate;
+    let gate_requested =
+        config.termination_gate || config.termination_cell_gate || config.termination_orbit_gate;
     let no_gate = if gate_requested {
         let no_gate = complete_replies
             .get("trained")
@@ -601,8 +619,49 @@ fn run() -> Result<serde_json::Value, String> {
             },
         })
     };
+    let termination_orbit_gate = if !config.termination_orbit_gate {
+        serde_json::Value::Null
+    } else {
+        let derivation =
+            derive_termination_orbit_gates(&trained_artifact, &training_samples, true, config.seed)
+                .map_err(|error| error.to_string())?;
+        let no_gate =
+            no_gate.ok_or_else(|| "termination orbit gate lost its no-gate arm".to_owned())?;
+        let trained_gate = evaluate_termination_orbit_gate_replies(
+            &trained_artifact,
+            &evaluation_samples,
+            config.reply_cap,
+            true,
+            &derivation.trained,
+        )
+        .map_err(|error| error.to_string())?;
+        let random_gate = evaluate_termination_orbit_gate_replies(
+            &trained_artifact,
+            &evaluation_samples,
+            config.reply_cap,
+            true,
+            &derivation.random,
+        )
+        .map_err(|error| error.to_string())?;
+        let trained_vs_no_gate = termination_gate_comparison(&trained_gate, no_gate)?;
+        let trained_vs_random = termination_gate_comparison(&trained_gate, &random_gate)?;
+        serde_json::json!({
+            "random_seed": config.seed,
+            "artifact_sha256": trained_sha256,
+            "derivation": derivation,
+            "trained_gate_sha256": termination_gate_sha256(&derivation.trained)?,
+            "random_gate_sha256": termination_gate_sha256(&derivation.random)?,
+            "no_gate": no_gate,
+            "trained_gate": trained_gate,
+            "random_gate": random_gate,
+            "paired": {
+                "trained_vs_no_gate": trained_vs_no_gate,
+                "trained_vs_random": trained_vs_random,
+            },
+        })
+    };
     let report = serde_json::json!({
-        "schema": "uor-r4.cpu-memory-panel-run/3",
+        "schema": "uor-r4.cpu-memory-panel-run/4",
         "substrate": "cpu-development-research",
         "qualification": "gpu-required",
         "inputs": {
@@ -675,6 +734,7 @@ fn run() -> Result<serde_json::Value, String> {
         "termination_diagnostics": termination_diagnostics,
         "termination_gate": termination_gate,
         "termination_cell_gate": termination_cell_gate,
+        "termination_orbit_gate": termination_orbit_gate,
         "target_shuffle_audit": shuffle_audit,
         "reply_cap": config.reply_cap,
         "parity": parity,
