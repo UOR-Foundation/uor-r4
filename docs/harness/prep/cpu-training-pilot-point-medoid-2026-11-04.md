@@ -118,18 +118,22 @@ fresh output roots under
 
 ```sh
 set -euo pipefail
-ROOT=/home/callard/projects/codex-playground/uor-r4
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-point-medoid
+SHARED=/home/callard/projects/codex-playground/uor-r4
 SOURCE_PIN=b17638480e1b2f264b511c0351639e669fb6bc46
-PIPELINE=$ROOT/local/deepseek/point-medoid/2026-11-04-attempt-1
-BUILD=$ROOT/target/deepseek/point-medoid-build-123
-DEV=$ROOT/local/deepseek/public-m1-parity
-DUAL=$ROOT/local/deepseek/public-fbs-dual
-test -z "$(git status --porcelain)"
-git diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
+PIPELINE=$SHARED/local/deepseek/point-medoid/2026-11-04-attempt-1
+BUILD=$SOURCE/target/deepseek/point-medoid-build-123
+DEV=$SHARED/local/deepseek/public-m1-parity
+DUAL=$SHARED/local/deepseek/public-fbs-dual
+test -z "$(git -C "$SOURCE" status --porcelain)"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
-CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
-  -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+(
+  cd "$SOURCE"
+  CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+    -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+)
 BIN="$BUILD/release/cpu-point-transfer-driver"
 BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
 run() {
