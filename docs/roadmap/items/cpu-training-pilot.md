@@ -241,6 +241,28 @@ independent full-table check. This is diagnostic evidence, not a speed or
 capability gain. See
 [deepseek-127](../../loop/tasks/cpu-training-pilot/deepseek-127/REPORT.md).
 
+The next CPU implementation comparison removed six of the ten full-trunk
+imports in exact and shuffled verification. The source table set is moved into
+exact expected-count reconstruction, each exported arm is decoded once, and
+the shuffled expectation still uses a separate fresh source import. Eight
+mirrored runs at one and sixteen workers reduced mean wall time by
+**19.77%/22.28%** and exact-plus-shuffled verification time by
+**49.94%/50.46%**. Every artifact, table, decision, checksum and normalized
+report remained byte-identical, and peak RSS stayed below 1.546 GiB. This is a
+CPU implementation speedup, not a model or capability result. See
+[deepseek-128](../../loop/tasks/cpu-training-pilot/deepseek-128/REPORT.md).
+
+The next CPU implementation step reused the integer model already loaded for
+input validation and the CPU trunk reader already loaded for teacher-forced
+row derivation when evaluating the unchanged arm. Exact and shuffled arms
+continue to reload independently. Eight mirrored runs at one and sixteen
+workers reduced mean wall time by **16.01%/18.36%** and the no-update
+evaluation stage by **92.68%/99.42%**, with every artifact, table, decision,
+checksum and normalized report identical. Peak RSS remained below 1.55 GiB of
+the strict 2-GiB stop. This is CPU implementation performance evidence, not a
+capability result. See
+[deepseek-129](../../loop/tasks/cpu-training-pilot/deepseek-129/REPORT.md).
+
 ## Done when
 
 - The pre-registration exists before compute and names pass, fail and stop outcomes.

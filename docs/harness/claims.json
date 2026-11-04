@@ -342,6 +342,13 @@
     "lab": "deepseek",
     "note": "4096-row exact-vs-shuffled 19-table CPU count training comparison"
   },
+  "deepseek/trunk-eval-reuse": {
+    "branch": "deepseek/trunk-eval-reuse",
+    "claimed_at": "2026-11-04T06:27:06-05:00",
+    "head": "c4b467657",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/trunk-parallel": {
     "branch": "deepseek/trunk-parallel",
     "claimed_at": "2026-11-04T04:07:59-05:00",
