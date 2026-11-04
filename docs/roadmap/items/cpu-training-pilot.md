@@ -218,6 +218,29 @@ one while the shuffled control changed nothing, so the registered comparison
 is negative. This closes the fixed 4,096-row additive dose, not other count
 schedules. See [deepseek-125](../../loop/tasks/cpu-training-pilot/deepseek-125/REPORT.md).
 
+The count driver now uses one explicit local Rayon pool for ordered training-row
+derivation and held-out CPU/integer evaluation. Eight fresh runs in mirrored
+worker order reproduced every deepseek-125 artifact, table, decision and
+checksum exactly while recording a strict positive peak RSS. The best mean
+speedup was **1.065x** at 16 workers, below the pre-registered 1.5x bar; 32
+workers was slightly slower. Flat wall time and roughly one-core process
+utilization suggest the two parallel loops are a small share of total driver
+work; stage timing is required before naming the remaining bottleneck. This is
+a performance/instrument negative, not a model result. See
+[deepseek-126](../../loop/tasks/cpu-training-pilot/deepseek-126/REPORT.md).
+
+The count driver now reports and validates a complete 21-stage profile, failing
+closed on duplicate, missing or extra stages. Four mirrored runs at one and
+sixteen workers reproduced every deepseek-125/126 artifact and non-stage report
+field while accounting for all measured wall time. `exact_verify` was the
+largest stage at both worker counts, at **26.70%/28.27%**, and exact plus
+shuffled verification consumed **45.32%/48.05%** of wall time. Held-out
+evaluation consumed another **32.20%/32.02%**. The measured next target is to
+remove repeated full-trunk decoding from verification without weakening its
+independent full-table check. This is diagnostic evidence, not a speed or
+capability gain. See
+[deepseek-127](../../loop/tasks/cpu-training-pilot/deepseek-127/REPORT.md).
+
 ## Done when
 
 - The pre-registration exists before compute and names pass, fail and stop outcomes.
