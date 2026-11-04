@@ -174,6 +174,16 @@ IMPL_PIN=c6038e6fc3fdc105c69b8bd894efe91c453e2c8e
 MIN_FREE_KIB=31588352
 RUNTIME_PATHS=(.cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party)
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
+seal_pipeline() {
+  test -d "$PIPELINE" || return 0
+  (
+    cd "$PIPELINE"
+    find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
+      sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
+    mv SHA256SUMS.tmp SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 test "$(nproc)" -eq 32
@@ -190,6 +200,7 @@ test ! -e "$PIPELINE"
 test ! -e "$BUILD"
 test ! -e "$CONTROL_BUILD"
 mkdir -p "$PIPELINE"
+trap 'status=$?; trap - EXIT; seal_pipeline || status=$?; exit "$status"' EXIT
 BUILD_STARTED=$(date -u +%s)
 (
   cd "$SOURCE"
@@ -270,11 +281,11 @@ run_preflight() {
   PREFLIGHT_RSS=$(awk -F': ' '/Maximum resident set size/ { print $2 }' \
     "$PIPELINE/seed-$seed.preflight.time.txt")
   test "$PREFLIGHT_RSS" -le 1048576
-  jq -e '.modes.gate_horizon as $h |
+  if ! jq -e '.modes.gate_horizon as $h |
     $h.training as $g |
-    $g.rows >= 1568 and
-    $g.terminal_rows >= 84 and
-    $g.nonterminal_rows >= 1484 and
+    $g.rows == 1568 and
+    $g.terminal_rows == 84 and
+    $g.nonterminal_rows == 1484 and
     $g.terminal_stops >= 26 and
     $g.nonterminal_stops <= $g.nonterminal_stop_limit and
     $g.horizon_abs_error < $h.shuffled_training.horizon_abs_error and
@@ -282,7 +293,14 @@ run_preflight() {
     ($g.gate.rows | length) == $g.rows and
     $h.true_sha256 != $h.shuffled_sha256 and
     $h.predictions_changed > 0' \
-    "$PIPELINE/seed-$seed.preflight.json" >/dev/null
+    "$PIPELINE/seed-$seed.preflight.json" >/dev/null; then
+    jq -n --arg seed "$seed" \
+      --slurpfile preflight "$PIPELINE/seed-$seed.preflight.json" \
+      '{schema:"uor-r4.cpu-content-continuation-preflight-bar-failure/1",
+        seed:$seed, report:$preflight[0]}' \
+      >"$PIPELINE/seed-$seed.preflight-bar-failure.json"
+    return 1
+  fi
 }
 run_preflight 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 run_preflight 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
@@ -332,9 +350,8 @@ done < <(find "$PIPELINE/seed-1" -maxdepth 1 -type f -name '*.json' \
 printf '{"seed_1_passes":%s,"seed_2_passes":%s,"bar_passes":%s,"repeat_passes":%s}\n' \
   "$SEED_1_PASS" "$SEED_2_PASS" "$BAR_PASS" "$REPEAT_PASS" \
   >"$PIPELINE/bar-summary.json"
-(cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
-  sort -z | xargs -0 sha256sum >SHA256SUMS &&
-  sha256sum -c SHA256SUMS --quiet)
+seal_pipeline
+trap - EXIT
 test "$(du -sb "$PIPELINE" | cut -f1)" -le 201326592
 test -z "$(git -C "$SOURCE" status --porcelain -- "${RUNTIME_PATHS[@]}")"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- "${RUNTIME_PATHS[@]}"

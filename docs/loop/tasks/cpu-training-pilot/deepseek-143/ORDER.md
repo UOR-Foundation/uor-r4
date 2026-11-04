@@ -56,7 +56,7 @@ objective over generated rows with within-offset horizon permutation.
 Run `--select-only` on both seeds with `--stop-horizon-neighbors 8`.
 Proceed only if each seed has:
 
-- at least 84 zero-horizon rows and at least 1,484 nonterminal rows;
+- exactly 84 zero-horizon rows, 1,484 nonterminal rows and 1,568 total rows;
 - true leave-one-out terminal recall at least 26/84;
 - true false stops at or below the 1% nonterminal limit;
 - true horizon MAE strictly below the within-offset shuffled control;

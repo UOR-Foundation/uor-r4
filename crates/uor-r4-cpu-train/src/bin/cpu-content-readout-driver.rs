@@ -3,17 +3,18 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, content_continuation_gate_fires, content_mapping_sha256,
-    content_stop_density_gate_fires, content_stop_gate_fires, content_target_mapping,
-    derive_content_continuation_rows, derive_content_readout, derive_content_stop_readout,
-    derive_content_stop_rows, derive_turn_memory, evaluate_content_continuation_gate,
-    evaluate_content_readout, evaluate_content_stop_density_gate, evaluate_content_stop_gate,
-    fit_content_continuation_gate, fit_content_stop_density_gate, fit_content_stop_gate,
-    shuffle_content_continuation_rows, shuffle_content_stop_rows, shuffle_content_targets,
-    validate_corpus_manifest, verify_content_readout_serving, ContentContinuationGate,
-    ContentContinuationRow, ContentPromptReading, ContentReadout, ContentSignatureMode,
-    ContentStopDensityGate, ContentStopGate, ContentStopRow, CpuConversationSample,
-    CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
+    add_turn_memory_uorlut01, content_continuation_gate_fires,
+    content_continuation_gate_prediction, content_mapping_sha256, content_stop_density_gate_fires,
+    content_stop_gate_fires, content_target_mapping, derive_content_continuation_rows,
+    derive_content_readout, derive_content_stop_readout, derive_content_stop_rows,
+    derive_turn_memory, evaluate_content_continuation_gate, evaluate_content_readout,
+    evaluate_content_stop_density_gate, evaluate_content_stop_gate, fit_content_continuation_gate,
+    fit_content_stop_density_gate, fit_content_stop_gate, shuffle_content_continuation_rows,
+    shuffle_content_stop_rows, shuffle_content_targets, validate_corpus_manifest,
+    verify_content_readout_serving, ContentContinuationGate, ContentContinuationRow,
+    ContentPromptReading, ContentReadout, ContentSignatureMode, ContentStopDensityGate,
+    ContentStopGate, ContentStopRow, CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample,
+    CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
 };
 use uor_r4_integer::stack::{
     read_memory_uorlut01, IntegerStackModel, STACK_CONTENT_READOUT_SCHEMA,
@@ -715,9 +716,9 @@ fn run() -> Result<serde_json::Value, String> {
             let rows_match = horizon_training.gate.rows.len() as u64 == horizon_training.rows;
             let horizon_error_better =
                 horizon_training.horizon_abs_error < horizon_shuffled_training.horizon_abs_error;
-            let structural = horizon_training.rows >= 1_568
-                && horizon_training.terminal_rows >= 84
-                && horizon_training.nonterminal_rows >= 1_484
+            let structural = horizon_training.rows == 1_568
+                && horizon_training.terminal_rows == 84
+                && horizon_training.nonterminal_rows == 1_484
                 && horizon_training.terminal_stops >= 26
                 && horizon_training.nonterminal_stops <= horizon_training.nonterminal_stop_limit
                 && horizon_error_better
@@ -1346,13 +1347,13 @@ fn horizon_predictions_changed(
     rows.iter()
         .zip(comparison_rows)
         .try_fold(0u64, |changed, (candidate_row, control_row)| {
-            let left = content_continuation_gate_fires(
+            let left = content_continuation_gate_prediction(
                 candidate,
                 &candidate_row.signature,
                 candidate_row.offset,
             )
             .map_err(|error| error.to_string())?;
-            let right = content_continuation_gate_fires(
+            let right = content_continuation_gate_prediction(
                 control,
                 &control_row.signature,
                 control_row.offset,

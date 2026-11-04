@@ -1064,11 +1064,11 @@ fn continuation_prediction(
     Ok(horizons.get((neighbors - 1) / 2).copied())
 }
 
-fn content_continuation_fires(
+pub fn content_continuation_gate_prediction(
     gate: &ContentContinuationGate,
     signature: &ContentSignature,
     offset: u16,
-) -> Result<bool> {
+) -> Result<Option<i16>> {
     validate_content_continuation_gate(gate)?;
     if signature.len() != gate.signature_bits / 64 {
         return Err(invalid("content continuation query width differs"));
@@ -1080,7 +1080,7 @@ fn content_continuation_fires(
         .map(|row| (content_hamming(signature, &row.signature), row))
         .collect::<Vec<_>>();
     if candidates.len() < gate.neighbors {
-        return Ok(false);
+        return Ok(None);
     }
     candidates.sort_by(|(left_distance, left), (right_distance, right)| {
         left_distance
@@ -1094,7 +1094,7 @@ fn content_continuation_fires(
         .map(|(_, row)| row.remaining)
         .collect::<Vec<_>>();
     horizons.sort_unstable();
-    Ok(horizons[(gate.neighbors - 1) / 2] == 0)
+    Ok(Some(horizons[(gate.neighbors - 1) / 2]))
 }
 
 pub fn content_continuation_gate_fires(
@@ -1102,7 +1102,7 @@ pub fn content_continuation_gate_fires(
     signature: &ContentSignature,
     offset: u16,
 ) -> Result<bool> {
-    content_continuation_fires(gate, signature, offset)
+    Ok(content_continuation_gate_prediction(gate, signature, offset)? == Some(0))
 }
 
 fn validate_content_continuation_gate(gate: &ContentContinuationGate) -> Result<()> {
@@ -1820,7 +1820,7 @@ fn generate_with_content_continuation_gate(
         let signature = pack_content_signature(&current.query_q12, ContentSignatureMode::Code)?;
         let (content_chosen, nearest_distance, ambiguous_nearest, used_readout) =
             select_content_target(readout, &signature, current.token)?;
-        let gate_fired = content_continuation_fires(
+        let gate_fired = content_continuation_gate_fires(
             gate,
             &signature,
             offset.try_into().map_err(|_| {
@@ -2700,6 +2700,14 @@ mod tests {
         assert!(content_continuation_gate_fires(&decoded, &code_signature(0), 4).unwrap());
         assert!(!content_continuation_gate_fires(&decoded, &code_signature(1), 4).unwrap());
         assert!(!content_continuation_gate_fires(&decoded, &code_signature(0), 5).unwrap());
+        let mut malformed_gate = training.gate.clone();
+        malformed_gate.rows[0].signature.pop();
+        assert!(
+            content_continuation_gate_prediction(&malformed_gate, &code_signature(0), 4).is_err()
+        );
+        let mut malformed_rows = rows;
+        malformed_rows[0].signature.pop();
+        assert!(fit_content_continuation_gate(&malformed_rows, 1).is_err());
     }
 
     #[test]
