@@ -47,7 +47,7 @@ The opening key is the first eight prompt tokens. Opening/reply memory is
 derived only from training examples at key window 192 and reply turn 8. Every
 evaluation opening key must miss that exact memory table.
 
-## Training rule
+## Training procedure
 
 Build the existing production raw point rows from training prompts:
 

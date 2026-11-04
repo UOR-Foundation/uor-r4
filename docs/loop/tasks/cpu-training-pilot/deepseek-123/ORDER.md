@@ -1,37 +1,21 @@
 # ORDER: cpu-training-pilot, deepseek-123 (target point medoids)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Base: `5b3b8f361`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `5b3b8f361`.
 
 ## Goal
 
-Run the next materially different training-through-serving comparison after the
-rank-margin, memory-weight and raw point-row experiments. Derive a deterministic
-geometric medoid for each supervised opening target from the same training-only
-point rows, store those medoids in the existing point-key artifact format, and
-evaluate the trained table against point-off and a duplicate-safe shuffled-target
-medoid control on both public model seeds and the fixed unseen-key split.
+Run the next distinct training-through-serving comparison after rank-margin,
+memory-weight and raw point rows. Derive one geometric medoid per supervised
+opening target from training-only point rows, store it in the existing point-key
+format, and evaluate it against point-off and a duplicate-safe shuffled medoid
+on both public seeds and the fixed unseen-key split.
 
 This is D84 CPU development research. It is not GPU qualification, complete-reply
 evidence or a language-capability claim.
 
-## Cancel probe
-
-- `main` is `5b3b8f361`; the public seed artifacts, corpus, mask and manifest are
-  present locally.
-- `cpu-point-transfer-driver` already derives deterministic training-only point
-  rows, attaches opening/reply memory and writes served point artifacts.
-- It currently emits point-off, raw-row nearest, optional raw-row vote and a
-  shuffled-target raw-row control. It has no target-level medoid or matched
-  shuffled-medoid arm.
-- Claude's open #3649 changes only `crates/uor-r4-float-train/**`; this unit does
-  not touch those files.
-
 ## Design
 
-- Preserve all existing driver outputs byte for byte by leaving raw-row artifacts
-  unchanged.
+- Preserve all existing raw-row outputs byte for byte.
 - Group the complete training point rows by supervised target.
 - For each target, select one observed member minimizing the exact sum of L1
   distances to every member of that target group. Break equal total distances by
@@ -48,9 +32,8 @@ evidence or a language-capability claim.
   3. raw-row vote at `k = 8` when the existing run requests it;
   4. target medoid;
   5. shuffled-target medoid.
-- Run the complete served-forward audit for every arm and report opening top-1,
-  opening distance, complete teacher-forced top-1/distance, selected target,
-  point-row count and artifact hashes.
+- Run the complete served-forward audit for every arm and report opening and
+  complete teacher-forced readings, row counts and artifact hashes.
 
 ## Pre-registration
 
@@ -67,6 +50,9 @@ public runs. The primary bar is:
 Raw-row nearest and vote are reported descriptively. Their outcomes do not
 change the medoid bar after the run. A positive is a bounded unseen-key
 geometry result; a negative closes only this medoid construction.
+
+Cancel probe: public inputs are local; the driver has raw rows but no medoid;
+Claude's open #3649 touches only `crates/uor-r4-float-train/**`.
 
 ## Files in scope
 
