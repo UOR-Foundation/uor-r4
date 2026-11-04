@@ -167,13 +167,17 @@ DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
 IMPL_PIN=c8180c1576970069dcff395889460defad2a2d6c
 MIN_FREE_KIB=31588352
-RUNTIME_PATHS=(Cargo.toml Cargo.lock rust-toolchain.toml crates third_party)
+RUNTIME_PATHS=(.cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party)
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
 test "$(nproc)" -eq 32
 test "$(lscpu | awk -F: '/Model name/ { sub(/^[ \t]+/, "", $2); print $2; exit }')" = \
   "AMD Ryzen 9 9950X 16-Core Processor"
+test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN rustc --version)" = \
+  "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+test "$(env -u RUSTUP_TOOLCHAIN cargo --version)" = \
+  "cargo 1.97.1 (c980f4866 2026-06-30)"
 test "$(awk '/MemAvailable/ { print $2 }' /proc/meminfo)" -ge 8388608
 test -z "$(git -C "$SOURCE" status --porcelain -- "${RUNTIME_PATHS[@]}")"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- "${RUNTIME_PATHS[@]}"
@@ -184,8 +188,11 @@ mkdir -p "$PIPELINE"
 BUILD_STARTED=$(date -u +%s)
 (
   cd "$SOURCE"
-  /usr/bin/time -v -o "$PIPELINE/build.time.txt" env CARGO_BUILD_JOBS=16 \
-    CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+  /usr/bin/time -v -o "$PIPELINE/build.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+    -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+    -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+    cargo build --locked --release \
     -p uor-r4-cpu-train --bin cpu-content-readout-driver
 )
 BUILD_SECONDS=$(( $(date -u +%s) - BUILD_STARTED ))
@@ -200,15 +207,24 @@ BIN=$BUILD/release/cpu-content-readout-driver
 sha256sum "$BIN" | sed 's# .*/#  #' >"$PIPELINE/binary.sha256"
 (
   cd "$SOURCE"
-  /usr/bin/time -v -o "$PIPELINE/control-lib.time.txt" env CARGO_BUILD_JOBS=16 \
-    CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo test --locked --release \
+  /usr/bin/time -v -o "$PIPELINE/control-lib.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+    -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+    -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" \
+    timeout 600s cargo test --locked --release \
     -p uor-r4-cpu-train --lib >"$PIPELINE/control-lib.txt"
-  /usr/bin/time -v -o "$PIPELINE/control-bin.time.txt" env CARGO_BUILD_JOBS=16 \
-    CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo test --locked --release \
+  /usr/bin/time -v -o "$PIPELINE/control-bin.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+    -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+    -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" \
+    timeout 600s cargo test --locked --release \
     -p uor-r4-cpu-train --bin cpu-content-readout-driver \
     >"$PIPELINE/control-bin.txt"
-  /usr/bin/time -v -o "$PIPELINE/control-clippy.time.txt" env CARGO_BUILD_JOBS=16 \
-    CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo clippy --locked \
+  /usr/bin/time -v -o "$PIPELINE/control-clippy.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+    -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+    -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" \
+    timeout 600s cargo clippy --locked \
     -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings \
     >"$PIPELINE/control-clippy.txt" 2>&1
 )
@@ -218,7 +234,7 @@ CONTROL_RSS=$(awk -F': ' '/Maximum resident set size/ {
 } END { print max }' "$PIPELINE"/control-*.time.txt)
 test "$CONTROL_BYTES" -le 3221225472
 test "$CONTROL_RSS" -le 4194304
-rustfmt --edition 2021 --check --config skip_children=true \
+env -u RUSTUP_TOOLCHAIN rustfmt --edition 2021 --check --config skip_children=true \
   "$SOURCE/crates/uor-r4-cpu-train/src/content_readout.rs" \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-content-readout-driver.rs" \
   "$SOURCE/crates/uor-r4-cpu-train/src/lib.rs"
@@ -292,25 +308,37 @@ run() {
 run 1 seed-1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd 32
 run 2 seed-2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 32
 run 1 seed-1-repeat a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd 1
-jq -e '.bar.gate_density.passes == true' \
-  "$PIPELINE/seed-1/report.json" >/dev/null
-jq -e '.bar.gate_density.passes == true' \
-  "$PIPELINE/seed-2/report.json" >/dev/null
+SEED_1_PASS=$(jq -r '.bar.gate_density.passes == true' \
+  "$PIPELINE/seed-1/report.json")
+SEED_2_PASS=$(jq -r '.bar.gate_density.passes == true' \
+  "$PIPELINE/seed-2/report.json")
+BAR_PASS=false
+if test "$SEED_1_PASS" = true && test "$SEED_2_PASS" = true; then
+  BAR_PASS=true
+fi
 jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
   "$PIPELINE/seed-1/report.json" >"$PIPELINE/seed-1.normalized.json"
 jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
   "$PIPELINE/seed-1-repeat/report.json" >"$PIPELINE/seed-1-repeat.normalized.json"
-cmp "$PIPELINE/seed-1.normalized.json" "$PIPELINE/seed-1-repeat.normalized.json"
+REPEAT_PASS=true
+cmp "$PIPELINE/seed-1.normalized.json" "$PIPELINE/seed-1-repeat.normalized.json" \
+  || REPEAT_PASS=false
 while IFS= read -r -d '' file; do
-  cmp "$file" "$PIPELINE/seed-1-repeat/${file#"$PIPELINE/seed-1/"}"
+  cmp "$file" "$PIPELINE/seed-1-repeat/${file#"$PIPELINE/seed-1/"}" \
+    || REPEAT_PASS=false
 done < <(find "$PIPELINE/seed-1" -maxdepth 1 -type f -name '*.json' \
   ! -name report.json -print0 | sort -z)
+printf '{"seed_1_passes":%s,"seed_2_passes":%s,"bar_passes":%s,"repeat_passes":%s}\n' \
+  "$SEED_1_PASS" "$SEED_2_PASS" "$BAR_PASS" "$REPEAT_PASS" \
+  >"$PIPELINE/bar-summary.json"
 (cd "$PIPELINE" && find . -type f ! -name SHA256SUMS -print0 |
   sort -z | xargs -0 sha256sum >SHA256SUMS &&
   sha256sum -c SHA256SUMS --quiet)
 test "$(du -sb "$PIPELINE" | cut -f1)" -le 201326592
 test -z "$(git -C "$SOURCE" status --porcelain -- "${RUNTIME_PATHS[@]}")"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- "${RUNTIME_PATHS[@]}"
+test "$BAR_PASS" = true
+test "$REPEAT_PASS" = true
 ```
 
 Any source, input, split, gate, token identity, worker-order, repeat or
