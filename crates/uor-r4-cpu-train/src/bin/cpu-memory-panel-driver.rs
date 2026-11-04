@@ -625,7 +625,7 @@ fn run() -> Result<serde_json::Value, String> {
         let derivation =
             derive_termination_orbit_gates(&trained_artifact, &training_samples, true, config.seed)
                 .map_err(|error| error.to_string())?;
-        if derivation.control_changed_points == 0 {
+        if derivation.control_changed_points == 0 || derivation.control_changed_cells == 0 {
             return Err("termination orbit control changed no class assignment".to_owned());
         }
         let no_gate =
@@ -649,6 +649,9 @@ fn run() -> Result<serde_json::Value, String> {
             &derivation.random,
         )
         .map_err(|error| error.to_string())?;
+        if random_gate.gated_decisions == 0 {
+            return Err("termination orbit control evaluated no gated decision".to_owned());
+        }
         let trained_vs_no_gate = termination_gate_comparison(&trained_gate.reading, no_gate)?;
         let trained_vs_random =
             termination_gate_comparison(&trained_gate.reading, &random_gate.reading)?;

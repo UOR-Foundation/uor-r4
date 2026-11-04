@@ -159,6 +159,7 @@ pub struct TerminationOrbitTraining {
     pub skipped_terminal_only_cells: usize,
     pub skipped_nonterminal_only_cells: usize,
     pub control_changed_points: usize,
+    pub control_changed_cells: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -936,8 +937,12 @@ pub fn derive_termination_orbit_gates(
     let mut trained = BTreeMap::new();
     let mut random = BTreeMap::new();
     let (mut skipped_terminal_only_cells, mut skipped_nonterminal_only_cells) = (0usize, 0usize);
-    let (mut terminal_points, mut nonterminal_points, mut control_changed_points) =
-        (0usize, 0usize, 0usize);
+    let (
+        mut terminal_points,
+        mut nonterminal_points,
+        mut control_changed_points,
+        mut control_changed_cells,
+    ) = (0usize, 0usize, 0usize, 0usize);
     for (cell, (terminal, nonterminal)) in rows {
         if terminal.is_empty() {
             skipped_nonterminal_only_cells += 1;
@@ -954,63 +959,24 @@ pub fn derive_termination_orbit_gates(
             .checked_add(nonterminal.len())
             .ok_or_else(|| invalid("termination orbit nonterminal count overflow"))?;
 
-        let mut points = terminal
-            .iter()
-            .chain(&nonterminal)
-            .cloned()
-            .collect::<Vec<_>>();
-        let mut labels = std::iter::repeat_n(true, terminal.len())
-            .chain(std::iter::repeat_n(false, nonterminal.len()))
-            .collect::<Vec<_>>();
-        let original = labels.clone();
-        let mut state = random_seed
-            .wrapping_add(u64::from(cell))
-            .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-            | 1;
-        for end in (1..labels.len()).rev() {
-            state ^= state >> 12;
-            state ^= state << 25;
-            state ^= state >> 27;
-            let draw = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
-            labels.swap(
-                end,
-                usize::try_from(draw % (end as u64 + 1))
-                    .map_err(|_| invalid("termination orbit control index exceeds usize"))?,
-            );
+        let trained_cell = TerminationOrbitCell {
+            terminal: terminal.clone(),
+            nonterminal: nonterminal.clone(),
+        };
+        let (random_cell, changed_points, changed_class) = permute_termination_orbit_cell(
+            &trained_cell,
+            random_seed.wrapping_add(u64::from(cell)),
+        )?;
+        control_changed_points = control_changed_points
+            .checked_add(changed_points)
+            .ok_or_else(|| invalid("termination orbit changed-point count overflow"))?;
+        if changed_class {
+            control_changed_cells = control_changed_cells
+                .checked_add(1)
+                .ok_or_else(|| invalid("termination orbit changed-cell count overflow"))?;
         }
-        if labels == original {
-            labels.rotate_left(1);
-        }
-        control_changed_points += original
-            .iter()
-            .zip(&labels)
-            .filter(|(before, after)| before != after)
-            .count();
-        trained.insert(
-            cell,
-            TerminationOrbitCell {
-                terminal: terminal.clone(),
-                nonterminal: nonterminal.clone(),
-            },
-        );
-        let (control_terminal, control_nonterminal): (Vec<_>, Vec<_>) = points
-            .drain(..)
-            .zip(labels)
-            .fold((Vec::new(), Vec::new()), |mut groups, (point, terminal)| {
-                if terminal {
-                    groups.0.push(point);
-                } else {
-                    groups.1.push(point);
-                }
-                groups
-            });
-        random.insert(
-            cell,
-            TerminationOrbitCell {
-                terminal: control_terminal,
-                nonterminal: control_nonterminal,
-            },
-        );
+        trained.insert(cell, trained_cell);
+        random.insert(cell, random_cell);
     }
     if trained.is_empty() {
         return Err(invalid(
@@ -1035,7 +1001,93 @@ pub fn derive_termination_orbit_gates(
         skipped_terminal_only_cells,
         skipped_nonterminal_only_cells,
         control_changed_points,
+        control_changed_cells,
     })
+}
+
+fn permute_termination_orbit_cell(
+    cell: &TerminationOrbitCell,
+    seed: u64,
+) -> Result<(TerminationOrbitCell, usize, bool)> {
+    let mut points = cell
+        .terminal
+        .iter()
+        .chain(&cell.nonterminal)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut labels = std::iter::repeat_n(true, cell.terminal.len())
+        .chain(std::iter::repeat_n(false, cell.nonterminal.len()))
+        .collect::<Vec<_>>();
+    if !labels.contains(&true) || !labels.contains(&false) {
+        return Err(invalid(
+            "termination orbit control needs both classes in a gated cell",
+        ));
+    }
+    let original = labels.clone();
+    let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    for end in (1..labels.len()).rev() {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        let draw = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        labels.swap(
+            end,
+            usize::try_from(draw % (end as u64 + 1))
+                .map_err(|_| invalid("termination orbit control index exceeds usize"))?,
+        );
+    }
+    if labels == original {
+        labels.rotate_left(1);
+    }
+    let terminal_set = |labels: &[bool]| {
+        let mut terminal = points
+            .iter()
+            .zip(labels)
+            .filter_map(|(point, &terminal)| terminal.then_some(point.clone()))
+            .collect::<Vec<_>>();
+        terminal.sort_unstable();
+        terminal
+    };
+    let original_terminal = terminal_set(&original);
+    let permuted_terminal = terminal_set(&labels);
+    if permuted_terminal == original_terminal {
+        let switch = (0..points.len()).find_map(|left| {
+            (0..points.len()).find_map(|right| {
+                (labels[left] && !labels[right] && points[left] != points[right])
+                    .then_some((left, right))
+            })
+        });
+        if let Some((left, right)) = switch {
+            labels.swap(left, right);
+        }
+    }
+    let changed_points = original
+        .iter()
+        .zip(&labels)
+        .filter(|(before, after)| before != after)
+        .count();
+    let (terminal, nonterminal): (Vec<_>, Vec<_>) = points.drain(..).zip(labels).fold(
+        (Vec::new(), Vec::new()),
+        |mut groups, (point, terminal)| {
+            if terminal {
+                groups.0.push(point);
+            } else {
+                groups.1.push(point);
+            }
+            groups
+        },
+    );
+    let mut control_terminal = terminal.clone();
+    control_terminal.sort_unstable();
+    let changed_class = original_terminal != control_terminal;
+    Ok((
+        TerminationOrbitCell {
+            terminal,
+            nonterminal,
+        },
+        changed_points,
+        changed_class,
+    ))
 }
 
 pub fn evaluate_termination_orbit_gate_replies(
@@ -1889,6 +1941,25 @@ mod tests {
             POINT_KEY_BOS
         );
         assert_eq!(gated.load(Ordering::Relaxed), 2);
+
+        let malformed = TerminationOrbitGate {
+            signature_len: 31,
+            cells: BTreeMap::from([(
+                cell,
+                TerminationOrbitCell {
+                    terminal: vec![phase.to_vec()],
+                    nonterminal: vec![phase.iter().map(|value| value + 1).collect()],
+                },
+            )]),
+        };
+        assert!(orbit_name_or_writer(
+            &forward,
+            &malformed,
+            &step,
+            &AtomicU64::new(0),
+            &AtomicU64::new(0)
+        )
+        .is_err());
     }
 
     #[test]
@@ -1929,6 +2000,35 @@ mod tests {
             random_all.sort_unstable();
             assert_eq!(trained_all, random_all);
         }
+    }
+
+    #[test]
+    fn termination_orbit_control_changes_effective_class_membership() {
+        let cell = TerminationOrbitCell {
+            terminal: vec![vec![1], vec![2]],
+            nonterminal: vec![vec![3], vec![4]],
+        };
+        let (control, changed_points, changed_class) =
+            permute_termination_orbit_cell(&cell, 1).unwrap();
+        assert!(changed_points > 0);
+        assert!(changed_class);
+        assert_eq!(control.terminal.len(), cell.terminal.len());
+        assert_eq!(control.nonterminal.len(), cell.nonterminal.len());
+        let mut before = cell
+            .terminal
+            .iter()
+            .chain(&cell.nonterminal)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut after = control
+            .terminal
+            .iter()
+            .chain(&control.nonterminal)
+            .cloned()
+            .collect::<Vec<_>>();
+        before.sort_unstable();
+        after.sort_unstable();
+        assert_eq!(before, after);
     }
 
     #[test]
