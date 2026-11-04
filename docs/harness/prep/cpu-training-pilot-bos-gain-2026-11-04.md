@@ -1,6 +1,6 @@
 # Direct final-gain training for reply termination
 
-**Status:** READY FOR FIT REVIEW
+**Status:** FIT
 
 ## Question
 
@@ -260,4 +260,16 @@ fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
-PENDING
+TEST FITNESS: FIT - M2 #2030 direct final-gain BOS training
+sheet: docs/harness/prep/cpu-training-pilot-bos-gain-2026-11-04.md
+head: 39ac7ccf3382c1538e71f3cf72798d3828e6bfea
+implementation pin: c5f9472acd5470547b2b88cc1096172539a4de2b
+reviewer: independent-subagent fbs-fit-3
+note: two-seed D84 screen; final-token EOS labels, cached full-path final-gain
+search, nonterminal safety gates, shuffled-label and equal-move random controls,
+exact CPU/integer parity, fail-closed source/resource/storage gates,
+deterministic seed-1 repeat, fixed 26/103 terminal bar, and
+repeated-key/document-disjoint scope
+date: 2026-11-04
+
+A FIT verdict clears compute for this configuration only (D22).
