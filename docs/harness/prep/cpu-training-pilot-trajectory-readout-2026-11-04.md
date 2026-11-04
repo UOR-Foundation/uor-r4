@@ -365,3 +365,13 @@ note: Trajectory history, target shuffle, exact fallback and distinct
 date: 2026-11-04
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `codex-fresh-context-go-attempt-2`, 2026-11-04. HEAD was
+clean at `ffdb3421782e9fd487941fe201c3f47d8e4adc8e`; implementation pin
+`99a0687f3a4a7cf87cc5bdaff07ce6330d5d3968` matched the runtime tree. The
+five public inputs, host/toolchain/resource limits and absent output roots
+passed. Shell syntax, JSON paths, trajectory history, target shuffle,
+two/three-sigma pairing and readout/fallback accounting were checked
+read-only.
