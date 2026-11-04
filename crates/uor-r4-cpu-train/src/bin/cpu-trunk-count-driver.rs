@@ -12,7 +12,9 @@ use serde_json::json;
 use uor_r4_cpu_train::{
     validate_corpus_manifest, CpuDiscreteTrunkReader, CpuMaskedCorpus, RankMarginSample,
 };
-use uor_r4_discrete::trunk::{import_trunk_d11, TrunkTables, TrunkTrainRow};
+use uor_r4_discrete::trunk::{
+    import_trunk_d11, pack_u32_key, SparseCountTable, TrunkTables, TrunkTrainRow,
+};
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
 const SCHEMA: &str = "uor-r4.cpu-trunk-count-run/1";
@@ -47,6 +49,7 @@ struct DecisionReading {
     top8_mismatches: u64,
     token_mismatches: u64,
     checksum: u64,
+    row_checksums: Vec<u64>,
 }
 
 #[derive(PartialEq, Eq, serde::Serialize)]
@@ -255,12 +258,20 @@ fn run() -> Result<serde_json::Value, String> {
     if exact_artifact != exact_artifact_2 {
         return Err("exact count training is not deterministic".to_owned());
     }
+    if exact_artifact == shuffled_artifact {
+        return Err("exact and shuffled count training produced the same artifact".to_owned());
+    }
 
     let source_semantics = semantics(&artifact)?;
     let exact_semantics = semantics(&exact_artifact)?;
     let shuffled_semantics = semantics(&shuffled_artifact)?;
     if exact_semantics != source_semantics || shuffled_semantics != source_semantics {
         return Err("count training changed a non-count trunk section".to_owned());
+    }
+    if trunk_tables(&exact_artifact)? != expected_count_tables(&artifact, &training)?
+        || trunk_tables(&shuffled_artifact)? != expected_count_tables(&artifact, &shuffled)?
+    {
+        return Err("decoded count tables differ from the independent tally".to_owned());
     }
     let source_tables = table_reading(&artifact)?;
     let exact_tables = table_reading(&exact_artifact)?;
@@ -339,9 +350,9 @@ fn run() -> Result<serde_json::Value, String> {
             "shuffled": reading_json(&shuffled_reading),
         },
         "changed_decisions": {
-            "exact_vs_no_update": exact.checksum != no_update.checksum,
-            "shuffled_vs_no_update": shuffled_reading.checksum != no_update.checksum,
-            "exact_vs_shuffled": exact.checksum != shuffled_reading.checksum,
+            "exact_vs_no_update_rows": changed_rows(&exact, &no_update)?,
+            "shuffled_vs_no_update_rows": changed_rows(&shuffled_reading, &no_update)?,
+            "exact_vs_shuffled_rows": changed_rows(&exact, &shuffled_reading)?,
         },
         "threads": 1,
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
@@ -407,7 +418,7 @@ fn semantics(
 }
 
 fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, String> {
-    let (_, _, _, tables) = import_trunk_d11(artifact).map_err(|error| error.to_string())?;
+    let tables = trunk_tables(artifact)?;
     let mut out = BTreeMap::new();
     out.insert(
         "unigram".to_owned(),
@@ -434,6 +445,99 @@ fn table_reading(artifact: &[u8]) -> Result<BTreeMap<String, TableReading>, Stri
         );
     }
     Ok(out)
+}
+
+fn trunk_tables(artifact: &[u8]) -> Result<TrunkTables, String> {
+    import_trunk_d11(artifact)
+        .map(|(_, _, _, tables)| tables)
+        .map_err(|error| error.to_string())
+}
+
+fn expected_count_tables(artifact: &[u8], rows: &[TrunkTrainRow]) -> Result<TrunkTables, String> {
+    let mut tables = trunk_tables(artifact)?;
+    for row in rows {
+        let target = usize::from(row.target_token);
+        if target >= tables.unigram_counts.len() {
+            return Err("expected count target exceeds vocabulary".to_owned());
+        }
+        tables.unigram_counts[target] = tables.unigram_counts[target]
+            .checked_add(1)
+            .ok_or_else(|| "expected unigram count overflows".to_owned())?;
+        add_expected(
+            &mut tables.read_table,
+            u32::from(row.read_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.rec_table,
+            u32::from(row.rec_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.read_rec_table,
+            pack_u32_key(row.read_code, row.rec_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.rec_shuf_table,
+            u32::from(row.rec_shuf_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.read_rec_shuf_table,
+            pack_u32_key(row.read_code, row.rec_shuf_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.rec_unit_table,
+            u32::from(row.rec_unit_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.read_rec_unit_table,
+            pack_u32_key(row.read_code, row.rec_unit_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.query_table,
+            u32::from(row.query_token),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.query_read_table,
+            pack_u32_key(row.query_token, row.read_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.query_rec_table,
+            pack_u32_key(row.query_token, row.rec_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.query_rec_shuf_table,
+            pack_u32_key(row.query_token, row.rec_shuf_code),
+            row.target_token,
+        );
+        add_expected(
+            &mut tables.query_rec_unit_table,
+            pack_u32_key(row.query_token, row.rec_unit_code),
+            row.target_token,
+        );
+    }
+    let mut best = 0u16;
+    let mut best_count = 0u32;
+    for (token, &count) in tables.unigram_counts.iter().enumerate() {
+        if count > best_count {
+            best = u16::try_from(token).map_err(|_| "expected unigram token exceeds u16")?;
+            best_count = count;
+        }
+    }
+    tables.unigram_best_global = best;
+    Ok(tables)
+}
+
+fn add_expected(table: &mut SparseCountTable, key: u32, token: u16) {
+    table.add(key, token);
 }
 
 fn sparse_tables(
@@ -485,9 +589,13 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
         }
         reading.top8_mismatches += u64::from(decision.top8 != served_top8);
         reading.token_mismatches += u64::from(decision.token != serving.prediction);
+        let mut row_checksum = 0u64;
         for &coordinate in &decision.query {
             reading.checksum = reading
                 .checksum
+                .rotate_left(7)
+                .wrapping_add(coordinate as u32 as u64);
+            row_checksum = row_checksum
                 .rotate_left(7)
                 .wrapping_add(coordinate as u32 as u64);
         }
@@ -496,13 +604,30 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
                 .checksum
                 .rotate_left(7)
                 .wrapping_add(u64::from(token));
+            row_checksum = row_checksum.rotate_left(7).wrapping_add(u64::from(token));
         }
         reading.checksum = reading
             .checksum
             .rotate_left(7)
             .wrapping_add(u64::from(decision.token));
+        row_checksum = row_checksum
+            .rotate_left(7)
+            .wrapping_add(u64::from(decision.token));
+        reading.row_checksums.push(row_checksum);
     }
     Ok(reading)
+}
+
+fn changed_rows(left: &DecisionReading, right: &DecisionReading) -> Result<usize, String> {
+    if left.row_checksums.len() != right.row_checksums.len() {
+        return Err("decision arms have different row counts".to_owned());
+    }
+    Ok(left
+        .row_checksums
+        .iter()
+        .zip(&right.row_checksums)
+        .filter(|(left, right)| left != right)
+        .count())
 }
 
 fn reading_json(reading: &DecisionReading) -> serde_json::Value {

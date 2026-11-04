@@ -4401,6 +4401,35 @@ mod tests {
     }
 
     #[test]
+    fn cpu_trunk_count_training_keeps_the_smaller_unigram_on_a_tie() {
+        let mut tables = TrunkTables::build(&[TrunkTrainRow {
+            read_code: 3,
+            rec_code: 4,
+            rec_shuf_code: 5,
+            rec_unit_code: 6,
+            query_token: 7,
+            target_token: 8,
+        }])
+        .unwrap();
+        assert_eq!(tables.unigram_best_global, 8);
+        add_trunk_count_row(
+            &mut tables,
+            &TrunkTrainRow {
+                read_code: 9,
+                rec_code: 10,
+                rec_shuf_code: 11,
+                rec_unit_code: 12,
+                query_token: 13,
+                target_token: 7,
+            },
+        )
+        .unwrap();
+        assert_eq!(tables.unigram_counts[7], 1);
+        assert_eq!(tables.unigram_counts[8], 1);
+        assert_eq!(tables.unigram_best_global, 7);
+    }
+
+    #[test]
     fn cpu_trunk_refuses_shape_table_and_recurrence_corruption() {
         let artifact = synthetic_trunk_artifact();
         for cut in [artifact.len() - 1, artifact.len() / 2, 15] {
