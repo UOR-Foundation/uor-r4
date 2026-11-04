@@ -1,6 +1,6 @@
 # Public 19-table CPU count training
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -174,4 +174,20 @@ useful chat or GPU-qualified training.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 public-19-table-count-training
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-count-2026-11-04.md`
+head: `3baa15318af8b9e9fab855ab1eea5ff0fc54b02c`
+implementation pin: `1ca202ef217918d4c8444499ebaabc3a91e1878a`
+reviewer: deepseek fresh-context non-author subagent
+note: attempts 1 and 2 excluded as resource stops above the 2-GiB cap; fresh
+attempt-3 roots; streaming reader/artifact phases; exact CPU row derivation,
+independent full decoded table counts, checked bounds, smaller-id unigram tie,
+deterministic non-identity shuffled targets, semantic preservation, 128/512
+document-disjoint rows, exact CPU/serving parity, binary/output checksums,
+600-second/2-GiB bounds, storage bound and deterministic repeat
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone
+before compute.

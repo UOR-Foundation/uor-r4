@@ -44,6 +44,10 @@ artifact before constructing the other, and reloads each artifact only for its
 own verification/evaluation phase. Attempt 3 uses new roots and requires a new
 FIT.
 
+The fourth review returned FIT at docs head
+`3baa15318af8b9e9fab855ab1eea5ff0fc54b02c`, bound to source
+`1ca202ef217918d4c8444499ebaabc3a91e1878a`.
+
 ## What changed
 
 Implementation will add exact CPU derivation of trunk training rows and checked
