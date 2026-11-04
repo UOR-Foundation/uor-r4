@@ -5,6 +5,7 @@
 //! useful-chat measurement.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rayon::prelude::*;
 use uor_r4_integer::stack::{read_memory_uorlut01, reply_stop, ReplyEnd, POINT_KEY_BOS};
@@ -158,6 +159,14 @@ pub struct TerminationOrbitTraining {
     pub skipped_terminal_only_cells: usize,
     pub skipped_nonterminal_only_cells: usize,
     pub control_changed_points: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TerminationOrbitReplyReading {
+    pub reading: TimedReplyReading,
+    pub gated_decisions: u64,
+    pub ungated_decisions: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1032,9 +1041,24 @@ pub fn evaluate_termination_orbit_gate_replies(
     cap: usize,
     memory_enabled: bool,
     gate: &TerminationOrbitGate,
-) -> Result<TimedReplyReading> {
-    evaluate_generated(artifact, samples, cap, |prompt, cap| {
-        generate_termination_orbit_gate_reply(artifact, prompt, cap, memory_enabled, gate)
+) -> Result<TerminationOrbitReplyReading> {
+    let gated = AtomicU64::new(0);
+    let ungated = AtomicU64::new(0);
+    let reading = evaluate_generated(artifact, samples, cap, |prompt, cap| {
+        generate_termination_orbit_gate_reply(
+            artifact,
+            prompt,
+            cap,
+            memory_enabled,
+            gate,
+            &gated,
+            &ungated,
+        )
+    })?;
+    Ok(TerminationOrbitReplyReading {
+        reading,
+        gated_decisions: gated.load(Ordering::Relaxed),
+        ungated_decisions: ungated.load(Ordering::Relaxed),
     })
 }
 
@@ -1044,6 +1068,8 @@ fn generate_termination_orbit_gate_reply(
     cap: usize,
     memory_enabled: bool,
     gate: &TerminationOrbitGate,
+    gated: &AtomicU64,
+    ungated: &AtomicU64,
 ) -> Result<GeneratedReply> {
     let mut forward = CpuFbsForward::from_artifact(artifact)
         .map_err(|error| invalid(format!("termination orbit gate forward: {error}")))?;
@@ -1065,7 +1091,7 @@ fn generate_termination_orbit_gate_reply(
             .step(token, CpuFbsHead::Writer)
             .map_err(|error| invalid(format!("termination orbit gate prompt step: {error}")))?;
         if index + 1 == prompt.len() {
-            next = Some(orbit_name_or_writer(&forward, gate, &step)?);
+            next = Some(orbit_name_or_writer(&forward, gate, &step, gated, ungated)?);
         }
     }
     let mut next = next.ok_or_else(|| invalid("termination orbit gate prompt is empty"))?;
@@ -1088,7 +1114,7 @@ fn generate_termination_orbit_gate_reply(
         let step = forward
             .step(next, CpuFbsHead::Writer)
             .map_err(|error| invalid(format!("termination orbit gate generated step: {error}")))?;
-        next = orbit_name_or_writer(&forward, gate, &step)?;
+        next = orbit_name_or_writer(&forward, gate, &step, gated, ungated)?;
     }
 }
 
@@ -1096,13 +1122,17 @@ fn orbit_name_or_writer(
     forward: &CpuFbsForward,
     gate: &TerminationOrbitGate,
     step: &crate::CpuFbsStep,
+    gated: &AtomicU64,
+    ungated: &AtomicU64,
 ) -> Result<u32> {
     let (cell, phase) = forward
         .writer_query_orbit(&step.query_q12)
         .map_err(|error| invalid(format!("termination orbit gate cell: {error}")))?;
     let Some(rows) = gate.cells.get(&cell) else {
+        ungated.fetch_add(1, Ordering::Relaxed);
         return Ok(step.token);
     };
+    gated.fetch_add(1, Ordering::Relaxed);
     if phase.len() != gate.signature_len
         || rows
             .terminal
@@ -1832,7 +1862,14 @@ mod tests {
                 },
             )]),
         };
-        assert_eq!(orbit_name_or_writer(&forward, &tied, &step).unwrap(), 7);
+        let gated = AtomicU64::new(0);
+        let ungated = AtomicU64::new(0);
+        assert_eq!(
+            orbit_name_or_writer(&forward, &tied, &step, &gated, &ungated).unwrap(),
+            7
+        );
+        assert_eq!(gated.load(Ordering::Relaxed), 1);
+        assert_eq!(ungated.load(Ordering::Relaxed), 0);
 
         let separated = TerminationOrbitGate {
             signature_len: 32,
@@ -1845,9 +1882,10 @@ mod tests {
             )]),
         };
         assert_eq!(
-            orbit_name_or_writer(&forward, &separated, &step).unwrap(),
+            orbit_name_or_writer(&forward, &separated, &step, &gated, &ungated).unwrap(),
             POINT_KEY_BOS
         );
+        assert_eq!(gated.load(Ordering::Relaxed), 2);
     }
 
     #[test]
@@ -1997,8 +2035,10 @@ mod tests {
         let no_gate = evaluate_replies(&artifact, &samples, 4).unwrap();
         let empty_gate =
             evaluate_termination_orbit_gate_replies(&artifact, &samples, 4, true, &gate).unwrap();
-        assert_eq!(no_gate.reply_sha256, empty_gate.reply_sha256);
-        assert_eq!(no_gate.reading, empty_gate.reading);
+        assert_eq!(no_gate.reply_sha256, empty_gate.reading.reply_sha256);
+        assert_eq!(no_gate.reading, empty_gate.reading.reading);
+        assert_eq!(empty_gate.gated_decisions, 0);
+        assert!(empty_gate.ungated_decisions > 0);
     }
 
     #[test]

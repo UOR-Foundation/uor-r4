@@ -625,6 +625,9 @@ fn run() -> Result<serde_json::Value, String> {
         let derivation =
             derive_termination_orbit_gates(&trained_artifact, &training_samples, true, config.seed)
                 .map_err(|error| error.to_string())?;
+        if derivation.control_changed_points == 0 {
+            return Err("termination orbit control changed no class assignment".to_owned());
+        }
         let no_gate =
             no_gate.ok_or_else(|| "termination orbit gate lost its no-gate arm".to_owned())?;
         let trained_gate = evaluate_termination_orbit_gate_replies(
@@ -635,6 +638,9 @@ fn run() -> Result<serde_json::Value, String> {
             &derivation.trained,
         )
         .map_err(|error| error.to_string())?;
+        if trained_gate.gated_decisions == 0 {
+            return Err("termination orbit gate evaluated no gated decision".to_owned());
+        }
         let random_gate = evaluate_termination_orbit_gate_replies(
             &trained_artifact,
             &evaluation_samples,
@@ -643,8 +649,9 @@ fn run() -> Result<serde_json::Value, String> {
             &derivation.random,
         )
         .map_err(|error| error.to_string())?;
-        let trained_vs_no_gate = termination_gate_comparison(&trained_gate, no_gate)?;
-        let trained_vs_random = termination_gate_comparison(&trained_gate, &random_gate)?;
+        let trained_vs_no_gate = termination_gate_comparison(&trained_gate.reading, no_gate)?;
+        let trained_vs_random =
+            termination_gate_comparison(&trained_gate.reading, &random_gate.reading)?;
         serde_json::json!({
             "random_seed": config.seed,
             "artifact_sha256": trained_sha256,
