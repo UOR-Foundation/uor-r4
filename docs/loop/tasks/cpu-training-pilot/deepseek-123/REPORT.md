@@ -14,7 +14,11 @@ manual ORDER push was refused because its item link was split across lines and
 the required REPORT stub was absent; both were corrected before implementation
 was published.
 
-This is the in-progress record. No public comparison has run yet.
+- The first FIT review returned **NOT_FIT**. The mechanism, controls and bar
+  passed review, but the run recipe did not pin source drift, persist a binary
+  receipt and output checksums, record resource/storage bounds, or name the
+  exact repeat fields. The sheet now adds all four before a second FIT.
+- This is the in-progress record. No public comparison has run yet.
 
 ## What changed
 

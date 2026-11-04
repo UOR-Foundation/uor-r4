@@ -119,10 +119,13 @@ fresh output roots under
 ```sh
 set -euo pipefail
 ROOT=/home/callard/projects/codex-playground/uor-r4
+SOURCE_PIN=b17638480e1b2f264b511c0351639e669fb6bc46
 PIPELINE=$ROOT/local/deepseek/point-medoid/2026-11-04-attempt-1
 BUILD=$ROOT/target/deepseek/point-medoid-build-123
 DEV=$ROOT/local/deepseek/public-m1-parity
 DUAL=$ROOT/local/deepseek/public-fbs-dual
+test -z "$(git status --porcelain)"
+git diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
@@ -144,6 +147,13 @@ run() {
     --key-tokens 8 --reply-turn 8 --neighbor-vote 8 --random-seed 1
   test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
+  printf '%s  cpu-point-transfer-driver\n' "$BIN_SHA" >"$out/binary.sha256"
+  (
+    cd "$out"
+    find . -type f ! -name SHA256SUMS -print0 |
+      sort -z | xargs -0 sha256sum >SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
 }
 run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
 run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
@@ -152,9 +162,11 @@ diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.jso
   <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
 ```
 
-The seed-1 repeat differs only in output root. Any source, binary, argument,
-output-root or deterministic mismatch is an instrument fault requiring a new
-FIT before retry.
+The seed-1 repeat differs only in output root. `jq -S` deletes every timing and
+resource field exposed by this report: top-level `wall_elapsed_ms` and
+`peak_rss_kib`; no nested timing field exists in this schema. Any source,
+binary, argument, output-root or deterministic mismatch is an instrument fault
+requiring a new FIT before retry.
 
 ## Minimum test power
 
@@ -165,10 +177,14 @@ evidence, not a capability bar.
 
 ## Cost and stop
 
-Local workstation only; no GPU, pod or paid API. Expected runtime is under two
-minutes for all three runs at 32 workers and peak RSS below 1 GiB. Stop on input
-drift, nondeterminism, a malformed or unchanged control, memory-key overlap,
-CPU/serving divergence, or evaluation-time tuning.
+Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
+7.0.0-42-generic x86_64. At registration the project filesystem had
+548,723,466,240 bytes free and `/tmp` had 26,339,098,624 bytes free. The fresh
+build allocates below 2.5 GiB temporarily; three roots retain below 64 MiB.
+The required 128 MiB reserve remains intact. Expected runtime is under two
+minutes total at 32 workers and peak RSS below 1 GiB. Stop on input drift,
+nondeterminism, a malformed or unchanged control, memory-key overlap,
+CPU/serving divergence or evaluation-time tuning.
 
 ## Claim boundary
 
