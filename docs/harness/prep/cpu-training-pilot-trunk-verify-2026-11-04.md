@@ -1,6 +1,6 @@
 # Consolidate public 19-table CPU verification
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -19,9 +19,9 @@ paid API.
 
 | Input | Identity |
 |---|---|
-| implementation source | `9717f52ba4b60eab6eae39273dbc7ee7a0239c3c` |
+| implementation source | `fcb7c8c5327800cb372529926ada62e6ba5cfb55` |
 | baseline driver | `e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada` |
-| optimized driver | `c92e2d2a101b64c13751fda099c41f8e88994ebc1627046332b863cdececba04` |
+| optimized driver | `8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -95,12 +95,12 @@ Run only after FIT:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-verify
 DATA=/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-m1-parity
-PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-verify/2026-11-04-attempt-1
+PIPELINE=/home/callard/projects/codex-playground/uor-r4/local/deepseek/trunk-verify/2026-11-04-attempt-2
 OLD_BIN="$SOURCE/target/deepseek/trunk-verify-baseline/release/cpu-trunk-count-driver"
 NEW_BIN="$SOURCE/target/deepseek/trunk-verify-optimized-final/release/cpu-trunk-count-driver"
-SOURCE_PIN=9717f52ba4b60eab6eae39273dbc7ee7a0239c3c
+SOURCE_PIN=fcb7c8c5327800cb372529926ada62e6ba5cfb55
 OLD_SHA=e4dac42e783958a082ebfe0b3cf63ec4f54ea149d73a19764114878559c14ada
-NEW_SHA=c92e2d2a101b64c13751fda099c41f8e88994ebc1627046332b863cdececba04
+NEW_SHA=8517f0c1aeb69a9a0da3137e561233e7d5d83f1f3180b5233b42ec60bb2087df
 EXPECTED_EXACT=db4a672d6af83c4c56b7fbccc9ebc2279cb13fb8719b47829db64c910f7d2bb2
 EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eabcd
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
@@ -246,4 +246,15 @@ finite stages; strict positive RSS below 2,097,152 KiB; 600-second timeout;
 10-percent wall and 20-percent verification bars; instrument-only claim
 date: 2026-11-04
 
+The first executed panel used that reviewed source and its
+`c92e2d2a…ba04` binary. A post-run package-format check then normalized three
+test-only expressions in `fcb7c8c5327800cb372529926ada62e6ba5cfb55`. Rebuilding
+changed the linked binary hash to `8517f0c1…87df`, despite no production-code
+change. The first attempt is retained as a passing diagnostic, but this fixed
+experiment will use a fresh fourth review, fresh binary pin and fresh output
+root so the delivered source, binary and timing record are aligned exactly.
+
 A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+TEST FITNESS: pending fourth fresh-context non-author review after
+formatting-only source revision `fcb7c8c5327800cb372529926ada62e6ba5cfb55`.
