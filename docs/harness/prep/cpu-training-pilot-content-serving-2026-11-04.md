@@ -302,3 +302,11 @@ date: 2026-11-04
 A FIT verdict clears compute for the configuration in that sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
+
+## Pre-run GO
+
+GO - reviewer `codex-exact-go-attempt-4`, 2026-11-04. HEAD was clean at
+`2ae64ba5f`; the implementation pin and public inputs matched, attempt-3
+instrument evidence and its measured charge were preserved, all four
+attempt-4 roots were absent, free storage and RAM cleared the projections,
+and execution remains confined to the local AMD Ryzen 9 9950X CPU path.
