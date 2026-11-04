@@ -413,3 +413,50 @@ fn remote_multibyte_error_body_does_not_panic() {
         .expect_err("401 must remain an error, not a panic");
     assert!(error.contains("401"), "{error}");
 }
+
+#[test]
+fn failed_stdio_tool_listing_releases_session_slot_and_child() {
+    let root = temp_dir("failed-list-cleanup");
+    let fixture = compile_stdio_fixture(&root);
+    let pid_file = root.join("fixture.pid");
+    let manager = McpManager::default();
+    let session = manager
+        .connect_stdio(
+            &fixture,
+            &[
+                "--fail-list".to_string(),
+                format!("--pid-file={}", pid_file.display()),
+            ],
+            &root,
+            limits(),
+        )
+        .expect("connect stdio before listing");
+    let pid = fs::read_to_string(&pid_file).expect("read fixture pid");
+    let error = manager
+        .list_tools(&session)
+        .expect_err("fixture tool listing must fail");
+    assert!(error.contains("listing failed"), "{error}");
+    let session_unavailable = manager
+        .call_tool(&session, "read_file", &json!({}))
+        .is_err();
+    let process_running = Command::new("ps")
+        .args(["-p", pid.trim(), "-o", "stat="])
+        .output()
+        .expect("inspect fixture process")
+        .status
+        .success();
+    assert!(
+        session_unavailable,
+        "failed-list session remained callable through the manager"
+    );
+    assert!(!process_running, "failed-list stdio child is still running");
+    assert!(
+        manager.disconnect(&session).is_err(),
+        "session was not removed"
+    );
+    manager
+        .connect_stdio(&fixture, &[], &root, limits())
+        .expect("failed listing must release the session slot");
+    drop(manager);
+    let _ = fs::remove_dir_all(&root);
+}

@@ -291,53 +291,70 @@ export function mountMcpConnections({ root = globalThis.document, connectRemote:
         }
     }
 
-    async function connectWith(button, action) {
-        button.disabled = true;
-        status.textContent = 'Connecting…';
-        tools.textContent = '';
-        if (session?.disconnect) {
-            try {
-                await session.disconnect();
-            } catch (error) {
-                status.textContent = 'Previous session cleanup failed: ' + String(error?.message || error);
-            }
-            session = null;
-        }
+    let connectionToken = 0;
+    let connecting = false;
+
+    function setConnecting(value) {
+        connecting = value;
+        connectButton.disabled = value;
+        stdio.disabled = value || !native;
+    }
+
+    async function release(candidate) {
+        if (!candidate?.disconnect) return '';
         try {
-            session = await action();
-            if (!session) {
-                status.textContent = 'Connection approval was cancelled; nothing started.';
-                return;
-            }
-            const listed = await session.listTools();
-            status.textContent = `Connected · ${listed.length} tool${listed.length === 1 ? '' : 's'}`;
-            renderTools(listed);
+            await candidate.disconnect();
+            return '';
         } catch (error) {
-            const failedSession = session;
-            session = null;
-            if (failedSession?.disconnect) {
-                try {
-                    await failedSession.disconnect();
-                } catch (cleanupError) {
-                    status.textContent = String(error?.message || error) + ' Cleanup failed: ' + String(cleanupError?.message || cleanupError);
-                    return;
-                }
-            }
-            status.textContent = String(error?.message || error);
-        } finally {
-            button.disabled = false;
+            const message = String(error?.message || error);
+            return message === 'MCP session is already disconnected.' ? '' : message;
         }
     }
 
-    connectButton.addEventListener('click', () => connectWith(connectButton, () => connect({ url: url.value.trim(), credential: credential.value })));
+    async function connectWith(action) {
+        if (connecting) return;
+        setConnecting(true);
+        const token = ++connectionToken;
+        const previous = session;
+        status.textContent = 'Connecting…';
+        let candidate = null;
+        try {
+            candidate = await action();
+            if (token !== connectionToken) { await release(candidate); return; }
+            if (!candidate) {
+                status.textContent = 'Connection approval was cancelled; nothing started.' + (previous ? ' Previous connection is still active.' : '');
+                return;
+            }
+            const listed = await candidate.listTools();
+            if (token !== connectionToken) { await release(candidate); return; }
+            let previousCleanup = '';
+            if (previous && previous !== candidate) previousCleanup = await release(previous);
+            if (token !== connectionToken) { await release(candidate); return; }
+            session = candidate;
+            status.textContent = `Connected · ${listed.length} tool${listed.length === 1 ? '' : 's'}` + (previousCleanup ? ' Previous session cleanup failed: ' + previousCleanup : '');
+            renderTools(listed);
+        } catch (error) {
+            const cleanup = await release(candidate);
+            if (token === connectionToken) {
+                session = previous;
+                status.textContent = String(error?.message || error) + (cleanup ? ' Replacement cleanup failed: ' + cleanup : '');
+                if (!previous) tools.textContent = '';
+            }
+        } finally {
+            if (token === connectionToken) setConnecting(false);
+        }
+    }
+
+    connectButton.addEventListener('click', () => connectWith(() => connect({ url: url.value.trim(), credential: credential.value })));
     if (native) {
-        stdio.addEventListener('click', () => connectWith(stdio, () => {
+        stdio.addEventListener('click', () => connectWith(() => {
             const parsed = stdioArgs.value.trim() ? JSON.parse(stdioArgs.value) : [];
             if (!Array.isArray(parsed)) throw mcpError('MCP stdio arguments must be a JSON array.');
             return connectNativeStdio({ executable: executable.value.trim(), args: parsed, cwd: cwd.value.trim() });
         }));
     }
     globalThis.addEventListener?.('pagehide', () => {
+        connectionToken += 1;
         if (session?.disconnect) session.disconnect().catch(() => {});
     });
     return section;

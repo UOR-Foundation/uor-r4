@@ -62,6 +62,11 @@ case "${1:-}" in
         while IFS= read -r -d '' path; do
             rel=${path#"$dest"/}
             [ "$rel" = 'SHA256SUMS' ] && continue
+            case "$rel" in
+                models/*.uorlut|models/*.tokenizer.json|models/*.uorlut.audit.json)
+                    continue
+                    ;;
+            esac
             if ! list_files | grep -Fxq "$rel"; then
                 printf 'Unexpected runtime file: %s\n' "$path" >&2
                 exit 1

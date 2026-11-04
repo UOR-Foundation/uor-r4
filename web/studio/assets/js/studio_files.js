@@ -109,7 +109,11 @@
     function restoreRecent() {
         try {
             var parsed = JSON.parse(window.localStorage.getItem(RECENT_KEY) || '[]');
-            if (Array.isArray(parsed)) state.recent = parsed.filter(function (item) { return typeof item === 'string'; }).slice(0, 12);
+            if (Array.isArray(parsed)) state.recent = parsed.map(function (item) {
+                if (typeof item === 'string') return { path: item, rootPath: '' };
+                if (item && typeof item.path === 'string') return { path: item.path, rootPath: typeof item.rootPath === 'string' ? item.rootPath : '' };
+                return null;
+            }).filter(Boolean).slice(0, 12);
         } catch (error) { state.recent = []; }
         renderRecent();
     }
@@ -425,6 +429,8 @@
         var mode = state.mode === 'native' ? 'native' : (record.handle ? 'directory' : (state.mode === 'demo' ? 'demo' : (record.file ? 'imported' : 'local')));
         try {
             var content = await readPath(path);
+            existing = tabFor(path, rootPath);
+            if (existing) { activateTab(existing.path, existing.rootPath); return; }
             state.tabs.push({
                 path: path,
                 name: baseName(path),
@@ -434,15 +440,19 @@
                 handle: record.handle || null,
                 rootPath: rootPath
             });
-            addRecent(path);
+            addRecent(path, rootPath);
             activateTab(path, rootPath);
         } catch (error) {
             toast('Could not open ' + path + ': ' + (error && error.message ? error.message : error), 'error');
         }
     }
 
-    function addRecent(path) {
-        state.recent = [path].concat(state.recent.filter(function (item) { return item !== path; })).slice(0, 12);
+    function addRecent(path, rootPath) {
+        rootPath = typeof rootPath === 'string' ? rootPath : state.rootPath;
+        var entry = { path: path, rootPath: rootPath };
+        state.recent = [entry].concat(state.recent.filter(function (item) {
+            return item.path !== path || item.rootPath !== rootPath;
+        })).slice(0, 12);
         persistRecent();
         renderRecent();
     }
@@ -458,13 +468,13 @@
             list.appendChild(empty);
             return;
         }
-        state.recent.forEach(function (path) {
+        state.recent.forEach(function (entry) {
             var item = document.createElement('li');
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'recent-file';
-            button.textContent = path;
-            button.addEventListener('click', function () { if (state.files[path]) openFile(path); });
+            button.textContent = entry.path + (entry.rootPath ? ' — ' + entry.rootPath : '');
+            button.addEventListener('click', function () { if (state.files[entry.path]) openFile(entry.path, entry.rootPath); });
             item.appendChild(button);
             list.appendChild(item);
         });

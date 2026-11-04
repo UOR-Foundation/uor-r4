@@ -1,3 +1,5 @@
+import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,12 @@ REPO = Path(__file__).resolve().parents[2]
 RUNTIME = REPO / 'scripts/studio/runtime-files.sh'
 PREPARE = REPO / 'scripts/studio/prepare-tauri-runtime.sh'
 CONF = REPO / 'src-tauri/tauri.conf.json'
+FIXTURE_SPEC = importlib.util.spec_from_file_location(
+    'served_forward_fixture', Path(__file__).with_name('test_validate_served_forward_receipt.py')
+)
+assert FIXTURE_SPEC is not None and FIXTURE_SPEC.loader is not None
+FIXTURE_MODULE = importlib.util.module_from_spec(FIXTURE_SPEC)
+FIXTURE_SPEC.loader.exec_module(FIXTURE_MODULE)
 
 
 class TauriRuntimeContractTests(unittest.TestCase):
@@ -66,6 +74,47 @@ class TauriRuntimeContractTests(unittest.TestCase):
                 self.assertTrue((dest / required).is_file(), required)
             for forbidden in ['src', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'node_modules', 'README.md', 'assets/js/mcp_client.test.mjs', 'verify_desktop_client.mjs']:
                 self.assertFalse((dest / forbidden).exists(), forbidden)
+
+    def test_pages_stages_trained_models_and_rejects_unexpected_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / 'trained.uorlut'
+            artifact_bytes = (REPO / 'web/studio/pkg/synthetic-stack.lut').read_bytes()
+            artifact.write_bytes(artifact_bytes)
+            artifact_sha = hashlib.sha256(artifact_bytes).hexdigest()
+            tokenizer = root / 'trained.tokenizer.json'
+            tokenizer.write_bytes((REPO / 'web/studio/pkg/tokenizer.json').read_bytes())
+            report = FIXTURE_MODULE.report()
+            report['artifact'] = {'sha256': artifact_sha, 'bytes': len(artifact_bytes)}
+            audit = root / 'trained.audit.json'
+            audit.write_text(json.dumps(report), encoding='utf-8')
+            audit_sha = hashlib.sha256(audit.read_bytes()).hexdigest()
+            manifest = root / 'trained.json'
+            manifest.write_text(json.dumps([{
+                'id': 'trained-fixture',
+                'label': 'Trained manifest fixture',
+                'file': str(artifact),
+                'tokenizer': str(tokenizer),
+                'audit': str(audit),
+                'audit_sha256': audit_sha,
+            }]), encoding='utf-8')
+            dest = root / 'studio'
+            result = subprocess.run([
+                'bash', str(REPO / 'scripts/stage-studio-site.sh'),
+                str(REPO / 'web/studio'), str(dest), '--trained-manifest', str(manifest),
+            ], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for suffix in ['uorlut', 'tokenizer.json', 'uorlut.audit.json']:
+                self.assertTrue((dest / 'models' / f'trained-fixture.{suffix}').is_file(), suffix)
+            catalog = json.loads((dest / 'models.json').read_text(encoding='utf-8'))
+            self.assertIn('trained-fixture', [model['id'] for model in catalog['models']])
+            (dest / 'models/unexpected.txt').write_text('not generated', encoding='utf-8')
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('Unexpected runtime file', rejected.stderr)
 
     def test_prepare_check_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmp:

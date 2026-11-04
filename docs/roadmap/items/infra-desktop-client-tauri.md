@@ -12,7 +12,7 @@ scope: [src-tauri/**, web/**, crates/uor-r4-integer/**, crates/uor-r4-object-sto
 
 ## Why it matters
 
-It is the third product the owner defined on 19 October: the same interface as the web client, running the model natively on your own laptop, with durable memory and offline use. It sits at the serving end of the project, after the model file is built. No trained model exists, so this work runs against the synthetic stand-in. See [the desktop client specification](../../products/desktop-client.md).
+It is the third product the owner defined on 19 October: the same interface as the web client, running the model natively on your own laptop, with durable memory and offline use. It sits at the serving end of the project, after the model file is built. No qualified trained desktop/product bundle exists, so this work runs against the synthetic stand-in. See [the desktop client specification](../../products/desktop-client.md).
 
 ## What is missing
 
@@ -24,7 +24,7 @@ The shared web/Tauri harness now exists and passes host, protocol and packaged-r
 
 ## Done when
 
-A Tauri app sharing the web interface that runs the integer engine natively, offline, with durable memory, matching the written specification. Until a trained model exists, "runs the engine" means the synthetic stand-in.
+A Tauri app sharing the web interface that runs the integer engine natively, offline, with durable memory, matching the written specification. Until a qualified trained desktop/product bundle exists, "runs the engine" means the synthetic stand-in.
 
 ## How to start
 

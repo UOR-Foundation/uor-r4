@@ -1161,6 +1161,11 @@
         window.addEventListener('focus', updateStatus);
     }
 
+    function hashViewSection() {
+        var match = (window.location.hash || '').match(/^#view=(agent|files|editor|models|guide|chat|model|changes|terminal)$/);
+        return match ? sectionForView(match[1]) : null;
+    }
+
     function applyHash() {
         var hash = window.location.hash || '';
         if (hash === '#settings' || hash === '#settings-modal') { window.setTimeout(openSettings, 150); return; }
@@ -1204,13 +1209,8 @@
             window.setTimeout(function () { activateSection('agent'); }, 120);
             return;
         }
-        var match = hash.match(/^#view=(agent|files|editor|models|guide|chat|model)$/);
-        if (match) {
-            var name = match[1];
-            if (name === 'chat') name = 'agent';
-            if (name === 'model') name = 'models';
-            window.setTimeout(function () { activateSection(name); }, 120);
-        }
+        var linkedSection = hashViewSection();
+        if (linkedSection) window.setTimeout(function () { activateSection(linkedSection); }, 120);
     }
 
     function promptUrl() {
@@ -1242,7 +1242,7 @@
         updateStatus();
         renderAttachments();
         wire();
-        activateSection(sectionForView(document.body.dataset.view || 'chat'), { silent: true });
+        activateSection(hashViewSection() || sectionForView(document.body.dataset.view || 'chat'), { silent: true });
         updateStatus();
         watchSessions();
         watchMessages();

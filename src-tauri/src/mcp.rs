@@ -643,10 +643,21 @@ impl McpManager {
     }
 
     pub fn list_tools(&self, id: &str) -> Result<Vec<Value>, String> {
-        match self.get(id)? {
+        let result = match self.get(id)? {
             McpSession::Remote(session) => session.list_tools(),
             McpSession::Stdio(session) => session.list_tools(),
+        };
+        if result.is_err() {
+            let removed = self
+                .sessions
+                .lock()
+                .map_err(|_| "MCP session mutex poisoned".to_string())?
+                .remove(id);
+            if removed.is_some() {
+                self.release_reservation();
+            }
         }
+        result
     }
 
     pub fn call_tool(&self, id: &str, name: &str, args: &Value) -> Result<Value, String> {

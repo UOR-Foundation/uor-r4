@@ -151,3 +151,12 @@ test('HTTPS Pages get native-setup guidance for insecure loopback before any req
     }), /HTTPS Pages cannot call insecure HTTP loopback.*native-runner\.sh|HTTPS Pages cannot call insecure HTTP loopback.*runner-served local Studio/);
     assert.equal(calls, 0);
 });
+
+
+test('non-ASCII tool arguments are limited by UTF-8 bytes before any call request', async () => {
+    const server = await fixture();
+    const session = await connectRemote(config(server));
+    await assert.rejects(session.callTool('read_file', { text: '€'.repeat(22000) }), /64 KiB/);
+    assert.equal(server.requests.filter((request) => request.message?.method === 'tools/call').length, 0);
+    await server.close();
+});

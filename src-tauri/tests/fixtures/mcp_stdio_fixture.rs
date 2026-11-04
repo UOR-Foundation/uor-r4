@@ -25,6 +25,11 @@ fn write_frame(stdout: &mut impl Write, frame: &str, initialize: bool) {
 }
 
 fn main() {
+    let args = std::env::args().collect::<Vec<_>>();
+    if let Some(path) = args.iter().find_map(|arg| arg.strip_prefix("--pid-file=")) {
+        std::fs::write(path, std::process::id().to_string()).expect("write fixture pid");
+    }
+    let fail_list = args.iter().any(|arg| arg == "--fail-list");
     for _ in 0..2048 {
         eprintln!("mcp fixture stderr drain check");
     }
@@ -41,6 +46,11 @@ fn main() {
         }
         if line.contains("\"method\":\"tools/call\"") && line.contains("hang") {
             std::thread::sleep(std::time::Duration::from_secs(60));
+            continue;
+        }
+        if fail_list && line.contains("\"method\":\"tools/list\"") {
+            let frame = format!("{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"message\":\"listing failed\"}}}}");
+            write_frame(&mut stdout, &frame, false);
             continue;
         }
         let result = if line.contains("\"method\":\"initialize\"") {

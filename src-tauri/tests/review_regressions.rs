@@ -280,3 +280,169 @@ fn git_clean_filter_cannot_execute_from_a_granted_repository() {
     assert!(!marker.exists(), "a repository-local clean filter executed");
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn legacy_static_handler_rejects_a_symlinked_parent_outside_studio() {
+    let root = temp_dir("legacy-symlink-parent");
+    let studio = root.join("studio");
+    let outside = root.join("outside");
+    fs::create_dir_all(&studio).expect("create studio root");
+    fs::create_dir_all(&outside).expect("create outside directory");
+    fs::write(studio.join("index.html"), "<html></html>").expect("write index");
+    fs::write(outside.join("secret.txt"), "outside-secret\n").expect("write secret");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, studio.join("linked")).expect("create parent symlink");
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let (status, _, body) = uor_r4_desktop_client::handle_studio_http_request(
+        &mut backend,
+        &studio,
+        "127.0.0.1:1420",
+        "launch-token",
+        "GET",
+        "/linked/secret.txt",
+        &[("Host".to_string(), "127.0.0.1:1420".to_string())],
+        b"",
+    );
+    assert_eq!(status, 403, "a symlinked parent escaped the Studio root");
+    assert_eq!(body, b"Forbidden", "outside content was returned: {body:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn git_filter_guard_covers_included_and_worktree_configuration() {
+    for worktree in [false, true] {
+        let root = temp_dir(if worktree {
+            "git-worktree-filter"
+        } else {
+            "git-included-filter"
+        });
+        let marker = root.join("filter-ran");
+        let hook = root.join("filter.sh");
+        fs::write(
+            &hook,
+            format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+        )
+        .expect("write filter");
+        let mut permissions = fs::metadata(&hook).expect("filter metadata").permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+        fs::set_permissions(&hook, permissions).expect("make filter executable");
+        let run_git = |args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .expect("run fixture git");
+            assert!(
+                output.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        run_git(&["init"]);
+        run_git(&["config", "user.email", "studio@example.invalid"]);
+        run_git(&["config", "user.name", "Studio Fixture"]);
+        fs::write(root.join(".gitattributes"), "tracked.txt filter=attack\n")
+            .expect("write attributes");
+        fs::write(root.join("tracked.txt"), "before\n").expect("write tracked file");
+        run_git(&["add", "tracked.txt", ".gitattributes"]);
+        run_git(&["commit", "-m", "fixture"]);
+        let filter_config = format!("[filter \"attack\"]\n\tclean = {}\n", hook.display());
+        if worktree {
+            run_git(&["config", "extensions.worktreeConfig", "true"]);
+            fs::write(root.join(".git/config.worktree"), filter_config)
+                .expect("write worktree filter");
+        } else {
+            let included = root.join("included-filter-config");
+            fs::write(&included, filter_config).expect("write included filter");
+            run_git(&["config", "include.path", &included.to_string_lossy()]);
+        }
+        fs::write(root.join("tracked.txt"), "after\n").expect("modify tracked file");
+        let _ = fs::remove_file(&marker);
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        backend
+            .native_grant_folder(&root)
+            .expect("grant repository");
+        let error = backend.native_git_diff(&root).expect_err(if worktree {
+            "worktree filter configuration must be refused"
+        } else {
+            "included filter configuration must be refused"
+        });
+        assert!(
+            matches!(
+                error,
+                DesktopClientError::InvalidInput(_) | DesktopClientError::CommandFailed(_)
+            ),
+            "{error:?}"
+        );
+        assert!(
+            !marker.exists(),
+            "included/worktree filter executed (worktree={worktree})"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[test]
+fn git_diff_and_repository_config_writes_are_serialized() {
+    let root = temp_dir("git-filter-race");
+    let marker = root.join("race-filter-ran");
+    let hook = root.join("filter.sh");
+    fs::write(
+        &hook,
+        format!("#!/bin/sh\ntouch '{}'\ncat\n", marker.display()),
+    )
+    .expect("write filter");
+    let mut permissions = fs::metadata(&hook).expect("filter metadata").permissions();
+    std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+    fs::set_permissions(&hook, permissions).expect("make filter executable");
+    let run_git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(&root)
+            .output()
+            .expect("run fixture git");
+        assert!(output.status.success(), "git {args:?} failed");
+    };
+    run_git(&["init"]);
+    run_git(&["config", "user.email", "studio@example.invalid"]);
+    run_git(&["config", "user.name", "Studio Fixture"]);
+    fs::write(root.join(".gitattributes"), "tracked.txt filter=attack\n")
+        .expect("write attributes");
+    fs::write(root.join("tracked.txt"), "before\n").expect("write tracked file");
+    run_git(&["add", "tracked.txt", ".gitattributes"]);
+    run_git(&["commit", "-m", "fixture"]);
+    fs::write(root.join("tracked.txt"), "after\n").expect("modify tracked file");
+    let _ = fs::remove_file(&marker);
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend
+        .native_grant_folder(&root)
+        .expect("grant repository");
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        let writer = scope.spawn(|| {
+            let benign = "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tlogallrefupdates = true\n";
+            let malicious = format!(
+                "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tlogallrefupdates = true\n[filter \"attack\"]\n\tclean = {}\n",
+                hook.display()
+            );
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = backend.native_write_file(&root.join(".git/config"), benign);
+                let _ = backend.native_write_file(&root.join(".git/config"), &malicious);
+                std::thread::yield_now();
+            }
+        });
+        for _ in 0..400 {
+            let _ = backend.native_git_diff(&root);
+            if marker.exists() {
+                break;
+            }
+        }
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        writer.join().expect("join config writer");
+    });
+    assert!(
+        !marker.exists(),
+        "a filter was installed between the guard and real Git diff"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

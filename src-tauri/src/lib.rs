@@ -1106,6 +1106,7 @@ impl DesktopBackend {
             });
         }
         let safe_path = self.verify_granted_write_path(file_path)?;
+        let _git_guard = lock_git_mutation_guard()?;
         fs::write(&safe_path, content).map_err(|e| DesktopClientError::Io(e.to_string()))
     }
 
@@ -1262,6 +1263,13 @@ impl DesktopBackend {
 
 const MAX_PROCESS_OUTPUT_BYTES: usize = 64 * 1024;
 const PROCESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+static GIT_MUTATION_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_git_mutation_guard() -> Result<std::sync::MutexGuard<'static, ()>, DesktopClientError> {
+    GIT_MUTATION_GUARD.lock().map_err(|_| {
+        DesktopClientError::CommandFailed("Git mutation guard is unavailable".to_string())
+    })
+}
 
 struct BoundedProcessOutput {
     stdout: Vec<u8>,
@@ -1423,25 +1431,33 @@ fn hardened_git_command(repo: &Path) -> Command {
 }
 
 fn ensure_no_git_filters(repo: &Path) -> Result<(), DesktopClientError> {
-    let output = run_bounded_process(
-        hardened_git_command(repo).args(["config", "--local", "--get-regexp", "^filter\\."]),
-        PROCESS_TIMEOUT,
-        MAX_PROCESS_OUTPUT_BYTES,
-    )?;
-    if output.status.success() {
-        if !output.stdout.is_empty() {
-            return Err(DesktopClientError::InvalidInput(
-                "Git filter drivers are not allowed in guarded repositories".to_string(),
+    for scope in ["--local", "--worktree"] {
+        let output = run_bounded_process(
+            hardened_git_command(repo).args([
+                "config",
+                scope,
+                "--includes",
+                "--get-regexp",
+                "^filter\\.",
+            ]),
+            PROCESS_TIMEOUT,
+            MAX_PROCESS_OUTPUT_BYTES,
+        )?;
+        if output.status.success() {
+            if !output.stdout.is_empty() {
+                return Err(DesktopClientError::InvalidInput(
+                    "Git filter drivers are not allowed in guarded repositories".to_string(),
+                ));
+            }
+            continue;
+        }
+        if output.status.code() != Some(1) {
+            return Err(DesktopClientError::CommandFailed(
+                "could not verify Git filter configuration".to_string(),
             ));
         }
-        return Ok(());
     }
-    if output.status.code() == Some(1) {
-        return Ok(());
-    }
-    Err(DesktopClientError::CommandFailed(
-        "could not verify Git filter configuration".to_string(),
-    ))
+    Ok(())
 }
 
 fn ensure_git_repository_root(repo: &Path) -> Result<(), DesktopClientError> {
@@ -1468,6 +1484,7 @@ fn ensure_git_repository_root(repo: &Path) -> Result<(), DesktopClientError> {
 }
 
 fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
+    let _git_guard = lock_git_mutation_guard()?;
     ensure_git_repository_root(repo)?;
     let status_out = run_bounded_process(
         hardened_git_command(repo).args([
@@ -1530,6 +1547,7 @@ fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
 }
 
 fn git_diff_at(repo: &Path) -> Result<GitDiffReport, DesktopClientError> {
+    let _git_guard = lock_git_mutation_guard()?;
     ensure_git_repository_root(repo)?;
     let output = run_bounded_process(
         hardened_git_command(repo).args([
@@ -1627,6 +1645,13 @@ pub fn validate_terminal_program(program: &str) -> Result<(), DesktopClientError
 fn run_prepared_terminal_command(
     prepared: &PreparedTerminalCommand,
 ) -> Result<String, DesktopClientError> {
+    let _git_guard = if prepared.program == "git" {
+        let guard = lock_git_mutation_guard()?;
+        ensure_git_repository_root(&prepared.cwd)?;
+        Some(guard)
+    } else {
+        None
+    };
     let mut command = if prepared.program == "git" {
         hardened_git_command(&prepared.cwd)
     } else {
@@ -2358,7 +2383,16 @@ pub fn handle_studio_http_request(
     {
         return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec());
     }
-    let Ok(mut bytes) = fs::read(&candidate) else {
+    let canonical_root = match fs::canonicalize(studio_root) {
+        Ok(root) => root,
+        Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
+    };
+    let canonical_candidate = match fs::canonicalize(&candidate) {
+        Ok(path) if path.starts_with(&canonical_root) => path,
+        Ok(_) => return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec()),
+        Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
+    };
+    let Ok(mut bytes) = fs::read(&canonical_candidate) else {
         return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
     };
     if rel == "index.html" && !expected_token.is_empty() {
@@ -2593,7 +2627,11 @@ pub mod tauri_gui {
         }
         match url.scheme() {
             "tauri" => url.host_str() == Some("localhost") && url.port().is_none(),
-            "http" | "https" => url.host_str() == Some("tauri.localhost") && url.port().is_none(),
+            "http" | "https" => {
+                !cfg!(target_os = "macos")
+                    && url.host_str() == Some("tauri.localhost")
+                    && url.port().is_none()
+            }
             _ => false,
         }
     }
@@ -3250,10 +3288,22 @@ mod sidecar_path_tests {
     use std::path::Path;
 
     #[test]
-    fn navigation_is_confined_to_the_asset_origin() {
+    fn navigation_is_confined_to_the_actual_platform_asset_origin() {
         assert!(studio_navigation_allowed("tauri://localhost"));
-        assert!(studio_navigation_allowed("http://tauri.localhost"));
-        assert!(studio_navigation_allowed("https://tauri.localhost"));
+        #[cfg(target_os = "macos")]
+        {
+            assert!(!studio_navigation_allowed("http://tauri.localhost"));
+            assert!(!studio_navigation_allowed("https://tauri.localhost"));
+            assert!(!studio_navigation_allowed("http://tauri.localhost:80"));
+            assert!(!studio_navigation_allowed("https://tauri.localhost:443"));
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert!(studio_navigation_allowed("http://tauri.localhost"));
+            assert!(studio_navigation_allowed("https://tauri.localhost"));
+            assert!(studio_navigation_allowed("http://tauri.localhost:80"));
+            assert!(studio_navigation_allowed("https://tauri.localhost:443"));
+        }
         assert!(!studio_navigation_allowed("https://example.com"));
         assert!(!studio_navigation_allowed("http://127.0.0.1:8000"));
         assert!(!studio_navigation_allowed("tauri://evil"));
@@ -3261,8 +3311,6 @@ mod sidecar_path_tests {
         assert!(!studio_navigation_allowed("http://tauri.localhost:8000"));
         assert!(!studio_navigation_allowed("https://tauri.localhost:444"));
         assert!(!studio_navigation_allowed("https://user@tauri.localhost"));
-        assert!(studio_navigation_allowed("http://tauri.localhost:80"));
-        assert!(studio_navigation_allowed("https://tauri.localhost:443"));
         assert!(!studio_navigation_allowed("file:///tmp/private.html"));
     }
 
