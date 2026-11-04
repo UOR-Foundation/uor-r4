@@ -60,6 +60,29 @@ describe('image file decoding and composer intake', () => {
         expect(isImageFile(new File(['x'], 'x.svg', { type: 'image/svg+xml' }))).toBe(false);
     });
 
+    it('uses up to a 2x2 grid for larger and odd-dimension images', async () => {
+        canvasFixture();
+        vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 512, height: 256, close: vi.fn() }));
+        const large = await readImageFiles([new File([new Uint8Array(4)], 'large.png', { type: 'image/png' })]);
+        expect(large.errors).toEqual([]);
+        expect(large.attachments[0].grid).toEqual({ columns: 2, rows: 2 });
+        canvasFixture(3, 3);
+        vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 3, height: 3, close: vi.fn() }));
+        const odd = await readImageFiles([new File([new Uint8Array(4)], 'odd.png', { type: 'image/png' })]);
+        expect(odd.errors).toEqual([]);
+        expect(odd.attachments[0].grid).toEqual({ columns: 2, rows: 2 });
+    });
+
+    it('rejects huge decoded source dimensions before drawing or canvas allocation', async () => {
+        const { context, canvas } = canvasFixture(1, 1);
+        const bitmap = { width: 10000, height: 10000, close: vi.fn() };
+        vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
+        await expect(decodeImageFile(new File([new Uint8Array(4)], 'huge-dimensions.png', { type: 'image/png' }))).rejects.toThrow('source dimensions');
+        expect(context.drawImage).not.toHaveBeenCalled();
+        expect(canvas.getContext).not.toHaveBeenCalled();
+        expect(bitmap.close).toHaveBeenCalledOnce();
+    });
+
     it('refuses oversized input and revokes fallback object URLs on decode failure', async () => {
         const oversized = await readImageFiles([{ name: 'huge.png', type: 'image/png', size: 4 * 1024 * 1024 + 1 }], { maxFileBytes: 4 * 1024 * 1024 });
         expect(oversized.attachments).toEqual([]);

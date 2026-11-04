@@ -110,6 +110,7 @@ export interface StudioUiApi {
     updateSettings(patch: Partial<StudioSettings>): void;
     updateStatus(): void;
     getAttachments(): Attachment[];
+    getImageRecallCount?(): number;
     addAttachment(entry: Attachment): void;
     removeAttachment(name: string): void;
     clearAttachments(): void;

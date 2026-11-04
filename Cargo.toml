@@ -8,7 +8,6 @@ members = [
     "crates/uor-r4-vision",
     "crates/uor-r4-discrete",
     "crates/uor-r4-integer",
-    "crates/uor-r4-vision",
     "crates/uor-r4-lut",
     "crates/uor-r4-simd",
     "crates/uor-r4-tokenizer",

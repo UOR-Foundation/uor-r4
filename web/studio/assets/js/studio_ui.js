@@ -526,7 +526,7 @@
         var tokenHint = document.getElementById('attachmentTokenHint');
         if (chips) chips.textContent = '';
         if (inspector) inspector.textContent = '';
-        if (bar) bar.hidden = attachments.length === 0;
+        if (bar) bar.hidden = attachments.length === 0 && recalledImages === 0;
         var images = attachments.filter(function (item) { return item.kind === 'image'; });
         var totalChars = attachments.reduce(function (sum, item) { return sum + String(item.content || '').length; }, 0);
         var approxTokens = Math.max(0, Math.round(totalChars / 4));
@@ -565,7 +565,7 @@
         document.dispatchEvent(new CustomEvent('uor-attachments-changed', { detail: { count: attachments.length } }));
     }
     function removeAttachment(name) { attachments = attachments.filter(function (item) { return item.name !== name; }); saveAttachments(); renderAttachments(); }
-    function clearAttachments() { attachments = []; saveAttachments(); renderAttachments(); }
+    function clearAttachments() { attachments = []; recalledImages = 0; saveAttachments(); renderAttachments(); }
     function attachContext() {
         var files = window.__studioFiles;
         if (files && files.activeFile) { var active = files.activeFile(); if (active && active.content) { addAttachment({ name: active.path, content: active.content, source: 'editor' }); return; } }

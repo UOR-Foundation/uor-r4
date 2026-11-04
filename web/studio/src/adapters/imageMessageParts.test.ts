@@ -61,8 +61,15 @@ describe('API image content parts', () => {
         ]);
     });
 
-    it('refuses recalled images whose bytes were not persisted', () => {
+    it('allows text-only sends with recalled metadata and no current images', async () => {
         const apiMessages = factory({ id: 'native-loopback', ephemeral: true }, [], 1);
-        expect(() => apiMessages({ messages: [{ role: 'user', content: 'Hi' }] })).toThrow(/reattach/i);
+        const messages = apiMessages({ messages: [{ role: 'user', content: 'Hi' }] });
+        expect(await messages[0].content).toBe('Hi');
+    });
+
+    it('allows a send after recalled metadata is cleared', async () => {
+        const apiMessages = factory({ id: 'native-loopback', ephemeral: true }, [], 0);
+        const messages = apiMessages({ messages: [{ role: 'user', content: 'Hi' }] });
+        expect(await messages[0].content).toBe('Hi');
     });
 });

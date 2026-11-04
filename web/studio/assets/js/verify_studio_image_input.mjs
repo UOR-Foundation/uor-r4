@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const STUDIO_ROOT = resolve(__dirname, '..', '..');
 const WORKTREE = resolve(STUDIO_ROOT, '..', '..');
 const TOKEN = 'image-flow-token';
-const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGP8z8Dwn4GBgYGJAQoAHxcCAk+Uzr4AAAAASUVORK5CYII=', 'base64');
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==', 'base64');
 
 function assert(value, message) {
     if (!value) throw new Error(message);
@@ -238,7 +238,12 @@ async function main() {
         assert(await evaluate("!document.querySelector('.msg[data-role=assistant]')"), 'file selection sent without explicit Send');
         await captureChatRequests();
         await evaluate("document.querySelector('#btnSend').click(); true");
-        await waitFor("document.querySelector('.msg[data-role=assistant] .msg-body') && document.querySelector('.msg[data-role=assistant] .msg-body').textContent.length > 0", 25000);
+        try {
+            await waitFor("document.querySelector('.msg[data-role=assistant] .msg-body') && document.querySelector('.msg[data-role=assistant] .msg-body').textContent.length > 0", 25000);
+        } catch (error) {
+            const detail = await evaluate("document.querySelector('#chatMessages').textContent");
+            throw new Error(error.message + ' ' + detail);
+        }
         assert(await evaluate(`(() => {
             const body = window.__imageFlowChatBodies[0];
             const content = body && body.messages && body.messages[body.messages.length - 1].content;

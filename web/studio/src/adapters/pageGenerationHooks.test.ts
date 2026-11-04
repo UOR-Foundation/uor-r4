@@ -342,17 +342,20 @@ describe('actual page prediction hooks', () => {
         }
     });
 
-    it('finishes native image preparation errors with correlated request cleanup', async () => {
-        const { app, hooks, conversation } = pageHooks();
+    it('allows text-only sends with recalled metadata and cleans up completion', async () => {
+        const { app, hooks, conversation, apiRequests } = pageHooks();
         app.mode = 'api';
         app.apiConfig = { id: 'native-loopback', ephemeral: true, baseUrl: 'http://127.0.0.1:8765/v1' } as { baseUrl: string };
         const legacy = window as unknown as { __studioUi?: { getAttachments(): Array<Record<string, unknown>>; getImageRecallCount?(): number } };
         legacy.__studioUi = { getAttachments: () => [], getImageRecallCount: () => 1 };
+        conversation.messages.push({ role: 'user', content: 'Hi' });
         try {
             await hooks.sendViaApi('Hi', conversation);
+            expect(apiRequests).toHaveLength(1);
+            expect(conversation.messages.some((message) => message.role === 'error')).toBe(false);
+            apiRequests[0].onDone({ stopped: false });
             expect(app.generating).toBe(false);
             expect(app.activeChatRequestId).toBeNull();
-            expect(conversation.messages.some((message) => message.role === 'error' && String(message.content).toLowerCase().includes('reattach'))).toBe(true);
         } finally {
             delete legacy.__studioUi;
         }

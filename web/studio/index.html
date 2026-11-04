@@ -1520,7 +1520,6 @@
             var recalledImages = window.__studioUi && typeof window.__studioUi.getImageRecallCount === 'function'
                 ? window.__studioUi.getImageRecallCount()
                 : 0;
-            if (recalledImages > 0) throw new Error('Reattach the previous image after reload; image bytes are not persisted.');
             var textAttachments = attachments.filter(function (item) { return item.kind !== 'image'; });
             if (textAttachments.length) {
                 var context = textAttachments.map(function (item) {
