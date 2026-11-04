@@ -33,7 +33,8 @@ unseen-key, complete-reply, fresh-phrasing or GPU qualification evidence.
   document/group splitter;
 - `--steps 32 --seed 1`;
 - cached exact trajectory;
-- 16 Rayon workers per seed, both seeds concurrent.
+- 32 Rayon workers for seed 1 first, then the same for seed 2 if the
+  registered 30-minute total-cost stop allows.
 
 ## Done when
 
