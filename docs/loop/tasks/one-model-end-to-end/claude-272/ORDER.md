@@ -1,81 +1,58 @@
-# ORDER: one-model-end-to-end, claude-272
+# ORDER: one-model-end-to-end, claude-272 (the Hamming read at long windows)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `1325bd064`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `1325bd064`. Draft PR #3644.
 
 ## Goal
 
-The item's done-when reads:
+claude-271 wrote conversations of up to 2,048 tokens. Training and scoring cannot read them yet. The Hamming read's `choose_sorted` (`flock_read_hamming.rs`) builds a `(batch, time, time, head_width)` f32 difference for each head, and then its absolute value as a second tensor of the same size. It also builds the candidate mask in a host loop over `rows × time` entries.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+At width 64, one such tensor is 4.3 GB at 2,048 tokens with the training batch of 4, and about 17 GB with the scoring batch of 16 (shape estimates).
+
+This unit computes the same distances in row chunks under a byte budget, and the same mask on the device. It then times the read on one GPU at 192, 512, 1,024 and 2,048 tokens.
+
+- **Plan step:** Casey's 4 November plan, P2, in its own words: "Run a finite GPU test of the Hamming read's memory and time at 512, 1,024 and 2,048".
+- **What it changes in the model:** the read that training and scoring use at long windows. Its picks stay byte-identical at every size.
+- **No prereg** (§4.5): this is a finite kernel test, not training or evaluation.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. Does `choose_sorted` still build the full difference and the host mask?
+2. Does any open order hold `flock_read_hamming.rs`?
+3. Does candle 0.9.2's CUDA `arg_sort_last_dim` take 2,048 columns? Its launch uses `block_dim = min(ncols_pad, 1024)` with striding threads (`sort.rs:87–93`).
+
+**Result (4 Nov, ~05:45Z, at `1325bd064`). Class: instrument, no cancel.**
+1. **Yes.** The full difference is at `flock_read_hamming.rs:1377`, and the host mask loop at `:1395`.
+2. **No.** No open PR changes `flock_read_hamming.rs`.
+3. **Yes, by reading.**
+   - `candle-core-0.9.2/src/sort.rs:87–93` launches one block per row, with `ncols_pad.min(1024)` threads and `ncols_pad * 4` bytes of shared memory: 8 KB at 2,048.
+   - `candle-kernels-0.9.2/src/sort.cu` strides each thread over the padded columns.
+
+   The GPU test confirms it at 2,048.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
+- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
+- `docs/loop/tasks/one-model-end-to-end/claude-272/**`
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
-- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
-- `crates/uor-r4-training/Cargo.toml`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-training/src/milestone_world_v2.rs`
 
 ## Done when
 
-To fill in.
+1. **Chunked and on the device.**
+   - `choose_sorted` takes query rows in chunks sized to a fixed byte budget, and builds `s >= first && s < t && s < limit` from device comparisons.
+   - A CPU test pins `(order, real)` byte-identical to the unchunked form for:
+     - chunk sizes 1, a non-divisor of `time`, and `time`;
+     - the tie rule on and off;
+     - row limits and `first` of 0 and 1.
+   - **Negative gate:** an off-by-one chunk start fails it.
+2. **The GPU test.** One ignored CUDA test runs on one pod (the smallest RTX 5090, one lease, under an hour). It times the read at 192, 512, 1,024 and 2,048 tokens, at batch 4 and 16 and width 64:
+   - chunked at every size, and the old form where it fits;
+   - with peak memory sampled by `nvidia-smi` during the run.
 
-## Stop and ask if
+   On the same pod, the crate's CUDA library suite passes.
+3. **A REPORT, negatives first,** and one notebook row.
 
-To fill in.
+## Stop and decide
+
+- **Chunked 2,048 too slow to train** (each forward much slower than the trunk's): record the result. The next unit packs sign bits in an nvcc-built kernel (no NVRTC; never a dot product, per §3.3).
+- **Any pick differs from the unchunked form:** this is a bug. Fix it; never loosen the test.
