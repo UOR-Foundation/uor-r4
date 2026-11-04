@@ -16,6 +16,7 @@
   "preparation_review_projection_seconds": 600,
   "build_projection_seconds": 300,
   "controls_evaluation_projection_seconds": 120,
+  "checkpointing_projection_seconds": 0,
   "delivery_projection_seconds": 300,
   "retry_projection_seconds": 0,
   "threads": {

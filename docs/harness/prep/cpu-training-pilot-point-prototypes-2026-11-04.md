@@ -283,6 +283,7 @@ active chain, not on pretending the global model-time ledger exists.
 | builds | two sequential fresh release targets, 16 Cargo jobs each, under 5 GiB combined, peak RSS below 4 GiB per build and under five minutes total |
 | training | none |
 | controls and evaluation | seed 1, seed 2 and a seed-1 cross-build repeat, 32 Rayon workers, under two minutes total, peak RSS below 1 GiB |
+| checkpointing | none; there is no training run |
 | retry | none; an instrument fault requires a new FIT |
 | retained output | three sealed roots below 64 MiB total |
 | rebuildable output | the two fresh target directories remain available for audit and hygiene rather than being deleted |
