@@ -46,7 +46,7 @@ writer treats BOS before any target override.
 ## Steps
 
 1. Build a fresh release `cpu-memory-panel-driver`.
-2. Pass nine focused reply tests, the writer diagnostic test and the full CPU
+2. Pass ten focused reply tests, the writer diagnostic test and the full CPU
    suite before public replay.
 3. Run the exact deepseek-109 training replay with:
 
@@ -89,13 +89,20 @@ Instrument:
 - all diagnostic distances are non-negative and
   `bos_minus_chosen_distance = bos_distance - chosen_distance`.
 
-Classification, in order:
+Partition every arm's steps into mutually exclusive counts:
 
-1. **Never admitted** when `bos_admitted = 0`.
-2. **Admitted but never first** when admitted steps exist and `bos_top1 = 0`.
-3. **Decoder defect** when `bos_top1 > 0` while `chosen_bos = 0`.
-4. **Mixed** when arms or rows require more than one class; report the exact
-   step counts rather than forcing one label.
+```text
+never_admitted       = decisions - bos_admitted
+admitted_not_top1    = bos_admitted - bos_top1
+top1_suppressed      = bos_top1 - chosen_bos
+chosen_bos           = chosen_bos
+```
+
+Declare **Never admitted** only when `never_admitted > 0` and the other three
+counts are zero. Declare **Admitted but never first** only when
+`admitted_not_top1 > 0` and the other three are zero. Declare **Decoder defect**
+only when `top1_suppressed > 0` and the other three are zero. Otherwise report
+**Mixed** with all four exact counts; never force a mixed arm into one label.
 
 ## Minimum test power
 
@@ -118,7 +125,7 @@ nondeterministic classification or any post-observation tuning.
 
 ## TEST FITNESS
 
-Author self-check only. Nine focused reply tests and the writer diagnostic test
+Author self-check only. Ten focused reply tests and the writer diagnostic test
 pass. No non-author review has been recorded, so public compute is not
 authorized.
 

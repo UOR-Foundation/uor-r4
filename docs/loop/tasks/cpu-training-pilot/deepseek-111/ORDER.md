@@ -10,8 +10,9 @@ fixed deepseek-109 artifacts, record at every generated step whether BOS is in
 the writer's admitted cells, its exact L1 distance to the query, its rank among
 admitted writer candidates, and the distance margin to the chosen token.
 
-This is a read-only model diagnostic. It does not train, change serving, or
-claim chat capability.
+This is a read-only model diagnostic with no new training configuration. The
+32-step replay only reconstructs the pinned deepseek-109 artifacts. It does not
+change serving or claim chat capability.
 
 ## Files in scope
 
@@ -28,7 +29,8 @@ No float-training or Claude #3642 file is changed.
 - seed 1 and seed 2 public FBS artifacts;
 - the fixed 16-key / 102-training / 114-evaluation deepseek-109 selection;
 - 32 exact Q24 updates, reproducing the pinned trained artifact hashes;
-- four diagnostic arms: frozen, trained, target-trained and target-shuffled;
+- four query-movement diagnostic arms: frozen, trained, memory-off and
+  trained-memory-off;
 - 16 generated tokens per prompt;
 - 32 Rayon workers;
 - seed 1 first, seed 2 second, under a 30-minute total local CPU stop.

@@ -35,9 +35,9 @@ while preserving the generated reply sequence and digest.
 
 ## Checks run at the head
 
-- Nine focused reply-evaluator tests passed.
+- Ten focused reply-evaluator tests passed.
 - The writer diagnostic test passed.
-- Full CPU release suite: 174 library tests passed, 4 release benchmarks
+- Full CPU release suite: 175 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy and formatting passed.
 - No public model inference was run.

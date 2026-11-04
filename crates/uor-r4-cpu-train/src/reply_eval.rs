@@ -65,6 +65,17 @@ pub struct TerminationStepReading {
     pub bos_minus_chosen_distance: i64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TerminationClass {
+    NoDecisions,
+    AllChosenBos,
+    NeverAdmitted,
+    AdmittedNotTop1,
+    Top1Suppressed,
+    Mixed,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TerminationReading {
@@ -74,9 +85,13 @@ pub struct TerminationReading {
     pub bos_admitted: u64,
     pub bos_top8: u64,
     pub bos_top1: u64,
+    pub never_admitted: u64,
+    pub admitted_not_top1: u64,
+    pub top1_suppressed: u64,
     pub min_bos_rank: Option<usize>,
     pub bos_distance_sum: u64,
     pub chosen_distance_sum: u64,
+    pub classification: Option<TerminationClass>,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -348,6 +363,43 @@ fn summarize_termination(steps: &[TerminationStepReading]) -> Result<Termination
             )
             .ok_or_else(|| invalid("termination chosen distance sum overflows"))?;
     }
+    reading.never_admitted = reading
+        .decisions
+        .checked_sub(reading.bos_admitted)
+        .ok_or_else(|| invalid("termination admitted count exceeds decisions"))?;
+    reading.admitted_not_top1 = reading
+        .bos_admitted
+        .checked_sub(reading.bos_top1)
+        .ok_or_else(|| invalid("termination top-1 count exceeds admitted"))?;
+    reading.top1_suppressed = reading
+        .bos_top1
+        .checked_sub(reading.chosen_bos)
+        .ok_or_else(|| invalid("termination chosen count exceeds top-1"))?;
+    reading.classification = Some(if reading.decisions == 0 {
+        TerminationClass::NoDecisions
+    } else if reading.never_admitted > 0
+        && reading.admitted_not_top1 == 0
+        && reading.top1_suppressed == 0
+        && reading.chosen_bos == 0
+    {
+        TerminationClass::NeverAdmitted
+    } else if reading.never_admitted == 0
+        && reading.admitted_not_top1 > 0
+        && reading.top1_suppressed == 0
+        && reading.chosen_bos == 0
+    {
+        TerminationClass::AdmittedNotTop1
+    } else if reading.never_admitted == 0
+        && reading.admitted_not_top1 == 0
+        && reading.top1_suppressed > 0
+        && reading.chosen_bos == 0
+    {
+        TerminationClass::Top1Suppressed
+    } else if reading.chosen_bos == reading.decisions {
+        TerminationClass::AllChosenBos
+    } else {
+        TerminationClass::Mixed
+    });
     Ok(reading)
 }
 
@@ -866,5 +918,38 @@ mod tests {
                 .bos_rank
                 .is_none_or(|rank| (1..=step.candidate_count).contains(&rank)));
         }
+    }
+
+    #[test]
+    fn termination_classification_partitions_mixed_steps_exactly() {
+        let step =
+            |row, generated_step, bos_admitted, bos_rank, chosen_bos| TerminationStepReading {
+                row,
+                generated_step,
+                generated_token: chosen_bos,
+                writer_token: 0,
+                bos_admitted,
+                bos_rank,
+                bos_top8: bos_rank.is_some_and(|rank| rank <= 8),
+                candidate_count: 8,
+                bos_distance: 10,
+                chosen_distance: 9,
+                bos_minus_chosen_distance: 1,
+            };
+        let reading = summarize_termination(&[
+            step(0, 0, true, Some(1), 7),
+            step(0, 1, true, Some(2), 7),
+            step(1, 0, false, None, 7),
+            step(1, 1, false, None, 7),
+        ])
+        .unwrap();
+        assert_eq!(reading.decisions, 4);
+        assert_eq!(reading.bos_admitted, 2);
+        assert_eq!(reading.bos_top1, 1);
+        assert_eq!(reading.chosen_bos, 0);
+        assert_eq!(reading.never_admitted, 2);
+        assert_eq!(reading.admitted_not_top1, 1);
+        assert_eq!(reading.top1_suppressed, 1);
+        assert_eq!(reading.classification, Some(TerminationClass::Mixed));
     }
 }

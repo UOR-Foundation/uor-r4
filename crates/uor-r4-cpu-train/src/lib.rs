@@ -68,8 +68,8 @@ pub use quant_shadow::{
 pub use reply_eval::{
     evaluate_memory_target_replies, evaluate_replies, evaluate_replies_memory_off,
     evaluate_termination_diagnostics, generate_reply, generate_reply_memory_off, GeneratedReply,
-    ReplyReading, ReplyRowReading, TerminationReading, TerminationStepReading, TimedReplyReading,
-    TimedTerminationReading,
+    ReplyReading, ReplyRowReading, TerminationClass, TerminationReading, TerminationStepReading,
+    TimedReplyReading, TimedTerminationReading,
 };
 pub use served_forward::{
     audit_served_forward, exact_fbs_contract, read_uort_token_slice, ExactFbsContract,
