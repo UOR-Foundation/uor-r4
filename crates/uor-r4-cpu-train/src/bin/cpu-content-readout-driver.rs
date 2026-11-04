@@ -1591,7 +1591,7 @@ mod tests {
                 offset: 4,
             },
             ContentContinuationRow {
-                signature: signature(1),
+                signature: signature(0),
                 remaining: 0,
                 writer_token: 7,
                 offset: 4,
@@ -1603,7 +1603,7 @@ mod tests {
                 offset: 4,
             },
             ContentContinuationRow {
-                signature: signature(101),
+                signature: signature(100),
                 remaining: 1,
                 writer_token: 8,
                 offset: 4,
