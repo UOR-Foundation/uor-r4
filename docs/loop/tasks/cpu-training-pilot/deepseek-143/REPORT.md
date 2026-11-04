@@ -7,7 +7,7 @@ Order: [ORDER.md](ORDER.md). Base: `7dfd96644`.
 ## Status
 
 The ORDER, branch claim, implementation and pre-registration are committed.
-TEST FITNESS, GO, preflight and the public comparison are pending; no
+TEST FITNESS is FIT; GO, preflight and the public comparison are pending. No
 capability claim is made.
 
 ## What did not work
@@ -35,8 +35,8 @@ Focused pre-run checks passed:
 
 - continuation horizon/offset derivation: **6 focused library tests**, including
   the matching prior continuation test;
-- driver tests: **8 passed**, including the continuation terminal-pairing and
-  self-exclusion controls;
+- driver tests: **8 passed**, including continuation terminal pairing and an
+  explicit unique-signature self-exclusion regression;
 - strict scoped Clippy with `-D warnings`;
 - targeted rustfmt.
 
@@ -59,7 +59,7 @@ No system-provided Codex skill applies.
 ## Still open
 
 - Implement the exact-offset continuation-horizon arm and tests.
-- Obtain FIT and fresh GO before the registered preflight.
+- Obtain fresh GO before the registered preflight.
 - Run and classify the bounded comparison.
 
 ## Plain summary

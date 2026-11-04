@@ -1,6 +1,6 @@
 # Generated-state exact-offset continuation horizon
 
-**Status:** FIT PENDING
+**Status:** FIT
 
 ## Question
 
@@ -375,4 +375,11 @@ repeat or resource mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - deepseek-143 exact-offset continuation horizon.
+TEST FITNESS: FIT - M2 #2030 deepseek-143
+sheet: docs/harness/prep/cpu-training-pilot-continuation-horizon-2026-11-04.md
+reviewer: codex-fresh-context-fit-attempt-4
+note: Exact 1,568/84/1,484 counts, failure sealing, raw Option<i16>
+  prediction changes and explicit non-self LOO terminal pairing verified.
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
