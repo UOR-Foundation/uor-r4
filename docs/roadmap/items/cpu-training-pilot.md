@@ -309,9 +309,10 @@ after the native writer and point-key fallback; raw `step` and `step_native`
 remain unchanged. The content driver compared all 1,648 generated decisions on
 each public seed and found zero token or decision mismatches, including
 chosen token, fallback, packed signature, nearest distance and fired state.
-`uor-chat --content-readout` loaded the same files in a real CLI smoke. This
-closes the content-readout serving-integration gap, not completion or useful
-chat: the content arm remains 73/64 and 58/39 with no exact replies. See
+`uor-chat --content-readout` loaded the same files in a real CLI smoke, and
+readout-bound sessions carry the canonical identity in `UR4SESS2`. This closes
+the content-readout serving-integration gap, not completion or useful chat:
+the content arm remains 73/64 and 58/39 with no exact replies. See
 [deepseek-140](../../loop/tasks/cpu-training-pilot/deepseek-140/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes
