@@ -56,14 +56,14 @@
         "random_distance": 4911362319
       },
       "complete_replies": {
-        "frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
-        "trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 14, "distinct": 3, "repeated_4gram": 91},
-        "random": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
-        "memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
-        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26},
-        "target_frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76},
-        "target_trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76},
-        "target_shuffled": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 10, "distinct": 15, "repeated_4gram": 81}
+        "frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26, "generated_tokens": 1824, "generated_tokens_per_second": 24043.124190447645},
+        "trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 14, "distinct": 3, "repeated_4gram": 91, "generated_tokens": 1824, "generated_tokens_per_second": 21846.619531467146},
+        "random": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26, "generated_tokens": 1824, "generated_tokens_per_second": 21540.466458801166},
+        "memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26, "generated_tokens": 1824, "generated_tokens_per_second": 25044.8304524707},
+        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 0, "distinct": 2, "repeated_4gram": 26, "generated_tokens": 1824, "generated_tokens_per_second": 25080.29510102223},
+        "target_frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76, "generated_tokens": 1824, "generated_tokens_per_second": 21168.04015410101},
+        "target_trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 76, "generated_tokens": 1824, "generated_tokens_per_second": 21692.111469814543},
+        "target_shuffled": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 10, "distinct": 15, "repeated_4gram": 81, "generated_tokens": 1824, "generated_tokens_per_second": 25003.341660972263}
       },
       "paired": {
         "trained_vs_frozen": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false},
@@ -97,14 +97,14 @@
         "random_distance": 5072947107
       },
       "complete_replies": {
-        "frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48},
-        "trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48},
-        "random": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48},
-        "memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48},
-        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48},
-        "target_frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 37},
-        "target_trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 37},
-        "target_shuffled": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 10, "distinct": 16, "repeated_4gram": 61}
+        "frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48, "generated_tokens": 1824, "generated_tokens_per_second": 21622.194983999278},
+        "trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48, "generated_tokens": 1824, "generated_tokens_per_second": 24989.64005423903},
+        "random": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48, "generated_tokens": 1824, "generated_tokens_per_second": 22068.49290704845},
+        "memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48, "generated_tokens": 1824, "generated_tokens_per_second": 23361.26669706193},
+        "trained_memory_off": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 4, "distinct": 2, "repeated_4gram": 48, "generated_tokens": 1824, "generated_tokens_per_second": 25000.425925567783},
+        "target_frozen": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 37, "generated_tokens": 1824, "generated_tokens_per_second": 21061.55527045733},
+        "target_trained": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 50, "distinct": 15, "repeated_4gram": 37, "generated_tokens": 1824, "generated_tokens_per_second": 21050.749791584305},
+        "target_shuffled": {"exact": 0, "bos": 0, "cap": 114, "context": 0, "opening": 10, "distinct": 16, "repeated_4gram": 61, "generated_tokens": 1824, "generated_tokens_per_second": 24646.620298410577}
       },
       "paired": {
         "trained_vs_frozen": {"rows": 104, "candidate_only": 0, "control_only": 0, "gain": 0, "threshold": 2, "passes": false},

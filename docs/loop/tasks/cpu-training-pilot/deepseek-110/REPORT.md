@@ -97,6 +97,27 @@ Corrected complete-reply readings:
 | 2 | target-trained | 0 | 0 | 114 | 50 | 15 | 37 |
 | 2 | target-shuffled | 0 | 0 | 114 | 10 | 16 | 61 |
 
+Generated-token totals and aggregate rates:
+
+| Seed | Arm | Tokens | Generated tokens/s |
+|---:|---|---:|---:|
+| 1 | frozen | 1,824 | 24,043.1 |
+| 1 | trained | 1,824 | 21,846.6 |
+| 1 | random | 1,824 | 21,540.5 |
+| 1 | memory-off | 1,824 | 25,044.8 |
+| 1 | trained-memory-off | 1,824 | 25,080.3 |
+| 1 | target-frozen | 1,824 | 21,168.0 |
+| 1 | target-trained | 1,824 | 21,692.1 |
+| 1 | target-shuffled | 1,824 | 25,003.3 |
+| 2 | frozen | 1,824 | 21,622.2 |
+| 2 | trained | 1,824 | 24,989.6 |
+| 2 | random | 1,824 | 22,068.5 |
+| 2 | memory-off | 1,824 | 23,361.3 |
+| 2 | trained-memory-off | 1,824 | 25,000.4 |
+| 2 | target-frozen | 1,824 | 21,061.6 |
+| 2 | target-trained | 1,824 | 21,050.7 |
+| 2 | target-shuffled | 1,824 | 24,646.6 |
+
 Every paired exact-reference comparison covered 104 reachable rows, had
 `b+c=0`, gain 0 against a threshold of 2, and failed the registered margin.
 The five served query-movement arms retained zero mismatches over 4,333
