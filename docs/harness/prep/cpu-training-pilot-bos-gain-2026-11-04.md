@@ -251,4 +251,15 @@ establishes complete replies, fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
-PENDING
+TEST FITNESS: FIT - M2 #2030 direct final-gain BOS training
+sheet: docs/harness/prep/cpu-training-pilot-bos-gain-2026-11-04.md
+head: 2b27e6383ad2c5f059975ab6631348c078f32004
+implementation pin: f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5
+reviewer: independent-subagent fbs-fit-2
+note: two-seed D84 screen; training-only EOS/BOS labels, cached full-path
+final-gain search, nonterminal safety gates, shuffled-label and equal-move
+random controls, exact CPU/integer parity, fail-closed source/resource/storage
+gates, deterministic seed-1 repeat, and fixed 26/103 terminal bar
+date: 2026-11-04
+
+A FIT verdict clears compute for this configuration only (D22).
