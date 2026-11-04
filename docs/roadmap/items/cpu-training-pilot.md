@@ -319,6 +319,50 @@ gap, not completion or useful chat: the content arm remains 73/64 and 58/39
 with no exact replies. See
 [deepseek-140](../../loop/tasks/cpu-training-pilot/deepseek-140/REPORT.md).
 
+The next full-row density gate retained all 1,568 generated training states
+and conditioned terminal/nonterminal neighbour comparisons on the generated
+reply offset. Deterministic leave-one-out fitting selected k=8 and a margin
+under the 1% nonterminal false-stop limit. Seed 1 recalled only 19/84 terminal
+rows against the registered 26/84 floor, with 9/1,484 false stops; its
+class-preserving shuffled control also recalled 19/84, with 11/1,484 false
+stops. The preflight therefore stopped the run before seed 2, free generation
+or the worker-count repeat. This closes the fixed full-row offset-conditioned
+K<=8 density representation and leaves the next termination attempt to a
+continuation objective or a different terminal-state representation. See
+[deepseek-142](../../loop/tasks/cpu-training-pilot/deepseek-142/REPORT.md).
+
+The following continuation-horizon unit changed the objective to signed
+remaining reference length rather than terminal membership. Exact-offset
+Hamming neighbours predicted a lower-median horizon, with k fitted by
+leave-one-out and a within-offset horizon permutation as control. Seed 1
+retained the exact 1,568-row split and recalled 40/84 endpoints, passing the
+26/84 training floor; true horizon error was 7,184 against 9,525 for the
+control. However, 66/1,484 nonterminal rows stopped against the 14-row 1%
+limit, so the registered preflight stopped the run before seed 2, free
+generation or the repeat. This closes the fixed exact-offset lower-median
+horizon configuration while preserving the signal that ordinal horizon
+prediction carries information. A later attempt needs a different trajectory
+representation or a nonterminal-aware continuation objective. See
+[deepseek-143](../../loop/tasks/cpu-training-pilot/deepseek-143/REPORT.md).
+
+The following content unit added the first-order generated-state transition to
+the positive modulo-256 code: current code followed by current XOR previous.
+The 4,096-bit trajectory readout reduced leave-one-out ambiguity from 277 to
+254 and changed 632/633 effective assignments under the target control, but
+top-1 fell from 300 to 297 against code. The registered preflight therefore
+stopped before seed 2 or generation. This closes the fixed current-plus-XOR
+concatenation; higher-order transition history or learned transition geometry
+remains open. See
+[deepseek-144](../../loop/tasks/cpu-training-pilot/deepseek-144/REPORT.md).
+
+An exact-head review then found that the first trajectory implementation's
+full-generation fallback check compared reference-aligned decisions with all
+generated decisions. The repair added a separate generated-decision count and
+a capped-horizon regression, then reproduced the seed-1 preflight report and
+structured failure byte-for-byte from the corrected source. The same 300
+versus 297 top-1 result still stops before generation. See
+[deepseek-145](../../loop/tasks/cpu-training-pilot/deepseek-145/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

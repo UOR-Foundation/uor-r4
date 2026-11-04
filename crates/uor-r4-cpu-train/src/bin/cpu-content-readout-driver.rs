@@ -3,12 +3,16 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
-    add_turn_memory_uorlut01, content_mapping_sha256, content_stop_gate_fires,
-    content_target_mapping, derive_content_readout, derive_content_stop_readout,
-    derive_content_stop_rows, derive_turn_memory, evaluate_content_readout,
-    evaluate_content_stop_gate, fit_content_stop_gate, shuffle_content_stop_rows,
-    shuffle_content_targets, validate_corpus_manifest, verify_content_readout_serving,
-    ContentPromptReading, ContentReadout, ContentSignatureMode, ContentStopGate, ContentStopRow,
+    add_turn_memory_uorlut01, content_continuation_loo_prediction, content_mapping_sha256,
+    content_stop_density_gate_fires, content_stop_gate_fires, content_target_mapping,
+    derive_content_continuation_rows, derive_content_readout, derive_content_stop_readout,
+    derive_content_stop_rows, derive_turn_memory, evaluate_content_continuation_gate,
+    evaluate_content_readout, evaluate_content_stop_density_gate, evaluate_content_stop_gate,
+    fit_content_continuation_gate, fit_content_stop_density_gate, fit_content_stop_gate,
+    shuffle_content_continuation_rows, shuffle_content_stop_rows, shuffle_content_targets,
+    validate_corpus_manifest, verify_content_readout_serving, ContentContinuationRow,
+    ContentContinuationTraining, ContentPromptReading, ContentReadout, ContentReadoutReading,
+    ContentSignatureMode, ContentStopDensityGate, ContentStopGate, ContentStopRow,
     CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES,
     CONTENT_MIN_TRAINING_ROWS,
 };
@@ -29,6 +33,10 @@ struct Config {
     reply_turn: usize,
     reply_cap: usize,
     stop_prototypes: usize,
+    stop_density_neighbors: Option<usize>,
+    stop_density_offset_radius: u16,
+    stop_horizon_neighbors: Option<usize>,
+    trajectory_readout: bool,
     seed: u64,
     select_only: bool,
     expected_artifact_sha256: String,
@@ -62,7 +70,9 @@ fn usage() -> String {
      --expected-artifact-sha256 HEX --expected-tokens-sha256 HEX \
      --expected-mask-sha256 HEX --expected-manifest-sha256 HEX \
      [--keys N] [--per-key N] [--key-tokens N] [--reply-turn N] \
-     [--reply-cap N] [--stop-prototypes N] [--seed N] [--select-only]"
+     [--reply-cap N] [--stop-prototypes N] [--stop-density-neighbors N] \
+     [--stop-density-offset-radius N] [--stop-horizon-neighbors N] \
+     [--trajectory-readout] [--seed N] [--select-only]"
         .to_owned()
 }
 
@@ -85,6 +95,10 @@ fn parse_args() -> Result<Config, String> {
         reply_turn: 8,
         reply_cap: 16,
         stop_prototypes: 8,
+        stop_density_neighbors: None,
+        stop_density_offset_radius: 2,
+        stop_horizon_neighbors: None,
+        trajectory_readout: false,
         seed: 1,
         select_only: false,
         expected_artifact_sha256: String::new(),
@@ -97,6 +111,10 @@ fn parse_args() -> Result<Config, String> {
             config.select_only = true;
             continue;
         }
+        if flag == "--trajectory-readout" {
+            config.trajectory_readout = true;
+            continue;
+        }
         let value = values
             .next()
             .ok_or_else(|| format!("{flag} needs a value"))?;
@@ -107,6 +125,15 @@ fn parse_args() -> Result<Config, String> {
             "--reply-turn" => config.reply_turn = number(&value)?,
             "--reply-cap" => config.reply_cap = number(&value)?,
             "--stop-prototypes" => config.stop_prototypes = number(&value)?,
+            "--stop-density-neighbors" => {
+                config.stop_density_neighbors = Some(number(&value)?);
+            }
+            "--stop-density-offset-radius" => {
+                config.stop_density_offset_radius = number(&value)?;
+            }
+            "--stop-horizon-neighbors" => {
+                config.stop_horizon_neighbors = Some(number(&value)?);
+            }
             "--seed" => config.seed = number(&value)?,
             "--expected-artifact-sha256" => config.expected_artifact_sha256 = hex(&value)?,
             "--expected-tokens-sha256" => config.expected_tokens_sha256 = hex(&value)?,
@@ -131,6 +158,13 @@ fn parse_args() -> Result<Config, String> {
         || !(1..=16).contains(&config.reply_turn)
         || !(1..=64).contains(&config.reply_cap)
         || !(1..=1024).contains(&config.stop_prototypes)
+        || config
+            .stop_density_neighbors
+            .is_some_and(|neighbors| !(1..=16).contains(&neighbors))
+        || config
+            .stop_horizon_neighbors
+            .is_some_and(|neighbors| !(1..=16).contains(&neighbors))
+        || config.stop_density_offset_radius > 16
     {
         return Err("group or reply dimensions are out of bounds".to_owned());
     }
@@ -243,6 +277,36 @@ fn run() -> Result<serde_json::Value, String> {
         ContentSignatureMode::Code,
     )
     .map_err(|error| error.to_string())?;
+    let trajectory_training = config
+        .trajectory_readout
+        .then(|| {
+            derive_content_readout(
+                &memory_artifact,
+                &training_samples,
+                config.reply_cap,
+                true,
+                ContentSignatureMode::Trajectory,
+            )
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let trajectory_shuffled = trajectory_training
+        .as_ref()
+        .map(|training| shuffle_content_targets(&training.readout, config.seed))
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let trajectory_changes = trajectory_training
+        .as_ref()
+        .zip(trajectory_shuffled.as_ref())
+        .map(|(training, shuffled)| mapping_changes(&training.readout, shuffled))
+        .transpose()?
+        .unwrap_or(0);
+    let trajectory_mapping = trajectory_training
+        .as_ref()
+        .zip(trajectory_shuffled.as_ref())
+        .map(|(training, shuffled)| mapping_json(&training.readout, shuffled, trajectory_changes))
+        .transpose()?;
+    let trajectory_shuffled_sha = trajectory_shuffled.as_ref().map(readout_sha).transpose()?;
     let code_stop_training =
         derive_content_stop_readout(&memory_artifact, &training_samples, config.reply_cap, true)
             .map_err(|error| error.to_string())?;
@@ -262,6 +326,98 @@ fn run() -> Result<serde_json::Value, String> {
         .map_err(|error| error.to_string())?;
     let gate_sha256 = json_sha(&gate_training.gate)?;
     let gate_shuffled_sha256 = json_sha(&gate_shuffled_training.gate)?;
+    let gate_density_training = config
+        .stop_density_neighbors
+        .map(|neighbors| {
+            fit_content_stop_density_gate(&gate_rows, neighbors, config.stop_density_offset_radius)
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let gate_density_shuffled_training = config
+        .stop_density_neighbors
+        .map(|neighbors| {
+            fit_content_stop_density_gate(
+                &gate_shuffled_rows,
+                neighbors,
+                config.stop_density_offset_radius,
+            )
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let gate_density_sha256 = gate_density_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let gate_density_shuffled_sha256 = gate_density_shuffled_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let horizon_rows = config
+        .stop_horizon_neighbors
+        .map(|_| {
+            derive_content_continuation_rows(
+                &memory_artifact,
+                &training_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+            )
+        })
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let horizon_shuffled_rows = horizon_rows
+        .as_ref()
+        .map(|rows| shuffle_content_continuation_rows(rows, config.seed))
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let horizon_training = config
+        .stop_horizon_neighbors
+        .map(|neighbors| {
+            fit_content_continuation_gate(
+                horizon_rows
+                    .as_ref()
+                    .ok_or_else(|| "continuation rows are missing".to_owned())?,
+                neighbors,
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
+    let horizon_shuffled_training = config
+        .stop_horizon_neighbors
+        .map(|neighbors| {
+            fit_content_continuation_gate(
+                horizon_shuffled_rows
+                    .as_ref()
+                    .ok_or_else(|| "shuffled continuation rows are missing".to_owned())?,
+                neighbors,
+            )
+            .map_err(|error| error.to_string())
+        })
+        .transpose()?;
+    let horizon_sha256 = horizon_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let horizon_shuffled_sha256 = horizon_shuffled_training
+        .as_ref()
+        .map(|training| json_sha(&training.gate))
+        .transpose()?;
+    let horizon_prediction_changes = match (
+        horizon_rows.as_ref(),
+        horizon_training.as_ref(),
+        horizon_shuffled_rows.as_ref(),
+        horizon_shuffled_training.as_ref(),
+    ) {
+        (Some(rows), Some(training), Some(shuffled_rows), Some(shuffled)) => {
+            Some(horizon_predictions_changed(
+                rows,
+                training.gate.neighbors,
+                shuffled_rows,
+                shuffled.gate.neighbors,
+            )?)
+        }
+        _ => None,
+    };
     let sign_shuffled = shuffle_content_targets(&sign_training.readout, config.seed)
         .map_err(|error| error.to_string())?;
     let code_shuffled = shuffle_content_targets(&code_training.readout, config.seed)
@@ -295,6 +451,13 @@ fn run() -> Result<serde_json::Value, String> {
                     "shuffled_readout_sha256": readout_sha(&code_shuffled)?,
                     "mapping": code_mapping,
                 },
+                "trajectory": trajectory_training.as_ref().map(|training| {
+                    serde_json::json!({
+                        "training": training,
+                        "shuffled_readout_sha256": trajectory_shuffled_sha,
+                        "mapping": trajectory_mapping,
+                    })
+                }),
                 "code_stop": {
                     "training": code_stop_training,
                     "shuffled_readout_sha256": readout_sha(&code_stop_shuffled)?,
@@ -308,6 +471,28 @@ fn run() -> Result<serde_json::Value, String> {
                     "true_sha256": gate_sha256,
                     "shuffled_sha256": gate_shuffled_sha256,
                 },
+                "gate_density": gate_density_training.as_ref().map(|training| {
+                    serde_json::json!({
+                        "rows": gate_rows.len(),
+                        "max_neighbors": config.stop_density_neighbors,
+                        "offset_radius": config.stop_density_offset_radius,
+                        "training": training,
+                        "shuffled_training": gate_density_shuffled_training,
+                        "true_sha256": gate_density_sha256,
+                        "shuffled_sha256": gate_density_shuffled_sha256,
+                    })
+                }),
+                "gate_horizon": horizon_training.as_ref().map(|training| {
+                    serde_json::json!({
+                        "rows": horizon_rows.as_ref().map(Vec::len),
+                        "max_neighbors": config.stop_horizon_neighbors,
+                        "training": training,
+                        "shuffled_training": horizon_shuffled_training,
+                        "true_sha256": horizon_sha256,
+                        "shuffled_sha256": horizon_shuffled_sha256,
+                        "predictions_changed": horizon_prediction_changes,
+                    })
+                }),
             },
         }));
     }
@@ -373,6 +558,30 @@ fn run() -> Result<serde_json::Value, String> {
         Some(&code_shuffled),
     )
     .map_err(|error| error.to_string())?;
+    let trajectory_arms =
+        if let (Some(training), Some(shuffled)) = (&trajectory_training, &trajectory_shuffled) {
+            let (arm, prompts) = evaluate_content_readout(
+                &memory_artifact,
+                &evaluation_samples,
+                config.reply_cap,
+                true,
+                ContentSignatureMode::Trajectory,
+                Some(&training.readout),
+            )
+            .map_err(|error| error.to_string())?;
+            let (shuffled_arm, shuffled_prompts) = evaluate_content_readout(
+                &memory_artifact,
+                &evaluation_samples,
+                config.reply_cap,
+                true,
+                ContentSignatureMode::Trajectory,
+                Some(shuffled),
+            )
+            .map_err(|error| error.to_string())?;
+            Some((arm, prompts, shuffled_arm, shuffled_prompts))
+        } else {
+            None
+        };
     let (code_stop_arm, code_stop_prompts) = evaluate_content_readout(
         &memory_artifact,
         &evaluation_samples,
@@ -409,6 +618,275 @@ fn run() -> Result<serde_json::Value, String> {
         &gate_shuffled_training.gate,
     )
     .map_err(|error| error.to_string())?;
+    let (gate_density_arms, gate_density_bar) =
+        if let (Some(density_training), Some(density_shuffled_training)) =
+            (&gate_density_training, &gate_density_shuffled_training)
+        {
+            let (density_arm, density_prompts) = evaluate_content_stop_density_gate(
+                &memory_artifact,
+                &evaluation_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+                &density_training.gate,
+            )
+            .map_err(|error| error.to_string())?;
+            let (density_shuffled_arm, density_shuffled_prompts) =
+                evaluate_content_stop_density_gate(
+                    &memory_artifact,
+                    &evaluation_samples,
+                    config.reply_cap,
+                    true,
+                    &code_training.readout,
+                    &density_shuffled_training.gate,
+                )
+                .map_err(|error| error.to_string())?;
+            let vs_code_top1 = paired(&density_prompts, &code_prompts, |row| row.top1)?;
+            let vs_code_depth = paired(&density_prompts, &code_prompts, |row| {
+                row.matched_prefix_depth as u64
+            })?;
+            let vs_code_bos = paired(&density_prompts, &code_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let vs_shuffled_bos = paired(&density_prompts, &density_shuffled_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let non_inferior = non_inferior(
+                vs_code_top1["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "density top-1 sum differs".to_owned())?,
+                vs_code_top1["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code top-1 sum differs".to_owned())?,
+                vs_code_depth["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "density depth sum differs".to_owned())?,
+                vs_code_depth["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code depth sum differs".to_owned())?,
+            );
+            let lengths = bos_length_counts(&density_prompts);
+            let terminal_comparison = paired_terminal_density_rows(
+                &gate_rows,
+                &density_training.gate,
+                &density_shuffled_training.gate,
+            )?;
+            let hashes_differ = gate_density_sha256 != gate_density_shuffled_sha256;
+            let rows_match = density_training.gate.terminal_rows.len() as u64
+                == density_training.terminal_rows
+                && density_training.gate.nonterminal_rows.len() as u64
+                    == density_training.nonterminal_rows;
+            let structural = density_training.terminal_rows >= 84
+                && density_training.nonterminal_rows >= 1_484
+                && density_training.terminal_stops >= 26
+                && density_training.nonterminal_stops <= density_training.nonterminal_stop_limit
+                && hashes_differ
+                && rows_match;
+            let passes = structural
+                && non_inferior
+                && density_arm.ungated_token_mismatches == 0
+                && density_arm.bos_stopped >= 9
+                && lengths.within_reference() >= 8
+                && density_arm.exact_reference >= 8
+                && vs_code_bos["passes"].as_bool() == Some(true)
+                && vs_shuffled_bos["passes"].as_bool() == Some(true)
+                && terminal_comparison["passes"].as_bool() == Some(true);
+            (
+                Some(serde_json::json!({
+                    "reading": density_arm,
+                    "prompts": density_prompts,
+                    "shuffled_reading": density_shuffled_arm,
+                    "shuffled_prompts": density_shuffled_prompts,
+                })),
+                Some(serde_json::json!({
+                    "training": density_training,
+                    "shuffled_training": density_shuffled_training,
+                    "true_sha256": gate_density_sha256.as_ref(),
+                    "shuffled_sha256": gate_density_shuffled_sha256.as_ref(),
+                    "structural_pass": structural,
+                    "hashes_differ": hashes_differ,
+                    "gate_rows_match_training": rows_match,
+                    "terminal_rows_vs_shuffled": terminal_comparison,
+                    "exact_reference": density_arm.exact_reference,
+                    "bos_complete": density_arm.bos_stopped,
+                    "bos_within_reference": lengths.within_reference(),
+                    "bos_at_reference_length": lengths.at_reference_length,
+                    "bos_shorter": lengths.shorter,
+                    "bos_longer": lengths.longer,
+                    "gate_fires": density_arm.gate_fires,
+                    "ungated_token_mismatches": density_arm.ungated_token_mismatches,
+                    "non_inferior_to_code": non_inferior,
+                    "vs_code_top1": vs_code_top1,
+                    "vs_code_depth": vs_code_depth,
+                    "vs_code_bos": vs_code_bos,
+                    "vs_shuffled_bos": vs_shuffled_bos,
+                    "passes": passes,
+                })),
+            )
+        } else {
+            (None, None)
+        };
+    let (gate_horizon_arms, gate_horizon_bar) =
+        if let (Some(horizon_rows), Some(horizon_training), Some(horizon_shuffled_training)) = (
+            horizon_rows.as_ref(),
+            horizon_training.as_ref(),
+            horizon_shuffled_training.as_ref(),
+        ) {
+            let (horizon_arm, horizon_prompts) = evaluate_content_continuation_gate(
+                &memory_artifact,
+                &evaluation_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+                &horizon_training.gate,
+            )
+            .map_err(|error| error.to_string())?;
+            let (horizon_shuffled_arm, horizon_shuffled_prompts) =
+                evaluate_content_continuation_gate(
+                    &memory_artifact,
+                    &evaluation_samples,
+                    config.reply_cap,
+                    true,
+                    &code_training.readout,
+                    &horizon_shuffled_training.gate,
+                )
+                .map_err(|error| error.to_string())?;
+            let vs_code_top1 = paired(&horizon_prompts, &code_prompts, |row| row.top1)?;
+            let vs_code_depth = paired(&horizon_prompts, &code_prompts, |row| {
+                row.matched_prefix_depth as u64
+            })?;
+            let vs_code_bos = paired(&horizon_prompts, &code_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let vs_shuffled_bos = paired(&horizon_prompts, &horizon_shuffled_prompts, |row| {
+                u64::from(row.stop == "bos")
+            })?;
+            let non_inferior = non_inferior(
+                vs_code_top1["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "horizon top-1 sum differs".to_owned())?,
+                vs_code_top1["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code top-1 sum differs".to_owned())?,
+                vs_code_depth["candidate_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "horizon depth sum differs".to_owned())?,
+                vs_code_depth["control_sum"]
+                    .as_u64()
+                    .ok_or_else(|| "code depth sum differs".to_owned())?,
+            );
+            let lengths = bos_length_counts(&horizon_prompts);
+            let terminal_comparison = paired_terminal_continuation_rows(
+                horizon_rows,
+                horizon_training,
+                horizon_shuffled_rows
+                    .as_ref()
+                    .ok_or_else(|| "shuffled continuation rows are missing".to_owned())?,
+                horizon_shuffled_training,
+            )?;
+            let prediction_changes = horizon_prediction_changes.unwrap_or(0);
+            let hashes_differ = horizon_sha256 != horizon_shuffled_sha256;
+            let rows_match = horizon_training.gate.rows.len() as u64 == horizon_training.rows;
+            let horizon_error_better =
+                horizon_training.horizon_abs_error < horizon_shuffled_training.horizon_abs_error;
+            let structural = horizon_training.rows == 1_568
+                && horizon_training.terminal_rows == 84
+                && horizon_training.nonterminal_rows == 1_484
+                && horizon_training.terminal_stops >= 26
+                && horizon_training.nonterminal_stops <= horizon_training.nonterminal_stop_limit
+                && horizon_error_better
+                && hashes_differ
+                && prediction_changes > 0
+                && rows_match;
+            let passes = structural
+                && non_inferior
+                && horizon_arm.ungated_token_mismatches == 0
+                && horizon_arm.bos_stopped >= 9
+                && lengths.within_reference() >= 8
+                && horizon_arm.exact_reference >= 8
+                && vs_code_bos["passes"].as_bool() == Some(true)
+                && vs_shuffled_bos["passes"].as_bool() == Some(true)
+                && terminal_comparison["passes"].as_bool() == Some(true);
+            (
+                Some(serde_json::json!({
+                    "reading": horizon_arm,
+                    "prompts": horizon_prompts,
+                    "shuffled_reading": horizon_shuffled_arm,
+                    "shuffled_prompts": horizon_shuffled_prompts,
+                })),
+                Some(serde_json::json!({
+                    "training": horizon_training,
+                    "shuffled_training": horizon_shuffled_training,
+                    "true_sha256": horizon_sha256.as_ref(),
+                    "shuffled_sha256": horizon_shuffled_sha256.as_ref(),
+                    "prediction_changes": prediction_changes,
+                    "structural_pass": structural,
+                    "hashes_differ": hashes_differ,
+                    "gate_rows_match_training": rows_match,
+                    "horizon_error_better": horizon_error_better,
+                    "terminal_rows_vs_shuffled": terminal_comparison,
+                    "exact_reference": horizon_arm.exact_reference,
+                    "bos_complete": horizon_arm.bos_stopped,
+                    "bos_within_reference": lengths.within_reference(),
+                    "bos_at_reference_length": lengths.at_reference_length,
+                    "bos_shorter": lengths.shorter,
+                    "bos_longer": lengths.longer,
+                    "gate_fires": horizon_arm.gate_fires,
+                    "ungated_token_mismatches": horizon_arm.ungated_token_mismatches,
+                    "non_inferior_to_code": non_inferior,
+                    "vs_code_top1": vs_code_top1,
+                    "vs_code_depth": vs_code_depth,
+                    "vs_code_bos": vs_code_bos,
+                    "vs_shuffled_bos": vs_shuffled_bos,
+                    "passes": passes,
+                })),
+            )
+        } else {
+            (None, None)
+        };
+    let trajectory_bar = trajectory_arms
+        .as_ref()
+        .map(
+            |(arm, prompts, shuffled_arm, shuffled_prompts)| -> Result<serde_json::Value, String> {
+                let mapping = trajectory_mapping
+                    .as_ref()
+                    .ok_or_else(|| "trajectory mapping is missing".to_owned())?;
+                let training = trajectory_training
+                    .as_ref()
+                    .ok_or_else(|| "trajectory training is missing".to_owned())?;
+                let vs_code_top1 = paired(prompts, &code_prompts, |row| row.top1)?;
+                let vs_code_depth = paired_two_sqrt(prompts, &code_prompts, |row| {
+                    row.matched_prefix_depth as u64
+                })?;
+                let vs_shuffled_top1 = paired(prompts, shuffled_prompts, |row| row.top1)?;
+                let structural = mode_structural_pass(training, mapping);
+                let fallback_accounting = readout_fallback_accounting(arm);
+                let passes = structural
+                    && fallback_accounting
+                    && non_inferior(
+                        arm.top1,
+                        code_arm.top1,
+                        arm.matched_prefix_depth_sum,
+                        code_arm.matched_prefix_depth_sum,
+                    )
+                    && vs_code_top1["passes"].as_bool() == Some(true)
+                    && vs_code_depth["passes"].as_bool() == Some(true)
+                    && vs_shuffled_top1["passes"].as_bool() == Some(true);
+                Ok(serde_json::json!({
+                "reading": arm,
+                "prompts": prompts,
+                "shuffled_reading": shuffled_arm,
+                "shuffled_prompts": shuffled_prompts,
+                "structural_pass": structural,
+                "readout_fallback_accounting": fallback_accounting,
+                "vs_code_top1": vs_code_top1,
+                "vs_code_depth": vs_code_depth,
+                "vs_shuffled_top1": vs_shuffled_top1,
+                "passes": passes,
+                }))
+            },
+        )
+        .transpose()?;
     let serving_parity = verify_content_readout_serving(
         &memory_artifact,
         &evaluation_samples,
@@ -507,7 +985,7 @@ fn run() -> Result<serde_json::Value, String> {
         && gate_training.terminal_stops >= 26
         && gate_training.nonterminal_stops <= gate_training.nonterminal_stop_limit;
     let code_exposure = code_arm.readout_decisions > 0 && code_arm.writer_fallbacks > 0;
-    let bar = serde_json::json!({
+    let mut bar = serde_json::json!({
         "sign": {
             "structural_pass": sign_structural,
             "vs_writer_top1": sign_vs_writer_top1,
@@ -602,6 +1080,15 @@ fn run() -> Result<serde_json::Value, String> {
             && gate_vs_code_bos["passes"].as_bool() == Some(true)
             && gate_vs_shuffled_bos["passes"].as_bool() == Some(true),
     });
+    if let Some(density) = gate_density_bar.as_ref() {
+        bar["gate_density"] = density.clone();
+    }
+    if let Some(horizon) = gate_horizon_bar.as_ref() {
+        bar["gate_horizon"] = horizon.clone();
+    }
+    if let Some(trajectory) = trajectory_bar.as_ref() {
+        bar["trajectory"] = trajectory.clone();
+    }
     let sign_mapping_sha256 = mapping_json(&sign_training.readout, &sign_shuffled, sign_changes)?;
     let code_mapping_sha256 = mapping_json(&code_training.readout, &code_shuffled, code_changes)?;
     std::fs::write(
@@ -624,6 +1111,18 @@ fn run() -> Result<serde_json::Value, String> {
         serde_json::to_vec_pretty(&code_shuffled).map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
+    if let (Some(training), Some(shuffled)) = (&trajectory_training, &trajectory_shuffled) {
+        std::fs::write(
+            config.out.join("trajectory-true-readout.json"),
+            serde_json::to_vec_pretty(training).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("trajectory-shuffled-readout.json"),
+            serde_json::to_vec_pretty(shuffled).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
     std::fs::write(
         config.out.join("code-stop-readout.json"),
         serde_json::to_vec_pretty(&code_stop_training).map_err(|error| error.to_string())?,
@@ -649,11 +1148,47 @@ fn run() -> Result<serde_json::Value, String> {
         serde_json::to_vec_pretty(&gate_shuffled_training).map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
+    if let (Some(training), Some(shuffled)) =
+        (&gate_density_training, &gate_density_shuffled_training)
+    {
+        std::fs::write(
+            config.out.join("content-stop-density-gate.json"),
+            serde_json::to_vec_pretty(training).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("content-stop-density-gate-shuffled.json"),
+            serde_json::to_vec_pretty(shuffled).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    if let (Some(training), Some(shuffled)) = (&horizon_training, &horizon_shuffled_training) {
+        std::fs::write(
+            config.out.join("content-continuation-rows.json"),
+            serde_json::to_vec_pretty(
+                horizon_rows
+                    .as_ref()
+                    .ok_or_else(|| "continuation rows are missing".to_owned())?,
+            )
+            .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("content-continuation-gate.json"),
+            serde_json::to_vec_pretty(training).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+        std::fs::write(
+            config.out.join("content-continuation-gate-shuffled.json"),
+            serde_json::to_vec_pretty(shuffled).map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
+    }
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-content-readout-run/2",
         "substrate": "cpu-development-research",
         "qualification": "gpu-required",
-        "claim": "CPU sign and modulo-256 nearest-example content readout with exact integer-serving sidecar parity; no language claim",
+        "claim": "CPU generated-state content, trajectory and termination research with exact integer-serving parity; no language claim",
         "inputs": {
             "artifact": config.artifact,
             "artifact_sha256": config.expected_artifact_sha256,
@@ -668,9 +1203,14 @@ fn run() -> Result<serde_json::Value, String> {
         "training": {
             "sign": sign_training,
             "code": code_training,
+            "trajectory": trajectory_training.as_ref(),
             "code_stop": code_stop_training,
             "gate": gate_training,
             "gate_shuffled": gate_shuffled_training,
+            "gate_density": gate_density_training.as_ref(),
+            "gate_density_shuffled": gate_density_shuffled_training.as_ref(),
+            "gate_horizon": horizon_training.as_ref(),
+            "gate_horizon_shuffled": horizon_shuffled_training.as_ref(),
         },
         "serving": {
             "artifact": "serving.uorlut",
@@ -682,6 +1222,7 @@ fn run() -> Result<serde_json::Value, String> {
         "mapping": {
             "sign": sign_mapping_sha256,
             "code": code_mapping_sha256,
+            "trajectory": trajectory_mapping,
             "code_stop": code_stop_mapping,
         },
         "arms": {
@@ -690,6 +1231,12 @@ fn run() -> Result<serde_json::Value, String> {
             "sign_shuffled": { "reading": sign_shuffled_arm, "prompts": sign_shuffled_prompts },
             "code": { "reading": code_arm, "prompts": code_prompts },
             "code_shuffled": { "reading": code_shuffled_arm, "prompts": code_shuffled_prompts },
+            "trajectory": trajectory_arms.as_ref().map(|(reading, prompts, _, _)| {
+                serde_json::json!({ "reading": reading, "prompts": prompts })
+            }),
+            "trajectory_shuffled": trajectory_arms.as_ref().map(|(_, _, reading, prompts)| {
+                serde_json::json!({ "reading": reading, "prompts": prompts })
+            }),
             "code_stop": { "reading": code_stop_arm, "prompts": code_stop_prompts },
             "code_stop_shuffled": {
                 "reading": code_stop_shuffled_arm,
@@ -700,6 +1247,8 @@ fn run() -> Result<serde_json::Value, String> {
                 "reading": gate_shuffled_arm,
                 "prompts": gate_shuffled_prompts
             },
+            "gate_density": gate_density_arms,
+            "gate_horizon": gate_horizon_arms,
         },
         "bar": bar,
         "rayon_workers": rayon::current_num_threads(),
@@ -764,10 +1313,31 @@ fn non_inferior(
     candidate_top1 >= control_top1 && candidate_depth >= control_depth
 }
 
+fn readout_fallback_accounting(reading: &ContentReadoutReading) -> bool {
+    reading.generated_decisions == reading.readout_decisions + reading.writer_fallbacks
+}
+
 fn paired(
     candidate: &[ContentPromptReading],
     control: &[ContentPromptReading],
     value: impl Fn(&ContentPromptReading) -> u64,
+) -> Result<serde_json::Value, String> {
+    paired_with(candidate, control, value, ceil_three_sqrt)
+}
+
+fn paired_two_sqrt(
+    candidate: &[ContentPromptReading],
+    control: &[ContentPromptReading],
+    value: impl Fn(&ContentPromptReading) -> u64,
+) -> Result<serde_json::Value, String> {
+    paired_with(candidate, control, value, ceil_two_sqrt)
+}
+
+fn paired_with(
+    candidate: &[ContentPromptReading],
+    control: &[ContentPromptReading],
+    value: impl Fn(&ContentPromptReading) -> u64,
+    threshold: fn(u64) -> u64,
 ) -> Result<serde_json::Value, String> {
     if candidate.len() != control.len() {
         return Err("content-readout paired counts differ".to_owned());
@@ -787,7 +1357,7 @@ fn paired(
         only += u64::from(left > right);
         control_only += u64::from(right > left);
     }
-    let threshold = ceil_three_sqrt(control_only).max(2);
+    let threshold = threshold(control_only).max(2);
     Ok(serde_json::json!({
         "candidate_only": only,
         "control_only": control_only,
@@ -855,6 +1425,106 @@ fn paired_terminal_rows(
         "passes": candidate_sum > control_sum
             && candidate_only >= threshold,
     }))
+}
+
+fn paired_terminal_density_rows(
+    rows: &[ContentStopRow],
+    candidate: &ContentStopDensityGate,
+    control: &ContentStopDensityGate,
+) -> Result<serde_json::Value, String> {
+    let mut candidate_only = 0u64;
+    let mut control_only = 0u64;
+    let mut candidate_sum = 0u64;
+    let mut control_sum = 0u64;
+    for row in rows.iter().filter(|row| row.terminal) {
+        let left = u64::from(
+            content_stop_density_gate_fires(candidate, &row.signature, row.offset)
+                .map_err(|error| error.to_string())?,
+        );
+        let right = u64::from(
+            content_stop_density_gate_fires(control, &row.signature, row.offset)
+                .map_err(|error| error.to_string())?,
+        );
+        candidate_sum += left;
+        control_sum += right;
+        candidate_only += u64::from(left > right);
+        control_only += u64::from(right > left);
+    }
+    let threshold = ceil_two_sqrt(control_only).max(2);
+    Ok(serde_json::json!({
+        "candidate_only": candidate_only,
+        "control_only": control_only,
+        "candidate_sum": candidate_sum,
+        "control_sum": control_sum,
+        "threshold": threshold,
+        "passes": candidate_sum > control_sum && candidate_only >= threshold,
+    }))
+}
+
+fn paired_terminal_continuation_rows(
+    rows: &[ContentContinuationRow],
+    candidate: &ContentContinuationTraining,
+    shuffled_rows: &[ContentContinuationRow],
+    control: &ContentContinuationTraining,
+) -> Result<serde_json::Value, String> {
+    if rows.len() != shuffled_rows.len() {
+        return Err("continuation terminal row counts differ".to_owned());
+    }
+    let mut candidate_only = 0u64;
+    let mut control_only = 0u64;
+    let mut candidate_sum = 0u64;
+    let mut control_sum = 0u64;
+    for (index, _row) in rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.remaining == 0)
+    {
+        let left = u64::from(
+            content_continuation_loo_prediction(rows, index, candidate.gate.neighbors)
+                .map_err(|error| error.to_string())?
+                == Some(0),
+        );
+        let right = u64::from(
+            content_continuation_loo_prediction(shuffled_rows, index, control.gate.neighbors)
+                .map_err(|error| error.to_string())?
+                == Some(0),
+        );
+        candidate_sum += left;
+        control_sum += right;
+        candidate_only += u64::from(left > right);
+        control_only += u64::from(right > left);
+    }
+    let threshold = ceil_two_sqrt(control_only).max(2);
+    Ok(serde_json::json!({
+        "candidate_only": candidate_only,
+        "control_only": control_only,
+        "candidate_sum": candidate_sum,
+        "control_sum": control_sum,
+        "threshold": threshold,
+        "passes": candidate_sum > control_sum && candidate_only >= threshold,
+    }))
+}
+
+fn horizon_predictions_changed(
+    rows: &[ContentContinuationRow],
+    candidate_neighbors: usize,
+    comparison_rows: &[ContentContinuationRow],
+    control_neighbors: usize,
+) -> Result<u64, String> {
+    if rows.len() != comparison_rows.len() {
+        return Err("continuation prediction row counts differ".to_owned());
+    }
+    rows.iter()
+        .zip(comparison_rows)
+        .enumerate()
+        .try_fold(0u64, |changed, (index, _)| {
+            let left = content_continuation_loo_prediction(rows, index, candidate_neighbors)
+                .map_err(|error| error.to_string())?;
+            let right =
+                content_continuation_loo_prediction(comparison_rows, index, control_neighbors)
+                    .map_err(|error| error.to_string())?;
+            Ok(changed + u64::from(left != right))
+        })
 }
 
 fn ceil_three_sqrt(value: u64) -> u64 {
@@ -988,6 +1658,23 @@ mod tests {
         }
     }
 
+    fn density_gate(terminal: Vec<u64>, nonterminal: Vec<u64>) -> ContentStopDensityGate {
+        ContentStopDensityGate {
+            signature_bits: uor_r4_cpu_train::CONTENT_CODE_SIGNATURE_BITS,
+            terminal_rows: vec![uor_r4_cpu_train::ContentStopDensityPoint {
+                signature: terminal,
+                offset: 4,
+            }],
+            nonterminal_rows: vec![uor_r4_cpu_train::ContentStopDensityPoint {
+                signature: nonterminal,
+                offset: 4,
+            }],
+            neighbors: 1,
+            offset_radius: 0,
+            margin: 1,
+        }
+    }
+
     #[test]
     fn content_non_inferiority_uses_both_ordered_metrics() {
         assert!(non_inferior(73, 73, 64, 64));
@@ -998,6 +1685,25 @@ mod tests {
     }
 
     #[test]
+    fn trajectory_readout_fallback_accounts_for_every_decision() {
+        let reading = ContentReadoutReading {
+            decisions: 2,
+            generated_decisions: 10,
+            readout_decisions: 3,
+            writer_fallbacks: 7,
+            ..ContentReadoutReading::default()
+        };
+        assert!(readout_fallback_accounting(&reading));
+        assert!(!readout_fallback_accounting(&ContentReadoutReading {
+            decisions: 2,
+            generated_decisions: 10,
+            readout_decisions: 3,
+            writer_fallbacks: 6,
+            ..ContentReadoutReading::default()
+        }));
+    }
+
+    #[test]
     fn terminal_pairing_requires_the_two_sigma_disagreement() {
         let terminal_signature = signature(10);
         let rows = (0..4)
@@ -1005,6 +1711,7 @@ mod tests {
                 signature: terminal_signature.clone(),
                 terminal: true,
                 writer_token: 7,
+                offset: 4,
             })
             .collect::<Vec<_>>();
         let candidate = gate(terminal_signature.clone(), signature(100));
@@ -1020,18 +1727,138 @@ mod tests {
     }
 
     #[test]
+    fn density_terminal_pairing_uses_the_same_control_rule() {
+        let terminal_signature = signature(10);
+        let rows = (0..4)
+            .map(|_| ContentStopRow {
+                signature: terminal_signature.clone(),
+                terminal: true,
+                writer_token: 7,
+                offset: 4,
+            })
+            .collect::<Vec<_>>();
+        let candidate = density_gate(terminal_signature.clone(), signature(100));
+        let control = density_gate(signature(100), terminal_signature);
+        let paired = paired_terminal_density_rows(&rows, &candidate, &control).unwrap();
+        assert_eq!(paired["candidate_only"], 4);
+        assert_eq!(paired["control_only"], 0);
+        assert_eq!(paired["threshold"], 2);
+        assert_eq!(paired["passes"], true);
+    }
+
+    #[test]
+    fn continuation_terminal_pairing_uses_the_same_control_rule() {
+        let rows = vec![
+            ContentContinuationRow {
+                signature: signature(0),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(0),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(100),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(100),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+        ];
+        let shuffled = shuffle_content_continuation_rows(&rows, 1).unwrap();
+        let candidate = fit_content_continuation_gate(&rows, 1).unwrap();
+        let control = fit_content_continuation_gate(&shuffled, 1).unwrap();
+        let paired =
+            paired_terminal_continuation_rows(&rows, &candidate, &shuffled, &control).unwrap();
+        assert_eq!(paired["candidate_only"], 2);
+        assert_eq!(paired["control_only"], 0);
+        assert_eq!(paired["threshold"], 2);
+        assert_eq!(paired["passes"], true);
+        assert_eq!(
+            horizon_predictions_changed(
+                &rows,
+                candidate.gate.neighbors,
+                &shuffled,
+                control.gate.neighbors,
+            )
+            .unwrap(),
+            4
+        );
+    }
+
+    #[test]
+    fn continuation_pairing_does_not_count_a_self_signature() {
+        let rows = vec![
+            ContentContinuationRow {
+                signature: signature(0),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(2),
+                remaining: 0,
+                writer_token: 7,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(100),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+            ContentContinuationRow {
+                signature: signature(201),
+                remaining: 1,
+                writer_token: 8,
+                offset: 4,
+            },
+        ];
+        let candidate = fit_content_continuation_gate(&rows, 1).unwrap();
+        assert_eq!(
+            uor_r4_cpu_train::content_continuation_gate_prediction(
+                &candidate.gate,
+                &signature(0),
+                4
+            )
+            .unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            content_continuation_loo_prediction(&rows, 0, candidate.gate.neighbors).unwrap(),
+            Some(1)
+        );
+        let shuffled = shuffle_content_continuation_rows(&rows, 1).unwrap();
+        let control = fit_content_continuation_gate(&shuffled, 1).unwrap();
+        let paired =
+            paired_terminal_continuation_rows(&rows, &candidate, &shuffled, &control).unwrap();
+        assert_eq!(paired["candidate_sum"], 0);
+    }
+
+    #[test]
     fn terminal_pairing_threshold_uses_control_only_disagreements() {
         let mut rows = (0..5)
             .map(|_| ContentStopRow {
                 signature: signature(10),
                 terminal: true,
                 writer_token: 7,
+                offset: 4,
             })
             .collect::<Vec<_>>();
         rows.extend((0..4).map(|_| ContentStopRow {
             signature: signature(100),
             terminal: true,
             writer_token: 8,
+            offset: 4,
         }));
         let candidate = gate(signature(10), signature(100));
         let control = gate(signature(100), signature(10));
@@ -1054,6 +1881,8 @@ mod tests {
             stop: "cap".to_owned(),
             generated_tokens: 16,
             reference_tokens: 16,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
         };
         let candidate = (0..19)
             .map(|sample| reading(sample, u64::from(sample < 10)))
@@ -1070,6 +1899,39 @@ mod tests {
     }
 
     #[test]
+    fn two_and_three_sigma_pairs_use_distinct_thresholds() {
+        let reading = |sample, value| ContentPromptReading {
+            sample,
+            matched_prefix_depth: value,
+            top1: 0,
+            observed_decisions: 0,
+            exact_reference: false,
+            stop: "cap".to_owned(),
+            generated_tokens: 16,
+            reference_tokens: 16,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
+        };
+        let candidate = [1, 1, 0, 1]
+            .into_iter()
+            .enumerate()
+            .map(|(sample, value)| reading(sample, value))
+            .collect::<Vec<_>>();
+        let control = [1, 0, 1, 0]
+            .into_iter()
+            .enumerate()
+            .map(|(sample, value)| reading(sample, value))
+            .collect::<Vec<_>>();
+        let two =
+            paired_two_sqrt(&candidate, &control, |row| row.matched_prefix_depth as u64).unwrap();
+        let three = paired(&candidate, &control, |row| row.matched_prefix_depth as u64).unwrap();
+        assert_eq!(two["threshold"], 2);
+        assert_eq!(two["passes"], true);
+        assert_eq!(three["threshold"], 3);
+        assert_eq!(three["passes"], false);
+    }
+
+    #[test]
     fn bos_length_accounting_separates_exact_shorter_and_longer_stops() {
         let prompt = |stop: &str, generated_tokens, reference_tokens| ContentPromptReading {
             sample: 0,
@@ -1080,6 +1942,8 @@ mod tests {
             stop: stop.to_owned(),
             generated_tokens,
             reference_tokens,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
         };
         let prompts = vec![
             prompt("bos", 2, 3),
