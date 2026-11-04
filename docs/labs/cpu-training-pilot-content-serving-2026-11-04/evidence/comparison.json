@@ -3,41 +3,32 @@
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "both_seeds_pass": true,
-  "implementation_pin": "8194823789244096e2db317bb45954d5a7eeaf8f",
-  "rebased_runtime_pin": "881b8ad95d4f37f1e183c7c384f079b8da63d162",
-  "inputs": {
-    "seed_1_artifact_sha256": "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd",
-    "seed_2_artifact_sha256": "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1",
-    "tokens_sha256": "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b",
-    "mask_sha256": "a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078",
-    "manifest_sha256": "ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab"
-  },
+  "implementation_pin": "486932e24692f4ca0447dec48606d33e9972f81f",
+  "rebased_runtime_pin": "486932e24692f4ca0447dec48606d33e9972f81f",
   "builds": [
     {
       "target": "cpu-content-readout-driver",
       "jobs": 16,
-      "reported_wall_seconds": 20,
-      "time_measured_wall_seconds": 19.35,
-      "peak_rss_kib": 1224168,
-      "target_bytes": 266917268,
-      "binary_bytes": 2829328,
-      "binary_sha256": "811da311338b477c62a9c0f628cf86b7c4e2737be1e37b6973b035b939b75d29"
+      "reported_wall_seconds": 19,
+      "time_measured_wall_seconds": 18.74,
+      "peak_rss_kib": 1189076,
+      "target_bytes": 266934026
     },
     {
       "target": "uor-chat",
       "jobs": 16,
-      "time_measured_wall_seconds": 11.66,
-      "target_bytes": 104717444,
-      "binary_bytes": 3429792,
-      "binary_sha256": "31f562fd07e1c2993e8363ee2ec3b1a54f291296b99a92e459bd5d65dc727c96"
+      "reported_wall_seconds": 12,
+      "time_measured_wall_seconds": 12.00,
+      "peak_rss_kib": 1200396,
+      "target_bytes": 104718166
     },
     {
       "target": "uor-r4-integer-focused-controls",
       "jobs": 16,
-      "time_measured_wall_seconds": 33.47,
-      "peak_rss_kib": 2430812,
-      "target_bytes": 2141709077,
-      "integer_tests_passed": 7,
+      "time_measured_wall_seconds": 34.57,
+      "peak_rss_kib": 2405300,
+      "target_bytes": 2141139524,
+      "integer_tests_passed": 9,
       "loopback_tests_passed": 18
     }
   ],
@@ -45,6 +36,19 @@
     "seed_1_normalized_report_sha256": "29ca4343ef5aef5652e4c37b1a09cdca6bf2375633da25d683de2f9178038939",
     "normalized_report_matches": true,
     "generated_json_and_artifacts_match": true
+  },
+  "efficiency": {
+    "schema": "uor-r4.content-readout-serving-efficiency/1",
+    "generated_tokens_per_run": 32,
+    "repeats": 3,
+    "threads": 1,
+    "sidecar_rows_scanned_per_decision": 894,
+    "sidecar_signature_bytes_scanned_per_decision": 228864,
+    "vote_targets_scanned_per_decision": 4096,
+    "vote_scratch_bytes_resident": 32768,
+    "sidecar_median_generated_tokens_per_second": 4529.714431231362,
+    "no_readout_median_generated_tokens_per_second": 4796.190385976419,
+    "relative_sidecar_throughput": 0.944440079875852
   },
   "seeds": [
     {
@@ -107,10 +111,10 @@
       },
       "resources": {
         "rayon_workers": 32,
-        "report_wall_elapsed_ms": 3173.3729569999996,
-        "time_measured_wall_seconds": 3.19,
-        "report_peak_rss_kib": 230724,
-        "time_peak_rss_kib": 228344
+        "report_wall_elapsed_ms": 3241.912841,
+        "time_measured_wall_seconds": 3.26,
+        "report_peak_rss_kib": 230620,
+        "time_peak_rss_kib": 228088
       },
       "passes": true
     },
@@ -171,20 +175,20 @@
       },
       "resources": {
         "rayon_workers": 32,
-        "report_wall_elapsed_ms": 3140.8127339999996,
-        "time_measured_wall_seconds": 3.15,
-        "report_peak_rss_kib": 230672,
-        "time_peak_rss_kib": 228096
+        "report_wall_elapsed_ms": 3233.600912,
+        "time_measured_wall_seconds": 3.25,
+        "report_peak_rss_kib": 230528,
+        "time_peak_rss_kib": 227384
       },
       "passes": true
     }
   ],
   "repeat_resources": {
     "rayon_workers": 32,
-    "report_wall_elapsed_ms": 3213.127349,
-    "time_measured_wall_seconds": 3.23,
-    "report_peak_rss_kib": 230788,
-    "time_peak_rss_kib": 227932
+    "report_wall_elapsed_ms": 3233.0422,
+    "time_measured_wall_seconds": 3.25,
+    "report_peak_rss_kib": 230668,
+    "time_peak_rss_kib": 227872
   },
   "chat_paths": {
     "prompt_id": {
@@ -196,6 +200,8 @@
         1,
         1
       ],
+      "generation_seconds": 0.000971028,
+      "generated_tokens_per_second": 4119.345683131692,
       "session_bytes_len": 47368,
       "session_sha256": "efc24c3d6136a9dad5e165061a15fbacb70395cbb4d71aebb1df6e238aed94c9"
     },

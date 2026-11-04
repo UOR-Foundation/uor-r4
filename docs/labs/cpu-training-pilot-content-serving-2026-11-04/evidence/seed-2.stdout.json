@@ -10903,7 +10903,7 @@
       "true_sha256": "24d4329ae8755163a51a3feb994929289bfa74b35960f6ba831ce0e61c57d585"
     }
   },
-  "peak_rss_kib": 230672,
+  "peak_rss_kib": 230528,
   "qualification": "gpu-required",
   "rayon_workers": 32,
   "schema": "uor-r4.cpu-content-readout-run/2",
@@ -89407,5 +89407,5 @@
       "target_values": 207
     }
   },
-  "wall_elapsed_ms": 3140.8127339999996
+  "wall_elapsed_ms": 3233.600912
 }

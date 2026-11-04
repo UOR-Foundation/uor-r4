@@ -1,7 +1,7 @@
 {
-  "artifact": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/content-readout-serving/2026-11-04-attempt-4/seed-1/serving.uorlut",
+  "artifact": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/content-readout-serving/2026-11-04-attempt-5/seed-1/serving.uorlut",
   "artifact_sha256": "ed06a88b6c2cfffda72d16d4387c60982f39d1d7fe7229a0ed38fcc2d47daffc",
-  "content_readout": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/content-readout-serving/2026-11-04-attempt-4/seed-1/content-readout-sidecar.json",
+  "content_readout": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/content-readout-serving/2026-11-04-attempt-5/seed-1/content-readout-sidecar.json",
   "content_readout_sha256": "e60a909e14a8fa2ab310a9a6255fa995920f51202471936661077c8f7ea290e7",
   "context": 192,
   "decoding": "greedy serve_step (dense: integer argmax; SpiralCore/FBS: native/point fallback, optionally overridden by an artifact-bound content-readout sidecar)",
@@ -11,6 +11,8 @@
     1,
     1
   ],
+  "generated_tokens_per_second": 4119.345683131692,
+  "generation_seconds": 0.000971028,
   "last_token": 1,
   "position": 6,
   "prompt_ids": [

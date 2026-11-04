@@ -21,7 +21,15 @@ Order: [ORDER.md](ORDER.md). Base: `70f45367d`.
 - **Attempt 3 was an instrument failure.** It passed the same parity and
   control assertions but ran the focused tests inside the chat target, which
   grew to 2,246,424,310 bytes against the registered 2 GiB limit. Attempt 4
-  uses a separate control target and preserves attempt 3 as evidence.
+  used a separate control target and preserves attempt 3 as evidence.
+- **Attempt 4 failed serving review.** It allocated a signature vector and vote
+  map per served decision, did not directly exercise both raw APIs on the
+  attached model, and left serving throughput unmeasured. Attempt 5 removes
+  the allocations and records the missing checks.
+- **The sidecar costs throughput.** At one serving thread, the 894-row table
+  reached a median **4,529.71 generated tokens/s**, versus **4,796.19/s**
+  without it, retaining **94.44%** on the same 32-token trajectory. Each
+  decision scans 228,864 signature bytes and 4,096 vote slots.
 
 ## What changed
 
@@ -29,7 +37,9 @@ The positive modulo-256 content readout now has an exact integer serving path.
 `IntegerStackModel::serve_step` obtains the normal native writer or point-key
 fallback and then applies the sidecar's nearest-example target only inside its
 training-fitted Hamming radius. Raw `step` and `step_native` do not consult the
-readout.
+readout. The selector's signature is a fixed stack array, while vote counts and
+epochs come from session-owned scratch; attaching a readout adds 32,772 bytes
+of logical scratch storage, excluding allocator bookkeeping.
 
 The sidecar uses schema `uor-r4.stack-content-readout/1`, binds the complete
 serving artifact SHA-256, and rejects wrong artifacts, sign-mode or reference-end
@@ -61,13 +71,16 @@ Attempt 3 at pin `819482378` passed every parity and control assertion but
 grew its shared chat target above the registered ceiling; it remains under
 [`evidence-attempt-3/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-3/)
 with its own [resource ledger](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/attempt-3-resource-ledger.json).
-Attempt 4 at the same implementation pin isolated the controls and is the
-deciding run below.
+Attempt 4 at the same implementation pin isolated the controls and passed the
+CPU/serving parity arm. Exact review then found the per-decision allocation,
+raw-step coverage and efficiency gaps; its complete tree remains under
+[`evidence-attempt-4/`](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence-attempt-4/).
+Attempt 5 at implementation pin `486932e24` is the deciding run below.
 
 After deepseek-141 merged the item scope, this branch rebased onto fresh
-`main`. The measured runtime source is now commit `881b8ad95`; its crate source
-outside tests is identical to executed pin `819482378`. The later `d847ba71c`
-review-repair commit adds parser-refusal tests and records only.
+`main`. Attempt 4 measured commit `881b8ad95`, whose crate source outside tests
+is identical to executed pin `819482378`. Attempt 5 adds the allocation-free
+selector and direct raw-path tests at commit `486932e24`.
 
 The preserved attempt-3 metadata records the registration timestamps; the
 evidence directory's filesystem birth and final-manifest mtimes were
@@ -113,47 +126,48 @@ Responses, and final-stream JSON.
 
 Build and runs:
 
-- driver build: **20 s**, peak RSS **1,224,168 KiB**, target
-  **266,917,268 bytes**;
-- `uor-chat` build: **12 s**, peak RSS **1,199,584 KiB**, target
-  **104,717,444 bytes**;
-- focused controls: **33.47 s**, peak RSS **2,430,812 KiB**, isolated target
-  **2,141,709,077 bytes**; 7 integer and 18 loopback tests passed;
-- walls: **3.19/3.15/3.23 s** at 32 Rayon workers for seed 1, seed 2 and the
+- driver build: **19 s**, peak RSS **1,189,076 KiB**, target
+  **266,934,026 bytes**;
+- `uor-chat` build: **12 s**, peak RSS **1,200,396 KiB**, target
+  **104,718,166 bytes**;
+- focused controls: **34.57 s**, peak RSS **2,405,300 KiB**, isolated target
+  **2,141,139,524 bytes**; 9 integer/session and 18 loopback tests passed;
+- walls: **3.26/3.25/3.25 s** at 32 Rayon workers for seed 1, seed 2 and the
   seed-1 repeat;
-- run RSS maxima: **228,344/228,096/227,932 KiB**;
+- run RSS maxima: **228,088/227,384/227,872 KiB**;
 - driver and chat binary SHA-256:
-  `811da311338b477c62a9c0f628cf86b7c4e2737be1e37b6973b035b939b75d29`
+  `cc3c512d6c69ea4ee4768785369010313bc704adda1fbb94d6ba350548126928`
   and
-  `31f562fd07e1c2993e8363ee2ec3b1a54f291296b99a92e459bd5d65dc727c96`;
-- committed deciding evidence: **49,502,554 bytes**; all four attempt trees
-  retain **197,982,559 bytes**, below the registered 224 MiB limit;
+  `26f0f20f01416d43e5d66de67d5a46036d49b7ac560656d321efa1d9fcabb52d`;
+- committed deciding evidence: **49,513,908 bytes**; all five attempt trees
+  retain **247,496,467 bytes**, below the registered 256 MiB limit;
 - evidence `SHA256SUMS`:
-  `15cd38a930e17025d4227568d1b4d1b48740ed6f266c682599cc85565a209262`.
+  `b1e7889f305cca25973a99ccc4238b9fd53b0c6e42bd29c013b8f7677d7b3e31`.
 
 Compact evidence:
 [comparison.json](../../../../labs/cpu-training-pilot-content-serving-2026-11-04/evidence/comparison.json).
-The source pipeline occupied **49,502,554 bytes**.
+The source pipeline and efficiency record occupied **49,513,908 bytes**.
 
 ## Checks run at the head
 
 - Full `uor-r4-cpu-train` release suite: **246 passed, 4 expected ignores**,
   with all binary tests green.
-- Full `uor-r4-integer` serving library suite: **463 total, 462 passed and 1
+- Full `uor-r4-integer` serving library suite: **464 total, 463 passed and 1
   expected ignore**.
-- The attempt-4 control target ran **7** focused integer/session tests and
+- The attempt-5 control target ran **9** focused integer/session tests and
   **18** OpenAI-loopback tests, all passing.
 - The built release CLI independently completed a prompt-ID smoke, a text
   one-shot and a one-turn REPL with the exact sidecar path and hash; a sidecar
   missing `includes_reference_end` was refused before any step.
 - Focused tests cover sidecar strictness, BOS refusal, voting and fallback,
-  raw-step isolation, complete CPU/serving parity, same-readout session
+  attached-model raw `step`/`step_native`, no-readout `serve_step`,
+  reuse/wraparound of session vote scratch, complete CPU/serving parity, same-readout session
   restore, missing/different-readout refusal, legacy `UR4SESS1` and
   `UR4SESS2` codec identity.
 - The post-run parser-refusal suite directly covers wrong schema, sign mode,
   empty rows, malformed and oversized thresholds, unknown readout/row fields,
-  trailing input and the 64 MiB bound; the full integer suite is **463 total:
-  462 passed and 1 expected ignore**.
+  trailing input and the 64 MiB bound; the full integer suite is **464 total:
+  463 passed and 1 expected ignore**.
 - Strict `uor-r4-cpu-train` Clippy with `--no-deps -D warnings`, targeted
   `rustfmt --check` on every touched Rust file, and the source/docs-scoped
   `git diff --check` passed. The complete evidence diff retains the captured
@@ -164,8 +178,12 @@ The source pipeline occupied **49,502,554 bytes**.
   and the failure list contains none of the new content-readout diagnostics.
 - Both evidence manifests, the normalized repeat, generated JSON and
   `serving.uorlut`/sidecar files matched.
+- Three paired throughput runs used the same artifact, prompt IDs and
+  single-threaded release CLI. The sidecar median was 4,529.714 tokens/s
+  against 4,796.190/s without it; the measured generation-loop values and
+  candidate/byte costs are in `efficiency.json`.
 - Claim wording, docs catalog, roadmap schema/rendering, prep-check, D23 and
-  D25 passed. The full harness check exited 0 with no errors and 160
+  D25 passed. The full harness check exited 0 with no errors and 164
   repository-wide warnings, with no warning attached to this unit.
 
 ## Skills used
@@ -177,7 +195,7 @@ separate subagents.
 
 - Complete replies and a geometric termination rule.
 - Fresh-phrasing and semantic-correctness panels.
-- GPU parity and throughput for sidecar serving.
+- GPU parity and wider-hardware throughput for sidecar serving.
 - Claude's P3 decode-cache unit and later end-to-end model evaluation.
 
 ## Plain summary
