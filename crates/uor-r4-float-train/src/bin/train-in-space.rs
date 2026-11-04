@@ -20,8 +20,9 @@
 //! (`HammingReads::with_copy_keys`, claude-268); the checkpoint records the list when they differ.
 //! `--score-rows` additionally accepts `[--batched-decode 0|1]`.
 //!
-//! `--score-rows` decodes equal-length prompts together on the full-scope nearest arms, and every
-//! other arm one prompt at a time (`BATCHED_DECODE_DEFAULT`, claude-270). `--batched-decode 0`
+//! `--score-rows` decodes equal-length prompts together on the full-scope nearest arms, except
+//! their forced-opening and served-key decodes, and everything else one prompt at a time
+//! (`BATCHED_DECODE_DEFAULT`, claude-270). `--batched-decode 0`
 //! decodes every prompt one at a time: the serial reference, which gave byte-identical files on
 //! an RTX 5090 at two arms and two seeds.
 //!
