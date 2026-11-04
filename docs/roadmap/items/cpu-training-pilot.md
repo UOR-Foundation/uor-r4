@@ -161,6 +161,26 @@ the next attempt must change the representation or compare terminal against
 nonterminal density. See
 [deepseek-118](../../loop/tasks/cpu-training-pilot/deepseek-118/REPORT.md).
 
+A top-writer-cell majority gate then tested cell identity instead of point
+distance. Each seed learned from 102 terminal and 1,192 nonterminal training
+queries. Cell 1 occupied 92 terminal rows and was the dominant learned cell;
+seed 2 also learned cells 145 and 191. The learned gate stopped 114/114 seed-1
+replies and 48/114 seed-2 replies, but every BOS was premature and the exact
+count stayed zero. Equal-size disjoint shuffled-cell controls never fired.
+This resolves the missing-admission question but shows that cell identity alone
+does not separate the final row from ordinary continuation. See
+[deepseek-120](../../loop/tasks/cpu-training-pilot/deepseek-120/REPORT.md).
+
+A finite full-path acceptance fixture now covers the 2,048-position boundary
+Claude's long-window track targets. With mixed-key Hamming reads, opening/reply
+memory and a point key active, the CPU oracle and integer serving agreed on
+all 131,072 Q12 coordinates, 2,048 token decisions and 16,384 kept cells. A
+copy read at position 1,024 retained early position 100, replay was
+deterministic, and position 2,049 was refused as context exhaustion. This
+prepares the existing `cpu-served-forward-audit` check for Claude's first
+trained long-context export; it is not a long-context capability result. See
+[deepseek-121](../../loop/tasks/cpu-training-pilot/deepseek-121/REPORT.md).
+
 ## Done when
 
 - The pre-registration exists before compute and names pass, fail and stop outcomes.
