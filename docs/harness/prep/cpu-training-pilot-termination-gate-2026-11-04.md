@@ -1,6 +1,6 @@
 # CPU geometric termination-point gate
 
-**Status:** FIT
+**Status:** DRAFT
 
 ## Question
 
@@ -151,9 +151,11 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 ## Candidate bar
 
 On each of both model seeds, `trained_gate` must strictly exceed both
-`no_gate` and `random_gate` in BOS-complete replies and must not reduce
-exact-reference replies relative to either control. Premature stops are
-reported and do not count as success.
+`no_gate` and `random_gate` in non-premature BOS completion
+(`bos_complete - premature_stop`) and must not reduce exact-reference replies
+relative to either control. Raw BOS completion and premature stops remain
+reported, but a premature BOS does not count as success. A reading whose
+premature stops exceed its BOS completions is refused.
 
 A positive result advances only as a bounded CPU development finding. It
 justifies a follow-up on held-out phrasing and an integer-serving
@@ -173,20 +175,4 @@ nondeterministic repeat, an unavailable dependency or a counter overflow.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030
-sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`
-head: `951ce09c701fd4783ea4f0b8c0de96e6becd387a`
-reviewer: Codex fresh-context non-author review
-note: bounded two-seed D84 CPU termination experiment; fixed deepseek-109
-16-key / 102-training / 114-evaluation selection and 32-update replay; three
-arms (no gate, training-derived terminal-point gate, equal-size random
-nonterminal-point control); corpus EOS id 1 identifies the terminal training
-row and an accepted match maps to decoder BOS id 0; deterministic training-only
-L1 derivation, exact collision removal, radius bounds, 16-token cap, 32 Rayon
-workers, pinned trained/no-gate hashes, strict candidate bar, seed-1 repeat and
-30-minute stop.
-date: 2026-11-04
-
-This FIT clears only this registered configuration at the exact source head.
-Any source, hash, selection, arm, cap, bar, control or gate-rule change requires
-re-review.
+Pending fresh-context non-author FIT at the corrected success-accounting head.

@@ -796,19 +796,31 @@ fn termination_gate_comparison(
     let paired = paired_reply_comparison(candidate, control)?;
     let candidate_bos = candidate.reading.bos_complete;
     let control_bos = control.reading.bos_complete;
-    let bos_strictly_higher = candidate_bos > control_bos;
+    let candidate_non_premature_bos = candidate
+        .reading
+        .bos_complete
+        .checked_sub(candidate.reading.premature_stop)
+        .ok_or_else(|| "candidate premature stops exceed BOS completions".to_owned())?;
+    let control_non_premature_bos = control
+        .reading
+        .bos_complete
+        .checked_sub(control.reading.premature_stop)
+        .ok_or_else(|| "control premature stops exceed BOS completions".to_owned())?;
+    let non_premature_bos_strictly_higher = candidate_non_premature_bos > control_non_premature_bos;
     let exact_not_lower = candidate.reading.exact_reference >= control.reading.exact_reference;
     Ok(serde_json::json!({
         "paired_exact": paired,
         "candidate_bos": candidate_bos,
         "control_bos": control_bos,
+        "candidate_non_premature_bos": candidate_non_premature_bos,
+        "control_non_premature_bos": control_non_premature_bos,
         "candidate_exact": candidate.reading.exact_reference,
         "control_exact": control.reading.exact_reference,
         "candidate_premature_stop": candidate.reading.premature_stop,
         "control_premature_stop": control.reading.premature_stop,
-        "bos_strictly_higher": bos_strictly_higher,
+        "non_premature_bos_strictly_higher": non_premature_bos_strictly_higher,
         "exact_not_lower": exact_not_lower,
-        "passes": bos_strictly_higher && exact_not_lower,
+        "passes": non_premature_bos_strictly_higher && exact_not_lower,
     }))
 }
 
@@ -1041,7 +1053,7 @@ mod tests {
                 replies: 1,
                 bos_complete: bos,
                 exact_reference: 1,
-                premature_stop: 1 - bos,
+                premature_stop: 0,
                 ..ReplyReading::default()
             },
             reply_sha256: String::new(),
@@ -1050,12 +1062,28 @@ mod tests {
         };
         let wins = termination_gate_comparison(&reading(1), &reading(0)).unwrap();
         assert_eq!(wins["passes"], true);
-        assert_eq!(wins["bos_strictly_higher"], true);
+        assert_eq!(wins["non_premature_bos_strictly_higher"], true);
         assert_eq!(wins["exact_not_lower"], true);
 
         let tie = termination_gate_comparison(&reading(1), &reading(1)).unwrap();
         assert_eq!(tie["passes"], false);
-        assert_eq!(tie["bos_strictly_higher"], false);
+        assert_eq!(tie["non_premature_bos_strictly_higher"], false);
+
+        let premature = TimedReplyReading {
+            rows: rows.clone(),
+            reading: ReplyReading {
+                replies: 1,
+                bos_complete: 1,
+                premature_stop: 1,
+                ..ReplyReading::default()
+            },
+            reply_sha256: String::new(),
+            wall_elapsed_us: 0,
+            generated_tokens_per_second: 0.0,
+        };
+        let all_premature = termination_gate_comparison(&premature, &reading(0)).unwrap();
+        assert_eq!(all_premature["candidate_non_premature_bos"], 0);
+        assert_eq!(all_premature["passes"], false);
     }
 
     #[test]
