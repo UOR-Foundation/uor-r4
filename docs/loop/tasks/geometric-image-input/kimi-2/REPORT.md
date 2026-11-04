@@ -11,6 +11,8 @@ Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-ima
 
 Cargo regenerated `src-tauri/Cargo.lock` with `uor-r4-vision` depending on `blake3` and `rayon`, replacing `hex`, `serde`, and `sha2`. The lockfile diff is exactly two insertions and three deletions; no source, dependency version, model, tokenizer, issue state, or Pages content changed. This task's ORDER and REPORT are the only other files.
 
+## Checks run at the head
+
 ## Measurements and checks
 
 - RED at base: `cargo build --manifest-path src-tauri/Cargo.toml --locked` refused to update the lockfile.
