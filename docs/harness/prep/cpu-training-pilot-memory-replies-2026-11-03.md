@@ -1,8 +1,8 @@
 # CPU memory-weight and target-arbitration replies
 
-**Status:** PENDING RE-FIT AFTER SOURCE CORRECTION
+**Status:** FIT
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question
 
@@ -191,9 +191,20 @@ post-observation change to arms, cap, keys, steps or controls.
 
 ## TEST FITNESS
 
-The prior FIT at `a686ecfdba0e843c872c4f59c0d45972f9dabab5` was invalidated
-when the exact-head review found that the complete-reply
-`trained_memory_off` arm still applied memory. Source now provides a genuine
-memory-disabled forward path. A fresh non-author FIT is required before rerun.
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-memory-replies-2026-11-03.md
+head: bccbf9295d011727d005e827f47cb1d0afde2c81
+reviewer: Codex fresh-context non-author review
+note: the prior invalid trained_memory_off arm is repaired. Complete replies now
+call CpuFbsForward::disable_memory, clearing turn memory and point-key fallback
+while retaining the trained artifact's trunk and identity; a focused test proves
+an artifact point key is ignored with memory off, and both memory-off arms use
+this path. The eight-arm configuration, two seeds x 114 examples, 104 reachable
+references, paired margins, shuffled-target remap threshold, D84 scope,
+16-token stopping contract, cost stop and repeat are unchanged. The prior public
+result is marked invalid and excluded from evidence. The head passes 172 library
+tests plus binaries, strict Clippy, formatting and diff checks.
+date: 2026-11-04
 
-TEST FITNESS: PENDING
+This FIT clears only the registered rerun at this exact source head. Any source,
+hash, selection, arm, cap, control or bar change requires re-review.
