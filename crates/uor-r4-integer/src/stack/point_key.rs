@@ -203,8 +203,9 @@ impl ServedPointKey {
     }
 
     /// A second, plain implementation of [`Self::name`]'s rule, for the run's instrument
-    /// (claude-228, the item's done-when 2): every row's L1 distance at Q12 into a list, the least
-    /// of them, the targets at it counted in an ordered map, then the largest count, ties to the
+    /// (claude-228, the item's done-when 2): every row's L1 distance at Q12 into a list ordered
+    /// exactly by `(distance, row)`; `vote_k = 1` counts every target at the least distance, while
+    /// a wider vote counts the first `vote_k` rows. Both choose the largest count with ties to the
     /// smaller id. It shares no code with `name` and is off the step's path. `None` for a query of
     /// another width.
     pub(crate) fn reference_name(&self, query: &[i32]) -> Option<(u32, i64)> {

@@ -56,9 +56,10 @@ capability comparison and makes no language result.
 2. `vote_k = 8` is artifact-bound, deterministic, allocation-bounded in the
    session and exercised through native serving and the CPU audit.
 3. The exporter builds the voted artifact and refuses malformed widths.
-4. Integer and CPU package tests, strict package Clippy, formatting, report
-   validation, exact-head review, protected merge and fresh-main verification
-   pass.
+4. Integer and CPU package tests, strict `uor-r4-cpu-train` all-target Clippy,
+   formatting, report validation, exact-head review, protected merge and
+   fresh-main verification pass. The all-target `uor-r4-integer` Clippy
+   baseline is recorded separately and is not changed by this unit.
 
 ## Cancel probe
 
