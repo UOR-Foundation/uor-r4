@@ -13,7 +13,7 @@ worker count reduce wall time by at least 1.5 times on the Ryzen 9 9950X?
 
 Local CPU development research under D84. No GPU, pod or paid API.
 
-## Pins
+## Base artifact
 
 | Input | Identity |
 |---|---|
@@ -29,7 +29,7 @@ Inputs are under
 The binary was built cleanly with
 `CARGO_TARGET_DIR=target/deepseek/trunk-parallel-build-126-timing cargo build --locked --release -p uor-r4-cpu-train --bin cpu-trunk-count-driver`.
 
-## Fixed run
+## Data split
 
 Replay the accepted deepseek-125 split and dose exactly:
 
@@ -91,6 +91,15 @@ mechanism and says nothing about language capability.
 - normalized reports are identical across all eight runs;
 - every run records positive peak RSS below 2,097,152 KiB and stays below the
   600-second timeout.
+
+## Minimum test power
+
+The fixed evaluation panel has 512 document-disjoint rows, above D22's 200-row
+floor. One public artifact is sufficient for this host-performance comparison
+because deepseek-124 and deepseek-125 established the mechanism, controls and
+exact CPU/integer result on it. The repeated opposite-order runs test scheduling
+effects; they do not turn this performance measurement into fresh-transfer
+evidence.
 
 ## Steps
 
@@ -240,4 +249,16 @@ capability, count-training quality or GPU qualification.
 
 ## TEST FITNESS
 
-TEST FITNESS: pending fresh-context non-author review.
+TEST FITNESS: FIT - M2 #2030 parallel public 19-table CPU count driver
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-parallel-2026-11-04.md`
+head: `6cf73ce09a6c4be76424a4f849ab571ba716cd45`
+implementation pin: `e4bc08361c95b1b2c78a357c755c9c9812e42abe`
+binary pin: `577195fb21f29b36ef2c49bc2b02af19d0eaa8a10a04d062abe8bb4005333b5e`
+reviewer: Codex fresh-context non-author session
+note: eight fresh runs in opposite worker order; exact 125 artifact,
+decision, reading and normalized-report oracle pins; one prebuilt local
+Rayon pool; ordered worker-count tests; executable mean-wall 1.5x bar;
+fail-closed positive RSS strictly below 2,097,152 KiB; 600-second timeout
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
