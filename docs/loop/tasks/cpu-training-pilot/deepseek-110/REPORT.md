@@ -1,4 +1,4 @@
-# REPORT: cpu-training-pilot, deepseek-110 (memory-weight complete replies)
+# REPORT: cpu-training-pilot, deepseek-110 (memory-weight and target-arbitration replies)
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Prep:
@@ -7,16 +7,21 @@ Base: `5707380fe`.
 
 ## What did not work, first
 
-- **No public result exists.** The pre-registration is `TEST FITNESS: PENDING`
-  because no fresh non-author reviewer recorded a FIT. Running the registered
-  public replay before that would repeat the project's L-012 failure.
-- **This is not a new trainer.** It replays deepseek-109's exact coordinate
-  descent to determine whether that mechanism propagates into complete replies.
-  It does not reopen the failed rank-margin family or widen the coordinate
-  sweep.
-- **The point-vote complete-reply result does not answer this question.** The
-  point-vote artifacts had zero movement weights; deepseek-109 trained opening
-  and reply movement weights and was graded only token by token.
+- **Neither memory arm produced a complete reply.** Every one of the 114 prompts
+  on every arm hit the 16-token cap on both seeds. Exact-reference and
+  BOS-complete counts were zero, with zero context stops.
+- **The trained movement weights did not propagate.** Seed 1 moved the opening
+  from 0 to 14 correct, but still reached zero complete replies and repeated
+  4-grams rose from 26 to 91. Seed 2's trained and frozen arms were byte-identical
+  in output, with opening 4.
+- **Direct exact-memory targets did not carry the reply.** They raised opening
+  correctness to 50/114 on both seeds and produced 15 distinct replies, but the
+  subsequent autoregressive path still hit the cap with zero exact or
+  BOS-complete replies. The shuffled target control reached 10 openings.
+- **Direct target output was insensitive to trained fallback weights.** The
+  `target_frozen` and `target_trained` output digests were identical on each
+  seed, so the trained weights did not change the exercised target-arbitration
+  trajectory.
 
 ## What changed
 
@@ -46,27 +51,39 @@ shuffled-target control.
 
 ## Measurements
 
-**Model replay NOT RUN.** The public seed replay is blocked by the missing
-non-author FIT. No model decision, generated reply or throughput reading is
-reported here.
+The 114 references hold 1,326 tokens after one trailing BOS is removed.
+**104/114** fit the fixed 16-token cap and 192-token context. The other ten are
+26–36 tokens and are counted unreachable.
 
-The model-free selection census is complete. The 114 evaluation references
-hold 1,326 tokens after one trailing BOS is removed. The longest is 36 tokens.
-**104 of 114** references fit the registered 16-token reply cap and 192-token
-context; ten references of 26–36 tokens are unreachable under the fixed cap.
-This means 104 prompts can still be judged for exact complete reply once FIT
-clears the replay.
+Training reproduced deepseek-109 exactly on both seeds. Both runs accepted all
+32 updates and reproduced trained artifact hashes
+`c856ce21…b88de4` and `10f91f73…40e6`. Teacher-forced top-1 remained
+`507→526` and `441→484`, with distances below frozen and random.
 
-The training-only key census is stronger: **114/114** evaluation opening keys
-hit the derived memory table and **50** stored majority targets are correct.
-For reply rows, **795/1,212** keys hit and **717** stored majority targets are
-already correct, 59.2% of all evaluation reply decisions. Only 44 of 724 reply
-keys, covering 133 of 1,192 training reply decisions, are ambiguous. This is a
-table-content ceiling, not served-model output. It shows that missing table
-content is not the sole explanation for deepseek-109's low served top-1; target
-distance, writer rendering and remaining misses can still limit it.
+Complete-reply readings:
 
-The pinned census is [reference-census.json](evidence/reference-census.json).
+| Seed | Arm | Exact | BOS | Cap | Opening | Distinct | Repeated 4-gram |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 1 | frozen / trained / random | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 0 / 14 / 0 | 2 / 3 / 2 | 26 / 91 / 26 |
+| 1 | target frozen / trained / shuffled | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 50 / 50 / 10 | 15 / 15 / 15 | 76 / 76 / 81 |
+| 2 | frozen / trained / random | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 4 / 4 / 4 | 2 / 2 / 2 | 48 / 48 / 48 |
+| 2 | target frozen / trained / shuffled | 0 / 0 / 0 | 0 / 0 / 0 | 114 / 114 / 114 | 50 / 50 / 10 | 15 / 15 / 16 | 37 / 37 / 61 |
+
+Every paired exact-reference comparison covered 104 reachable rows, had
+`b+c=0`, gain 0 against a threshold of 2, and failed the registered margin.
+The five served query-movement arms retained zero mismatches over 4,333
+decisions, 1,109,248 Q12 coordinates and 34,664 kept cells per seed.
+
+The shuffle control changed **102/114** exercised opening mappings and
+**773/795** exercised reply mappings while preserving keys and weights.
+
+Walls were 37.028 s and 37.276 s; peak RSS was 410,784 and 398,500 KiB. A fresh
+seed-1 process reproduced the complete report with all timing fields removed,
+and reproduced every artifact hash byte for byte.
+
+The detailed record is [comparison.json](evidence/comparison.json);
+[SHA256SUMS](evidence/SHA256SUMS) binds the binary and generated artifacts. The
+model-free ceiling remains in [reference-census.json](evidence/reference-census.json).
 
 ## Checks run at the head
 
@@ -84,6 +101,9 @@ The pinned census is [reference-census.json](evidence/reference-census.json).
   compute.
 - Model-free `--select-only --reply-cap 16` reproduced 16 keys, 102 training
   examples, 114 evaluation examples and the 104-reachable-reference census.
+- Both public seeds and the fresh seed-1 repeat completed under FIT.
+- Both seeds reproduced the registered trained artifact hashes and exact
+  five-arm CPU/serving parity.
 
 ## Skills used
 
@@ -92,35 +112,34 @@ No system-provided skill applied.
 
 ## Reading
 
-The instrument is ready; the model question is unanswered. A future fresh
-non-author FIT can authorize the bounded replay. Until then, no claim is made
-about whether trained movement weights affect complete replies or termination.
+The registered complete-reply question is negative. Movement weights and direct
+exact-memory targets can change the first token, but neither produces a
+complete or naturally terminated reply in this configuration. Because every
+paired exact-reference result is `0=0`, no larger fresh-phrasing run or serving
+implementation is justified for this target-arbitration formulation.
 
-The key census changes the next trainer decision. The table already contains a
-correct majority target for 59.2% of teacher-forced held-out reply decisions,
-while deepseek-109's served model named only 12.5% correctly. Increasing the
-coordinate sweep would therefore optimize the wrong bottleneck. This unit now
-includes the lawful exact-memory target arbitration and matched shuffled-target
-control. A positive target result is CPU-offline evidence only: the mechanism
-must then be implemented in integer serving and pass exact CPU/serving parity
-and the release gate before a larger fresh-phrasing run. If the replay is
-negative, target arbitration is closed as a configuration and the next unit
-must change the memory key or proposal path, not widen the coordinate sweep.
+This closes the fixed 16-key / 102-training / 114-evaluation, 32-update,
+16-token greedy memory-target configuration. It does not reject every memory
+key or every proposal path. The next work must change how reply continuation
+and termination are represented, not add more movement-weight steps or another
+width of this target arbiter.
 
 ## Still open
 
-- Fresh non-author TEST FITNESS for the pending sheet.
-- Two-seed replay and seed-1 repeat.
-- Comparison against frozen, random, memory-off and trained-memory-off.
-- A materially different credit rule if complete-reply propagation is negative.
-- The pending matched replay comparing exact-memory target arbitration with
-  query-only movement.
+- A continuation mechanism that can escape the fixed 16-token cap.
+- A new memory-key or proposal rule; the current direct-target formulation is
+  closed.
+- Serving implementation only if a future positive arm exists.
 - Complete replies, fresh phrasing, useful chat and GPU qualification.
 
 ## Plain summary
 
-The source can now replay deepseek-109 and grade five query-movement artifacts
-plus three direct-target arbitration arms on bounded complete replies.
-Everything finite is implemented and green. No public run was performed, so
-this unit contributes a ready instrument and a pending pre-registration rather
-than a model result.
+Both public seeds and a fresh seed-1 repeat ran the five query-movement and
+three direct-target arms through complete greedy replies. Memory weights raised
+teacher-forced top-1, but every complete-reply arm hit the cap with zero exact
+and zero BOS-complete replies. Direct targets raised opening correctness to
+50/114 but did not complete a reply.
+
+The result closes this full-path memory-target configuration. The next step is
+a continuation and termination mechanism, not more coordinate updates or a
+larger version of the same target arbiter.
