@@ -179,7 +179,7 @@ None applied.
    - "First" is per pass, and groups run shortest first, so an early group's short prompt or slide can hide a later group's refusal. A count per kind would show both.
    - The epoch comment calls it "the identity of the reads set". It counts calls to `set_hamming_reads`, so an in-place update of the reads' tensors would not bump it. Nothing does that inside a decode.
    - Two nits: a `ReadHook` name reaches `first_refusal` with its trailing comma, and a doc comment in `DecodeForwards` has a broken line.
-3. **The real-text corpus** (THE ORDER step 6) still stands. This result does not clear the data; it says the read fails first, even on data drawn as TRAIN was.
+3. **The real-text corpus** (THE ORDER step 6) still stands. This result does not clear the data; it says the trained model does not recall first, even on data drawn as TRAIN was. It does not separate the read from the recipe.
 4. **The tok/s difference between pods** (137–148 here against claude-279's 98.7, with the same cache) is not explained. The kernel unit (#3678) times a cached step, and should time it on one pod type, or report the host.
 5. **Then, as #2028 orders:**
    - the kernel unit (#3678): the generated kernel list first, then the measurement, then the fusion if the chains are at least 5% of a step;
