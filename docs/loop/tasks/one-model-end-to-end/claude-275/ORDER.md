@@ -58,7 +58,8 @@ This unit builds those three, writes the long panel and the long TRAIN on the la
    - For a queries panel, it also counts the share of answers that appear in any TRAIN reply.
    - Run on the laptop: the long panel against the long TRAIN.
 6. **The row stride.** `--score-rows --context N` with 192 < N ≤ 1,536 is refused by name. Several windows share a forward there, and `row_picks`' stride call site has no test. A test pins the refusal, with a negative gate.
-7. **P2b's sheet.** `docs/harness/prep/one-model-end-to-end-long-context-2026-11-04.md`, with the shape rule's headings (Bar, Base artifact, Data split, Steps, Minimum test power), a fresh non-author FIT, and a fresh pre-run review that passes.
+7. **P2b's sheet.** `docs/harness/prep/one-model-end-to-end-long-context-2026-11-04.md`, with the shape rule's headings (Bar, Base artifact, Data split, Steps, Minimum test power), and a fresh non-author FIT.
+   - **Amended 4 Nov, before any work:** the pre-run review moves to the run's unit and happens right before launch, as §5.10 orders. The run's pin is this unit's merge commit, which does not exist until this unit merges. A job file reviewed here would have to change its pin line afterwards, which voids the review.
 
 ## Stop and ask if
 
