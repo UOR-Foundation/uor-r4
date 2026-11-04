@@ -22,7 +22,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `116de4fda557098192b12c7d5a3aa24e4511e926` |
+| implementation source | `6bd0edff0e7a32e8457e2630a952bd235a9c0523` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -141,7 +141,7 @@ fresh roots:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-stop-signature
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=116de4fda557098192b12c7d5a3aa24e4511e926
+SOURCE_PIN=6bd0edff0e7a32e8457e2630a952bd235a9c0523
 PIPELINE=$SHARED/local/deepseek/stop-signature/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/stop-signature-132
 DEV=$SHARED/local/deepseek/public-m1-parity

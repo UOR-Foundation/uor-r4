@@ -50,7 +50,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-132/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-stop-signature-2026-11-04.md",
-    "implementation_pin": "116de4fda557098192b12c7d5a3aa24e4511e926"
+    "implementation_pin": "6bd0edff0e7a32e8457e2630a952bd235a9c0523"
   },
   "normal_close": {
     "gpu_pods": 0,
