@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use uor_r4_cpu_train::{
@@ -304,7 +304,7 @@ fn run() -> Result<serde_json::Value, String> {
     .map_err(|error| error.to_string())?;
     let memory_artifact =
         add_turn_memory_uorlut01(&artifact, &memory).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
+    create_fresh_output(&config.out)?;
     std::fs::write(config.out.join("memory-baseline.uorlut"), &memory_artifact)
         .map_err(|error| error.to_string())?;
 
@@ -766,6 +766,16 @@ fn memory_sample(sample: &CpuConversationSample) -> MemoryWeightSample {
     }
 }
 
+fn create_fresh_output(out: &Path) -> Result<(), String> {
+    if out.exists() {
+        return Err(format!("output root already exists: {}", out.display()));
+    }
+    if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    std::fs::create_dir(out).map_err(|error| format!("{}: {error}", out.display()))
+}
+
 fn reference_shape(
     samples: &[MemoryWeightSample],
     cap: usize,
@@ -922,33 +932,57 @@ fn termination_gate_comparison(
     control: &TimedReplyReading,
 ) -> Result<serde_json::Value, String> {
     let paired = paired_reply_comparison(candidate, control)?;
-    let candidate_bos = candidate.reading.bos_complete;
-    let control_bos = control.reading.bos_complete;
-    let candidate_non_premature_bos = candidate
-        .reading
-        .bos_complete
-        .checked_sub(candidate.reading.premature_stop)
-        .ok_or_else(|| "candidate premature stops exceed BOS completions".to_owned())?;
-    let control_non_premature_bos = control
-        .reading
-        .bos_complete
-        .checked_sub(control.reading.premature_stop)
-        .ok_or_else(|| "control premature stops exceed BOS completions".to_owned())?;
-    let non_premature_bos_strictly_higher = candidate_non_premature_bos > control_non_premature_bos;
+    let (mut candidate_non_premature_bos, mut control_non_premature_bos) = (0u64, 0u64);
+    let (mut candidate_only, mut control_only) = (0u64, 0u64);
+    for (left, right) in candidate.rows.iter().zip(&control.rows) {
+        if left.row != right.row {
+            return Err("termination BOS rows differ".to_owned());
+        }
+        candidate_non_premature_bos = candidate_non_premature_bos
+            .checked_add(u64::from(left.non_premature_bos))
+            .ok_or_else(|| "candidate non-premature BOS count overflows".to_owned())?;
+        control_non_premature_bos = control_non_premature_bos
+            .checked_add(u64::from(right.non_premature_bos))
+            .ok_or_else(|| "control non-premature BOS count overflows".to_owned())?;
+        candidate_only = candidate_only
+            .checked_add(u64::from(
+                left.non_premature_bos && !right.non_premature_bos,
+            ))
+            .ok_or_else(|| "candidate-only BOS count overflows".to_owned())?;
+        control_only = control_only
+            .checked_add(u64::from(
+                !left.non_premature_bos && right.non_premature_bos,
+            ))
+            .ok_or_else(|| "control-only BOS count overflows".to_owned())?;
+    }
+    let discordant = candidate_only
+        .checked_add(control_only)
+        .ok_or_else(|| "termination BOS discordance overflows".to_owned())?;
+    let threshold =
+        2u64.max(ceil_sqrt(discordant.checked_mul(4).ok_or_else(|| {
+            "termination BOS threshold overflows".to_owned()
+        })?));
+    let bos_gain = i128::from(candidate_non_premature_bos) - i128::from(control_non_premature_bos);
+    let non_premature_bos_margin = bos_gain >= i128::from(threshold);
     let exact_not_lower = candidate.reading.exact_reference >= control.reading.exact_reference;
     Ok(serde_json::json!({
         "paired_exact": paired,
-        "candidate_bos": candidate_bos,
-        "control_bos": control_bos,
+        "candidate_bos": candidate.reading.bos_complete,
+        "control_bos": control.reading.bos_complete,
         "candidate_non_premature_bos": candidate_non_premature_bos,
         "control_non_premature_bos": control_non_premature_bos,
+        "candidate_only_non_premature_bos": candidate_only,
+        "control_only_non_premature_bos": control_only,
+        "discordant_non_premature_bos": discordant,
+        "non_premature_bos_threshold": threshold,
+        "non_premature_bos_gain": bos_gain,
         "candidate_exact": candidate.reading.exact_reference,
         "control_exact": control.reading.exact_reference,
         "candidate_premature_stop": candidate.reading.premature_stop,
         "control_premature_stop": control.reading.premature_stop,
-        "non_premature_bos_strictly_higher": non_premature_bos_strictly_higher,
+        "non_premature_bos_margin": non_premature_bos_margin,
         "exact_not_lower": exact_not_lower,
-        "passes": non_premature_bos_strictly_higher && exact_not_lower,
+        "passes": non_premature_bos_margin && exact_not_lower,
     }))
 }
 
@@ -1085,32 +1119,54 @@ mod tests {
     }
 
     #[test]
+    fn output_root_must_be_fresh() {
+        let root = std::env::temp_dir().join(format!(
+            "uor-r4-orbit-output-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let out = root.join("run");
+        create_fresh_output(&out).unwrap();
+        assert!(create_fresh_output(&out).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn paired_reply_margin_uses_asymmetric_disagreements_and_skips_unreachable() {
         let rows = vec![
             ReplyRowReading {
                 row: 0,
                 reachable: true,
                 exact: true,
+                non_premature_bos: true,
             },
             ReplyRowReading {
                 row: 1,
                 reachable: true,
                 exact: false,
+                non_premature_bos: false,
             },
             ReplyRowReading {
                 row: 2,
                 reachable: true,
                 exact: true,
+                non_premature_bos: true,
             },
             ReplyRowReading {
                 row: 3,
                 reachable: false,
                 exact: false,
+                non_premature_bos: false,
             },
             ReplyRowReading {
                 row: 4,
                 reachable: true,
                 exact: true,
+                non_premature_bos: false,
             },
         ];
         let control_rows = vec![
@@ -1118,26 +1174,31 @@ mod tests {
                 row: 0,
                 reachable: true,
                 exact: false,
+                non_premature_bos: false,
             },
             ReplyRowReading {
                 row: 1,
                 reachable: true,
                 exact: true,
+                non_premature_bos: true,
             },
             ReplyRowReading {
                 row: 2,
                 reachable: true,
                 exact: true,
+                non_premature_bos: true,
             },
             ReplyRowReading {
                 row: 3,
                 reachable: false,
                 exact: true,
+                non_premature_bos: false,
             },
             ReplyRowReading {
                 row: 4,
                 reachable: true,
                 exact: false,
+                non_premature_bos: false,
             },
         ];
         let reading = |rows: Vec<ReplyRowReading>, bos: u64| TimedReplyReading {
@@ -1168,17 +1229,22 @@ mod tests {
 
     #[test]
     fn termination_gate_requires_strict_bos_gain_without_exact_loss() {
-        let rows = vec![ReplyRowReading {
-            row: 0,
-            reachable: true,
-            exact: true,
-        }];
-        let reading = |bos: u64| TimedReplyReading {
-            rows: rows.clone(),
+        let rows = |non_premature_bos: bool| {
+            (0..4)
+                .map(|row| ReplyRowReading {
+                    row,
+                    reachable: true,
+                    exact: true,
+                    non_premature_bos,
+                })
+                .collect::<Vec<_>>()
+        };
+        let reading = |non_premature_bos: bool, bos: u64| TimedReplyReading {
+            rows: rows(non_premature_bos),
             reading: ReplyReading {
-                replies: 1,
+                replies: 4,
                 bos_complete: bos,
-                exact_reference: 1,
+                exact_reference: 4,
                 premature_stop: 0,
                 ..ReplyReading::default()
             },
@@ -1186,28 +1252,29 @@ mod tests {
             wall_elapsed_us: 0,
             generated_tokens_per_second: 0.0,
         };
-        let wins = termination_gate_comparison(&reading(1), &reading(0)).unwrap();
+        let wins = termination_gate_comparison(&reading(true, 4), &reading(false, 0)).unwrap();
         assert_eq!(wins["passes"], true);
-        assert_eq!(wins["non_premature_bos_strictly_higher"], true);
+        assert_eq!(wins["non_premature_bos_margin"], true);
         assert_eq!(wins["exact_not_lower"], true);
 
-        let tie = termination_gate_comparison(&reading(1), &reading(1)).unwrap();
+        let tie = termination_gate_comparison(&reading(true, 4), &reading(true, 4)).unwrap();
         assert_eq!(tie["passes"], false);
-        assert_eq!(tie["non_premature_bos_strictly_higher"], false);
+        assert_eq!(tie["non_premature_bos_margin"], false);
 
         let premature = TimedReplyReading {
-            rows: rows.clone(),
+            rows: rows(false),
             reading: ReplyReading {
-                replies: 1,
+                replies: 4,
                 bos_complete: 1,
                 premature_stop: 1,
+                exact_reference: 0,
                 ..ReplyReading::default()
             },
             reply_sha256: String::new(),
             wall_elapsed_us: 0,
             generated_tokens_per_second: 0.0,
         };
-        let all_premature = termination_gate_comparison(&premature, &reading(0)).unwrap();
+        let all_premature = termination_gate_comparison(&premature, &reading(false, 0)).unwrap();
         assert_eq!(all_premature["candidate_non_premature_bos"], 0);
         assert_eq!(all_premature["passes"], false);
     }

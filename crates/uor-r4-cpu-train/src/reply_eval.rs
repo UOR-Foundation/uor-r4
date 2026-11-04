@@ -50,6 +50,7 @@ pub struct ReplyRowReading {
     pub row: usize,
     pub reachable: bool,
     pub exact: bool,
+    pub non_premature_bos: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1346,10 +1347,14 @@ fn evaluate_generated(
     let row_readings = rows
         .iter()
         .enumerate()
-        .map(|(row, (generated, reference, reachable))| ReplyRowReading {
-            row,
-            reachable: *reachable,
-            exact: generated.tokens == normalized_reference(reference),
+        .map(|(row, (generated, reference, reachable))| {
+            let exact = generated.tokens == normalized_reference(reference);
+            ReplyRowReading {
+                row,
+                reachable: *reachable,
+                exact,
+                non_premature_bos: generated.stop == "bos" && exact,
+            }
         })
         .collect::<Vec<_>>();
     let reply_sha256 = reply_sequence_sha256(&rows);
