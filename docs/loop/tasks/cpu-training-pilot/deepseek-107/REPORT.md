@@ -40,9 +40,10 @@ script still executes the exact SpiralCore/prime-route metadata path but no
 longer compiles `uor-r4-integer` under a second feature set. Normal core
 consumers are unchanged because the feature is on by default.
 
-The code diff is 3 files, `+10/-2`. The docs diff at the reviewed source head
-is 4 files, `+174/-1`; retained evidence is 2 files, `+47/-0`. This remains
-within the ORDER's finite build-repair scope.
+The code diff is 3 files, `+10/-2`; retained evidence is 2 files, `+47/-0`.
+Documentation adds the ORDER, this REPORT, the item entry and the program
+entry. `loop pr-check` reports their exact total at the final head. This
+remains within the ORDER's finite build-repair scope.
 
 ## Measurements
 
@@ -78,9 +79,9 @@ No available Codex skill applied.
 
 ## Still open
 
-- The complete default `uor-r4-core` binary target set was not rechecked
-  without default features because those binaries intentionally require the
-  full API.
+- The complete default `uor-r4-core` all-target set remains broken and
+  unrepaired because those binaries intentionally require the full API; the
+  failure is the pre-existing stale-target condition recorded above.
 - Three unrelated core tokenizer tests differ under this machine's rustfmt;
   they remain outside this build-graph unit.
 - No model training, recognition, generation or throughput result changed.
