@@ -3,7 +3,7 @@ id: infra-desktop-client-tauri
 title: Build the Tauri desktop client against the synthetic stand-in
 milestone: infra
 area: serving
-status: done
+status: in_progress
 open_to: anyone
 needs_gpu: false
 depends_on: [m7-studio-connect-wasm-engine]
@@ -16,12 +16,11 @@ It is the third product the owner defined on 19 October: the same interface as t
 
 ## What is missing
 
-The desktop client exists only as a written specification: a Tauri app sharing the web interface, running the model natively with durable memory and offline use on M1-class laptops. It is a defined product but is not part of any M1 to M8 bar in these sources. Per the specification:
+The shared web/Tauri harness now exists and passes host, protocol and packaged-resource checks: one asset-origin UI and backend, a host-mediated `uor-chat` sidecar, trusted folder/model grants, bounded Git/terminal, browser and native MCP, durable object-store sessions, and a launchable macOS `.app`. These are synthetic protocol and host results, not useful-chat or production qualification.
 
-- No `src-tauri/` project exists. The Studio page `web/studio/index.html` already calls `native_read_file`, `native_write_file`, `native_git_status`, `native_run_terminal_command` and `native_list_local_models` when `window.__TAURI__` is present, but nothing in the repository defines them.
-- The engine, `crates/uor-r4-integer`, is a library and a CLI verified only on test and synthetic models.
-- `crates/uor-r4-object-store` is a tested library that no crate uses yet. Storing session snapshots in it is a design note, not done.
-- That native is faster than WebAssembly is a hypothesis. No decode speed exists for any D11 artifact, so no speed bar is registered.
+- **Native GUI acceptance has passed at development scope.** The real app showed synthetic `uor-chat` streaming and exact usage, native consent sheets, saved file/diff/terminal behavior, and both MCP transports returning their exact fixture results. Cancel and normal-exit cleanup passed; a real restart cleared credentials while preserving chat text.
+- Exact sidecar hidden-state resume, forced-kill child cleanup, signed distribution, production readiness, M3/M7/M8 completion and native-versus-WASM speed claims remain open. Cmd+R did not reload the page, so it is not used as credential-clearing evidence.
+- Independent review fixes now cover exact origins, slow partial streams, async MCP, page-unique cancellation, terminal/Git confinement and durable manifest atomicity/collisions. Exact-head review, protected delivery, fresh-main verification and hosted publication remain open; at least 30 GiB free is still unmet.
 
 ## Done when
 

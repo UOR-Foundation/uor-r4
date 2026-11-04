@@ -30,23 +30,59 @@ pub struct NativeChatEvent {
     pub error: Option<String>,
 }
 
+struct SidecarChild {
+    child: Mutex<Child>,
+}
+
+impl Drop for SidecarChild {
+    fn drop(&mut self) {
+        if let Ok(mut child) = self.child.lock() {
+            super::process_control::terminate(&mut child);
+        }
+    }
+}
+
+struct StartupChild(Option<Child>);
+
+impl Drop for StartupChild {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            super::process_control::terminate(&mut child);
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct SidecarProcess {
     port: u16,
     token: String,
-    child: Arc<Mutex<Child>>,
+    child: Arc<SidecarChild>,
     active: Arc<Mutex<BTreeMap<String, Arc<AtomicBool>>>>,
+}
+
+impl std::fmt::Debug for SidecarProcess {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SidecarProcess")
+            .field("port", &self.port)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SidecarProcess {
     pub fn start(binary: &Path, stack: &Path, tokenizer: &Path) -> Result<Self, String> {
         for path in [binary, stack, tokenizer] {
             if !path.is_file() {
-                return Err(format!("required sidecar input is unavailable: {}", path.display()));
+                return Err(format!(
+                    "required sidecar input is unavailable: {}",
+                    path.display()
+                ));
             }
         }
         let token = generate_token();
-        let mut child = Command::new(binary)
+        let mut command = Command::new(binary);
+        super::process_control::prepare(&mut command);
+        let child = command
             .arg("--stack")
             .arg(stack)
             .arg("--tokenizer")
@@ -59,11 +95,17 @@ impl SidecarProcess {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| format!("could not launch uor-chat: {error}"))?;
+        let mut startup = StartupChild(Some(child));
+        let child = startup
+            .0
+            .as_mut()
+            .ok_or_else(|| "uor-chat child was unavailable".to_string())?;
         let mut stdin = child
             .stdin
             .take()
             .ok_or_else(|| "uor-chat stdin was unavailable".to_string())?;
-        writeln!(stdin, "{token}").map_err(|error| format!("could not pass token to uor-chat: {error}"))?;
+        writeln!(stdin, "{token}")
+            .map_err(|error| format!("could not pass token to uor-chat: {error}"))?;
         drop(stdin);
         let stdout = child
             .stdout
@@ -90,13 +132,13 @@ impl SidecarProcess {
         let mut port = None;
         while port.is_none() {
             if Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
                 return Err("uor-chat did not report its loopback port before timeout".into());
             }
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(line) => {
-                    if let Some(address) = line.strip_prefix("uor-chat OpenAI loopback listening on http://127.0.0.1:") {
+                    if let Some(address) =
+                        line.strip_prefix("uor-chat OpenAI loopback listening on http://127.0.0.1:")
+                    {
                         let parsed = address
                             .split_whitespace()
                             .next()
@@ -108,16 +150,20 @@ impl SidecarProcess {
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
                     return Err("uor-chat exited before reporting its port".into());
                 }
             }
         }
+        let child = startup
+            .0
+            .take()
+            .ok_or_else(|| "uor-chat child was unavailable after startup".to_string())?;
         let sidecar = Self {
             port: port.ok_or_else(|| "uor-chat did not report a port".to_string())?,
             token,
-            child: Arc::new(Mutex::new(child)),
+            child: Arc::new(SidecarChild {
+                child: Mutex::new(child),
+            }),
             active: Arc::new(Mutex::new(BTreeMap::new())),
         };
         let readiness_deadline = Instant::now() + STARTUP_TIMEOUT;
@@ -126,8 +172,7 @@ impl SidecarProcess {
                 Ok(_) => return Ok(sidecar),
                 Err(error) => {
                     if Instant::now() >= readiness_deadline {
-                        let _ = sidecar.child.lock().map_err(|_| "sidecar mutex poisoned".to_string())?.kill();
-                        let _ = sidecar.child.lock().map_err(|_| "sidecar mutex poisoned".to_string())?.wait();
+                        sidecar.shutdown();
                         return Err(format!("uor-chat was not ready: {error}"));
                     }
                     std::thread::sleep(Duration::from_millis(100));
@@ -136,14 +181,30 @@ impl SidecarProcess {
         }
     }
 
+    pub fn shutdown(&self) {
+        if let Ok(active) = self.active.lock() {
+            for flag in active.values() {
+                flag.store(true, Ordering::Relaxed);
+            }
+        }
+        if let Ok(mut child) = self.child.child.lock() {
+            super::process_control::terminate(&mut child);
+        }
+    }
+
     pub fn port(&self) -> u16 {
         self.port
     }
 
     pub fn models(&self) -> Result<NativeProxyResponse, String> {
-        let (reader, status, headers) = self.request("GET", "/v1/models", &[], "application/json")?;
+        let (reader, status, headers) =
+            self.request("GET", "/v1/models", &[], "application/json")?;
         let body = read_bounded(reader)?;
-        Ok(NativeProxyResponse { status, headers, body })
+        Ok(NativeProxyResponse {
+            status,
+            headers,
+            body,
+        })
     }
 
     pub fn decompose(
@@ -154,13 +215,32 @@ impl SidecarProcess {
         rows: u32,
         rgba: &[u8],
     ) -> Result<NativeProxyResponse, String> {
+        if width == 0 || height == 0 || width > 256 || height > 256 {
+            return Err("image dimensions must be within 1..256".into());
+        }
+        if columns == 0
+            || rows == 0
+            || columns > 32
+            || rows > 32
+            || columns > width
+            || rows > height
+        {
+            return Err("image grid must fit within 32x32 and the image dimensions".into());
+        }
         if rgba.len() != width as usize * height as usize * 4 {
             return Err("RGBA byte length does not match dimensions".into());
         }
-        let path = format!("/v1/images/decompose?width={width}&height={height}&columns={columns}&rows={rows}");
-        let (reader, status, headers) = self.request("POST", &path, rgba, "application/octet-stream")?;
+        let path = format!(
+            "/v1/images/decompose?width={width}&height={height}&columns={columns}&rows={rows}"
+        );
+        let (reader, status, headers) =
+            self.request("POST", &path, rgba, "application/octet-stream")?;
         let body = read_bounded(reader)?;
-        Ok(NativeProxyResponse { status, headers, body })
+        Ok(NativeProxyResponse {
+            status,
+            headers,
+            body,
+        })
     }
 
     pub fn stream_chat<F>(&self, request_id: &str, body: &str, emit: F) -> Result<(), String>
@@ -199,7 +279,12 @@ impl SidecarProcess {
     where
         F: FnMut(NativeChatEvent),
     {
-        let (reader, status, headers) = self.request("POST", "/v1/chat/completions", body.as_bytes(), "application/json")?;
+        let (reader, status, headers) = self.request(
+            "POST",
+            "/v1/chat/completions",
+            body.as_bytes(),
+            "application/json",
+        )?;
         let is_sse = headers
             .get("content-type")
             .is_some_and(|value| value.to_ascii_lowercase().contains("text/event-stream"));
@@ -216,6 +301,8 @@ impl SidecarProcess {
         }
         let mut reader = reader;
         let mut block = Vec::new();
+        let mut line = Vec::new();
+        let mut idle_deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
         loop {
             if cancel.load(Ordering::Relaxed) {
                 let _ = reader.get_ref().shutdown(Shutdown::Both);
@@ -228,13 +315,18 @@ impl SidecarProcess {
                 });
                 return Ok(());
             }
-            let mut line = String::new();
-            match reader.read_line(&mut line) {
-                Ok(0) => break,
-                Ok(_) => {
-                    if line == "\r\n" || line == "\n" {
+            match read_line_bytes(&mut reader, &mut line, MAX_RESPONSE_BYTES)? {
+                LineRead::Eof => break,
+                LineRead::Pending if Instant::now() < idle_deadline => continue,
+                LineRead::Pending => return Err("timed out waiting for sidecar stream".into()),
+                LineRead::Line => {
+                    idle_deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
+                    if block.len() + line.len() > MAX_RESPONSE_BYTES {
+                        return Err("sidecar stream event exceeds 1 MiB".into());
+                    }
+                    if line == b"\r\n" || line == b"\n" {
                         if !block.is_empty() {
-                            block.extend_from_slice(line.as_bytes());
+                            block.extend_from_slice(&line);
                             emit(NativeChatEvent {
                                 status,
                                 headers: headers.clone(),
@@ -244,11 +336,10 @@ impl SidecarProcess {
                             });
                         }
                     } else {
-                        block.extend_from_slice(line.as_bytes());
+                        block.extend_from_slice(&line);
                     }
+                    line.clear();
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => continue,
-                Err(error) => return Err(format!("sidecar stream failed: {error}")),
             }
         }
         if !block.is_empty() {
@@ -274,9 +365,14 @@ impl SidecarProcess {
         if request_id.trim().is_empty() {
             return Err("request ID is required for cancellation".into());
         }
-        self.active
+        let mut active = self
+            .active
             .lock()
-            .map_err(|_| "request registry mutex poisoned".to_string())?
+            .map_err(|_| "request registry mutex poisoned".to_string())?;
+        if !active.contains_key(request_id) && active.len() >= 64 {
+            return Err("request cancellation registry is full".into());
+        }
+        active
             .entry(request_id.to_string())
             .or_insert_with(|| Arc::new(AtomicBool::new(false)))
             .store(true, Ordering::Relaxed);
@@ -335,41 +431,86 @@ impl SidecarProcess {
     }
 }
 
-impl Drop for SidecarProcess {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.child) == 1 {
-            if let Ok(mut child) = self.child.lock() {
-                let _ = child.kill();
-                let _ = child.wait();
+const RESPONSE_IDLE_TIMEOUT: Duration = Duration::from_secs(15);
+
+enum LineRead {
+    Line,
+    Pending,
+    Eof,
+}
+
+fn read_line_bytes(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    maximum: usize,
+) -> Result<LineRead, String> {
+    loop {
+        let (consumed, complete) = match reader.fill_buf() {
+            Ok([]) => return Ok(LineRead::Eof),
+            Ok(available) => match available.iter().position(|byte| *byte == b'\n') {
+                Some(position) => {
+                    let consumed = position + 1;
+                    line.extend_from_slice(&available[..consumed]);
+                    (consumed, true)
+                }
+                None => {
+                    line.extend_from_slice(available);
+                    (available.len(), false)
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                return Ok(LineRead::Pending)
             }
+            Err(error) => return Err(format!("could not read sidecar data: {error}")),
+        };
+        if line.len() > maximum {
+            return Err("sidecar line exceeds its byte limit".into());
+        }
+        reader.consume(consumed);
+        if complete {
+            return Ok(LineRead::Line);
         }
     }
 }
 
 fn read_header_line(reader: &mut impl BufRead) -> Result<String, String> {
-    let mut line = String::new();
-    let read = reader
-        .read_line(&mut line)
-        .map_err(|error| format!("could not read sidecar headers: {error}"))?;
-    if read == 0 {
-        return Err("sidecar closed before completing headers".into());
+    let deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
+    let mut line = Vec::new();
+    loop {
+        match read_line_bytes(reader, &mut line, MAX_HEADER_BYTES)? {
+            LineRead::Line => {
+                return String::from_utf8(line)
+                    .map_err(|_| "sidecar headers are not valid UTF-8".into());
+            }
+            LineRead::Pending if Instant::now() < deadline => {}
+            LineRead::Pending => return Err("timed out waiting for sidecar headers".into()),
+            LineRead::Eof => return Err("sidecar closed before completing headers".into()),
+        }
     }
-    if line.len() > MAX_HEADER_BYTES {
-        return Err("sidecar header line exceeds 64 KiB".into());
-    }
-    Ok(line)
 }
 
-fn read_bounded(reader: impl Read) -> Result<Vec<u8>, String> {
+fn read_bounded(mut reader: impl Read) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
-    reader
-        .take((MAX_RESPONSE_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("could not read sidecar response: {error}"))?;
-    if bytes.len() > MAX_RESPONSE_BYTES {
-        return Err("sidecar response exceeds 1 MiB".into());
+    let mut buffer = [0u8; 8192];
+    let mut deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => return Ok(bytes),
+            Ok(read) => {
+                bytes.extend_from_slice(&buffer[..read]);
+                if bytes.len() > MAX_RESPONSE_BYTES {
+                    return Err("sidecar response exceeds 1 MiB".into());
+                }
+                deadline = Instant::now() + RESPONSE_IDLE_TIMEOUT;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return Err("timed out waiting for sidecar response".into());
+                }
+            }
+            Err(error) => return Err(format!("could not read sidecar response: {error}")),
+        }
     }
-    Ok(bytes)
 }
 
 fn generate_token() -> String {

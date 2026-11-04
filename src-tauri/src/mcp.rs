@@ -101,7 +101,12 @@ impl McpRemoteSession {
         Ok(session)
     }
 
-    fn request(&self, method: &str, params: Value, notification: bool) -> Result<RemoteAnswer, String> {
+    fn request(
+        &self,
+        method: &str,
+        params: Value,
+        notification: bool,
+    ) -> Result<RemoteAnswer, String> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let mut message = json!({"jsonrpc": "2.0", "method": method, "params": params});
         if !notification {
@@ -132,7 +137,9 @@ impl McpRemoteSession {
         let mut tools = Vec::new();
         let mut cursor = None;
         for page in 0..self.limits.max_pages {
-            let params = cursor.as_ref().map_or_else(|| json!({}), |value| json!({"cursor": value}));
+            let params = cursor
+                .as_ref()
+                .map_or_else(|| json!({}), |value| json!({"cursor": value}));
             let result = self
                 .request("tools/list", params, false)?
                 .result
@@ -143,11 +150,17 @@ impl McpRemoteSession {
             if tools.len() > MAX_TOOLS {
                 return Err(format!("MCP tool list exceeds the {MAX_TOOLS}-tool cap."));
             }
-            let Some(next) = result["nextCursor"].as_str().filter(|value| !value.is_empty()) else {
+            let Some(next) = result["nextCursor"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+            else {
                 return Ok(tools);
             };
             if page + 1 == self.limits.max_pages {
-                return Err(format!("MCP pagination cap reached ({} pages).", self.limits.max_pages));
+                return Err(format!(
+                    "MCP pagination cap reached ({} pages).",
+                    self.limits.max_pages
+                ));
             }
             cursor = Some(next.to_string());
         }
@@ -155,12 +168,20 @@ impl McpRemoteSession {
     }
 
     pub fn call_tool(&self, name: &str, args: &Value) -> Result<Value, String> {
-        if serde_json::to_vec(args).map_err(|error| error.to_string())?.len() > MAX_ARGUMENT_BYTES {
+        if serde_json::to_vec(args)
+            .map_err(|error| error.to_string())?
+            .len()
+            > MAX_ARGUMENT_BYTES
+        {
             return Err("MCP tool arguments exceed 64 KiB.".to_string());
         }
-        self.request("tools/call", json!({"name": name, "arguments": args}), false)?
-            .result
-            .ok_or_else(|| "MCP tools/call returned no result.".to_string())
+        self.request(
+            "tools/call",
+            json!({"name": name, "arguments": args}),
+            false,
+        )?
+        .result
+        .ok_or_else(|| "MCP tools/call returned no result.".to_string())
     }
 }
 
@@ -192,19 +213,30 @@ fn read_remote_response(response: Response, max_bytes: usize) -> Result<RemoteAn
         .read_to_end(&mut body)
         .map_err(|error| format!("MCP response read failed: {error}"))?;
     if body.len() > max_bytes {
-        return Err(format!("MCP response exceeds the {max_bytes}-byte size cap."));
+        return Err(format!(
+            "MCP response exceeds the {max_bytes}-byte size cap."
+        ));
     }
     if !status.is_success() {
         let detail = String::from_utf8_lossy(&body);
-        return Err(format!("MCP request failed with HTTP {status}: {}", &detail[..detail.len().min(400)]));
+        return Err(format!(
+            "MCP request failed with HTTP {status}: {}",
+            &detail[..detail.len().min(400)]
+        ));
     }
     if body.is_empty() {
-        return Ok(RemoteAnswer { result: None, session_id });
+        return Ok(RemoteAnswer {
+            result: None,
+            session_id,
+        });
     }
     let text = String::from_utf8_lossy(&body);
     let payload = parse_payload(&text, &content_type)?;
     if let Some(error) = payload.get("error") {
-        return Err(format!("MCP server error: {}", error["message"].as_str().unwrap_or("unknown")));
+        return Err(format!(
+            "MCP server error: {}",
+            error["message"].as_str().unwrap_or("unknown")
+        ));
     }
     Ok(RemoteAnswer {
         result: payload.get("result").cloned().or(Some(payload)),
@@ -245,8 +277,7 @@ struct StdioInner {
 impl StdioInner {
     fn kill(&self) {
         if let Ok(mut child) = self.child.lock() {
-            let _ = child.kill();
-            let _ = child.wait();
+            super::process_control::terminate(&mut child);
         }
     }
 }
@@ -265,14 +296,24 @@ pub struct McpStdioSession {
 
 impl std::fmt::Debug for McpStdioSession {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_struct("McpStdioSession").finish_non_exhaustive()
+        formatter
+            .debug_struct("McpStdioSession")
+            .finish_non_exhaustive()
     }
 }
 
 impl McpStdioSession {
-    pub fn spawn(executable: &Path, args: &[String], cwd: &Path, limits: McpLimits) -> Result<Self, String> {
+    pub fn spawn(
+        executable: &Path,
+        args: &[String],
+        cwd: &Path,
+        limits: McpLimits,
+    ) -> Result<Self, String> {
         if !executable.is_absolute() || !cwd.is_absolute() {
-            return Err("MCP stdio requires exact absolute executable and working-directory paths.".to_string());
+            return Err(
+                "MCP stdio requires exact absolute executable and working-directory paths."
+                    .to_string(),
+            );
         }
         if args.len() > MAX_STDIO_ARGS || args.iter().any(|arg| arg.len() > MAX_STDIO_ARG_BYTES) {
             return Err("MCP stdio arguments exceed their declared cap.".to_string());
@@ -281,17 +322,24 @@ impl McpStdioSession {
         if !canonical_cwd.is_dir() {
             return Err("MCP stdio working directory is not a directory.".to_string());
         }
-        let canonical_executable = fs::canonicalize(executable).map_err(|error| error.to_string())?;
+        let canonical_executable =
+            fs::canonicalize(executable).map_err(|error| error.to_string())?;
         if !canonical_executable.starts_with(&canonical_cwd) {
             return Err("MCP executable is outside the approved working directory.".to_string());
         }
-        if fs::symlink_metadata(executable).map_err(|error| error.to_string())?.file_type().is_symlink() {
+        if fs::symlink_metadata(executable)
+            .map_err(|error| error.to_string())?
+            .file_type()
+            .is_symlink()
+        {
             return Err("MCP executable symlinks are refused.".to_string());
         }
         if !canonical_executable.is_file() {
             return Err("MCP executable is not a file.".to_string());
         }
-        let mut child = Command::new(&canonical_executable)
+        let mut command = Command::new(&canonical_executable);
+        super::process_control::prepare(&mut command);
+        let mut child = command
             .args(args)
             .current_dir(&canonical_cwd)
             .stdin(Stdio::piped())
@@ -299,9 +347,18 @@ impl McpStdioSession {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| format!("could not start MCP stdio server: {error}"))?;
-        let stdin = child.stdin.take().ok_or_else(|| "MCP stdin unavailable".to_string())?;
-        let stdout = child.stdout.take().ok_or_else(|| "MCP stdout unavailable".to_string())?;
-        let stderr = child.stderr.take().ok_or_else(|| "MCP stderr unavailable".to_string())?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| "MCP stdin unavailable".to_string())?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "MCP stdout unavailable".to_string())?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| "MCP stderr unavailable".to_string())?;
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stderr);
             let mut sink = std::io::sink();
@@ -330,16 +387,33 @@ impl McpStdioSession {
         Ok(session)
     }
 
-    fn request(&self, method: &str, params: Value, notification: bool) -> Result<Option<Value>, String> {
-        let _io = self.inner.io.lock().map_err(|_| "MCP stdio I/O mutex poisoned".to_string())?;
+    fn request(
+        &self,
+        method: &str,
+        params: Value,
+        notification: bool,
+    ) -> Result<Option<Value>, String> {
+        let _io = self
+            .inner
+            .io
+            .lock()
+            .map_err(|_| "MCP stdio I/O mutex poisoned".to_string())?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let mut message = json!({"jsonrpc": "2.0", "method": method, "params": params});
         if !notification {
             message["id"] = json!(id);
         }
         {
-            let mut stdin = self.inner.stdin.lock().map_err(|_| "MCP stdin mutex poisoned".to_string())?;
-            stdin.write_all(message.to_string().as_bytes()).and_then(|_| stdin.write_all(b"\n")).and_then(|_| stdin.flush()).map_err(|error| format!("MCP stdio write failed: {error}"))?;
+            let mut stdin = self
+                .inner
+                .stdin
+                .lock()
+                .map_err(|_| "MCP stdin mutex poisoned".to_string())?;
+            stdin
+                .write_all(message.to_string().as_bytes())
+                .and_then(|_| stdin.write_all(b"\n"))
+                .and_then(|_| stdin.flush())
+                .map_err(|error| format!("MCP stdio write failed: {error}"))?;
         }
         if notification {
             return Ok(None);
@@ -367,7 +441,9 @@ impl McpStdioSession {
         let mut tools = Vec::new();
         let mut cursor = None;
         for page in 0..self.limits.max_pages {
-            let params = cursor.as_ref().map_or_else(|| json!({}), |value| json!({"cursor": value}));
+            let params = cursor
+                .as_ref()
+                .map_or_else(|| json!({}), |value| json!({"cursor": value}));
             let result = self
                 .request("tools/list", params, false)?
                 .ok_or_else(|| "MCP tools/list returned no result.".to_string())?;
@@ -377,11 +453,17 @@ impl McpStdioSession {
             if tools.len() > MAX_TOOLS {
                 return Err(format!("MCP tool list exceeds the {MAX_TOOLS}-tool cap."));
             }
-            let Some(next) = result["nextCursor"].as_str().filter(|value| !value.is_empty()) else {
+            let Some(next) = result["nextCursor"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+            else {
                 return Ok(tools);
             };
             if page + 1 == self.limits.max_pages {
-                return Err(format!("MCP pagination cap reached ({} pages).", self.limits.max_pages));
+                return Err(format!(
+                    "MCP pagination cap reached ({} pages).",
+                    self.limits.max_pages
+                ));
             }
             cursor = Some(next.to_string());
         }
@@ -389,11 +471,19 @@ impl McpStdioSession {
     }
 
     pub fn call_tool(&self, name: &str, args: &Value) -> Result<Value, String> {
-        if serde_json::to_vec(args).map_err(|error| error.to_string())?.len() > MAX_ARGUMENT_BYTES {
+        if serde_json::to_vec(args)
+            .map_err(|error| error.to_string())?
+            .len()
+            > MAX_ARGUMENT_BYTES
+        {
             return Err("MCP tool arguments exceed 64 KiB.".to_string());
         }
-        self.request("tools/call", json!({"name": name, "arguments": args}), false)?
-            .ok_or_else(|| "MCP tools/call returned no result.".to_string())
+        self.request(
+            "tools/call",
+            json!({"name": name, "arguments": args}),
+            false,
+        )?
+        .ok_or_else(|| "MCP tools/call returned no result.".to_string())
     }
 
     pub fn is_running(&self) -> bool {
@@ -409,7 +499,9 @@ impl McpStdioSession {
 fn read_frame(reader: &mut impl BufRead, max_bytes: usize) -> Result<Vec<u8>, String> {
     let mut frame = Vec::new();
     loop {
-        let available = reader.fill_buf().map_err(|error| format!("MCP stdio read failed: {error}"))?;
+        let available = reader
+            .fill_buf()
+            .map_err(|error| format!("MCP stdio read failed: {error}"))?;
         if available.is_empty() {
             return Err("MCP stdio process exited.".to_string());
         }
@@ -426,16 +518,25 @@ fn read_frame(reader: &mut impl BufRead, max_bytes: usize) -> Result<Vec<u8>, St
     }
 }
 
-fn read_stdio_result(stdout: &Arc<Mutex<BufReader<ChildStdout>>>, id: u64) -> Result<Option<Value>, String> {
-    let mut reader = stdout.lock().map_err(|_| "MCP stdout mutex poisoned".to_string())?;
+fn read_stdio_result(
+    stdout: &Arc<Mutex<BufReader<ChildStdout>>>,
+    id: u64,
+) -> Result<Option<Value>, String> {
+    let mut reader = stdout
+        .lock()
+        .map_err(|_| "MCP stdout mutex poisoned".to_string())?;
     for _ in 0..16 {
         let frame = read_frame(&mut *reader, 1024 * 1024)?;
-        let payload: Value = serde_json::from_slice(&frame).map_err(|error| format!("MCP stdio returned invalid JSON: {error}"))?;
+        let payload: Value = serde_json::from_slice(&frame)
+            .map_err(|error| format!("MCP stdio returned invalid JSON: {error}"))?;
         if payload["id"].as_u64() != Some(id) {
             continue;
         }
         if let Some(error) = payload.get("error") {
-            return Err(format!("MCP stdio server error: {}", error["message"].as_str().unwrap_or("unknown")));
+            return Err(format!(
+                "MCP stdio server error: {}",
+                error["message"].as_str().unwrap_or("unknown")
+            ));
         }
         return Ok(payload.get("result").cloned().or(Some(payload)));
     }
@@ -457,7 +558,10 @@ pub struct McpManager {
 
 impl McpManager {
     fn reserve(&self) -> Result<(), String> {
-        let mut slots = self.slots.lock().map_err(|_| "MCP slot mutex poisoned".to_string())?;
+        let mut slots = self
+            .slots
+            .lock()
+            .map_err(|_| "MCP slot mutex poisoned".to_string())?;
         if *slots >= 4 {
             return Err("MCP session cap reached (4).".to_string());
         }
@@ -472,12 +576,23 @@ impl McpManager {
     }
 
     fn insert(&self, session: McpSession) -> Result<String, String> {
-        let id = format!("native-{}", self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
-        self.sessions.lock().map_err(|_| "MCP session mutex poisoned".to_string())?.insert(id.clone(), session);
+        let id = format!(
+            "native-{}",
+            self.next_id.fetch_add(1, Ordering::Relaxed) + 1
+        );
+        self.sessions
+            .lock()
+            .map_err(|_| "MCP session mutex poisoned".to_string())?
+            .insert(id.clone(), session);
         Ok(id)
     }
 
-    pub fn connect_remote(&self, url: &str, credential: &str, limits: McpLimits) -> Result<String, String> {
+    pub fn connect_remote(
+        &self,
+        url: &str,
+        credential: &str,
+        limits: McpLimits,
+    ) -> Result<String, String> {
         self.reserve()?;
         match McpRemoteSession::connect(url, credential, limits) {
             Ok(session) => self.insert(McpSession::Remote(session)),
@@ -488,7 +603,13 @@ impl McpManager {
         }
     }
 
-    pub fn connect_stdio(&self, executable: &Path, args: &[String], cwd: &Path, limits: McpLimits) -> Result<String, String> {
+    pub fn connect_stdio(
+        &self,
+        executable: &Path,
+        args: &[String],
+        cwd: &Path,
+        limits: McpLimits,
+    ) -> Result<String, String> {
         self.reserve()?;
         match McpStdioSession::spawn(executable, args, cwd, limits) {
             Ok(session) => self.insert(McpSession::Stdio(Arc::new(session))),
@@ -500,7 +621,25 @@ impl McpManager {
     }
 
     fn get(&self, id: &str) -> Result<McpSession, String> {
-        self.sessions.lock().map_err(|_| "MCP session mutex poisoned".to_string())?.get(id).cloned().ok_or_else(|| "MCP session is unavailable.".to_string())
+        self.sessions
+            .lock()
+            .map_err(|_| "MCP session mutex poisoned".to_string())?
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "MCP session is unavailable.".to_string())
+    }
+
+    pub fn disconnect(&self, id: &str) -> Result<(), String> {
+        let removed = self
+            .sessions
+            .lock()
+            .map_err(|_| "MCP session mutex poisoned".to_string())?
+            .remove(id);
+        if removed.is_none() {
+            return Err("MCP session is already disconnected.".to_string());
+        }
+        self.release_reservation();
+        Ok(())
     }
 
     pub fn list_tools(&self, id: &str) -> Result<Vec<Value>, String> {

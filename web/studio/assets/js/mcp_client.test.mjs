@@ -116,19 +116,27 @@ test('pagination stops at its declared cap instead of following forever', async 
 
 test('declared Tauri MCP transport handles remote calls without direct browser fetch', async () => {
     const calls = [];
-    globalThis.__TAURI__ = { core: { invoke: async (command, args) => {
+    globalThis.__TAURI__ = { core: { Channel: class {}, invoke: async (command, args) => {
         calls.push({ command, args });
         if (command === 'native_mcp_connect_remote') return { sessionId: 'native-1' };
         if (command === 'native_mcp_list_tools') return [{ name: 'native_tool', description: 'host' }];
         if (command === 'native_mcp_call_tool') return { content: [{ type: 'text', text: 'host result' }] };
+        if (command === 'native_mcp_disconnect') return { disconnected: true };
         throw new Error('unexpected ' + command);
     } } };
     const session = await connectRemote({ url: 'https://example.invalid/mcp', credential: 'memory-only', fetchImpl: async () => { throw new Error('direct fetch must not run'); } });
     assert.deepEqual(await session.listTools(), [{ name: 'native_tool', description: 'host' }]);
     assert.equal((await session.callTool('native_tool', {})).content[0].text, 'host result');
-    assert.deepEqual(calls.map((call) => call.command), ['native_mcp_connect_remote', 'native_mcp_list_tools', 'native_mcp_call_tool']);
+    await session.disconnect();
+    assert.deepEqual(calls.map((call) => call.command), ['native_mcp_connect_remote', 'native_mcp_list_tools', 'native_mcp_call_tool', 'native_mcp_disconnect']);
     assert.equal(calls[0].args.credential, 'memory-only');
     assert.equal('credential' in calls[1].args, false);
+    delete globalThis.__TAURI__;
+});
+
+test('cancelling native remote approval returns null without creating a session', async () => {
+    globalThis.__TAURI__ = { core: { Channel: class {}, invoke: async () => null } };
+    assert.equal(await connectRemote({ url: 'https://example.invalid/mcp', credential: 'secret' }), null);
     delete globalThis.__TAURI__;
 });
 

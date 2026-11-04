@@ -14,6 +14,7 @@ list_files() {
         'assets/js/composer_input.js' \
         'assets/js/desktop_actions.js' \
         'assets/js/desktop_openai.js' \
+        'assets/js/desktop_origin.js' \
         'assets/js/image_input.js' \
         'assets/js/mcp_client.js' \
         'assets/js/model_sources.js' \

@@ -46,6 +46,14 @@ describe('MCP Connections', () => {
         expect(document.querySelector('.mcp-tool-button')).toBeNull();
     });
 
+    it('does not treat the loopback core-only shim as full native MCP availability', () => {
+        document.body.innerHTML = '<div id="mcpMount"></div>';
+        (window as unknown as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke: vi.fn() } };
+        mountMcpConnections({ connectRemote: vi.fn() });
+        expect((document.getElementById('mcpStdioButton') as HTMLButtonElement).disabled).toBe(true);
+        delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+    });
+
     it('keeps MCP mounted when the model-source container rerenders', () => {
         document.body.innerHTML = '<div id="modelSourceMount"></div><div id="mcpMount"></div>';
         mountMcpConnections({ connectRemote: vi.fn() });

@@ -41,6 +41,7 @@ class TauriRuntimeContractTests(unittest.TestCase):
         self.assertNotIn('https://', csp)
         self.assertEqual(conf['bundle']['resources']['runtime/studio/pkg/'], 'pkg/')
         self.assertEqual(conf['bundle']['resources']['runtime/studio/models.json'], 'models.json')
+        self.assertEqual(conf['bundle']['resources']['runtime/studio/SHA256SUMS'], 'SHA256SUMS')
         self.assertTrue((REPO / 'src-tauri/assets/uor-icon.svg').is_file())
 
     def test_prepare_verifies_pinned_runtime(self):
@@ -55,6 +56,16 @@ class TauriRuntimeContractTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / 'runtime/studio/models.json').is_file())
             self.assertTrue((Path(tmp) / 'icons/icon.png').is_file())
             self.assertTrue((Path(tmp) / 'icons/icon.icns').is_file())
+
+    def test_pages_publisher_uses_the_same_runtime_allowlist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / 'studio'
+            result = subprocess.run(['bash', str(REPO / 'scripts/stage-studio-site.sh'), str(REPO / 'web/studio'), str(dest)], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            for required in ['index.html', 'assets/js/desktop_openai.js', 'assets/js/desktop_actions.js', 'assets/js/mcp_client.js']:
+                self.assertTrue((dest / required).is_file(), required)
+            for forbidden in ['src', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'node_modules', 'README.md', 'assets/js/mcp_client.test.mjs', 'verify_desktop_client.mjs']:
+                self.assertFalse((dest / forbidden).exists(), forbidden)
 
     def test_prepare_check_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmp:

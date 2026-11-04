@@ -13,6 +13,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 pub mod mcp;
+pub(crate) mod process_control;
 pub mod sidecar;
 
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,9 @@ pub const MAX_DESKTOP_SESSIONS: usize = 32;
 
 /// Maximum UTF-8 source file size accepted by `native_read_file` (16 MiB).
 pub const MAX_READ_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Maximum UTF-8 content accepted by `native_write_file` (16 MiB).
+pub const MAX_WRITE_FILE_BYTES: usize = 16 * 1024 * 1024;
 
 /// Maximum `UORLUT01` model file size inspected by `native_list_local_models` / `native_load_model` (128 MiB).
 pub const MAX_MODEL_FILE_BYTES: u64 = 128 * 1024 * 1024;
@@ -362,7 +366,7 @@ pub struct DesktopBackend {
     pins: PinRegistry,
     granted_folders: BTreeSet<PathBuf>,
     terminal_enabled: bool,
-    host_approved_commands: BTreeSet<(PathBuf, String)>,
+    host_approved_commands: BTreeMap<(PathBuf, String), std::time::Instant>,
     loaded_model: Option<IntegerStackModel>,
     loaded_capabilities: Option<LoadedModelCapabilities>,
     initial_session_bytes: Option<Vec<u8>>,
@@ -383,7 +387,7 @@ impl DesktopBackend {
             pins,
             granted_folders: BTreeSet::new(),
             terminal_enabled: false,
-            host_approved_commands: BTreeSet::new(),
+            host_approved_commands: BTreeMap::new(),
             loaded_model: None,
             loaded_capabilities: None,
             initial_session_bytes: None,
@@ -905,14 +909,16 @@ impl DesktopBackend {
 
         if let Some(ref dir) = self.durable_store_dir {
             let records_path = dir.join("records.uorobj01");
+            let scopes_dir = dir.join("scopes");
+            let manifest_path = scopes_dir.join(scope_manifest_filename(&scope));
+            reject_if_symlink(&scopes_dir)?;
+            fs::create_dir_all(&scopes_dir).map_err(|e| DesktopClientError::Io(e.to_string()))?;
+            self.verify_granted_write_path(&records_path)?;
+            self.verify_granted_write_path(&manifest_path)?;
             self.object_store
                 .save(&records_path)
                 .map_err(|e| DesktopClientError::ObjectStore(e.to_string()))?;
-            let scopes_dir = dir.join("scopes");
-            fs::create_dir_all(&scopes_dir).map_err(|e| DesktopClientError::Io(e.to_string()))?;
-            let manifest_path = scopes_dir.join(scope_manifest_filename(&scope));
-            fs::write(&manifest_path, &manifest_bytes)
-                .map_err(|e| DesktopClientError::Io(e.to_string()))?;
+            write_atomic_file(&manifest_path, &manifest_bytes)?;
         }
 
         Ok(DurableSessionReceipt {
@@ -946,7 +952,10 @@ impl DesktopBackend {
                         "either manifest_bytes or durable_store_dir is required".to_string(),
                     )
                 })?;
-                let manifest_path = dir.join("scopes").join(scope_manifest_filename(&scope));
+                let scopes_dir = dir.join("scopes");
+                reject_if_symlink(&scopes_dir)?;
+                let manifest_path = scopes_dir.join(scope_manifest_filename(&scope));
+                self.verify_granted_existing_path(&manifest_path)?;
                 owned_manifest_bytes =
                     fs::read(&manifest_path).map_err(|e| DesktopClientError::Io(e.to_string()))?;
                 &owned_manifest_bytes
@@ -1090,6 +1099,12 @@ impl DesktopBackend {
         file_path: &Path,
         content: &str,
     ) -> Result<(), DesktopClientError> {
+        if content.len() > MAX_WRITE_FILE_BYTES {
+            return Err(DesktopClientError::FileTooLarge {
+                bytes: content.len() as u64,
+                max_bytes: MAX_WRITE_FILE_BYTES as u64,
+            });
+        }
         let safe_path = self.verify_granted_write_path(file_path)?;
         fs::write(&safe_path, content).map_err(|e| DesktopClientError::Io(e.to_string()))
     }
@@ -1158,8 +1173,11 @@ impl DesktopBackend {
         if trimmed.is_empty() {
             return Err(DesktopClientError::TerminalConsentRequired);
         }
-        self.host_approved_commands
-            .insert((canonical_cwd, trimmed.to_string()));
+        validate_consent_text(trimmed)?;
+        self.host_approved_commands.insert(
+            (canonical_cwd, trimmed.to_string()),
+            std::time::Instant::now(),
+        );
         Ok(())
     }
 
@@ -1186,6 +1204,7 @@ impl DesktopBackend {
         if !self
             .host_approved_commands
             .remove(&(canonical_cwd.clone(), trimmed.to_string()))
+            .is_some_and(|approved_at| approved_at.elapsed() <= std::time::Duration::from_secs(60))
         {
             return Err(DesktopClientError::TerminalConsentRequired);
         }
@@ -1194,8 +1213,14 @@ impl DesktopBackend {
             return Err(DesktopClientError::TerminalConsentRequired);
         };
         validate_terminal_program(program)?;
+        validate_terminal_argument_shape(program, args)?;
 
         for &arg in args {
+            if arg.starts_with('-') && (arg.contains('/') || arg.contains('\\')) {
+                let separator = arg.find(['/', '\\']).unwrap_or(0);
+                self.verify_granted_write_path(Path::new(&arg[separator..]))?;
+                continue;
+            }
             let candidate_str = match arg.split_once('=') {
                 Some((_, val)) if arg.starts_with('-') => val,
                 _ => arg,
@@ -1228,6 +1253,9 @@ impl DesktopBackend {
         req: &TerminalCommandRequest,
     ) -> Result<String, DesktopClientError> {
         let prepared = self.prepare_terminal_command(req)?;
+        if prepared.program == "git" {
+            ensure_git_repository_root(&prepared.cwd)?;
+        }
         run_prepared_terminal_command(&prepared)
     }
 }
@@ -1270,6 +1298,7 @@ fn run_bounded_process(
     use std::sync::mpsc::RecvTimeoutError;
     use std::time::{Duration, Instant};
 
+    process_control::prepare(command);
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command
         .spawn()
@@ -1301,12 +1330,12 @@ fn run_bounded_process(
     loop {
         if !killed && retained >= max_bytes {
             truncated = true;
-            let _ = child.kill();
+            process_control::terminate(&mut child);
             killed = true;
         }
         if !killed && Instant::now() >= deadline {
             timed_out = true;
-            let _ = child.kill();
+            process_control::terminate(&mut child);
             killed = true;
         }
         match receiver.recv_timeout(Duration::from_millis(25)) {
@@ -1320,7 +1349,7 @@ fn run_bounded_process(
                 retained += keep;
                 if keep < bytes.len() && !killed {
                     truncated = true;
-                    let _ = child.kill();
+                    process_control::terminate(&mut child);
                     killed = true;
                 }
             }
@@ -1379,16 +1408,46 @@ fn hardened_git_command(repo: &Path) -> Command {
     command
 }
 
+fn ensure_git_repository_root(repo: &Path) -> Result<(), DesktopClientError> {
+    let output = run_bounded_process(
+        hardened_git_command(repo).args(["rev-parse", "--show-toplevel"]),
+        PROCESS_TIMEOUT,
+        MAX_PROCESS_OUTPUT_BYTES,
+    )?;
+    if !output.status.success() {
+        return Err(DesktopClientError::PathNotGranted(
+            "path is not a Git repository root".to_string(),
+        ));
+    }
+    let top = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let canonical = fs::canonicalize(&top).map_err(|_| {
+        DesktopClientError::PathNotGranted("Git repository root is unavailable".to_string())
+    })?;
+    if canonical != repo {
+        return Err(DesktopClientError::PathNotGranted(format!(
+            "Git repository discovery escapes the granted directory: {top}"
+        )));
+    }
+    Ok(())
+}
+
 fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
+    ensure_git_repository_root(repo)?;
     let status_out = run_bounded_process(
-        hardened_git_command(repo)
-            .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+        hardened_git_command(repo).args([
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+        ]),
         PROCESS_TIMEOUT,
         MAX_PROCESS_OUTPUT_BYTES,
     )?;
     if !status_out.status.success() && !status_out.truncated && !status_out.timed_out {
         return Err(DesktopClientError::CommandFailed(
-            String::from_utf8_lossy(&status_out.stderr).trim().to_string(),
+            String::from_utf8_lossy(&status_out.stderr)
+                .trim()
+                .to_string(),
         ));
     }
     let branch_out = run_bounded_process(
@@ -1397,7 +1456,9 @@ fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
         MAX_PROCESS_OUTPUT_BYTES,
     )?;
     let branch = if branch_out.status.success() {
-        String::from_utf8_lossy(&branch_out.stdout).trim().to_string()
+        String::from_utf8_lossy(&branch_out.stdout)
+            .trim()
+            .to_string()
     } else if branch_out.timed_out {
         "HEAD (timeout)".to_string()
     } else {
@@ -1420,7 +1481,8 @@ fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
     }
     let truncated = status_out.truncated || branch_out.truncated;
     let timed_out = status_out.timed_out || branch_out.timed_out;
-    let is_clean = !truncated && !timed_out && modified_files.is_empty() && untracked_files.is_empty();
+    let is_clean =
+        !truncated && !timed_out && modified_files.is_empty() && untracked_files.is_empty();
     Ok(GitStatusReport {
         branch,
         is_clean,
@@ -1432,6 +1494,7 @@ fn git_status_at(repo: &Path) -> Result<GitStatusReport, DesktopClientError> {
 }
 
 fn git_diff_at(repo: &Path) -> Result<GitDiffReport, DesktopClientError> {
+    ensure_git_repository_root(repo)?;
     let output = run_bounded_process(
         hardened_git_command(repo).args([
             "diff",
@@ -1456,6 +1519,45 @@ fn git_diff_at(repo: &Path) -> Result<GitDiffReport, DesktopClientError> {
     })
 }
 
+fn validate_consent_text(value: &str) -> Result<(), DesktopClientError> {
+    if value.chars().any(|character| {
+        character.is_control()
+            || matches!(character, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
+    }) {
+        return Err(DesktopClientError::InvalidInput(
+            "control and bidirectional formatting characters are refused in host consent".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_terminal_argument_shape(
+    program: &str,
+    args: &[&str],
+) -> Result<(), DesktopClientError> {
+    for arg in args {
+        if matches!(*arg, "-exec" | "-execdir" | "-ok" | "-okdir") {
+            return Err(DesktopClientError::InvalidInput(format!(
+                "terminal execution flag is refused: {arg}"
+            )));
+        }
+        let attached_file_value = match program {
+            "grep" | "rg" => arg.starts_with("-f") && arg.len() > 2,
+            "find" => {
+                (arg.starts_with("-fprint") && arg.len() > "-fprint".len())
+                    || (arg.starts_with("-fls") && arg.len() > "-fls".len())
+            }
+            _ => false,
+        };
+        if attached_file_value {
+            return Err(DesktopClientError::InvalidInput(format!(
+                "file-taking option requires a separately validated path: {arg}"
+            )));
+        }
+    }
+    Ok(())
+}
+
 pub fn validate_terminal_program(program: &str) -> Result<(), DesktopClientError> {
     const ALLOWED: [&str; 14] = [
         "cargo",
@@ -1474,7 +1576,9 @@ pub fn validate_terminal_program(program: &str) -> Result<(), DesktopClientError
         "uor-harness",
     ];
     if program.contains('/') || program.contains('\\') || program.contains("..") {
-        return Err(DesktopClientError::PathTraversalRefused(program.to_string()));
+        return Err(DesktopClientError::PathTraversalRefused(
+            program.to_string(),
+        ));
     }
     if !ALLOWED.contains(&program) {
         return Err(DesktopClientError::InvalidInput(format!(
@@ -1487,13 +1591,13 @@ pub fn validate_terminal_program(program: &str) -> Result<(), DesktopClientError
 fn run_prepared_terminal_command(
     prepared: &PreparedTerminalCommand,
 ) -> Result<String, DesktopClientError> {
-    let output = run_bounded_process(
+    let mut command = if prepared.program == "git" {
+        hardened_git_command(&prepared.cwd)
+    } else {
         Command::new(&prepared.program)
-            .args(&prepared.args)
-            .current_dir(&prepared.cwd),
-        PROCESS_TIMEOUT,
-        MAX_PROCESS_OUTPUT_BYTES,
-    )?;
+    };
+    command.args(&prepared.args).current_dir(&prepared.cwd);
+    let output = run_bounded_process(&mut command, PROCESS_TIMEOUT, MAX_PROCESS_OUTPUT_BYTES)?;
     let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stderr.is_empty() {
@@ -1522,14 +1626,38 @@ mod bounded_process_tests {
     fn process_timeout_kills_and_reports() {
         let mut command = Command::new("sleep");
         command.arg("5");
-        let output = run_bounded_process(
-            &mut command,
-            std::time::Duration::from_millis(25),
-            1024,
-        )
-        .expect("bounded sleep");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+            .expect("bounded sleep");
         assert!(output.timed_out);
         assert!(!output.status.success());
+    }
+
+    #[test]
+    fn process_timeout_kills_descendants() {
+        let root = std::env::temp_dir().join(format!("uor-grandchild-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create grandchild fixture");
+        let pid_path = root.join("sleep.pid");
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg(format!(
+            "nohup sleep 30 >/dev/null 2>&1 & echo $! > '{}'; wait",
+            pid_path.display()
+        ));
+        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+            .expect("bounded shell with descendant");
+        assert!(output.timed_out);
+        let pid = fs::read_to_string(&pid_path)
+            .expect("descendant pid")
+            .trim()
+            .to_string();
+        let alive = Command::new("ps")
+            .arg("-p")
+            .arg(&pid)
+            .status()
+            .expect("ps")
+            .success();
+        assert!(!alive, "descendant {pid} survived process timeout");
+        let _ = fs::remove_dir_all(&root);
     }
 }
 
@@ -1543,14 +1671,27 @@ fn scope_manifest_filename(scope: &IdentityScope) -> String {
                     '_'
                 }
             })
+            .take(48)
             .collect()
     };
+    let digest = hex::encode(Sha256::digest(scope.key().as_bytes()));
     format!(
-        "{}__{}__{}.uorman01",
+        "{}__{}__{}__{}.uorman01",
         sanitize(&scope.user_id),
         sanitize(&scope.project_id),
-        sanitize(&scope.session_id)
+        sanitize(&scope.session_id),
+        &digest[..16],
     )
+}
+
+fn write_atomic_file(path: &Path, bytes: &[u8]) -> Result<(), DesktopClientError> {
+    let name = path.file_name().ok_or_else(|| {
+        DesktopClientError::InvalidInput("durable manifest filename is unavailable".to_string())
+    })?;
+    let temporary = path.with_file_name(format!("{}.tmp", name.to_string_lossy()));
+    reject_if_symlink(&temporary)?;
+    fs::write(&temporary, bytes).map_err(|error| DesktopClientError::Io(error.to_string()))?;
+    fs::rename(&temporary, path).map_err(|error| DesktopClientError::Io(error.to_string()))
 }
 
 pub fn reject_parent_dir_traversal(path: &Path) -> Result<(), DesktopClientError> {
@@ -2190,13 +2331,15 @@ pub mod tauri_gui {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use serde_json::{json, Value};
     use super::mcp::McpManager;
     use super::sidecar::{NativeChatEvent, NativeProxyResponse, SidecarProcess};
     use super::{
-        dispatch_rpc_command, git_diff_at, git_status_at, run_prepared_terminal_command,
-        DesktopBackend, GitDiffReport, GitStatusReport, PinRegistry, TerminalCommandRequest,
+        dispatch_rpc_command, ensure_git_repository_root, git_diff_at, git_status_at,
+        run_prepared_terminal_command, DesktopBackend, GitDiffReport, GitStatusReport, PinRegistry,
+        TerminalCommandRequest,
     };
+    use serde_json::{json, Value};
+    use tauri::Manager;
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
     #[derive(Clone)]
@@ -2255,23 +2398,35 @@ pub mod tauri_gui {
         }
 
         pub fn grant_project_folder(&self, path: &Path) -> Result<PathBuf, String> {
-            self.with_backend(|backend| backend.native_grant_folder(path).map_err(|error| error.to_string()))
+            self.with_backend(|backend| {
+                backend
+                    .native_grant_folder(path)
+                    .map_err(|error| error.to_string())
+            })
         }
 
         pub fn grant_model_folder(&self, path: &Path) -> Result<PathBuf, String> {
-            self.with_backend(|backend| backend.grant_model_search_dir(path).map_err(|error| error.to_string()))
+            self.with_backend(|backend| {
+                backend
+                    .grant_model_search_dir(path)
+                    .map_err(|error| error.to_string())
+            })
         }
 
         pub fn git_status(&self, repo: &Path) -> Result<GitStatusReport, String> {
             let canonical = self.with_backend(|backend| {
-                backend.verify_granted_existing_path(repo).map_err(|error| error.to_string())
+                backend
+                    .verify_granted_existing_path(repo)
+                    .map_err(|error| error.to_string())
             })?;
             git_status_at(&canonical).map_err(|error| error.to_string())
         }
 
         pub fn git_diff(&self, repo: &Path) -> Result<GitDiffReport, String> {
             let canonical = self.with_backend(|backend| {
-                backend.verify_granted_existing_path(repo).map_err(|error| error.to_string())
+                backend
+                    .verify_granted_existing_path(repo)
+                    .map_err(|error| error.to_string())
             })?;
             git_diff_at(&canonical).map_err(|error| error.to_string())
         }
@@ -2291,31 +2446,98 @@ pub mod tauri_gui {
             })
         }
 
-        pub fn run_terminal_command(&self, request: &TerminalCommandRequest) -> Result<String, String> {
+        pub fn run_terminal_command(
+            &self,
+            request: &TerminalCommandRequest,
+        ) -> Result<String, String> {
             let prepared = self.with_backend(|backend| {
-                backend.prepare_terminal_command(request).map_err(|error| error.to_string())
+                backend
+                    .prepare_terminal_command(request)
+                    .map_err(|error| error.to_string())
             })?;
+            if prepared.program == "git" {
+                ensure_git_repository_root(&prepared.cwd).map_err(|error| error.to_string())?;
+            }
             run_prepared_terminal_command(&prepared).map_err(|error| error.to_string())
         }
 
         pub fn connect_mcp_remote(&self, url: &str, credential: &str) -> Result<String, String> {
-            self.mcp.connect_remote(url, credential, super::mcp::McpLimits::default())
+            self.mcp
+                .connect_remote(url, credential, super::mcp::McpLimits::default())
         }
 
-        pub fn connect_mcp_stdio(&self, executable: &Path, args: &[String], cwd: &Path) -> Result<String, String> {
+        pub fn connect_mcp_stdio(
+            &self,
+            executable: &Path,
+            args: &[String],
+            cwd: &Path,
+        ) -> Result<String, String> {
             let canonical_cwd = self.with_backend(|backend| {
-                backend.verify_granted_existing_path(cwd).map_err(|error| error.to_string())
+                backend
+                    .verify_granted_existing_path(cwd)
+                    .map_err(|error| error.to_string())
             })?;
-            self.mcp.connect_stdio(executable, args, &canonical_cwd, super::mcp::McpLimits::default())
+            self.mcp.connect_stdio(
+                executable,
+                args,
+                &canonical_cwd,
+                super::mcp::McpLimits::default(),
+            )
         }
 
         pub fn list_mcp_tools(&self, session_id: &str) -> Result<Vec<Value>, String> {
             self.mcp.list_tools(session_id)
         }
 
-        pub fn call_mcp_tool(&self, session_id: &str, name: &str, args: &Value) -> Result<Value, String> {
+        pub fn call_mcp_tool(
+            &self,
+            session_id: &str,
+            name: &str,
+            args: &Value,
+        ) -> Result<Value, String> {
             self.mcp.call_tool(session_id, name, args)
         }
+
+        pub fn disconnect_mcp(&self, session_id: &str) -> Result<(), String> {
+            self.mcp.disconnect(session_id)
+        }
+    }
+
+    fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
+        app.get_webview_window("main")
+            .ok_or_else(|| "The main Studio window is unavailable.".to_string())
+    }
+
+    fn confirmation_dialog(
+        app: &tauri::AppHandle,
+        message: impl Into<String>,
+    ) -> Result<tauri_plugin_dialog::MessageDialogBuilder<tauri::Wry>, String> {
+        let window = main_window(app)?;
+        Ok(window.dialog().message(message).parent(&window))
+    }
+
+    pub(crate) fn studio_navigation_allowed(value: &str) -> bool {
+        let Ok(url) = reqwest::Url::parse(value) else {
+            return false;
+        };
+        if !url.username().is_empty() || url.password().is_some() {
+            return false;
+        }
+        match url.scheme() {
+            "tauri" => url.host_str() == Some("localhost") && url.port().is_none(),
+            "http" | "https" => url.host_str() == Some("tauri.localhost") && url.port().is_none(),
+            _ => false,
+        }
+    }
+
+    pub async fn connect_mcp_remote_on_worker(
+        state: TauriDesktopState,
+        url: String,
+        credential: String,
+    ) -> Result<String, String> {
+        tauri::async_runtime::spawn_blocking(move || state.connect_mcp_remote(&url, &credential))
+            .await
+            .map_err(|error| format!("native MCP worker failed: {error}"))?
     }
 
     fn sidecar_input_paths() -> Result<(PathBuf, PathBuf, PathBuf), String> {
@@ -2330,9 +2552,9 @@ pub mod tauri_gui {
         let macos = executable
             .parent()
             .ok_or_else(|| "The executable has no parent directory.".to_string())?;
-        let packaged = executable.components().any(|component| {
-            component.as_os_str().to_string_lossy().ends_with(".app")
-        });
+        let packaged = executable
+            .components()
+            .any(|component| component.as_os_str().to_string_lossy().ends_with(".app"));
         if packaged {
             let resources = macos
                 .parent()
@@ -2356,9 +2578,9 @@ pub mod tauri_gui {
             return Ok(development);
         }
         let resources = macos
-                .parent()
-                .ok_or_else(|| "The executable has no resource directory.".to_string())?
-                .join("Resources");
+            .parent()
+            .ok_or_else(|| "The executable has no resource directory.".to_string())?
+            .join("Resources");
         Ok((
             macos.join("uor-chat"),
             resources.join("pkg/synthetic-stack.lut"),
@@ -2375,12 +2597,14 @@ pub mod tauri_gui {
         state.with_backend(|b| dispatch_rpc_command(b, cmd, &args))
     }
 
-    #[tauri::command]
-    pub fn native_models(state: tauri::State<'_, TauriDesktopState>) -> Result<NativeProxyResponse, String> {
+    #[tauri::command(async)]
+    pub fn native_models(
+        state: tauri::State<'_, TauriDesktopState>,
+    ) -> Result<NativeProxyResponse, String> {
         state.sidecar()?.models()
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_decompose_image(
         state: tauri::State<'_, TauriDesktopState>,
         width: u32,
@@ -2389,10 +2613,12 @@ pub mod tauri_gui {
         rows: u32,
         rgba: Vec<u8>,
     ) -> Result<NativeProxyResponse, String> {
-        state.sidecar()?.decompose(width, height, columns, rows, &rgba)
+        state
+            .sidecar()?
+            .decompose(width, height, columns, rows, &rgba)
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn host_cancel_chat(
         state: tauri::State<'_, TauriDesktopState>,
         request_id: String,
@@ -2400,7 +2626,7 @@ pub mod tauri_gui {
         state.sidecar()?.cancel(&request_id)
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_chat_completions(
         state: tauri::State<'_, TauriDesktopState>,
         request_id: String,
@@ -2449,7 +2675,7 @@ pub mod tauri_gui {
         }
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_list_local_models(
         state: tauri::State<'_, TauriDesktopState>,
         model_dir: Option<String>,
@@ -2463,14 +2689,14 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_load_synthetic_standin(
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
         state.with_backend(|b| dispatch_rpc_command(b, "native_load_synthetic_standin", &json!({})))
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_load_model(
         state: tauri::State<'_, TauriDesktopState>,
         file_path: Option<String>,
@@ -2492,7 +2718,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_step_tokens(
         state: tauri::State<'_, TauriDesktopState>,
         conversation_id: Option<String>,
@@ -2512,7 +2738,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_generate_prompt(
         state: tauri::State<'_, TauriDesktopState>,
         conversation_id: Option<String>,
@@ -2532,7 +2758,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_export_session(
         state: tauri::State<'_, TauriDesktopState>,
         conversation_id: Option<String>,
@@ -2546,7 +2772,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_import_session(
         state: tauri::State<'_, TauriDesktopState>,
         conversation_id: String,
@@ -2566,7 +2792,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_reset_session(
         state: tauri::State<'_, TauriDesktopState>,
         conversation_id: Option<String>,
@@ -2580,7 +2806,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_save_session_durable(
         state: tauri::State<'_, TauriDesktopState>,
         user_id: Option<String>,
@@ -2602,7 +2828,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_restore_session_durable(
         state: tauri::State<'_, TauriDesktopState>,
         user_id: Option<String>,
@@ -2626,14 +2852,14 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_list_granted_folders(
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
         state.with_backend(|b| dispatch_rpc_command(b, "native_list_granted_folders", &json!({})))
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_read_file(
         state: tauri::State<'_, TauriDesktopState>,
         file_path: String,
@@ -2643,7 +2869,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_write_file(
         state: tauri::State<'_, TauriDesktopState>,
         file_path: String,
@@ -2658,7 +2884,7 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_list_directory(
         state: tauri::State<'_, TauriDesktopState>,
         folder_path: String,
@@ -2673,24 +2899,26 @@ pub mod tauri_gui {
         })
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_git_status(
         state: tauri::State<'_, TauriDesktopState>,
         repo_path: String,
     ) -> Result<Value, String> {
-        serde_json::to_value(state.git_status(Path::new(&repo_path))?).map_err(|error| error.to_string())
+        serde_json::to_value(state.git_status(Path::new(&repo_path))?)
+            .map_err(|error| error.to_string())
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_git_diff(
         state: tauri::State<'_, TauriDesktopState>,
         repo_path: String,
     ) -> Result<Value, String> {
-        serde_json::to_value(state.git_diff(Path::new(&repo_path))?).map_err(|error| error.to_string())
+        serde_json::to_value(state.git_diff(Path::new(&repo_path))?)
+            .map_err(|error| error.to_string())
     }
 
-    #[tauri::command]
-    pub fn native_choose_project_folder(
+    #[tauri::command(async)]
+    pub async fn native_choose_project_folder(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
@@ -2702,8 +2930,8 @@ pub mod tauri_gui {
         Ok(json!({ "path": granted }))
     }
 
-    #[tauri::command]
-    pub fn native_choose_model_folder(
+    #[tauri::command(async)]
+    pub async fn native_choose_model_folder(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
@@ -2715,14 +2943,12 @@ pub mod tauri_gui {
         Ok(json!({ "path": granted }))
     }
 
-    #[tauri::command]
-    pub fn native_enable_terminal(
+    #[tauri::command(async)]
+    pub async fn native_enable_terminal(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
-        let confirmed = app
-            .dialog()
-            .message("Enable the guarded terminal for this app session? Every command will still require separate approval.")
+        let confirmed = confirmation_dialog(&app, "Enable the guarded terminal for this app session? Every command will still require separate approval.")?
             .title("Enable terminal")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancel)
@@ -2734,22 +2960,23 @@ pub mod tauri_gui {
         Ok(json!({ "enabled": true }))
     }
 
-    #[tauri::command]
-    pub fn native_confirm_terminal_command(
+    #[tauri::command(async)]
+    pub async fn native_confirm_terminal_command(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
         cwd: String,
         command: String,
     ) -> Result<Value, String> {
-        let confirmed = app
-            .dialog()
-            .message(format!(
-                "Run this command once?\n\nWorking directory:\n{cwd}\n\nCommand:\n{command}"
-            ))
-            .title("Approve command")
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancel)
-            .blocking_show();
+        super::validate_consent_text(&cwd).map_err(|error| error.to_string())?;
+        super::validate_consent_text(&command).map_err(|error| error.to_string())?;
+        let confirmed = confirmation_dialog(
+            &app,
+            format!("Run this command once?\n\nWorking directory:\n{cwd}\n\nCommand:\n{command}"),
+        )?
+        .title("Approve command")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
         if !confirmed {
             return Ok(json!({ "approved": false }));
         }
@@ -2757,7 +2984,7 @@ pub mod tauri_gui {
         Ok(json!({ "approved": true }))
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_run_terminal_command(
         state: tauri::State<'_, TauriDesktopState>,
         cwd: String,
@@ -2774,17 +3001,45 @@ pub mod tauri_gui {
         Ok(Value::String(state.run_terminal_command(&request)?))
     }
 
-    #[tauri::command]
-    pub fn native_mcp_connect_remote(
+    #[tauri::command(async)]
+    pub async fn native_mcp_connect_remote(
+        app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
         url: String,
         credential: String,
     ) -> Result<Value, String> {
-        let session_id = state.connect_mcp_remote(&url, &credential)?;
+        super::validate_consent_text(&url).map_err(|error| error.to_string())?;
+        let credential_notice = if credential.is_empty() {
+            ""
+        } else {
+            "\n\nA credential will be sent to this server."
+        };
+        let confirmed = confirmation_dialog(
+            &app,
+            format!("Connect to this MCP server?\n\n{url}{credential_notice}"),
+        )?
+        .title("Approve remote MCP server")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancel)
+        .blocking_show();
+        if !confirmed {
+            return Ok(Value::Null);
+        }
+        let session_id =
+            connect_mcp_remote_on_worker(state.inner().clone(), url, credential).await?;
         Ok(json!({ "sessionId": session_id }))
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
+    pub fn native_mcp_disconnect(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+    ) -> Result<Value, String> {
+        state.disconnect_mcp(&session_id)?;
+        Ok(json!({ "disconnected": true }))
+    }
+
+    #[tauri::command(async)]
     pub fn native_mcp_list_tools(
         state: tauri::State<'_, TauriDesktopState>,
         session_id: String,
@@ -2792,7 +3047,7 @@ pub mod tauri_gui {
         serde_json::to_value(state.list_mcp_tools(&session_id)?).map_err(|error| error.to_string())
     }
 
-    #[tauri::command]
+    #[tauri::command(async)]
     pub fn native_mcp_call_tool(
         state: tauri::State<'_, TauriDesktopState>,
         session_id: String,
@@ -2802,19 +3057,22 @@ pub mod tauri_gui {
         state.call_mcp_tool(&session_id, &name, &args)
     }
 
-    #[tauri::command]
-    pub fn native_mcp_connect_stdio(
+    #[tauri::command(async)]
+    pub async fn native_mcp_connect_stdio(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
         executable: String,
         args: Vec<String>,
         cwd: String,
     ) -> Result<Value, String> {
-        let confirmed = app
-            .dialog()
-            .message(format!(
+        super::validate_consent_text(&executable).map_err(|error| error.to_string())?;
+        super::validate_consent_text(&cwd).map_err(|error| error.to_string())?;
+        for argument in &args {
+            super::validate_consent_text(argument).map_err(|error| error.to_string())?;
+        }
+        let confirmed = confirmation_dialog(&app, format!(
                 "Start this MCP stdio server?\n\nExecutable:\n{executable}\n\nArguments:\n{args:?}\n\nWorking directory:\n{cwd}"
-            ))
+            ))?
             .title("Approve MCP stdio server")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancel)
@@ -2822,15 +3080,44 @@ pub mod tauri_gui {
         if !confirmed {
             return Ok(Value::Null);
         }
-        let session_id = state.connect_mcp_stdio(Path::new(&executable), &args, Path::new(&cwd))?;
+        let worker_state = state.inner().clone();
+        let session_id = tauri::async_runtime::spawn_blocking(move || {
+            worker_state.connect_mcp_stdio(Path::new(&executable), &args, Path::new(&cwd))
+        })
+        .await
+        .map_err(|error| format!("native MCP stdio worker failed: {error}"))??;
         Ok(json!({ "sessionId": session_id }))
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 29 native/host `#[tauri::command]` handlers registered.
+    /// 30 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
+            .setup(|app| {
+                tauri::WebviewWindowBuilder::new(
+                    app,
+                    "main",
+                    tauri::WebviewUrl::App("index.html".into()),
+                )
+                .title("UOR Harness")
+                .inner_size(1440.0, 900.0)
+                .resizable(true)
+                .fullscreen(false)
+                .on_navigation(|url| {
+                    if studio_navigation_allowed(url.as_str()) {
+                        return true;
+                    }
+                    if matches!(url.scheme(), "http" | "https") {
+                        let _ = std::process::Command::new("open")
+                            .arg(url.as_str())
+                            .status();
+                    }
+                    false
+                })
+                .build()?;
+                Ok(())
+            })
             .manage(state)
             .invoke_handler(tauri::generate_handler![
                 native_models,
@@ -2861,6 +3148,7 @@ pub mod tauri_gui {
                 native_mcp_connect_remote,
                 native_mcp_list_tools,
                 native_mcp_call_tool,
+                native_mcp_disconnect,
                 native_mcp_connect_stdio,
             ])
     }
@@ -2868,17 +3156,47 @@ pub mod tauri_gui {
     /// Launch the native Tauri v2 desktop window wrapping `web/studio/`.
     pub fn run_tauri_gui(backend: DesktopBackend) -> Result<(), String> {
         let (binary, stack, tokenizer) = sidecar_input_paths()?;
-        let state = TauriDesktopState::with_backend_and_sidecar(backend, &binary, &stack, &tokenizer)?;
-        build_tauri_app_builder(state)
-            .run(tauri::generate_context!())
-            .map_err(|e| e.to_string())
+        let state =
+            TauriDesktopState::with_backend_and_sidecar(backend, &binary, &stack, &tokenizer)?;
+        let exit_sidecar = state.sidecar.clone();
+        let app = build_tauri_app_builder(state)
+            .build(tauri::generate_context!())
+            .map_err(|e| e.to_string())?;
+        app.run(move |_app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::Exit | tauri::RunEvent::ExitRequested { .. }
+            ) {
+                if let Some(sidecar) = &exit_sidecar {
+                    sidecar.shutdown();
+                }
+            }
+        });
+        Ok(())
     }
 }
 
 #[cfg(all(test, feature = "gui"))]
 mod sidecar_path_tests {
-    use super::tauri_gui::sidecar_input_paths_for;
+    use super::tauri_gui::{sidecar_input_paths_for, studio_navigation_allowed};
     use std::path::Path;
+
+    #[test]
+    fn navigation_is_confined_to_the_asset_origin() {
+        assert!(studio_navigation_allowed("tauri://localhost"));
+        assert!(studio_navigation_allowed("http://tauri.localhost"));
+        assert!(studio_navigation_allowed("https://tauri.localhost"));
+        assert!(!studio_navigation_allowed("https://example.com"));
+        assert!(!studio_navigation_allowed("http://127.0.0.1:8000"));
+        assert!(!studio_navigation_allowed("tauri://evil"));
+        assert!(!studio_navigation_allowed("tauri://user@localhost"));
+        assert!(!studio_navigation_allowed("http://tauri.localhost:8000"));
+        assert!(!studio_navigation_allowed("https://tauri.localhost:444"));
+        assert!(!studio_navigation_allowed("https://user@tauri.localhost"));
+        assert!(studio_navigation_allowed("http://tauri.localhost:80"));
+        assert!(studio_navigation_allowed("https://tauri.localhost:443"));
+        assert!(!studio_navigation_allowed("file:///tmp/private.html"));
+    }
 
     #[test]
     fn packaged_app_prefers_its_own_resources_over_development_inputs() {

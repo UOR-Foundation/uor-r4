@@ -59,5 +59,11 @@ verify_hash "$runtime_home/runtime/studio/pkg/synthetic-stack.lut" "$stack_sha"
 verify_hash "$runtime_home/runtime/studio/pkg/tokenizer.json" "$tokenizer_sha"
 verify_hash "$runtime_home/runtime/studio/models.json" "$catalog_sha"
 "$repo_root/scripts/studio/runtime-files.sh" --verify "$runtime_home/runtime/studio"
+: > "$runtime_home/runtime/studio/SHA256SUMS"
+while IFS= read -r rel; do
+    if [ -f "$runtime_home/runtime/studio/$rel" ]; then
+        shasum -a 256 "$runtime_home/runtime/studio/$rel" | sed "s|$runtime_home/runtime/studio/||" >> "$runtime_home/runtime/studio/SHA256SUMS"
+    fi
+done < <("$repo_root/scripts/studio/runtime-files.sh" --list)
 "$repo_root/scripts/studio/generate-tauri-icons.sh"
 printf 'Tauri runtime prepared under %s\n' "$runtime_home"

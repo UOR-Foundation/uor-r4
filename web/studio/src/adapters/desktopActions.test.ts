@@ -87,6 +87,23 @@ describe('desktop Git and terminal actions', () => {
         expect(invoke.mock.calls.map((call) => call[0])).toEqual(['native_choose_model_folder', 'native_list_local_models']);
     });
 
+    it('disables saved custom providers and remote model downloads on every Tauri render', async () => {
+        vi.resetModules();
+        document.body.innerHTML = '<div id="modelSourceMount"></div>';
+        (window as unknown as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke: vi.fn(), Channel: class {} } };
+        globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ schema: 'uor-r4.studio-models/1', models: [{ id: 'm1', label: 'M1', kind: 'published', url: './models/m1.lut', sha256: 'a'.repeat(64) }] }), { status: 200 }));
+        const { ModelSources } = await import('../../assets/js/model_sources.js');
+        ModelSources.addApi({ id: 'custom', label: 'Custom', baseUrl: 'https://api.example.com/v1', model: 'custom', ephemeral: true });
+        await ModelSources.loadModelCatalog();
+        ModelSources.mount!(document.getElementById('modelSourceMount')!);
+        for (const action of ['api-use', 'api-test', 'api-edit', 'add-api', 'load-url', 'load-published']) {
+            const button = document.querySelector(`[data-action="${action}"]`) as HTMLButtonElement | null;
+            expect(button, action).not.toBeNull();
+            expect(button?.disabled, action).toBe(true);
+        }
+        delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
+    });
+
     it('keeps an honest disabled state when the host is unavailable', () => {
         controls();
         const actions = createDesktopActions();

@@ -1,3 +1,5 @@
+import { isDeclaredDesktopOrigin } from './desktop_origin.js';
+
 const DEFAULT_MAX_QUEUE_BYTES = 256 * 1024;
 
 class DesktopEventQueue {
@@ -89,8 +91,13 @@ export function createDesktopOpenAI({ invoke, Channel, maxQueueBytes = DEFAULT_M
         throw new Error('The declared desktop OpenAI transport is unavailable.');
     }
     let serial = 0;
+    const pageId = globalThis.crypto?.randomUUID?.() || 'page-' + Date.now().toString(36);
+    const nativeLocation = globalThis.location || 'http://desktop.local/';
     async function desktopFetch(url, init = {}) {
-        const parsed = new URL(String(url), 'http://desktop.local');
+        const parsed = new URL(String(url), nativeLocation);
+        if (!isDeclaredDesktopOrigin(parsed, nativeLocation)) {
+            throw new Error('Custom OpenAI providers and remote model URLs are available in the browser build.');
+        }
         if (parsed.pathname === '/v1/models') {
             return directResponse(await invoke('native_models', {}));
         }
@@ -110,7 +117,7 @@ export function createDesktopOpenAI({ invoke, Channel, maxQueueBytes = DEFAULT_M
         const channel = new Channel();
         const queue = new DesktopEventQueue(maxQueueBytes);
         channel.onmessage = (event) => queue.push(event);
-        const requestId = 'request-' + (++serial);
+        const requestId = pageId + '-request-' + (++serial);
         queue.onOverflow = () => {
             Promise.resolve(invoke('host_cancel_chat', { requestId })).catch(() => {});
         };

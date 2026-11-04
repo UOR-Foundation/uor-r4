@@ -163,13 +163,16 @@ export function createMcpClient(options = {}) {
 
 function declaredNativeInvoke() {
     const invoke = globalThis.__TAURI__?.core?.invoke;
-    return typeof invoke === 'function' ? invoke.bind(globalThis.__TAURI__.core) : null;
+    return typeof invoke === 'function' && typeof globalThis.__TAURI__?.core?.Channel === 'function'
+        ? invoke.bind(globalThis.__TAURI__.core)
+        : null;
 }
 
 function nativeSession(sessionId, invoke) {
     return {
         listTools: () => invoke('native_mcp_list_tools', { sessionId }),
         callTool: (name, args = {}) => invoke('native_mcp_call_tool', { sessionId, name, args }),
+        disconnect: () => invoke('native_mcp_disconnect', { sessionId }),
     };
 }
 
@@ -192,6 +195,7 @@ export async function connectRemote(config = {}) {
             url: String(config.url || ''),
             credential: String(config.credential || ''),
         });
+        if (!selected) return null;
         return nativeSession(selected.sessionId, invoke);
     }
     const client = createMcpClient(config);
@@ -291,6 +295,14 @@ export function mountMcpConnections({ root = globalThis.document, connectRemote:
         button.disabled = true;
         status.textContent = 'Connecting…';
         tools.textContent = '';
+        if (session?.disconnect) {
+            try {
+                await session.disconnect();
+            } catch (error) {
+                status.textContent = 'Previous session cleanup failed: ' + String(error?.message || error);
+            }
+            session = null;
+        }
         try {
             session = await action();
             if (!session) {
@@ -316,6 +328,9 @@ export function mountMcpConnections({ root = globalThis.document, connectRemote:
             return connectNativeStdio({ executable: executable.value.trim(), args: parsed, cwd: cwd.value.trim() });
         }));
     }
+    globalThis.addEventListener?.('pagehide', () => {
+        if (session?.disconnect) session.disconnect().catch(() => {});
+    });
     return section;
 }
 

@@ -108,13 +108,7 @@ if [ -n "$public_url" ] && [ -z "$public_label" ]; then
     exit 1
 fi
 
-rm -rf "$dest"
-mkdir -p "$dest"
-cp -R "$src"/. "$dest"/
-# Dev-only files stay out of the published page.
-rm -rf "$dest/tools" "$dest/README.md"
-find "$dest" -maxdepth 1 -type f \( -name 'verify_*.mjs' -o -name '*.sh' \) -delete
-rm -f "$dest/pkg/.gitignore"
+"$repo_root/scripts/studio/runtime-files.sh" copy "$src" "$dest" --allow-generated-missing
 rm -f "$dest/models.json"
 
 node - "$dest" "$public_url" "$public_label" "$trained_manifest" \
