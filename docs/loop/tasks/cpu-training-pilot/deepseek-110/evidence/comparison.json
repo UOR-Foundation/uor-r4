@@ -1,5 +1,7 @@
 {
   "schema": "uor-r4.cpu-memory-replies-comparison/1",
+  "status": "invalid-first-run",
+  "invalid_reason": "trained_memory_off used a complete-reply path that always loaded memory",
   "substrate": "cpu-development-research",
   "qualification": "gpu-required",
   "source": {

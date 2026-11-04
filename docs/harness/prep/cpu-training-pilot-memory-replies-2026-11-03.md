@@ -1,8 +1,8 @@
 # CPU memory-weight and target-arbitration replies
 
-**Status:** FIT
+**Status:** PENDING RE-FIT AFTER SOURCE CORRECTION
 
-TEST FITNESS: FIT
+TEST FITNESS: PENDING
 
 ## Question
 
@@ -191,21 +191,9 @@ post-observation change to arms, cap, keys, steps or controls.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030
-sheet: docs/harness/prep/cpu-training-pilot-memory-replies-2026-11-03.md
-head: a686ecfdba0e843c872c4f59c0d45972f9dabab5
-reviewer: Codex fresh-context non-author review
-note: all prior blockers resolved; eight-arm D84 CPU replay; fixed hashes and
-16-key/102-training/114-evaluation selection; 104 of 114 references reachable
-under the fixed cap/context rule; paired exact-reference comparisons use
-max(2, ceil(2*sqrt(b+c))) over reachable rows; shuffled control preserves keys,
-metadata and weights while enforcing at least half of pre-generation evaluation
-mappings changed in each table; integer BOS/cap/context semantics; exact parity
-required for the five served query-movement arms; direct-target pass requires
-integer-serving implementation and exact serving parity before larger runs;
-30-minute stop and seed-1 repeat registered; 171 CPU library tests plus all
-binary suites, strict Clippy, formatting and loop gates pass
-date: 2026-11-04
+The prior FIT at `a686ecfdba0e843c872c4f59c0d45972f9dabab5` was invalidated
+when the exact-head review found that the complete-reply
+`trained_memory_off` arm still applied memory. Source now provides a genuine
+memory-disabled forward path. A fresh non-author FIT is required before rerun.
 
-A FIT verdict clears compute for this registered configuration only. Any change
-to source, hashes, selection, arms, cap, controls or bars requires re-review.
+TEST FITNESS: PENDING

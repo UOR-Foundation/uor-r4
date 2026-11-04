@@ -62,8 +62,30 @@ pub struct GeneratedReply {
 /// tokens are then fed back until the shared integer `reply_stop` contract
 /// returns BOS, the cap or context exhaustion.
 pub fn generate_reply(artifact: &[u8], prompt: &[u32], cap: usize) -> Result<GeneratedReply> {
+    generate_reply_with_memory(artifact, prompt, cap, true)
+}
+
+/// Generate one bounded reply after disabling the artifact's turn-memory and
+/// point-key reads while retaining its trunk and artifact identity.
+pub fn generate_reply_memory_off(
+    artifact: &[u8],
+    prompt: &[u32],
+    cap: usize,
+) -> Result<GeneratedReply> {
+    generate_reply_with_memory(artifact, prompt, cap, false)
+}
+
+fn generate_reply_with_memory(
+    artifact: &[u8],
+    prompt: &[u32],
+    cap: usize,
+    memory_enabled: bool,
+) -> Result<GeneratedReply> {
     let mut forward = CpuFbsForward::from_artifact(artifact)
         .map_err(|error| invalid(format!("complete-reply forward: {error}")))?;
+    if !memory_enabled {
+        forward.disable_memory();
+    }
     let context = forward.context_length();
     if cap == 0 || cap > 64 || prompt.is_empty() || prompt.len() > context {
         return Err(invalid(
@@ -104,6 +126,18 @@ pub fn evaluate_replies(
 ) -> Result<TimedReplyReading> {
     evaluate_generated(artifact, samples, cap, |prompt, cap| {
         generate_reply(artifact, prompt, cap)
+    })
+}
+
+/// Generate and summarize complete replies with turn memory and point-key
+/// reads disabled.
+pub fn evaluate_replies_memory_off(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+) -> Result<TimedReplyReading> {
+    evaluate_generated(artifact, samples, cap, |prompt, cap| {
+        generate_reply_memory_off(artifact, prompt, cap)
     })
 }
 
@@ -377,8 +411,11 @@ fn add_count(left: u64, right: u64) -> Result<u64> {
 mod tests {
     use super::*;
     use crate::{add_turn_memory_uorlut01, derive_turn_memory};
-    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+    use uor_r4_integer::stack::{
+        add_point_key_uorlut01, export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot,
+        PointKeyImage,
+    };
 
     fn artifact() -> Vec<u8> {
         let mut snapshot = synthetic_fbs_trunk_with(
@@ -534,5 +571,62 @@ mod tests {
         assert_eq!(reading.reading.exact_reference, 1);
         assert_eq!(reading.reading.reference_reachable, 1);
         assert_eq!(reading.reading.opening_correct, 1);
+    }
+
+    #[test]
+    fn memory_off_complete_reply_ignores_an_artifact_point_key() {
+        let artifact = add_turn_memory_uorlut01(
+            &artifact(),
+            &FbsMemorySnapshot {
+                k: 3,
+                key_window: 16,
+                opening: vec![FbsMemoryEntry {
+                    key: vec![1, 2, 3],
+                    value: 4,
+                }],
+                opening_weight: vec![0.0; 64],
+                reply: None,
+            },
+        )
+        .unwrap();
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let mut query = None;
+        for (index, token) in [10, 11, 12].into_iter().enumerate() {
+            if index + 1 == 3 {
+                forward.mark_reply_start();
+            }
+            let step = forward.step(token, CpuFbsHead::Writer).unwrap();
+            if index + 1 == 3 {
+                query = Some(step.query_q12);
+            }
+        }
+        let artifact = add_point_key_uorlut01(
+            &artifact,
+            &PointKeyImage {
+                width: 64,
+                points: query
+                    .unwrap()
+                    .into_iter()
+                    .map(|value| i16::try_from(value).unwrap())
+                    .collect(),
+                targets: vec![99],
+                vote_k: 1,
+            },
+        )
+        .unwrap();
+        let on = generate_reply(&artifact, &[10, 11, 12], 2).unwrap();
+        let off = generate_reply_memory_off(&artifact, &[10, 11, 12], 2).unwrap();
+        assert_eq!(on.tokens.first(), Some(&99));
+        assert_ne!(off.tokens.first(), Some(&99));
+        let evaluated = evaluate_replies_memory_off(
+            &artifact,
+            &[MemoryWeightSample {
+                prompt: vec![10, 11, 12],
+                reply: off.tokens.clone(),
+            }],
+            2,
+        )
+        .unwrap();
+        assert_eq!(evaluated.reading.exact_reference, 1);
     }
 }

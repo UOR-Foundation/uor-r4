@@ -5,10 +5,10 @@ use std::time::Instant;
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
     evaluate_memory_target_replies, evaluate_memory_weight_samples, evaluate_replies,
-    memory_key_coverage, memory_target_shuffle_audit, replace_memory_weight_table,
-    shuffle_memory_targets, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
-    CpuMemoryWeightTrainer, MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
-    TimedReplyReading,
+    evaluate_replies_memory_off, memory_key_coverage, memory_target_shuffle_audit,
+    replace_memory_weight_table, shuffle_memory_targets, validate_corpus_manifest,
+    CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer, MemoryWeightConfig,
+    MemoryWeightSample, MemoryWeightTable, TimedReplyReading,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
 
@@ -383,15 +383,20 @@ fn run() -> Result<serde_json::Value, String> {
         BTreeMap::new()
     } else {
         let mut complete_replies = [
-            ("frozen", memory_artifact.as_slice()),
-            ("trained", trained_artifact.as_slice()),
-            ("random", random_artifact.as_slice()),
-            ("memory_off", artifact.as_slice()),
-            ("trained_memory_off", trained_artifact.as_slice()),
+            ("frozen", memory_artifact.as_slice(), true),
+            ("trained", trained_artifact.as_slice(), true),
+            ("random", random_artifact.as_slice(), true),
+            ("memory_off", artifact.as_slice(), false),
+            ("trained_memory_off", trained_artifact.as_slice(), false),
         ]
         .into_iter()
-        .map(|(name, bytes)| {
-            evaluate_replies(bytes, &evaluation_samples, config.reply_cap)
+        .map(|(name, bytes, memory_enabled)| {
+            let reading = if memory_enabled {
+                evaluate_replies(bytes, &evaluation_samples, config.reply_cap)
+            } else {
+                evaluate_replies_memory_off(bytes, &evaluation_samples, config.reply_cap)
+            };
+            reading
                 .map_err(|error| error.to_string())
                 .map(|reading| (name, reading))
         })

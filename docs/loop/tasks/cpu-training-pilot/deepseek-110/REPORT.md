@@ -2,11 +2,17 @@
 
 Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
 (#3506). Order: [ORDER.md](ORDER.md). Prep:
-[pending memory replies](../../../harness/prep/cpu-training-pilot-memory-replies-2026-11-03.md).
+[FIT memory replies](../../../harness/prep/cpu-training-pilot-memory-replies-2026-11-03.md).
 Base: `5707380fe`.
 
 ## What did not work, first
 
+- **The first completion run had an invalid memory-off arm.** It passed the
+  trained artifact to a complete-reply evaluator that always loaded memory, so
+  `trained_memory_off` duplicated `trained`. The exact-head review caught this.
+  The first raw roots are retained as invalid; a genuine
+  `CpuFbsForward::disable_memory` path and point-key regression were added
+  before rerun.
 - **Neither memory arm produced a complete reply.** Every one of the 114 prompts
   on every arm hit the 16-token cap on both seeds. Exact-reference and
   BOS-complete counts were zero, with zero context stops.
@@ -49,6 +55,10 @@ memory target at an exact key hit and the exact CPU writer only on a miss:
 frozen, trained-fallback and trained-fallback with a deterministic
 shuffled-target control.
 
+Complete replies now have a genuine memory-disabled path. It retains the
+artifact's trunk and hash, clears turn memory and the point fallback, and has a
+finite test proving an artifact point key is ignored.
+
 ## Measurements
 
 The 114 references hold 1,326 tokens after one trailing BOS is removed.
@@ -60,7 +70,7 @@ Training reproduced deepseek-109 exactly on both seeds. Both runs accepted all
 `c856ce21…b88de4` and `10f91f73…40e6`. Teacher-forced top-1 remained
 `507→526` and `441→484`, with distances below frozen and random.
 
-Complete-reply readings:
+**Invalid first-run readings — retained, superseded, and not used as evidence:**
 
 | Seed | Arm | Exact | BOS | Cap | Opening | Distinct | Repeated 4-gram |
 |---:|---|---:|---:|---:|---:|---:|---:|
@@ -87,18 +97,18 @@ model-free ceiling remains in [reference-census.json](evidence/reference-census.
 
 ## Checks run at the head
 
-- Seven focused reply-evaluator tests passed, including deterministic
+- Eight focused reply-evaluator tests passed, including deterministic
   query-movement and direct-target replies over exported synthetic CPU
-  artifacts.
+  artifacts and a point-key test proving the memory-off path ignores memory.
 - The driver control test verifies the shuffled snapshot preserves keys and
   weights through artifact export/read-back while changing exercised targets.
-- Full CPU release suite: 171 library tests passed, 4 release benchmarks
+- Full CPU release suite: 172 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - `cargo fmt -p uor-r4-cpu-train -- --check`: passed.
 - `git diff --check`: passed.
-- `uor-harness prep-check`: sheet is complete but `PENDING`, not cleared for
-  compute.
+- `uor-harness prep-check`: sheet completed at `FIT`; the source correction
+  requires a fresh FIT before rerun.
 - Model-free `--select-only --reply-cap 16` reproduced 16 keys, 102 training
   examples, 114 evaluation examples and the 104-reachable-reference census.
 - Both public seeds and the fresh seed-1 repeat completed under FIT.
@@ -107,7 +117,7 @@ model-free ceiling remains in [reference-census.json](evidence/reference-census.
 
 ## Skills used
 
-The repository's `experiment-prereg` instructions governed the pending sheet.
+The repository's `experiment-prereg` instructions governed the FIT sheet.
 No system-provided skill applied.
 
 ## Reading
