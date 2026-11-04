@@ -11,8 +11,8 @@ function bootSource(): string {
 describe('conversation-first connectivity guidance', () => {
     it('loads only the bundled demo automatically when no model is loaded', () => {
         const boot = bootSource();
-        expect(boot).toContain("active.kind === 'wasm' && !app.caps");
-        expect(boot).toContain('ModelSources.loadBundled()');
+        expect(boot).toContain("active.kind === 'wasm' && active.id === 'bundled-demo' && !app.caps");
+        expect(boot).toContain("ModelSources.loadBundled({ operationId: 1, sourceId: 'bundled-demo' })");
         expect(boot).not.toContain('ModelSources.loadPublished()');
     });
 

@@ -15,7 +15,7 @@ Static GitHub Pages still cannot host an API, and HTTPS Pages must not call inse
 
 ### First console redesign (superseded by v2)
 
-*Current interface: the workable v2 Workspace/Agent design below; this subsection preserves the first console as history.*
+*Historical interface: the workable v2 Workspace/Agent design below; the conversation-first section above is the current source.*
 
 An agent-console shell: command bar (wordmark, workspace breadcrumb, project chip, command search,
 view switch, theme/new), icon rail, collapsible sessions sidebar with a runtime environment card, a

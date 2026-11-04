@@ -3,12 +3,11 @@ set -euo pipefail
 
 RELEASE_TAG='studio-native-runner-v0.1.0'
 RELEASE_ROOT="https://github.com/UOR-Foundation/uor-r4/releases/download/${RELEASE_TAG}"
-PAGES_ROOT='https://uor-foundation.github.io/uor-r4/studio/pkg'
 RUNNER_HOME="${UOR_RUNNER_HOME:-${HOME}/.cache/uor-r4-studio/${RELEASE_TAG}}"
 BINARY_NAME='uor-chat-arm64-apple-darwin'
 STUDIO_ARCHIVE_NAME='studio-local.tar.gz'
 UOR_CHAT_SHA256='f4f36c72baea6b0fb76c72ff511cf8e9615fd328022d3b08937660b28cc05f7e'
-STUDIO_BUNDLE_SHA256='9d05faa776803add7375cf74cc0d34af747f793940115695aeb0ce6ad9e9d78f'
+STUDIO_BUNDLE_SHA256='bf78084e09d03736d3de5cfbe98040e632cc102946f6396434f12314b9ede04d'
 STACK_SHA256='d60f88d6e08ac60763b35484307f9425f702b9fead4615dd8cbe5fdbbced92df'
 TOKENIZER_SHA256='6758318dbcad5925a550103a5c2ee41e35898c30a7daf066da09b0159a41c57b'
 RESEARCH_MODEL='dual-c131-seed-1-raw_both.uorlut'
@@ -73,8 +72,6 @@ fetch_verified() {
 mkdir -p "$RUNNER_HOME"
 fetch_verified "${RELEASE_ROOT}/${BINARY_NAME}" "${RUNNER_HOME}/${BINARY_NAME}" "$UOR_CHAT_SHA256"
 fetch_verified "${RELEASE_ROOT}/${STUDIO_ARCHIVE_NAME}" "${RUNNER_HOME}/${STUDIO_ARCHIVE_NAME}" "$STUDIO_BUNDLE_SHA256"
-fetch_verified "${PAGES_ROOT}/synthetic-stack.lut" "${RUNNER_HOME}/synthetic-stack.lut" "$STACK_SHA256"
-fetch_verified "${PAGES_ROOT}/tokenizer.json" "${RUNNER_HOME}/tokenizer.json" "$TOKENIZER_SHA256"
 chmod 755 "${RUNNER_HOME}/${BINARY_NAME}"
 
 tar -tzf "${RUNNER_HOME}/${STUDIO_ARCHIVE_NAME}" | while IFS= read -r entry; do
@@ -95,8 +92,8 @@ trap 'unset UOR_RUNNER_TOKEN' EXIT
 printf 'Native synthetic protocol demo: http://127.0.0.1:8000/\n'
 printf 'Press Ctrl+C to stop. No useful-conversation or visual-understanding capability is claimed.\n'
 printf '%s\n' "$UOR_RUNNER_TOKEN" | "${RUNNER_HOME}/${BINARY_NAME}" \
-    --stack "${RUNNER_HOME}/synthetic-stack.lut" \
-    --tokenizer "${RUNNER_HOME}/tokenizer.json" \
+    --stack "${STUDIO_ROOT}/pkg/synthetic-stack.lut" \
+    --tokenizer "${STUDIO_ROOT}/pkg/tokenizer.json" \
     --serve 127.0.0.1:8000 \
     --studio-root "$STUDIO_ROOT" \
     --token-stdin

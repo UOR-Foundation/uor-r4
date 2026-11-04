@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark light">
-    <meta name="description" content="UOR-R4 Studio: an offline-first agent console for the geometric language model project.">
-    <title>UOR-R4 Studio — agent console</title>
+    <meta name="description" content="UOR-R4 Studio: an offline-first conversation interface for the geometric language model project.">
+    <title>UOR-R4 Studio — local chat</title>
     <link rel="stylesheet" href="./assets/css/uor_offline_fonts.css">
     <link rel="stylesheet" href="./index.css">
     <script>
@@ -2189,8 +2189,8 @@
             renderConversationList();
             renderMessages();
             startWorker();
-            if (active.kind === 'wasm' && !app.caps) {
-                ModelSources.loadBundled().catch(function (error) {
+            if (active.kind === 'wasm' && active.id === 'bundled-demo' && !app.caps) {
+                ModelSources.loadBundled({ operationId: 1, sourceId: 'bundled-demo' }).catch(function (error) {
                     toast('The offline demo could not load: ' + String(error && error.message || error), 'error');
                 });
             }

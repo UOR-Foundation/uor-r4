@@ -2330,7 +2330,7 @@ html {
 }
 
 .chat-empty::before {
-    content: "UOR-R4 · AGENT CONSOLE";
+    content: "UOR-R4 · LOCAL CHAT";
     font-family: 'Fira Code', 'SF Mono', ui-monospace, Menlo, monospace;
     font-size: 10px;
     letter-spacing: 0.24em;
