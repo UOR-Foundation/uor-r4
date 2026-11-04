@@ -220,7 +220,9 @@ refused because this engine has no integer categorical sampler. `--say` prints a
 `uor-r4.stack-content-readout/1` sidecar. The sidecar must bind the exact artifact SHA-256; it
 overrides only `serve_step`'s native/point fallback when a training row is within its learned Hamming
 radius. Raw `step` and `step_native` remain unchanged. The one-shot, REPL, prompt-ID and OpenAI
-loopback paths all use the attached model.
+loopback paths all use the attached model. Session snapshots written with a readout use the
+`UR4SESS2` codec and bind its canonical hash; restore refuses a missing or different readout before
+changing state. Legacy `UR4SESS1` bytes remain unchanged when no readout is attached.
 `--memory <VALUE>` adds one `System: Memory: <VALUE>.` turn before the next assistant reply, using the
 same literal-role encoder as training. In the REPL, `/memory <VALUE>` queues the same one-turn line,
 `/memory` displays it and `/memory clear` removes it. The value is explicit in this unit; statement
