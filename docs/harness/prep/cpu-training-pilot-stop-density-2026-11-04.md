@@ -20,7 +20,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `8eb4a1a7a01c2cac3f6afb4d00f5fb87c730179a` |
+| implementation source | `c8180c1576970069dcff395889460defad2a2d6c` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -135,19 +135,20 @@ establishes useful chat.
 | Component | Projection |
 |---|---:|
 | preparation, FIT and pre-run review | 600 s |
-| release build and two-seed preflight | 600 s |
+| release build, full controls and two-seed preflight | 1,500 s |
 | two seeds plus repeat | 900 s |
 | delivery and evidence | 300 s |
-| total increment | **2,400 s** |
+| total increment | **3,300 s** |
 
 - Build: 16 jobs, 4 GiB RSS, 2 GiB target maximum.
+- Full controls: 16 jobs, 4 GiB RSS, separate 3 GiB target maximum.
 - Runs: 32 workers for seed 1/2, one worker for the repeat, 1 GiB RSS and
   600 s per run.
 - Retained evidence: 192 MiB maximum.
 - Previous ledger:
   `cpu-training-pilot-content-serving-2026-11-04/resource-ledger.json` at
   `35,683.988816343 s` measured and `52,027.677487699 s` admitted cumulative.
-- Admitted cumulative projection: **54,427.677487699 s**.
+- Admitted cumulative projection: **55,327.677487699 s**.
 
 ## Steps
 
@@ -159,9 +160,10 @@ SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-stop-d
 SHARED=/home/callard/projects/codex-playground/uor-r4
 PIPELINE=$SHARED/local/deepseek/stop-density/2026-11-04
 BUILD=$SOURCE/target/deepseek/stop-density-142
+CONTROL_BUILD=$SOURCE/target/deepseek/stop-density-controls-142
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=8eb4a1a7a01c2cac3f6afb4d00f5fb87c730179a
+IMPL_PIN=c8180c1576970069dcff395889460defad2a2d6c
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -170,6 +172,7 @@ test -z "$(git -C "$SOURCE" status --porcelain -- crates)"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- crates/uor-r4-cpu-train
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
+test ! -e "$CONTROL_BUILD"
 mkdir -p "$PIPELINE"
 BUILD_STARTED=$(date -u +%s)
 /usr/bin/time -v -o "$PIPELINE/build.time.txt" env CARGO_BUILD_JOBS=16 \
@@ -185,7 +188,31 @@ printf '{"jobs":16,"wall_seconds":%s,"peak_rss_kib":%s,"target_bytes":%s}\n' \
   "$BUILD_SECONDS" "$BUILD_RSS" "$BUILD_BYTES" >"$PIPELINE/build-summary.json"
 BIN=$BUILD/release/cpu-content-readout-driver
 sha256sum "$BIN" | sed 's# .*/#  #' >"$PIPELINE/binary.sha256"
-select() {
+/usr/bin/time -v -o "$PIPELINE/control-lib.time.txt" env CARGO_BUILD_JOBS=16 \
+  CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo test --locked --release \
+  -p uor-r4-cpu-train --lib >"$PIPELINE/control-lib.txt"
+/usr/bin/time -v -o "$PIPELINE/control-bin.time.txt" env CARGO_BUILD_JOBS=16 \
+  CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo test --locked --release \
+  -p uor-r4-cpu-train --bin cpu-content-readout-driver \
+  >"$PIPELINE/control-bin.txt"
+/usr/bin/time -v -o "$PIPELINE/control-clippy.time.txt" env CARGO_BUILD_JOBS=16 \
+  CARGO_TARGET_DIR="$CONTROL_BUILD" timeout 600s cargo clippy --locked \
+  -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings \
+  >"$PIPELINE/control-clippy.txt" 2>&1
+CONTROL_BYTES=$(du -sb "$CONTROL_BUILD" | cut -f1)
+CONTROL_RSS=$(awk -F': ' '/Maximum resident set size/ {
+  if ($2 > max) max = $2
+} END { print max }' "$PIPELINE"/control-*.time.txt)
+test "$CONTROL_BYTES" -le 3221225472
+test "$CONTROL_RSS" -le 4194304
+rustfmt --edition 2021 --check --config skip_children=true \
+  "$SOURCE/crates/uor-r4-cpu-train/src/content_readout.rs" \
+  "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-content-readout-driver.rs" \
+  "$SOURCE/crates/uor-r4-cpu-train/src/lib.rs"
+git -C "$SOURCE" diff --check
+printf '{"jobs":16,"target_bytes":%s,"peak_rss_kib":%s}\n' \
+  "$CONTROL_BYTES" "$CONTROL_RSS" >"$PIPELINE/control-summary.json"
+run_preflight() {
   seed=$1 artifact=$2
   RAYON_NUM_THREADS=32 "$BIN" \
     "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
@@ -199,18 +226,21 @@ select() {
     --reply-cap 16 --stop-prototypes 8 --stop-density-neighbors 8 \
     --stop-density-offset-radius 2 --seed 1 --select-only \
     >"$PIPELINE/seed-$seed.preflight.json"
-  jq -e '.modes.gate_density.training as $g |
+  jq -e '.modes.gate_density as $d | $d.training as $g |
     $g.terminal_rows >= 84 and
-    $g.nonterminal_rows > 0 and
+    $g.nonterminal_rows >= 1484 and
     $g.terminal_stops >= 26 and
     $g.nonterminal_stops <= $g.nonterminal_stop_limit and
     ([1,2,4,8] | index($g.leave_one_out_neighbors)) != null and
     $g.gate.terminal_rows != [] and
-    $g.gate.nonterminal_rows != []' \
+    $g.gate.nonterminal_rows != [] and
+    ($g.gate.terminal_rows | length) == $g.terminal_rows and
+    ($g.gate.nonterminal_rows | length) == $g.nonterminal_rows and
+    $d.true_sha256 != $d.shuffled_sha256' \
     "$PIPELINE/seed-$seed.preflight.json" >/dev/null
 }
-select 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-select 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run_preflight 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run_preflight 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 run() {
   seed=$1 label=$2 artifact=$3 workers=$4
   out=$PIPELINE/$label
@@ -235,6 +265,8 @@ run() {
 run 1 seed-1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd 32
 run 2 seed-2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 32
 run 1 seed-1-repeat a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd 1
+jq -e '.bar.gate_density.passes == true' \
+  "$PIPELINE/seed-1/report.json" "$PIPELINE/seed-2/report.json" >/dev/null
 jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
   "$PIPELINE/seed-1/report.json" >"$PIPELINE/seed-1.normalized.json"
 jq 'del(.wall_elapsed_ms, .peak_rss_kib, .rayon_workers)' \
@@ -257,8 +289,8 @@ resource mismatch is an instrument fault requiring a new FIT.
 
 TEST FITNESS: PENDING - M2 #2030 offset-conditioned density stop gate:
 docs/harness/prep/cpu-training-pilot-stop-density-2026-11-04.md
-head: 8eb4a1a7a01c2cac3f6afb4d00f5fb87c730179a
-implementation pin: 8eb4a1a7a01c2cac3f6afb4d00f5fb87c730179a
+head: c8180c1576970069dcff395889460defad2a2d6c
+implementation pin: c8180c1576970069dcff395889460defad2a2d6c
 reviewer: pending
 date: 2026-11-04
 
