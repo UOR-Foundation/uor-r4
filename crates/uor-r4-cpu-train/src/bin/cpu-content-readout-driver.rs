@@ -669,9 +669,9 @@ fn run() -> Result<serde_json::Value, String> {
             "gate_shuffled": gate_shuffled_training,
         },
         "serving": {
-            "artifact": config.out.join("serving.uorlut"),
+            "artifact": "serving.uorlut",
             "artifact_sha256": serving_artifact_sha256,
-            "sidecar": config.out.join("content-readout-sidecar.json"),
+            "sidecar": "content-readout-sidecar.json",
             "sidecar_sha256": serving_sidecar_sha256,
             "parity": serving_parity,
         },

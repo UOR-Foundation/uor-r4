@@ -10,6 +10,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use super::point_key::POINT_KEY_BOS;
 use super::StackError;
 
 /// Schema of a serving content-readout sidecar.
@@ -156,6 +157,11 @@ impl ContentReadout {
                     "content-readout target {} is outside vocabulary {vocab}",
                     row.target
                 )));
+            }
+            if row.target == POINT_KEY_BOS {
+                return Err(StackError::ContentReadout(
+                    "content-readout serving rows must not target BOS".to_owned(),
+                ));
             }
         }
         Ok(())
@@ -371,6 +377,10 @@ mod tests {
         let mut wrong_target = valid.clone();
         wrong_target.rows[0].target = 2;
         assert!(wrong_target.validate(2).is_err());
+
+        let mut bos = valid.clone();
+        bos.rows[0].target = POINT_KEY_BOS;
+        assert!(bos.validate(2).is_err());
 
         let mut terminal = valid.clone();
         terminal.includes_reference_end = true;
