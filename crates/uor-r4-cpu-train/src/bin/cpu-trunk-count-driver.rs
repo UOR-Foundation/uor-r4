@@ -877,6 +877,14 @@ fn parse_peak_rss_kib(status: &str) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_discrete::metadata::BinderPlan;
+    use uor_r4_discrete::snapshot::Snapshot;
+    use uor_r4_discrete::trunk::{
+        COMPILED_COMPOSITION_KAPPA, COMPILED_OPERATOR_KAPPA, build_trunk_norm_frames,
+        build_trunk_step_table, export_trunk_d11,
+    };
+    use uor_r4_discrete::w2_capacity::root_vector;
+    use uor_r4_discrete::{ObjectivePolicy, ReadInitialization, ReadSpec, SCHEMA, Spec};
 
     fn test_outcome(sample: &RankMarginSample) -> Result<DecisionOutcome, String> {
         let query = (0..=sample.target % 5)
@@ -935,8 +943,61 @@ mod tests {
             .is_err());
     }
 
+    fn synthetic_trunk(epoch: u64, rows: &[TrunkTrainRow]) -> Vec<u8> {
+        let spec = Spec {
+            vocabulary: 4096,
+            blocks: 4,
+            context: 1,
+            kept_cells: 1,
+        };
+        let read_spec = ReadSpec::Route;
+        let stages = BinderPlan::new(spec.context as usize).unwrap().stages() as u32;
+        let table = (0u16..4096)
+            .flat_map(|token| {
+                root_vector([
+                    ((token >> 12) & 15) as u8,
+                    ((token >> 8) & 15) as u8,
+                    ((token >> 4) & 15) as u8,
+                    (token & 15) as u8,
+                ])
+            })
+            .collect();
+        let snapshot = Snapshot {
+            schema: SCHEMA.to_owned(),
+            spec,
+            read_spec,
+            objective_policy: ObjectivePolicy::NearestAddressMarginV1,
+            read_initialization: ReadInitialization::ZeroGatesV1,
+            normalization_mode: Default::default(),
+            position: None,
+            address_metric: Default::default(),
+            seed: 1,
+            epoch,
+            table,
+            routes: vec![0; (spec.blocks * stages) as usize],
+            gates: vec![
+                0;
+                read_spec.gate_count(spec.blocks, stages).unwrap() as usize
+            ],
+            operator_kappa: COMPILED_OPERATOR_KAPPA.to_owned(),
+            composition_kappa: COMPILED_COMPOSITION_KAPPA.to_owned(),
+            kernel_sha256: "11".repeat(32),
+            source_sha256: "22".repeat(32),
+            geometry_sha256: "33".repeat(32),
+        };
+        let steps = build_trunk_step_table(spec.blocks, 0).unwrap();
+        let norms = build_trunk_norm_frames(spec.blocks, 0).unwrap();
+        export_trunk_d11(
+            &snapshot,
+            &steps,
+            &norms,
+            &TrunkTables::build(rows).unwrap(),
+        )
+        .unwrap()
+    }
+
     #[test]
-    fn consolidated_verification_builds_and_checks_one_table_set() {
+    fn consolidated_verification_imports_checks_and_rejects_mismatches() {
         let source_row = TrunkTrainRow {
             read_code: 1,
             rec_code: 2,
@@ -953,22 +1014,73 @@ mod tests {
             query_token: 11,
             target_token: 12,
         };
-        let source = TrunkTables::build(&[source_row]).unwrap();
-        let source_summary = table_reading(&source);
-        let expected = expected_count_tables(source, &[added_row]).unwrap();
-        let expected_summary = table_reading(&expected);
-        assert_eq!(source_summary.len(), 13);
-        assert_eq!(expected_summary.len(), 13);
-        assert_eq!(expected_summary["unigram"].total, 2);
-        assert!(require_same(&expected, &expected, "tables differ").is_ok());
+        let source_artifact = synthetic_trunk(1, &[source_row]);
+        let exact_artifact = synthetic_trunk(1, &[source_row, added_row]);
+        let changed_semantics = synthetic_trunk(2, &[source_row, added_row]);
+        let wrong_tables = synthetic_trunk(
+            1,
+            &[
+                source_row,
+                TrunkTrainRow {
+                    target_token: 13,
+                    ..added_row
+                },
+            ],
+        );
 
-        let wrong = TrunkTables::build(&[TrunkTrainRow {
-            target_token: 13,
-            ..added_row
-        }])
+        let (source_semantics, source_trunk_tables) = trunk_reading(&source_artifact).unwrap();
+        let source_summary = table_reading(&source_trunk_tables);
+        let expected = expected_count_tables(source_trunk_tables, &[added_row]).unwrap();
+        let (exact_semantics, exact_trunk_tables) = trunk_reading(&exact_artifact).unwrap();
+        require_same(
+            &exact_semantics,
+            &source_semantics,
+            "count training changed a non-count trunk section",
+        )
         .unwrap();
-        assert!(require_same(&wrong, &expected, "tables differ").is_err());
-        assert!(require_same(&1u8, &2u8, "semantics differ").is_err());
+        require_same(
+            &exact_trunk_tables,
+            &expected,
+            "decoded count tables differ from the independent tally",
+        )
+        .unwrap();
+        assert_eq!(source_summary.len(), 13);
+        require_same(
+            &table_reading(&exact_trunk_tables),
+            &table_reading(&expected),
+            "summaries differ",
+        )
+        .unwrap();
+        assert_eq!(table_reading(&expected)["unigram"].total, 2);
+
+        let (_, shuffled_source_tables) = trunk_reading(&source_artifact).unwrap();
+        let shuffled_expected =
+            expected_count_tables(shuffled_source_tables, &[added_row]).unwrap();
+        require_same(
+            &shuffled_expected,
+            &expected,
+            "fresh source reconstruction differs",
+        )
+        .unwrap();
+
+        let (wrong_semantics, _) = trunk_reading(&changed_semantics).unwrap();
+        assert!(
+            require_same(
+                &wrong_semantics,
+                &source_semantics,
+                "count training changed a non-count trunk section",
+            )
+            .is_err()
+        );
+        let (_, wrong_tables_decoded) = trunk_reading(&wrong_tables).unwrap();
+        assert!(
+            require_same(
+                &wrong_tables_decoded,
+                &expected,
+                "decoded count tables differ from the independent tally",
+            )
+            .is_err()
+        );
     }
 
     #[test]
