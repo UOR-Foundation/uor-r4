@@ -452,24 +452,22 @@ fn run() -> Result<serde_json::Value, String> {
             Ok((*name, reading))
         })
         .collect::<Result<BTreeMap<_, _>, String>>()?;
-    let opening_distances = opening
+    let baseline_outcomes = &opening_outcomes["point_off"];
+    if opening_outcomes
         .values()
-        .map(|reading| reading.target_distance_sum)
-        .collect::<BTreeSet<_>>();
-    if opening_distances.len() != 1 {
-        return Err("point fallback changed the opening query distance".to_owned());
+        .any(|outcomes| !opening_distances_equal(outcomes, baseline_outcomes))
+    {
+        return Err("point fallback changed an opening query distance".to_owned());
     }
     let point_fallback_exposure = arms
         .iter()
         .map(|(name, _)| *name)
         .filter(|name| *name != "point_off")
         .map(|name| {
-            let changed = opening_outcomes[name]
-                .iter()
-                .zip(&opening_outcomes["point_off"])
-                .filter(|(candidate, off)| candidate.token != off.token)
-                .count();
-            (name, changed)
+            (
+                name,
+                changed_openings(&opening_outcomes[name], &opening_outcomes["point_off"]),
+            )
         })
         .collect::<BTreeMap<_, _>>();
     if point_fallback_exposure
@@ -477,6 +475,23 @@ fn run() -> Result<serde_json::Value, String> {
         .any(|&changed| changed == 0)
     {
         return Err("a point-key arm never changed the served opening".to_owned());
+    }
+    if prototypes.is_some() {
+        if point_fallback_exposure["point_prototypes"] != evaluation_samples.len() {
+            return Err(
+                "the target-prototype arm did not change every held-out opening".to_owned(),
+            );
+        }
+        if changed_openings(
+            &opening_outcomes["random_prototypes"],
+            &opening_outcomes["point_prototypes"],
+        ) == 0
+        {
+            return Err(
+                "the shuffled-target prototype control named the treatment's opening every time"
+                    .to_owned(),
+            );
+        }
     }
     let neighbor = if config.neighbor_vote == 0 {
         None
@@ -1307,6 +1322,22 @@ fn summarize_openings(outcomes: &[OpeningOutcome]) -> Result<OpeningReading, Str
     Ok(reading)
 }
 
+fn changed_openings(candidate: &[OpeningOutcome], control: &[OpeningOutcome]) -> usize {
+    candidate
+        .iter()
+        .zip(control)
+        .filter(|(candidate, control)| candidate.token != control.token)
+        .count()
+}
+
+fn opening_distances_equal(candidate: &[OpeningOutcome], baseline: &[OpeningOutcome]) -> bool {
+    candidate.len() == baseline.len()
+        && candidate
+            .iter()
+            .zip(baseline)
+            .all(|(candidate, baseline)| candidate.target_distance == baseline.target_distance)
+}
+
 fn evaluate_opening_outcomes(
     artifact: &[u8],
     samples: &[CpuConversationSample],
@@ -1523,6 +1554,22 @@ mod tests {
     }
 
     #[test]
+    fn target_prototypes_break_residual_ties_with_signed_lexicographic_points() {
+        let point = PointKeyImage {
+            width: 2,
+            // The target-7 medoid is (0, 0); four residual points are all at L1
+            // distance 2. Signed component-wise lexicographic order chooses
+            // (-2, 0), including across a negative coordinate.
+            points: vec![0, 0, 2, 0, -2, 0, 0, 2, 0, -2, 9, 9],
+            targets: vec![7, 7, 7, 7, 7, 8],
+            vote_k: 1,
+        };
+        let prototypes = derive_target_prototypes(&point, 2).unwrap();
+        assert_eq!(prototypes.points, vec![-2, 0, 0, 0, 9, 9]);
+        assert_eq!(prototypes.targets, vec![7, 7, 8]);
+    }
+
+    #[test]
     fn target_prototypes_refuse_zero_malformed_and_one_target_tables() {
         let malformed = PointKeyImage {
             width: 2,
@@ -1585,6 +1632,31 @@ mod tests {
         assert_eq!(reading["control_only"], 0);
         assert_eq!(reading["threshold"], 4);
         assert_eq!(reading["passes"], true);
+    }
+
+    #[test]
+    fn opening_instruments_require_every_row_and_per_row_distance_equality() {
+        let mut baseline = (0..60)
+            .map(|index| OpeningOutcome {
+                top1: false,
+                target_distance: index,
+                token: 7,
+            })
+            .collect::<Vec<_>>();
+        let mut candidate = baseline.clone();
+        for row in &mut candidate {
+            row.token = 8;
+        }
+        assert_eq!(changed_openings(&candidate, &baseline), 60);
+        assert!(opening_distances_equal(&candidate, &baseline));
+
+        candidate[0].target_distance = 1;
+        baseline[1].target_distance = 2;
+        assert!(
+            candidate.iter().map(|row| row.target_distance).sum::<u64>()
+                == baseline.iter().map(|row| row.target_distance).sum::<u64>()
+        );
+        assert!(!opening_distances_equal(&candidate, &baseline));
     }
 
     #[test]
@@ -1790,6 +1862,16 @@ mod tests {
             prompt: vec![20, 21, 22, 23],
             reply: vec![second_target, 1],
         };
+        let third_training = CpuConversationSample {
+            document_ordinal: 4,
+            prompt: vec![40, 41, 42, 43],
+            reply: vec![target, 1],
+        };
+        let fourth_training = CpuConversationSample {
+            document_ordinal: 6,
+            prompt: vec![50, 51, 52, 53],
+            reply: vec![target, 1],
+        };
         let held_out = CpuConversationSample {
             document_ordinal: 1,
             prompt,
@@ -1797,7 +1879,7 @@ mod tests {
         };
         let point = derive_point_table(
             &memory_artifact,
-            &[training, second_training],
+            &[training, second_training, third_training, fourth_training],
             snapshot.width,
             snapshot.vocab,
         )
@@ -1834,6 +1916,55 @@ mod tests {
             opening_token(&random_artifact, &held_out.prompt),
             point_token
         );
+        let prototypes = derive_target_prototypes(&point, 2).unwrap();
+        assert!(prototypes.rows() < point.rows());
+        let prototype_artifact = add_point_key_uorlut01(&memory_artifact, &prototypes).unwrap();
+        let (prototype_query, prototype_token) =
+            opening_query_and_token(&prototype_artifact, &held_out.prompt).unwrap();
+        assert_eq!(
+            point_vote(&prototypes, &prototype_query, 1).unwrap(),
+            prototype_token
+        );
+        let (_random_prototypes, random_prototype_artifact) = (2..100)
+            .find_map(|seed| {
+                let image = PointKeyImage {
+                    width: prototypes.width,
+                    points: prototypes.points.clone(),
+                    targets: shuffled_targets(&prototypes.targets, seed).ok()?,
+                    vote_k: 1,
+                };
+                let artifact = add_point_key_uorlut01(&memory_artifact, &image).ok()?;
+                (opening_token(&artifact, &held_out.prompt) != prototype_token)
+                    .then_some((image, artifact))
+            })
+            .unwrap();
+        let baseline_opening = evaluate_opening_outcomes(
+            &memory_artifact,
+            std::slice::from_ref(&held_out),
+            snapshot.width,
+        )
+        .unwrap();
+        for artifact in [
+            point_artifact.as_slice(),
+            medoid_artifact.as_slice(),
+            prototype_artifact.as_slice(),
+            random_prototype_artifact.as_slice(),
+        ] {
+            let opening = evaluate_opening_outcomes(
+                artifact,
+                std::slice::from_ref(&held_out),
+                snapshot.width,
+            )
+            .unwrap();
+            assert_eq!(
+                opening[0].target_distance,
+                baseline_opening[0].target_distance
+            );
+        }
+        let audit =
+            audit_memory_weight_samples(&prototype_artifact, &[memory_sample(&held_out)], true)
+                .unwrap();
+        assert!(audit.is_exact());
         let neighbors = evaluate_neighbor_vote(
             &memory_artifact,
             &point_artifact,
