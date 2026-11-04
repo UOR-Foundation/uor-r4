@@ -20,6 +20,10 @@ requires the smaller token id, the exact and shuffled artifacts must differ,
 and changed served-decision rows are counted rather than represented only by a
 boolean checksum difference.
 
+The second review returned FIT at docs head
+`3ff9ca748ad76cd22f5fa2ae8c27e35a1ac4c249`, bound to source
+`b70ae7de6c2a6fe0946ca14fffe0a63bb62525d2`.
+
 ## What changed
 
 Implementation will add exact CPU derivation of trunk training rows and checked
