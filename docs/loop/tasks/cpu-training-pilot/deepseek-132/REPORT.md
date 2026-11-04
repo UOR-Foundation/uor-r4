@@ -101,7 +101,7 @@ all gate/baseline artifact copies.
   hashes.
 - After repair, fresh FIT review returned FIT at `c2fc34f19`; final pre-run
   review returned GO at `c885f0e23`.
-- Full `uor-r4-cpu-train` release suite: **209 library and 52 binary tests
+- Full `uor-r4-cpu-train` release suite: **212 library and 52 binary tests
   passed, 0 failed, 4 expected ignores**. Focused signature tests: **8/8**;
   driver tests: **4/4**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`, package formatting,
