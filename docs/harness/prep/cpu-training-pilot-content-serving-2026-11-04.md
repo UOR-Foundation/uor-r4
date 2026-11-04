@@ -20,14 +20,16 @@ Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
 Final audit added canonical readout identity to serialized sessions. Attempt 2
 at pin `fe253c5ca` passed both public seeds but was superseded after
 exact-head review found that loopback JSON omitted the sidecar path and file
-SHA-256. Attempt 3 reruns under pin `1be885d9d`; only loopback metadata and
-its tests changed.
+SHA-256. Attempt 3 reruns under pin `819482378` after the same review also
+required strict refusal of an omitted `includes_reference_end`, rejection of
+readouts on non-256-wide FBS models before any step, bounded sidecar reads,
+and transactional missing/different-readout restore checks.
 
 ## Base artifacts
 
 | Input | Identity |
 |---|---|
-| implementation source | `1be885d9d78e7549059e76aadc8c30091fbe018a` |
+| implementation source | `81948237860d9a655485ebf460b8c6c1b23e264c` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -157,7 +159,7 @@ BUILD=$SOURCE/target/deepseek/content-readout-serving-140-attempt-3
 CHAT_BUILD=$SOURCE/target/deepseek/content-readout-serving-chat-140-attempt-3
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=1be885d9d78e7549059e76aadc8c30091fbe018a
+IMPL_PIN=81948237860d9a655485ebf460b8c6c1b23e264c
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
@@ -245,10 +247,10 @@ mismatch is an instrument fault requiring a new FIT.
 
 TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: 1be885d9d78e7549059e76aadc8c30091fbe018a
-implementation pin: 1be885d9d78e7549059e76aadc8c30091fbe018a
+head: 81948237860d9a655485ebf460b8c6c1b23e264c
+implementation pin: 81948237860d9a655485ebf460b8c6c1b23e264c
 reviewer: pending
 date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22). The attempt-2
-FIT does not carry to the loopback-identity binary.
+FIT does not carry to the tightened delivery binary.
