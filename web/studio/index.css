@@ -55,6 +55,7 @@ html[data-theme="light"] {
     --accent: #b2521c;
     --accent-bright: #c9611f;
     --accent-dim: #8f3f14;
+    --accent-text: #8f3f14;
     --accent-soft: rgba(178, 82, 28, 0.10);
     --accent-line: rgba(178, 82, 28, 0.35);
     --on-accent: #fff8ef;

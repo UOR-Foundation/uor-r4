@@ -46,7 +46,7 @@ function effectiveBackground(element: HTMLElement): string {
         const color = getComputedStyle(current).backgroundColor;
         if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)' && color !== 'color(srgb 0 0 0 / 0)') return color;
     }
-    return getComputedStyle(document.body).backgroundColor;
+    return getComputedStyle(document.documentElement).getPropertyValue('--bg');
 }
 
 afterEach(() => {
@@ -153,20 +153,23 @@ describe('Mac-inspired Studio visual system', () => {
     });
 
     it('keeps shipped text accents at AA and previews at 32px', () => {
-        installTheme('dark');
-        document.body.innerHTML += '<article class="empty-card"><span class="empty-card-label">Empty</span></article><footer class="statusbar"><span class="status-brand">UOR</span></footer><div class="template-menu"><div class="template-menu-label">Templates</div></div><div class="palette-item" aria-selected="true"><span class="palette-item-desc">Description</span></div><img class="attachment-chip-preview" alt="">';
-        for (const [foreground, background] of [
-            ['.empty-card-label', '.empty-card'],
-            ['.status-brand', '.statusbar'],
-            ['.template-menu-label', '.template-menu'],
-            ['.palette-item-desc', '.palette-item[aria-selected="true"]'],
-        ]) {
-            const text = getComputedStyle(document.querySelector<HTMLElement>(foreground)!).color;
-            const surface = effectiveBackground(document.querySelector<HTMLElement>(background)!);
-            expect(contrast(cssColorToHex(text), cssColorToHex(surface)), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+        for (const theme of ['dark', 'light'] as const) {
+            installTheme(theme);
+            expect(getComputedStyle(document.documentElement).getPropertyValue('--accent-text')).toBe(theme === 'dark' ? '#64d2ff' : '#8f3f14');
+            document.body.innerHTML += '<article class="empty-card"><span class="empty-card-label">Empty</span></article><footer class="statusbar"><span class="status-brand">UOR</span></footer><div class="template-menu"><div class="template-menu-label">Templates</div></div><div class="palette-item" aria-selected="true"><span class="palette-item-desc">Description</span></div><img class="attachment-chip-preview" alt="">';
+            for (const [foreground, background] of [
+                ['.empty-card-label', '.empty-card'],
+                ['.status-brand', '.statusbar'],
+                ['.template-menu-label', '.template-menu'],
+                ['.palette-item-desc', '.palette-item[aria-selected="true"]'],
+            ]) {
+                const text = getComputedStyle(document.querySelector<HTMLElement>(foreground)!).color;
+                const surface = effectiveBackground(document.querySelector<HTMLElement>(background)!);
+                expect(contrast(cssColorToHex(text), cssColorToHex(surface)), `${foreground} on ${background}: ${text} / ${surface}`).toBeGreaterThanOrEqual(4.5);
+            }
+            const preview = document.querySelector<HTMLImageElement>('.attachment-chip-preview')!;
+            expect(getComputedStyle(preview).inlineSize).toBe('32px');
+            expect(getComputedStyle(preview).blockSize).toBe('32px');
         }
-        const preview = document.querySelector<HTMLImageElement>('.attachment-chip-preview')!;
-        expect(getComputedStyle(preview).inlineSize).toBe('32px');
-        expect(getComputedStyle(preview).blockSize).toBe('32px');
     });
 });
