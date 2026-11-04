@@ -106,8 +106,7 @@ EXPECTED_SHUFFLED=19cbb1caa487473ac4344e1b3582060fbcb22b1e6066fa51540bcbc8977eab
 EXPECTED_REPORT=64e6e9b971ae0e90281aa485112db595e440eddeb29dbf99c9976a1fc467722f
 check_pins() {
   test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
-  git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- \
-    crates/uor-r4-cpu-train Cargo.toml Cargo.lock
+  git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
   test "$(sha256sum "$OLD_BIN" | cut -d' ' -f1)" = "$OLD_SHA"
   test "$(sha256sum "$NEW_BIN" | cut -d' ' -f1)" = "$NEW_SHA"
   test "$(sha256sum "$DATA/t16-frozen-zero-seed1-trunk.d11" | cut -d' ' -f1)" = \
