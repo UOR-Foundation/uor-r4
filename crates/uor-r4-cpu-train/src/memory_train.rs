@@ -126,6 +126,23 @@ pub struct MemoryWeightStep {
     pub parity: Option<MemoryWeightParityReading>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MemoryKeyCoverage {
+    pub opening_training_keys: u64,
+    pub opening_ambiguous_training_keys: u64,
+    pub opening_evaluation_decisions: u64,
+    pub opening_hits: u64,
+    pub opening_correct: u64,
+    pub reply_training_keys: u64,
+    pub reply_ambiguous_training_keys: u64,
+    pub reply_training_decisions: u64,
+    pub reply_ambiguous_training_decisions: u64,
+    pub reply_evaluation_decisions: u64,
+    pub reply_hits: u64,
+    pub reply_correct: u64,
+}
+
 #[derive(Clone)]
 pub struct CpuMemoryWeightTrainer {
     initial_artifact: Vec<u8>,
@@ -753,38 +770,15 @@ pub fn derive_turn_memory(
                 "turn-memory derivation needs non-empty prompt and reply",
             ));
         }
-        let opening_key = sample.prompt.iter().copied().take(k).collect::<Vec<_>>();
+        let opening_key = memory_opening_key(sample, k)?;
         *opening
             .entry(opening_key)
             .or_default()
             .entry(sample.reply[0])
             .or_default() += 1;
 
-        let turn = sample
-            .prompt
-            .iter()
-            .copied()
-            .take(reply_turn)
-            .collect::<Vec<_>>();
-        let tokens = sample
-            .prompt
-            .iter()
-            .chain(&sample.reply)
-            .copied()
-            .collect::<Vec<_>>();
-        let reply_start = sample.prompt.len();
         for offset in 0..sample.reply.len().saturating_sub(1) {
-            let row = reply_start + offset;
-            let block_start = row / key_window * key_window;
-            let visible = block_start.max(reply_start);
-            let length = row + 1 - visible;
-            let mut key = turn.clone();
-            key.extend([
-                MEMORY_PAD,
-                u32::try_from(length).map_err(|_| invalid("reply key length exceeds u32"))?,
-                MEMORY_PAD,
-                tokens[row],
-            ]);
+            let key = memory_reply_key(sample, offset, reply_turn, key_window)?;
             *reply
                 .entry(key)
                 .or_default()
@@ -805,15 +799,168 @@ pub fn derive_turn_memory(
     })
 }
 
+/// Model-free coverage of a memory table derived from the same training keys.
+///
+/// A hit means the evaluation key exists in the training-derived table. Correct
+/// means the table's commonest target already equals the held-out next token.
+/// These are table-content ceilings, not served model readings.
+pub fn memory_key_coverage(
+    training: &[MemoryWeightSample],
+    evaluation: &[MemoryWeightSample],
+    k: usize,
+    key_window: usize,
+    reply_turn: usize,
+) -> Result<MemoryKeyCoverage> {
+    if training.is_empty() || evaluation.is_empty() || !(1..=16).contains(&k) {
+        return Err(invalid("memory coverage inputs differ"));
+    }
+    if key_window == 0 || !(1..=16).contains(&reply_turn) {
+        return Err(invalid("memory coverage dimensions differ"));
+    }
+    let mut opening = BTreeMap::<Vec<u32>, BTreeMap<u32, usize>>::new();
+    let mut reply = BTreeMap::<Vec<u32>, BTreeMap<u32, usize>>::new();
+    let mut reply_training_decisions = 0u64;
+    for sample in training {
+        validate_memory_sample(sample)?;
+        *opening
+            .entry(memory_opening_key(sample, k)?)
+            .or_default()
+            .entry(sample.reply[0])
+            .or_default() += 1;
+        for offset in 0..sample.reply.len().saturating_sub(1) {
+            *reply
+                .entry(memory_reply_key(sample, offset, reply_turn, key_window)?)
+                .or_default()
+                .entry(sample.reply[offset + 1])
+                .or_default() += 1;
+            reply_training_decisions = reply_training_decisions
+                .checked_add(1)
+                .ok_or_else(|| invalid("memory coverage reply decision count overflows"))?;
+        }
+    }
+    let mut coverage = MemoryKeyCoverage {
+        opening_training_keys: opening.len() as u64,
+        opening_ambiguous_training_keys: opening
+            .values()
+            .filter(|targets| targets.len() > 1)
+            .count() as u64,
+        reply_training_keys: reply.len() as u64,
+        reply_ambiguous_training_keys: reply.values().filter(|targets| targets.len() > 1).count()
+            as u64,
+        reply_training_decisions,
+        ..MemoryKeyCoverage::default()
+    };
+    for targets in reply.values().filter(|targets| targets.len() > 1) {
+        coverage.reply_ambiguous_training_decisions = coverage
+            .reply_ambiguous_training_decisions
+            .checked_add(targets.values().copied().sum::<usize>() as u64)
+            .ok_or_else(|| invalid("memory coverage ambiguous decision count overflows"))?;
+    }
+    for sample in evaluation {
+        validate_memory_sample(sample)?;
+        coverage.opening_evaluation_decisions = coverage
+            .opening_evaluation_decisions
+            .checked_add(1)
+            .ok_or_else(|| invalid("memory coverage opening decision count overflows"))?;
+        if let Some(targets) = opening.get(&memory_opening_key(sample, k)?) {
+            coverage.opening_hits = coverage
+                .opening_hits
+                .checked_add(1)
+                .ok_or_else(|| invalid("memory coverage opening hit count overflows"))?;
+            let target = commonest_target(targets);
+            coverage.opening_correct = coverage
+                .opening_correct
+                .checked_add(u64::from(target == sample.reply[0]))
+                .ok_or_else(|| invalid("memory coverage opening correct count overflows"))?;
+        }
+        for offset in 0..sample.reply.len().saturating_sub(1) {
+            coverage.reply_evaluation_decisions = coverage
+                .reply_evaluation_decisions
+                .checked_add(1)
+                .ok_or_else(|| invalid("memory coverage reply decision count overflows"))?;
+            if let Some(targets) =
+                reply.get(&memory_reply_key(sample, offset, reply_turn, key_window)?)
+            {
+                coverage.reply_hits = coverage
+                    .reply_hits
+                    .checked_add(1)
+                    .ok_or_else(|| invalid("memory coverage reply hit count overflows"))?;
+                let target = commonest_target(targets);
+                coverage.reply_correct = coverage
+                    .reply_correct
+                    .checked_add(u64::from(target == sample.reply[offset + 1]))
+                    .ok_or_else(|| invalid("memory coverage reply correct count overflows"))?;
+            }
+        }
+    }
+    Ok(coverage)
+}
+
+fn validate_memory_sample(sample: &MemoryWeightSample) -> Result<()> {
+    if sample.prompt.is_empty() || sample.reply.is_empty() {
+        return Err(invalid(
+            "memory derivation needs a non-empty prompt and reply",
+        ));
+    }
+    Ok(())
+}
+
+fn memory_opening_key(sample: &MemoryWeightSample, k: usize) -> Result<Vec<u32>> {
+    validate_memory_sample(sample)?;
+    Ok(sample.prompt.iter().copied().take(k).collect())
+}
+
+fn memory_reply_key(
+    sample: &MemoryWeightSample,
+    offset: usize,
+    reply_turn: usize,
+    key_window: usize,
+) -> Result<Vec<u32>> {
+    validate_memory_sample(sample)?;
+    let row = sample
+        .prompt
+        .len()
+        .checked_add(offset)
+        .ok_or_else(|| invalid("reply key row overflows"))?;
+    let block_start = row / key_window * key_window;
+    let visible = block_start.max(sample.prompt.len());
+    let length = row
+        .checked_add(1)
+        .and_then(|end| end.checked_sub(visible))
+        .ok_or_else(|| invalid("reply key length underflows"))?;
+    let token = sample
+        .reply
+        .get(offset)
+        .copied()
+        .ok_or_else(|| invalid("reply key offset is outside the reply"))?;
+    let mut key = sample
+        .prompt
+        .iter()
+        .copied()
+        .take(reply_turn)
+        .collect::<Vec<_>>();
+    key.extend([
+        MEMORY_PAD,
+        u32::try_from(length).map_err(|_| invalid("reply key length exceeds u32"))?,
+        MEMORY_PAD,
+        token,
+    ]);
+    Ok(key)
+}
+
+fn commonest_target(targets: &BTreeMap<u32, usize>) -> u32 {
+    targets
+        .iter()
+        .min_by(|left, right| right.1.cmp(left.1).then_with(|| left.0.cmp(right.0)))
+        .map(|(&target, _)| target)
+        .expect("a derived memory key has a target")
+}
+
 fn commonest_entries(counts: BTreeMap<Vec<u32>, BTreeMap<u32, usize>>) -> Vec<FbsMemoryEntry> {
     counts
         .into_iter()
         .map(|(key, targets)| {
-            let value = targets
-                .into_iter()
-                .min_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)))
-                .map(|(target, _)| target)
-                .expect("a derived memory key has a target");
+            let value = commonest_target(&targets);
             FbsMemoryEntry { key, value }
         })
         .collect()
@@ -1790,5 +1937,41 @@ mod tests {
         let step = trainer.train_step().unwrap();
         assert!(step.updated);
         assert!(step.parity.as_ref().unwrap().is_exact());
+    }
+
+    #[test]
+    fn key_coverage_reports_hits_ambiguity_and_majority_ceiling() {
+        let training = vec![
+            MemoryWeightSample {
+                prompt: vec![10, 11, 12],
+                reply: vec![42, 77, 99],
+            },
+            MemoryWeightSample {
+                prompt: vec![10, 11, 12],
+                reply: vec![42, 78, 99],
+            },
+        ];
+        let evaluation = vec![MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, 77, 99],
+        }];
+        let coverage = memory_key_coverage(&training, &evaluation, 3, 16, 3).unwrap();
+        assert_eq!(
+            coverage,
+            MemoryKeyCoverage {
+                opening_training_keys: 1,
+                opening_ambiguous_training_keys: 0,
+                opening_evaluation_decisions: 1,
+                opening_hits: 1,
+                opening_correct: 1,
+                reply_training_keys: 3,
+                reply_ambiguous_training_keys: 1,
+                reply_training_decisions: 4,
+                reply_ambiguous_training_decisions: 2,
+                reply_evaluation_decisions: 2,
+                reply_hits: 2,
+                reply_correct: 2,
+            }
+        );
     }
 }

@@ -4,9 +4,9 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, evaluate_replies, replace_memory_weight_table,
-    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer,
-    MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
+    evaluate_memory_weight_samples, evaluate_replies, memory_key_coverage,
+    replace_memory_weight_table, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
+    CpuMemoryWeightTrainer, MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
 
@@ -230,6 +230,13 @@ fn run() -> Result<serde_json::Value, String> {
                 config.reply_cap,
                 shape.context,
             ),
+            "memory_key_coverage": memory_key_coverage(
+                &training_samples,
+                &evaluation_samples,
+                config.key_tokens,
+                shape.context,
+                config.reply_turn,
+            ).map_err(|error| error.to_string())?,
             "keys": groups.iter().map(|group| serde_json::json!({
                 "key": group.key,
                 "training": group.training.len(),

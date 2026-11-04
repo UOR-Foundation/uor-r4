@@ -53,6 +53,17 @@ references fit both the registered 16-token reply cap and the 192-token artifact
 context; the remaining ten are 26 to 36 tokens and are unreachable under the
 registered cap.
 
+The training-only memory-key census reports:
+
+- all 114 evaluation opening keys hit the table, and the stored majority target
+  is correct on 50;
+- 795 of 1,212 evaluation reply keys hit, and the stored majority target is
+  correct on 717;
+- only 44 of 724 reply keys and 133 of 1,192 training reply decisions are
+  ambiguous.
+
+These are table-content ceilings. They do not replace the served-model bar.
+
 ## Arms
 
 For each model seed, evaluate five matched artifacts on the 114 evaluation

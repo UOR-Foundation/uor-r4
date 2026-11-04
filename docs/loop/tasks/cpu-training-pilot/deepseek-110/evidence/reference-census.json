@@ -43,5 +43,19 @@
       "33": 6,
       "36": 1
     }
+  },
+  "memory_key_coverage": {
+    "opening_training_keys": 16,
+    "opening_ambiguous_training_keys": 14,
+    "opening_evaluation_decisions": 114,
+    "opening_hits": 114,
+    "opening_correct": 50,
+    "reply_training_keys": 724,
+    "reply_ambiguous_training_keys": 44,
+    "reply_training_decisions": 1192,
+    "reply_ambiguous_training_decisions": 133,
+    "reply_evaluation_decisions": 1212,
+    "reply_hits": 795,
+    "reply_correct": 717
   }
 }

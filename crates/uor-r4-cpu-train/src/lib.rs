@@ -50,9 +50,10 @@ pub use gain_train::{
 };
 pub use memory_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, replace_memory_weight_table, CpuMemoryWeightTrainer,
-    MemoryWeightConfig, MemoryWeightParityReading, MemoryWeightReading, MemoryWeightSample,
-    MemoryWeightStep, MemoryWeightTable, CPU_MEMORY_WEIGHT_TRAINER_SCHEMA,
+    evaluate_memory_weight_samples, memory_key_coverage, replace_memory_weight_table,
+    CpuMemoryWeightTrainer, MemoryKeyCoverage, MemoryWeightConfig, MemoryWeightParityReading,
+    MemoryWeightReading, MemoryWeightSample, MemoryWeightStep, MemoryWeightTable,
+    CPU_MEMORY_WEIGHT_TRAINER_SCHEMA,
 };
 pub use panel::{
     panel_admission_gate, CpuPanelEvaluator, PanelDelta, PanelExportReading, PanelGateDecision,

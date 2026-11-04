@@ -51,13 +51,21 @@ context; ten references of 26–36 tokens are unreachable under the fixed cap.
 This means 104 prompts can still be judged for exact complete reply once FIT
 clears the replay.
 
+The training-only key census is stronger: **114/114** evaluation opening keys
+hit the derived memory table and **50** stored majority targets are correct.
+For reply rows, **795/1,212** keys hit and **717** stored majority targets are
+already correct, 59.2% of all evaluation reply decisions. Only 44 of 724 reply
+keys, covering 133 of 1,192 training reply decisions, are ambiguous. This is a
+table-content ceiling, not served-model output, but it shows that table absence
+and label ambiguity do not explain deepseek-109's low served top-1.
+
 The pinned census is [reference-census.json](evidence/reference-census.json).
 
 ## Checks run at the head
 
 - Six focused reply-evaluator tests passed, including deterministic evaluation
   of an exported synthetic CPU artifact.
-- Full CPU release suite: 169 library tests passed, 4 release benchmarks
+- Full CPU release suite: 170 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - `cargo fmt -p uor-r4-cpu-train -- --check`: passed.
