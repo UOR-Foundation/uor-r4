@@ -65,7 +65,7 @@ visual understanding.
 
 ## Follow-up hardening: issued R4 records
 
-[kimi-1](../../loop/tasks/geometric-image-input/kimi-1/REPORT.md) binds native image parts to at most 64 server-issued decompositions. Exact eight-field parts require the issued ID, canonical bytes, source Blake3, dimensions and grid; unknown, expired, substituted and non-user parts are refused even with recomputed hashes. Compact base64 preserves every signed Q12 value without the earlier 206/192 context overflow. Real dual-c131 turns returned `I.`: A 53/3/56 at 172.3 tok/s and changed B 54/3/57 at 169.3 tok/s; a true 2x2 image used 118/3/121. Reload preserves text-only sends and a working Clear path while image bytes remain absent. Native and WASM audits at `4806f2675` pass 44/130 and 7/7 respectively. This remains transport evidence, not visual understanding.
+[kimi-1](../../loop/tasks/geometric-image-input/kimi-1/REPORT.md) binds native image parts to at most 64 server-issued decompositions. Exact eight-field parts require the issued ID, canonical bytes, source Blake3, dimensions and grid; unknown, expired, substituted and non-user parts are refused even with recomputed hashes. Compact base64 preserves every signed Q12 value without the earlier 206/192 context overflow. Real dual-c131 turns returned `I.`: A 53/3/56 at 172.3 tok/s and changed B 54/3/57 at 169.3 tok/s; a true 2x2 image used 118/3/121. Reload preserves text-only sends and a working Clear path while image bytes remain absent. Native and WASM audits at `4eba93a01` pass 44/130 and 7/7 respectively. This remains transport evidence, not visual understanding.
 
 ## Done when
 
