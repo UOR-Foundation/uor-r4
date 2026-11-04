@@ -1,6 +1,6 @@
 # Public 19-table CPU count training
 
-**Status:** FIT
+**Status:** PENDING
 
 ## Question
 
@@ -18,7 +18,7 @@ paid API. This is not GPU qualification or language-quality evidence.
 
 | Input | Identity |
 |---|---|
-| implementation source | `b70ae7de6c2a6fe0946ca14fffe0a63bb62525d2` |
+| implementation source | `d5108222aef6882007aba31eeadc95796b9c8aca` |
 | public M1 trunk | `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | DEV response mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
@@ -87,9 +87,9 @@ separate:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-trunk-count-training
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=b70ae7de6c2a6fe0946ca14fffe0a63bb62525d2
-PIPELINE=$SHARED/local/deepseek/trunk-count/2026-11-04-attempt-1
-BUILD=$SOURCE/target/deepseek/trunk-count-build-124
+SOURCE_PIN=d5108222aef6882007aba31eeadc95796b9c8aca
+PIPELINE=$SHARED/local/deepseek/trunk-count/2026-11-04-attempt-2
+BUILD=$SOURCE/target/deepseek/trunk-count-build-124-attempt-2
 DATA=$SHARED/local/deepseek/public-m1-parity
 test -z "$(git -C "$SOURCE" status --porcelain)"
 git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
@@ -156,6 +156,12 @@ build is capped below 3 GiB temporary storage; two output roots retain below
 peak-RSS cap. Stop on artifact drift, semantic-section change, count
 mismatch/overflow, nondeterminism, output-root reuse or CPU/serving divergence.
 
+Attempt 1 is preserved at
+`local/deepseek/trunk-count/2026-11-04-attempt-1/`. It completed its mechanism
+checks but reached 3,063,024 KiB peak RSS, so the resource rule stopped it
+before repeat or evidence acceptance. Attempt 2 adds explicit drops of the
+source serving model and training reader before later verification/evaluation.
+
 ## Claim boundary
 
 This proves CPU writeback over the full public 19-table family. It does not show
@@ -164,21 +170,4 @@ useful chat or GPU-qualified training.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 public-19-table-count-training
-sheet: `docs/harness/prep/cpu-training-pilot-trunk-count-2026-11-04.md`
-head: `3ff9ca748ad76cd22f5fa2ae8c27e35a1ac4c249`
-implementation pin: `b70ae7de6c2a6fe0946ca14fffe0a63bb62525d2`
-reviewer: deepseek fresh-context non-author subagent
-note: one public 19-table writeback control; exact CPU row derivation,
-independent full decoded table counts, checked sparse/unigram bounds, smaller-id
-global tie rule, deterministic non-identity shuffled targets, semantic-section
-preservation, 128 training / 512 document-disjoint evaluation rows, exact
-CPU/serving query/cell/top-8/token parity, fresh roots, binary and output
-checksums, 600-second/2-GiB bounds, storage bound and deterministic artifact
-repeat
-date: 2026-11-04
-
-A FIT verdict clears compute for the configuration in that sheet only (D22).
-
-Every mechanism pre-registration gets a TEST FITNESS review on its milestone
-before compute.
+TEST FITNESS: PENDING
