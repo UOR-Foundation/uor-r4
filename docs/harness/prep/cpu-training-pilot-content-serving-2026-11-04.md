@@ -18,7 +18,7 @@ external model execution.
 
 Attempt 1 at pin `a463a1c8d` is retained as superseded integration evidence.
 Final audit added canonical readout identity to serialized sessions; attempt 2
-reruns under pin `b7e0bc35a`.
+reruns under pin `fe253c5ca`.
 
 ## Base artifacts
 

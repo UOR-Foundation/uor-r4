@@ -11,4 +11,4 @@ refuses restore into a model with a missing or different readout. Because this
 changes the binary, the original run is retained here with its report,
 checksums and resource ledger but does not decide the unit.
 
-The registered rerun uses pin `b7e0bc35a`.
+The registered rerun uses pin `fe253c5ca`.
