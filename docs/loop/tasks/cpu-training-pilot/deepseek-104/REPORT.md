@@ -112,8 +112,9 @@ mismatches.
 ## Checks run at the head
 
 - Focused `cpu-point-transfer-driver` release suite: 5 passed.
-- Both registered public runs exited 0 and produced sealed local reports and
-  three artifacts per seed.
+- Both registered public runs exited 0 and produced local reports plus three
+  artifacts per seed. These output roots are retained as run evidence; this
+  driver does not claim the report roots are sealed.
 - Every CPU/serving parity counter was zero.
 - Full `uor-r4-cpu-train` release suite: 161 library tests passed with 4
   release benchmarks ignored; the corpus, counterfactual and discrete driver

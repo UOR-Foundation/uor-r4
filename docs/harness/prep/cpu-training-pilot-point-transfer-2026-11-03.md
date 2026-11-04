@@ -1,8 +1,8 @@
 # CPU unseen-key point transfer
 
-**Status:** READY FOR FIT REVIEW
+**Status:** FIT
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
 
 ## Question
 
@@ -164,6 +164,16 @@ cpu-point-transfer-driver ARTIFACT TOKENS MASK MANIFEST OUT \
   --train-keys 8 --evaluation-keys 8 --per-key 8 \
   --key-tokens 8 --reply-turn 8 --random-seed 1
 ```
+
+## Minimum test power
+
+Two public model seeds are required. Each seed uses the same 8 training keys
+and 8 disjoint evaluation keys, 60 training examples and 60 evaluation
+examples. The 60 held-out openings are the ranking unit; the full
+teacher-forced check adds 2,050 decisions per arm. Point, point-off and random
+must all run on each seed, and the strict-above-both bar must hold on both.
+This is the minimum bounded power for this exploratory transfer probe and does
+not qualify language capability.
 
 ## Cost and stop
 
