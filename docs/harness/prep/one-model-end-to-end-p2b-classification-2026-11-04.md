@@ -230,3 +230,10 @@ The second pre-run review, at `cdd4f9ec8`, was split into four narrow reviewers.
   - the watcher stops, and wakes the session, when a lease renewal fails, since a lapsed lease lets the reaper take an idle pod before its results are saved.
 
 None of this changes a panel, reading, bar or line of code.
+
+## Run 1: stopped at I-0n; the test repaired
+
+Run 1 ran at `04b547c70` on `vast-59164039`. It passed I-0, then stopped at I-0n (EXIT 4) before it fetched any input: the slide test passed with the row-cut fix set aside. This is classed as an instrument fault, never a result.
+- **The cause:** every decode forward clears the row cut after it. So a cut left on the thread meets only the first exact-length group's first step. That group is the 3-position prompt, and `prefill_refusal` refuses its prefill as a short prompt (`time` below `CONVOLUTION_WIDTH`, 4) before it asks about the cut. The test could not fail.
+- **The repair:** test only, at `64475a830`. The row-cut check now decodes the prompts from length 5 up. On the same pod it passes with the fix in place, and fails with the fix set aside on "a row cut left on the thread changed the forwards" (prefills 2, the first refusal being the row cut). No scored path changes.
+- **Run 2:** the sheet's one re-run, at `64475a830`, in new folders. Run 1's 26 files are sealed in the store under `run1/`.
