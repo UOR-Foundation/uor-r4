@@ -173,10 +173,10 @@ nondeterministic repeat, an unavailable dependency or a counter overflow.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030  
-sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`  
-head: `951ce09c701fd4783ea4f0b8c0de96e6becd387a`  
-reviewer: Codex fresh-context non-author review  
+TEST FITNESS: FIT - M2 #2030
+sheet: `docs/harness/prep/cpu-training-pilot-termination-gate-2026-11-04.md`
+head: `951ce09c701fd4783ea4f0b8c0de96e6becd387a`
+reviewer: Codex fresh-context non-author review
 note: bounded two-seed D84 CPU termination experiment; fixed deepseek-109
 16-key / 102-training / 114-evaluation selection and 32-update replay; three
 arms (no gate, training-derived terminal-point gate, equal-size random
@@ -184,7 +184,7 @@ nonterminal-point control); corpus EOS id 1 identifies the terminal training
 row and an accepted match maps to decoder BOS id 0; deterministic training-only
 L1 derivation, exact collision removal, radius bounds, 16-token cap, 32 Rayon
 workers, pinned trained/no-gate hashes, strict candidate bar, seed-1 repeat and
-30-minute stop.  
+30-minute stop.
 date: 2026-11-04
 
 This FIT clears only this registered configuration at the exact source head.
