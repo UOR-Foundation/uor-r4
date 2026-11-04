@@ -165,6 +165,14 @@ failed diagnostic cannot contaminate the next forward on that thread. See
   head by its own key and matches the integer session exactly on mixed
   artifacts, and `fbs-toks --copy-codes`, which assumes copy key 1, refuses
   one. The public readers no longer refuse a mixed record.
+  [claude-270](../../loop/tasks/one-model-end-to-end/claude-270/REPORT.md)
+  made batched decode the scorer's default. First it reran claude-266's
+  scoring command on current code, serial and then batched, on (b) seed 1 and
+  (k2) seed 2. Every output file was byte-identical, and the serial files
+  matched claude-266's stored ones. The decode ran 42 → 242 and 42 → 256
+  tok/s (about 6×). `--batched-decode 0` keeps the serial reference. This
+  item's scope gains the corpus generator `milestone_world_v2.rs`, for the
+  long-conversation corpus.
 - **A census of the data:**
   - the TRAIN size correction: [claude-202's census](../../loop/tasks/one-model-end-to-end/claude-202/REPORT.md) measured 7,512,797 tokens and 2,425,925 eligible targets in the pinned TRAIN file. The older sheet's 26,214,400 / 10,975,281 figures for the same `tokens.u16` SHA match neither its header nor its payload and are not the corpus count;
   - a TRAIN reply index;
