@@ -22,7 +22,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `32db3159011c33d9fe94e775958a6bd12d6198fb` |
+| implementation source | `98f7d04e1a0fd96ac0bee560365f9cc3e7e8f642` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -57,7 +57,8 @@ prompts. For each distinct supervised first-reply token:
 1. choose its observed medoid by exact within-target L1 sum;
 2. among the remaining distinct observed points, choose the point with maximum
    minimum L1 distance to the selected set;
-3. break every distance tie by lexicographic point bytes, then target id; and
+3. break every distance tie by component-wise signed lexicographic point
+   order, then target id; and
 4. retain at most two rows for that target.
 
 The fixed treatment is `k = 2`. It is chosen before observing any
@@ -77,14 +78,15 @@ samples:
 
 1. point-off;
 2. raw-row nearest;
-3. raw-row vote at `k = 8`;
-4. one target medoid;
-5. shuffled-target medoid;
-6. two target-local prototypes; and
-7. shuffled-target two-prototype control.
+3. shuffled-target raw-row nearest;
+4. raw-row vote at `k = 8`;
+5. one target medoid;
+6. shuffled-target medoid;
+7. two target-local prototypes; and
+8. shuffled-target two-prototype control.
 
-Arms 2-5 are descriptive controls from the two preceding units. Arms 1, 6 and
-7 are the registered comparison.
+Arms 2-6 are descriptive controls from the two preceding units. Arms 1, 7 and
+8 are the registered comparison.
 
 ## Bar
 
@@ -112,7 +114,8 @@ observing results.
 - The shuffled control preserves the point multiset and target counts and
   changes every target assignment used by the served image.
 - Point fallback changes all 60 treatment openings relative to point-off.
-- Opening target distance is identical for every arm.
+- The shuffled-target prototype control changes at least one treatment opening.
+- Opening target distance is identical row by row for every arm.
 - Every arm reports zero query-coordinate, token and kept-cell mismatches
   against `IntegerStackModel` over 2,110 positions and 540,160 Q12
   coordinates per seed.
@@ -120,36 +123,46 @@ observing results.
 
 ## Steps
 
-This compute runs only after FIT. It builds once in a fresh release target,
-binds the binary hash, and executes seed 1, seed 2 and a seed-1 repeat into
-fresh output roots under
+This compute runs only after FIT. It builds twice in separate fresh release
+targets, binds each binary hash, and executes seed 1 and seed 2 with build A,
+then a seed-1 repeat with build B, into fresh output roots under
 `local/deepseek/point-prototypes/2026-11-04-attempt-1/`:
 
 ```sh
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-point-prototypes
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=32db3159011c33d9fe94e775958a6bd12d6198fb
+SOURCE_PIN=98f7d04e1a0fd96ac0bee560365f9cc3e7e8f642
 PIPELINE=$SHARED/local/deepseek/point-prototypes/2026-11-04-attempt-1
-BUILD=$SOURCE/target/deepseek/point-prototypes-build-130
+BUILD_A=$SOURCE/target/deepseek/point-prototypes-build-130-a
+BUILD_B=$SOURCE/target/deepseek/point-prototypes-build-130-b
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
+MIN_BUILD_FREE_KIB=8388608
+MIN_RESERVE_KIB=131072
+MAX_RETAINED_BYTES=67108864
+test "$(df -Pk "$SOURCE" | awk 'NR == 2 { print $4 }')" -ge "$MIN_BUILD_FREE_KIB"
 test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
 git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- crates Cargo.toml Cargo.lock
 test ! -e "$PIPELINE"
-test ! -e "$BUILD"
-(
-  cd "$SOURCE"
-  CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
-    -p uor-r4-cpu-train --bin cpu-point-transfer-driver
-)
-BIN="$BUILD/release/cpu-point-transfer-driver"
-BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
+test ! -e "$BUILD_A"
+test ! -e "$BUILD_B"
+for build in "$BUILD_A" "$BUILD_B"; do
+  (
+    cd "$SOURCE"
+    CARGO_TARGET_DIR="$build" cargo build --locked --release \
+      -p uor-r4-cpu-train --bin cpu-point-transfer-driver
+  )
+done
+BIN_A="$BUILD_A/release/cpu-point-transfer-driver"
+BIN_B="$BUILD_B/release/cpu-point-transfer-driver"
+BIN_A_SHA=$(sha256sum "$BIN_A" | cut -d' ' -f1)
+BIN_B_SHA=$(sha256sum "$BIN_B" | cut -d' ' -f1)
 run() {
-  seed=$1 artifact_pin=$2 out=$3
+  bin=$1 bin_sha=$2 seed=$3 artifact_pin=$4 out=$5
   test ! -e "$out"
   /usr/bin/time -v timeout 600s env RAYON_NUM_THREADS=32 \
-    "$BIN" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
+    "$bin" "$DUAL/dual-c131-seed-${seed}-raw_both.uorlut" \
     "$DEV/dev-tokens.u16" "$DEV/dev-response-mask.u8" \
     "$DEV/dev-manifest.json" "$out" \
     --expected-artifact-sha256 "$artifact_pin" \
@@ -159,11 +172,12 @@ run() {
     --train-keys 8 --evaluation-keys 8 --per-key 8 \
     --key-tokens 8 --reply-turn 8 --neighbor-vote 8 \
     --target-prototypes 2 --random-seed 1
-  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(sha256sum "$bin" | cut -d' ' -f1)" = "$bin_sha"
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
   test "$(jq -er '.target_prototypes.rows' "$out/report.json")" \
     -lt "$(jq -er '.point.rows' "$out/report.json")"
-  printf '%s  cpu-point-transfer-driver\n' "$BIN_SHA" >"$out/binary.sha256"
+  test "$(jq -er '.point_fallback_exposure.point_prototypes' "$out/report.json")" -eq 60
+  printf '%s  cpu-point-transfer-driver\n' "$bin_sha" >"$out/binary.sha256"
   (
     cd "$out"
     find . -type f ! -name SHA256SUMS -print0 |
@@ -171,12 +185,18 @@ run() {
     sha256sum -c SHA256SUMS --quiet
   )
 }
-run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
-run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
-run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
+run "$BIN_A" "$BIN_A_SHA" 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1"
+run "$BIN_A" "$BIN_A_SHA" 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELINE/seed-2"
+run "$BIN_B" "$BIN_B_SHA" 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
 diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
   <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
+test "$(jq -er '.target_prototypes.artifact_sha256' "$PIPELINE/seed-1/report.json")" \
+  = "$(jq -er '.target_prototypes.artifact_sha256' "$PIPELINE/seed-1-repeat/report.json")"
+test "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1/report.json")" \
+  = "$(jq -er '.target_prototypes.random_artifact_sha256' "$PIPELINE/seed-1-repeat/report.json")"
 test -z "$(git -C "$SOURCE" status --porcelain -- crates Cargo.toml Cargo.lock)"
+test "$(df -Pk "$SOURCE" | awk 'NR == 2 { print $4 }')" -ge "$MIN_RESERVE_KIB"
+test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_RETAINED_BYTES"
 ```
 
 Any source, binary, argument, output-root, control or deterministic mismatch
@@ -193,12 +213,13 @@ exploratory evidence, not a capability bar.
 
 Local workstation only; no GPU, pod or paid API. Rust 1.97.1 on Linux
 7.0.0-42-generic x86_64. At registration the project filesystem had at least
-490 GiB free. The fresh build allocates below 2.5 GiB temporarily; three roots
-retain below 64 MiB. The required 128 MiB reserve remains intact. Expected
-runtime is under two minutes total at 32 workers and peak RSS below 1 GiB.
-Stop on input drift, nondeterminism, a malformed or unchanged control,
-memory-key overlap, CPU/serving divergence, a non-reducing prototype table or
-evaluation-time tuning.
+490 GiB free. The two fresh builds allocate below 5 GiB combined; three roots
+retain below 64 MiB. The recipe requires 8 GiB free before build, at least the
+128 MiB reserve after the runs and no more than 64 MiB retained under the
+pipeline. Expected runtime is under two minutes total at 32 workers and peak
+RSS below 1 GiB. Stop on input drift, nondeterminism, a malformed or unchanged
+control, memory-key overlap, CPU/serving divergence, a non-reducing prototype
+table, a storage-floor breach or evaluation-time tuning.
 
 ## Claim boundary
 
