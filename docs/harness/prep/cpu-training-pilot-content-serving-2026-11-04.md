@@ -361,3 +361,11 @@ GO - reviewer `codex-exact-go-attempt-4`, 2026-11-04. HEAD was clean at
 instrument evidence and its measured charge were preserved, all four
 attempt-4 roots were absent, free storage and RAM cleared the projections,
 and execution remains confined to the local AMD Ryzen 9 9950X CPU path.
+
+GO - reviewer `codex-exact-go-attempt-5`, 2026-11-04. HEAD was clean at
+`b5524d9bb1f3fc7a0e7e2e7c7a09e7448bea34f7`; implementation source remained
+the reviewed `486932e24692f4ca0447dec48606d33e9972f81f`. The predecessor was
+the completed attempt-4 ledger, the admitted cumulative was
+`52,027.677487699 s`, the aggregate retained-evidence projection was
+`247,485,113` bytes against the `268,435,456`-byte ceiling, all public inputs
+matched, and the attempt-5 output and build roots were absent.
