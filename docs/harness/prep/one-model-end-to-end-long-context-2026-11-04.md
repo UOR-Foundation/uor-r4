@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). Casey's 4 November plan, P2b: train at 2,048 × 4 on the long corpus, score recall across turns against a no-memory control (L-010), and time a step at 2,048 against 192.
 
-TEST FITNESS: TBD - fresh non-author adversarial review of this sheet.
+TEST FITNESS: PENDING - a fresh non-author adversarial review of this sheet is under way.
 
 PRE-RUN: not yet. The pre-run review happens in the run's unit, right before launch (§5.10; claude-275's ORDER, amended 4 Nov). The run's pin is this unit's merge commit, which does not exist until this unit merges.
 
