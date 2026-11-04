@@ -146,8 +146,8 @@ made.
 ## Minimum test power
 
 Two public model seeds and 114 document-disjoint evaluation examples per seed,
-with five matched artifacts. This is a repeated-key readiness screen, not a
-decisive capability run.
+with five query-movement arms and three direct-target arms. This is a
+repeated-key readiness screen, not a decisive capability run.
 
 ## Outcomes
 
@@ -162,7 +162,7 @@ decisive capability run.
 ## Cost and stop
 
 Local Ryzen 9 9950X only; no GPU, pod or paid API. Two exact 32-step training
-replays and five-arm complete-reply evaluations are expected to use about two
+replays and eight-arm complete-reply evaluations are expected to use about two
 CPU minutes, plus build and tests. Stop before seed 2 if seed 1 projects the
 two-seed total beyond 30 CPU minutes. Stop on artifact-hash drift, selection
 drift, nondeterministic replies, missing parity, counter overflow or any
@@ -170,8 +170,9 @@ post-observation change to arms, cap, keys, steps or controls.
 
 ## TEST FITNESS
 
-Author self-check only. The six finite evaluator tests pass, including a
-deterministic complete-reply run over an exported synthetic artifact. No non-author
-review has been recorded, so public compute is not authorized by this sheet.
+Author self-check only. Seven focused evaluator tests pass, including
+deterministic query-movement and direct-target replies over exported synthetic
+artifacts, plus the shuffled-target control. No non-author review has been
+recorded, so public compute is not authorized by this sheet.
 
 TEST FITNESS: PENDING

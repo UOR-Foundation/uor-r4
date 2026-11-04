@@ -31,7 +31,7 @@ Added a bounded complete-reply evaluator to `uor-r4-cpu-train`:
 
 `cpu-memory-panel-driver` now accepts:
 
-- `--reply-cap N`, which adds five matched complete-reply readings;
+- `--reply-cap N`, which adds eight matched complete-reply readings;
 - `--expected-trained-sha256 HEX`, which refuses artifact drift before outputs
   are used.
 
@@ -112,7 +112,8 @@ coordinate sweep.
 
 ## Plain summary
 
-The source can now replay deepseek-109 and grade five matched artifacts on
-bounded complete replies. Everything finite is implemented and green. No public
-run was performed, so this unit contributes a ready instrument and a pending
-pre-registration rather than a model result.
+The source can now replay deepseek-109 and grade five query-movement artifacts
+plus three direct-target arbitration arms on bounded complete replies.
+Everything finite is implemented and green. No public run was performed, so
+this unit contributes a ready instrument and a pending pre-registration rather
+than a model result.
