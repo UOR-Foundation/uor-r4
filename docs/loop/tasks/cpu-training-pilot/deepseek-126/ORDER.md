@@ -32,9 +32,9 @@ training-quality or GPU-qualification claim.
 
 Write `docs/harness/prep/cpu-training-pilot-trunk-parallel-2026-11-04.md`
 and obtain a fresh-context non-author FIT before public worker-count compute.
-The required result is exact equivalence at every worker count plus a measured
-wall-speedup; a slower or equal parallel path is an instrument result, not a
-model negative.
+The required result is identical artifacts and decisions at every worker count
+plus a measured wall-speedup; a slower or equal parallel path is an instrument
+result, not a model negative.
 
 ## Files in scope
 
