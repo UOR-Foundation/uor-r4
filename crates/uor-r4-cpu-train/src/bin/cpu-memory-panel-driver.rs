@@ -4,9 +4,9 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, replace_memory_weight_table, validate_corpus_manifest,
-    CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer, MemoryWeightConfig,
-    MemoryWeightSample, MemoryWeightTable,
+    evaluate_memory_weight_samples, evaluate_replies, replace_memory_weight_table,
+    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer,
+    MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
 };
 use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel};
 
@@ -25,10 +25,12 @@ struct Config {
     seed: u64,
     select_only: bool,
     reference: bool,
+    reply_cap: usize,
     expected_artifact_sha256: String,
     expected_tokens_sha256: String,
     expected_mask_sha256: String,
     expected_manifest_sha256: String,
+    expected_trained_sha256: Option<String>,
 }
 
 #[derive(Clone)]
@@ -55,8 +57,9 @@ fn usage() -> String {
     "usage: cpu-memory-panel-driver ARTIFACT TOKENS MASK MANIFEST OUT \
      --expected-artifact-sha256 HEX --expected-tokens-sha256 HEX \
      --expected-mask-sha256 HEX --expected-manifest-sha256 HEX \
+     [--expected-trained-sha256 HEX] \
      [--steps N] [--keys N] [--per-key N] [--key-tokens N] \
-     [--reply-turn N] [--seed N] [--select-only] [--reference]"
+     [--reply-turn N] [--reply-cap N] [--seed N] [--select-only] [--reference]"
         .to_owned()
 }
 
@@ -81,10 +84,12 @@ fn parse_args() -> Result<Config, String> {
         seed: 1,
         select_only: false,
         reference: false,
+        reply_cap: 0,
         expected_artifact_sha256: String::new(),
         expected_tokens_sha256: String::new(),
         expected_mask_sha256: String::new(),
         expected_manifest_sha256: String::new(),
+        expected_trained_sha256: None,
     };
     while let Some(flag) = values.next() {
         if flag == "--select-only" {
@@ -104,11 +109,13 @@ fn parse_args() -> Result<Config, String> {
             "--per-key" => config.per_key = number(&value)?,
             "--key-tokens" => config.key_tokens = number(&value)?,
             "--reply-turn" => config.reply_turn = number(&value)?,
+            "--reply-cap" => config.reply_cap = number(&value)?,
             "--seed" => config.seed = number::<u64>(&value)?,
             "--expected-artifact-sha256" => config.expected_artifact_sha256 = hex(&value)?,
             "--expected-tokens-sha256" => config.expected_tokens_sha256 = hex(&value)?,
             "--expected-mask-sha256" => config.expected_mask_sha256 = hex(&value)?,
             "--expected-manifest-sha256" => config.expected_manifest_sha256 = hex(&value)?,
+            "--expected-trained-sha256" => config.expected_trained_sha256 = Some(hex(&value)?),
             _ => return Err(format!("unknown argument {flag}\n{}", usage())),
         }
     }
@@ -127,6 +134,7 @@ fn parse_args() -> Result<Config, String> {
         || config.per_key == 0
         || !(2..=16).contains(&config.key_tokens)
         || !(1..=16).contains(&config.reply_turn)
+        || config.reply_cap > 64
     {
         return Err("training and group dimensions must be positive and bounded".to_owned());
     }
@@ -273,6 +281,16 @@ fn run() -> Result<serde_json::Value, String> {
     }
     let train_after = trainer.reading().map_err(|error| error.to_string())?;
     let trained_artifact = trainer.artifact().to_vec();
+    let trained_sha256 = uor_r4_discrete::corpus::sha256(&trained_artifact);
+    if config
+        .expected_trained_sha256
+        .as_ref()
+        .is_some_and(|expected| expected != &trained_sha256)
+    {
+        return Err(format!(
+            "trained artifact SHA-256 differs: got {trained_sha256}"
+        ));
+    }
     std::fs::write(config.out.join("trained.uorlut"), &trained_artifact)
         .map_err(|error| error.to_string())?;
     let random_artifact =
@@ -306,6 +324,24 @@ fn run() -> Result<serde_json::Value, String> {
             return Err(format!("{name} lost CPU/serving parity"));
         }
     }
+    let complete_replies = if config.reply_cap == 0 {
+        BTreeMap::new()
+    } else {
+        [
+            ("frozen", memory_artifact.as_slice()),
+            ("trained", trained_artifact.as_slice()),
+            ("random", random_artifact.as_slice()),
+            ("memory_off", artifact.as_slice()),
+            ("trained_memory_off", trained_artifact.as_slice()),
+        ]
+        .into_iter()
+        .map(|(name, bytes)| {
+            evaluate_replies(bytes, &evaluation_samples, config.reply_cap)
+                .map(|reading| (name, reading))
+                .map_err(|error| error.to_string())
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?
+    };
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-memory-panel-run/1",
         "substrate": "cpu-development-research",
@@ -363,6 +399,8 @@ fn run() -> Result<serde_json::Value, String> {
             "memory_off": memory_off,
             "trained_memory_off": trained_off,
         },
+        "complete_replies": complete_replies,
+        "reply_cap": config.reply_cap,
         "parity": parity,
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),

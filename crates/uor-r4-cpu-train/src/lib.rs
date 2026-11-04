@@ -19,6 +19,7 @@ mod memory;
 mod memory_train;
 mod panel;
 mod quant_shadow;
+mod reply_eval;
 mod served_forward;
 mod train;
 
@@ -61,6 +62,9 @@ pub use quant_shadow::{
     quantization_gate, CpuFloatPanelReading, CpuPanelGap, CpuQuantizationCheckpoint,
     CpuQuantizationPanelReading, CpuQuantizationShadow, CpuQuantizationStep, QuantizationGate,
     CPU_QUANTIZATION_CHECKPOINT_SCHEMA,
+};
+pub use reply_eval::{
+    evaluate_replies, generate_reply, GeneratedReply, ReplyReading, TimedReplyReading,
 };
 pub use served_forward::{
     audit_served_forward, exact_fbs_contract, read_uort_token_slice, ExactFbsContract,
