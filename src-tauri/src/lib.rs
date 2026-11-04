@@ -2319,11 +2319,35 @@ pub mod tauri_gui {
     }
 
     fn sidecar_input_paths() -> Result<(PathBuf, PathBuf, PathBuf), String> {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+        sidecar_input_paths_for(&executable, Path::new(env!("CARGO_MANIFEST_DIR")))
+    }
+
+    pub(crate) fn sidecar_input_paths_for(
+        executable: &Path,
+        manifest_dir: &Path,
+    ) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+        let macos = executable
+            .parent()
+            .ok_or_else(|| "The executable has no parent directory.".to_string())?;
+        let packaged = executable.components().any(|component| {
+            component.as_os_str().to_string_lossy().ends_with(".app")
+        });
+        if packaged {
+            let resources = macos
+                .parent()
+                .ok_or_else(|| "The executable has no resource directory.".to_string())?
+                .join("Resources");
+            return Ok((
+                macos.join("uor-chat"),
+                resources.join("pkg/synthetic-stack.lut"),
+                resources.join("pkg/tokenizer.json"),
+            ));
+        }
         let development = (
-            root.join("binaries/uor-chat-aarch64-apple-darwin"),
-            root.join("runtime/studio/pkg/synthetic-stack.lut"),
-            root.join("runtime/studio/pkg/tokenizer.json"),
+            manifest_dir.join("binaries/uor-chat-aarch64-apple-darwin"),
+            manifest_dir.join("runtime/studio/pkg/synthetic-stack.lut"),
+            manifest_dir.join("runtime/studio/pkg/tokenizer.json"),
         );
         if [&development.0, &development.1, &development.2]
             .iter()
@@ -2331,11 +2355,10 @@ pub mod tauri_gui {
         {
             return Ok(development);
         }
-        let executable = std::env::current_exe().map_err(|error| error.to_string())?;
-        let macos = executable
-            .parent()
-            .ok_or_else(|| "The packaged executable has no parent directory.".to_string())?;
-        let resources = macos.join("../Resources");
+        let resources = macos
+                .parent()
+                .ok_or_else(|| "The executable has no resource directory.".to_string())?
+                .join("Resources");
         Ok((
             macos.join("uor-chat"),
             resources.join("pkg/synthetic-stack.lut"),
@@ -2849,5 +2872,21 @@ pub mod tauri_gui {
         build_tauri_app_builder(state)
             .run(tauri::generate_context!())
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(all(test, feature = "gui"))]
+mod sidecar_path_tests {
+    use super::tauri_gui::sidecar_input_paths_for;
+    use std::path::Path;
+
+    #[test]
+    fn packaged_app_prefers_its_own_resources_over_development_inputs() {
+        let executable = Path::new("/tmp/UOR Harness.app/Contents/MacOS/uor-desktop-client");
+        let (binary, stack, tokenizer) = sidecar_input_paths_for(executable, Path::new("/source"))
+            .expect("packaged sidecar paths");
+        assert!(binary.ends_with("UOR Harness.app/Contents/MacOS/uor-chat"));
+        assert!(stack.ends_with("UOR Harness.app/Contents/Resources/pkg/synthetic-stack.lut"));
+        assert!(tokenizer.ends_with("UOR Harness.app/Contents/Resources/pkg/tokenizer.json"));
     }
 }

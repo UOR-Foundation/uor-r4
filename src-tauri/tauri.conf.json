@@ -26,7 +26,10 @@
     "active": true,
     "targets": "app",
     "externalBin": ["binaries/uor-chat"],
-    "resources": ["runtime/studio/pkg/"],
+    "resources": {
+      "runtime/studio/pkg/": "pkg/",
+      "runtime/studio/models.json": "models.json"
+    },
     "icon": ["icons/icon.png", "icons/icon.icns"]
   }
 }

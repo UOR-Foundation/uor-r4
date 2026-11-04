@@ -45,4 +45,12 @@ describe('MCP Connections', () => {
         expect((document.getElementById('mcpCredentialInput') as HTMLInputElement).value).toBe('');
         expect(document.querySelector('.mcp-tool-button')).toBeNull();
     });
+
+    it('keeps MCP mounted when the model-source container rerenders', () => {
+        document.body.innerHTML = '<div id="modelSourceMount"></div><div id="mcpMount"></div>';
+        mountMcpConnections({ connectRemote: vi.fn() });
+        expect(document.getElementById('mcpConnections')).not.toBeNull();
+        document.getElementById('modelSourceMount')!.innerHTML = '';
+        expect(document.getElementById('mcpConnections')).not.toBeNull();
+    });
 });

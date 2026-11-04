@@ -39,7 +39,8 @@ class TauriRuntimeContractTests(unittest.TestCase):
         self.assertIn("'wasm-unsafe-eval'", csp)
         self.assertIn("worker-src 'self'", csp)
         self.assertNotIn('https://', csp)
-        self.assertIn('runtime/studio/pkg/', conf['bundle']['resources'])
+        self.assertEqual(conf['bundle']['resources']['runtime/studio/pkg/'], 'pkg/')
+        self.assertEqual(conf['bundle']['resources']['runtime/studio/models.json'], 'models.json')
         self.assertTrue((REPO / 'src-tauri/assets/uor-icon.svg').is_file())
 
     def test_prepare_verifies_pinned_runtime(self):

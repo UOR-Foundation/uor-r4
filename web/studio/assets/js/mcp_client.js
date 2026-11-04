@@ -208,7 +208,7 @@ function element(tag, className, text) {
 export function mountMcpConnections({ root = globalThis.document, connectRemote: connect = connectRemote } = {}) {
     if (!root) return;
     root.getElementById('mcpConnections')?.remove();
-    const mount = root.getElementById('modelSourceMount');
+    const mount = root.getElementById('mcpMount') || root.getElementById('modelSourceMount');
     if (!mount) return;
     let session = null;
     const section = element('section', 'source-group mcp-connections');
