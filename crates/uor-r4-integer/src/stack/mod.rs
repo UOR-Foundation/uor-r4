@@ -52,6 +52,7 @@
 //! instructions.
 
 mod chat;
+mod content_readout;
 mod dialogue_memory;
 pub mod flock;
 mod format;
@@ -70,6 +71,10 @@ mod tests;
 use std::fmt;
 
 pub use chat::{StackChat, StackChatError, StackReply, StackStop, CHAT_CONTEXT, CYCLE_REPEATS};
+pub use content_readout::{
+    ContentExample, ContentReadout, ContentSelection, ContentSignature, ContentSignatureMode,
+    CONTENT_CODE_SIGNATURE_BITS, MAX_CONTENT_READOUT_BYTES, STACK_CONTENT_READOUT_SCHEMA,
+};
 pub use dialogue_memory::{
     is_query as is_dialogue_query, recall as recall_from_dialogue,
     recall_value as recall_value_from_dialogue, SieveRecall,
@@ -195,6 +200,8 @@ pub enum StackError {
     CopyScaleWithPointer,
     /// A thread count of zero, or a worker pool that could not be built.
     Threads(String),
+    /// A serving content-readout sidecar is malformed, foreign or unsafe.
+    ContentReadout(String),
 }
 
 impl fmt::Display for StackError {
@@ -269,6 +276,7 @@ impl fmt::Display for StackError {
                 "a model with a pointer-copy head refuses a positive copy scale"
             ),
             Self::Threads(reason) => write!(f, "stack engine threads: {reason}"),
+            Self::ContentReadout(reason) => write!(f, "stack content readout: {reason}"),
         }
     }
 }

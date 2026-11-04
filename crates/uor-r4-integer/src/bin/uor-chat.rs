@@ -20,13 +20,13 @@ use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::openai::OpenAiServing;
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
-    is_dialogue_query, recall_from_dialogue, IntegerStackModel, SieveRecall, StackChat,
-    StackChatError, StackError, StackReply,
+    is_dialogue_query, recall_from_dialogue, ContentReadout, IntegerStackModel, SieveRecall,
+    StackChat, StackChatError, StackError, StackReply,
 };
 
 /// How the stack path picks each token: `IntegerStackSession::serve_step`.
 const STACK_DECODING: &str =
-    "greedy serve_step (dense: integer argmax of the logits; SpiralCore/FBS: the native head's pick)";
+    "greedy serve_step (dense: integer argmax; SpiralCore/FBS: native/point fallback, optionally overridden by an artifact-bound content-readout sidecar)";
 use uor_r4_integer::{IntegerError, Result};
 use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 
@@ -47,6 +47,8 @@ struct CliArgs {
     /// A `UORLUT01` discrete SpiralCore/FBS artifact (`--discrete`).
     discrete_path: Option<PathBuf>,
     tokenizer_path: Option<PathBuf>,
+    /// Optional artifact-bound content readout for the `--stack` path.
+    content_readout_path: Option<PathBuf>,
     /// Literal-role dialogue version for the stack artifact (default 2).
     protocol: u8,
     threads: usize,
@@ -188,6 +190,7 @@ impl Default for CliArgs {
             stack_path: None,
             discrete_path: None,
             tokenizer_path: None,
+            content_readout_path: None,
             protocol: 2,
             threads: 1,
             say: None,
@@ -227,6 +230,7 @@ fn print_usage() {
     eprintln!("      --discrete <ARTIFACT>   UORLUT01 discrete SpiralCore/FBS artifact; one-shot");
     eprintln!("                              raw-token serving through IntegerDiscreteModel");
     eprintln!("      --tokenizer <PATH>      tokenizer.json for --stack (required with it)");
+    eprintln!("      --content-readout <P>   artifact-bound content-readout sidecar for --stack");
     eprintln!(
         "      --protocol <1|2>        literal-role dialogue version for --stack (default: 2)"
     );
@@ -377,6 +381,17 @@ fn parse_cli_args() -> CliArgs {
                 } else {
                     eprintln!(
                         "{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--tokenizer'"
+                    );
+                    process::exit(1);
+                }
+            }
+            "--content-readout" => {
+                idx += 1;
+                if idx < raw.len() {
+                    args.content_readout_path = Some(PathBuf::from(&raw[idx]));
+                } else {
+                    eprintln!(
+                        "{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--content-readout'"
                     );
                     process::exit(1);
                 }
@@ -593,6 +608,10 @@ fn parse_cli_args() -> CliArgs {
     }
     if args.tokenizer_path.is_some() && args.stack_path.is_none() {
         eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--tokenizer' is only used with '--stack'");
+        process::exit(1);
+    }
+    if args.content_readout_path.is_some() && args.stack_path.is_none() {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--content-readout' requires '--stack'");
         process::exit(1);
     }
     if args.serve.is_some() && args.stack_path.is_none() {
@@ -1643,6 +1662,15 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     model.set_threads(cli.threads)?;
     #[cfg(target_arch = "wasm32")]
     let _ = cli.threads;
+    let content_readout_sha256 = if let Some(path) = cli.content_readout_path.as_deref() {
+        let bytes = std::fs::read(path)?;
+        let readout =
+            ContentReadout::from_sidecar(&bytes, model.artifact_sha256(), model.shape().vocab)?;
+        model.set_content_readout(readout)?;
+        Some(hex::encode(Sha256::digest(&bytes)))
+    } else {
+        None
+    };
     if let Some(address) = cli.serve.as_deref() {
         let (host, port) = address
             .rsplit_once(':')
@@ -1713,6 +1741,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "artifact": artifact,
             "artifact_sha256": model.artifact_sha256(),
             "tokenizer": tokenizer_path,
+            "content_readout": cli.content_readout_path,
+            "content_readout_sha256": content_readout_sha256,
             "tokenizer_cid": chat.protocol().tokenizer_cid,
             "protocol": chat.protocol(),
             "context": chat.context(),
@@ -1749,6 +1779,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "artifact": artifact,
             "artifact_sha256": model.artifact_sha256(),
             "tokenizer": tokenizer_path,
+            "content_readout": cli.content_readout_path,
+            "content_readout_sha256": content_readout_sha256,
             "tokenizer_cid": chat.protocol().tokenizer_cid,
             "protocol": chat.protocol(),
             "context": chat.context(),

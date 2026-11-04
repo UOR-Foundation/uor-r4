@@ -29,6 +29,7 @@ use std::path::{Path, PathBuf};
 
 use crate::bitcode::{BitCode, BITCODE_LANES};
 
+use super::content_readout::ContentReadout;
 use super::flock::{
     flock_select_integer, rank_table_q31, FlockScratch, FlockSelect, MAX_FLOCK_CONTEXT,
 };
@@ -552,6 +553,9 @@ pub struct IntegerStackModel {
     /// `turn-memory-integer`); `None` on a stack without one, whose steps are the
     /// trunk's alone.
     memory: Option<Box<ServedTurnMemory>>,
+    /// An optional artifact-bound nearest-example content override used by
+    /// [`IntegerStackSession::serve_step`], never by the raw step paths.
+    content_readout: Option<Box<ContentReadout>>,
     exp_table: Vec<u32>,
     silu_table: Vec<i32>,
     gelu_table: Vec<i32>,
@@ -974,6 +978,7 @@ impl IntegerStackModel {
             layers,
             fbs,
             memory,
+            content_readout: None,
             exp_table,
             silu_table,
             gelu_table,
@@ -1066,6 +1071,22 @@ impl IntegerStackModel {
     /// SHA-256 of the artifact bytes.
     pub fn artifact_sha256(&self) -> &str {
         &self.sha256
+    }
+
+    /// Attach a validated content-readout sidecar to an FBS model.
+    pub fn set_content_readout(&mut self, readout: ContentReadout) -> Result<(), StackError> {
+        if self.fbs.is_none() {
+            return Err(StackError::Shape(
+                "a content readout requires a SpiralCore/FBS model",
+            ));
+        }
+        readout.validate(self.shape.vocab)?;
+        self.content_readout = Some(Box::new(readout));
+        Ok(())
+    }
+
+    pub fn content_readout(&self) -> Option<&ContentReadout> {
+        self.content_readout.as_deref()
     }
 
     /// The same model with its Hamming reads dropped, for timing the session without them
@@ -2745,6 +2766,20 @@ impl IntegerStackSession<'_> {
         })
     }
 
+    /// The native writer or point-key fallback selected by the latest FBS step,
+    /// before any serving content-readout override.
+    pub fn last_native_token(&self) -> Option<u32> {
+        self.model.fbs.as_ref().map(|_| self.b.native_token)
+    }
+
+    /// The final Q12 writer query produced by the latest FBS step.
+    pub fn last_query_q12(&self) -> Option<&[i32]> {
+        self.model
+            .fbs
+            .as_ref()
+            .map(|_| self.b.query_q12.as_slice())
+    }
+
     /// Feed one token and return the served greedy next token and its margin in Q16 units: what
     /// the browser's `wasm_step` serves (integer-nearest-readout, claude-231).
     /// - **A dense stack:** the integer argmax of its logits (first on ties), with top1 − top2.
@@ -2754,7 +2789,11 @@ impl IntegerStackSession<'_> {
     pub fn serve_step(&mut self, token: u32) -> Result<(u32, i32), StackError> {
         if self.model.fbs.is_some() {
             self.step(token)?;
-            return Ok((self.b.native_token, 0));
+            let mut next = self.b.native_token;
+            if let Some(readout) = self.model.content_readout.as_deref() {
+                next = readout.select(&self.b.query_q12, next)?.token;
+            }
+            return Ok((next, 0));
         }
         let logits = self.step(token)?;
         let next = stack_argmax(logits) as u32;
@@ -4947,6 +4986,67 @@ mod fbs_stage_tests {
         }
         assert_eq!(plain.save_state(), timed.save_state());
         assert_eq!(plain.tokens(), timed.tokens());
+    }
+
+    #[test]
+    fn content_readout_overrides_only_the_served_pick() {
+        let snap = super::super::synthetic::synthetic_fbs_trunk_with(
+            7,
+            super::super::synthetic::FbsSynth {
+                vocab: 256,
+                d: 256,
+                mlp: 256,
+                layers: 1,
+                context: 8,
+                kept: 2,
+                gain_lo: 0.75,
+                gain_span: 0.5,
+                table: 0.25,
+                decay_step: 0.0625,
+            },
+        );
+        let bytes = super::super::export_fbs_trunk_uorlut01(&snap).expect("export");
+        let prompt = 1u32;
+        let probe = IntegerStackModel::parse(&bytes).expect("parse");
+        let vocab = probe.shape.vocab;
+        let query = probe
+            .session()
+            .step_native(prompt)
+            .expect("probe step")
+            .query_q12;
+        let native = probe
+            .session()
+            .step_native(prompt)
+            .expect("native step")
+            .token;
+        let target = (native + 1) % vocab as u32;
+        let readout = ContentReadout {
+            mode: super::super::ContentSignatureMode::Code,
+            signature_bits: super::super::CONTENT_CODE_SIGNATURE_BITS,
+            includes_reference_end: false,
+            rows: vec![super::super::ContentExample {
+                signature: ContentReadout::signature(&query).expect("signature"),
+                target,
+            }],
+            max_distance: 0,
+        };
+
+        let plain = IntegerStackModel::parse(&bytes).expect("parse");
+        let mut candidate = IntegerStackModel::parse(&bytes).expect("parse");
+        candidate
+            .set_content_readout(readout)
+            .expect("attach readout");
+        let mut plain_session = plain.session();
+        let mut content_session = candidate.session();
+        let raw = plain_session.step_native(prompt).expect("raw step");
+        let (served, margin) = content_session.serve_step(prompt).expect("content step");
+
+        assert_eq!(served, target);
+        assert_eq!(margin, 0);
+        assert_eq!(content_session.last_native_token(), Some(raw.token));
+        assert_eq!(content_session.last_query_q12(), Some(raw.query_q12.as_slice()));
+        assert_eq!(plain_session.save_state(), content_session.save_state());
+        assert_eq!(plain_session.tokens(), content_session.tokens());
     }
 
     /// Every writer row's score to `q` (`-L1` at Q12), sorted by score descending then id
