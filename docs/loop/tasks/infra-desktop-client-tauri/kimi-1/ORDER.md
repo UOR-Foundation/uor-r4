@@ -8,7 +8,7 @@ Turn the conversation-first Studio into a simple, complete harness IDE without r
 
 ## Design
 
-[DESIGN.md](DESIGN.md). Use one adaptive frontend and the verified `uor-chat` sidecar for native/web parity. Do not revive the retired Tauri tokenizer bridge. Native dialogs own folder/terminal consent. Browser and desktop failure states stay explicit.
+[DESIGN.md](DESIGN.md). Use one adaptive frontend, one Tauri asset origin and one backend state. Tauri IPC mediates every privileged action and a host proxy reaches the verified `uor-chat` sidecar for native/web parity. Do not revive the retired Tauri tokenizer bridge or add a second RPC server. Native dialogs own folder/terminal consent. Browser and desktop failure states stay explicit.
 
 ## Files in scope
 
@@ -20,7 +20,7 @@ Turn the conversation-first Studio into a simple, complete harness IDE without r
 
 - Every view and submenu uses the same system-type dark Apple-like design; no old IDE panel treatment remains. Chat, Files, Changes, Terminal, Connections and Settings are responsive and straightforward.
 - The shared page retains working WASM/OpenAI chat, sessions, history, long pastes and attachments, and adds real remote Streamable HTTP MCP configuration/initialize/tools list/call with honest CORS/auth errors.
-- Tauri serves the same frontend through the verified `uor-chat` sidecar and authenticated desktop RPC, with separate in-memory tokens and exact origin/CORS limits. Native folder choice, file read/write, Git status/diff, host-confirmed terminal and durable sessions work end-to-end.
+- Tauri serves one asset-origin frontend and one backend state; a host-mediated streaming proxy reaches the verified `uor-chat` sidecar with an in-memory token. Native folder choice, file read/write, bounded Git status/diff, host-confirmed/allowlisted terminal and local conversation history work end-to-end. Exact sidecar hidden-state resume is not claimed.
 - Native stdio MCP uses an explicit host-approved executable/args/working directory, bounded JSON-RPC and initialize/tools list/call; arbitrary page-launched executables remain refused.
 - The macOS arm64 Tauri bundle builds with generated/pinned sidecar artifacts and native dialogs. No binary or secret is committed or printed. Packaging and real GUI checks pass.
 - Failing-first regressions, existing Studio/Node/Rust/desktop checks, independent exact-head review, protected merge, fresh-main verification and hosted-source verification pass. Final cleanup preserves evidence and at least 30 GiB free.
