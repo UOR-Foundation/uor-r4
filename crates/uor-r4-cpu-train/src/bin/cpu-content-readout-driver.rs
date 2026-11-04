@@ -854,7 +854,7 @@ fn run() -> Result<serde_json::Value, String> {
                     .as_ref()
                     .ok_or_else(|| "trajectory training is missing".to_owned())?;
                 let vs_code_top1 = paired(prompts, &code_prompts, |row| row.top1)?;
-                let vs_code_depth = paired(prompts, &code_prompts, |row| {
+                let vs_code_depth = paired_two_sqrt(prompts, &code_prompts, |row| {
                     row.matched_prefix_depth as u64
                 })?;
                 let vs_shuffled_top1 = paired(prompts, shuffled_prompts, |row| row.top1)?;
@@ -1314,6 +1314,23 @@ fn paired(
     control: &[ContentPromptReading],
     value: impl Fn(&ContentPromptReading) -> u64,
 ) -> Result<serde_json::Value, String> {
+    paired_with(candidate, control, value, ceil_three_sqrt)
+}
+
+fn paired_two_sqrt(
+    candidate: &[ContentPromptReading],
+    control: &[ContentPromptReading],
+    value: impl Fn(&ContentPromptReading) -> u64,
+) -> Result<serde_json::Value, String> {
+    paired_with(candidate, control, value, ceil_two_sqrt)
+}
+
+fn paired_with(
+    candidate: &[ContentPromptReading],
+    control: &[ContentPromptReading],
+    value: impl Fn(&ContentPromptReading) -> u64,
+    threshold: fn(u64) -> u64,
+) -> Result<serde_json::Value, String> {
     if candidate.len() != control.len() {
         return Err("content-readout paired counts differ".to_owned());
     }
@@ -1332,7 +1349,7 @@ fn paired(
         only += u64::from(left > right);
         control_only += u64::from(right > left);
     }
-    let threshold = ceil_three_sqrt(control_only).max(2);
+    let threshold = threshold(control_only).max(2);
     Ok(serde_json::json!({
         "candidate_only": only,
         "control_only": control_only,
@@ -1852,6 +1869,39 @@ mod tests {
         assert_eq!(paired["control_only"], 9);
         assert_eq!(paired["threshold"], 9);
         assert_eq!(paired["passes"], true);
+    }
+
+    #[test]
+    fn two_and_three_sigma_pairs_use_distinct_thresholds() {
+        let reading = |sample, value| ContentPromptReading {
+            sample,
+            matched_prefix_depth: value,
+            top1: 0,
+            observed_decisions: 0,
+            exact_reference: false,
+            stop: "cap".to_owned(),
+            generated_tokens: 16,
+            reference_tokens: 16,
+            generated_ids: Vec::new(),
+            decision_sha256: String::new(),
+        };
+        let candidate = [1, 1, 0, 1]
+            .into_iter()
+            .enumerate()
+            .map(|(sample, value)| reading(sample, value))
+            .collect::<Vec<_>>();
+        let control = [1, 0, 1, 0]
+            .into_iter()
+            .enumerate()
+            .map(|(sample, value)| reading(sample, value))
+            .collect::<Vec<_>>();
+        let two =
+            paired_two_sqrt(&candidate, &control, |row| row.matched_prefix_depth as u64).unwrap();
+        let three = paired(&candidate, &control, |row| row.matched_prefix_depth as u64).unwrap();
+        assert_eq!(two["threshold"], 2);
+        assert_eq!(two["passes"], true);
+        assert_eq!(three["threshold"], 3);
+        assert_eq!(three["passes"], false);
     }
 
     #[test]
