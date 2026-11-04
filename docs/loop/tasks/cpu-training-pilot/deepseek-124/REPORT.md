@@ -36,6 +36,14 @@ The third review returned FIT at docs head
 `e94f21783e10e1a1d570d34d634698ea870657a0`, bound to source
 `d5108222aef6882007aba31eeadc95796b9c8aca`.
 
+Attempt 2 also hit the registered stop at **2,297,824 KiB**, despite dropping
+the model and reader. It is preserved at
+`local/deepseek/trunk-count/2026-11-04-attempt-2/` and is not accepted.
+Source `1ca202ef2` now consumes each training reader, writes and releases one
+artifact before constructing the other, and reloads each artifact only for its
+own verification/evaluation phase. Attempt 3 uses new roots and requires a new
+FIT.
+
 ## What changed
 
 Implementation will add exact CPU derivation of trunk training rows and checked
