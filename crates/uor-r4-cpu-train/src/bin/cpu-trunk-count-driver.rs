@@ -20,6 +20,29 @@ use uor_r4_discrete::trunk::{
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 
 const SCHEMA: &str = "uor-r4.cpu-trunk-count-run/1";
+const REQUIRED_STAGES: [&str; 21] = [
+    "control_rows",
+    "corpus_split",
+    "decision_reduction",
+    "exact_evaluation",
+    "exact_hash_write",
+    "exact_update_export",
+    "exact_verify",
+    "input_read_hash",
+    "input_validate",
+    "no_update_evaluation",
+    "output_prepare",
+    "parity_reduction",
+    "reader_load",
+    "resource_measure",
+    "shuffled_evaluation",
+    "shuffled_hash_write",
+    "shuffled_reader_load",
+    "shuffled_update_export",
+    "shuffled_verify",
+    "table_verification",
+    "training_row_derivation",
+];
 
 #[derive(Clone)]
 struct Config {
@@ -105,6 +128,13 @@ impl StageClock {
     }
 
     fn reading(&self, wall_elapsed_ms: f64) -> Result<serde_json::Value, String> {
+        if self.elapsed_ms.len() != REQUIRED_STAGES.len()
+            || REQUIRED_STAGES
+                .iter()
+                .any(|stage| !self.elapsed_ms.contains_key(stage))
+        {
+            return Err("stage set differs from the required profile".to_owned());
+        }
         let attributed = self.attributed_ms();
         if !attributed.is_finite()
             || !wall_elapsed_ms.is_finite()
@@ -840,15 +870,16 @@ mod tests {
     }
 
     #[test]
-    fn stage_clock_accounts_for_each_lap_and_rejects_duplicates() {
+    fn stage_clock_requires_the_complete_profile() {
         let started = Instant::now();
         let mut clock = StageClock::new(started);
-        clock.lap("first").unwrap();
-        clock.lap("second").unwrap();
+        for stage in REQUIRED_STAGES {
+            clock.lap(stage).unwrap();
+        }
         let wall_elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
         let reading = clock.reading(wall_elapsed_ms).unwrap();
         let elapsed = reading["elapsed_ms"].as_object().unwrap();
-        assert_eq!(elapsed.len(), 2);
+        assert_eq!(elapsed.len(), REQUIRED_STAGES.len());
         assert!(elapsed.values().all(|value| {
             value
                 .as_f64()
@@ -856,7 +887,24 @@ mod tests {
         }));
         assert!(reading["attributed_ms"].as_f64().unwrap() <= wall_elapsed_ms + 0.001);
         assert!(reading["unattributed_ms"].as_f64().unwrap() >= 0.0);
-        assert!(clock.lap("first").is_err());
+        assert!(clock.lap(REQUIRED_STAGES[0]).is_err());
+
+        let mut missing = StageClock::new(Instant::now());
+        for stage in REQUIRED_STAGES.iter().take(REQUIRED_STAGES.len() - 1) {
+            missing.lap(stage).unwrap();
+        }
+        assert!(missing
+            .reading(started.elapsed().as_secs_f64() * 1_000.0)
+            .is_err());
+
+        let mut extra = StageClock::new(Instant::now());
+        for stage in REQUIRED_STAGES {
+            extra.lap(stage).unwrap();
+        }
+        extra.lap("extra").unwrap();
+        assert!(extra
+            .reading(started.elapsed().as_secs_f64() * 1_000.0)
+            .is_err());
     }
 
     #[test]
