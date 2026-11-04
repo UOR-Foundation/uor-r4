@@ -1,6 +1,6 @@
 # Generated-state writer admission headroom
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -231,6 +231,15 @@ mismatch is an instrument fault requiring a new FIT before retry.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 generated-state admission headroom
+sheet: docs/harness/prep/cpu-training-pilot-admission-headroom-2026-11-04.md
+head: d5d742c198ef3c978d8341c7b36f42879c9992aa
+implementation pin: 5565bf9b432b4937fb4de8d532321f20966bee1d
+reviewer: independent-subagent admission-headroom-fit-2
+note: two-seed D84 K=8/K=16 generated-trajectory census; actual K16
+eligibility and held-out admissions, 640-row/64-pair readiness, equal-budget
+random-extra cells, header-only artifact patch, exact parity and deterministic
+repeat
+date: 2026-11-04
 
 A FIT verdict clears compute for this configuration only (D22).
