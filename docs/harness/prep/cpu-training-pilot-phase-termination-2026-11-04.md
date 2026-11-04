@@ -279,9 +279,15 @@ restores current-code termination behavior and leaves integer serving,
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - M2 #2030 deepseek-146
+TEST FITNESS: FIT - M2 #2030 deepseek-146
+sheet: docs/harness/prep/cpu-training-pilot-phase-termination-2026-11-04.md
+reviewer: codex fresh-context FIT round 4
+note: Phase history, LOO label-control prediction changes, executable stop
+  predicate, two-sigma comparisons, resource limits and full-run recipe
+  verified at `0d387f1b9`.
+date: 2026-11-04
 
-Pending fresh-context review.
+A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 ## Pre-run GO
 
