@@ -11,9 +11,10 @@ use uor_r4_cpu_train::{
     fit_content_continuation_gate, fit_content_stop_density_gate, fit_content_stop_gate,
     shuffle_content_continuation_rows, shuffle_content_stop_rows, shuffle_content_targets,
     validate_corpus_manifest, verify_content_readout_serving, ContentContinuationRow,
-    ContentContinuationTraining, ContentPromptReading, ContentReadout, ContentSignatureMode,
-    ContentStopDensityGate, ContentStopGate, ContentStopRow, CpuConversationSample,
-    CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES, CONTENT_MIN_TRAINING_ROWS,
+    ContentContinuationTraining, ContentPromptReading, ContentReadout, ContentReadoutReading,
+    ContentSignatureMode, ContentStopDensityGate, ContentStopGate, ContentStopRow,
+    CpuConversationSample, CpuMaskedCorpus, MemoryWeightSample, CONTENT_MIN_TARGET_VALUES,
+    CONTENT_MIN_TRAINING_ROWS,
 };
 use uor_r4_integer::stack::{
     read_memory_uorlut01, IntegerStackModel, STACK_CONTENT_READOUT_SCHEMA,
@@ -859,7 +860,9 @@ fn run() -> Result<serde_json::Value, String> {
                 })?;
                 let vs_shuffled_top1 = paired(prompts, shuffled_prompts, |row| row.top1)?;
                 let structural = mode_structural_pass(training, mapping);
+                let fallback_accounting = readout_fallback_accounting(arm);
                 let passes = structural
+                    && fallback_accounting
                     && non_inferior(
                         arm.top1,
                         code_arm.top1,
@@ -875,6 +878,7 @@ fn run() -> Result<serde_json::Value, String> {
                 "shuffled_reading": shuffled_arm,
                 "shuffled_prompts": shuffled_prompts,
                 "structural_pass": structural,
+                "readout_fallback_accounting": fallback_accounting,
                 "vs_code_top1": vs_code_top1,
                 "vs_code_depth": vs_code_depth,
                 "vs_shuffled_top1": vs_shuffled_top1,
@@ -1309,6 +1313,10 @@ fn non_inferior(
     candidate_top1 >= control_top1 && candidate_depth >= control_depth
 }
 
+fn readout_fallback_accounting(reading: &ContentReadoutReading) -> bool {
+    reading.decisions == reading.readout_decisions + reading.writer_fallbacks
+}
+
 fn paired(
     candidate: &[ContentPromptReading],
     control: &[ContentPromptReading],
@@ -1674,6 +1682,23 @@ mod tests {
         assert!(non_inferior(73, 73, 65, 64));
         assert!(!non_inferior(72, 73, 65, 64));
         assert!(!non_inferior(74, 73, 63, 64));
+    }
+
+    #[test]
+    fn trajectory_readout_fallback_accounts_for_every_decision() {
+        let reading = ContentReadoutReading {
+            decisions: 10,
+            readout_decisions: 3,
+            writer_fallbacks: 7,
+            ..ContentReadoutReading::default()
+        };
+        assert!(readout_fallback_accounting(&reading));
+        assert!(!readout_fallback_accounting(&ContentReadoutReading {
+            decisions: 10,
+            readout_decisions: 3,
+            writer_fallbacks: 6,
+            ..ContentReadoutReading::default()
+        }));
     }
 
     #[test]
