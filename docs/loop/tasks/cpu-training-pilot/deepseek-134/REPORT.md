@@ -89,8 +89,8 @@ Compact evidence hashes:
   regression where the two trajectories differ.
 - A fresh review then returned FIT at `d5d742c19`, and a separate fresh
   pre-run review returned GO at `a2c611773`.
-- Full `uor-r4-cpu-train` release suite: **227 library and 56 binary tests
-  passed, 0 failed, 4 expected ignores**.
+- Full `uor-r4-cpu-train` release suite: **229 library and 56 binary tests
+  passed, 0 failed; 4 library tests were expected ignores**.
 - Focused self-prefix tests: **16/16**; admission driver tests: **2/2**.
 - Strict no-deps all-target CPU Clippy with `-D warnings`, formatting,
   prep-shape and `git diff --check`: passed.
