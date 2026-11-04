@@ -139,8 +139,8 @@ The source pipeline occupied **49,502,554 bytes**.
 
 - Full `uor-r4-cpu-train` release suite: **246 passed, 4 expected ignores**,
   with all binary tests green.
-- Full `uor-r4-integer` serving library suite: **462 passed, 1 expected
-  ignore**.
+- Full `uor-r4-integer` serving library suite: **463 total, 462 passed and 1
+  expected ignore**.
 - The attempt-4 control target ran **7** focused integer/session tests and
   **18** OpenAI-loopback tests, all passing.
 - The built release CLI independently completed a prompt-ID smoke, a text
@@ -152,8 +152,8 @@ The source pipeline occupied **49,502,554 bytes**.
   `UR4SESS2` codec identity.
 - The post-run parser-refusal suite directly covers wrong schema, sign mode,
   empty rows, malformed and oversized thresholds, unknown readout/row fields,
-  trailing input and the 64 MiB bound; the full integer suite passes **462**
-  tests with one expected ignore.
+  trailing input and the 64 MiB bound; the full integer suite is **463 total:
+  462 passed and 1 expected ignore**.
 - Strict `uor-r4-cpu-train` Clippy with `--no-deps -D warnings`, targeted
   `rustfmt --check` on every touched Rust file, and the source/docs-scoped
   `git diff --check` passed. The complete evidence diff retains the captured
