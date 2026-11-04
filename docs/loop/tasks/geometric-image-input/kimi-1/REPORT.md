@@ -28,19 +28,19 @@ Lab: kimi. Item: [geometric-image-input](../../../../roadmap/items/geometric-ima
 
 ## Measurements and checks
 
-- Studio at `4780a06ba`: **33 files / 284 Vitest tests PASS**, **41 Node tests PASS**, typecheck and Vite build PASS. Regressions cover text-only reload, Clear, 2×2 grid, huge decoded dimensions, issued content, abort cleanup, and computed contrast in all four reviewed states under both themes. Studio worker/static/runtime-page and desktop checks PASS with zero unexpected external requests; both 1440×900 theme views were inspected.
+- Studio at `81d9ed6ca`: **33 files / 284 Vitest tests PASS**, **41 Node tests PASS**, typecheck and Vite build PASS. Regressions cover text-only reload, Clear, 2×2 grid, huge decoded dimensions, issued content, abort cleanup, and computed contrast in all four reviewed states under both themes. Studio worker/static/runtime-page and desktop checks PASS with zero unexpected external requests; both 1440×900 theme views were inspected.
 - Native: **15/15 OpenAI integration tests PASS**, including valid issuance, unknown/expired IDs, valid-content substitution, non-user roles, image count, context overflow, CORS, deterministic busy/disconnect behavior, and byte/deadline-bounded oversized-request JSON errors. Vision: **9/9 PASS**. xtask: **222/222 PASS**.
-- Native library and binaries at `4780a06ba`: **454 library tests PASS, 1 ignored**, plus **17 binary tests PASS**. The six external-fixture adversarial failures are disclosed above and excluded from this count. `cargo metadata --no-deps` passes with one `uor-r4-vision` member.
-- Native audit at `4780a06ba39ac6828e1f6012824f8931e570a8bc`: **FULL PASS**, 44 symbol ranges and 138 reachable functions, zero forbidden instructions. `uor-r4-stack` SHA-256 `faf2264e17a731f9f3d37f9487fa06d4099f01163adfa25c8e5dffb8e3dd2891`.
+- Native library and binaries at `81d9ed6ca`: **454 library tests PASS, 1 ignored**, plus **17 binary tests PASS**. The six external-fixture adversarial failures are disclosed above and excluded from this count. `cargo metadata --no-deps` passes with one `uor-r4-vision` member.
+- Native audit at `81d9ed6caa6228e18d4e29bd22af323d2a4b821b`: **FULL PASS**, 44 symbol ranges and 138 reachable functions, zero forbidden instructions. `uor-r4-stack` SHA-256 `c698749fb72bf7dcdcec0e3a7656519d4964dfa3b085459d4a1f74f20d3a22c8`.
 - WASM audit at the same head: **7/7 PASS**, zero floats or unclassified instructions. Bundle 700,756 bytes, SHA-256 `df368909167f21a3b004bff0d723591f9256118ec91292ec3fd59dd9b7a6a9a0`. The same bundle passes Studio worker checks.
 - Scoped rustfmt and `git diff --check` PASS. Final repository gates, local policy, exact-head review, GitHub checks, protected queue, and fresh-main verification remain external delivery steps.
 
 ## Real browser and native evidence
 
-Used existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192, with the established W2 tokenizer. The final smoke used `uor-chat` built at `4780a06ba`, SHA-256 `12f43539c53821332833fcb1d703b609247c87e8dfc0c986f715d18a6637191e`.
+Used existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a7230b52d8c635736202a2afa8694`, schema `uor-r4.lut-stack/5`, context 192, with the established W2 tokenizer. The earlier merged smoke at `4780a06ba` used `uor-chat` SHA-256 `12f43539c53821332833fcb1d703b609247c87e8dfc0c986f715d18a6637191e`.
 
-- The merged synthetic native browser verifier passes image-only send, exact **31 prompt / 6 completion / 37 total usage**, memory-only reload, and a valid second send with historical image markers. Its latest run measured 359.2 tok/s, TTFT 13.957 ms, elapsed 16.706 ms.
-- The final merged dual-c131 smoke used Studio's actual file picker and Enter-to-send. Pixel A returned `I.`: **53 prompt / 3 completion / 56 total tokens**, 165.0 tok/s, TTFT 17.318 ms, elapsed 18.178 ms. After reload, with no image restored, a text-only turn returned `I.`: **34 / 3 / 37**, 165.4 tok/s, TTFT 17.560 ms, elapsed 18.143 ms. Clear remained visible and removed the recall notice.
+- The repaired synthetic native browser verifier passes image-only send, exact **31 prompt / 6 completion / 37 total usage**, memory-only reload, and a valid second send with historical image markers. Its latest run measured 279.7 tok/s, TTFT 16.783 ms, elapsed 21.453 ms.
+- The earlier merged dual-c131 smoke used Studio's actual file picker and Enter-to-send. Pixel A returned `I.`: **53 prompt / 3 completion / 56 total tokens**, 165.0 tok/s, TTFT 17.318 ms, elapsed 18.178 ms. After reload, with no image restored, a text-only turn returned `I.`: **34 / 3 / 37**, 165.4 tok/s, TTFT 17.560 ms, elapsed 18.143 ms. Clear remained visible and removed the recall notice.
 - Earlier scoped measurements remain consistent: changed pixel B returned `I.`, **54 / 3 / 57**, 169.3 tok/s; a true 2×2 image returned `I.`, **118 / 3 / 121**, 93.9 tok/s. These establish the changed-pixel and larger-grid paths, not visual quality.
 - The earlier 206/192 and 77/64 failures are retained as negative results. A real delayed-browser Stop remains NOT_RUN. Browser tabs and native servers were stopped.
 
@@ -53,7 +53,7 @@ Used existing dual-c131 artifact SHA-256 `9e80cc6a894ed50c7dc7d0393e2d3b22f74a72
 
 ## Checks run at the head
 
-Implementation measurements and binary audits use `4780a06ba39ac6828e1f6012824f8931e570a8bc`; the final REPORT-only head and tree are recorded on the PR with exact-head review. Repository gates, local policy, GitHub checks, protected queue, and fresh-main verification are external delivery records, not preclaimed passes.
+Implementation measurements and binary audits use `81d9ed6caa6228e18d4e29bd22af323d2a4b821b`; the final REPORT-only head and tree are recorded on the PR with exact-head review. Repository gates, local policy, GitHub checks, protected queue, and fresh-main verification are external delivery records, not preclaimed passes.
 
 ## Skills used
 
