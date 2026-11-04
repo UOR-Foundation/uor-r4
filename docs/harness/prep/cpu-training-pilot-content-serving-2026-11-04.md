@@ -1,6 +1,6 @@
 # Content readout serving sidecar
 
-**Status:** PENDING RE-FIT
+**Status:** FIT
 
 ## Question
 
@@ -258,12 +258,12 @@ mismatch is an instrument fault requiring a new FIT.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - M2 #2030 content-readout serving sidecar:
+TEST FITNESS: FIT - M2 #2030 CPU content-readout serving attempt 3
 docs/harness/prep/cpu-training-pilot-content-serving-2026-11-04.md
-head: 8194823789244096e2db317bb45954d5a7eeaf8f
-implementation pin: 8194823789244096e2db317bb45954d5a7eeaf8f
-reviewer: pending
+reviewer: codex-exact-fit-attempt-3b
+note: Exact pin valid; five inputs match; strict parser, raw-step, synthetic no-memory restore and loopback controls are registered in the run recipe.
 date: 2026-11-04
 
-A FIT verdict clears compute for this configuration only (D22). The attempt-2
-FIT does not carry to the tightened delivery binary.
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
