@@ -1305,6 +1305,14 @@ fn fold_picks(picks: &[RowPick]) -> (NearestReading, WriterReading) {
     (reading, written)
 }
 
+/// How many windows of `window` positions one scoring forward holds (claude-274): at most the
+/// evaluation's established positions, `SHEET_EVAL_BATCH` windows of [`SHEET_CONTEXT`]. A loaded
+/// checkpoint's weights are variables, so a forward keeps its intermediates until its picks are
+/// read, and its memory grows with its positions. So 16 windows at 192, and one at 2,048.
+fn windows_per_forward(window: usize) -> usize {
+    (hs::SHEET_EVAL_BATCH * SHEET_CONTEXT / window.max(1)).clamp(1, hs::SHEET_EVAL_BATCH)
+}
+
 /// Every scored row of `dev` decoded by `model`, in panel order: the nearest token and the
 /// writer's pick from the same points, with the turn memory named at the rows training names
 /// (its openings, and its reply table's later rows). `on_query` sees each batch's query rows
@@ -1323,9 +1331,10 @@ fn row_picks(
 ) -> Result<Vec<RowPick>> {
     let table = table(model)?;
     let writer = model.native_vector_writer()?;
+    let per_forward = dev.first().map_or(hs::SHEET_EVAL_BATCH, |w| windows_per_forward(w.input_ids.len()));
     let forward = || {
         let mut out = Vec::new();
-        for chunk in dev.chunks(hs::SHEET_EVAL_BATCH) {
+        for chunk in dev.chunks(per_forward) {
             let windows: Vec<&CausalWindow> = chunk.iter().collect();
             let (ids, scored, targets) = assemble(&windows);
             if scored.is_empty() {
@@ -5540,9 +5549,10 @@ fn decode_reply_with_mode(
 /// opening and no served point key. Everything else keeps [`decode_reply_with_mode`]'s
 /// one-at-a-time path. Equal lengths avoid padding, which would change the recurrent state; each
 /// group is split by the evaluation's established row/token budget, `SHEET_EVAL_BATCH` windows
-/// of the model's own `context` (claude-274; before, of [`SHEET_CONTEXT`]).
+/// of [`SHEET_CONTEXT`], at the widest window a member reaches, which the model's own `context`
+/// caps (claude-274). The budget stays in positions because a forward's memory grows with them.
 fn exact_length_batches(prompts: &[Vec<u32>], reply_tokens: usize, context: usize) -> Vec<Vec<usize>> {
-    let budget = hs::SHEET_EVAL_BATCH * context;
+    let budget = hs::SHEET_EVAL_BATCH * SHEET_CONTEXT;
     let mut by_length: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for (index, prompt) in prompts.iter().enumerate() {
         by_length.entry(prompt.len()).or_default().push(index);
@@ -15212,17 +15222,28 @@ mod tests {
         assert_eq!(keys, later, "each row keeps its own key");
     }
 
-    /// claude-274: the batched decode's budget is `SHEET_EVAL_BATCH` windows of the model's own
-    /// length. At 192 a 1,000-token prompt group is cut at the 192 window, 16 a batch, as before;
-    /// at 2,048 its 1,064-token reach takes 30 a batch.
+    /// claude-274: the batched decode's budget stays `SHEET_EVAL_BATCH` windows of 192 positions,
+    /// and a group's reach is capped by the model's own window. At 192 a 1,000-token prompt group
+    /// reaches the 192 window, 16 a batch, as before; at 2,048 its 1,064-token reach takes 2.
+    /// claude-274: a scoring forward holds the positions of 16 windows of 192, so 16 windows at
+    /// 192 as before, and fewer at longer windows.
     #[test]
-    fn exact_length_batches_take_the_budget_of_the_model_s_window() {
+    fn a_scoring_forward_holds_sixteen_windows_of_192_positions() {
+        assert_eq!(windows_per_forward(SHEET_CONTEXT), hs::SHEET_EVAL_BATCH);
+        assert_eq!(windows_per_forward(96), hs::SHEET_EVAL_BATCH, "never more than 16");
+        assert_eq!(windows_per_forward(1024), 3);
+        assert_eq!(windows_per_forward(2048), 1);
+        assert_eq!(windows_per_forward(4096), 1, "never fewer than 1");
+    }
+
+    #[test]
+    fn exact_length_batches_cap_the_reach_at_the_model_s_window() {
         let prompts: Vec<Vec<u32>> = (0..40).map(|seed| vec![seed; 1000]).collect();
         let sizes = |context| -> Vec<usize> {
             exact_length_batches(&prompts, 64, context).iter().map(Vec::len).collect()
         };
         assert_eq!(sizes(SHEET_CONTEXT), [16, 16, 8]);
-        assert_eq!(sizes(2048), [30, 10]);
+        assert_eq!(sizes(2048), [2; 20]);
     }
 
     /// claude-274: `--sample-opening last` decodes from each window's last reply opening with at

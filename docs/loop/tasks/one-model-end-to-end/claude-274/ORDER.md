@@ -68,6 +68,7 @@ At 192 nothing changes, and a GPU check compares base and head byte for byte, wh
    - `row_picks`' reply-table rows take the forward's own window length.
    - Decodes slide over the model's own window (`config.context`): the serial decode, the batched decode, and `reply_key_hits`.
    - The batched decode's budget is `SHEET_EVAL_BATCH ×` that window.
+   - **Amended before the GPU check:** the batched decode's budget, and the row forward's, stay at `SHEET_EVAL_BATCH × 192` positions; only a group's reach is capped at the model's window. A loaded checkpoint's weights are variables (`StackModel::load`, `Var::from_tensor`), so every forward keeps its intermediates and its memory grows with its positions. Scoring was measured only at 16 × 192 = 3,072 positions a forward, about 5.2 GiB (claude-270). 16 × 2,048 = 32,768 is 10.7 times that. So the row forward takes 16 windows at 192, as before, and one at 2,048.
 3. **Refused at N other than 192, by name:**
    - `--decision-trace` and `--decision-force` (Q5 is parked);
    - `--opening-keys`, `--served-key` and `--keyed-decode`, whose TRAIN table is cut at 192.
@@ -75,7 +76,7 @@ At 192 nothing changes, and a GPU check compares base and head byte for byte, wh
 5. **Scored files carry their window.** Each `ScoredFile` records `context`, left out at 192, so a 192 manifest is as before.
 6. **Host tests on the laptop.** No tensor maths, per D24/D29.
    - The reply-table rows at a 2,048 window are `window · 2,048 + offset`.
-   - `exact_length_batches` at 192 is as before, and at 2,048 its budget is 16 × 2,048.
+   - `exact_length_batches` at 192 is as before, and at 2,048 its budget is 16 × 2,048 (amended: its budget stays 16 × 192 positions, and a group's reach is capped at 2,048; a row forward holds 16 windows at 192 and one at 2,048).
    - `reply_key_hits` reads the window the decoder sees.
    - The last-opening selector's windows start at the last opening, and their prompt, reference and position follow it.
    - `context_applies` accepts scoring.
