@@ -1,6 +1,6 @@
 # Direct final-gain training for reply termination
 
-**Status:** FIT
+**Status:** READY FOR FIT REVIEW
 
 ## Question
 
@@ -21,7 +21,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5` |
+| implementation source | `c5f9472acd5470547b2b88cc1096172539a4de2b` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -145,7 +145,7 @@ Use a fresh source-bound release target and fresh output roots:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-bos-writer-training
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5
+SOURCE_PIN=c5f9472acd5470547b2b88cc1096172539a4de2b
 PIPELINE=$SHARED/local/deepseek/termination-gain/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/termination-gain-131
 DEV=$SHARED/local/deepseek/public-m1-parity
@@ -260,15 +260,4 @@ fresh phrasing or useful chat.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 direct final-gain BOS training
-sheet: docs/harness/prep/cpu-training-pilot-bos-gain-2026-11-04.md
-head: 2b27e6383ad2c5f059975ab6631348c078f32004
-implementation pin: f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5
-reviewer: independent-subagent fbs-fit-2
-note: two-seed D84 screen; training-only EOS/BOS labels, cached full-path
-final-gain search, nonterminal safety gates, shuffled-label and equal-move
-random controls, exact CPU/integer parity, fail-closed source/resource/storage
-gates, deterministic seed-1 repeat, and fixed 26/103 terminal bar
-date: 2026-11-04
-
-A FIT verdict clears compute for this configuration only (D22).
+PENDING
