@@ -1,6 +1,6 @@
 # Reuse loaded trunk models for CPU evaluation
 
-**Status:** PENDING
+**Status:** FIT
 
 ## Question
 
@@ -220,4 +220,18 @@ language capability or GPU qualification.
 
 ## TEST FITNESS
 
-TEST FITNESS: pending fresh-context non-author review.
+TEST FITNESS: FIT - M2 #2030 public 19-table CPU evaluation reuse
+sheet: `docs/harness/prep/cpu-training-pilot-trunk-eval-reuse-2026-11-04.md`
+docs head: `b0f2a7aa572f9cf95c2f535b6556fde630ed8069`
+implementation pin: `1f5fe3c3a4aee2e67de64276a4712cd0fbd23a7f`
+baseline binary: `e32f99e8494ec51d26d523861ae4511ade3a73a5a03dbc29bd557105d3680dd4`
+optimized binary: `a29541a5a9cdfdd3e07fbe6992bfbf54cbffe7f46f53fc897331b2b7fcc45d40`
+reviewer: Codex fresh-context non-author session
+note: no-update reuses the preloaded CPU/integer models; exact and shuffled
+independently reload; real D11 finite equivalence test; mirrored one/sixteen
+worker order; canonical 21 stages; direct artifact hashes; full-crates source
+pin; strict positive RSS below 2,097,152 KiB; 600-second timeout; 5-percent wall
+and 50-percent no-update-evaluation bars; instrument-only claim
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
