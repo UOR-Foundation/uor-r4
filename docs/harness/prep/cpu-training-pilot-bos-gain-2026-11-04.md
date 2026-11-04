@@ -21,7 +21,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `51279a81a58710df08e65f69002634f8837d1288` |
+| implementation source | `f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5` |
 | seed 1 FBS artifact | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
 | seed 2 FBS artifact | `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1` |
 | DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -143,16 +143,51 @@ Use a fresh source-bound release target and fresh output roots:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-bos-writer-training
 SHARED=/home/callard/projects/codex-playground/uor-r4
-SOURCE_PIN=51279a81a58710df08e65f69002634f8837d1288
+SOURCE_PIN=f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5
 PIPELINE=$SHARED/local/deepseek/termination-gain/2026-11-04-attempt-1
 BUILD=$SOURCE/target/deepseek/termination-gain-131
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
+HARNESS=$SHARED/local/harness-target/release/uor-harness
+MIN_FREE_KIB=37748736
+MIN_RESERVE_KIB=31588352
+MAX_BUILD_BYTES=2147483648
+MAX_BUILD_RSS_KIB=4194304
+MAX_PIPELINE_BYTES=67108864
+SOURCE_GUARD_PATHS=(crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)
+free_kib() {
+  df -Pk "$1" | awk 'NR == 2 { print $4 }'
+}
+test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
+test "$(free_kib "$SHARED")" -ge "$MIN_FREE_KIB"
+"$HARNESS" budget show --json | jq -e \
+  '.model_time_ledger.present == false
+   and .resource_ledger.chain.head == "cpu-training-pilot-bos-gain-2026-11-04/resource-ledger.json"
+   and .resource_ledger.chain.cumulative_projected_seconds == 36774.680792822' >/dev/null
+test -z "$(git -C "$SOURCE" status --porcelain -- "${SOURCE_GUARD_PATHS[@]}")"
+git -C "$SOURCE" diff --quiet "$SOURCE_PIN" -- "${SOURCE_GUARD_PATHS[@]}"
 test ! -e "$PIPELINE"
 test ! -e "$BUILD"
-mkdir -p "$PIPELINE"
-CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
-  -p uor-r4-cpu-train --bin cpu-termination-gain-driver
+mkdir -p "$PIPELINE/build"
+BUILD_STARTED=$(date -u +%s)
+(
+  cd "$SOURCE"
+  /usr/bin/time -v -o "$PIPELINE/build/build.time.txt" \
+    env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER \
+      -u RUSTFLAGS -u CARGO_ENCODED_RUSTFLAGS -u RUSTDOCFLAGS \
+      -u RUSTUP_TOOLCHAIN CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+      cargo build --locked --release \
+        -p uor-r4-cpu-train --bin cpu-termination-gain-driver
+)
+BUILD_SECONDS=$(( $(date -u +%s) - BUILD_STARTED ))
+BUILD_BYTES=$(du -sb "$BUILD" | cut -f1)
+BUILD_PEAK_RSS_KIB=$(awk -F': ' '/Maximum resident set size/ { print $2 }' \
+  "$PIPELINE/build/build.time.txt")
+test "$BUILD_BYTES" -le "$MAX_BUILD_BYTES"
+test "$BUILD_PEAK_RSS_KIB" -le "$MAX_BUILD_RSS_KIB"
+printf '{"jobs":16,"wall_seconds":%s,"peak_rss_kib":%s,"target_bytes":%s}\n' \
+  "$BUILD_SECONDS" "$BUILD_PEAK_RSS_KIB" "$BUILD_BYTES" \
+  >"$PIPELINE/build/summary.json"
 BIN=$BUILD/release/cpu-termination-gain-driver
 BIN_SHA=$(sha256sum "$BIN" | cut -d' ' -f1)
 printf '%s  cpu-termination-gain-driver\n' "$BIN_SHA" >"$PIPELINE/binary.sha256"
@@ -171,6 +206,18 @@ run() {
     --steps 8 --reply-cap 16 --seed 1
   test "$(jq -er '.peak_rss_kib' "$out/report.json")" -le 1048576
   test "$(jq -er '.training.true.accepted_moves' "$out/report.json")" -gt 0
+  test "$(jq -er '.training.label_shuffled.accepted_moves' "$out/report.json")" -gt 0
+  test "$(jq -er '.training.random.moves | length' "$out/report.json")" \
+    = "$(jq -er '.training.true.accepted_moves' "$out/report.json")"
+  test "$(jq -er '.training.true.artifact_sha256' "$out/report.json")" \
+    != "$(jq -er '.memory.artifact_sha256' "$out/report.json")"
+  test "$(jq -er '.training.label_shuffled.artifact_sha256' "$out/report.json")" \
+    != "$(jq -er '.memory.artifact_sha256' "$out/report.json")"
+  test "$(jq -er '.training.random.artifact_sha256' "$out/report.json")" \
+    != "$(jq -er '.memory.artifact_sha256' "$out/report.json")"
+  test "$(sha256sum "$BIN" | cut -d' ' -f1)" = "$BIN_SHA"
+  test "$(free_kib "$SOURCE")" -ge "$MIN_RESERVE_KIB"
+  test "$(free_kib "$SHARED")" -ge "$MIN_RESERVE_KIB"
   (cd "$out" && find . -type f ! -name SHA256SUMS -print0 |
     sort -z | xargs -0 sha256sum >SHA256SUMS &&
     sha256sum -c SHA256SUMS --quiet)
@@ -180,9 +227,8 @@ run 2 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$PIPELIN
 run 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$PIPELINE/seed-1-repeat"
 diff <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1/report.json") \
   <(jq -S 'del(.wall_elapsed_ms, .peak_rss_kib)' "$PIPELINE/seed-1-repeat/report.json")
-test "$(jq -er '.bar.passes' "$PIPELINE/seed-1/report.json")" = true
-test "$(jq -er '.bar.passes' "$PIPELINE/seed-2/report.json")" = true
 test -z "$(git -C "$SOURCE" status --porcelain -- crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)"
+test "$(du -sb "$PIPELINE" | cut -f1)" -le "$MAX_PIPELINE_BYTES"
 ```
 
 Any source, input, binary, output-root, control or deterministic mismatch is

@@ -50,7 +50,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-131/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-bos-gain-2026-11-04.md",
-    "implementation_pin": "51279a81a58710df08e65f69002634f8837d1288"
+    "implementation_pin": "f55eb2af7c1a6e18cfd2c0cfce4e2c4f5af6bdc5"
   },
   "normal_close": {
     "gpu_pods": 0,
