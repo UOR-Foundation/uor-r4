@@ -92,17 +92,21 @@ pub fn evaluate_replies(
     samples: &[MemoryWeightSample],
     cap: usize,
 ) -> Result<TimedReplyReading> {
+    if samples.is_empty() {
+        return Err(invalid(
+            "complete-reply evaluation needs at least one sample",
+        ));
+    }
+    let context = CpuFbsForward::from_artifact(artifact)
+        .map_err(|error| invalid(format!("complete-reply context: {error}")))?
+        .context_length();
     let started = std::time::Instant::now();
     let rows = samples
         .par_iter()
         .map(|sample| {
             let generated = generate_reply(artifact, &sample.prompt, cap)?;
             let reference = normalized_reference(&sample.reply).to_vec();
-            let reachable = reference_reachable(sample.prompt.len(), reference.len(), cap, {
-                let forward = CpuFbsForward::from_artifact(artifact)
-                    .map_err(|error| invalid(format!("complete-reply context: {error}")))?;
-                forward.context_length()
-            });
+            let reachable = reference_reachable(sample.prompt.len(), reference.len(), cap, context);
             Ok((generated, reference, reachable))
         })
         .collect::<Result<Vec<_>>>()?;
