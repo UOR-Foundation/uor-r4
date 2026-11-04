@@ -7,7 +7,8 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 Test a writer-cell termination rule after the single-radius point gate closed
 negative. For every teacher-forced training query, derive the 256-way writer
-cell from the first and last orbit roots. Count terminal and nonterminal
+cell from the nearest first and last orbit-root scores, exactly as the writer
+admits its cell. Count terminal and nonterminal
 training rows per cell and learn only cells with strictly more terminal than
 nonterminal evidence. At decode, a generated query in a learned cell names the
 BOS stop sentinel.
@@ -28,8 +29,8 @@ not the failed point radius.
 ## Registered mechanism
 
 - The writer cell is `first_root * 16 + last_root`, where each root is the
-  canonical orbit identified from the query's first and last eight Q12
-  coordinates, exactly as the writer's admission cell is formed.
+  lowest-index orbit root with the minimum L1 distance to the query's first or
+  last eight Q12 coordinates, exactly as the writer ranks admission cells.
 - Corpus EOS id 1 identifies the terminal row; prompt-final and earlier
   reply-content rows are nonterminal.
 - A cell is learned only when its terminal count is greater than its

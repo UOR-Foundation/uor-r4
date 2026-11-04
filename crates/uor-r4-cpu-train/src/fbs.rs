@@ -337,6 +337,34 @@ impl CpuFbsForward {
         self.kept_cells
     }
 
+    pub(crate) fn writer_query_cell(&self, query: &[i32]) -> Result<u16> {
+        if query.len() != self.width {
+            return Err(invalid("writer cell query width differs"));
+        }
+        let root_score = |left: &[i32], right: &[i32]| -> i64 {
+            left.iter()
+                .zip(right)
+                .fold(0i64, |sum, (&left, &right)| {
+                    sum.wrapping_add(i64::from(left.abs_diff(right)))
+                })
+                .wrapping_neg()
+        };
+        let nearest = |block: &[i32]| {
+            let mut best = 0usize;
+            for root in 1..16 {
+                if root_score(block, &self.roots_q12[root])
+                    > root_score(block, &self.roots_q12[best])
+                {
+                    best = root;
+                }
+            }
+            best
+        };
+        let first = nearest(&query[..8]);
+        let last = nearest(&query[self.width - 8..]);
+        Ok((first * 16 + last) as u16)
+    }
+
     pub(crate) fn context_length(&self) -> usize {
         self.context
     }
