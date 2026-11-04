@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Instant;
 
+use rayon::prelude::*;
+use rayon::ThreadPoolBuilder;
 use serde_json::json;
 use uor_r4_cpu_train::{
     validate_corpus_manifest, CpuDiscreteTrunkReader, CpuMaskedCorpus, RankMarginSample,
@@ -34,6 +36,7 @@ struct Config {
     evaluation_stride: usize,
     max_evaluation: usize,
     seed: u64,
+    workers: usize,
     select_only: bool,
 }
 
@@ -52,6 +55,20 @@ struct DecisionReading {
     row_checksums: Vec<u64>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct DecisionOutcome {
+    admitted: bool,
+    top1: bool,
+    top8: bool,
+    query: Vec<i32>,
+    top8_tokens: [u32; 8],
+    token: u32,
+    query_coordinate_mismatches: u64,
+    admitted_cell_mismatches: u64,
+    top8_mismatches: u64,
+    token_mismatches: u64,
+}
+
 #[derive(PartialEq, Eq, serde::Serialize)]
 struct TableReading {
     total: u64,
@@ -59,7 +76,14 @@ struct TableReading {
 }
 
 fn main() {
-    match run() {
+    let result = parse_args().and_then(|config| {
+        let pool = ThreadPoolBuilder::new()
+            .num_threads(config.workers)
+            .build()
+            .map_err(|error| format!("cannot build {}-worker pool: {error}", config.workers))?;
+        pool.install(|| run(config))
+    });
+    match result {
         Ok(report) => println!(
             "{}",
             serde_json::to_string_pretty(&report).expect("the report serializes")
@@ -76,7 +100,7 @@ fn usage() -> String {
      --expected-artifact-sha256 HEX --expected-tokens-sha256 HEX \
      --expected-mask-sha256 HEX --expected-manifest-sha256 HEX \
      [--train-rows N] [--evaluation-stride N] [--max-evaluation N] \
-     [--seed N] [--select-only]"
+     [--seed N] [--workers N] [--select-only]"
         .to_owned()
 }
 
@@ -101,6 +125,7 @@ fn parse_args() -> Result<Config, String> {
         evaluation_stride: 2,
         max_evaluation: 512,
         seed: 1,
+        workers: rayon::current_num_threads(),
         select_only: false,
     };
     while let Some(flag) = values.next() {
@@ -120,6 +145,7 @@ fn parse_args() -> Result<Config, String> {
             "--evaluation-stride" => config.evaluation_stride = number(&value)?,
             "--max-evaluation" => config.max_evaluation = number(&value)?,
             "--seed" => config.seed = number(&value)?,
+            "--workers" => config.workers = number(&value)?,
             _ => return Err(format!("unknown argument {flag}\n{}", usage())),
         }
     }
@@ -138,8 +164,10 @@ fn parse_args() -> Result<Config, String> {
         || config.evaluation_stride < 2
         || config.max_evaluation == 0
         || config.max_evaluation > 16_384
+        || config.workers == 0
+        || config.workers > 256
     {
-        return Err("training, split and evaluation bounds differ".to_owned());
+        return Err("training, split, evaluation or worker bounds differ".to_owned());
     }
     Ok(config)
 }
@@ -157,8 +185,7 @@ fn hex(value: &str) -> Result<String, String> {
     }
 }
 
-fn run() -> Result<serde_json::Value, String> {
-    let config = parse_args()?;
+fn run(config: Config) -> Result<serde_json::Value, String> {
     if !config.select_only && config.out.exists() {
         return Err(format!(
             "output root already exists: {}",
@@ -212,8 +239,9 @@ fn run() -> Result<serde_json::Value, String> {
         CpuDiscreteTrunkReader::from_bytes(&artifact).map_err(|error| error.to_string())?;
     let training = split
         .training
-        .iter()
-        .take(config.train_rows)
+        .get(..config.train_rows)
+        .ok_or_else(|| "training split is shorter than requested".to_owned())?
+        .par_iter()
         .enumerate()
         .map(|(index, sample)| {
             reader
@@ -368,7 +396,7 @@ fn run() -> Result<serde_json::Value, String> {
             "shuffled_vs_no_update_rows": changed_rows(&shuffled_reading, &no_update)?,
             "exact_vs_shuffled_rows": changed_rows(&exact, &shuffled_reading)?,
         },
-        "threads": 1,
+        "threads": rayon::current_num_threads(),
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),
         "claim": "CPU development-research writeback test; not GPU qualification or language capability",
@@ -576,35 +604,54 @@ fn sparse_tables(
 fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionReading, String> {
     let cpu = CpuDiscreteTrunkReader::from_bytes(artifact).map_err(|error| error.to_string())?;
     let served = IntegerDiscreteModel::from_bytes(artifact).map_err(|error| error.to_string())?;
+    let outcomes = samples
+        .par_iter()
+        .map(|sample| {
+            let (decision, admitted, top1, top8) = cpu
+                .observe_target(&sample.input, sample.target)
+                .map_err(|error| error.to_string())?;
+            let serving = served
+                .evaluate_prefix(&sample.input)
+                .map_err(|error| error.to_string())?;
+            let query_coordinate_mismatches = decision
+                .query
+                .iter()
+                .zip(&serving.read_vector)
+                .filter(|(left, right)| left != right)
+                .count() as u64;
+            let admitted_cell_mismatches =
+                u64::from(decision.admitted_cells != serving.admitted_cells);
+            let mut served_top8 = [u32::MAX; 8];
+            for (slot, &token) in serving.top8.iter().take(8).enumerate() {
+                served_top8[slot] = token;
+            }
+            Ok(DecisionOutcome {
+                admitted,
+                top1,
+                top8,
+                token_mismatches: u64::from(decision.token != serving.prediction),
+                top8_mismatches: u64::from(decision.top8 != served_top8),
+                query_coordinate_mismatches,
+                admitted_cell_mismatches,
+                query: decision.query.to_vec(),
+                top8_tokens: decision.top8,
+                token: decision.token,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     let mut reading = DecisionReading::default();
-    for sample in samples {
-        let (decision, admitted, top1, top8) = cpu
-            .observe_target(&sample.input, sample.target)
-            .map_err(|error| error.to_string())?;
-        let serving = served
-            .evaluate_prefix(&sample.input)
-            .map_err(|error| error.to_string())?;
+    for outcome in outcomes {
         reading.rows += 1;
-        reading.admitted += u64::from(admitted);
-        reading.top1 += u64::from(top1);
-        reading.top8 += u64::from(top8);
-        reading.query_coordinates += decision.query.len() as u64;
-        reading.query_coordinate_mismatches += decision
-            .query
-            .iter()
-            .zip(&serving.read_vector)
-            .filter(|(left, right)| left != right)
-            .count() as u64;
-        reading.admitted_cell_mismatches +=
-            u64::from(decision.admitted_cells != serving.admitted_cells);
-        let mut served_top8 = [u32::MAX; 8];
-        for (slot, &token) in serving.top8.iter().take(8).enumerate() {
-            served_top8[slot] = token;
-        }
-        reading.top8_mismatches += u64::from(decision.top8 != served_top8);
-        reading.token_mismatches += u64::from(decision.token != serving.prediction);
+        reading.admitted += u64::from(outcome.admitted);
+        reading.top1 += u64::from(outcome.top1);
+        reading.top8 += u64::from(outcome.top8);
+        reading.query_coordinates += outcome.query.len() as u64;
+        reading.query_coordinate_mismatches += outcome.query_coordinate_mismatches;
+        reading.admitted_cell_mismatches += outcome.admitted_cell_mismatches;
+        reading.top8_mismatches += outcome.top8_mismatches;
+        reading.token_mismatches += outcome.token_mismatches;
         let mut row_checksum = 0u64;
-        for &coordinate in &decision.query {
+        for &coordinate in &outcome.query {
             reading.checksum = reading
                 .checksum
                 .rotate_left(7)
@@ -613,7 +660,7 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
                 .rotate_left(7)
                 .wrapping_add(coordinate as u32 as u64);
         }
-        for &token in &decision.top8 {
+        for &token in &outcome.top8_tokens {
             reading.checksum = reading
                 .checksum
                 .rotate_left(7)
@@ -623,10 +670,10 @@ fn evaluate(artifact: &[u8], samples: &[RankMarginSample]) -> Result<DecisionRea
         reading.checksum = reading
             .checksum
             .rotate_left(7)
-            .wrapping_add(u64::from(decision.token));
+            .wrapping_add(u64::from(outcome.token));
         row_checksum = row_checksum
             .rotate_left(7)
-            .wrapping_add(u64::from(decision.token));
+            .wrapping_add(u64::from(outcome.token));
         reading.row_checksums.push(row_checksum);
     }
     Ok(reading)
