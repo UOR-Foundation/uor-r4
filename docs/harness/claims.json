@@ -83,6 +83,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/content-stop-gate": {
+    "branch": "deepseek/content-stop-gate",
+    "claimed_at": "2026-11-04T11:40:41-05:00",
+    "head": "202aa1e29",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/copy-codes-key2-guard": {
     "branch": "deepseek/copy-codes-key2-guard",
     "claimed_at": "2026-11-02T23:04:45-05:00",
@@ -339,6 +346,13 @@
     "branch": "deepseek/reply-termination",
     "claimed_at": "2026-11-04T00:06:22-05:00",
     "head": "3f7f8605b",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/scope-content-serving": {
+    "branch": "deepseek/scope-content-serving",
+    "claimed_at": "2026-11-04T14:15:47-05:00",
+    "head": "67422a3b4",
     "lab": "deepseek",
     "note": ""
   },

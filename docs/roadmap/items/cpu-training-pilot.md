@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/README.md, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/session_codec.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/content_readout.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/tests/session_codec_interop_fixture.rs, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/integration/current-state.md, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/labs/cpu-training-pilot-content-serving-2026-11-04/**, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -283,9 +283,23 @@ replies. Seed 1 also lost content, 73→60 top-1 and 64→46 depth; seed 2 was
 unchanged at 58/39. Every true stop arm still hit the 16-token cap, while the
 shuffled endpoint controls stopped 2 and 27 replies prematurely. This closes
 shared content-table endpoint rows. A separate two-class generated-state stop
-gate is the next termination direction; the positive content code remains
+gate was the next termination direction; the positive content code remained
 intact. See
 [deepseek-138](../../loop/tasks/cpu-training-pilot/deepseek-138/REPORT.md).
+
+The separate stop gate trained terminal and nonterminal code-signature
+prototypes without changing content targets. It stayed inside the 1% false-stop
+limit but recalled only 8/84 and 9/84 training endpoints. The true arms stopped
+10 and 11 replies, none exact; seed 1 had 4 shorter, 2 at-reference and 4
+longer stops, while seed 2 had 5 shorter, 4 at-reference and 2 longer. The
+shuffled controls stopped 9 and 21 replies. Corrected control-only paired
+thresholds made seed 1 pass at 10 versus 9 and seed 2 fail at 11 versus 21, so
+the shuffled gain did not replicate. Content stayed exactly 73/64 and 58/39
+with zero ungated token mismatches. A wider prototype preflight did not
+approach the training bar. This closes the fixed eight-prototype
+code-signature gate at the 1% false-stop limit; another termination
+representation or continuation objective is required. See
+[deepseek-139](../../loop/tasks/cpu-training-pilot/deepseek-139/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
