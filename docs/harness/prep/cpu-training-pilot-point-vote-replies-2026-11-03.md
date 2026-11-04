@@ -121,7 +121,8 @@ reviewer: Codex fresh-context non-author review
 note: fixed deepseek-104/105 60/60 split, four matched arms, established
 reply_stop/BOS semantics, one-trailing-BOS reference normalization, exact
 cap/context reachability, per-arm cost, distinct/repeated-4-gram counters,
-12/12 finite tests; readiness screen only
+12/12 finite tests at FIT, 13/13 including the post-review sequence digest;
+readiness screen only
 date: 2026-11-03
 
 A FIT verdict clears compute for the configuration in that sheet only (D22).
