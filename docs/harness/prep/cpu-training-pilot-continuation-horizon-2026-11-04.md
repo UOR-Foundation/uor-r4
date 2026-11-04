@@ -1,6 +1,6 @@
 # Generated-state exact-offset continuation horizon
 
-**Status:** FIT
+**Status:** STOPPED AT PREFLIGHT
 
 ## Question
 
@@ -137,6 +137,33 @@ termination candidate and justifies artifact-bound serving integration. A
 fail closes this lower-median same-offset configuration and requires a
 different trajectory state, decode objective or content mechanism. Neither
 result alone establishes useful chat.
+
+## Outcome
+
+Attempt 1 executed implementation pin
+`0a8631d4e033af39025b06c64fc50496782269f4`. The release driver, 254 library
+tests, eight driver tests, scoped Clippy and targeted rustfmt passed. The five
+public inputs and source pin matched.
+
+| Seed 1 reading | True horizon | Permuted horizon | Registered limit |
+|---|---:|---:|---:|
+| Total / terminal / nonterminal rows | 1,568 / 84 / 1,484 | 1,568 / 84 / 1,484 | exact |
+| Terminal recall | **40/84** | 33/84 | at least 26/84 |
+| Nonterminal false stops | **66/1,484** | 62/1,484 | at most 14/1,484 |
+| Horizon absolute error | **7,184** | 9,525 | true < shuffled |
+| Selected k | 2 | 1 | in `{1,2,4,8}` |
+| Changed raw predictions | 806 | 806 | > 0 |
+
+The true horizon signal beat the permuted control on error and raw prediction
+changes, and terminal recall passed. The false-stop count failed, so the
+registered stop rule prevented the seed-2 preflight, all generation arms and
+the one-worker repeat. The limit and configuration were not changed after
+observation.
+
+Exact stopped evidence is under
+[`evidence-attempt-1/`](../../labs/cpu-training-pilot-continuation-horizon-2026-11-04/evidence-attempt-1/).
+Measured compute and cumulative accounting are in the
+[resource ledger](../../labs/cpu-training-pilot-continuation-horizon-2026-11-04/resource-ledger.json).
 
 ## Cost
 
