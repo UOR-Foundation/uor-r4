@@ -10,29 +10,40 @@ Lab: claude. [ORDER](./ORDER.md). PR #3664, item #3407. Plan step: Casey's plan 
   - The mean speedup is 1.12, under the 1.2 floor.
   - The two serial repeats differ by 31% on the same pod, which is far more than any gain.
 - **What follows from Inconclusive:** the passes stay serial, and P5's pod repeats one A/B pair at no extra cost.
-- **At 2,048, two passes at once ran slower than one after the other.** They took 6,269 s, against 5,248 s queued (r = 2.39). So this line's 2,048 passes stay one at a time.
+- **At 2,048, two passes at once took 6,269 s,** 2.39 times P2b's single pass on another pod (2,624 s). So this line's 2,048 passes stay one at a time.
 - **Records:** the run cost about $2.45. All 456 sealed files are in the store and read back equal.
 
 ## Tokens per second first
 
 Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 tokens a file), from the `decode` pair `--score-rows` printed for it. Phases A ran one pass at a time, B two at once, C four at once, and D two 2,048 passes at once.
 
-| pass | memory on | memory off | pass wall time (s) | decode share of the pass |
-|---|---|---|---|---|
-| A1 (L) 192 | 643.1 | 649.3 | 109.3 | 55% |
-| A1 (S) 192 | 701.1 | 707.9 | 102.3 | 54% |
-| A2 (L) 192 | 638.7 | 493.0 | 150.2 | 47% |
-| A2 (S) 192 | 613.3 | 622.0 | 127.5 | 49% |
-| B1 (L) 192 | 281.2 | 305.1 | 226.1 | 59% |
-| B1 (S) 192 | 311.7 | 337.3 | 218.2 | 55% |
-| B2 (L) 192 | 300.5 | 324.0 | 211.5 | 59% |
-| B2 (S) 192 | 331.0 | 352.8 | 206.0 | 55% |
-| C, four passes, (L) / (S) | 139.4–141.2 / 152.8–153.3 | 160.2–161.4 / 176.6–177.3 | 432.2–443.1 | 54–59% |
-| D (L) 2,048, each of two | 6.31 | 6.33 | 6,268.9 | 98% |
+The two share columns divide decode seconds by the pass's wall time: all eleven `decode` pairs a pass prints, and the two queries files alone.
+
+| pass | memory on | memory off | pass wall time (s) | all decode share | queries-file decode share |
+|---|---|---|---|---|---|
+| A1 (L) 192 | 643.1 | 649.3 | 109.3 | 85% | 55% |
+| A1 (S) 192 | 701.1 | 707.9 | 102.3 | 83% | 54% |
+| A2 (L) 192 | 638.7 | 493.0 | 150.2 | 86% | 47% |
+| A2 (S) 192 | 613.3 | 622.0 | 127.5 | 85% | 50% |
+| B1 (L) 192 | 281.2 | 305.1 | 226.1 | 85% | 59% |
+| B1 (S) 192 | 311.7 | 337.5 | 218.2 | 85% | 55% |
+| B2 (L) 192 | 300.9 | 324.5 | 211.5 | 86% | 59% |
+| B2 (S) 192 | 331.5 | 352.8 | 206.0 | 85% | 55% |
+| C, four passes, (L) / (S) | 139.9–141.8 / 153.5–153.8 | 160.5–161.2 / 176.5–177.9 | 432.2–443.1 | 82–83% | 55–59% |
+| D (L) 2,048, each of two | 6.31 | 6.33 | 6,268.9 | 99% | 98% |
 
 - **At 192, two passes at once decode at 281–353 tok/s each,** against 493–708 for one pass alone (613–708 but for A2's one slow file). Together that is roughly what one pass gives alone.
-- **At 2,048, two passes at once decode at 6.3 tok/s each,** 12.6 between them. P2b's single pass on another pod did 15.2. Time-slicing between the two processes cost throughput.
-- **Decode is 98% of a 2,048 pass,** against about half of a 192 pass. The rest of a 192 pass is row scoring and loading. So a faster decode at 2,048 shortens nearly the whole pass.
+- **At 2,048, two passes at once decode at 6.3 tok/s each,** 12.6 between them. P2b's single pass on another pod did 15.2. This pod decoded about 1.37 times as fast as P2b's at 192, so the cost of time-slicing at 2,048 is not measured here (What did not work, item 4).
+- **Decode is 99% of a 2,048 pass and 82–86% of a 192 pass.** The two queries files alone are about half of a 192 pass. The rest of a 192 pass is row scoring and loading. So a faster decode shortens nearly the whole pass at 2,048, and most of it at 192.
+- **GPU utilization (R4),** from `smi.log`'s samples inside each phase's start and end:
+
+  | | A1 | B1 | A2 | B2 | C | D |
+  |---|---|---|---|---|---|---|
+  | mean utilization | 68% | 93% | 52% | 94% | 97% | 99% |
+  | samples under 50% | 31% | 3.3% | 43% | 2.5% | 0.4% | 0.1% |
+  | samples | 393 | 420 | 501 | 393 | 818 | 11,570 |
+
+  Utilization × wall time, a rough measure of the time a kernel ran, is about 145 s in both A1 and A2, and 198–210 s in B1 and B2 for the same two passes. Side by side filled the GPU's idle time, but the kernels' own time grew by about as much as it saved.
 - **GPU memory peaks:**
   - one pass: 3,532 and 3,596 MiB;
   - two at once: 7,027 and 7,155 MiB;
@@ -56,16 +67,17 @@ Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 t
    - **Where A2's extra time went:**
      - most of it is in its (L) pass, 150.2 s against 109.3 s;
      - its memory-off queries file decoded at 493.0 tok/s, against 638.7 for memory on in the same pass.
-   - **Cause:** not identified. The run has no host-side trace that would separate the pod's own variation from this job.
+   - **The GPU trace puts it on the host side.** A2's mean utilization was 52%, against A1's 68%, with 43% of its samples under 50% against 31%. Utilization × wall time is about 145 s in both. So the GPU did about the same work in each, and in A2 it waited longer between kernels.
+   - **Cause:** not identified. The run has no host-side trace, so it cannot say what the host was doing.
    - **What it means:** on this pod type, a single A/B pair cannot resolve a 1.2× gain. The Bar's two-repeat rule exists for this reason.
 3. **Four at once does not beat two pairs (R2).**
    - C took 443.150 s, against 489.377 s for its four passes run serially (1.104×) and 437.639 s for two B pairs back to back.
    - The width stays one, since the Bar keeps the passes serial on Inconclusive.
-4. **Two 2,048 passes at once are slower than queued (R3).**
-   - D's wall time was 6,268.912 s. Against P2b's single pass of 2,624 s, r = 2.389.
-   - That is 19% more than two passes back to back (5,248 s). So time-slicing between processes adds overhead, rather than filling idle time.
+4. **Two 2,048 passes at once gain nothing (R3).**
+   - D's wall time was 6,268.912 s. Against P2b's single pass of 2,624 s, r = 2.389, 19% more than twice that pass.
    - r ≥ 1.7, so this line's 2,048 passes stay one at a time.
-   - **Known bias, as the sheet names it:** 2,624 s comes from another pod. That pod also ran another driver (item 5), which this run cannot separate from the effect.
+   - **The size of any overhead is unresolved.** No single 2,048 pass ran on this pod. The sheet bounded the cross-pod bias at 7%, but this pod decoded about 1.37 times as fast as P2b's at 192 (A1's 643–708 tok/s against 466–517), on another driver (item 5). So whether time-slicing added overhead at 2,048 is not measured.
+   - **The step holds anyway.** r stays at 1.7 or above unless one pass alone here would take more than 3,688 s (6,268.912 / 1.7), about 40% slower than P2b's pod. At 192 this pod was faster.
 5. **Files from another pod differ, for the same binary, checkpoint and pin.** This is reported beside the gate, not part of it.
    - **What matched and what differed:**
      - Set beside P2b's sealed seed-1 files, A1's greedy-sample and recall files are byte-identical.
@@ -93,7 +105,7 @@ Decode tok/s for each p-long queries file (609 queries, 32 tokens each, 19,488 t
 - **What changed after launch.** Casey asked at about 14:45Z, while D ran: "Can we add cache?" P3's order was then changed by a lab decision, posted for Casey to reverse on #2028 (6634218223), after a fresh decision review read APPROVE WITH CHANGES:
   - an exact decode cache replaces P3(b) and carries P3(c)'s aim;
   - it takes P3's two remaining units.
-- **Why this run supports the change:** decode is 98% of a 2,048 pass here, and the 2,048 pass was 2,624 s of a P2b seed's 2,910 s of scoring.
+- **Why this run supports the change:** decode is 99% of a 2,048 pass here, and the 2,048 pass was 2,624 s of a P2b seed's 2,910 s of scoring.
 - **The next unit** is the cache, unit 1, gated byte for byte against today's full re-run.
 
 ## Outside the sheet: an MPS availability probe
@@ -116,7 +128,7 @@ No code. This unit adds:
 
 ## Measurements
 
-- **The pod:** `vast-59110873`, 1 × RTX 5090 at $0.975/h on Vast (Alberta). It was up from 13:34Z and deleted at 16:04:43Z, about 2.5 h and $2.45, inside the sheet's $1.8–2.7. D took 104 minutes, past the sheet's 45–90.
+- **The pod:** `vast-59110873`, 1 × RTX 5090 at $0.975/h on Vast (Alberta, `local/claude/p3/up-277.log`). It booted at 13:34Z and was deleted at about 16:05Z, after the MPS probe (whose log ends at 16:04Z); `uor-pod down`'s output was not saved to a file. That is about 2.5 h and $2.45, inside the sheet's $1.8–2.7. D took 104 minutes, past the sheet's 45–90.
 - **The job:** `local/claude/p3/job-p3a.sh`, SHA-256 `02a52e0fda6089c026cfc100bfdea5bddff177cf09a456eaf0a3d92d41efbf93`, the same on the laptop and the pod.
   - It started at 13:48:54Z and ended `EXIT 0 all steps passed` at 16:01:53Z.
   - The build step took about 40 s.
@@ -133,6 +145,6 @@ No code. This unit adds:
 - **The store:** `results/claude/one-model-end-to-end-side-by-side-2026-11-04/run/`, 460 files (the inputs left out).
   - Its `SHA256SUMS.files` (456 lines) has SHA-256 `dd13fa1d835a6b87d7a2fae4396767cb3a78143a6675eb68a84fa7aced9117b7`.
   - It was read back to the laptop, and 456 of 456 files checked OK. The pod was deleted only after that.
-- **One watcher event.** At 15:04:54Z the laptop watcher's 45-minute no-change rule stopped the watcher during D. D writes no file until a 2,048 pass ends, and the GPU read 99%.
+- **One watcher event.** At 15:04:54Z the laptop watcher's 45-minute no-change rule stopped the watcher during D (`local/claude/p3/watch-277.log`, lines 81–82). D writes no file until a 2,048 pass ends, and the GPU read 99%.
   - The watcher was re-armed with a 120-minute rule.
   - The job and the pod were not touched.
