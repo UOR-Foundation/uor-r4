@@ -237,3 +237,12 @@ Run 1 ran at `04b547c70` on `vast-59164039`. It passed I-0, then stopped at I-0n
 - **The cause:** every decode forward clears the row cut after it. So a cut left on the thread meets only the first exact-length group's first step. That group is the 3-position prompt, and `prefill_refusal` refuses its prefill as a short prompt (`time` below `CONVOLUTION_WIDTH`, 4) before it asks about the cut. The test could not fail.
 - **The repair:** test only, at `64475a830`. The row-cut check now decodes the prompts from length 5 up. On the same pod it passes with the fix in place, and fails with the fix set aside on "a row cut left on the thread changed the forwards" (prefills 2, the first refusal being the row cut). No scored path changes.
 - **Run 2:** the sheet's one re-run, at `64475a830`, in new folders. Run 1's 26 files are sealed in the store under `run1/`.
+
+## Outcome (run 2, at `64475a830`)
+
+Every instrument check passes: I-0, I-0n and I-2 on the pod, I-1 (the four p-long recall files equal P2b's sealed ones), and I-3 to I-7 on the laptop.
+- **The Bar reads Mechanism at both seeds.** s_tt is 0 of 283 at each, under 10, and s_dd is 0 of 306.
+- **R2:** q-td (0 of 287) and q-dt (0 of 270) read 0 too, so both gaps fail.
+- **What it closes:** P2b's read configuration at this recipe, never the read.
+
+R2 to R5 and the bins are in [the REPORT](../../loop/tasks/one-model-end-to-end/claude-281/REPORT.md).
