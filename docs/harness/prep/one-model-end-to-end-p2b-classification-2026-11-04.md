@@ -1,0 +1,150 @@
+# Prep sheet: P2b's Negative, instrument or mechanism? Trained phrasing against held-out phrasing (one-model-end-to-end, claude-281, 4 Nov 2026)
+
+Lab: claude. Item: one-model-end-to-end (#3407). Order: [claude-281](../../loop/tasks/one-model-end-to-end/claude-281/ORDER.md), THE ORDER (#2028 6634218223) step 4.
+
+TEST FITNESS: PENDING - a fresh non-author FIT of this sheet is owed before any pod.
+
+**Why.** [P2b](../../loop/tasks/one-model-end-to-end/claude-276/REPORT.md) read Negative. (L), trained at 2,048, stated a held-out note's value in 0 (seed 1) and 1 (seed 2) of 603 paired p-long queries. That closes the configuration only (§4.1). Before a next configuration is chosen, §4.2 asks for a classification, instrument or mechanism. p-long changes two things at once:
+- **The phrasing:** p-long is `cell=dev,dev`. Its note and query user turns use only the `development` templates (`milestone_world_v2.rs:986-1015`), which TRAIN never contains. The reply templates are shared.
+- **The values:** p-long's values are DEV values too.
+- **No positive control was scored.** The instrument writes `cell=train,train`, drawn as TRAIN was, but none was drawn for P2b.
+- **The commonest reply** in P2b's seed-1 queries file is the note acknowledgement (82 of 609), as if the query were read as a note.
+
+So the Negative is either "the trained model cannot recall a note across turns" (mechanism: the read, or the recipe), or "it never learned to recognize a question it was not trained on" (a phrasing generalization, which is data and curriculum, not the read).
+
+## Question
+
+1. In the trained phrasings (`train,train`), does (L) at 2,048 state the note's value where it does not in the held-out ones (`dev,dev`)?
+2. Which change carries it: the phrasing (`dev,train` against `train,train`) or the value (`train,dev` against `train,train`)?
+3. When the reply fails, what does it say: a reply template with the wrong value, or a note acknowledgement?
+
+## Base artifact
+
+- **The pin:** this unit's head, which carries claude-279's decode cache, its four refusals (Code, below) and the census's `found_queries`. `--score-rows` steps from the exact decode cache where the window fits. claude-279 found the files byte-identical with the cache on and off.
+- **The checkpoints:** P2b's sealed (L) at seeds 1 and 2, `results/claude/one-model-end-to-end-long-context-2026-11-04/s{1,2}/L/models/step-008192/`, checked against each seed's `SHA256SUMS.files` before scoring.
+- **No training.** The object is the trained float model's recall under the float scorer. No served, integer, step-4 or milestone claim rests on this run.
+
+## Data split
+
+Three new panels, written on the laptop with the pinned tokenizer `d36d3e87…`. Each is `heldout-panel out=NEW tokenizer=TOKENIZER cell=CELL conversations=160 protocol=2 chain=2048 seed=SEED`, a data tool, not an evaluation. Each gives 0 metered mismatches, and `check-queries` reports 0 failed.
+
+| panel | cell | seed | changes against TRAIN | tokens | queries | words / numbers |
+|---|---|---|---|---|---|---|
+| q-tt | `train,train` | 2761 | none (the positive control) | 314,924 | 617 | 298 / 319 |
+| q-td | `train,dev` | 2762 | values only | 314,180 | 610 | 301 / 309 |
+| q-dt | `dev,train` | 2763 | phrasings only | 312,879 | 590 | 286 / 304 |
+| p-long (P2b's, sealed) | `dev,dev` | 2751 | both | 313,980 | 609 | 319 / 290 |
+
+- **Distances** (under 192 / 192–511 / 512–1,023 / at least 1,024; at most):
+  - q-tt: 31 / 70 / 143 / 373, at most 2,002;
+  - q-td: 23 / 88 / 144 / 355, at most 2,002;
+  - q-dt: 35 / 79 / 138 / 338, at most 1,999;
+  - p-long: 23 / 86 / 138 / 362, at most 1,994.
+
+  Replies are 6–21 tokens.
+- **SHA-256s** (tokens, mask, `queries.json`, `user_turns.json`):
+  - q-tt: `84f1eb1d01a8de327153635e4367a69148e89b6e9ca55cc6c1dad6fc3197fe63`, `9359992750d3866d9b7ff30da52920f12b3648e0b8a0ddf5436b912333616978`, `e40f1cfe5e45553270547420bbe556347ff8f8ea6d13a5418fbc7dd598c21b36`, `c86cfca51f5ccc62ee5a02c90fc10fa66beb947b19669249282a4744435d4200`;
+  - q-td: `cbdfa95e132fe79e7a06831fcccd2fc7b5bab9cfac61ae215598742b70d89139`, `4e4f46c07052bf3637f97ac306701067bb53a5622a0bebcd860aa9b9d0a253b2`, `ac88ec02e0b825200ed52bee8f406782ac118c82f2094568f06672b252350f74`, `50adeaa4884d07f776a818c1d93c33a731beb50867e4f489263a04197d58a232`;
+  - q-dt: `80368dad3b3e7d8e2a3852ea33f6dc38420c4c0ef2008ba0aca71640bdadb3af`, `1172b6a5607d9f3a033135ed1ce6533b22b545dc1f9784d6e78261506f776fa9`, `7f7938f0258c85725752c22159e593685dbecbb148731f1793e0aec13a46c8a7`, `21b6d5bef2753d57c0631a1b265d89c008da4c8559c8a2c239eda93103fdb95b`;
+  - p-long: [claude-276's sheet](one-model-end-to-end-long-context-2026-11-04.md#data-split), unchanged.
+- **The census** is `train-in-space --census 1` against P2b's long TRAIN, `--train-split` with its pinned SHA-256s `61019954…` and `29b34d2c…`. It ran on the laptop at this unit's code. It counts each panel's answers found as words of TRAIN's replies, and lists the queries (`found_queries`):
+
+  | panel | words in TRAIN | numbers in TRAIN | queries set aside |
+  |---|---|---|---|
+  | p-long | 0 of 319 | 6 of 290 | 6: queries 0, 42, 93, 401, 471, 487 (P2b's six) |
+  | q-tt | 3 of 298 | 318 of 319 | 321 |
+  | q-td | 0 of 301 | 10 of 309 | 10 |
+  | q-dt | 2 of 286 | 303 of 304 | 305 |
+
+  A trained value that is a number comes from TRAIN's own pool, so in q-tt and q-dt a reply can state a number without reading its note. The invented words are new even in the trained-value cell. So **the deciding readings are words against words, census-clean:** 295 in q-tt, 301 in q-td, 284 in q-dt and 319 in p-long.
+- **Overlap:** TRAIN was drawn with `exclude=` p-long's user turns. The new panels are new draws (new seeds). A `train` user turn can equal a TRAIN user turn word for word, which is what a positive control drawn as TRAIN was looks like. Keys and values are drawn fresh per conversation.
+- **Stored,** with a `SHA256SUMS` read back: `results/claude/one-model-end-to-end-p2b-classification-2026-11-04/inputs/{q-tt,q-td,q-dt,census}/`. This is this unit's own root, never P2b's sealed one (L-002).
+
+No model output was read to set any panel, query, reading or bar.
+
+## Arms
+
+Each pass is P2b's scoring command with four panels:
+
+`--data-root DATA --score-rows CKPT --out DIR --samples 16 --reply-tokens 32 --retain-rates 1 --seed S --context 2048 --panel NAME=DIR --panel-queries NAME=DIR/queries.json`
+
+The four panels are p-long, q-tt, q-td and q-dt. There is one pass for each seed's (L), with `--seed` the seed's own as in P2b, run serially on GPU 0. Each pass writes memory on and out.
+
+## Readings
+
+Every count is read from the panel's `recall-NAME-memory.json` (memory on), per seed, by this fixed `jq` over `outcomes[]`. A query counts when its outcome is `stated`, its answer in the panel's `queries.json` is a word (not `^[0-9]+$`), and its index is not in the census's `found_queries` for that panel:
+
+```
+jq --slurpfile q PANEL/queries.json --slurpfile c census.json --arg p NAME '
+  ($c[0].answers[] | select(.panel == $p) | .found_queries) as $E
+  | [$q[0].queries[] | .answer | test("^[0-9]+$") | not] as $W
+  | [.outcomes[] | select(.stated and $W[.query] and (.query as $i | ($E | index($i)) == null))]
+  | length' recall-NAME-memory.json
+```
+
+The same expression with `select(.decoded and …)` in place of `.stated` gives each panel's n. Tested on P2b's sealed `score-L-2048/recall-p-long-memory.json` with p-long's census: s_dd = 0 at seed 1 and 0 at seed 2, each of n = 319. Over every query, the seeds' stated counts are 0 and 1, so seed 2's one was a number.
+
+- **R1 (deciding): trained phrasings against held-out ones, words.** s_tt (q-tt) against s_dd (p-long). The panels are drawn apart, so the test is unpaired. R1 passes where s_tt ≥ 10 and s_tt − s_dd > 2√(s_tt + s_dd). It is reported with each panel's n.
+- **R2: which change carries it, words.** s_dt against s_tt (the phrasing alone) and s_td against s_tt (the value alone), under R1's rule. Each is reported, and read only where R1 passes. For words the value contrast is weak by construction: the census finds 3 of 298 q-tt words and 0 of 301 q-td words in TRAIN, so both cells' words are mostly new to the model.
+- **R2n: numbers, reported only.** Each panel's stated count over its number answers, census-clean and in all, set beside its census count. In q-tt and q-dt nearly every number is TRAIN's, so their number counts are never read as recall.
+- **R3: the reply form.** In each panel's `samples-NAME-queries-memory.json`, the text of each reply before its first `<|eos|>`, classed by this fixed `jq` test:
+  - **ack:** `test("^ Okay, I.ll remember")`;
+  - **template opening:** `test("^ (It|That).s ")` or `test("^ [A-Z][a-z]+ is ")`;
+  - **template shape:** the same openings ending `[^ ]+[.]$`;
+  - **other:** the rest.
+
+  Tested on P2b's sealed s1 L2048 queries file: 82 ack, 135 open "It's/That's", 1 opens "{k} is", 391 other. Reported only.
+- **R4: the memory (L-010).** Each panel's words, memory on against out, paired by query (b, c as P2b's R2). Reported only.
+- **R5: tok/s first.** Decode tok/s for each queries file at 2,048 with the cache, from the `decode` pair `--score-rows` prints, set beside P2b's 15.2.
+- **The distance bins** (under 192, 192–511, at least 512) for R1, R2 and R4.
+
+## Bar
+
+Read per seed, then across both:
+- **Phrasing (the read works in trained phrasings):** R1 passes at both seeds. P2b's Negative is then a generalization fault of the data, not of the read. The next unit on this line changes the data (held-out templates mixed into TRAIN, or the real-text corpus, THE ORDER step 6), and the read and recipe stay as they are. R2 says whether the phrasing carries it.
+- **Mechanism (it does not recall even as trained):** R1 fails at both seeds with s_tt < 10 at each. The trained model then does not recall a note across turns even in its trained phrasings, on panels drawn as TRAIN was. That closes P2b's configuration of the read (copy key 1, the earliest 16 matches averaged, `flock_read_hamming.rs`) at this recipe; it never closes the read (§4.2). The next unit is a read configuration the scout traced: copy key 2, or the latest match. claude-267's oracle found key 1 right at 3,859 of 8,243 copyable DEV positions with the latest match.
+- **Inconclusive:** anything else, the seeds disagreeing included. Nothing is named or closed.
+
+Whatever the outcome, R2 to R5 are reported with their numbers. A failed instrument check leaves every reading unread (§4.1).
+
+## Instrument checks
+
+- **I-0:** the float crate's CUDA library suite at the pin passes, `--no-fail-fast`, with claude-275's query tests and claude-279's decode-cache tests named. That includes `the_decode_cache_decodes_the_same_replies_through_a_window_slide`, which carries this unit's tests for the row cut and `first_refusal`. **I-0n:** that test also fails with the row-cut fix set aside, by a reverse patch of the fix's own lines, and passes again once it is restored.
+- **I-1 (the scorer did not move):** the re-scored `recall-p-long-{memory,no-memory}.json` equal P2b's sealed ones byte for byte, seed by seed. Only the recall grades are compared across pods: claude-279 found that 19 of 609 query replies and 0.13–0.28% of top-1 picks differ between this lab's 5090 pods, while the recall files stayed identical. Every cell-against-cell reading is scored on one pod, in one pass, so no reading crosses pods.
+- **I-2 (the panels):** `check-queries` passes for each panel on the pod, and every SHA-256 in the Data split equals its file's.
+- **I-3 (the grade can see a pass):** in every `recall-*.json`, `total.reference_states` equals `total.decoded`.
+- **I-4 (the cache ran):** each pass's `decode_forwards` has `steps` > 0. Its `first_refusal` is reported.
+- **I-5 (the pairing):** each panel's memory-on and memory-out recall files list the same queries.
+
+## Steps
+
+1. On the pod, fetch the pin, build the float crate's `train-in-space` with `--features cuda`, record the binary's SHA-256, and run I-0, then I-0n (set aside, run, restore, rebuild).
+2. Fetch the inputs: the three panels, p-long, the census, both seeds' checkpoints and the pinned driver data. Check every `SHA256SUMS`, and run I-2.
+3. Score seed 1's (L), then seed 2's, at 2,048 over the four panels (Arms).
+4. Seal every output with `SHA256SUMS` under `results/claude/one-model-end-to-end-p2b-classification-2026-11-04/`, read it back, and only then take the pod down.
+5. On the laptop: check I-1 and I-3 to I-5, compute R1 to R5 and the bins, and apply the Bar.
+
+## Minimum test power
+
+R1's rule needs s_tt ≥ 10. On about 295 census-clean word queries, that is a stated rate of about 3.4%. P2b's s_dd on its 319 clean words was 0 at both seeds, so a positive control that recalls 4% of words passes, and one that recalls under 3% does not.
+
+## Code in this unit (claude-279's review SHOULDs, and the census)
+
+Each refusal returns the group to the whole-window re-run, and the census field is additive. None changes a scored token: I-1 checks that the p-long recall files still equal P2b's. Each fix ships with a test that fails with the fix set aside.
+- `step_instrument` (`flock_read_hamming.rs`) refuses the Hamming read's tie rule being off. CPU test; set aside, it fails.
+- `step_refusal` (`geometric_stack_native.rs`) refuses reads set since the prefill, by an epoch the prefill records, not only by site count. Reads set and cleared again passed the count. CPU test; set aside, it fails.
+- The decode switch (`in_space_long.rs`) clears a row cut left on the thread before it asks the cache. CUDA test (I-0, I-0n).
+- `DecodeForwards` names the first refusal's kind. CUDA test (I-0).
+- The census lists `found_queries`. CPU tests; set aside, both fail.
+
+## Cost
+
+- **The laptop:** three panels and the census, done (about a minute each).
+- **The pod:** one RTX 5090.
+  - Two passes at 2,048 over four queries panels each, with the cache. The scale is claude-279's on-L2048 pass, 441 s, with the queries file about 98% of it. So a pass takes about 4 × 441 s ≈ 30 min, and both seeds about 1 h.
+  - Building, I-0 and I-0n add about 20 min.
+  - About 1.4 h at up to $1/h is about $1.40, inside a $3 bound.
+
+## Stop rule
+
+The run stops when both passes are scored, the files sealed and read back, and the pod is down. A failed instrument check is repaired and re-run once inside the bound. Nothing is trained.
