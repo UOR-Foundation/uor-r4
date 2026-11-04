@@ -150,11 +150,10 @@ free_kib() {
 }
 test "$(free_kib "$SOURCE")" -ge "$MIN_BUILD_FREE_KIB"
 test "$(free_kib "$SHARED")" -ge "$MIN_BUILD_FREE_KIB"
-test "$("$HARNESS" budget show --json | jq -r '.model_time_ledger.present')" = false
-test "$("$HARNESS" budget show --json | jq -r '.resource_ledger.chain.head')" \
-  = "cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json"
-test "$("$HARNESS" budget show --json | jq -r '.resource_ledger.chain.cumulative_projected_seconds')" \
-  = 35953
+"$HARNESS" budget show --json | jq -e \
+  '.model_time_ledger.present == false
+   and .resource_ledger.chain.head == "cpu-training-pilot-point-prototypes-2026-11-04/resource-ledger.json"
+   and .resource_ledger.chain.cumulative_projected_seconds == 35953' >/dev/null
 test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN rustc --version)" = \
   "rustc 1.97.1 (8bab26f4f 2026-07-14)"
 test "$(env -u RUSTC -u RUSTUP_TOOLCHAIN cargo --version)" = \
