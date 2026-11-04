@@ -38,7 +38,7 @@ function cssColorToHex(color: string): string {
     const channels = color.match(/[\d.]+/g);
     if (!channels) throw new Error(`Unrecognized CSS color: ${color}`);
     channels.slice(0, 3).map(Number);
-    return '#' + channels.map((channel) => Math.round(channel * scale).toString(16).padStart(2, '0')).join('');
+    return '#' + channels.map((channel) => Math.round(Number(channel) * scale).toString(16).padStart(2, '0')).join('');
 }
 
 function effectiveBackground(element: HTMLElement): string {
