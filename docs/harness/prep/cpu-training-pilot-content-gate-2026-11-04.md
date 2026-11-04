@@ -153,11 +153,11 @@ After FIT and a fresh GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-content-stop-gate
 SHARED=/home/callard/projects/codex-playground/uor-r4
-PIPELINE=$SHARED/local/deepseek/content-stop-gate/2026-11-04-attempt-1
-BUILD=$SOURCE/target/deepseek/content-stop-gate-139
+PIPELINE=$SHARED/local/deepseek/content-stop-gate/2026-11-04-attempt-2
+BUILD=$SOURCE/target/deepseek/content-stop-gate-139-attempt-2
 DEV=$SHARED/local/deepseek/public-m1-parity
 DUAL=$SHARED/local/deepseek/public-fbs-dual
-IMPL_PIN=18b0bc8c07720160913435f338ae9f43c1b0194f
+IMPL_PIN=249b296072c2d716019af487dbb0afaa38281e55
 MIN_FREE_KIB=31588352
 free_kib() { df -Pk "$1" | awk 'NR == 2 { print $4 }'; }
 test "$(free_kib "$SOURCE")" -ge "$MIN_FREE_KIB"
