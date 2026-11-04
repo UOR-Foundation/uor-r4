@@ -9,6 +9,8 @@ Replay deepseek-109's exact expanded memory-weight training configuration and
 extend the evaluation through complete greedy replies. Compare the frozen,
 trained, equal-accepted-move random and memory-off artifacts, including the
 trained artifact with memory disabled, on the same 114 evaluation examples.
+Also compare direct exact-memory target arbitration against a matched
+shuffled-target artifact using the same keys and trained weights.
 
 This unit is not another trainer or a width/step increase. It determines
 whether the movement weights that improved teacher-forced top-1 and distance
@@ -34,6 +36,7 @@ No float-training, `train-in-space`, or Claude #3629 file is changed.
 - 32 Rayon workers;
 - frozen, trained, equal-accepted-move random, memory-off and
   trained-memory-off arms;
+- direct-target frozen, trained and shuffled-target arbitration arms;
 - 16 generated reply tokens, BOS/context/cap stopping through `reply_stop`;
 - seed 1 followed by seed 2 under a 30-minute local CPU stop.
 
@@ -64,6 +67,10 @@ On each seed, trained memory carries only if it produces more
 exact-reference complete replies than frozen, equal-move random and memory-off,
 and does not reduce BOS completion. A termination-only improvement is reported
 separately and does not by itself pass the reply-content bar.
+
+Direct target arbitration carries only if `target_trained` beats both the
+trained query-movement arm and the shuffled-target artifact on exact-reference
+complete replies on both seeds, without lowering BOS completion.
 
 The 114 repeated-key prompts are a bounded readiness screen. They do not
 support a three-sigma, unseen-phrasing or useful-chat claim.

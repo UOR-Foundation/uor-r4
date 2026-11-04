@@ -36,7 +36,10 @@ Added a bounded complete-reply evaluator to `uor-r4-cpu-train`:
   are used.
 
 The arms are frozen memory, trained memory, equal-accepted-move random,
-memory-off and trained-memory-off.
+memory-off and trained-memory-off. Three direct-target arms use the stored
+memory target at an exact key hit and the exact CPU writer only on a miss:
+frozen, trained-fallback and trained-fallback with a deterministic
+shuffled-target control.
 
 ## Measurements
 
@@ -63,9 +66,10 @@ The pinned census is [reference-census.json](evidence/reference-census.json).
 
 ## Checks run at the head
 
-- Six focused reply-evaluator tests passed, including deterministic evaluation
-  of an exported synthetic CPU artifact.
-- Full CPU release suite: 170 library tests passed, 4 release benchmarks
+- Seven focused reply-evaluator tests passed, including deterministic
+  query-movement and direct-target replies over exported synthetic CPU
+  artifacts.
+- Full CPU release suite: 171 library tests passed, 4 release benchmarks
   ignored; every binary suite passed.
 - Strict all-target CPU Clippy with `-D warnings`: passed.
 - `cargo fmt -p uor-r4-cpu-train -- --check`: passed.

@@ -1,4 +1,4 @@
-# CPU memory-weight complete replies
+# CPU memory-weight and target-arbitration replies
 
 **Status:** PENDING NON-AUTHOR FIT
 
@@ -7,11 +7,13 @@ TEST FITNESS: PENDING
 ## Question
 
 Do the memory movement weights trained by deepseek-109 change complete greedy
-reply content or termination, or is their measured gain confined to
-teacher-forced next-token decisions?
+reply content or termination? Does direct use of the stored exact-memory target
+outperform query-only movement with the same table and a shuffled-target
+control?
 
-This is a replay of the exact deepseek-109 training configuration. It is not a
-new credit rule and does not extend the closed coordinate-sweep search.
+This is a replay of the exact deepseek-109 training configuration plus one
+distinct direct-memory arbitration path. It does not extend the closed
+coordinate-sweep search.
 
 ## Compute class
 
@@ -66,14 +68,23 @@ These are table-content ceilings. They do not replace the served-model bar.
 
 ## Arms
 
-For each model seed, evaluate five matched artifacts on the 114 evaluation
-samples:
+For each model seed, evaluate five query-movement artifacts on the 114
+evaluation samples:
 
 1. frozen corpus-derived memory with zero movement weights;
 2. the trained artifact;
 3. the equal-accepted-move random control;
 4. the source artifact with memory off;
 5. the trained artifact with memory off.
+
+Also evaluate three target-arbitration arms. At an exact opening/reply key hit,
+the stored target is used directly; on a miss, the exact CPU forward supplies
+the fallback token:
+
+1. `target_frozen`: frozen table and zero movement weights;
+2. `target_trained`: the trained table and trained fallback weights;
+3. `target_shuffled`: the same keys and trained weights with target values
+   deterministically permuted.
 
 ## Steps
 
@@ -109,6 +120,8 @@ env RAYON_NUM_THREADS=32 target/release/cpu-memory-panel-driver \
 - Exact-reference comparisons report both the full 114-reply panel and the 104
   references reachable under the fixed cap/context rule.
 - The seed-1 repeat reproduces every complete-reply counter and digest.
+- The shuffled control keeps every key and weight while changing at least one
+  stored target value.
 
 ## Candidate bar
 
@@ -120,6 +133,11 @@ On each model seed, trained memory carries into the reply-content path only if:
 
 A BOS or stopping improvement with no exact-reference gain is reported as a
 termination-only result and does not pass the content bar.
+
+The direct-memory candidate can advance to a larger run only if, on both model
+seeds, `target_trained` produces more exact-reference complete replies than
+`target_shuffled` and the trained query-movement arm, and its BOS completion is
+not lower than `target_shuffled`.
 
 Two seeds and 114 repeated-key prompts make this a bounded readiness screen.
 No three-sigma, fresh-phrasing, semantic-correctness or useful-chat claim is

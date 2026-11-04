@@ -905,12 +905,12 @@ fn validate_memory_sample(sample: &MemoryWeightSample) -> Result<()> {
     Ok(())
 }
 
-fn memory_opening_key(sample: &MemoryWeightSample, k: usize) -> Result<Vec<u32>> {
+pub(crate) fn memory_opening_key(sample: &MemoryWeightSample, k: usize) -> Result<Vec<u32>> {
     validate_memory_sample(sample)?;
     Ok(sample.prompt.iter().copied().take(k).collect())
 }
 
-fn memory_reply_key(
+pub(crate) fn memory_reply_key(
     sample: &MemoryWeightSample,
     offset: usize,
     reply_turn: usize,

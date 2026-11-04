@@ -4,11 +4,14 @@ use std::time::Instant;
 
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, evaluate_replies, memory_key_coverage,
-    replace_memory_weight_table, validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus,
-    CpuMemoryWeightTrainer, MemoryWeightConfig, MemoryWeightSample, MemoryWeightTable,
+    evaluate_memory_target_replies, evaluate_memory_weight_samples, evaluate_replies,
+    memory_key_coverage, replace_memory_weight_table, validate_corpus_manifest,
+    CpuConversationSample, CpuMaskedCorpus, CpuMemoryWeightTrainer, MemoryWeightConfig,
+    MemoryWeightSample, MemoryWeightTable,
 };
-use uor_r4_integer::stack::{read_memory_uorlut01, IntegerStackModel, POINT_KEY_BOS};
+use uor_r4_integer::stack::{
+    read_memory_uorlut01, FbsMemorySnapshot, IntegerStackModel, POINT_KEY_BOS,
+};
 
 #[derive(Clone)]
 struct Config {
@@ -310,6 +313,32 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?;
     std::fs::write(config.out.join("random.uorlut"), &random_artifact)
         .map_err(|error| error.to_string())?;
+    let shuffled_memory =
+        shuffled_memory_target_control(&memory, config.seed).map_err(|error| error.to_string())?;
+    let mut shuffled_artifact =
+        add_turn_memory_uorlut01(&artifact, &shuffled_memory).map_err(|error| error.to_string())?;
+    let trained_memory = read_memory_uorlut01(&trained_artifact)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "trained artifact lost turn memory".to_owned())?;
+    shuffled_artifact = replace_memory_weight_table(
+        &shuffled_artifact,
+        MemoryWeightTable::Opening,
+        &trained_memory.opening.weight,
+    )
+    .map_err(|error| error.to_string())?;
+    if let Some(reply) = &trained_memory.reply {
+        shuffled_artifact = replace_memory_weight_table(
+            &shuffled_artifact,
+            MemoryWeightTable::Reply,
+            &reply.weight,
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    std::fs::write(
+        config.out.join("target-shuffled.uorlut"),
+        &shuffled_artifact,
+    )
+    .map_err(|error| error.to_string())?;
     let trained = evaluate_memory_weight_samples(&trained_artifact, &evaluation_samples, true)
         .map_err(|error| error.to_string())?;
     let random = evaluate_memory_weight_samples(&random_artifact, &evaluation_samples, true)
@@ -339,7 +368,7 @@ fn run() -> Result<serde_json::Value, String> {
     let complete_replies = if config.reply_cap == 0 {
         BTreeMap::new()
     } else {
-        [
+        let mut complete_replies = [
             ("frozen", memory_artifact.as_slice()),
             ("trained", trained_artifact.as_slice()),
             ("random", random_artifact.as_slice()),
@@ -349,10 +378,22 @@ fn run() -> Result<serde_json::Value, String> {
         .into_iter()
         .map(|(name, bytes)| {
             evaluate_replies(bytes, &evaluation_samples, config.reply_cap)
-                .map(|reading| (name, reading))
                 .map_err(|error| error.to_string())
+                .map(|reading| (name, reading))
         })
-        .collect::<Result<BTreeMap<_, _>, _>>()?
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+        for (name, bytes) in [
+            ("target_frozen", memory_artifact.as_slice()),
+            ("target_trained", trained_artifact.as_slice()),
+            ("target_shuffled", shuffled_artifact.as_slice()),
+        ] {
+            complete_replies.insert(
+                name,
+                evaluate_memory_target_replies(bytes, &evaluation_samples, config.reply_cap)
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+        complete_replies
     };
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-memory-panel-run/1",
@@ -555,6 +596,49 @@ fn random_control(
     Ok(out)
 }
 
+fn shuffled_memory_target_control(
+    memory: &FbsMemorySnapshot,
+    seed: u64,
+) -> Result<FbsMemorySnapshot, String> {
+    let mut shuffled = memory.clone();
+    let mut opening = shuffled
+        .opening
+        .iter()
+        .map(|entry| entry.value)
+        .collect::<Vec<_>>();
+    shuffle_values(&mut opening, seed ^ 0xA5A5_5A5A_D3C1_B79F);
+    for (entry, value) in shuffled.opening.iter_mut().zip(opening) {
+        entry.value = value;
+    }
+    if let Some(reply) = &mut shuffled.reply {
+        let mut values = reply
+            .entries
+            .iter()
+            .map(|entry| entry.value)
+            .collect::<Vec<_>>();
+        shuffle_values(&mut values, seed ^ 0x6C8E_9CF5_4E72_1A37);
+        for (entry, value) in reply.entries.iter_mut().zip(values) {
+            entry.value = value;
+        }
+    }
+    if shuffled == *memory {
+        return Err("shuffled memory-target control is identical to the source".to_owned());
+    }
+    Ok(shuffled)
+}
+
+fn shuffle_values<T>(values: &mut [T], seed: u64) {
+    let mut state = seed | 1;
+    for index in (1..values.len()).rev() {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        let draw = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
+        let swap = usize::try_from(draw % (index as u64 + 1)).expect("bounded shuffle index");
+        values.swap(index, swap);
+    }
+}
+
 fn peak_rss_kib() -> u64 {
     std::fs::read_to_string("/proc/self/status")
         .ok()
@@ -571,6 +655,7 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::{FbsMemoryEntry, FbsReplyTable};
 
     #[test]
     fn reference_shape_normalizes_bos_and_counts_reachability() {
@@ -592,5 +677,81 @@ mod tests {
         assert_eq!(shape["within_reply_cap_and_context"], 1);
         assert_eq!(shape["length_histogram"]["3"], 1);
         assert_eq!(shape["length_histogram"]["5"], 1);
+    }
+
+    #[test]
+    fn shuffled_target_control_changes_values_but_not_keys() {
+        let memory = FbsMemorySnapshot {
+            k: 3,
+            key_window: 16,
+            opening: vec![
+                FbsMemoryEntry {
+                    key: vec![10, 11, 12],
+                    value: 1,
+                },
+                FbsMemoryEntry {
+                    key: vec![10, 11, 13],
+                    value: 2,
+                },
+                FbsMemoryEntry {
+                    key: vec![10, 11, 14],
+                    value: 3,
+                },
+                FbsMemoryEntry {
+                    key: vec![10, 11, 15],
+                    value: 4,
+                },
+            ],
+            opening_weight: vec![0.0; 4],
+            reply: Some(FbsReplyTable {
+                turn: 3,
+                entries: vec![
+                    FbsMemoryEntry {
+                        key: vec![10, 11, 12, u32::MAX, 1, u32::MAX, 20],
+                        value: 5,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![10, 11, 12, u32::MAX, 2, u32::MAX, 21],
+                        value: 6,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![10, 11, 12, u32::MAX, 3, u32::MAX, 22],
+                        value: 7,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![10, 11, 12, u32::MAX, 4, u32::MAX, 23],
+                        value: 8,
+                    },
+                ],
+                weight: vec![0.0; 4],
+            }),
+        };
+        let shuffled = shuffled_memory_target_control(&memory, 17).unwrap();
+        let keys = |table: &FbsMemorySnapshot| {
+            table
+                .opening
+                .iter()
+                .map(|entry| entry.key.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(keys(&shuffled), keys(&memory));
+        let mut before = memory
+            .opening
+            .iter()
+            .map(|entry| entry.value)
+            .collect::<Vec<_>>();
+        let mut after = shuffled
+            .opening
+            .iter()
+            .map(|entry| entry.value)
+            .collect::<Vec<_>>();
+        before.sort_unstable();
+        after.sort_unstable();
+        assert_eq!(before, after);
+        assert_ne!(shuffled.opening, memory.opening);
+        assert_ne!(
+            shuffled.reply.as_ref().unwrap().entries,
+            memory.reply.as_ref().unwrap().entries
+        );
     }
 }

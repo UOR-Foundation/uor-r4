@@ -4,11 +4,12 @@
 //! repetition diagnostics. Exact-reference agreement is not a semantic or
 //! useful-chat measurement.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rayon::prelude::*;
-use uor_r4_integer::stack::{reply_stop, ReplyEnd, POINT_KEY_BOS};
+use uor_r4_integer::stack::{read_memory_uorlut01, reply_stop, ReplyEnd, POINT_KEY_BOS};
 
+use crate::memory_train::memory_reply_key;
 use crate::{invalid, CpuFbsForward, CpuFbsHead, CpuTrainError, MemoryWeightSample};
 
 type Result<T> = std::result::Result<T, CpuTrainError>;
@@ -92,6 +93,34 @@ pub fn evaluate_replies(
     samples: &[MemoryWeightSample],
     cap: usize,
 ) -> Result<TimedReplyReading> {
+    evaluate_generated(artifact, samples, cap, |prompt, cap| {
+        generate_reply(artifact, prompt, cap)
+    })
+}
+
+/// Generate complete replies with a direct exact-memory target override.
+///
+/// A hit on the opening key names the first reply token. After each generated
+/// token is fed through the exact CPU forward, a hit on the same reply key the
+/// served memory uses replaces the writer's fallback token with the stored
+/// target. Misses retain the forward token. This experimental arbitration does
+/// not apply the memory-weight query move.
+pub fn evaluate_memory_target_replies(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+) -> Result<TimedReplyReading> {
+    evaluate_generated(artifact, samples, cap, |prompt, cap| {
+        generate_memory_target_reply(artifact, prompt, cap)
+    })
+}
+
+fn evaluate_generated(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    generate: impl Fn(&[u32], usize) -> Result<GeneratedReply> + Sync,
+) -> Result<TimedReplyReading> {
     if samples.is_empty() {
         return Err(invalid(
             "complete-reply evaluation needs at least one sample",
@@ -104,7 +133,7 @@ pub fn evaluate_replies(
     let rows = samples
         .par_iter()
         .map(|sample| {
-            let generated = generate_reply(artifact, &sample.prompt, cap)?;
+            let generated = generate(&sample.prompt, cap)?;
             let reference = normalized_reference(&sample.reply).to_vec();
             let reachable = reference_reachable(sample.prompt.len(), reference.len(), cap, context);
             Ok((generated, reference, reachable))
@@ -120,6 +149,89 @@ pub fn evaluate_replies(
         generated_tokens_per_second: reading.generated_tokens as f64
             / elapsed.as_secs_f64().max(1e-12),
     })
+}
+
+fn generate_memory_target_reply(
+    artifact: &[u8],
+    prompt: &[u32],
+    cap: usize,
+) -> Result<GeneratedReply> {
+    let memory = read_memory_uorlut01(artifact)
+        .map_err(|error| invalid(format!("complete-reply memory: {error}")))?
+        .ok_or_else(|| invalid("memory-target replies require turn memory"))?;
+    let k = memory.record.k;
+    let key_window = memory.record.key_window;
+    let reply_turn = memory.record.reply_turn;
+    let opening = memory
+        .opening
+        .keys
+        .into_iter()
+        .zip(memory.opening.values)
+        .collect::<BTreeMap<_, _>>();
+    let reply = memory.reply.map(|table| {
+        table
+            .keys
+            .into_iter()
+            .zip(table.values)
+            .collect::<BTreeMap<_, _>>()
+    });
+    let mut forward = CpuFbsForward::from_artifact(artifact)
+        .map_err(|error| invalid(format!("memory-target forward: {error}")))?;
+    let context = forward.context_length();
+    if cap == 0 || cap > 64 || prompt.is_empty() || prompt.len() > context {
+        return Err(invalid(
+            "memory-target reply prompt, cap or artifact context is invalid",
+        ));
+    }
+    let mut first = None;
+    for (index, &token) in prompt.iter().enumerate() {
+        if index + 1 == prompt.len() {
+            forward.mark_reply_start();
+        }
+        let step = forward
+            .step(token, CpuFbsHead::Writer)
+            .map_err(|error| invalid(format!("memory-target prompt step: {error}")))?;
+        if index + 1 == prompt.len() {
+            first = Some(step.token);
+        }
+    }
+    let opening_key = prompt.iter().copied().take(k).collect::<Vec<_>>();
+    let mut next = opening
+        .get(&opening_key)
+        .copied()
+        .or(first)
+        .ok_or_else(|| invalid("memory-target prompt is empty"))?;
+    let mut tokens = Vec::with_capacity(cap);
+    loop {
+        let stop = reply_stop(next, tokens.len(), prompt.len(), cap, context);
+        if stop != Some(ReplyEnd::Bos) {
+            tokens.push(next);
+        }
+        if let Some(stop) = stop {
+            return Ok(GeneratedReply {
+                tokens,
+                stop: match stop {
+                    ReplyEnd::Bos => "bos",
+                    ReplyEnd::Length => "cap",
+                    ReplyEnd::Context => "context",
+                },
+            });
+        }
+        let fallback = forward
+            .step(next, CpuFbsHead::Writer)
+            .map_err(|error| invalid(format!("memory-target generated step: {error}")))?
+            .token;
+        next = if let (Some(reply), Some(turn)) = (&reply, reply_turn) {
+            let sample = MemoryWeightSample {
+                prompt: prompt.to_vec(),
+                reply: tokens.clone(),
+            };
+            let key = memory_reply_key(&sample, tokens.len() - 1, turn, key_window)?;
+            reply.get(&key).copied().unwrap_or(fallback)
+        } else {
+            fallback
+        };
+    }
 }
 
 fn summarize_replies(rows: Vec<(GeneratedReply, Vec<u32>, bool)>) -> Result<ReplyReading> {
@@ -244,6 +356,7 @@ fn add_count(left: u64, right: u64) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{add_turn_memory_uorlut01, derive_turn_memory};
     use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
@@ -385,5 +498,21 @@ mod tests {
             generated.tokens.len() as u64,
             first.reading.generated_tokens
         );
+    }
+
+    #[test]
+    fn exact_memory_targets_drive_a_complete_reply_with_forward_fallback() {
+        let samples = vec![MemoryWeightSample {
+            prompt: vec![10, 11, 12],
+            reply: vec![42, 77, POINT_KEY_BOS],
+        }];
+        let memory = derive_turn_memory(&samples, 64, 3, 16, 3).unwrap();
+        let artifact = add_turn_memory_uorlut01(&artifact(), &memory).unwrap();
+        let reading = evaluate_memory_target_replies(&artifact, &samples, 4).unwrap();
+        assert_eq!(reading.reading.replies, 1);
+        assert_eq!(reading.reading.bos_complete, 1);
+        assert_eq!(reading.reading.exact_reference, 1);
+        assert_eq!(reading.reading.reference_reachable, 1);
+        assert_eq!(reading.reading.opening_correct, 1);
     }
 }
