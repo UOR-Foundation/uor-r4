@@ -1,6 +1,6 @@
 # Full-query Hamming stop signatures
 
-**Status:** READY FOR FIT REVIEW
+**Status:** FIT
 
 ## Question
 
@@ -250,4 +250,16 @@ closes only this fixed signature/prototype/margin configuration.
 
 ## TEST FITNESS
 
-PENDING
+TEST FITNESS: FIT - M2 #2030 Hamming stop signatures outside writer admission
+sheet: docs/harness/prep/cpu-training-pilot-stop-signature-2026-11-04.md
+head: c2fc34f19a61d9aab5a5853199965b27a1bcd523
+implementation pin: 6bd0edff0e7a32e8457e2630a952bd235a9c0523
+reviewer: independent-subagent stop-signature-fit-2
+note: two-seed D84 screen; full-query 256-bit sign signatures, K=8 observed
+prototypes, training-only margin under exact 1% false-stop ceiling, no-gate and
+class-preserving shuffled controls, explicit ungated token identity, gate
+hashes, free-reply reporting, source/resource/storage gates and deterministic
+repeat
+date: 2026-11-04
+
+A FIT verdict clears compute for this configuration only (D22).
