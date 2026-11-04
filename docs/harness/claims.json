@@ -76,6 +76,13 @@
     "lab": "deepseek",
     "note": "generated-state full-query Hamming nearest-example content readout"
   },
+  "deepseek/content-readout-serving": {
+    "branch": "deepseek/content-readout-serving",
+    "claimed_at": "2026-11-04T12:41:52-05:00",
+    "head": "70f45367d",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/content-stop": {
     "branch": "deepseek/content-stop",
     "claimed_at": "2026-11-04T11:20:16-05:00",
@@ -346,6 +353,13 @@
     "branch": "deepseek/reply-termination",
     "claimed_at": "2026-11-04T00:06:22-05:00",
     "head": "3f7f8605b",
+    "lab": "deepseek",
+    "note": ""
+  },
+  "deepseek/scope-content-serving": {
+    "branch": "deepseek/scope-content-serving",
+    "claimed_at": "2026-11-04T14:15:47-05:00",
+    "head": "67422a3b4",
     "lab": "deepseek",
     "note": ""
   },
