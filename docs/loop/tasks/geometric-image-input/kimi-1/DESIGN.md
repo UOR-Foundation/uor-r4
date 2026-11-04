@@ -20,7 +20,7 @@ An accepted image uses `render_r4_context` to encode the exact big-endian bytes 
 
 ## Browser behavior
 
-`image_input.js` uses object URLs and Canvas to decode a selected/pasted/dropped raster image, downsample proportionally to at most 256×256, extract RGBA, and release resources on every path. It refuses undecodable/oversized input loudly and rejects decoded source dimensions above 4096 pixels per side before canvas allocation. The browser chooses `min(2, width, height)` as the default square grid.
+`image_input.js` uses object URLs and Canvas to decode a selected/pasted/dropped raster image, downsample proportionally to at most 256×256, extract RGBA, and release resources on every path. It refuses undecodable/oversized input loudly and rejects decoded source dimensions above 4096 pixels per side before canvas allocation or drawing. This is a post-decode guard, not a bound on decoder memory; header parsing before full decode remains future work. The browser independently caps the default grid at 2 columns and 2 rows per axis, so extreme-aspect images can be 1×2 or 2×1 rather than square.
 
 Native preparation posts RGBA with the generation abort signal and `cache: 'no-store'`, checks the signal between images, and reads the binary body only after a successful response. It validates the schema, Blake3 hash, issued ID, exact dimensions/grid, patch count, canonical magic, and byte bound, then converts the canonical bytes to lowercase hex. Error envelopes retain their server message. `apiMessages` emits the exact flat eight-field part only after successful preparation and explicit Send. Custom OpenAI providers may send ordinary data-URL `image_url` parts and surface provider errors verbatim. Local WASM refuses image context explicitly.
 

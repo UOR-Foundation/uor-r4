@@ -31,6 +31,24 @@ function contrast(foreground: string, background: string): number {
     return (high + 0.05) / (low + 0.05);
 }
 
+function cssColorToHex(color: string): string {
+    if (color.startsWith('var(')) color = getComputedStyle(document.documentElement).getPropertyValue(color.slice(4, -1));
+    if (color.startsWith('#')) return color;
+    const scale = color.startsWith('color(srgb') ? 255 : 1;
+    const channels = color.match(/[\d.]+/g);
+    if (!channels) throw new Error(`Unrecognized CSS color: ${color}`);
+    channels.slice(0, 3).map(Number);
+    return '#' + channels.map((channel) => Math.round(channel * scale).toString(16).padStart(2, '0')).join('');
+}
+
+function effectiveBackground(element: HTMLElement): string {
+    for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+        const color = getComputedStyle(current).backgroundColor;
+        if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)' && color !== 'color(srgb 0 0 0 / 0)') return color;
+    }
+    return getComputedStyle(document.body).backgroundColor;
+}
+
 afterEach(() => {
     document.querySelectorAll('style').forEach((node) => node.remove());
     document.body.innerHTML = '';
@@ -132,5 +150,23 @@ describe('Mac-inspired Studio visual system', () => {
         const light = declaration(installTheme('light'), 'html[data-theme="light"]');
         expect(light.getPropertyValue('--surface-1')).toBe('#fffdf8');
         expect(light.getPropertyValue('--accent')).toBe('#b2521c');
+    });
+
+    it('keeps shipped text accents at AA and previews at 32px', () => {
+        installTheme('dark');
+        document.body.innerHTML += '<article class="empty-card"><span class="empty-card-label">Empty</span></article><footer class="statusbar"><span class="status-brand">UOR</span></footer><div class="template-menu"><div class="template-menu-label">Templates</div></div><div class="palette-item" aria-selected="true"><span class="palette-item-desc">Description</span></div><img class="attachment-chip-preview" alt="">';
+        for (const [foreground, background] of [
+            ['.empty-card-label', '.empty-card'],
+            ['.status-brand', '.statusbar'],
+            ['.template-menu-label', '.template-menu'],
+            ['.palette-item-desc', '.palette-item[aria-selected="true"]'],
+        ]) {
+            const text = getComputedStyle(document.querySelector<HTMLElement>(foreground)!).color;
+            const surface = effectiveBackground(document.querySelector<HTMLElement>(background)!);
+            expect(contrast(cssColorToHex(text), cssColorToHex(surface)), `${foreground} on ${background}`).toBeGreaterThanOrEqual(4.5);
+        }
+        const preview = document.querySelector<HTMLImageElement>('.attachment-chip-preview')!;
+        expect(getComputedStyle(preview).inlineSize).toBe('32px');
+        expect(getComputedStyle(preview).blockSize).toBe('32px');
     });
 });

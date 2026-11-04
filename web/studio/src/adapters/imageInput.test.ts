@@ -71,6 +71,16 @@ describe('image file decoding and composer intake', () => {
         const odd = await readImageFiles([new File([new Uint8Array(4)], 'odd.png', { type: 'image/png' })]);
         expect(odd.errors).toEqual([]);
         expect(odd.attachments[0].grid).toEqual({ columns: 2, rows: 2 });
+        canvasFixture(1, 3);
+        vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 1, height: 3, close: vi.fn() }));
+        const tall = await readImageFiles([new File([new Uint8Array(4)], 'tall.png', { type: 'image/png' })]);
+        expect(tall.errors).toEqual([]);
+        expect(tall.attachments[0].grid).toEqual({ columns: 1, rows: 2 });
+        canvasFixture(3, 1);
+        vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 3, height: 1, close: vi.fn() }));
+        const wide = await readImageFiles([new File([new Uint8Array(4)], 'wide.png', { type: 'image/png' })]);
+        expect(wide.errors).toEqual([]);
+        expect(wide.attachments[0].grid).toEqual({ columns: 2, rows: 1 });
     });
 
     it('rejects huge decoded source dimensions before drawing or canvas allocation', async () => {
