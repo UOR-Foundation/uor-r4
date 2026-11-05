@@ -32,7 +32,7 @@ fixed-depth-1, and a seeded random depth.
 
 ## Data split
 
-Fit on new `cell=dev,dev` panel seed `2601`, 64 conversations. Evaluate only on
+Fit on new `cell=train,train` panel seed `2601`, 64 conversations. Evaluate only on
 new `cell=dev,dev` panel seed `2602`, 64 conversations. Each panel must contain
 at least 200 eligible positions. Public DEV remains instrument-only and must
 reproduce deepseek-149's parity counts with the existing depth screen.
