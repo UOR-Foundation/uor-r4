@@ -62,7 +62,7 @@ All readings are taken on the laptop from the sealed `no-memory` rows files, thr
 **Not §4.8's integer top-1.** The decided order scores real text by "integer top-1 against unigram and T2 count tables". Here that is read as an exact count of hits, with no likelihood. The pick is the float model's, trained as served (`--train-as-served 1`). The slope is therefore a float-model measurement. The integer artifact is checked by R9's parity, not scored on the panel, and the D11 export's panel top-1 is owed before any width is served or any claim is made (the decision card on #3472).
 
 **The two row sets.** Every row of a panel is in exactly one set:
-- **unseen:** at least 8 tokens of its own document precede it, counting its `<|bos|>`, and those 8 tokens do not occur anywhere in D3's TRAIN as a run inside one document;
+- **unseen:** at least 8 tokens of its own document precede it, counting its `<|bos|>`, and those 8 tokens do not occur anywhere in the TRAIN the seen set is built against (cell X's, below) as a run inside one document;
 - **excluded:** every other row.
 
 `scale-probe seen` writes this bit for every row (`excluded.bin`) against one TRAIN. `pair clean=` reads every comparison on all rows and again on the unseen rows, with the seen set of cell X's TRAIN:
