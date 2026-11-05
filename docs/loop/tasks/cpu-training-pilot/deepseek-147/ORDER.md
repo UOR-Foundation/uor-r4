@@ -11,11 +11,6 @@ continuation under the unchanged termination-density rule.
 This is D84 CPU development research. It does not change integer serving,
 `UORLUT01`, CUDA, float training or Claude-owned source.
 
-The combined-signature scaffolding was present as uncommitted work when this
-session resumed after the workstation lost power. This ORDER fixes the
-construction, controls, thresholds and stop rule before any evaluation result
-was observed in the resumed session.
-
 ## Fixed construction
 
 At generated offset `t`, retain the current 2,048-bit modulo-256 code and the
