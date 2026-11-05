@@ -353,4 +353,11 @@ the fresh panel is read, do not change the ranking, cap, arms or bar.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - fresh-context review is required before generation.
+TEST FITNESS: FIT - M1 #2029 geometric exact-copy arbitration
+sheet: docs/harness/prep/cpu-training-pilot-copy-geometric-2026-11-05.md
+reviewer: fresh-context Codex subagent fit_geometric_review_3
+note: Independent sign-Hamming oracle, distinct-token nearest-distance selection, geometric replay, and random-32 domain/fallback tests pass; fresh root and seed 2762 remain absent.
+date: 2026-11-05
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
