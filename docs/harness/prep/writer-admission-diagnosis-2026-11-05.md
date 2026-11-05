@@ -110,3 +110,10 @@ One RTX 5090 at about `$0.5/h`.
   - A healthy run is never cut short.
 - **Re-plan past `$3` or 2 hours** (the ORDER).
 - **Results** go to `caseyallard/uor-r4-store:results/claude/writer-admission-diagnosis-2026-11-05/`, sealed with a SHA256SUMS, and are read back before the pod comes down.
+
+## Outcome (5 Nov 2026)
+
+- **Run 1, at `dae2911be0d6acd72f729813d08f6064516b72a6`: an instrument fault, before any reading.** The CUDA tests passed and both seals checked, then `StackModel::load` refused seed 2's step 32,768 at the probe: the projection fingerprint pins `spiralcore_fbs.cu`, whose backward changed in `bcf2f57f7` (29 Oct). That is a refusal to load, not an I-2 mismatch, but it stops the same way, so the stop rule's fallback ran (#3394, 6657976950).
+- **Run 2, on the evidence branch `claude/evidence/writer-admission-074d54b2` at `8cb2ff9813515463665ab8c2c6269a0f976222c0`** (`074d54b2` plus this reading): I-1 to I-4 hold, I-2 exactly at all 34 checkpoints, and I-3b fails the near-tie test as it must.
+- **Seed 2 reads F** (14 of 15 checkpoints from step 4,096, N at 14,336). **Seed 1 reads L** (15 of 15). Both read U at step 0. At step 2,048 seed 1 reads O and seed 2 U.
+- The numbers, the store folder and the seal are in [claude-289's REPORT](../../loop/tasks/writer-admission/claude-289/REPORT.md).
