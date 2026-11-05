@@ -43,9 +43,11 @@ Read `docs/loop/tasks/m7-lexlean-studio-tools/kimi-1/ORDER.md`, `crates/uor-r4-i
 - CHARTER §3.1–3.4 and §3.6: reuse only the existing geometric integer engine; no second runtime, squashing table, dense matrix product or external WASM enters the served path.
 - CHARTER §3.11–3.13 and §4: Rust first, no new dependency or committed binary/corpus, exact artifact identity, finite positive and negative controls, and no capability claim beyond the measured deterministic tool.
 - CHARTER §5.5: ORDER/REPORT, fresh exact-head review, protected merge queue, fresh-main verification, Pages publication and cleanup. `References` the new item until every done-when row is satisfied.
+- Live Pages publication follows the owner's existing live-deploy decision recorded in [m7-studio-live-model-sources](m7-studio-live-model-sources.md); this registration performs no publication.
 
 ## Sources
 
 - [LexLean-R4 repository](https://github.com/Casey-allard/lexlean-r4) at `23436bdcd69e5238fcda51ef2529bbd4a5dc1e73`; deployed tree `563a7549e432fc035bc603504bb3a162eb332212` and [hosted page](https://casey-allard.github.io/lexlean-r4/).
+- [Issue #3704](https://github.com/UOR-Foundation/uor-r4/issues/3704), which already carries the `m7-lexlean-studio-tools` roadmap marker. No duplicate issue or generated issue mapping is introduced by this registration.
 - [CHARTER.md](../../../CHARTER.md), [the desktop product contract](../../products/desktop-client.md), [the web product contract](../../products/web-client.md), and [the existing geometric arithmetic](../../../crates/uor-r4-integer/src/m6_exact_arithmetic.rs).
-- [m7-studio-live-model-sources](m7-studio-live-model-sources.md) and [infra-desktop-client-tauri](infra-desktop-client-tauri.md), whose delivered browser/native shells this unit preserves.
+- [m7-studio-live-model-sources](m7-studio-live-model-sources.md) and [infra-desktop-client-tauri](infra-desktop-client-tauri.md), whose existing browser/native shell work this unit preserves. The desktop item's legacy status/mapping mismatch is outside this registration.
