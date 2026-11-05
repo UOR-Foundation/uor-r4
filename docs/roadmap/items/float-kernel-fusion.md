@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: []
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/fused_quantize*.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/tests/no_training_crate_dep.rs, crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs, crates/uor-r4-float-train/tests/fused_*.rs, crates/uor-r4-float-train/Cargo.toml, docs/harness/prep/float-kernel-fusion*, docs/loop/tasks/float-kernel-fusion/**, docs/research/notebook/float-training.md, docs/roadmap/items/float-kernel-fusion.md]
+scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/fused_quantize*.rs, crates/uor-r4-float-train/src/fused_quantize*.cu, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/tests/no_training_crate_dep.rs, crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs, crates/uor-r4-float-train/tests/fused_*.rs, crates/uor-r4-float-train/Cargo.toml, docs/harness/prep/float-kernel-fusion*, docs/loop/tasks/float-kernel-fusion/**, docs/research/notebook/float-training.md, docs/roadmap/items/float-kernel-fusion.md]
 ---
 
 ## Why it matters
@@ -28,7 +28,11 @@ Why these two kernels first:
 ## What is missing
 
 1. **One kernel list.** `KERNEL_ENTRY_POINTS` (`src/lib.rs:36`) and `EXPECTED_KERNELS` (`tests/no_training_crate_dep.rs:9`) are two hand copies of the same 26 names (22 in `cuda_stack.cu`, 4 in `spiralcore_fbs.cu`), and the test asserts the count 26 (`:103`). At run time, only the `HISTORICAL_KERNELS` deny list (defined at `src/cuda_stack_kernels.rs:46`, checked at `:356`) and the PTX load (`:376`) stand between a name and its launch. Nothing ties a launched name to the list.
-2. **A measured share.** No GPU profile has yet split a served training step by op chain.
+2. **A measured share.** Measured in [claude-283](../../loop/tasks/float-kernel-fusion/claude-283/REPORT.md), on one RTX 5090 at P2b's recipe with `--train-as-served 1`. Skipping both chains on alternate pairs of steps inside one run shortened a step by 7.5% at (S), 192 × 16 (noise 0.46%), and by 2.6% at (L), 2,048 × 4. The cancel rule did not fire, so done-whens 2 and 3 start.
+   - **Where the time is:** almost all in the forward, spread evenly over the 12 sublayers. The backward holds 1.9 ms at (L) and 1.0 ms at (S).
+   - **The calls:** a forward makes 12 `activation_quantize16` calls (about 49 tensor ops each) and 50 `q16_residual` calls (13 each), about 1,240 ops in all. Fused, that is 62.
+   - **A ceiling, not the gain:** the share is what removing the chains entirely saves. A fused kernel still makes one pass a call, and done-when 4 measures what it saves.
+   - **Before that measurement,** no GPU profile had split a served training step by op chain.
    - [served-rounding-cost](served-rounding-cost.md) (#3594, DeepSeek's item, M4) is the item for training as served's 6.83–6.96× slowdown against plain training.
    - Its host probe points at the export rounding instead: `grid_code` searches 2,032 grid candidates on the host for every rounded gain on every step, and nine matrices are copied to the host and back each step. Replacing the activation-scale loop saved about 2% of one CPU activation there.
    - That is a host probe, not a GPU profile, but it is the reason the fusion below waits on a measurement.
@@ -53,6 +57,7 @@ Why these two kernels first:
 ## Cancel if
 
 - The two chains' share of wall seconds per training step at P2b's recipe, with `--train-as-served 1`, is under 5%, with their launch counts reported alongside. Then done-when 1 lands alone, and the fusion is reported as not worth its pin.
+- **Checked in claude-283 (5 Nov): the rule did not fire.** The share is 7.5% at (S) and 2.6% at (L), so (S) is over the bar with margin.
 
 ## How to start
 
@@ -60,6 +65,7 @@ Why these two kernels first:
 - The list's two copies: `src/lib.rs:3-4, :33-36` and `tests/no_training_crate_dep.rs:9, :81-108`. `build.rs` names the three PTX modules at `:26-54` and builds them with nvcc at `:76-95`. The scan must run before the early return at `:68-70`, so CPU builds get the list too.
 - The chains and their CPU twins: `hamilton_sheet.rs:646-780` (`q16_residual_ste_scalar :675`, `activation_scale_scalar :691`, `activation_quantize16_ste_scalar :705`). Kernels load at `cuda_stack_kernels.rs:376`; the PTX is embedded at `:85-86`.
 - Stale "24" text to correct on the way: `tests/twenty_four_kernel_controls.rs:1-5` and the crate's `Cargo.toml` description.
+- **Where the kernels go** (claude-284's cancel probe). `cuda_stack.cu`'s SHA-256 is pinned as earlier sheets' source identity (`spiralcore_fbs_sheet.rs:54`, tested at `:4156`), so the fused kernels get their own source, `src/fused_quantize.cu`, built by `build.rs` as their own PTX module, as the SpiralCore arms were. The one-step gate needs the served model parts and the step's loss, which only `in_space_long.rs`'s `tests` module reaches; the unit changes no line outside it.
 - **Where it runs.** Kernel development may use Casey's local RTX 4090 (Linux) once it is up. The gates that count, done-when 2 to 4, run on an RTX 5090 pod. That is Casey's call 1 of 4 Nov (#2028 6638209391): qualification stays on 5090 pods until the 4090 bring-up's step 4 shows the cards agree. A 4090 needs its own PTX target (it cannot load `compute_120`).
 
 ## Rules that apply
