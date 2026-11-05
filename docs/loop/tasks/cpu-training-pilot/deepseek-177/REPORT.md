@@ -17,7 +17,7 @@ Does a denser candidate union, formed from the writer's top 128 non-BOS
 candidates, exact-copy depths one through 32 and the writer fallback, supply
 enough supervised choices to train the integer pairwise ranker?
 
-## What happened
+## What did not work
 
 The candidate union raised seed-1 supervision from the earlier 85 exact-copy
 groups to **2,442** groups with **332** distinct target tokens. Artifact seed 2
@@ -85,7 +85,7 @@ and [`evidence/geometric-candidate-union-2768/`](../../../../labs/cpu-training-p
 - Raw and published evidence seals.
 - Lane-scope and no-corpus checks.
 
-## What remains
+## Still open
 
 The writer/copy union is a useful supervision direction but did not reach the
 fixed floor on both public artifacts. A later experiment needs a newly
