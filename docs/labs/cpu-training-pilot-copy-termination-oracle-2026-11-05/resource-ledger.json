@@ -12,12 +12,12 @@
   "measured": {
     "release_build_seconds": 18.92,
     "incremental_build_seconds": 0.4,
-    "attempt_3_walls_seconds": [0.52, 0.54, 0.54, 0.54],
-    "peak_rss_kib": 159512,
-    "driver_binary_bytes": 1346288,
-    "driver_binary_sha256": "29a9aee4cd8bbdbb7c2ee4f981f00b9434d1087289d3f01e0b7e9857a7782fdf",
+    "attempt_5_walls_seconds": [0.53, 0.53, 0.53, 0.52],
+    "peak_rss_kib": 159424,
+    "driver_binary_bytes": 1349440,
+    "driver_binary_sha256": "32b6e72c5eafb4c33f92dcf46b04c69f26679cb90d83cb85fb0c9625c2a8f2e0",
     "fresh_target_bytes": 4663321830,
-    "published_evidence_bytes": 109581,
+    "published_evidence_bytes": 155159,
     "free_space_after_run_bytes": 469521399808
   },
   "attempts": [
@@ -33,6 +33,16 @@
     },
     {
       "attempt": 3,
+      "status": "INSTRUMENT_INCOMPLETE",
+      "reason": "oracle counts were correct, but report/corpus binding, full-trace hashes, step-count equality and mean-prefix output were absent"
+    },
+    {
+      "attempt": 4,
+      "status": "INSTRUMENT_FAULT",
+      "reason": "row hashes were compared against the arm aggregate instead of each sealed row"
+    },
+    {
+      "attempt": 5,
       "status": "COMPLETED",
       "cells": 4
     }
@@ -45,7 +55,8 @@
     "clippy": "pass",
     "rustfmt": "pass",
     "published_evidence_verified": true,
-    "raw_attempt_3_sha256": "ac7ddd5bb6bb5bb54cddbca5e1b5b01edbcdf97b78f2dfe7aa5b7d86929af82a"
+    "raw_attempt_4_sha256": "8b6639383884c7aa82af903616cb114052c8c263e868ad33a96750da4cc03cd1",
+    "raw_attempt_5_sha256": "f82b075e59e751b7eea1bc676dc361ce00f0552d845292ce0c3c9bfb4b5172de"
   },
   "threads": {
     "build_jobs": 16,
@@ -61,8 +72,8 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-155/ORDER.md",
     "sealed_copy_result": "docs/loop/tasks/cpu-training-pilot/deepseek-153/REPORT.md",
-    "implementation_pin": "24fe3e8d5898",
-    "published_sums_sha256": "5bf4fbf494fd21b45b61d5e410888cb30d3cb1926495f973ae548de5499aaf80"
+    "implementation_pin": "1290cb7eb7d2",
+    "published_sums_sha256": "f3c116d2506944b084cf2f82830212bea04ebd981905c2cab90d613d3d7a54fe"
   },
   "normal_close": {
     "gpu_pods": 0,

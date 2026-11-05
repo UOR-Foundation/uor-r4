@@ -25,3 +25,15 @@ e5a83aa04f40a472a1c23b47838cb87036fa7b609c287dcda2783f195f76bd2e  ./attempt-3/se
 d69832e8d7ee4a6f3f93070801155d66b1fb7a6fa49f0167d8a6c3c8e797f123  ./attempt-3/seed2-dd.time.txt
 a596a0241ed910e7d7b604e475f8fe230c41f9cc1dd8100e491100f15a5cfa9a  ./attempt-3/seed2-tt.json
 ac5d2bfbabb1a6cdecddd872142927952df2845f4815ef2af7bcef7e8276b828  ./attempt-3/seed2-tt.time.txt
+8b6639383884c7aa82af903616cb114052c8c263e868ad33a96750da4cc03cd1  ./attempt-4/RAW-SHA256SUMS
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./attempt-4/seed1-tt.json
+ec8615895994aa9475fc0162955e92641a17133e0996b2ac91feaa87c6d2bac6  ./attempt-4/seed1-tt.time.txt
+f82b075e59e751b7eea1bc676dc361ce00f0552d845292ce0c3c9bfb4b5172de  ./attempt-5/RAW-SHA256SUMS
+7048baa3bc62022b2ca332de37e50b584c92b707267927218323491e3c5ef6dd  ./attempt-5/seed1-dd.json
+db02ed3690d6086ca2e1d67725b22948d17c10054fdbbba423536c211f3d33b0  ./attempt-5/seed1-dd.time.txt
+64d2c6d9f2a790c4a757addc13a1690a70a7e0ef03a0cfbe121d59711843c6a2  ./attempt-5/seed1-tt.json
+b17e962cc8e4cc780e66fa9c7640f69eb3a9c8a2fa3a5204b97f6e76df4032b2  ./attempt-5/seed1-tt.time.txt
+63a703d5af2d32cf2155f7efbc5d866707fa25fa146d78541da7fe3506643971  ./attempt-5/seed2-dd.json
+67714d24651f92eb25ebc0f24a9fb40aac68ef4e85f9ffae5a537cab86b65d30  ./attempt-5/seed2-dd.time.txt
+264d75a35474db0efcc9abb761aec63aaf6d84637fd0c6a5b88409d52af1eddb  ./attempt-5/seed2-tt.json
+4df088b6fb4e26cb422585c291fbab1db47cb801229ec0972f0eb7222c6a4673  ./attempt-5/seed2-tt.time.txt

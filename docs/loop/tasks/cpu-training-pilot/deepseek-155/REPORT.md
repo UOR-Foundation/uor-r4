@@ -22,6 +22,10 @@ language result or serving claim.
   eligibility and trailing-mismatch histograms but copied the original
   no-stop `exact_reference` field into the oracle reading, leaving the result
   at zero. Both attempts are preserved.
+- Attempt 3 had the correct oracle count but omitted report/corpus hash
+  binding, per-row full-trace hashes, step-count equality and mean-prefix
+  output. Attempt 4 enforced those fields but compared each row against the
+  arm-level aggregate hash. Attempt 5 is the first complete analysis.
 - Most copy bodies remain incomplete even with perfect stopping: 442/453 train
   and 436/449 dev longest-first replies are not exact.
 - No new model generation ran. This unit cannot determine whether a trainable
@@ -65,23 +69,25 @@ Its maximum common prefix was 41 and 48 tokens. It also led `k2>k1` by 34 and
 Resources:
 
 - release build **18.92 s** plus **0.40 s** incremental rebuild;
-- four attempt-3 analyses **0.52-0.54 s each**, peak **159,512 KiB**;
-- analyzer binary **1,346,288 bytes**, SHA-256
-  `29a9aee4cd8bbdbb7c2ee4f981f00b9434d1087289d3f01e0b7e9857a7782fdf`;
+- four attempt-5 analyses **0.52-0.53 s each**, peak **159,424 KiB**;
+- analyzer binary **1,349,440 bytes**, SHA-256
+  `32b6e72c5eafb4c33f92dcf46b04c69f26679cb90d83cb85fb0c9625c2a8f2e0`;
 - fresh target storage **4,663,321,830 bytes**;
-- published evidence **109,581 bytes**;
+- published evidence **155,159 bytes**;
 - admitted cumulative projection: **78,227.677487699 s**.
 
-Attempt-3 raw manifest SHA-256:
-`ac7ddd5bb6bb5bb54cddbca5e1b5b01edbcdf97b78f2dfe7aa5b7d86929af82a`.
+Attempt-5 raw manifest SHA-256:
+`f82b075e59e751b7eea1bc676dc361ce00f0552d845292ce0c3c9bfb4b5172de`.
 Published evidence SHA-256:
-`5bf4fbf494fd21b45b61d5e410888cb30d3cb1926495f973ae548de5499aaf80`.
+`f3c116d2506944b084cf2f82830212bea04ebd981905c2cab90d613d3d7a54fe`.
 
 ## Checks run at the head
 
 - **286** CPU library tests passed with 4 expected ignores; **74** binary tests
   and **3** focused oracle tests passed.
 - Scoped Clippy, rustfmt, evidence manifests and `git diff --check` passed.
+- Report token/mask identities, each row's full-trace hash, and source
+  generated-token counts match before oracle truncation.
 - All four sealed reports reconstruct to the expected row counts and trace
   lengths.
 - Both artifact seeds and both panels agree on the termination-only outcome.
@@ -90,9 +96,9 @@ Published evidence SHA-256:
 ## Size
 
 Against base `835cfeb66`, this unit changes **2** code/manifest files
-(**+415 / -0**), **8** task, notebook, roadmap, current-state and lab-record
-files (**+343 / -1**), and **28** published evidence files
-(**+3,579 / -0**): **38 files, +4,337 / -1**. No generated corpus or new model
+(**+491 / -0**), **8** task, notebook, roadmap, current-state and lab-record
+files (**+360 / -1**), and **40** published evidence files
+(**+5,037 / -0**): **50 files, +5,888 / -1**. No generated corpus or new model
 binary is tracked.
 
 ## Skills used
