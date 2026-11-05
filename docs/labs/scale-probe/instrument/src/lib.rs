@@ -1,0 +1,922 @@
+//! P5 scale-probe laptop side: nested training mixes (`mix`), count-table grading of one
+//! checkpoint's rows (`grade`) and the paired-band comparison of two cells (`pair`).
+//! Counting only; integer arithmetic only; every inconsistency is a refusal.
+
+use serde::Deserialize;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use uor_r4_core::native_geometric::mmap_corpus::{CorpusWriter, MmapCorpusReader};
+
+/// Token id bound for rows and count tables.
+pub const VOCAB: usize = 4096;
+pub const MIX_SCHEMA: &str = "uor-r4-scale-probe-mix/v1";
+pub const GRADE_SCHEMA: &str = "uor-r4-scale-probe-grade/v1";
+pub const PAIR_SCHEMA: &str = "uor-r4-scale-probe-pair/v1";
+pub const HITS_FILE: &str = "nearest-hits.bin";
+
+type R<T> = Result<T, String>;
+
+/// Entry point for `main`: `args[0]` is the command.
+pub fn run(args: &[String]) -> R<String> {
+    let (cmd, rest) = args
+        .split_first()
+        .ok_or("usage: scale-probe mix|grade|pair key=value...")?;
+    let a = Args::parse(rest)?;
+    match cmd.as_str() {
+        "mix" => run_mix(&a),
+        "grade" => run_grade(&a),
+        "pair" => run_pair(&a),
+        other => Err(format!("unknown command {other:?}")),
+    }
+}
+
+/// `key=value` arguments, repeated keys kept in order.
+pub struct Args(Vec<(String, String)>);
+
+impl Args {
+    pub fn parse(items: &[String]) -> R<Self> {
+        let mut v = Vec::new();
+        for item in items {
+            let (k, val) = item
+                .split_once('=')
+                .ok_or(format!("argument {item:?}: expected key=value"))?;
+            v.push((k.to_string(), val.to_string()));
+        }
+        Ok(Args(v))
+    }
+    fn known(&self, keys: &[&str]) -> R<()> {
+        match self.0.iter().find(|(k, _)| !keys.contains(&k.as_str())) {
+            Some((k, _)) => Err(format!("unknown argument {k}=")),
+            None => Ok(()),
+        }
+    }
+    fn all(&self, key: &str) -> Vec<&str> {
+        self.0
+            .iter()
+            .filter(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+            .collect()
+    }
+    fn opt(&self, key: &str) -> R<Option<&str>> {
+        match self.all(key).as_slice() {
+            [] => Ok(None),
+            [v] => Ok(Some(v)),
+            _ => Err(format!("{key}= given more than once")),
+        }
+    }
+    fn one(&self, key: &str) -> R<&str> {
+        self.opt(key)?.ok_or(format!("{key}= is required"))
+    }
+}
+
+fn sha_bytes(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+
+fn read(path: &Path) -> R<Vec<u8>> {
+    fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn write(path: &Path, bytes: &[u8]) -> R<()> {
+    fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn pretty(v: &Value) -> Vec<u8> {
+    let mut s = serde_json::to_string_pretty(v).expect("json value serialises");
+    s.push('\n');
+    s.into_bytes()
+}
+
+fn refuse_existing(out: &Path) -> R<()> {
+    if out.exists() {
+        return Err(format!(
+            "{}: out already exists; never overwritten",
+            out.display()
+        ));
+    }
+    Ok(())
+}
+
+fn create_out_dir(out: &Path) -> R<()> {
+    if let Some(parent) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    fs::create_dir(out).map_err(|e| format!("{}: {e}", out.display()))
+}
+
+/// `DIR:TOKSHA:MASKSHA` (the dir may itself hold `:`).
+fn split_spec(spec: &str) -> R<(PathBuf, String, String)> {
+    let mut it = spec.rsplitn(3, ':');
+    let (mask, tok, dir) = (it.next(), it.next(), it.next());
+    match (dir, tok, mask) {
+        (Some(d), Some(t), Some(m)) if !d.is_empty() => Ok((
+            PathBuf::from(d),
+            t.to_ascii_lowercase(),
+            m.to_ascii_lowercase(),
+        )),
+        _ => Err(format!("{spec:?}: expected DIR:TOKSHA:MASKSHA")),
+    }
+}
+
+/// `NAME:DIR:TOKSHA:MASKSHA`.
+fn named_spec(spec: &str) -> R<(String, PathBuf, String, String)> {
+    let (name, rest) = spec
+        .split_once(':')
+        .filter(|(n, _)| !n.is_empty())
+        .ok_or(format!("{spec:?}: expected NAME:DIR:TOKSHA:MASKSHA"))?;
+    let (dir, t, m) = split_spec(rest)?;
+    Ok((name.to_string(), dir, t, m))
+}
+
+/// One split directory, sha-checked against the caller's pins.
+pub struct Split {
+    pub dir: PathBuf,
+    pub tokens: Vec<u16>,
+    pub mask: Vec<u8>,
+    pub vocab: u32,
+    pub manifest: Option<Value>,
+    pub tokens_sha256: String,
+    pub mask_sha256: String,
+}
+
+/// Loads `dir/{tokens.u16,response_mask.u8,manifest.json}` and refuses any inconsistency.
+pub fn load_split(dir: &Path, tok_sha: &str, mask_sha: &str, need_manifest: bool) -> R<Split> {
+    let tp = dir.join("tokens.u16");
+    let mp = dir.join("response_mask.u8");
+    let tokens_sha256 = sha_bytes(&read(&tp)?);
+    if tokens_sha256 != tok_sha {
+        return Err(format!(
+            "{}: sha256 {tokens_sha256} != given {tok_sha}",
+            tp.display()
+        ));
+    }
+    let mask = read(&mp)?;
+    let mask_sha256 = sha_bytes(&mask);
+    if mask_sha256 != mask_sha {
+        return Err(format!(
+            "{}: sha256 {mask_sha256} != given {mask_sha}",
+            mp.display()
+        ));
+    }
+    let mf = dir.join("manifest.json");
+    let manifest = if mf.exists() {
+        let v: Value = serde_json::from_slice(&read(&mf)?)
+            .map_err(|e| format!("{}: unreadable json: {e}", mf.display()))?;
+        for (key, given) in [("tokens_sha256", tok_sha), ("mask_sha256", mask_sha)] {
+            if v.get(key).and_then(Value::as_str) != Some(given) {
+                return Err(format!(
+                    "{}: {key} {} disagrees with given {given}",
+                    mf.display(),
+                    v.get(key).unwrap_or(&Value::Null)
+                ));
+            }
+        }
+        if v.get("bos_id").and_then(Value::as_u64) != Some(0) {
+            return Err(format!(
+                "{}: bos_id {} is not 0",
+                mf.display(),
+                v.get("bos_id").unwrap_or(&Value::Null)
+            ));
+        }
+        Some(v)
+    } else if need_manifest {
+        return Err(format!(
+            "{}: missing; a mix root needs its manifest",
+            mf.display()
+        ));
+    } else {
+        None
+    };
+    let reader = MmapCorpusReader::open(&tp).map_err(|e| format!("{}: {e}", tp.display()))?;
+    let tokens = reader.as_slice().to_vec();
+    let vocab = reader.vocab_size();
+    if tokens.len() != mask.len() {
+        return Err(format!(
+            "{}: {} tokens but {} holds {} mask bytes",
+            tp.display(),
+            tokens.len(),
+            mp.display(),
+            mask.len()
+        ));
+    }
+    if tokens.first() != Some(&0) {
+        return Err(format!(
+            "{}: tokens[0] is {:?}, not BOS 0",
+            tp.display(),
+            tokens.first()
+        ));
+    }
+    if let Some(i) = mask.iter().position(|&m| m > 1) {
+        return Err(format!(
+            "{}: mask[{i}] = {} is not 0 or 1",
+            mp.display(),
+            mask[i]
+        ));
+    }
+    Ok(Split {
+        dir: dir.to_path_buf(),
+        tokens,
+        mask,
+        vocab,
+        manifest,
+        tokens_sha256,
+        mask_sha256,
+    })
+}
+
+/// A scored position: not the first, not BOS, response mask 1.
+pub fn is_scored(tokens: &[u16], mask: &[u8], p: usize) -> bool {
+    p >= 1 && tokens[p] != 0 && mask[p] == 1
+}
+
+fn count_scored(tokens: &[u16], mask: &[u8], end: usize) -> u64 {
+    (1..end).filter(|&p| is_scored(tokens, mask, p)).count() as u64
+}
+
+/// `N/D` with `1 <= N <= D <= 64`.
+pub fn parse_fraction(s: &str) -> R<(u64, u64)> {
+    let bad = || format!("fraction {s:?}: expected N/D with 1 <= N <= D <= 64");
+    let (n, d) = s.split_once('/').ok_or_else(bad)?;
+    let (n, d): (u64, u64) = (n.parse().map_err(|_| bad())?, d.parse().map_err(|_| bad())?);
+    if !(1 <= n && n <= d && d <= 64) {
+        return Err(bad());
+    }
+    Ok((n, d))
+}
+
+/// The shortest document-boundary prefix `[0, L)` with `L * D >= total * N`.
+pub fn prefix_len(tokens: &[u16], n: u64, d: u64) -> usize {
+    let need = tokens.len() as u128 * u128::from(n);
+    for (i, &t) in tokens.iter().enumerate() {
+        if t == 0 && i as u128 * u128::from(d) >= need {
+            return i;
+        }
+    }
+    tokens.len()
+}
+
+fn run_mix(a: &Args) -> R<String> {
+    a.known(&["out", "fraction", "root"])?;
+    let out = PathBuf::from(a.one("out")?);
+    refuse_existing(&out)?;
+    let frac = a.one("fraction")?;
+    let (n, d) = parse_fraction(frac)?;
+    let specs = a.all("root");
+    if specs.is_empty() {
+        return Err("at least one root= is required".into());
+    }
+    let mut names = BTreeSet::new();
+    let mut roots: Vec<(String, Split)> = Vec::new();
+    for spec in specs {
+        let (name, dir, t, m) = named_spec(spec)?;
+        if !names.insert(name.clone()) {
+            return Err(format!("root {name}: duplicate root name"));
+        }
+        let s = load_split(&dir, &t, &m, true)?;
+        if let Some((first, f)) = roots.first() {
+            if f.vocab != s.vocab {
+                return Err(format!(
+                    "{}: vocab_size {} differs from root {first}'s {}",
+                    s.dir.join("tokens.u16").display(),
+                    s.vocab,
+                    f.vocab
+                ));
+            }
+        }
+        roots.push((name, s));
+    }
+    let mut root_rows = Vec::new();
+    let (mut tot_tokens, mut tot_docs, mut tot_scored) = (0u64, 0u64, 0u64);
+    for (name, s) in &roots {
+        let mf = s.manifest.as_ref().expect("mix roots carry a manifest");
+        let mut row = json!({
+            "name": name,
+            "tokens_sha256": s.tokens_sha256,
+            "mask_sha256": s.mask_sha256,
+        });
+        for key in ["source", "revision", "licence", "attribution"] {
+            let v = mf.get(key).ok_or(format!(
+                "{}: manifest lacks {key}",
+                s.dir.join("manifest.json").display()
+            ))?;
+            row[key] = v.clone();
+        }
+        let l = prefix_len(&s.tokens, n, d);
+        let docs_total = s.tokens.iter().filter(|&&t| t == 0).count() as u64;
+        let docs_taken = s.tokens[..l].iter().filter(|&&t| t == 0).count() as u64;
+        let scored = count_scored(&s.tokens, &s.mask, l);
+        row["documents_total"] = json!(docs_total);
+        row["documents_taken"] = json!(docs_taken);
+        row["tokens_total"] = json!(s.tokens.len() as u64);
+        row["tokens_taken"] = json!(l as u64);
+        row["scored_taken"] = json!(scored);
+        tot_tokens += l as u64;
+        tot_docs += docs_taken;
+        tot_scored += scored;
+        root_rows.push(row);
+    }
+    create_out_dir(&out)?;
+    let tp = out.join("tokens.u16");
+    let mut w = CorpusWriter::create(&tp, roots[0].1.vocab)
+        .map_err(|e| format!("{}: {e}", tp.display()))?;
+    let mut mask = Vec::with_capacity(tot_tokens as usize);
+    for ((_, s), row) in roots.iter().zip(&root_rows) {
+        let l = row["tokens_taken"].as_u64().expect("set above") as usize;
+        w.write_tokens(&s.tokens[..l])
+            .map_err(|e| format!("{}: {e}", tp.display()))?;
+        mask.extend_from_slice(&s.mask[..l]);
+    }
+    w.finish().map_err(|e| format!("{}: {e}", tp.display()))?;
+    let mp = out.join("response_mask.u8");
+    write(&mp, &mask)?;
+    let manifest = json!({
+        "schema": MIX_SCHEMA,
+        "fraction": format!("{n}/{d}"),
+        "roots": root_rows,
+        "tokens": tot_tokens,
+        "documents": tot_docs,
+        "scored": tot_scored,
+        "tokens_sha256": sha_bytes(&read(&tp)?),
+        "mask_sha256": sha_bytes(&read(&mp)?),
+        "bos_id": 0,
+    });
+    write(&out.join("manifest.json"), &pretty(&manifest))?;
+    let mut s = format!(
+        "mix {} fraction={frac}: tokens={tot_tokens} documents={tot_docs} scored={tot_scored}\n",
+        out.display()
+    );
+    for r in &root_rows {
+        s += &format!(
+            "  {}: tokens {}/{} documents {}/{}\n",
+            r["name"].as_str().unwrap_or(""),
+            r["tokens_taken"],
+            r["tokens_total"],
+            r["documents_taken"],
+            r["documents_total"]
+        );
+    }
+    Ok(s)
+}
+
+/// Rank rule top-1: highest count, ties to the lower id, zero counts excluded.
+pub fn top1<T: Copy + Ord + Default>(counts: &[T]) -> Option<u16> {
+    let mut best: Option<(usize, T)> = None;
+    for (i, &c) in counts.iter().enumerate() {
+        if c == T::default() {
+            continue;
+        }
+        if best.is_none_or(|(_, b)| c > b) {
+            best = Some((i, c));
+        }
+    }
+    best.map(|(i, _)| i as u16)
+}
+
+/// TRAIN count tables: unigram and the previous-token bigram (T2), top-1 only.
+pub struct Tables {
+    pub unigram_top1: u16,
+    pub bigram_top1: Vec<Option<u16>>,
+    pub scored_targets: u64,
+    pub bigram_keys_seen: u64,
+}
+
+impl Tables {
+    pub fn build(tokens: &[u16], mask: &[u8]) -> R<Self> {
+        let mut uni = vec![0u64; VOCAB];
+        let mut bi = vec![0u32; VOCAB * VOCAB];
+        let mut scored = 0u64;
+        for p in 1..tokens.len() {
+            if !is_scored(tokens, mask, p) {
+                continue;
+            }
+            let (q, t) = (tokens[p - 1] as usize, tokens[p] as usize);
+            if q >= VOCAB || t >= VOCAB {
+                return Err(format!("train position {p}: token id >= {VOCAB}"));
+            }
+            uni[t] += 1;
+            bi[q * VOCAB + t] += 1;
+            scored += 1;
+        }
+        let unigram_top1 = top1(&uni).ok_or("train: no scored positions")?;
+        let bigram_top1: Vec<Option<u16>> = bi.chunks_exact(VOCAB).map(top1).collect();
+        let bigram_keys_seen = bigram_top1.iter().filter(|t| t.is_some()).count() as u64;
+        Ok(Tables {
+            unigram_top1,
+            bigram_top1,
+            scored_targets: scored,
+            bigram_keys_seen,
+        })
+    }
+    /// T2 top-1 for previous token `q`; an unseen key falls back to the unigram top-1.
+    pub fn t2(&self, q: u16) -> u16 {
+        self.bigram_top1
+            .get(q as usize)
+            .copied()
+            .flatten()
+            .unwrap_or(self.unigram_top1)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RowsFile {
+    split: String,
+    memory: bool,
+    positions: Vec<usize>,
+    targets: Vec<u32>,
+    nearest: Vec<u32>,
+    writer: Vec<u32>,
+}
+
+#[derive(Default, Clone, Copy)]
+struct Counts {
+    rows: u64,
+    model: u64,
+    writer: u64,
+    unigram: u64,
+    t2: u64,
+    vs_uni: [u64; 2],
+    vs_t2: [u64; 2],
+}
+
+impl Counts {
+    fn add_row(&mut self, model: bool, writer: bool, uni: bool, t2: bool) {
+        self.rows += 1;
+        self.model += u64::from(model);
+        self.writer += u64::from(writer);
+        self.unigram += u64::from(uni);
+        self.t2 += u64::from(t2);
+        self.vs_uni[0] += u64::from(model && !uni);
+        self.vs_uni[1] += u64::from(!model && uni);
+        self.vs_t2[0] += u64::from(model && !t2);
+        self.vs_t2[1] += u64::from(!model && t2);
+    }
+    fn add(&mut self, o: &Counts) {
+        self.rows += o.rows;
+        self.model += o.model;
+        self.writer += o.writer;
+        self.unigram += o.unigram;
+        self.t2 += o.t2;
+        for i in 0..2 {
+            self.vs_uni[i] += o.vs_uni[i];
+            self.vs_t2[i] += o.vs_t2[i];
+        }
+    }
+    fn fill(&self, v: &mut Value) {
+        v["rows"] = json!(self.rows);
+        v["model_hits"] = json!(self.model);
+        v["writer_hits"] = json!(self.writer);
+        v["unigram_hits"] = json!(self.unigram);
+        v["t2_hits"] = json!(self.t2);
+        v["vs_unigram"] = json!({"b": self.vs_uni[0], "c": self.vs_uni[1]});
+        v["vs_t2"] = json!({"b": self.vs_t2[0], "c": self.vs_t2[1]});
+    }
+}
+
+fn run_grade(a: &Args) -> R<String> {
+    a.known(&["out", "train", "panel", "rows"])?;
+    let out = PathBuf::from(a.one("out")?);
+    refuse_existing(&out)?;
+    let (tdir, tt, tm) = split_spec(a.one("train")?)?;
+    let panels: Vec<_> = a
+        .all("panel")
+        .into_iter()
+        .map(named_spec)
+        .collect::<R<_>>()?;
+    if panels.is_empty() {
+        return Err("at least one panel= is required".into());
+    }
+    let mut rows: Vec<(String, PathBuf)> = Vec::new();
+    for spec in a.all("rows") {
+        let (n, f) = spec
+            .split_once(':')
+            .ok_or(format!("rows={spec:?}: expected NAME:FILE"))?;
+        if rows.iter().any(|(m, _)| m == n) {
+            return Err(format!("rows {n}: given more than once"));
+        }
+        rows.push((n.to_string(), PathBuf::from(f)));
+    }
+    let mut seen = BTreeSet::new();
+    for (name, ..) in &panels {
+        if !seen.insert(name.as_str()) {
+            return Err(format!("panel {name}: given more than once"));
+        }
+        if !rows.iter().any(|(n, _)| n == name) {
+            return Err(format!("panel {name}: no rows file with that name"));
+        }
+    }
+    if let Some((n, _)) = rows.iter().find(|(n, _)| !seen.contains(n.as_str())) {
+        return Err(format!("rows {n}: no panel with that name"));
+    }
+    let train = load_split(&tdir, &tt, &tm, false)?;
+    let tables = Tables::build(&train.tokens, &train.mask)?;
+    let mut splits = Vec::new();
+    let mut pooled = Counts::default();
+    let mut pooled_id = Sha256::new();
+    let mut bits: Vec<bool> = Vec::new();
+    for (name, dir, t, m) in &panels {
+        let p = load_split(dir, t, m, false)?;
+        let rp = &rows
+            .iter()
+            .find(|(n, _)| n == name)
+            .expect("matched above")
+            .1;
+        let bytes = read(rp)?;
+        let rf: RowsFile = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("{}: not a rows file: {e}", rp.display()))?;
+        if rf.split != *name {
+            return Err(format!(
+                "{}: split {:?} != rows name {name}",
+                rp.display(),
+                rf.split
+            ));
+        }
+        let k = rf.positions.len();
+        if [rf.targets.len(), rf.nearest.len(), rf.writer.len()] != [k; 3] {
+            return Err(format!(
+                "{}: split {name}: unequal list lengths",
+                rp.display()
+            ));
+        }
+        let mut used = vec![false; p.tokens.len()];
+        let mut c = Counts::default();
+        let mut id = Sha256::new();
+        for i in 0..k {
+            let (pos, target) = (rf.positions[i], rf.targets[i]);
+            let bad = |why: String| format!("split {name} row {i}: position {pos}: {why}");
+            if pos == 0 {
+                return Err(bad("position 0 is never scored".into()));
+            }
+            if pos >= p.tokens.len() {
+                return Err(bad(format!("beyond panel length {}", p.tokens.len())));
+            }
+            for (what, v) in [
+                ("target", target),
+                ("nearest", rf.nearest[i]),
+                ("writer", rf.writer[i]),
+            ] {
+                if v as usize >= VOCAB {
+                    return Err(bad(format!("{what} id {v} >= {VOCAB}")));
+                }
+            }
+            if u32::from(p.tokens[pos]) != target {
+                return Err(bad(format!(
+                    "panel token {} != target {target}",
+                    p.tokens[pos]
+                )));
+            }
+            if p.tokens[pos] == 0 {
+                return Err(bad("target is BOS".into()));
+            }
+            if p.mask[pos] != 1 {
+                return Err(bad("mask is 0".into()));
+            }
+            if std::mem::replace(&mut used[pos], true) {
+                return Err(bad("duplicate position".into()));
+            }
+            let model = rf.nearest[i] == target;
+            let uni = u32::from(tables.unigram_top1) == target;
+            let t2 = u32::from(tables.t2(p.tokens[pos - 1])) == target;
+            c.add_row(model, rf.writer[i] == target, uni, t2);
+            bits.push(model);
+            id.update((pos as u64).to_le_bytes());
+            id.update(target.to_le_bytes());
+        }
+        let id: [u8; 32] = id.finalize().into();
+        pooled_id.update((name.len() as u64).to_le_bytes());
+        pooled_id.update(name.as_bytes());
+        pooled_id.update(id);
+        pooled.add(&c);
+        let mut v = json!({
+            "name": name,
+            "tokens_sha256": p.tokens_sha256,
+            "mask_sha256": p.mask_sha256,
+            "rows_file_sha256": sha_bytes(&bytes),
+            "memory": rf.memory,
+            "panel_scored_positions": count_scored(&p.tokens, &p.mask, p.tokens.len()),
+            "row_identity_sha256": hex::encode(id),
+        });
+        c.fill(&mut v);
+        if let Some(mf) = &p.manifest {
+            let mfp = p.dir.join("manifest.json");
+            let get = |k: &str| {
+                mf.get(k)
+                    .and_then(Value::as_u64)
+                    .ok_or(format!("{}: {k} is not an integer", mfp.display()))
+            };
+            let (cb, pt) = (get("content_bytes")?, get("tokens")?);
+            if pt != p.tokens.len() as u64 {
+                return Err(format!(
+                    "{}: tokens {pt} != {} read",
+                    mfp.display(),
+                    p.tokens.len()
+                ));
+            }
+            v["content_bytes"] = json!(cb);
+            v["panel_tokens"] = json!(pt);
+        }
+        splits.push(v);
+    }
+    let mut hits = vec![0u8; bits.len().div_ceil(8)];
+    for (i, &b) in bits.iter().enumerate() {
+        hits[i / 8] |= u8::from(b) << (i % 8);
+    }
+    let mut pv = json!({"row_identity_sha256": hex::encode(pooled_id.finalize())});
+    pooled.fill(&mut pv);
+    let grade = json!({
+        "schema": GRADE_SCHEMA,
+        "train": {
+            "tokens_sha256": train.tokens_sha256,
+            "mask_sha256": train.mask_sha256,
+            "scored_targets": tables.scored_targets,
+            "bigram_keys_seen": tables.bigram_keys_seen,
+        },
+        "unigram_top1": tables.unigram_top1,
+        "splits": splits,
+        "pooled": pv,
+        "hits_file": HITS_FILE,
+        "hits_sha256": sha_bytes(&hits),
+    });
+    create_out_dir(&out)?;
+    write(&out.join(HITS_FILE), &hits)?;
+    write(&out.join("grade.json"), &pretty(&grade))?;
+    Ok(format!(
+        "grade {}: rows={} model={} t2={} unigram={}\n",
+        out.display(),
+        pooled.rows,
+        pooled.model,
+        pooled.t2,
+        pooled.unigram
+    ))
+}
+
+/// `⌈2·√n⌉`: the smallest `k >= 0` with `k * k >= 4n`.
+pub fn mcnemar_floor(n: u64) -> u64 {
+    let target = n.saturating_mul(4);
+    let mut k = 0u64;
+    while k.saturating_mul(k) < target {
+        k += 1;
+    }
+    k
+}
+
+/// One seed's paired reading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Seed {
+    pub b: u64,
+    pub c: u64,
+    pub d: i64,
+    pub band: u64,
+    pub position: &'static str,
+}
+
+/// The band rule over two seeds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Assessment {
+    pub seeds: [Seed; 2],
+    pub spread: u64,
+    pub verdict: &'static str,
+}
+
+/// `band(s) = max(⌈2·√(b(s)+c(s))⌉, max_s d − min_s d)`; ahead iff `d(s) > band(s)`,
+/// behind iff `d(s) < −band(s)`; the verdict needs both seeds to agree, else `mixed`.
+pub fn assess(b: [u64; 2], c: [u64; 2]) -> Assessment {
+    let d = [b[0] as i64 - c[0] as i64, b[1] as i64 - c[1] as i64];
+    let spread = (d[0].max(d[1]) - d[0].min(d[1])) as u64;
+    let seed = |s: usize| {
+        let band = mcnemar_floor(b[s] + c[s]).max(spread);
+        let position = if d[s] > band as i64 {
+            "ahead"
+        } else if d[s] < -(band as i64) {
+            "behind"
+        } else {
+            "inside"
+        };
+        Seed {
+            b: b[s],
+            c: c[s],
+            d: d[s],
+            band,
+            position,
+        }
+    };
+    let seeds = [seed(0), seed(1)];
+    let verdict = if seeds[0].position == seeds[1].position {
+        seeds[0].position
+    } else {
+        "mixed"
+    };
+    Assessment {
+        seeds,
+        spread,
+        verdict,
+    }
+}
+
+fn assessment_json(a: &Assessment) -> Value {
+    let seeds: Vec<Value> = a
+        .seeds
+        .iter()
+        .map(|s| json!({"b": s.b, "c": s.c, "d": s.d, "band": s.band, "position": s.position}))
+        .collect();
+    json!({"seeds": seeds, "spread": a.spread, "verdict": a.verdict})
+}
+
+/// Row `i` of an LSB-first hit bitset.
+pub fn hit(bits: &[u8], i: usize) -> bool {
+    bits[i / 8] >> (i % 8) & 1 == 1
+}
+
+/// `(b, c)` over rows `[start, start + len)`: X right & Y wrong, X wrong & Y right.
+pub fn discordant(x: &[u8], y: &[u8], start: usize, len: usize) -> (u64, u64) {
+    let (mut b, mut c) = (0u64, 0u64);
+    for i in start..start + len {
+        match (hit(x, i), hit(y, i)) {
+            (true, false) => b += 1,
+            (false, true) => c += 1,
+            _ => {}
+        }
+    }
+    (b, c)
+}
+
+struct Grade {
+    dir: PathBuf,
+    sha256: String,
+    v: Value,
+    hits: Vec<u8>,
+    /// `(name, row_identity_sha256, rows)` per split, in order.
+    splits: Vec<(String, String, u64)>,
+}
+
+fn load_grade(dir: &Path) -> R<Grade> {
+    let gp = dir.join("grade.json");
+    let bytes = read(&gp)?;
+    let v: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("{}: unreadable json: {e}", gp.display()))?;
+    let bad = |what: &str| format!("{}: {what}", gp.display());
+    if v["schema"] != GRADE_SCHEMA || v["hits_file"] != HITS_FILE {
+        return Err(bad("not a scale-probe grade"));
+    }
+    let hp = dir.join(HITS_FILE);
+    let hits = read(&hp)?;
+    let got = sha_bytes(&hits);
+    if v["hits_sha256"].as_str() != Some(got.as_str()) {
+        return Err(format!(
+            "{}: sha256 {got} != hits_sha256 {}",
+            hp.display(),
+            v["hits_sha256"]
+        ));
+    }
+    let mut splits = Vec::new();
+    for s in v["splits"]
+        .as_array()
+        .ok_or_else(|| bad("splits is not a list"))?
+    {
+        let name = s["name"]
+            .as_str()
+            .ok_or_else(|| bad("split without a name"))?;
+        let id = s["row_identity_sha256"]
+            .as_str()
+            .ok_or_else(|| bad("split without identity"))?;
+        let rows = s["rows"]
+            .as_u64()
+            .ok_or_else(|| bad("split without rows"))?;
+        splits.push((name.to_string(), id.to_string(), rows));
+    }
+    let total: u64 = splits.iter().map(|s| s.2).sum();
+    if v["pooled"]["rows"].as_u64() != Some(total) || hits.len() as u64 != total.div_ceil(8) {
+        return Err(format!(
+            "{}: length disagrees with {total} rows",
+            hp.display()
+        ));
+    }
+    let sha256 = sha_bytes(&bytes);
+    Ok(Grade {
+        dir: dir.to_path_buf(),
+        sha256,
+        v,
+        hits,
+        splits,
+    })
+}
+
+fn run_pair(a: &Args) -> R<String> {
+    a.known(&["out", "a1", "a2", "b1", "b2", "table"])?;
+    let out = PathBuf::from(a.one("out")?);
+    refuse_existing(&out)?;
+    let (b1, b2, table) = (a.opt("b1")?, a.opt("b2")?, a.opt("table")?);
+    let table = match (b1, b2, table) {
+        (Some(_), Some(_), None) => None,
+        (None, None, Some(t @ ("t2" | "unigram"))) => Some(t),
+        (None, None, Some(t)) => return Err(format!("table={t}: expected t2 or unigram")),
+        _ => return Err("give exactly one of b1= b2= (both) or table=".into()),
+    };
+    let mut g = vec![
+        load_grade(Path::new(a.one("a1")?))?,
+        load_grade(Path::new(a.one("a2")?))?,
+    ];
+    if let (Some(x), Some(y)) = (b1, b2) {
+        g.push(load_grade(Path::new(x))?);
+        g.push(load_grade(Path::new(y))?);
+    }
+    for x in &g[1..] {
+        if x.v["pooled"]["row_identity_sha256"] != g[0].v["pooled"]["row_identity_sha256"] {
+            return Err(format!(
+                "{}: pooled row_identity_sha256 differs from a1",
+                x.dir.display()
+            ));
+        }
+        let names = |y: &Grade| y.splits.iter().map(|s| s.0.clone()).collect::<Vec<_>>();
+        if names(x) != names(&g[0]) {
+            return Err(format!(
+                "{}: split names/order differ from a1",
+                x.dir.display()
+            ));
+        }
+        if let Some(s) = x.splits.iter().zip(&g[0].splits).find(|(p, q)| p.1 != q.1) {
+            return Err(format!(
+                "{}: split {} row_identity_sha256 differs from a1",
+                x.dir.display(),
+                s.0 .0
+            ));
+        }
+    }
+    let train = |y: &Grade| y.v["train"]["tokens_sha256"].clone();
+    for (p, q, cell) in [(0, 1, "a"), (2, 3, "b")] {
+        if q < g.len() && train(&g[p]) != train(&g[q]) {
+            return Err(format!(
+                "{}: train.tokens_sha256 differs from {}; cell {cell}'s seeds share TRAIN",
+                g[q].dir.display(),
+                g[p].dir.display()
+            ));
+        }
+    }
+    let key = table.map(|t| if t == "t2" { "vs_t2" } else { "vs_unigram" });
+    let reading = |split: Option<usize>| -> Assessment {
+        let mut b = [0u64; 2];
+        let mut c = [0u64; 2];
+        for s in 0..2 {
+            (b[s], c[s]) = match key {
+                Some(k) => {
+                    let v = match split {
+                        Some(i) => &g[s].v["splits"][i][k],
+                        None => &g[s].v["pooled"][k],
+                    };
+                    (v["b"].as_u64().unwrap_or(0), v["c"].as_u64().unwrap_or(0))
+                }
+                None => {
+                    let (start, len) = match split {
+                        Some(i) => {
+                            let start: u64 = g[s].splits[..i].iter().map(|x| x.2).sum();
+                            (start as usize, g[s].splits[i].2 as usize)
+                        }
+                        None => (0, g[s].splits.iter().map(|x| x.2).sum::<u64>() as usize),
+                    };
+                    discordant(&g[s].hits, &g[s + 2].hits, start, len)
+                }
+            };
+        }
+        assess(b, c)
+    };
+    let pooled = reading(None);
+    let splits: Vec<Value> = (0..g[0].splits.len())
+        .map(|i| {
+            let mut v = assessment_json(&reading(Some(i)));
+            v["name"] = json!(g[0].splits[i].0);
+            v
+        })
+        .collect();
+    let mut inputs = json!({"a1": g[0].sha256, "a2": g[1].sha256});
+    match table {
+        Some(t) => inputs["table"] = json!(t),
+        None => {
+            inputs["b1"] = json!(g[2].sha256);
+            inputs["b2"] = json!(g[3].sha256);
+        }
+    }
+    let doc = json!({
+        "schema": PAIR_SCHEMA,
+        "inputs_grade_sha256": inputs,
+        "pooled": assessment_json(&pooled),
+        "splits": splits,
+    });
+    if let Some(parent) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&out)
+        .map_err(|e| format!("{}: {e}", out.display()))?;
+    std::io::Write::write_all(&mut f, &pretty(&doc))
+        .map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(format!(
+        "pair {}: pooled verdict {}\n",
+        out.display(),
+        pooled.verdict
+    ))
+}
