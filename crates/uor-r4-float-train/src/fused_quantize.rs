@@ -216,6 +216,7 @@ mod cuda {
     /// Threads per row of the activation kernels: a whole number of warps, as their full-mask
     /// shuffle needs.
     pub(super) const ROW_THREADS: usize = 256;
+    const _: () = assert!(ROW_THREADS % 32 == 0 && ROW_THREADS <= 1024);
 
     fn view<'a>(storage: &'a CudaStorage, layout: &Layout) -> CResult<CudaView<'a, f32>> {
         if storage.dtype() != DType::F32 {

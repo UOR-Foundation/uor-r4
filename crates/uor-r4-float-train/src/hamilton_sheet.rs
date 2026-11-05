@@ -1038,10 +1038,12 @@ pub fn with_fused_quantize<T>(
 }
 
 /// Whether this call of `chain` on `x` takes the fused op, counting the path it takes. `eligible`
-/// is the chain's own condition on top of the input's.
+/// is the chain's own condition on top of the input's. An empty input keeps the chain, which
+/// returns it empty where the activation op refuses a row of width 0.
 fn fused_applies(chain: TimedChain, x: &Tensor, eligible: bool) -> bool {
     let fused = eligible
         && FUSED_QUANTIZE.with(|flag| flag.get())
+        && x.elem_count() > 0
         && x.dtype() == candle_core::DType::F32
         && x.is_contiguous()
         && x.device().is_cuda();
