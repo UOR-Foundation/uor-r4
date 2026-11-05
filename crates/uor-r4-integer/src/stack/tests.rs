@@ -5618,6 +5618,76 @@ fn turn_memory_keys_follow_the_item_rule() {
     assert!(moved > key_window, "the decoded reply crossed the key window's block boundary");
 }
 
+/// The header JSON of an artifact.
+fn header_json(bytes: &[u8]) -> Value {
+    let len = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+    serde_json::from_slice(&bytes[16..16 + len]).expect("header")
+}
+
+/// A 64-token trunk with its turn memory keyed in 64-token blocks.
+fn carry_trunk() -> super::FbsTrunkSnapshot {
+    let mut snap = turn_memory_trunk(64);
+    snap.memory = Some(synthetic_turn_memory(snap.vocab, snap.width, 4, 64, true, 0, 288));
+    snap
+}
+
+/// claude-288: a carry export serves past the trained window, with the turn memory keyed over the
+/// whole served window and the trained window recorded; the base export stops at it.
+#[test]
+fn carry_export_serves_past_the_trained_window() {
+    let snap = carry_trunk();
+    let snaps = super::FbsExportSnaps::SNAPPED;
+    let carry = super::export_fbs_trunk_uorlut01_carry(&snap, snaps, 200).expect("carry export");
+    let model = IntegerStackModel::parse(&carry).expect("served carry");
+    assert_eq!(model.shape().context, 200);
+    assert_eq!(model.turn_memory().expect("record").key_window, 200);
+    assert_eq!(header_json(&carry)["source"]["trained_context"], json!(64));
+    let mut session = model.session();
+    for i in 0..100usize {
+        session.step_native(20 + (i % 40) as u32).expect("a step past the trained window");
+    }
+    let base = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("base export");
+    let model = IntegerStackModel::parse(&base).expect("served base");
+    let mut session = model.session();
+    for i in 0..64usize {
+        session.step_native(20 + (i % 40) as u32).expect("a step inside the window");
+    }
+    assert!(matches!(session.step_native(20), Err(StackError::ContextFull { context: 64 })));
+}
+
+/// claude-288: without carry the export is the wrapper's, byte for byte, with no trained context.
+#[test]
+fn base_export_records_no_trained_context() {
+    let snap = carry_trunk();
+    let base = super::export_fbs_trunk_uorlut01(&snap).expect("base export");
+    let snaps = super::FbsExportSnaps::SNAPPED;
+    let with = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("with");
+    assert_eq!(base, with);
+    assert!(header_json(&base)["source"].get("trained_context").is_none());
+}
+
+/// claude-288: a carry context below the trained window or past the limit is refused, and so is a
+/// recorded trained context of 0 or past the served context.
+#[test]
+fn carry_export_refusals() {
+    let snap = carry_trunk();
+    let snaps = super::FbsExportSnaps::SNAPPED;
+    for context in [63, super::format::MAX_CONTEXT + 1] {
+        let refused = super::export_fbs_trunk_uorlut01_carry(&snap, snaps, context);
+        assert!(matches!(refused, Err(StackError::Shape(_))), "context {context}");
+    }
+    let carry = super::export_fbs_trunk_uorlut01_carry(&snap, snaps, 200).expect("carry export");
+    for trained in [0, 201] {
+        let edited = with_header(&carry, |h| h["source"]["trained_context"] = json!(trained));
+        assert!(
+            matches!(super::format::Container::parse(&edited), Err(StackError::Shape(_))),
+            "trained_context {trained}"
+        );
+    }
+    let edited = with_header(&carry, |h| h["source"]["trained_context"] = json!(200));
+    assert!(super::format::Container::parse(&edited).is_ok());
+}
+
 /// Units 2-3: the opening table moves the reply's first step's row and the reply table each later
 /// row, n + w(c - n), after the Hamming readout. A zero weight, an unseen key, a memory without a
 /// reply table and a session without the reply-start signal move nothing.
