@@ -114,6 +114,7 @@ struct ScaleServingSummary {
     mlp: usize,
     layers: usize,
     kept_cells: usize,
+    readout_mode: &'static str,
     repeats: usize,
     cpu_model: String,
     logical_cpus: usize,
@@ -221,6 +222,7 @@ fn run_grid(
         mlp: MLP,
         layers: LAYERS,
         kept_cells: KEPT_CELLS,
+        readout_mode: "whole_table_nearest_l1",
         repeats,
         cpu_model: cpu_model(),
         logical_cpus: std::thread::available_parallelism()
@@ -372,6 +374,7 @@ fn validate_manifest(
         || shape.mlp != MLP
         || shape.layers != LAYERS
         || shape.kept_cells != KEPT_CELLS
+        || report.manifest.readout.mode != "whole_table_nearest_l1"
     {
         return Err(format!(
             "artifact shape differs at width {width}, context {context}, arm {}, repeat {repeat}",
@@ -434,6 +437,7 @@ fn build_artifact(width: usize, context: usize, arm: Arm, seed: u64) -> Result<V
             decay_step: 0.0625,
         },
     );
+    snapshot.readout_nearest = true;
     if arm == Arm::Full {
         snapshot.hamming = Some(synthetic_hamming(
             width,
