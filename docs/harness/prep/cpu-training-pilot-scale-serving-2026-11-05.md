@@ -49,11 +49,11 @@ the reply start so the exact opening/reply memory lookup path executes.
 
 - base: `3ac40d6d5`;
 - implementation source:
-  `8f0766915f175ff3497be29664ab278e228a8271`;
+  `bf3d44dd47faaf7531edd089b464c328990291bc`;
 - binary:
   `/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench`;
 - binary SHA-256:
-  `68bd9957f556dcb903ab035cfad6c48c09f3a7b92bfd64fd32086dbfc48c6771`;
+  `d652a9d4056b9534000ddb2b53b027e1eb7cdd02c2c3cec38452b95d5cb866fe`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: one process, platform default worker availability for library
   code, no GPU.
@@ -93,8 +93,8 @@ OUT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/
 BIN=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench
 
 test ! -e "$OUT/summary.json"
-git -C "$SOURCE" merge-base --is-ancestor 8f0766915f175ff3497be29664ab278e228a8271 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 68bd9957f556dcb903ab035cfad6c48c09f3a7b92bfd64fd32086dbfc48c6771
+git -C "$SOURCE" merge-base --is-ancestor bf3d44dd47faaf7531edd089b464c328990291bc HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = d652a9d4056b9534000ddb2b53b027e1eb7cdd02c2c3cec38452b95d5cb866fe
 mkdir -p "$OUT"
 timeout 1200s "$BIN" --output "$OUT/summary.json"
 ```
