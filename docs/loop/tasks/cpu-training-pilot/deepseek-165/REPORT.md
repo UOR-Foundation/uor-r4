@@ -55,7 +55,7 @@ vector-table row was non-vacuous but substantially worse than depth-first copy.
   random-32 **414**, writer **49 and 60**;
 - geometric changed **4,017 and 3,927** train decisions and **5,106 and
   4,891** fresh decisions versus longest-32;
-- random-32 changed **3,469** train and **4,171** fresh decisions;
+- random-32 changed **2,295** train and **2,921** fresh decisions;
 - every geometric copy decision carried a selected distance; every fallback
   preserved its writer token;
 - all arms had zero exact replies, zero BOS-complete replies and zero premature
