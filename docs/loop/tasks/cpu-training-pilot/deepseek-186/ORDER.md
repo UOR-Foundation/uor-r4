@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-186 (release table-anchor isolation)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `5e7d5c681`.
 
 ## Goal
