@@ -5437,4 +5437,37 @@ mod tests {
         }
         Ok(())
     }
+
+    /// writer-admission, claude-289: a near-tie inside the flat class's `1e-4` band. The first
+    /// port sits at `e` times root 0 and the second at zero. Root 0 then scores `-0.5 + e / 2`,
+    /// a root sharing one signed coordinate with it `-0.5`, and one sharing none `-0.5 - e / 2`,
+    /// so the 256 cell scores span `e / 2` to `e`.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn admission_counts_read_a_near_tie_on_cuda() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let table = Tensor::zeros((4096, 16), candle_core::DType::F32, &device)?;
+        let writer = NativeVectorWriter::new(
+            &table,
+            WriterSpec {
+                vocabulary: 4096,
+                width: 16,
+                kept_cells: 8,
+            },
+        )?;
+        let e = 5.0e-5f32;
+        let roots = crate::spiralcore_fbs::ProjectionPlan::new(8, 8)?.geometry.roots;
+        let mut row: Vec<f32> = roots[0].map(|v| f32::from(v) * e).to_vec();
+        row.extend([0.0f32; 8]);
+        let query = Tensor::from_vec(row, (1, 16), &device)?;
+        let counts = admission_counts(&writer, &query, &[0])?;
+        assert_eq!((counts.rows, counts.admitted), (1, 1));
+        let r = counts.reading();
+        assert_eq!(r.cell_spread_below, vec![0, 1, 1, 1]);
+        let half = f64::from(e) / 2.0;
+        assert!(r.cell_spread_mean > 0.9 * half && r.cell_spread_mean < 2.1 * half);
+        assert_eq!(counts.ports[0].top_root[0], 1);
+        assert!(counts.ports[0].top_gap_sum > 0.9 * half);
+        Ok(())
+    }
 }
