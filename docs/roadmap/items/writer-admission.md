@@ -28,8 +28,8 @@ The decision is to serve whole-table nearest, because the writer failed at one s
   - So done-when 2's change must be one the tie point cannot satisfy. A margin alone is not expected to leave it (an inference, untested). The REPORT's Still open, item 1, cautions that a symmetric pull toward the target's root may share the centre as its minimum while the port is uninformed.
 - **The change (done-when 2, [claude-290](../../loop/tasks/writer-admission/claude-290/REPORT.md)): anchored ports, `train-in-space --writer-anchor 1`, off by default.**
   - The shared table's two port blocks hold exactly each token's own cell roots. They are set at model build and after every main step, with their gradient masked to 0, in both training loops. The other columns stay learned.
-  - A token's own vector then addresses its own cell first at score 0, so the recipe's own `cell` or `nearest` objective trains admission.
-  - Four CUDA tests and three host tests pass on a pod, and both negative gates fail as required. No training run has used it yet.
+  - A token's own vector then addresses its own cell first at score 0, so the recipe's own `cell` or `nearest` objective would train admission (argued from the code, untested in training).
+  - Four CUDA tests and three host tests pass on a pod, and both negative gates fail as required. No run beyond a 32-step smoke has used it, and no training result exists.
   - **What done-when 3's sheet must carry:**
     - the query ports' mean |x| before step 2,048, with a stop rule, since the centre stays a fixed point in expectation for an uninformed trunk and the anchor fixes only the table side;
     - what the anchor costs nearest, since the table is also the input embedding and a cell's 16 tokens share their port code;

@@ -10,17 +10,17 @@ Lab: claude. [ORDER](./ORDER.md). PR #3727, item #3394. Plan step: P6 of Casey's
 
 **In one paragraph.**
 - **What the anchor does to the writer:** a token's own anchored vector, read as a query, puts its own cell first in the writer's `candidates`, at address score exactly 0. This holds for all six tokens tried, from both of a 512-token table's two cell rounds.
-  - So with anchored ports, the writer's address score for a cell is the ports' share of nearest's own L1 distance to that cell's tokens.
-  - The recipe's own token objective (`cell` or `nearest`) is then what trains admission. No separate address hinge is left to lose, as `voronoi`'s could.
+  - So with anchored ports, the writer's address distance to a cell is proportional to the ports' part of nearest's mean absolute distance to that cell's tokens (a factor of 8 / W; `nearest_scores`, `in_space_long.rs:1031–1046`).
+  - The recipe's own token objective (`cell` or `nearest`) is then what would train admission: argued from the code, not yet tested in training. No separate address hinge is left to lose, as `voronoi`'s could.
 - **What the tests pin:**
   - after a main step, the 16 port columns equal the roots bit for bit, and a learned column moved;
   - the gradient the update sees is exactly 0 on the port columns;
-  - an informed row's gradient moves its ports, and coordinate by coordinate never away from the target's roots.
+  - for an informed row whose ports start near the centre, leaning 1% toward the target's roots, the gradient moves its ports, and coordinate by coordinate never away from the target's roots (three tokens, one table).
 - **The negative gates bite:**
   - with the projection's call removed, the step test fails: token 0's first port coordinate reads `1.9998` (bits `1073740146`) against the root's `2` (`1073741824`), since weight decay scaled it by `1 − 1e-3 · 0.1`;
   - with the mask's call removed, the gradient test fails at its zero check.
 - **What this does not show:** that admission holds in training. Claude-289's seed 2 failed on the query side, where its two ports fell to the roots' centre, and the anchor fixes only the table side.
-  - For a row whose trunk predicts the target's roots, the centre is not stationary (the informed-row test).
+  - For a row whose trunk predicts the target's roots, the informed-row test shows the pull toward the target's roots near the centre, from ports already leaning 1% that way. It does not compute the gradient at the centre itself.
   - For an uninformed trunk it is still a fixed point in expectation (the ORDER's "What it does not claim").
   - Done-when 3's pre-registered run decides it, and must read the query ports before step 2,048.
 
@@ -38,6 +38,8 @@ Lab: claude. [ORDER](./ORDER.md). PR #3727, item #3394. Plan step: P6 of Casey's
 4. **The informed-row test does not start where the ORDER's wording puts it.** The ORDER says the ports start at 0. The test starts them at `0.01 · root + 0.001`, for two reasons.
    - candle's gradient of `|x|` at exactly 0 is +1, so a port coordinate at 0 whose target root is also 0 would be pushed off its root by the kink alone.
    - The `+ 0.001` puts every coordinate on one side of every kink. It is the same for every rival, so it does not favour the target.
+   - The `0.01 · root` term does favour the target. Where a target root is −2, the start is −0.019, which lies between the target and every rival whose root there is 0, so that coordinate is pulled. From the exact centre, with candle's +1 at 0, it would get no pull from such a rival, while a coordinate whose target root is +2 would. That split is the ORDER's "about half the time".
+   - So the test shows the pull near the centre, from a start already leaning toward the target, not at the centre itself.
    - The code review checked this. It also found that the test's first form asserted only that the summed L1 distance to the roots falls, which one coordinate moving away could hide. The test now asserts each of the 16 coordinates (What changed).
 5. **No CPU path:** the anchor refuses a non-CUDA device before any arithmetic, as the writer does. So the projection and the mask are pinned only by the pod's tests, and the laptop runs only the three host tests.
 6. **Job 2's first attempt stalled, an instrument fault.** Its `git fetch --depth 1` of `b6e214bbf` from GitHub stopped at 16 MB and grew no further for about three minutes; git sets no timeout.
@@ -53,7 +55,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3727, item #3394. Plan step: P6 of Casey's
   - the restored file (a clean `git status`), whose seven anchor tests then passed;
   - the binary build, the input fetch and the smoke run.
 - **The second job, at `b6e214bbf`** after the review's test change: the suite again, 377 passed, 0 failed, 12 ignored, with all seven anchor tests among the passes.
-- **Off is a no-op:** with the option off, the update runs alone and `config.json` carries no `writer_anchor` key (a host test). The existing tests, all run in both suites, pass unchanged.
+- **Off is a no-op:** with the option off, `anchored_update(None, …)` runs the update alone (read from the code), and `config.json` carries no `writer_anchor` key (a host test). The existing tests, all run in both suites, pass unchanged.
 - **The writer's file is untouched.** `native_vector_writer.rs`'s `binding()` carries its own `source_sha256`, so editing it would have invalidated every existing writer checkpoint.
 
 ## What changed
@@ -125,7 +127,11 @@ Lab: claude. [ORDER](./ORDER.md). PR #3727, item #3394. Plan step: P6 of Casey's
     - The step test's "a learned column moved" passes from weight decay alone. The mask test pins the masking.
     - The usage line was already over 100 characters.
     - The reviewer confirmed that nothing else writes `embedding.weight` after the projection. Train-as-served rounds, then restores before the step; the checkpoint closure rounds, saves and restores; no optimizer other than `opt_main` steps the table.
-  - **a claims check of this REPORT,** CLAIMS_CHECK.
+  - **a claims check of this REPORT,** the notebook row and the item's lines, at `f0a7ba9df`: FIX CLAIMS, two minors and three nits, all fixed in the next commit.
+    - "No training run" was wrong, since the 32-step smoke trains; it now reads "no training run beyond a 32-step smoke".
+    - The informed-row test was cited as showing that the centre is not stationary. It starts the ports leaning 1% toward the target's roots, so it now shows the pull near the centre, not at it (What did not work, item 4).
+    - "Trains admission" is now "would train admission", argued from the code. "Off runs the update alone" is marked as read from the code, not tested. The writer's distance is now "proportional to" nearest's port part, a mean, not an L1 sum.
+    - It reproduced the seal, both suites' counts, the restored count, both negative gates' bits and their arithmetic, the CPU suite, the usage line's lengths, the diff's split, the smoke readings, the decay arithmetic, the 40× fall and the cost.
   - It is recorded by `loop review` at the final head.
 
 ## Skills used
@@ -148,7 +154,7 @@ None applied.
 
 The model predicts a point, and a cheap "writer" picks which of 256 boxes (cells) the answer is in, by comparing 16 of the point's numbers (two "ports" of 8) with 16 fixed reference points (roots). In the failed training run, those 16 numbers shrank to the centre of the reference points, where every box looks the same.
 
-This unit adds an option that pins the matching 16 numbers of every word's stored vector to its own box's reference points, and keeps them there after every training step. So a word's own vector now points straight at its own box, and the model's ordinary training goal teaches the box choice too.
+This unit adds an option that pins the matching 16 numbers of every word's stored vector to its own box's reference points, and keeps them there after every training step. So a word's own vector now points straight at its own box, and the model's ordinary training goal should teach the box choice too. The next unit's run tests whether it does.
 
 Tests on a rented GPU show the pinned numbers stay exact after a step, that no training signal is wasted on them, and that a word's own vector picks its own box first. They also show that removing either half of the mechanism makes its test fail. What this does not yet show is whether the writer now works in a real training run. That is the next unit's pre-registered run, which watches the predicted point's 16 numbers early in training, where the failure began. The GPU time cost about $0.35.
 
