@@ -112,16 +112,17 @@ with `PUBLISHED-SHA256SUMS`.
 ## Size
 
 Against base `1b501c2f1`, the branch changes **3** code files (**+833 / -24**),
-**7** documentation files (**+516 / -0**), and **22** evidence/resource files
-(**+1,202 / -0**): **32 files, +2,551 / -24**. No standalone test file changed
+**9** documentation files (**+540 / -0**), and **21** evidence/resource files
+(**+1,195 / -0**): **33 files, +2,568 / -24**. No standalone test file changed
 because the focused tests remain in `copy_key_depth.rs`. The ORDER gave no line
 estimate, so a ratio to estimate is not defined. No generated corpus or binary
 is tracked.
 
 ## Skills used
 
-No system-provided Codex skill applies. Project-specific FIT, independent GO
-and exact-head review procedures were followed.
+The project-provided `uor-research-architect` skill was used for the
+research and delivery reviews. Project-specific FIT, independent GO and
+exact-head review procedures were followed.
 
 ## Still open
 
