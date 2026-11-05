@@ -85,8 +85,9 @@ different terminal prototype construction or a nonterminal-aware objective.
 - Release build, **258** library tests, **10** driver tests, scoped Clippy and
   rustfmt passed.
 - Source and all five public inputs matched.
-- Phase packing, offset-zero history, generated phase history, non-vacuous
-  label prediction changes and the pre-firing code-prefix audit passed.
+- Phase packing, offset-zero history, generated phase history and non-vacuous
+  label prediction changes passed. The full-generation code-prefix audit is
+  `NOT_RUN` because the preflight stopped before generation.
 - The preflight wrote structured failure evidence and sealed all outputs.
 - Claim wording, docs catalog, roadmap schema/rendering, formats,
   `uor-harness check` and `git diff --check` are recorded at delivery.
