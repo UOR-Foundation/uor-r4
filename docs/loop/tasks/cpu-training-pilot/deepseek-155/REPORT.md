@@ -73,7 +73,7 @@ Resources:
 - four attempt-6 analyses **0.51-0.57 s each**, peak **159,464 KiB**;
 - analyzer binary **1,350,696 bytes**, SHA-256
   `a6fffd70b67a220a5b699ca86398ee6caa1ceabf3c2de4b3b1278fa8c937413e`;
-- fresh target storage **4,663,321,830 bytes**;
+- fresh target storage **4,664,680,601 bytes**;
 - published evidence **198,944 bytes**;
 - admitted cumulative projection: **78,227.677487699 s**.
 

@@ -16,9 +16,9 @@
     "peak_rss_kib": 159464,
     "driver_binary_bytes": 1350696,
     "driver_binary_sha256": "a6fffd70b67a220a5b699ca86398ee6caa1ceabf3c2de4b3b1278fa8c937413e",
-    "fresh_target_bytes": 4663321830,
+    "fresh_target_bytes": 4664680601,
     "published_evidence_bytes": 198944,
-    "free_space_after_run_bytes": 469521399808
+    "free_space_after_run_bytes": 469132361728
   },
   "attempts": [
     {
