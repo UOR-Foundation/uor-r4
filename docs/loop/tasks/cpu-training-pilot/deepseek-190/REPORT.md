@@ -19,14 +19,27 @@ path with the corrected trailers.
 
 No model or runtime code has changed yet.
 
-## Checks run
+## Measurements
+
+Not run yet.
+
+## Checks run at the head
 
 - ORDER claim check: pass for order, scope, banned presence, owner paths and
   rule sources;
-- repository policy rejected the first push until this in-progress REPORT was
-  present.
+- the first push was refused until this in-progress REPORT existed and carried
+  the required REPORT sections.
+
+## Skills used
+
+No system-provided Codex skill applies. Repository loop, claim and delivery
+procedures are being used.
 
 ## Still open
 
 Benchmark implementation, focused tests, FIT, D67 GO, the 18-cell run,
 evidence, reviewed delivery and fresh-main verification.
+
+## Plain summary
+
+This claim is open. No benchmark, model or serving result exists yet.
