@@ -25,7 +25,7 @@ The decision is to serve whole-table nearest, because the writer failed at one s
   - Admission is then a near-tie lottery, about chance (8 of 256 cells).
   - The trunk learned anyway (nearest `6,909`). Seed 1's ports point at the target's roots instead (class L).
   - Both seeds start alike, and they split before step 2,048.
-  - So done-when 2's change must be one the tie point cannot satisfy. A margin alone does not leave it. The REPORT's Still open, item 1, cautions that a symmetric pull toward the target's root may share the centre as its minimum while the port is uninformed.
+  - So done-when 2's change must be one the tie point cannot satisfy. A margin alone is not expected to leave it (an inference, untested). The REPORT's Still open, item 1, cautions that a symmetric pull toward the target's root may share the centre as its minimum while the port is uninformed.
 - **Main refuses checkpoints saved before `bcf2f57f7`** (29 Oct): their projection fingerprint pins `spiralcore_fbs.cu`, whose backward changed. A reading of claude-150's checkpoints is built on `074d54b2`, as claude-289's evidence branch was.
 - **The writer** ([`native_vector_writer.rs`](../../../crates/uor-r4-float-train/src/native_vector_writer.rs), `address_scores`) keeps 8 of 256 cells. A cell is a pair of roots: the query's first and last 8 coordinates are each scored against 16 SpiralCore roots, by mean absolute distance. A token outside the kept cells cannot be decoded.
   This is the float-train crate's copy, the one `train-in-space` builds against (`crates/uor-r4-float-train/src/lib.rs`). `crates/uor-r4-training` holds another copy, which is not in scope.

@@ -13,15 +13,19 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
   - **The ports shrink:** their coordinates' mean absolute value falls from 2.2e-5 and 2.9e-5 at step 4,096 to 5.4e-7 and 8.3e-7 at 32,768. Over the same steps the whole query's grows from 1.06 to 3.97.
   - **The scores tie:** at step 32,768 every one of the 14,287 DEV rows has its 256 cell scores within 1e-4 of each other, and 5,625 rows within 1e-6.
 - **It is a near-tie, not an exact one.** An exact tie would keep cells 0–7 on every row. Instead:
-  - only 30–84 rows rank the target's cell at its own id;
+  - only 30–84 rows rank the target's cell at its own id. That is about the 56 (14,287 / 256) that a rank unrelated to the id gives by coincidence, where an exact tie gives every row;
   - 110–246 distinct cells are kept first;
   - residual differences pick the kept cells. Admission is then a lottery: 208–714 rows a checkpoint, a mean of 442 over the 15, against chance's 446 (8 of 256 cells).
-- **The ports carry no target information:** the target root's mean rank is 6.47–8.10 against chance's 7.5.
+- **The ports carry no target information the mean rank can see:** the target root's mean rank is 6.47–8.10 against chance's 7.5.
 - **The trunk learned anyway:** nearest's hits rose from 3,702 at step 4,096 to 6,909 at 32,768. The failure lies in the 16 port coordinates, not the trunk.
-- **The cause lies in training, not the initialization.** Both seeds read U alike at step 0.
+- **By the sheet's rule, the split arises in training:** both seeds read U alike at step 0.
+  - That rule does not exclude a difference in the two seeds' initializations or data order, which a step-0 class cannot see.
+  - Still open, item 2, names the rerun that would show it.
   - By step 2,048 they have split. Seed 1's ports point at the target's roots (mean ranks 2.68 and 3.32, class O).
-  - Seed 2's ports have shrunk to 0.02 with no target information (7.08 and 7.28, U), and its nearest reads 76 hits, against seed 1's 2,630.
-- **What it points done-when 2 to (the sheet's F row):** a change the tie point cannot satisfy, built from the roots' own geometry. Examples: cells kept by the target's own ports in training, or a port-to-target-root term that reads 0 only on the root. A margin alone does not leave the tie. Still open, item 1, adds one caution.
+  - Seed 2's ports have shrunk to 0.02, with mean root ranks near chance (7.08 and 7.28, U), and its nearest reads 76 hits, against seed 1's 2,630.
+- **What it points done-when 2 to (the sheet's F row):** a change the tie point cannot satisfy, built from the roots' own geometry. Examples: cells kept by the target's own ports in training, or a port-to-target-root term that reads 0 only on the root.
+  - A margin alone is not expected to leave the tie. That is an inference from the near-tie, not tested here.
+  - Still open, item 1, adds one caution.
 - **Two seeds, one failing run:** the class names this run's failure. It is not a rate.
 
 ## What did not work
@@ -67,13 +71,20 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
 - **The evidence branch** (+630 on `074d54b2`) carries the same instrument for run 2 and is not merged.
   - Its worktree is removed and the pushed branch kept.
   - Its one commit is also stored as `evidence-8cb2ff98.patch` beside the results (SHA-256 `b4745e5cf0db6115b56dbae84a215ae9ece25c1719cee9f904a0e76a5fbbfc58`).
-  - `uor-harness check` warns that the branch has no PR. It is kept rather than archived, because this REPORT and the store's `job.sh` name its commit (Still open, item 5).
+  - `uor-harness check` warns that the branch has no PR. It is kept rather than archived, because this REPORT and the store's `job.sh` name its commit (Still open, item 6).
+- **After the exact-head review,** test only: `admission_counts_merge_and_read` also asserts `rank_is_cell_rows`, the second port's `mean_abs` and `target_root` after a merge, each carried on both sides.
+  - Each assert fails with its own merge line set aside, reading 1 against 2, 0.03125 against 0.125, and (3, 0) against (3, 1).
+  - The test passes again after the restore and a rebuild.
+  - The instrument block itself is unchanged, and stays byte-identical to the evidence branch's.
 - **Size:** the ORDER gave no line estimate. The PR adds 640 lines of code, about a quarter of them tests, and no code line is removed.
 
 ## Measurements
 
 **The command,** per seed S, on the pod: `train-in-space-8cb2ff98 --data-root /workspace/tis-in/w2-inputs/2026-10-25/driver-data --retain-rates 1 --inspect RUN --seed S`, where RUN is claude-150's `sS-074d54b2/run`.
-- **The classes** come from `jq -s -f classify.jq inspect-sS.out`, which encodes the sheet's decision table and seed rule. It is stored beside the seal, SHA-256 `0d8b50e926e42056a32275cfa15b5a449fae39120a5a4512cfe9f76c76b86d73`.
+- **The classes** come from `jq -s -f classify.jq inspect-sS.out`.
+  - It encodes the sheet's decision table and the per-seed rule (12 of 15, step 32,768 among them).
+  - The rule against a class shared with seed 1 is applied in this REPORT, by hand.
+  - It is stored beside the seal, SHA-256 `0d8b50e926e42056a32275cfa15b5a449fae39120a5a4512cfe9f76c76b86d73`.
 - **The rows** are DEV's 14,287 scored rows at every checkpoint.
 - **The columns:**
   - **admitted:** rows whose target cell is among the 8 kept;
@@ -139,7 +150,12 @@ At step 14,336, all 14,287 rows lie under 1e-2, so it reads N.
   - seed 2 reads 114.7–134.4 from step 4,096;
   - seed 1 reads 30.4–38.2.
 - **The instrument checks:**
-  - **I-1:** both inspections exited 0, so the reading's admitted and row counts equalled the panel's at all 34 checkpoints.
+  - **I-1:** both inspections exited 0, so at all 34 checkpoints:
+    - the reading's admitted and row counts equalled the panel's;
+    - every batch's port sums equalled the writer's 256 cell scores exactly;
+    - the rows whose target cell ranks under 8 numbered the writer's admitted rows.
+
+    That last leg compares a count, not each kept cell's rank (Still open, item 5).
   - **I-2:** `I2-s1.json` and `I2-s2.json` read 17 of 17 with no mismatch, and the probe 1 of 1. The panel's top-1 and admitted counts and nearest's hits equal claude-150's logged ones at every step.
   - **I-3:** the CUDA library suite on the evidence build passed (116 passed, 0 failed, 5 ignored), both admission tests among them.
   - **I-3b:** with `ADMISSION_SPREAD_BOUNDS[1]` at `1e-5`, the near-tie test fails, reading `[0, 0, 1, 1]` against `[0, 1, 1, 1]` (exit 101). The source was then restored.
@@ -147,7 +163,7 @@ At step 14,336, all 14,287 rows lie under 1e-2, so it reads N.
 
 ## Checks run at the head
 
-- **The head** adds this REPORT, the notebook row, the item's lines and the sheet's outcome to `dae2911be`. No code changed after the commit the pod built at run 1. Run 2 built the evidence branch.
+- **The head** adds this REPORT, the notebook row, the item's lines and the sheet's outcome to `dae2911be`, the commit the pod built at run 1. Its one code change since then is the merge test's three asserts, which touch test code only. Run 2 built the evidence branch.
 - **The laptop gates at the head**, after the cache repair in What did not work, item 5:
   - the float crate's CPU suite, `--no-fail-fast`, passes: 306 passed and 0 failed over 9 test targets, `admission_counts_merge_and_read` among them;
   - the stub-nvcc `--features cuda --all-targets` check passes.
@@ -162,7 +178,11 @@ At step 14,336, all 14,287 rows lie under 1e-2, so it reads N.
   - the sheet's FIT: NOT FIT at round 1, then FIT at round 2 (#3394, 6657781139);
   - the D67 pre-run review: GO (6657781139);
   - the run 1 note (6657976950);
-  - the exact-head review of this PR, recorded by `loop review`.
+  - the exact-head review of this PR, at `94e513ac4`, in three fresh slices, each APPROVE WITH CHANGES with no blocker:
+    - **the instrument code:** it confirms the reading's port scores, cell layout and tie rule match the writer's, and that the bands, means and merge are right. Its three minors are Still open, item 5, with the coincidence reading of `rank_is_cell_rows` now in the paragraph above.
+    - **the tests and wiring:** it confirms the evidence patch's `hamilton_sheet.rs` lines equal the head's, and its `in_space_long.rs` port is equivalent for a non-served inspection. Its merge-test gaps are fixed (What changed); its other points are Still open, item 5.
+    - **a claims check of every number:** it reproduced both seeds' classes and every table value and range it checked. Its two majors were a causal sentence and an untested margin claim; both are reworded here, in the notebook row and in the item, and so are its two minors.
+  - It is recorded by `loop review` at the final head.
 
 ## Skills used
 
@@ -179,7 +199,12 @@ None applied.
    - Any later reading of pre-29-Oct checkpoints on main needs either an evidence branch, as here, or a load that pins the forward alone.
    - The second is a change to the checkpoint identity rule outside this item's scope, so it is not taken here.
 4. **Done-whens 3 and 4,** the pre-registered run and its REPORT, follow done-when 2.
-5. **The evidence branch** `claude/evidence/writer-admission-074d54b2` stays on origin until an archive unit moves it to `archive/history/branch-archive/` with an INDEX row. That folder is outside this item's scope. Its patch is already in the store.
+5. **The instrument's limits** (the exact-head code review; none changes a reading here). They land with done-when 2's unit, which runs the reading again, so the merged instrument stays byte-identical to the block run 2 ran.
+   - **I-1's rank leg** compares how many rows rank under 8 with the admitted count. A per-column check would rank each of the writer's 8 kept cells and require column k at rank k. The tie rule was checked against the writer's by reading the code.
+   - **A port's per-coordinate spread** is E[x²] − E[x]², summed in f32 on the device. Away from 0 it can cancel when the mean is much larger than the spread. This REPORT cites no spread value, only `mean_abs`.
+   - **A served inspection** (`--inspect` on a served run) skips the reading and prints no `admission` field, because its panel reads the Q12 writer while the reading reads the continuous one. A marker saying so would tell "skipped" from "missing".
+   - **The near-tie CUDA test's band** is 0.45e to 1.05e, against the sheet's e/2 to e. I-3b shows it can fail.
+6. **The evidence branch** `claude/evidence/writer-admission-074d54b2` stays on origin until an archive unit moves it to `archive/history/branch-archive/` with an INDEX row. That folder is outside this item's scope. Its patch is already in the store.
 
 ## Plain summary
 
@@ -187,6 +212,6 @@ The model predicts a point, and a cheap "writer" looks up which of 256 boxes (ce
 
 This unit opened the failed seed's saved checkpoints and measured the ports at each one. The ports had collapsed to almost exactly zero, the centre of the 16 reference points. There, every reference point looks equally good, so all 256 boxes score the same to within a millionth, and the writer's choice is a coin toss. The rest of the model still learned: a slower whole-table lookup on the same model kept getting better. The good seed's ports pointed at the right reference points instead. Both seeds started alike, so the collapse happened during training, in the first 2,048 steps.
 
-So the next unit has to change how boxes are chosen, in a way that the "everything ties" point at the centre cannot satisfy. A bigger margin alone would not help. The first attempt to read the checkpoints failed because today's code refuses checkpoints saved before 29 October. The reading was rerun on the code they were trained with. Every check held, and the pod time cost about $0.19.
+So the next unit has to change how boxes are chosen, in a way that the "everything ties" point at the centre cannot satisfy. A bigger margin alone is not expected to help, though that was not tested. The first attempt to read the checkpoints failed because today's code refuses checkpoints saved before 29 October. The reading was rerun on the code they were trained with. Every check held, and the pod time cost about $0.19.
 
 References #3394.
