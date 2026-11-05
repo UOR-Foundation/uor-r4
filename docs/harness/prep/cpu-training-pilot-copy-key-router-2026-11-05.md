@@ -49,10 +49,11 @@ the fixed age uppers:
 1, 2, 4, 8, 16, 32, 64, 128, 192
 ```
 
-At inference, select the available depth with highest learned precision; tie by
-deeper key. A depth-age cell with no training matches is unavailable. If no
-cell is available, fall back to longest-first. This is a lookup table with no
-softmax, normalization or matrix operation.
+Fit the precision table on copyable target positions only, matching the bar's
+evaluation population. At inference, select the available depth with highest
+learned precision; tie by deeper key. A depth-age cell with no training matches
+is unavailable. If no cell is available, fall back to longest-first. This is a
+lookup table with no softmax, normalization or matrix operation.
 
 ## Instrument gate
 
@@ -160,8 +161,11 @@ timeout 600s /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
   --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
   --features panel-writer --bin heldout-panel
 check_storage after-build
-test "$(du -sb "$BUILD" "$GENERATOR_TARGET" | awk '{total += $1} END {print total}')" \
-  -le "$TARGET_CAP"
+target_bytes=$(du -sb "$BUILD" "$GENERATOR_TARGET" |
+  awk '{total += $1} END {print total}')
+printf '{"target_bytes":%s,"target_cap_bytes":%s}\n' \
+  "$target_bytes" "$TARGET_CAP" >"$OUT/target-storage-after-build.json"
+test "$target_bytes" -le "$TARGET_CAP"
 
 GEN=$GENERATOR_TARGET/debug/heldout-panel
 /usr/bin/time -v -o "$OUT/train-panel-gen.time.txt" \
@@ -172,6 +176,14 @@ GEN=$GENERATOR_TARGET/debug/heldout-panel
   timeout 600s "$GEN" out="$PANELS/dev-dev-2602" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=64 seed=2602 protocol=2 \
   >"$OUT/dev-panel-gen.stdout.json"
+jq -e '.split == "train" and .cell.phrasing == "train" and
+  .cell.value == "train" and .seed == 2601 and .conversations == 64 and
+  .dialogue_protocol_version == 2' \
+  "$PANELS/train-train-2601/manifest.json" >/dev/null
+jq -e '.split == "dev" and .cell.phrasing == "dev" and
+  .cell.value == "dev" and .seed == 2602 and .conversations == 64 and
+  .dialogue_protocol_version == 2' \
+  "$PANELS/dev-dev-2602/manifest.json" >/dev/null
 
 DEPTH=$BUILD/release/cpu-copy-key-depth
 ROUTER=$BUILD/release/cpu-copy-key-router
@@ -231,7 +243,21 @@ Claude-owned source changes.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING independent fresh-context review.
+TEST FITNESS: FIT - M2 #2030 copy-key depth-age router:
+docs/harness/prep/cpu-training-pilot-copy-key-router-2026-11-05.md
+head: 857485ffe7d3748db090d9f9e85032781ecf524a
+implementation pin: ab2836f13f2d73e02bc4c395511f81f879fd03ff
+reviewer: codex-fresh-context-fit-round-2 (session
+  01a1a98d-5ff8-78c1-9a0a-f847925a5f86)
+note: Round 1 found the candidate-age novelty-count blocker, missing target
+  storage/free-space gates, and a large-count threshold edge. All were repaired.
+  Round 2 found no blocker or major. Its provenance and storage-audit minors are
+  fixed above without moving the bar. The remaining notes state that fitting is
+  copyable-conditioned and that the unfixed >192 age alias is unreachable at the
+  registered 192-token context.
+date: 2026-11-04
+
+A FIT verdict clears compute for this configuration only (D22).
 
 ## Pre-run GO
 
