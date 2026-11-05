@@ -106,7 +106,10 @@ impl AnchoredCandidateRanker {
 #[serde(deny_unknown_fields)]
 pub struct ExpandedCandidateCalibration {
     pub cells: usize,
-    pub writer_candidates: usize,
+    pub writer_candidate_limit: usize,
+    pub writer_candidate_rows: u64,
+    pub min_writer_candidates_per_group: usize,
+    pub max_writer_candidates_per_group: usize,
     pub generated_rows: u64,
     pub target_present_groups: u64,
     pub target_values: u64,
@@ -128,7 +131,10 @@ impl ExpandedCandidateCalibration {
 pub struct AnchoredCandidateTraining {
     pub candidate_set: String,
     pub cells: usize,
-    pub writer_candidates: usize,
+    pub writer_candidate_limit: usize,
+    pub writer_candidate_rows: u64,
+    pub min_writer_candidates_per_group: usize,
+    pub max_writer_candidates_per_group: usize,
     pub exact_depth: usize,
     pub trained: AnchoredCandidateRanker,
     pub shuffled: AnchoredCandidateRanker,
@@ -280,7 +286,10 @@ pub fn derive_anchored_candidate_rankers(
     Ok(AnchoredCandidateTraining {
         candidate_set: "expanded_writer_cells_exact32_anchored".to_owned(),
         cells,
-        writer_candidates: cells.saturating_mul(16),
+        writer_candidate_limit: cells.saturating_mul(16),
+        writer_candidate_rows: calibration.writer_candidate_rows,
+        min_writer_candidates_per_group: calibration.min_writer_candidates_per_group,
+        max_writer_candidates_per_group: calibration.max_writer_candidates_per_group,
         exact_depth: COPY_KEY_REPLY_MAX_DEPTH,
         trained,
         shuffled,
@@ -378,9 +387,31 @@ fn calibration_from_groups(
         .iter()
         .filter(|group| group.baseline != group.target)
         .count() as u64;
+    let writer_candidate_counts = groups
+        .iter()
+        .map(|group| {
+            group
+                .candidates
+                .iter()
+                .filter(|candidate| candidate.writer_rank.is_some())
+                .count()
+        })
+        .collect::<Vec<_>>();
     Ok(ExpandedCandidateCalibration {
         cells,
-        writer_candidates: cells.saturating_mul(16),
+        writer_candidate_limit: cells.saturating_mul(16),
+        writer_candidate_rows: groups
+            .iter()
+            .map(|group| {
+                group
+                    .candidates
+                    .iter()
+                    .filter(|candidate| candidate.writer_rank.is_some())
+                    .count() as u64
+            })
+            .sum(),
+        min_writer_candidates_per_group: writer_candidate_counts.iter().copied().min().unwrap_or(0),
+        max_writer_candidates_per_group: writer_candidate_counts.iter().copied().max().unwrap_or(0),
         generated_rows: groups
             .iter()
             .map(|group| group.row)
@@ -427,7 +458,7 @@ fn candidate_groups_for_sample(
         let target = reference[generated];
         let baseline = baseline_token(&stream, generator.0);
         let candidates = candidate_union(&forward, &generator.1, &stream, generator.0, cells)?;
-        if candidates.iter().any(|candidate| candidate.token == target) {
+        if baseline != 0 && candidates.iter().any(|candidate| candidate.token == target) {
             groups.push(CandidateGroup {
                 row,
                 generated_step: generated,
@@ -479,15 +510,27 @@ fn evaluate_one(
             tokens.len(),
         );
         let candidates = candidate_union(&forward, &generator.1, &stream, generator.0, cells)?;
-        let selected = match arm {
-            AnchoredCandidateArm::Trained
-            | AnchoredCandidateArm::Shuffled
-            | AnchoredCandidateArm::GeometryOnly => {
-                choose_anchored(&candidates, ranker, baseline.token)
+        let selected = match choose_generated(&candidates, arm, ranker, baseline.token)
+            .ok_or_else(|| invalid("anchored candidate ranker produced an empty candidate union"))?
+        {
+            CandidateChoice::Stop => {
+                steps.push(crate::GeometricCandidateStep {
+                    row,
+                    generated_step: tokens.len(),
+                    writer_token: generator.0,
+                    longest_token: 0,
+                    selected_token: 0,
+                    selected_exact_depth: None,
+                    selected_writer_rank: None,
+                    selected_score: None,
+                    candidate_count: candidates.len(),
+                    used_exact_copy: false,
+                });
+                break reply_stop(0, tokens.len(), sample.prompt.len(), cap, context)
+                    .ok_or_else(|| invalid("writer BOS candidate did not stop"))?;
             }
-            AnchoredCandidateArm::Unanchored => choose_unanchored(&candidates, ranker),
-        }
-        .ok_or_else(|| invalid("anchored candidate ranker produced an empty candidate union"))?;
+            CandidateChoice::Token(selected) => selected,
+        };
         steps.push(crate::GeometricCandidateStep {
             row,
             generated_step: tokens.len(),
@@ -798,6 +841,32 @@ fn choose_anchored<'a>(
     }
 }
 
+enum CandidateChoice<'a> {
+    Stop,
+    Token(&'a AnchoredCandidate),
+}
+
+fn choose_generated<'a>(
+    candidates: &'a [AnchoredCandidate],
+    arm: AnchoredCandidateArm,
+    ranker: &AnchoredCandidateRanker,
+    baseline: u32,
+) -> Option<CandidateChoice<'a>> {
+    if baseline == 0 {
+        return Some(CandidateChoice::Stop);
+    }
+    match arm {
+        AnchoredCandidateArm::Trained
+        | AnchoredCandidateArm::Shuffled
+        | AnchoredCandidateArm::GeometryOnly => {
+            choose_anchored(candidates, ranker, baseline).map(CandidateChoice::Token)
+        }
+        AnchoredCandidateArm::Unanchored => {
+            choose_unanchored(candidates, ranker).map(CandidateChoice::Token)
+        }
+    }
+}
+
 fn fit_anchored(
     groups: &[CandidateGroup],
     seed: u64,
@@ -1063,6 +1132,48 @@ mod tests {
     }
 
     #[test]
+    fn expanded_union_retains_depth_32_deepest_source_fallback_and_anchor() {
+        let artifact = artifact();
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        forward.mark_reply_start();
+        let step = forward.step(3, CpuFbsHead::Writer).unwrap();
+        let first_block = (1..=28).chain([1, 1, 1, 1]).collect::<Vec<_>>();
+        let second_block = [1]
+            .into_iter()
+            .chain(first_block[..30].iter().copied())
+            .chain([1])
+            .collect::<Vec<_>>();
+        let stream = [99]
+            .into_iter()
+            .chain(first_block)
+            .chain(second_block)
+            .chain([1])
+            .collect::<Vec<_>>();
+        let exact = exact_suffix_candidates(&stream);
+        assert_eq!(exact[COPY_KEY_REPLY_MAX_DEPTH - 1], Some((1, 33)));
+        let seeds = candidate_seeds(&forward, &step.query_q12, &stream, step.token, 12).unwrap();
+        assert_eq!(seeds[&1].exact_depth, Some(COPY_KEY_REPLY_MAX_DEPTH));
+        assert_eq!(seeds[&1].source, Some(33));
+        assert_eq!(
+            seeds[&baseline_token(&stream, step.token)].token,
+            baseline_token(&stream, step.token)
+        );
+
+        let admitted = forward
+            .writer_candidate_order_with_cells(&step.query_q12, 12, 193)
+            .unwrap()
+            .into_iter()
+            .map(|(token, _)| token)
+            .collect::<BTreeSet<_>>();
+        let fallback = (1..forward.vocabulary() as u32)
+            .find(|token| !admitted.contains(token))
+            .unwrap();
+        let seeds = candidate_seeds(&forward, &step.query_q12, &[3], fallback, 12).unwrap();
+        assert_eq!(seeds[&fallback].exact_depth, None);
+        assert_eq!(seeds[&fallback].writer_rank, None);
+    }
+
+    #[test]
     fn baseline_relative_features_are_bounded_and_identify_the_anchor() {
         let artifact = artifact();
         let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
@@ -1126,6 +1237,18 @@ mod tests {
                 .token,
             9
         );
+
+        for arm in [
+            AnchoredCandidateArm::Trained,
+            AnchoredCandidateArm::Shuffled,
+            AnchoredCandidateArm::GeometryOnly,
+            AnchoredCandidateArm::Unanchored,
+        ] {
+            assert!(matches!(
+                choose_generated(&positive, arm, &ranker, 0),
+                Some(CandidateChoice::Stop)
+            ));
+        }
     }
 
     #[test]
@@ -1172,13 +1295,15 @@ mod tests {
                 candidate(7, 32, 20, true),
             ],
         };
-        let first = shuffled_target(&group, 29).unwrap();
-        let repeat = shuffled_target(&group, 29).unwrap();
+        let first = shuffled_target(&group, 0).unwrap();
+        let repeat = shuffled_target(&group, 0).unwrap();
         assert_eq!(first, repeat);
         assert_ne!(first, group.target);
+        let ranker = fit_anchored(std::slice::from_ref(&group), 0, true).unwrap();
+        assert_ne!(ranker, AnchoredCandidateRanker::zero());
         assert_eq!(
-            fit_anchored(std::slice::from_ref(&group), 29, true).unwrap(),
-            fit_anchored(std::slice::from_ref(&group), 29, true).unwrap()
+            ranker,
+            fit_anchored(std::slice::from_ref(&group), 0, true).unwrap()
         );
     }
 
@@ -1197,7 +1322,10 @@ mod tests {
     fn registered_calibration_floors_are_exact() {
         let passing = ExpandedCandidateCalibration {
             cells: 12,
-            writer_candidates: 192,
+            writer_candidate_limit: 192,
+            writer_candidate_rows: 10,
+            min_writer_candidates_per_group: 1,
+            max_writer_candidates_per_group: 2,
             generated_rows: 400,
             target_present_groups: ANCHORED_CANDIDATE_MIN_GROUPS as u64,
             target_values: ANCHORED_CANDIDATE_MIN_TARGETS as u64,
