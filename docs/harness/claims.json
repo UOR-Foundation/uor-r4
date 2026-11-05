@@ -111,17 +111,10 @@
     "lab": "deepseek",
     "note": ""
   },
-  "deepseek/copy-exact-evidence-manifest": {
-    "branch": "deepseek/copy-exact-evidence-manifest",
-    "claimed_at": "2026-11-05T00:59:16-05:00",
-    "head": "3e8780e61",
-    "lab": "deepseek",
-    "note": ""
-  },
-  "deepseek/copy-exact-stop": {
-    "branch": "deepseek/copy-exact-stop",
-    "claimed_at": "2026-11-05T00:07:00-05:00",
-    "head": "330185de6",
+  "deepseek/copy-exact-release": {
+    "branch": "deepseek/copy-exact-release",
+    "claimed_at": "2026-11-05T01:08:52-05:00",
+    "head": "e29a7f8eb",
     "lab": "deepseek",
     "note": ""
   },
