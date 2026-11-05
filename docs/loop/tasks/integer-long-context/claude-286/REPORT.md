@@ -65,7 +65,19 @@ None. The probe is a reading of the code and the records at `e06635e3a`:
 
 ## Checks run at the head
 
-To fill in after the gates and the review.
+- **The in-unit review, two rounds, each by fresh reviewers who saw only the item, the diff and the sources:**
+  - **Round 1,** at `cd966fba9`:
+    - a decision review: APPROVE WITH CHANGES, with five findings: the DeepSeek lock, the oracle test, the decision table, the cache format and `session_codec.rs`;
+    - a claims check: two of the 14 claims it reached were imprecise: the oracle test outside `stack/`, and the `--dev`-only refusal.
+
+    All seven were fixed in `6c80b2341`.
+  - **Round 2,** at `6c80b2341`:
+    - a delta review: APPROVE WITH CHANGES. It confirmed that the 22-entry scope overlaps no `cpu-training-pilot` entry, and that returning the two files in claude-287's last commit works under the merge-base scope rule. It found the tie row self-contradictory: on serving cost alone, a tie would pick blocks.
+    - a claims check of the remaining twelve claims: none wrong, one imprecise (the `--score-rows` refusal from 193 to 1,536 was missing), two nits (the corpus writer's extra conditions, and training's `<|bos|>` restart and reaching-back last window).
+
+    All were fixed in the next commit. The tie row now never chooses blocks, chooses carry over slide, and is provisional. The checker's suggested range fix was itself imprecise: the 193 to 1,536 refusal is the scorer's, not training's (`bin/train-in-space.rs:6, 21`), so only the scorer's range was added.
+- **`loop report --check` and `loop pr-check --local`:** run at the head before the review record; the results are in the review record on the PR.
+- **No code changed,** so no build or test applies; CI runs the loop gates.
 
 ## Skills used
 
