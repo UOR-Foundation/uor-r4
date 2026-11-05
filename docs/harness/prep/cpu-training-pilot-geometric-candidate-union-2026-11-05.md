@@ -377,3 +377,17 @@ matched or parsed; seed 2768, its panel and the output root remained absent.
 The four registered fresh-process runs, fail-closed classifications, local
 resource plan and lane isolation were checked read-only. No seed-2768
 generation, build or driver run occurred.
+
+## Outcome
+
+**INSUFFICIENT_TRAINING_DATA.** Artifact seed 1 passed the floors with 2,442
+supervised groups and 332 target tokens. Artifact seed 2 stopped with 1,847
+groups against the 2,048-group floor, before fit, reply evaluation or any
+repeat. The raw result is preserved at
+`local/deepseek/geometric-candidate-union/2026-11-05`.
+
+The registered shell automation emitted `INSTRUMENT_FAULT` because its stop
+regex expected `fewer than 2048 supervised groups` while the preserved stderr
+reads `has 1847 supervised groups, fewer than 2048`. The post-run correction
+applies the registered stop rule to that preserved output. Seed 2768 was not
+rerun, no construction was retuned, and no two-seed bar is claimed.
