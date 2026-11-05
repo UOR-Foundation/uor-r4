@@ -290,3 +290,10 @@ Two fresh read-only reviewers read the pod job, and the chain and the scorer, at
 3. **Accepted as they are:**
    - the job's signal trap waits for the running pass before sealing;
    - the pin is substituted and checked in the job's copy before upload.
+
+## Changes after the run (claude-287's exact-head review)
+
+The run at pin `be2defc00004daa8c020350c6a6f4baeb8aa2fda` is unchanged; these correct this sheet's text to what ran.
+1. **Slide's query prompt.** Arms says slide's prompt is "the W positions before the reply". The code ends the W-token window at the reply's last input, as the base scorer's `query_prompts` does (`query_input_start`). So the prompt holds W + 1 − n tokens before a reply of n tokens: 172 to 187 at a7r and 2,028 to 2,043 at (L), for the panels' replies of 6 to 21 tokens. Under blocks a reply's first token reads anywhere from 1 to W tokens. Every slide query in the run used this.
+2. **"Nothing changed on the base path"** (Code in this unit) rests on reading the code, by two exact-head reviewers. No CPU test pins `score_rows`' default path, which runs on the GPU. One refusal order changed: a panel that fails both the windowing and the query checks now reports the windowing error first.
+3. **Refusals still owed,** filed as #3714 and touching none of this run: a missing run config, a losses vector shorter than the bands, carry over panels of different C, and blocks at W = 0. The laptop readout checks the first two on the sealed files: every band with targets has a numeric, non-zero `loss_sum` (156 of 156).

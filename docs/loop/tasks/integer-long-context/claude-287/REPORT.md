@@ -22,7 +22,7 @@ Float batched greedy decode of each panel's queries on the RTX 5090. This is not
 
 - a7r's carry rate matches claude-281's 137–148 tok/s at 2,048.
 - **Carry is the slowest float decode on a7r,** and slower than blocks on (L). So the table's "carry, on serving cost" does not rest on these rates. It rests on the integer session's carry, which claude-242 served past 192 at 4,647 tok/s at 192 and 1,851 at 2,112. claude-288 measures it on the served model.
-- **Slide is the costly rule at a long window.** At stride 128 and W = 2,048, each window re-reads 2,048 tokens to score its last 128. (L)'s slide passes took 2,660 s each, against 1,320 s estimated.
+- **Slide is the costly rule at a long window.** (L)'s slide passes took 2,660 s each, against 1,320 s estimated. 2,206 s of that is the two queries decodes at 18.5 tok/s. The stride-128 scoring, where each window reads 2,048 tokens to score its last 128, is the rest.
 
 ## What did not work
 
@@ -31,10 +31,15 @@ Float batched greedy decode of each panel's queries on the RTX 5090. This is not
   - Carry's loss past W is the highest of the three rules at both a7r seeds: +0.0194 and +0.0143 over slide. Both are inside the band (0.0197), and only because a7r's two seeds differ by 0.033. At seed 1 the margin is 0.0003.
   - **The class: mechanism, in one configuration** (carry on a7r, a 192-trained checkpoint, at 2,048). Every instrument check passed.
 - **(L)'s one "carry beats blocks" rests on one token:** 173 against 130 agreeing tokens of 4,262, where the band is 42.6. Were it a tie, (L)'s row would still be 4.
+- **A third call sits at the band's edge, and could move a row.** At (L) seed 2, carry's loss past W is 0.00634 below blocks', against a band of 0.00688. Had it crossed, carry would beat blocks at both seeds, and (L) would read row 3 (carry, not provisional).
 - **No rule is shown to use earlier context.**
   - Agreement past W is 1–5% under every rule.
   - Recall (R5) is 0: no census-clean far word is stated under any rule, of 306 on p-long and 189 on p-long4k. The one far note stated (a7r seed 2, carry, 1,849 tokens back) has a numeric answer, which the census-clean filter excludes.
-  - So the panels do not yet test what earlier context is for. Rows 4 and 5 are provisional for that reason, as the sheet expected.
+  - So the panels do not yet test what earlier context is for. That is why row 4 is provisional, as the sheet expected. Row 5 is provisional because a7r's seeds disagree; re-reading it on a checkpoint that recalls is the decision review's extension.
+- **The sheet's slide query prompt was misworded.** It says slide's prompt is "the W positions before the reply". The code ends the W-token window at the reply's last input, as the base scorer's `query_prompts` does.
+  - So slide's prompt holds W + 1 − n tokens before a reply of n tokens: 172 to 187 at a7r, and 2,028 to 2,043 at (L), for replies of 6 to 21 tokens.
+  - Under blocks, a reply's first token reads anywhere from 1 to W tokens, so neither rule's prompt is always the longer.
+  - Every slide query in the run used this. The sheet now records it under "Changes after the run".
 - **The memory adds nothing past the window (L-010).**
   - On a7r, memory on is worse past W than memory off, under every rule: R1 is 0.0024 to 0.0035 higher, and R2 0.003 to 0.013 lower.
   - On (L), it changes R1 by under 0.0001 and leaves R2 the same.
@@ -58,7 +63,7 @@ Float batched greedy decode of each panel's queries on the RTX 5090. This is not
   - the per-band query agreement and recall;
   - the new file `past-window-{split}-{memory|no-memory}.json`;
   - the refusals (Fresh V2, no panel, `--context` other than W, the arms this measurement does not read).
-  - Without the option, every output and refusal is as at the base.
+  - Without the option, every output is as at the base. That rests on reading the code (two exact-head reviewers); no CPU test pins it, since `score_rows` runs on the GPU. One refusal order changed: a panel that fails both the windowing and the query checks now reports the windowing error first (#3714).
 - **`bin/train-in-space.rs`:** the flags and the header line.
 - **The prep sheet,** `docs/harness/prep/integer-long-context-2026-11-05.md`, with its FIT round 1 and the pre-run review's changes.
 - **The p-long4k panel** (`chain=4096`, seed 2771) and its census, stored under `results/claude/integer-long-context-2026-11-05/inputs/`.
@@ -78,7 +83,7 @@ Float batched greedy decode of each panel's queries on the RTX 5090. This is not
 - **I-1:** passed.
   - DEV's rows files are byte-identical across the three rules.
   - DEV's sample files are byte-identical between slide and blocks. Under carry, one sample of 16 in one of 12 files differs (a7r seed 1, DEV Flock sample 11), from position 194, past 192, as the sheet expected; it is reported only.
-- **I-2:** passed. a7r's band 0 `loss_sum` differs from blocks' in the 9th significant digit, for slide and carry alike, inside carry's tolerances. It is recorded as batch composition, as the sheet decided in advance. The cause is not shown: slide and carry agree bit for bit, and blocks is the one that differs.
+- **I-2:** passed. a7r's band 0 `loss_sum` differs from blocks' in the 9th significant digit, for slide and carry alike, inside carry's tolerances. Slide's mismatch is recorded as batch composition, as the sheet decided in advance, and carry's is inside its own tolerances. The pattern is not explained: slide and carry agree bit for bit, and blocks is the one that differs.
 - **I-3 to I-8:** passed. I-5 and I-6 are also read on the laptop: every file's objective is `cell`, and carry ran at 2,048 and 4,096, in 160 windows.
 
 **The readings, memory on.**
@@ -97,7 +102,7 @@ Float batched greedy decode of each panel's queries on the RTX 5090. This is not
 - **(L):** b_loss 0.0069 and b_agree 0.0100.
 
 **By band (R3):**
-- **On a7r,** carry sits 0.01 to 0.03 above slide from 384 to 1,728, and below slide and blocks in the last band, 1,920 to 2,048.
+- **On a7r,** carry sits about 0.01 to 0.03 above slide from 384 to 1,920, and below slide and blocks in the last band, 1,920 to 2,048.
 - **On (L),** carry and slide agree within 0.0003, and carry's agreement is the highest at both seeds.
 
 **Reported, never deciding:**
@@ -130,6 +135,7 @@ None beyond the loop's own steps.
 - **The row is provisional.** The sheet re-reads row 4 on the first checkpoint that recalls far notes inside its window; the decision review applies the same re-read to a7r's row 5.
 - **The served long-context model.** a7r is read only out to 2,048, so serving it to 4,096 rests on (L)'s row. Which checkpoint serves long conversations is P5's to schedule. A reading that would separate the trained window from the other differences is a7r under carry at twice its window, the stretch (L) was read at.
 - **`uor-pod up`** should try the next offer when SSH never answers. Noted, not fixed here.
+- **#3714:** refusals the scorer should make (a missing run config, a short losses vector, carry over panels of different C, blocks at W = 0), and the default path's missing test. None touched this run; the next unit that runs the scorer lands them.
 
 ## Plain summary
 
@@ -138,6 +144,6 @@ The served chatbot stops after 192 tokens. Three ways to go further were measure
 - **blocks:** start fresh every 192;
 - **carry:** let the model's running state carry through the whole conversation.
 
-On the model trained on 2,048-token windows, carry is as good as sliding and at least as good as starting fresh, and it keeps the whole conversation. On the model trained on 192-token windows, carry is a little worse at one of its two seeds. So the chatbot will carry its state, provisionally. The next unit makes the served chatbot do that and times it out to 8,192 tokens.
+On the model trained on 2,048-token windows, carry is as good as sliding and at least as good as starting fresh, and it carries its state through the whole conversation. On the model trained on 192-token windows, carry is worse at one of its two seeds, with less than half of slide's reply agreement. So the chatbot will carry its state, provisionally. The next unit makes the served chatbot do that and times it out to 8,192 tokens.
 
 None of the models yet use what was said long ago in a conversation, so the test cannot yet show that any rule remembers better. The choice is read again on the first checkpoint that does.

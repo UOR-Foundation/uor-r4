@@ -73,7 +73,7 @@ The plan, recorded in [claude-286's ORDER](../../loop/tasks/integer-long-context
    - `--score-rows --past-window slide|blocks|carry` in the float scorer, and a `chain=4096` held-out panel, p-long4k;
    - the sheet [`integer-long-context-2026-11-05.md`](../../harness/prep/integer-long-context-2026-11-05.md), FIT, and its pre-run review;
    - one RTX 5090 pod ($1.70), sealed in the store under `results/claude/integer-long-context-2026-11-05/c287/`;
-   - **the decision review on #3471: carry, provisional.** a7r reads row 5 (its seeds disagree on carry) and P2b's (L) row 4 (carry holds at both seeds). No rule recalls a far note, so the row is re-read on the first checkpoint that does.
+   - **the decision review on #3471: carry, provisional.** a7r reads row 5 (its seeds disagree on carry) and P2b's (L) row 4 (carry holds at both seeds). No rule recalls a far note, so (L)'s row 4 is re-read on the first checkpoint that does; a7r's row 5, provisional because its seeds disagree, is re-read there by extension. #3714 holds the scorer's hardening for that re-read.
 3. **claude-288, done-whens 3 to 5, next:** the session serves carry, recorded in the artifact, with a test against the float forward's carry past 192 and a negative gate. Then tok/s and resident memory to 8,192, and gap 6. `stack/session.rs` and `stack/mod.rs` are back in the scope for it.
 
 ## Rules that apply
