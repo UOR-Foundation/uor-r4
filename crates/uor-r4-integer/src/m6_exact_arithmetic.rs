@@ -874,15 +874,23 @@ enum ExactToolOperator {
 
 fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     let rest = rest.trim_start();
-    let grouped = rest.starts_with(|c| matches!(c, '(' | '{' | '['));
-    let after_grouping =
-        rest.trim_start_matches(|c: char| matches!(c, '(' | '{' | '[') || c.is_whitespace());
-    let parenthesized = grouped && after_grouping.starts_with(|c: char| c.is_ascii_digit());
-    if !rest.starts_with(|c: char| c.is_ascii_digit()) && !parenthesized {
+    let signed_literal = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
+    if (signed_literal.starts_with('-') || signed_literal.starts_with('+'))
+        && signed_literal[1..].chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    if !rest.starts_with(|c: char| {
+        matches!(
+            c,
+            '0'..='9' | '+' | '-' | '.' | '(' | '{' | '[' | '%' | '^' | '*' | '/' | '×' | '÷'
+        )
+    }) || !rest.chars().any(|c| c.is_ascii_digit())
+    {
         return false;
     }
     for (index, c) in rest.char_indices() {
-        if matches!(c, '+' | '*' | '/' | '%' | '^' | '×' | '÷') || (parenthesized && c == '-') {
+        if matches!(c, '+' | '*' | '/' | '%' | '^' | '×' | '÷') {
             return true;
         }
         if c == '-' {
@@ -959,7 +967,11 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         && expression_bytes[5..7].iter().all(u8::is_ascii_digit)
         && expression_bytes[7] == b'-'
         && expression_bytes[8..10].iter().all(u8::is_ascii_digit)
-        && (expression_bytes.len() == 10 || expression_bytes[10].is_ascii_whitespace());
+        && (expression_bytes.len() == 10
+            || (expression_bytes[10].is_ascii_whitespace()
+                && expression_bytes[11..].iter().all(|byte| {
+                    byte.is_ascii_digit() || *byte == b':' || byte.is_ascii_whitespace()
+                })));
     if is_iso_date {
         return Ok(None);
     }
@@ -1008,6 +1020,11 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         ));
     }
     let parse_operand = |value: &str| -> Result<u64> {
+        if value.len() > 10 {
+            return Err(invalid(
+                "exact arithmetic operand exceeds the 10-digit tool bound",
+            ));
+        }
         let parsed = value
             .parse::<u64>()
             .map_err(|_| invalid("exact arithmetic operand is not an unsigned decimal integer"))?;
@@ -1484,6 +1501,18 @@ mod tests {
             "What is 17 ^ 25?",
             "What is ((17 + 25))?",
             "What is {17 + 25}?",
+            "What is +17 * 25?",
+            "What is -17 % 25?",
+            "What is +17 ^ 25?",
+            "What is +17 / 25?",
+            "What is +17 × 25?",
+            "What is +17 ÷ 25?",
+            "What is .5 + 25?",
+            "What is -17.5 + 25?",
+            "What is (-17 * 25)?",
+            "What is % 25?",
+            "2026-11-05 + 1",
+            "2026-11-05 - 1",
         ] {
             assert!(
                 exact_arithmetic_tool(prompt)
@@ -1516,8 +1545,19 @@ mod tests {
         assert!(exact_arithmetic_tool(&prefixed_over_limit)
             .expect("prefixed overlong arithmetic should be recognized")
             .is_err());
+        let signed_over_limit = format!("+1{}* 1", " ".repeat(159));
+        assert!(exact_arithmetic_tool(&signed_over_limit)
+            .expect("signed overlong arithmetic should be recognized")
+            .is_err());
         assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
         assert!(exact_arithmetic_tool("What is 50 -12?").is_none());
         assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
+        assert!(exact_arithmetic_tool("What is +42?").is_none());
+        assert!(exact_arithmetic_tool("What is -42?").is_none());
+        let overflow = exact_arithmetic_tool("What is 999999999999999999999 + 1?")
+            .expect("oversized operand should be recognized")
+            .err()
+            .expect("oversized operand should be an error");
+        assert!(overflow.to_string().contains("10-digit tool bound"));
     }
 }

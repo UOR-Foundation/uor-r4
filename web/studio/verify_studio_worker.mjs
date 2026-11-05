@@ -347,6 +347,18 @@ for (const [index, prompt] of [
     'What is 17 ^ 25?',
     'What is ((17 + 25))?',
     'What is {17 + 25}?',
+    'What is +17 * 25?',
+    'What is -17 % 25?',
+    'What is +17 ^ 25?',
+    'What is +17 / 25?',
+    'What is +17 × 25?',
+    'What is +17 ÷ 25?',
+    'What is .5 + 25?',
+    'What is -17.5 + 25?',
+    'What is (-17 * 25)?',
+    'What is % 25?',
+    '2026-11-05 + 1',
+    '2026-11-05 - 1',
 ].entries()) {
     const id = `gen_exact_unsupported_${index}`;
     await sendToWorker({
@@ -377,6 +389,19 @@ for (const spaces of [157, 159, 160]) {
     const overlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
     assert(overlong.action === 'generate_error' && overlong.error.includes('160-byte'), `overlong arithmetic with ${spaces} spaces must return the prompt limit: ${JSON.stringify(overlong)}`);
 }
+
+const signedOverlongArithmetic = `+1${' '.repeat(159)}* 1`;
+await sendToWorker({
+    action: 'generate',
+    id: 'gen_exact_signed_overlong',
+    payload: {
+        conversationId: 'conv_verify_exact_signed_overlong',
+        messages: [{ role: 'user', content: signedOverlongArithmetic }],
+        options: { max_new_tokens: 32 },
+    },
+});
+const signedOverlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_signed_overlong');
+assert(signedOverlong.action === 'generate_error' && signedOverlong.error.includes('160-byte'), `signed overlong arithmetic must return the prompt limit: ${JSON.stringify(signedOverlong)}`);
 
 const staleLoad = sendToWorker({
     action: 'load_model',

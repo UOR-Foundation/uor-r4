@@ -239,6 +239,17 @@ describe('model source adapter', () => {
         expect(store.canRun()).toBe(false);
     });
 
+    it('distinguishes a valid but wrong 64-character worker hash from the expected hash', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        const actual = 'b'.repeat(64);
+        adapter.handleWorkerMessage({ action: 'model_loaded', id: 1, capabilities: { file_name: 'model.lut', artifact_sha256: actual } });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain(actual);
+        expect(store.getState().artifact.error).toContain(EXPECTED_SHA256);
+        expect(store.canRun()).toBe(false);
+    });
+
     it('rejects a no-id worker identity mismatch instead of leaving finalizing pending', async () => {
         const adapter = createModelSourceAdapter(store, sources(), worker());
         await adapter.loadFromUrl('https://example.com/model.lut');

@@ -571,3 +571,18 @@ test('exact-tool local streaming uses the tool label', async () => {
     });
     assert.equal(context.footerMetrics, '0 model tokens · tool');
 });
+
+
+test('live model_loaded rejects a valid but wrong expected digest', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    const actual = 'b'.repeat(64);
+    context.app.expectedSha256 = 'a'.repeat(64);
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: actual } },
+    });
+    assert.equal(context.app.workerState, 'error');
+    assert.equal(context.app.caps, null);
+    assert.match(context.toastMessage, new RegExp(actual));
+    assert.match(context.toastMessage, new RegExp('a'.repeat(64)));
+});

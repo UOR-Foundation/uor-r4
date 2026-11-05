@@ -24,6 +24,9 @@ required=(
 for rel in "${required[@]}"; do
     [ -f "$contents/$rel" ] || { printf 'Missing packaged resource: %s\n' "$rel" >&2; exit 1; }
 done
+for rel in index.html index.css assets; do
+    [ ! -e "$contents/Resources/$rel" ] || { printf 'Unexpected embedded-frontend resource: %s\n' "$rel" >&2; exit 1; }
+done
 check_hash() {
     local path=$1 expected=$2 actual
     actual=$(shasum -a 256 "$path" | cut -d' ' -f1)

@@ -746,6 +746,18 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "What is 17 ^ 25?",
         "What is ((17 + 25))?",
         "What is {17 + 25}?",
+        "What is +17 * 25?",
+        "What is -17 % 25?",
+        "What is +17 ^ 25?",
+        "What is +17 / 25?",
+        "What is +17 × 25?",
+        "What is +17 ÷ 25?",
+        "What is .5 + 25?",
+        "What is -17.5 + 25?",
+        "What is (-17 * 25)?",
+        "What is % 25?",
+        "2026-11-05 + 1",
+        "2026-11-05 - 1",
     ] {
         let unsupported = dispatch_rpc_command(
             &mut backend,

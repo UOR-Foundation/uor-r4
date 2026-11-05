@@ -193,3 +193,22 @@ test('desktop exact arithmetic returns a tool JSON response without starting cha
     assert.equal(body.uor.tokens_per_second_milli, null);
     assert.deepEqual(calls, ['native_exact_arithmetic']);
 });
+
+test('desktop exact arithmetic propagates unsupported signed forms as explicit errors', async () => {
+    const { fetch } = createDesktopOpenAI({
+        invoke: async (command) => {
+            if (command === 'native_exact_arithmetic') {
+                return { handled: true, error: 'exact arithmetic supports only one unsigned decimal + or - expression' };
+            }
+            throw new Error('ordinary chat must not start for an unsupported arithmetic form: ' + command);
+        },
+        Channel: TestChannel,
+    });
+    const response = await fetch('/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'uor-chat', messages: [{ role: 'user', content: 'What is +17 * 25?' }], stream: true }),
+    });
+    assert.equal(response.status, 400);
+    const body = await response.json();
+    assert.match(body.error.message, /supports only one unsigned decimal/);
+});
