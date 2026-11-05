@@ -16,7 +16,7 @@ Nothing was measured; no training or serving speed changes. The ceiling for what
 
 1. **The kernels could not start in this unit.** The loop's scope rule reads an item's scope at the merge base (`loopprcheck.rs:431-446`). So a file the item does not list yet, such as the kernels' own `.cu` source, fails the check until a scope change reaches `main`.
 2. **The scope could not go through its usual item.** Earlier scope changes went through `infra-loop-harness` units (claude-223, #3453). `loop claim infra-loop-harness` was refused: its scope `docs/roadmap/items/*.md` overlaps this item's own file, which this item's open claim holds. So this unit lands the scope itself; the item file is in its own scope.
-3. **Appending to `cuda_stack.cu` was ruled out** (the ORDER's probe, item 5). `spiralcore_fbs_sheet.rs:54` pins its hash, and the test at `:4156` asserts that the pin matches. Two lab receipts record it as their source identity. One appended kernel would turn that test red and re-identify those sheets' source.
+3. **Appending to `cuda_stack.cu` was ruled out** (the ORDER's probe, item 5). `git grep` at the base finds its hash in 12 files: `spiralcore_fbs_sheet.rs:54` (the test at `:4156` asserts that the pin matches), one lab runner's code, eight lab records across three sheets, and three docs. One appended kernel would turn that test red and re-identify those sheets' source.
 
 ## What changed
 
@@ -36,14 +36,25 @@ None. The probe is a reading of the code:
 |---|---|---|
 | `abs`, the row max | `fabsf`; `fmaxf` from `-INFINITY` | yes; the max is exact in any order |
 | `clamp` | `maximum` then `minimum`: `fmaxf`, `fminf` | yes |
-| compares with a scalar | the f64 bound cast to f32 to nearest (`tensor.rs:112-134`); every bound used is exact in f32 | yes |
+| compares with a scalar | the f64 bound cast to f32 to nearest (`cmp`, `tensor.rs:1125-1131`); each bound is exact in f32, except `i32::MAX`, which rounds to 2^31 | yes |
 | `affine` `x * mul + add` | may be contracted to an fma (no `--fmad` flag, so its default); for the chains' constants both forms give the same bits, −0 included | yes |
 | `floor`, broadcast multiply and divide, `where_cond` | `floorf`; IEEE multiply; precise division | yes |
-| the gradient | `floor`, compares and `detach` carry none (`backprop.rs:582-587`), so it is `grad · inside` | exact |
+| the gradient | `floor`, compares and `detach` carry none (`backprop.rs:582-587`). With the bridge on it is `grad · inside`; `q16_residual` without its bridge gives `x` no gradient at all | exact |
 
 ## Checks run at the head
 
-To fill in at the head: `loop report --check`, `loop pr-check --local`, `loop gates --full`, and the fresh exact-head review.
+Run at `a1db79136`. The commits after it change this unit's ORDER and REPORT only.
+- **`uor-harness loop report --check --order <ORDER>`:** PASS.
+- **`uor-harness loop pr-check --local`:** PASS, with two advisory warnings: the ORDER's size on the read path, and four rows missing from `docs/start/FILEMAP.md`, none of them this unit's.
+- **`uor-harness loop gates --full`:** 11 of 11 green.
+- No code changed, so no cargo suite ran.
+- **Fresh exact-head reviews:**
+  - round 1 at `a1db79136`: CHANGES, three should-fixes and five nits, all fixed:
+    - the gradient claim was wrong for `q16_residual` with its bridge off, which has no gradient. The plan's backward and G1 now say so;
+    - the pin's records were undercounted; the ORDER now lists all 12 files;
+    - this section was unfilled;
+    - the nits: the compare's line reference, the bounds sentence, the `in_space_long.rs` wording, the early returns the flag must keep first, and G3, now supporting evidence that also rejects `.ftz`;
+  - round 2, a fresh reviewer on the delta from `a1db79136`: its verdict is in the PR's review record.
 
 ## Skills used
 
