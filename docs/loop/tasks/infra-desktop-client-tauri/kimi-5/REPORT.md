@@ -53,7 +53,7 @@ Every behavioral repair was observed failing for its intended reason before impl
 - `UOR_TAURI_APP=... UOR_DESKTOP_SHA256=20dce8dd… python3 scripts/tests/test_tauri_app.py`: 2/2.
 - `cargo fmt`, `git diff --check`: clean.
 - `UOR_LAB=kimi uor-harness loop gates --full`: all **11** currently registered gates GREEN; `uor-harness loop report --check`: PASS.
-- `origin/main` at `cf0c16d58db1e7b60c9f576879f84359cfa44337` is merged forward with no conflicts. Final repair ORDER is `d55ee3265`; the fully tested implementation head is `e80b310d0d2a04a7e08ed453128f828750facd2f`, and this final evidence is recorded at the exact review head.
+- `origin/main` at `cf0c16d58db1e7b60c9f576879f84359cfa44337` is merged forward with no conflicts. Final repair ORDER is `d55ee3265`; the fully tested implementation head is `e80b310d0d2a04a7e08ed453128f828750facd2f`. The final review head at verification is `ac7c5a2bee05ea8b5e37912324751b9c9318a8b4`; the commit recording this exact SHA and this evidence commit are documentation-only, and the exact-head review record binds the final PR head.
 - Diff size: 74 files, 9,746 insertions and 391 deletions, including this REPORT, DESIGN and repair ORDERs.
 
 ## Skills used
