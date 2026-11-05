@@ -7,7 +7,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3691, item #3678. Plan step: THE ORDER of 
 - **one training step at P2b's recipe:** the loss and every gradient, at (S) and (L);
 - **eight training steps:** the same models, samples and progress bytes as two chain runs.
 
-The kernels sit behind a flag, `train-in-space --fused-quantize 1`, whose default stays 0. What the fusion saves (done-when 4) and whether the flag defaults on (done-when 5) are later units. Run 1 failed two gates, and no value bit differed in either. G1 failed on the test side: its reference model of candle's gradients was wrong. G3 failed on the kernel source's form: nvcc compiled four of its adds without explicit rounding. Both were repaired before run 2.
+The kernels sit behind a flag, `train-in-space --fused-quantize 1`, whose default stays 0. What the fusion saves (done-when 4) and whether the flag defaults on (done-when 5) are later units. Run 1 failed two gates; no kernel bit differed from its chain in what run 1 compared. G1 failed on the test side: its reference model of candle's gradients was wrong. G3 failed on the kernel source's form: nvcc compiled four of its adds without explicit rounding. Both were repaired before run 2.
 
 ## Tokens per second first
 
@@ -23,7 +23,7 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
 
 ## What did not work
 
-1. **Run 1** (pin `a93ac5bd0`, `runs/c285`): EXIT 4, one fault on the test side and one in the kernel source's form; no value bit differed.
+1. **Run 1** (pin `a93ac5bd0`, `runs/c285`): EXIT 4, one fault on the test side and one in the kernel source's form; no kernel bit differed from its chain in what run 1 compared.
    - **S1 passed:** 350 passed, 0 failed, 12 ignored (154.7 s).
    - **G1, the activation and the residual tests, failed at "the twin's gradient".** Each test's kernel-against-chain forward and gradient checks had already passed on its first case ([9, 8] and [4, 6]).
      - **The difference:** the twin had +0 where the device had −0 (`0x80000000`), exactly where w = −0, or a negative weight met inside = 0.
@@ -50,7 +50,7 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
    - **N5:** the twin's forward comparison treats any NaN as equal to any NaN. Kernel against chain is compared strictly, NaN payload included, and so is the twin's gradient.
    - **The final review's code nits,** left for the done-when 4 unit, which runs G1 again. They are not fixed here because the GPU gates ran at `a1588bcc4`, and a code change after that pin would need another pod run.
      - G1's unbridged activation case runs the chain in both arms, so its bit comparison is an A/A. Its gradient comparison is `None == None`, since candle treats `Floor` as a leaf. The `(1, 0)` count assertion is the gate there; an `assert!(fused.1.is_none())` would state that `x` gets no gradient.
-     - The `.cu` header says "an affine whose multiplier is 1". In `row_scale` the two such affines have an input of 1 instead (`ones.affine(unit, 0)`). The argument holds either way, because the product is exact.
+     - The `.cu` header says "an affine whose multiplier is 1". In `row_scale` the two such affines have an input of 1 instead (`ones.affine(unit, 0)` and `ones.affine(2^-bits, 0)`). The argument holds either way, because the product is exact.
      - Two lines are over the width: `fused_quantize.cu:16` and a doc line in `hamilton_sheet.rs`.
 
 ## What changed
