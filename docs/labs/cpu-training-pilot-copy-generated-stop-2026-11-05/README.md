@@ -36,13 +36,19 @@ Published evidence is in [`evidence/`](evidence/).
 Deepseek-159 filtered training to the 11 trajectories whose generated body
 already equalled the reference before fitting the same gate. Both artifact
 seeds then fit **7/11** terminal rows with zero false stops on 308 selected
-nonterminal rows. On the unchanged dev panel the gate produced only **1/13**
-exact replies on each seed. Seed 2 also emitted **9** premature stops against
-the four-stop limit.
+nonterminal rows.
 
-This shows that the filtered training state is separable in sample but does
-not transfer. The shuffled, deepseek-157 all-reference and no-gate controls
-each produced zero exact dev replies. Attempt 7 is the sealed exact-body run,
-with a byte-identical fresh-process repeat for each artifact seed. The result
-closes exact-body filtering for this eight-prototype gate, not geometric
-termination. See [deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
+Attempt 7 opened the earlier dev panel before an independent FIT record and is
+preserved as exploratory evidence. It produced 1/13 exact replies per seed.
+
+The registered confirmation used a new seed-2722 dev panel after FIT and GO.
+It had 458 reachable replies and a 10-reply oracle ceiling on each artifact
+seed, but the gate produced **0/10** exact replies on both. Premature stops
+were **5** on seed 1 and **9** on seed 2, against the four-stop limit. The
+shuffled, all-reference and no-gate controls each produced zero exact replies.
+Attempt 8 is the sealed registered result, including byte-identical
+fresh-process repeats.
+
+This closes exact-body filtering for this eight-prototype gate, not geometric
+termination. See
+[deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).

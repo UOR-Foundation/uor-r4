@@ -3,12 +3,14 @@
 Filtering the deepseek-157 replay to the 11 train trajectories with exact
 generated bodies let the same eight-prototype gate fit **7/11** terminal
 trajectories on both artifact seeds, with zero false stops over 308 selected
-nonterminal rows. On the unchanged 449-reply dev panel it produced only
-**1/13** exact replies. Seed 2 emitted **9** premature stops against the
-four-stop limit; seed 1 exactly reached it at 4. The shuffled, all-reference
-and no-gate controls each produced zero exact dev replies. This closes
-exact-body filtering with this prototype and threshold family, not geometric
-termination. Record:
+nonterminal rows. A registered confirmation then evaluated the unchanged gate
+on a newly generated seed-2722 dev panel with 458 reachable replies and a
+10-reply oracle ceiling. It produced **0/10** exact replies on both seeds.
+Premature stops were **5** and **9** against the four-stop limit. The shuffled,
+all-reference and no-gate controls each produced zero exact dev replies.
+Attempt 7, which used an earlier panel without a recorded pre-run FIT, remains
+exploratory evidence. This closes exact-body filtering with this prototype and
+threshold family, not geometric termination. Record:
 [deepseek-159](../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
 **Next:** use copy phrase boundaries or an independent continuation objective,
 and improve terminal-token reconstruction before retrying termination.

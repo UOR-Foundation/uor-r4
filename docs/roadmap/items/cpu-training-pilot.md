@@ -434,12 +434,13 @@ See [deepseek-157](../../loop/tasks/cpu-training-pilot/deepseek-157/REPORT.md).
 The exact-body follow-up then fitted the same gate only on generated
 trajectories whose train bodies already reached the full reference. The gate
 fit 7/11 terminal trajectories on both artifact seeds with no selected-row
-false stops, but the unchanged dev panel produced only **1/13** exact replies
-per seed, and seed 2 emitted nine premature stops against a four-stop limit.
-All shuffled, all-reference and no-gate controls returned zero exact dev
-replies. Exact-body filtering is closed for this prototype family; the next
-termination test needs a copy-boundary or continuation objective and better
-terminal-token construction. See
+false stops. A registered confirmation on an unopened seed-2722 dev panel had
+458 reachable replies and a ten-reply oracle ceiling, but the gate produced
+**0/10** exact replies on both seeds and 5/9 premature stops against a
+four-stop limit. All shuffled, all-reference and no-gate controls returned zero
+exact dev replies. Exact-body filtering is closed for this prototype family;
+the next termination test needs a copy-boundary or continuation objective and
+better terminal-token construction. See
 [deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes

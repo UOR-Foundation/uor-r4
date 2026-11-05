@@ -1,7 +1,8 @@
 {
   "schema": "uor-r4.cpu-copy-exact-stop-resource/1",
-  "status": "COMPLETED_REJECT",
-  "experiment": "exact-body generated copy stop gate",
+  "status": "EXPLORATORY_NO_PRERUN_FIT",
+  "experiment": "exact-body generated copy stop gate, attempt 7",
+  "note": "Preserved exploratory evidence only. The registered fresh-dev confirmation in attempt 8 determines the task decision.",
   "increment_seconds": 60,
   "complete_projection_seconds": 1800,
   "previous_admitted_cumulative_projection_seconds": 79427.677487699,

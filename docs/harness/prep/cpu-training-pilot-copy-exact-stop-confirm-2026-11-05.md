@@ -309,3 +309,10 @@ TEST FITNESS: FIT - fresh-context confirmation review at `64fac2483`; isolated
 fresh root, pinned inputs and commands, machine-enforced power/exact/control
 floors, fail-closed panel and hash validation, and evidence sealing verified.
 No fresh panel had been generated or read.
+
+## Pre-run GO
+
+GO - independent fresh-context review at `3641b70f2`. The output root and
+seed-2722 panel were absent; FIT and every pin matched; the command block
+passed `bash -n`; power and instrument paths were fail-closed; train and dev
+bars both gated each seed; and no forbidden source was in scope.
