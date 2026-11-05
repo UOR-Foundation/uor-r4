@@ -119,7 +119,7 @@ Target shuffling then changed 167 and 278 decisions, so the repaired control
 was non-vacuous.
 
 The signal was too sparse to help. On fresh seed 2765 with 481 reachable
-replies, continuation lookahead scored **242 and 262/4,686** correct body
+replies, continuation lookahead scored **242 and 262/4,899** correct body
 positions against **511** for no-lookahead learned and longest-32. Only 231 and
 209 of 30,784 evaluated decisions matched the historical continuation. It
 changed about 4,500 decisions per seed and remained near 12.6k-12.9k generated

@@ -7,7 +7,7 @@ candidate's deepest source occurrence. The repaired target-shuffled control
 changed 167 and 278 decisions.
 
 On fresh seed 2765 with 481 reachable replies, continuation lookahead scored
-only **242 and 262/4,686** correct body positions against **511** for both
+only **242 and 262/4,899** correct body positions against **511** for both
 no-lookahead learned and longest-32. It arbitrated 27,318 and 26,594 candidates
 but matched the historical continuation on only 231 and 209 of 30,784
 evaluated decisions. Every arm repeated deterministically and emitted zero

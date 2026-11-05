@@ -490,7 +490,7 @@ Making lookahead continuation-sensitive repaired the control but not the
 content signal. The new score compared each candidate-conditioned prediction
 with the token that historically followed the candidate's retained source
 occurrence. On fresh seed 2765, target shuffling changed 167 and 278 decisions,
-yet continuation lookahead scored only **242 and 262/4,686** body positions
+yet continuation lookahead scored only **242 and 262/4,899** body positions
 against **511** for both no-lookahead learned and longest-32. It found a
 continuation match on only 231 and 209 of 30,784 evaluated decisions. This
 closes this single-token learned lookahead configuration. Longest exact copy

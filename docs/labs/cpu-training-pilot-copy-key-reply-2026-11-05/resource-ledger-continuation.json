@@ -27,7 +27,7 @@
   "controls": {
     "reachable_replies": 481,
     "decisions_per_arm": 30784,
-    "reference_body_tokens": 4686,
+    "reference_body_tokens": 4899,
     "lookahead_body_positions": [242, 262],
     "no_lookahead_body_positions": [511, 511],
     "longest_32_body_positions": [511, 511],

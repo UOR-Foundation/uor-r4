@@ -25,7 +25,7 @@ source occurrence.
 
 The repaired control was non-vacuous: shuffled continuation lookahead changed
 167 and 278 decisions. The treatment nevertheless remained far below the
-existing exact-copy path. It scored **242 and 262/4,686** correct body
+existing exact-copy path. It scored **242 and 262/4,899** correct body
 positions against **511** for both no-lookahead learned and longest-32. Only
 **231 and 209/30,784** evaluated decisions found a predicted continuation that
 matched the historical source continuation. The nearest-example readout is too
@@ -51,9 +51,9 @@ No serving, CUDA, float-training, termination or Claude-owned source changed.
 - fresh panel: seed 2765, `dev,dev`, 128 conversations and **481** reachable
   replies per artifact seed;
 - decisions: **30,784** per artifact seed;
-- continuation-lookahead body positions: **242/4,686** and **262/4,686**;
-- no-lookahead learned body positions: **511/4,686** on both seeds;
-- longest-32 body positions: **511/4,686** on both seeds;
+- continuation-lookahead body positions: **242/4,899** and **262/4,899**;
+- no-lookahead learned body positions: **511/4,899** on both seeds;
+- longest-32 body positions: **511/4,899** on both seeds;
 - geometric-copy control body positions: **248** and **244**;
 - candidate arbitrations: **27,318** and **26,594**;
 - continuation matches: **231** and **209**;
