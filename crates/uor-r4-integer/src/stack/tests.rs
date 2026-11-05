@@ -5667,7 +5667,8 @@ fn base_export_records_no_trained_context() {
 }
 
 /// claude-288: a carry context below the trained window or past the limit is refused, and so is a
-/// recorded trained context of 0 or past the served context, and a point key on a carry stack.
+/// recorded trained context of 0 or past the served context, a carry stack whose turn memory still
+/// keys at the trained window, and a point key on a carry stack.
 #[test]
 fn carry_export_refusals() {
     let snap = carry_trunk();
@@ -5686,10 +5687,24 @@ fn carry_export_refusals() {
     }
     let edited = with_header(&carry, |h| h["source"]["trained_context"] = json!(200));
     assert!(super::format::Container::parse(&edited).is_ok());
-    let refused = super::add_point_key_uorlut01(&carry, &synthetic_point_key(&carry, 5));
-    assert!(matches!(refused, Err(StackError::Shape(_))), "a point key on a carry stack");
+    // The refusals below are pinned by message, since every one of them is a `Shape` error.
+    fn refused<T>(result: Result<T, StackError>, want: &str) -> bool {
+        matches!(result, Err(StackError::Shape(message)) if message == want)
+    }
+    let edited = with_header(&carry, |h| h["memory"]["key_window"] = json!(64));
+    let window = "a carry stack's turn memory must key over the served context";
+    assert!(refused(super::format::Container::parse(&edited), window), "turn memory keyed at the trained window");
+    let unrecorded = with_header(&edited, |h| {
+        h["source"].as_object_mut().expect("source").remove("trained_context");
+    });
+    assert!(super::format::Container::parse(&unrecorded).is_ok(), "the same memory without carry");
+    let point = super::add_point_key_uorlut01(&carry, &synthetic_point_key(&carry, 5));
+    assert!(refused(point, "a point key is not added to a carry stack"), "a point key on a carry stack");
     let base = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("base export");
-    assert!(super::add_point_key_uorlut01(&base, &synthetic_point_key(&base, 5)).is_ok());
+    let pointed = super::add_point_key_uorlut01(&base, &synthetic_point_key(&base, 5)).expect("a point key on the base");
+    let edited = with_header(&pointed, |h| h["source"]["trained_context"] = json!(64));
+    let served = "a point key is not served on a carry stack";
+    assert!(refused(super::format::Container::parse(&edited), served), "a point key under carry provenance");
 }
 
 /// claude-288's carry key script, written the same in the float crate's

@@ -892,11 +892,22 @@ impl<'a> Container<'a> {
             return Err(StackError::Group(header.group));
         }
         header.shape.validate()?;
-        // A carry export's trained window (claude-288) lies inside the served context.
+        // A carry export's trained window (claude-288) lies inside the served context, and its turn
+        // memory keys over the whole served context: one still keyed at the trained window would
+        // serve block-cleared keys under carry provenance (found by DeepSeek's audit on #3717).
+        // A point key, built on 192-token windows, is refused here as `add_point_key_uorlut01`
+        // refuses to add one.
         if let Some(w) = header.source.get("trained_context") {
             if !w.as_u64().is_some_and(|w| w >= 1 && w <= header.shape.context as u64) {
                 let limit = "a trained context must be from 1 to the served context";
                 return Err(StackError::Shape(limit));
+            }
+            if header.memory.as_ref().is_some_and(|m| m.key_window != header.shape.context) {
+                let window = "a carry stack's turn memory must key over the served context";
+                return Err(StackError::Shape(window));
+            }
+            if header.point.is_some() {
+                return Err(StackError::Shape("a point key is not served on a carry stack"));
             }
         }
         if let Some(hamming) = &header.hamming {
