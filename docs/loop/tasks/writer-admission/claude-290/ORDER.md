@@ -79,8 +79,7 @@ All three are instrument checks of the project's state, not mechanism results.
 3. **Host tests:**
    - the cell-to-root layout, for every cell, against the writer's own address order (cell `16 a + b`);
    - the width-8 refusal;
-   - a `config.json` without the field reads as off;
-   - with the option off, the field is not written.
+   - with the option off, the field is not written; with it on, it is written as `true` (`LongConfig` only serializes, and nothing reads the field back, since a saved table already carries the anchors).
 4. **CUDA tests** (on a pod, finite kernel tests; no pre-registration needed, CHARTER §4.5):
    - after one training step with the option on, the port columns equal the roots exactly, and some learned column moved;
    - the table's gradient is exactly 0 on the port columns after the mask;
