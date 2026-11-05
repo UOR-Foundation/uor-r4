@@ -16,7 +16,7 @@ negative: deeper exact matches tied nested longest-4 on scored body positions.
 
 ## What changed
 
-- Removed `deepseek/copy-depth32`; retained only this temporary release claim.
+- Removed `deepseek/copy-depth32` and the temporary release claim.
 - Recorded exact-head review, merge and fresh-main checks in deepseek-163.
 - No model, source, serving, CUDA, float-training or Claude-owned file changed.
 
@@ -37,7 +37,7 @@ negative: deeper exact matches tied nested longest-4 on scored body positions.
 ## Size
 
 Against base `faf597e93`, this release changes four bookkeeping paths
-(**+92 / -4**).
+(**+85 / -7**).
 
 ## Skills used
 

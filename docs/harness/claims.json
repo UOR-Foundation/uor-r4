@@ -111,13 +111,6 @@
     "lab": "deepseek",
     "note": ""
   },
-  "deepseek/copy-depth32-release": {
-    "branch": "deepseek/copy-depth32-release",
-    "claimed_at": "2026-11-05T01:57:45-05:00",
-    "head": "a31deaa6c",
-    "lab": "deepseek",
-    "note": ""
-  },
   "deepseek/copy-key2-cpu": {
     "branch": "deepseek/copy-key2-cpu",
     "claimed_at": "2026-11-03T02:21:59-05:00",

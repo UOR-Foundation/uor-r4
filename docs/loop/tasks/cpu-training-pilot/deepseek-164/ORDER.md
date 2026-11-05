@@ -4,8 +4,9 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 ## Goal
 
-Release the completed `deepseek/copy-depth32` claim and record the final
-review, merge and fresh-main verification for deepseek-163.
+Release the completed `deepseek/copy-depth32` claim, release this temporary
+bookkeeping claim, and record the final review, merge and fresh-main
+verification for deepseek-163.
 
 ## Cancel probe
 
@@ -20,7 +21,6 @@ the published depth-32 evidence and fresh-main CPU tests pass.
 
 ## Done when
 
-1. `deepseek/copy-depth32` is removed and only this temporary release claim is
-   retained.
+1. No `deepseek/copy-depth32` or release claim remains.
 2. Deepseek-163 records the exact review, merge and fresh-main verification.
 3. Exact-head review, protected merge and fresh-main verification complete.
