@@ -3,7 +3,7 @@
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Base: `e94afaae8`; implementation pin:
-`f7ae95f3c`.
+`1ba1620a0`.
 
 ## Status
 
@@ -37,9 +37,10 @@ Those are expected negative controls, not model results.
   tokens and rows, and up to 32 first mismatches.
 - Added `cpu-writer-anchor-audit --artifact PATH
   [--expected-artifact-sha256 HEX] [--output PATH]`. Hash drift, malformed
-  artifacts, short widths and port mismatches fail closed.
+  artifacts, short widths and port mismatches fail closed. An output path that
+  resolves to the input artifact is refused.
 - Added synthetic positive, moved-coordinate, wrong-cell, malformed,
-  short-width, hash-parsing and Q12 boundary tests.
+  short-width, hash, output-alias and Q12 boundary tests.
 
 No training, serving, CUDA, float-inference, exporter or Claude-owned source
 changed.
@@ -56,9 +57,9 @@ changed.
 - Public negative controls are recorded in
   [evidence/public-fbs-dual-negative-controls.json](evidence/public-fbs-dual-negative-controls.json)
   with their sealed source hashes.
-- CPU package suite: **340 passed**, 4 expected ignores, and **99** binary
+- CPU package suite: **340 passed**, 4 expected ignores, and **101** binary
   tests passed.
-- Focused writer-port tests: **5 passed**; CLI hash test: **1 passed**.
+- Focused writer-port tests: **5 passed**; CLI tests: **4 passed**.
 
 ## Checks run at the head
 
@@ -69,6 +70,7 @@ changed.
 - strict Clippy with `--all-targets --no-deps -- -D warnings`;
 - direct audit runs on both public unanchored artifacts;
 - artifact SHA-256 agreement with the public `SHA256SUMS`;
+- fresh-context review, with the output-alias and hash-branch findings fixed;
 - `git diff --check`.
 
 Report, loop, review and fresh-main gates are recorded after the reviewed
@@ -77,8 +79,8 @@ delivery.
 ## Size
 
 The implementation adds one audit API, one binary and focused tests in the
-existing CPU training crate. No corpus, model artifact or evidence payload is
-committed.
+existing CPU training crate. No corpus or model artifact is committed; the
+compact negative-control audit evidence is.
 
 ## Skills used
 
