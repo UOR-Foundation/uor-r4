@@ -371,3 +371,13 @@ reviewer: full_sequence_fit_review_2
 date: 2026-11-05
 note: Corrected head 767705441; selected-source accounting and
 global-selection trajectory test verified.
+
+## D67 pre-run review
+
+D67 PRE-RUN: GO - implementation `fb439a066`, review head `0566e32e9`;
+source/input pins match; seed 2774 and the output root are absent; full
+prompt-plus-reply keys and same-stream arbitration are tested; the wrapper
+enforces RSS, activates TRAIN before the panel, and fails each seed before
+repeats on reachability, 100 global selections, local/shuffle non-vacuity, BOS
+absence and census equality; and the work remains isolated from Claude's scale
+probe. Reviewer: `full_sequence_go_review`, 2026-11-05.
