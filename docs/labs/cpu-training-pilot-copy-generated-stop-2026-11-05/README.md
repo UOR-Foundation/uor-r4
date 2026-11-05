@@ -27,4 +27,6 @@ Attempts 1–5 are preserved:
 
 Attempt 6 is final, includes per-row audit records and a byte-identical repeat
 after timing removal.
+`no_fire` means no gate firing through the reference horizon; token cost is
+charged to the complete 64-token selected trace.
 Published evidence is in [`evidence/`](evidence/).

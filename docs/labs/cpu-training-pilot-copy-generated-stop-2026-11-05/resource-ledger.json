@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-copy-generated-stop-resource/1",
   "status": "COMPLETED_REJECT",
   "experiment": "generated longest-first trajectory stop gate",
-  "increment_seconds": 47,
+  "increment_seconds": 56,
   "complete_projection_seconds": 1200,
   "previous_admitted_cumulative_projection_seconds": 78227.677487699,
   "admitted_cumulative_projection_seconds": 79427.677487699,

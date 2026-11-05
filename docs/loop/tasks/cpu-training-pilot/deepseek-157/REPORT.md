@@ -75,6 +75,9 @@ The shuffled gate also produced zero exact replies on both dev panels.
 No-gate produced zero exact replies by construction. Both bar evaluations
 failed.
 
+`no_fire` means no firing through the reference horizon. Those trajectories are
+charged to the complete 64-token trace for generated-token accounting.
+
 Resources:
 
 - release build **19.71 s**, peak unavailable from that compile; final CLI
