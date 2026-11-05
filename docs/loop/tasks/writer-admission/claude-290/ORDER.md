@@ -18,12 +18,25 @@ Done-when 2 of the item, and only that. The run is done-when 3, in the next unit
 **The change: anchored ports** (`--writer-anchor`, off by default).
 - Token `t` lives in cell `c = t mod 256`. The writer's address score reads port A (coordinates `0..8`) against root `c / 16`, and port B (coordinates `W-8..W`) against root `c mod 16`.
 - With the option on, the table's two port blocks for token `t` are set to exactly those two SpiralCore roots. This happens once when the model is built, and again after every optimizer step: a projection, so weight decay and gradients cannot move them. The other `W - 16` coordinates stay learned.
-- **Why the tie point no longer satisfies the objective:**
+- **What anchoring changes:**
   - With anchored ports, the writer's address score for cell `c` is the ports' share of the mean L1 distance from the query to every token in `c`. Up to the factor `8 / W`, it is the part of nearest's own score that the cell fixes.
-  - A query whose ports sit at the centre is equally far from every cell's roots, so its ports add nothing to the target's margin over any rival in another cell.
-  - A trunk that already ranks the target first by nearest gains margin by moving its ports toward the target's roots. Seed 2's trunk did (6,909). The recipe's own token objective (`cell` or `nearest`) therefore pulls the ports there on every row it can inform.
-  - Unlike claude-150's `voronoi`, no separate address hinge is left to lose. And the table's ports cannot fall to the centre together with the query's.
-- **What it does not claim:** for a trunk that carries no information about the target, the L1 pull still has the centre as its minimum, the caution in claude-289's Still open, item 1. The run in done-when 3 decides whether it holds.
+  - So the recipe's own token objective (`cell` or `nearest`) is what trains admission. No separate address hinge is left to lose, unlike claude-150's `voronoi`. And the table's ports cannot fall to the centre together with the query's.
+- **What it claims, as the design review restated it:** the centre is not stationary for a row whose trunk predicts the target's roots.
+  - For a port coordinate where the `cell` hinge is active, the query's gradient is `(sign(q − t) − sign(q − r)) / W`, for the target's value `t` and the best rival's value `r`.
+  - That gradient is nonzero only when `q` lies strictly between them. At `q ≈ 0`, a target at ±2 against a rival at ∓2 gets the full pull. A target at ±2 against a rival at 0 gets it about half the time. A rival that shares the target's root gives none.
+- **What it does not claim:**
+  - **An uninformed trunk.** Averaged over rows whose ports do not depend on the target, the signs cancel, and the centre is still a fixed point in expectation. That is the caution in claude-289's Still open, item 1.
+  - **Seed 2's timing.** Seed 2 had already fallen there before step 2,048, while nearest read 76. The run in done-when 3 decides whether anchoring holds, and must read the ports before step 2,048.
+- **Decay on the query side is left as it is.** `decayed()` (`geometric_stack_native.rs:784`) decays every rank-2 `.weight` by `1 − lr · 0.1` a step, with or without a gradient. That includes the trunk's maps that produce the query's port coordinates.
+  - Seed 2's fall of about 40× from step 4,096 to 32,768 fits that decay. This is an inference, not checked against the schedule.
+  - The anchor protects only the table side. Done-when 3's sheet reads the query ports' |x| before step 2,048, with a stop rule. Excluding the port-producing weights from decay is held as the fix if the run shows it.
+- **Where the code lives:** `in_space_long.rs`, not `native_vector_writer.rs`. Editing the writer's file moves `source_sha256` in its `binding()` (line 47), which existing writer checkpoints carry. The anchor builds the roots from the same `ProjectionPlan::new(8, 8)` the writer reads, at scale 1. A CUDA test pins that the two agree: an anchored token's vector, read as a query, scores 0 on its own cell.
+- **Gradients and steps:**
+  - The table's gradient is masked to 0 on the port columns before the main step. Otherwise the clip norm (taken over all gradients) and the Adam moments would be spent on columns that are overwritten anyway.
+  - The projection runs after `opt_main`'s step. `opt_decay` steps only `rec.decay` parameters, never the table.
+  - Train-as-served restores the float values before the step (`in_space_long.rs:11644`), so the projection sees float values. Q12 holds 0 and ±2 exactly, so the rounded and exported tables keep the roots.
+- **A known effect on the input side:** the table is also the input embedding. Its learned coordinates start at standard deviation 0.02 (`INITIAL_STD`), against roots at 0 and ±2. At the start the trunk's input is mostly the cell code, so 16 tokens share one code until the learned coordinates grow. Done-when 3 measures what this costs nearest.
+- **Held for later:** a kept count chosen by the margin, as a safety net when the spread is under the roots' spacing. It needs the writer's file, and `validate()` caps it at 16 of 256 cells, so it cannot reach nearest's result alone.
 - **Refusals:**
   - at width 8 the two ports are one block (`query_ports` aliases), so the option needs width ≥ 16;
   - the option refuses a model without the shared `embedding.weight`.
@@ -55,9 +68,13 @@ All three are instrument checks of the project's state, not mechanism results.
 
 ## Done when
 
-1. **The anchor.** `native_vector_writer.rs` gives each token's two port roots as a table-shaped tensor and a column mask, and the projection that writes them into a table. Both are elementwise, CUDA-only like the rest of the writer, and refuse width < 16.
-2. **The option.** `LongConfig::writer_anchor` and `train-in-space --writer-anchor`:
-   - applied at model build and after every main optimizer step, in both training loops;
+1. **The anchor, in `in_space_long.rs`.**
+   - Each token's two port roots as a table-shaped tensor and a column mask, built from the writer's own `ProjectionPlan::new(8, 8)` roots.
+   - The projection that writes them into `embedding.weight`, and the mask applied to the table's gradient before the main step.
+   - All elementwise and CUDA-only. Refuses width < 16 and a model without `embedding.weight`.
+   - `native_vector_writer.rs` is not edited.
+2. **The option.** `LongConfig::writer_anchor` and `train-in-space --writer-anchor 0|1`:
+   - applied at model build, and as the gradient mask and post-step projection at every `opt_main` step in both training loops (`in_space_long.rs` around 10797 and 11654);
    - recorded in `config.json` only when on.
 3. **Host tests:**
    - the cell-to-root layout, for every cell, against the writer's own address order (cell `16 a + b`);
@@ -66,8 +83,10 @@ All three are instrument checks of the project's state, not mechanism results.
    - with the option off, the field is not written.
 4. **CUDA tests** (on a pod, finite kernel tests; no pre-registration needed, CHARTER §4.5):
    - after one training step with the option on, the port columns equal the roots exactly, and some learned column moved;
-   - a query equal to token `t`'s anchored vector puts `t`'s cell first, with address score 0;
-   - each has a negative gate: with the projection's call set aside, the port test fails.
+   - the table's gradient is exactly 0 on the port columns after the mask;
+   - a query equal to token `t`'s anchored vector puts `t`'s cell first in the writer's `candidates`, with address score 0;
+   - the port gradient at the centre for an informed row: with the query's learned coordinates equal to the target's and its ports at 0, the `cell` hinge's gradient on the query's ports is nonzero and points toward the target's roots;
+   - negative gates: with the projection's call set aside, the port-equality test fails; with the mask set aside, the zero-gradient test fails.
 5. **Gates at the head:**
    - the float crate's CPU suite with `--no-fail-fast`;
    - the stub-nvcc `--features cuda --all-targets` check;
