@@ -17,7 +17,7 @@ On both trained artifact seeds:
 
 Longest-first passed every paired exact and body-position comparison against
 `k2>k1`, depth 1, random depth and writer in both artifact/panel cells. It had
-13/11 exact bodies and another small set of near misses one or two tokens from
+13/11 exact bodies and another small set of near misses two or three tokens from
 the reference. This means perfect stopping alone would produce a bounded set
 of complete replies, but most current copy trajectories still reconstruct
 their body incompletely.

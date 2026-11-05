@@ -18,6 +18,7 @@ struct ArmEvaluation {
     common_prefix_sum: u64,
     trailing_mismatch_histogram: BTreeMap<usize, u64>,
     oracle_exact: u64,
+    mean_common_prefix: f64,
 }
 
 fn main() {
@@ -44,6 +45,17 @@ fn run() -> Result<()> {
     let manifest_bytes = read(&manifest_path)?;
     let identity = validate_corpus_manifest(&manifest_bytes, &token_bytes, &mask_bytes)
         .map_err(|error| error.to_string())?;
+    if report
+        .pointer("/inputs/tokens_sha256")
+        .and_then(Value::as_str)
+        != Some(identity.tokens_sha256.as_str())
+        || report
+            .pointer("/inputs/mask_sha256")
+            .and_then(Value::as_str)
+            != Some(identity.mask_sha256.as_str())
+    {
+        return Err("report token or mask hash differs from the panel".to_owned());
+    }
     let corpus = CpuMaskedCorpus::from_bytes(
         &token_bytes,
         &mask_bytes,
@@ -169,6 +181,7 @@ fn run() -> Result<()> {
                 "max_common_prefix": arm.max_common_prefix,
                 "common_prefix_sum": arm.common_prefix_sum,
                 "trailing_mismatch_histogram": arm.trailing_mismatch_histogram,
+                "mean_common_prefix": arm.mean_common_prefix,
             }))
         }).collect::<serde_json::Map<_, _>>(),
     });
@@ -187,6 +200,20 @@ fn evaluate_arm(
         .get("steps")
         .and_then(Value::as_array)
         .ok_or_else(|| "arm has no steps".to_owned())?;
+    let source_generated_tokens = report
+        .pointer("/reading/generated_tokens")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| "arm has no source generated-token count".to_owned())?;
+    if steps.len() as u64 != source_generated_tokens {
+        return Err("step count differs from the source generated-token count".to_owned());
+    }
+    let source_rows = report
+        .get("rows")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "arm has no row readings".to_owned())?;
+    if source_rows.len() != samples.len() {
+        return Err("source row count differs from corpus examples".to_owned());
+    }
     let mut by_row = vec![Vec::<(usize, u32)>::new(); samples.len()];
     for step in steps {
         let row = step
@@ -228,6 +255,13 @@ fn evaluate_arm(
             .into_iter()
             .map(|(_, token)| token)
             .collect::<Vec<_>>();
+        let source_reply_sha256 = source_rows[row]
+            .get("reply_sha256")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("row {row} has no reply hash"))?;
+        if token_hash(&generated) != source_reply_sha256 {
+            return Err(format!("row {row} full-trace hash differs"));
+        }
         let reference = normalized_reference(&sample.reply);
         if generated.len() < reference.len() {
             return Err(format!("row {row} trace is shorter than its reference"));
@@ -273,6 +307,7 @@ fn evaluate_arm(
         });
     }
     let reference_tokens = rows.iter().map(|row| row.reference_tokens).sum::<u64>();
+    let mean_common_prefix = common_prefix_sum as f64 / rows.len() as f64;
     Ok(ArmEvaluation {
         reading: serde_json::json!({
             "arm": report.pointer("/reading/arm").cloned().unwrap_or(Value::Null),
@@ -297,6 +332,7 @@ fn evaluate_arm(
         common_prefix_sum,
         trailing_mismatch_histogram,
         oracle_exact,
+        mean_common_prefix,
     })
 }
 
@@ -358,19 +394,29 @@ mod tests {
         }
     }
 
-    fn report(steps: Value) -> Value {
-        serde_json::json!({ "steps": steps, "reading": { "arm": "longest4_to1" } })
+    fn report(steps: Value, tokens: &[u32]) -> Value {
+        serde_json::json!({
+            "steps": steps,
+            "reading": {
+                "arm": "longest4_to1",
+                "generated_tokens": tokens.len(),
+            },
+            "rows": [{"reply_sha256": token_hash(tokens)}],
+        })
     }
 
     #[test]
     fn oracle_body_uses_reference_horizon_and_common_prefix() {
         let samples = vec![sample(vec![1, 2], vec![3, 4, 5])];
-        let value = report(serde_json::json!([
-            {"row": 0, "generated_step": 2, "selected_token": 5},
-            {"row": 0, "generated_step": 0, "selected_token": 3},
-            {"row": 0, "generated_step": 3, "selected_token": 9},
-            {"row": 0, "generated_step": 1, "selected_token": 4}
-        ]));
+        let value = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 2, "selected_token": 5},
+                {"row": 0, "generated_step": 0, "selected_token": 3},
+                {"row": 0, "generated_step": 3, "selected_token": 9},
+                {"row": 0, "generated_step": 1, "selected_token": 4}
+            ]),
+            &[3, 4, 5, 9],
+        );
         let evaluated = evaluate_arm(&value, &samples).unwrap();
         assert_eq!(evaluated.max_common_prefix, 3);
         assert_eq!(evaluated.common_prefix_sum, 3);
@@ -379,30 +425,60 @@ mod tests {
         assert_eq!(evaluated.rows[0].generated_tokens, 3);
         assert_eq!(evaluated.oracle_exact, 1);
         assert_eq!(evaluated.reading["exact_reference"], 1);
+        assert_eq!(evaluated.mean_common_prefix, 3.0);
     }
 
     #[test]
     fn non_monotonic_and_short_traces_are_refused() {
         let samples = vec![sample(vec![1], vec![2, 3])];
-        let duplicate = report(serde_json::json!([
-            {"row": 0, "generated_step": 0, "selected_token": 2},
-            {"row": 0, "generated_step": 0, "selected_token": 3}
-        ]));
+        let duplicate = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 0, "selected_token": 2},
+                {"row": 0, "generated_step": 0, "selected_token": 3}
+            ]),
+            &[2, 3],
+        );
         assert!(evaluate_arm(&duplicate, &samples).is_err());
-        let short = report(serde_json::json!([
-            {"row": 0, "generated_step": 0, "selected_token": 2}
-        ]));
+        let short = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 0, "selected_token": 2}
+            ]),
+            &[2],
+        );
         assert!(evaluate_arm(&short, &samples).is_err());
+
+        let mut removed_step = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 0, "selected_token": 2},
+                {"row": 0, "generated_step": 1, "selected_token": 3}
+            ]),
+            &[2, 3],
+        );
+        removed_step["steps"].as_array_mut().unwrap().pop();
+        assert!(evaluate_arm(&removed_step, &samples).is_err());
+
+        let mut bad_hash = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 0, "selected_token": 2},
+                {"row": 0, "generated_step": 1, "selected_token": 3}
+            ]),
+            &[2, 3],
+        );
+        bad_hash["rows"][0]["reply_sha256"] = serde_json::json!("deadbeef");
+        assert!(evaluate_arm(&bad_hash, &samples).is_err());
     }
 
     #[test]
     fn one_token_tail_is_reported_as_a_near_miss_not_exact() {
         let samples = vec![sample(vec![1], vec![2, 3, 4])];
-        let value = report(serde_json::json!([
-            {"row": 0, "generated_step": 0, "selected_token": 2},
-            {"row": 0, "generated_step": 1, "selected_token": 3},
-            {"row": 0, "generated_step": 2, "selected_token": 9}
-        ]));
+        let value = report(
+            serde_json::json!([
+                {"row": 0, "generated_step": 0, "selected_token": 2},
+                {"row": 0, "generated_step": 1, "selected_token": 3},
+                {"row": 0, "generated_step": 2, "selected_token": 9}
+            ]),
+            &[2, 3, 9],
+        );
         let evaluated = evaluate_arm(&value, &samples).unwrap();
         assert_eq!(evaluated.oracle_exact, 0);
         assert_eq!(evaluated.max_common_prefix, 2);
