@@ -327,4 +327,11 @@ change the code packing, row cap, threshold, tie rule, arms or bar.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - fresh-context review is required before generation.
+TEST FITNESS: FIT - M1 #2029 learned modulo-code copy arbitration
+sheet: docs/harness/prep/cpu-training-pilot-copy-learned-read-2026-11-05.md
+reviewer: fresh-context Codex subagent fit_learned_copy_read_2
+note: Fresh FIT after correcting nested test-report checks; train-only generated-state fitting, candidate-constrained learned/shuffled arms, all controls, exact identity checks, deterministic replay and seed-2763 absence verified.
+date: 2026-11-05
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
