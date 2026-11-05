@@ -223,3 +223,17 @@ combined-artifact equality, fail-closed Hamming/memory/shape checks, all input
 and binary hashes, absent outputs, 58/616 panel power, full CPU tests, focused
 tests, scoped strict Clippy, formatting, D23/D32 ratchets and D84 scope. The
 public-panel arms had not run.
+
+## Outcome
+
+**COMPLETE (instrument).** Both sealed seeds completed, every arm was
+deterministic, and raw/raw retained exact serving parity.
+
+The anchored recurrent-input arm reproduced the combined decoding collapse:
+admitted/top-1/top-8 was `120/55/89` versus raw `245/181/236` on seed 1 and
+`29/9/20` versus `171/136/164` on seed 2. Writer-only preserved raw admission
+and port distance, with top-1/top-8 `195/233` and `137/162`.
+
+The result attributes the loss to the input-code change, not direct writer-row
+mismatch. The one-table artifact cannot represent the hybrid split, so this is
+an in-memory diagnostic and no serving or model result.

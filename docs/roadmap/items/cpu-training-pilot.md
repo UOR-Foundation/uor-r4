@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/README.md, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/session_codec.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/content_readout.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/tests/session_codec_interop_fixture.rs, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/integration/current-state.md, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/labs/cpu-training-pilot-content-serving-2026-11-04/**, docs/labs/cpu-training-pilot-trajectory-density-2026-11-04/**, docs/labs/cpu-training-pilot-copy-key-depth-2026-11-05/**, docs/labs/cpu-training-pilot-copy-key-reply-2026-11-05/**, docs/labs/cpu-training-pilot-copy-termination-oracle-2026-11-05/**, docs/labs/cpu-training-pilot-copy-generated-stop-2026-11-05/**, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/README.md, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/session_codec.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/content_readout.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/tests/session_codec_interop_fixture.rs, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/integration/current-state.md, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/labs/cpu-training-pilot-content-serving-2026-11-04/**, docs/labs/cpu-training-pilot-trajectory-density-2026-11-04/**, docs/labs/cpu-training-pilot-copy-key-depth-2026-11-05/**, docs/labs/cpu-training-pilot-copy-key-reply-2026-11-05/**, docs/labs/cpu-training-pilot-copy-termination-oracle-2026-11-05/**, docs/labs/cpu-training-pilot-copy-generated-stop-2026-11-05/**, docs/labs/cpu-training-pilot-table-anchor-isolation-2026-11-05/**, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -562,6 +562,18 @@ the input-code effect from direct writer-row mismatch; the next representation
 must decouple writer addressing from the learned input code or train both with
 an identity-preservation objective. See
 [deepseek-183](../../loop/tasks/cpu-training-pilot/deepseek-183/REPORT.md).
+
+The four-arm table-anchor isolation then separated that cost. On seed 1,
+raw/input-only/writer-only/combined admitted/top-1/top-8 was
+245/181/236, 120/55/89, 245/195/233 and 120/55/86. On seed 2 it was
+171/136/164, 29/9/20, 171/137/162 and 29/10/20. Input-only reproduced combined
+admission on both seeds and combined top-1 on seed 1; writer-only preserved
+raw admission, kept cells and port distance exactly. The loss is therefore an
+input-code effect, not direct writer-row mismatch. Root-addressed writer
+scoring remains viable only if its address rows are separated from the learned
+input rows or trained with input-code preservation. The hybrid table pairs are
+not representable in the current one-table artifact and make no serving claim.
+See [deepseek-185](../../loop/tasks/cpu-training-pilot/deepseek-185/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
