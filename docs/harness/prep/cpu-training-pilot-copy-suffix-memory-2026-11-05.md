@@ -346,6 +346,13 @@ minutes; peak RSS at or above 2 GiB; or any need to edit serving, CUDA,
 float-training, exporter or Claude-owned source. Once seed 2772 is read, do not
 change the depth cap, target tie, fallback, shuffle or bar.
 
+## D67 pre-run review
+
+D67 PRE-RUN: GO - seed 2772 and its output root are absent; source, panel,
+artifact and generator pins match; the CPU source is bounded under D84; the
+TRAIN preflight precedes fresh-panel generation; and both pass and fail change
+the next decision. Reviewer: `suffix_memory_go_review`, 2026-11-05.
+
 ## Verdict
 
 TEST FITNESS: FIT - M2 #2030 spiralcore-fbs
