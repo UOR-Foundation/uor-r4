@@ -335,4 +335,9 @@ change local priority, depth cap, support, majority rule, shuffle or bar.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+
+reviewer: suffix_fallback_fit_review_2
+date: 2026-11-05
+note: Corrected head 67b6ea7e2; accounting, local-priority common-state,
+and end-to-end fallback/shuffle controls verified.
