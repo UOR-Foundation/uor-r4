@@ -440,6 +440,24 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())
         })
         .transpose()?;
+    let training_trajectory_content_audit = if config.stop_trajectory_neighbors.is_some() {
+        Some(
+            audit_content_stop_trajectory_content_prefix(
+                &memory_artifact,
+                &training_samples,
+                config.reply_cap,
+                true,
+                &code_training.readout,
+                &gate_density_training
+                    .as_ref()
+                    .ok_or_else(|| "trajectory density training is missing".to_owned())?
+                    .gate,
+            )
+            .map_err(|error| error.to_string())?,
+        )
+    } else {
+        None
+    };
     let horizon_rows = config
         .stop_horizon_neighbors
         .map(|_| {
@@ -576,6 +594,7 @@ fn run() -> Result<serde_json::Value, String> {
                         "true_sha256": gate_density_sha256,
                         "shuffled_sha256": gate_density_shuffled_sha256,
                         "predictions_changed": gate_density_prediction_changes,
+                        "training_content_audit": training_trajectory_content_audit,
                     })
                 }),
                 "gate_horizon": horizon_training.as_ref().map(|training| {

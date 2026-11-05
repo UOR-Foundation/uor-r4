@@ -201,16 +201,16 @@ seal_pipeline() {
 trap 'status=$?; trap - EXIT; seal_pipeline || status=$?; exit "$status"' EXIT
 
 /usr/bin/time -v -o "$PIPELINE/build.time.txt" \
-  env CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-content-readout-driver
 /usr/bin/time -v -o "$PIPELINE/control-lib.time.txt" \
-  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
   -p uor-r4-cpu-train --lib
 /usr/bin/time -v -o "$PIPELINE/control-bin.time.txt" \
-  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" cargo test --locked --release \
   -p uor-r4-cpu-train --bin cpu-content-readout-driver
 /usr/bin/time -v -o "$PIPELINE/control-clippy.time.txt" \
-  env CARGO_TARGET_DIR="$CONTROL_BUILD" cargo clippy --locked \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$CONTROL_BUILD" cargo clippy --locked \
   -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings
 cargo fmt -p uor-r4-cpu-train -- --check
 test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$PIPELINE/build.time.txt")" -le 4194304
@@ -246,9 +246,9 @@ run_preflight() {
     $g.training.nonterminal_stops <= $g.training.nonterminal_stop_limit and
     $g.training.gate.neighbors <= 8 and
     $g.training.gate.offset_radius == 2 and
-    $g.predictions_changed > 0' \
-    "$PIPELINE/seed-$seed.preflight.json" >/dev/null
-  jq -e '.modes.gate_density.predictions_changed > 0' \
+    $g.predictions_changed > 0 and
+    $g.training_content_audit.decisions > 0 and
+    $g.training_content_audit.mismatches == 0' \
     "$PIPELINE/seed-$seed.preflight.json" >/dev/null
 }
 run_preflight 1 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
