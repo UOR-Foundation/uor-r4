@@ -31,6 +31,20 @@ memory.
 The result gives the scale run an exact output-path reference. It cannot fill
 the scale-probe quality slopes, whose qualification remains GPU research.
 
+## Base artifact
+
+There is no pre-existing trained artifact. Each cell constructs the fixed
+synthetic FBS snapshot in the registered source, exports it to `UORLUT01`, and
+reloads those bytes. Building the same cell twice must produce byte-identical
+artifacts before any timing or parity reading is accepted.
+
+## Data split
+
+No corpus or response mask is read. Training and evaluation data are not used.
+Each context length supplies one deterministic input-only token sequence,
+`token[i] = (i * 73 + 19) % 4096`, to both arms. The full arm marks row 1 as
+the reply start so the exact opening/reply memory lookup path executes.
+
 ## Source and binary
 
 - base: `3ac40d6d5`;
