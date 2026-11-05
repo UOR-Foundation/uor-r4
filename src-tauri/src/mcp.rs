@@ -275,10 +275,11 @@ struct StdioInner {
 }
 
 impl StdioInner {
-    fn kill(&self) {
-        if let Ok(mut child) = self.child.lock() {
-            super::process_control::terminate(&mut child);
-        }
+    fn kill(&self) -> bool {
+        self.child
+            .lock()
+            .map(|mut child| super::process_control::terminate(&mut child))
+            .unwrap_or(false)
     }
 }
 
@@ -430,8 +431,9 @@ impl McpStdioSession {
                 result
             }
             Err(_) => {
-                self.inner.kill();
-                let _ = reader.join();
+                if self.inner.kill() {
+                    let _ = reader.join();
+                }
                 Err("MCP stdio request timed out.".to_string())
             }
         }

@@ -59,6 +59,10 @@ case "${1:-}" in
         while IFS= read -r rel; do
             [ -f "$dest/$rel" ] || { printf 'Runtime file is missing: %s\n' "$dest/$rel" >&2; exit 1; }
         done < <(list_files)
+        if [ -L "$dest/models" ]; then
+            printf 'Model artifact root symlinks are refused: %s\n' "$dest/models" >&2
+            exit 1
+        fi
         while IFS= read -r -d '' path; do
             rel=${path#"$dest"/}
             [ "$rel" = 'SHA256SUMS' ] && continue
@@ -79,16 +83,18 @@ const { resolve, sep } = require('node:path');
 
 const dest = resolve(process.argv[2]);
 const modelsRoot = resolve(dest, 'models');
+const pkgRoot = resolve(dest, 'pkg');
 const manifest = JSON.parse(readFileSync(resolve(dest, 'models.json'), 'utf8'));
 const declared = new Map();
 
 function declare(url, sha) {
   if (typeof url !== 'string') return;
   const rel = url.replace(/^\.\//, '');
-  if (!rel.startsWith('models/')) return;
+  const root = rel.startsWith('models/') ? modelsRoot : (rel.startsWith('pkg/') ? pkgRoot : null);
+  if (!root) return;
   const file = resolve(dest, rel);
-  if (file === modelsRoot || !file.startsWith(modelsRoot + sep)) {
-    throw new Error('Model catalog path escapes models/: ' + url);
+  if (file === root || !file.startsWith(root + sep)) {
+    throw new Error('Model catalog path escapes its artifact root: ' + url);
   }
   if (!/^[0-9a-f]{64}$/.test(String(sha || ''))) {
     throw new Error('Model catalog hash is missing or invalid: ' + url);
@@ -117,6 +123,9 @@ function actualFiles(directory) {
   return files;
 }
 
+if (existsSync(modelsRoot) && lstatSync(modelsRoot).isSymbolicLink()) {
+  throw new Error('Model artifact root symlinks are refused: ' + modelsRoot);
+}
 for (const file of actualFiles(modelsRoot)) {
   if (!declared.has(file)) throw new Error('Unexpected model artifact: ' + file);
 }

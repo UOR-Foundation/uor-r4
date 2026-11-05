@@ -20,11 +20,11 @@ Clean-checkout commands for the current implementation:
 
 ```sh
 ./scripts/studio/prepare-tauri-runtime.sh
-CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --locked
-CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --features gui --locked
+CARGO_TARGET_DIR=local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --locked
+CARGO_TARGET_DIR=local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --features gui --locked
 ```
 
-The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **5** library, **12** controls, **6** MCP, **10** review and **8** sidecar tests by default, and **7** library, **16** controls, **7** MCP, **10** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
+The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **6** library, **12** controls, **7** MCP, **12** review and **8** sidecar tests by default, and **8** library, **16** controls, **8** MCP, **12** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
 
 | Test | Verified contract | Result |
 |---|---|---|

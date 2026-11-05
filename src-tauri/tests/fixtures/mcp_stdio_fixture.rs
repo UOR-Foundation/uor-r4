@@ -30,6 +30,7 @@ fn main() {
         std::fs::write(path, std::process::id().to_string()).expect("write fixture pid");
     }
     let fail_list = args.iter().any(|arg| arg == "--fail-list");
+    let exit_with_open_pipes = args.iter().any(|arg| arg == "--exit-with-open-pipes");
     for _ in 0..2048 {
         eprintln!("mcp fixture stderr drain check");
     }
@@ -41,6 +42,14 @@ fn main() {
             continue;
         }
         let id = response_id(&line);
+        if exit_with_open_pipes && line.contains("\"method\":\"initialize\"") {
+            std::process::Command::new("/bin/sh")
+                .args(["-c", "trap '' HUP TERM; exec sleep 30"])
+                .spawn()
+                .expect("spawn pipe-holding descendant");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            std::process::exit(0);
+        }
         if line.contains("\"method\":\"exit\"") {
             std::process::exit(0);
         }

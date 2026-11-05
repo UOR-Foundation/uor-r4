@@ -1335,6 +1335,7 @@ fn run_bounded_process(
     let mut truncated = false;
     let mut timed_out = false;
     let mut killed = false;
+    let mut readers_disconnected = false;
     loop {
         if !killed && retained >= max_bytes {
             truncated = true;
@@ -1345,6 +1346,14 @@ fn run_bounded_process(
             timed_out = true;
             process_control::terminate(&mut child);
             killed = true;
+        }
+        if killed
+            && child
+                .try_wait()
+                .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+                .is_some()
+        {
+            break;
         }
         match receiver.recv_timeout(Duration::from_millis(25)) {
             Ok((is_stdout, bytes)) => {
@@ -1362,22 +1371,30 @@ fn run_bounded_process(
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(RecvTimeoutError::Disconnected) => {
+                readers_disconnected = true;
+                break;
+            }
         }
     }
-    if child
+    let exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
-        .is_none()
-    {
+        .is_some();
+    if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
+    }
+    if !readers_disconnected {
+        timed_out = true;
     }
     let status = child
         .wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?;
-    let _ = stdout_thread.join();
-    let _ = stderr_thread.join();
+    if readers_disconnected {
+        let _ = stdout_thread.join();
+        let _ = stderr_thread.join();
+    }
     Ok(BoundedProcessOutput {
         stdout: stdout_bytes,
         stderr: stderr_bytes,
@@ -1590,7 +1607,16 @@ fn validate_terminal_argument_shape(
     args: &[&str],
 ) -> Result<(), DesktopClientError> {
     for arg in args {
-        if matches!(*arg, "-exec" | "-execdir" | "-ok" | "-okdir") {
+        if matches!(*arg, "-exec" | "-execdir" | "-ok" | "-okdir")
+            || (program == "rg" && (*arg == "--pre" || arg.starts_with("--pre=")))
+            || (program == "git"
+                && (matches!(
+                    *arg,
+                    "-c" | "-C" | "--config" | "--config-env" | "--exec-path" | "--git-dir" | "--work-tree"
+                ) || ["-c=", "--config=", "--config-env=", "--exec-path=", "--git-dir=", "--work-tree="]
+                    .iter()
+                    .any(|prefix| arg.starts_with(prefix))))
+        {
             return Err(DesktopClientError::InvalidInput(format!(
                 "terminal execution flag is refused: {arg}"
             )));
@@ -1750,6 +1776,15 @@ mod bounded_process_tests {
             .success();
         assert!(!alive, "descendant {pid} survived process timeout");
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn exited_parent_with_pipe_holding_descendant_returns_bounded() {
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg("sleep 30 & exit 0");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(50), 1024)
+            .expect("exited parent with open descendant pipes must return bounded");
+        assert!(output.timed_out, "open descendant pipes hid the timeout");
     }
 }
 

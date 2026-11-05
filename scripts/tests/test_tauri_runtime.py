@@ -133,6 +133,26 @@ class TauriRuntimeContractTests(unittest.TestCase):
             )
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn('hash', rejected.stderr.lower())
+            artifact.write_bytes(artifact_bytes)
+            bundled = dest / 'pkg/synthetic-stack.lut'
+            bundled_bytes = bundled.read_bytes()
+            bundled.write_bytes(b'tampered bundled stack')
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('hash', rejected.stderr.lower())
+            bundled.write_bytes(bundled_bytes)
+            models = dest / 'models'
+            models.rename(dest / 'models-real')
+            models.symlink_to(dest / 'models-real', target_is_directory=True)
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('symlink', rejected.stderr.lower())
 
     def test_prepare_check_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmp:
