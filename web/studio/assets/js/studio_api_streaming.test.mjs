@@ -586,3 +586,23 @@ test('live model_loaded rejects a valid but wrong expected digest', async () => 
     assert.match(context.toastMessage, new RegExp(actual));
     assert.match(context.toastMessage, new RegExp('a'.repeat(64)));
 });
+
+
+test('current load operation_error preserves both full digests', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    const expected = 'a'.repeat(64);
+    const actual = 'b'.repeat(64);
+    context.app.currentLoadId = 7;
+    context.app.predictionRequests = {};
+    context.app.workerState = 'loading';
+    context.app.expectedSha256 = expected;
+    const error = `Artifact sha256 ${actual} does not match the expected ${expected}; refusing to load.`;
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'operation_error', operation: 'load_model', id: 7, error },
+    });
+    assert.equal(context.app.workerState, 'error');
+    assert.equal(context.app.caps, null);
+    assert.match(context.modelStatus, new RegExp(expected));
+    assert.match(context.modelStatus, new RegExp(actual));
+});

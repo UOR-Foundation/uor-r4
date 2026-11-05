@@ -468,7 +468,7 @@ self.onmessage = async ({ data }) => {
             if (loadToken !== latestLoadToken) return;
             const expectedSha256 = expectedSha256Of(payload);
             if (expectedSha256 && artifactSha256 !== expectedSha256) {
-                throw new Error(`Artifact sha256 ${artifactSha256.slice(0, 12)}... does not match the expected ${expectedSha256.slice(0, 12)}...; refusing to load.`);
+                throw new Error(`Artifact sha256 ${artifactSha256} does not match the expected ${expectedSha256}; refusing to load.`);
             }
             const { source, source_label } = normalizeSource(payload);
             const nextTokenizerArtifact = await loadTokenizerArtifact(raw, headerInfo, payload.tokenizerArtifact);

@@ -904,6 +904,104 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     false
 }
 
+fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
+    let tens = *bytes.get(offset)?;
+    let ones = *bytes.get(offset + 1)?;
+    if !tens.is_ascii_digit() || !ones.is_ascii_digit() {
+        return None;
+    }
+    Some((tens - b'0') * 10 + ones - b'0')
+}
+
+fn exact_tool_is_iso_date_time(rest: &str) -> bool {
+    let bytes = rest.as_bytes();
+    if bytes.len() < 10
+        || !bytes[..4].iter().all(u8::is_ascii_digit)
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+    {
+        return false;
+    }
+    let Some(month) = exact_tool_two_digits(bytes, 5) else {
+        return false;
+    };
+    let Some(day) = exact_tool_two_digits(bytes, 8) else {
+        return false;
+    };
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return false;
+    }
+    if bytes.len() == 10 {
+        return true;
+    }
+    if !matches!(bytes[10], b'T' | b't' | b' ' | b'\t') {
+        return false;
+    }
+    let time = &bytes[11..];
+    let Some(hour) = exact_tool_two_digits(time, 0) else {
+        return false;
+    };
+    if hour > 23 {
+        return false;
+    }
+    if time.len() == 2 {
+        return true;
+    }
+    if time[2] != b':' {
+        return false;
+    }
+    let Some(minute) = exact_tool_two_digits(time, 3) else {
+        return false;
+    };
+    if minute > 59 {
+        return false;
+    }
+    let mut cursor = 5;
+    if cursor < time.len() && time[cursor] == b':' {
+        let Some(second) = exact_tool_two_digits(time, 6) else {
+            return false;
+        };
+        if second > 59 {
+            return false;
+        }
+        cursor = 8;
+        if cursor < time.len() && time[cursor] == b'.' {
+            cursor += 1;
+            let fraction_start = cursor;
+            while cursor < time.len() && time[cursor].is_ascii_digit() {
+                cursor += 1;
+            }
+            if cursor == fraction_start {
+                return false;
+            }
+        }
+    }
+    if cursor == time.len() {
+        return true;
+    }
+    let zone = &time[cursor..];
+    match zone[0] {
+        b'Z' | b'z' => zone.len() == 1,
+        b'+' | b'-' => {
+            let Some(zone_hour) = exact_tool_two_digits(zone, 1) else {
+                return false;
+            };
+            if zone_hour > 14 {
+                return false;
+            }
+            match zone.len() {
+                3 => true,
+                5 => exact_tool_two_digits(zone, 3).is_some_and(|minute| minute <= 59),
+                6 if zone[3] == b':' => {
+                    exact_tool_two_digits(zone, 4).is_some_and(|minute| minute <= 59)
+                }
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -922,7 +1020,10 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return Ok(None);
     }
-    if trimmed.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
+    if exact_tool_is_iso_date_time(rest) {
+        return Ok(None);
+    }
+    if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
         if exact_tool_arithmetic_shaped(rest) {
             return Err(invalid(
                 "exact arithmetic prompt exceeds the 160-byte tool bound",
@@ -974,6 +1075,17 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
                 })));
     if is_iso_date {
         return Ok(None);
+    }
+    if expression.starts_with('-')
+        && (expression.len() == 1
+            || expression[1..]
+                .chars()
+                .next()
+                .is_some_and(char::is_whitespace))
+    {
+        return Err(invalid(
+            "exact arithmetic does not accept an operator-only leading minus",
+        ));
     }
     if (expression.starts_with('-') || expression.starts_with('+'))
         && expression[1..].chars().all(|c| c.is_ascii_digit())
@@ -1511,6 +1623,9 @@ mod tests {
             "What is -17.5 + 25?",
             "What is (-17 * 25)?",
             "What is % 25?",
+            "What is - 25?",
+            "What is -?",
+            "What is [17 + 25]?",
             "2026-11-05 + 1",
             "2026-11-05 - 1",
         ] {
@@ -1554,6 +1669,25 @@ mod tests {
         assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
         assert!(exact_arithmetic_tool("What is +42?").is_none());
         assert!(exact_arithmetic_tool("What is -42?").is_none());
+        for prompt in [
+            "2026-11-05T17:25Z",
+            "2026-11-05T17:25+01:00",
+            "2026-11-05T17:25-01:00",
+            "2026-11-05 17:25+01:00",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ISO date/time was intercepted: {prompt}"
+            );
+        }
+        for prompt in [
+            format!("{}1 + 1", " ".repeat(200)),
+            format!("1 + 1{}", " ".repeat(200)),
+        ] {
+            assert!(exact_arithmetic_tool(&prompt)
+                .expect("whitespace-padded overlong arithmetic should be recognized")
+                .is_err());
+        }
         let overflow = exact_arithmetic_tool("What is 999999999999999999999 + 1?")
             .expect("oversized operand should be recognized")
             .err()

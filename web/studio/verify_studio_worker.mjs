@@ -294,6 +294,20 @@ assert(Array.isArray(infoMsg.refused_schemas) && infoMsg.refused_schemas.length 
 assert(infoMsg.turn_memory_served === true, 'engine_info should report the turn memory served');
 
 // 2. Load the synthetic stack via `load_model` -> `loadStack`.
+const wrongExpectedHash = 'b'.repeat(64);
+await sendToWorker({
+    action: 'load_model',
+    id: 'wrong_hash',
+    payload: {
+        bytes: stackBytes.buffer.slice(stackBytes.byteOffset, stackBytes.byteOffset + stackBytes.byteLength),
+        fileName: 'synthetic-stack.lut',
+        expectedSha256: wrongExpectedHash,
+    },
+});
+const wrongHashMessage = await waitForMessage((m) => m.action === 'operation_error' && m.id === 'wrong_hash');
+assert(wrongHashMessage.error.includes(wrongExpectedHash), `worker error must include the full expected digest: ${wrongHashMessage.error}`);
+assert(wrongHashMessage.error.includes(tokenizerArtifact.stack_sha256), `worker error must include the full actual digest: ${wrongHashMessage.error}`);
+
 await sendToWorker({
     action: 'load_model',
     payload: {
@@ -357,6 +371,9 @@ for (const [index, prompt] of [
     'What is -17.5 + 25?',
     'What is (-17 * 25)?',
     'What is % 25?',
+    'What is - 25?',
+    'What is -?',
+    'What is [17 + 25]?',
     '2026-11-05 + 1',
     '2026-11-05 - 1',
 ].entries()) {
@@ -403,12 +420,43 @@ await sendToWorker({
 const signedOverlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_signed_overlong');
 assert(signedOverlong.action === 'generate_error' && signedOverlong.error.includes('160-byte'), `signed overlong arithmetic must return the prompt limit: ${JSON.stringify(signedOverlong)}`);
 
+for (const [index, prompt] of [`${' '.repeat(200)}1 + 1`, `1 + 1${' '.repeat(200)}`].entries()) {
+    const id = `gen_exact_padded_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId: `conv_verify_exact_padded_${index}`,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const padded = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(padded.action === 'generate_error' && padded.error.includes('160-byte'), `whitespace-padded arithmetic must return the prompt limit: ${JSON.stringify(padded)}`);
+}
+
+for (const [index, prompt] of ['2026-11-05T17:25Z', '2026-11-05T17:25+01:00', '2026-11-05T17:25-01:00', '2026-11-05 17:25+01:00'].entries()) {
+    const id = `gen_iso_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId: `conv_verify_iso_${index}`,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const iso = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(iso.action === 'generate_complete' && iso.tokenCount === 32, `ISO date/time must use the ordinary model path: ${JSON.stringify(iso)}`);
+}
+
 const staleLoad = sendToWorker({
     action: 'load_model',
     id: 101,
     payload: {
         bytes: stackBytes.buffer.slice(stackBytes.byteOffset, stackBytes.byteOffset + stackBytes.byteLength),
         fileName: 'stale.lut',
+        expectedSha256: wrongExpectedHash,
     },
 });
 const currentLoad = sendToWorker({

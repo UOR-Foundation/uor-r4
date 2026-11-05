@@ -51,15 +51,17 @@ while IFS=' ' read -r expected rel; do
     [ -n "$expected" ] || continue
     case "$rel" in
         src-tauri/runtime/studio/*) resource=${rel#src-tauri/runtime/studio/} ;;
-        *) printf 'Invalid runtime manifest path: %s\n' "$rel" >&2; exit 1 ;;
+        ''|/*|*..*) printf 'Unsafe runtime manifest path: %s\n' "$rel" >&2; exit 1 ;;
+        *) resource=$rel ;;
     esac
     case "$resource" in ''|/*|*..*) printf 'Unsafe runtime manifest path: %s\n' "$rel" >&2; exit 1 ;; esac
     [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || { printf 'Invalid runtime manifest hash for %s: %s\n' "$rel" "$expected" >&2; exit 1; }
+    staged_file="$repo_root/src-tauri/runtime/studio/$resource"
     case "$resource" in
         models.json) ;;
-        *) cmp -s "$repo_root/$rel" "$repo_root/web/studio/$resource" || { printf 'Staged runtime differs from current source: %s\n' "$resource" >&2; exit 1; } ;;
+        *) cmp -s "$staged_file" "$repo_root/web/studio/$resource" || { printf 'Staged runtime differs from current source: %s\n' "$resource" >&2; exit 1; } ;;
     esac
-    check_hash "$repo_root/$rel" "$expected"
+    check_hash "$staged_file" "$expected"
     case "$resource" in
         pkg/*|models.json) check_hash "$contents/Resources/$resource" "$expected" ;;
     esac

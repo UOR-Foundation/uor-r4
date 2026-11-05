@@ -756,6 +756,9 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "What is -17.5 + 25?",
         "What is (-17 * 25)?",
         "What is % 25?",
+        "What is - 25?",
+        "What is -?",
+        "What is [17 + 25]?",
         "2026-11-05 + 1",
         "2026-11-05 - 1",
     ] {
@@ -788,6 +791,38 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
             .as_str()
             .unwrap_or_default()
             .contains("160-byte"));
+    }
+
+    for prompt in [
+        format!("{}1 + 1", " ".repeat(200)),
+        format!("1 + 1{}", " ".repeat(200)),
+    ] {
+        let padded = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("whitespace-padded arithmetic RPC should succeed");
+        assert_eq!(padded["handled"], json!(true));
+        assert!(padded["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("160-byte"));
+    }
+
+    for prompt in [
+        "2026-11-05T17:25Z",
+        "2026-11-05T17:25+01:00",
+        "2026-11-05T17:25-01:00",
+        "2026-11-05 17:25+01:00",
+    ] {
+        let iso = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ISO date/time RPC should succeed");
+        assert_eq!(iso["handled"], json!(false), "intercepted: {prompt}");
     }
 }
 
