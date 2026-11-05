@@ -2,6 +2,8 @@
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Base: `3f08ccfd1`.
 
+Setup row: 2 (item-file maintenance: a new gap item).
+
 ## Goal
 
 The item's done-when reads:
