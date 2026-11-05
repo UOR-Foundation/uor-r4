@@ -5303,6 +5303,68 @@ fn query_prompts(
     Ok(prompts)
 }
 
+/// A panel cut by a past-window `rule` at the checkpoint's window `w` (claude-287): `blocks`
+/// cuts back-to-back windows of `w` as training does, `slide` gives each target the last `w`
+/// tokens at the rule's stride, and `carry` keeps one window per document. Returns the context
+/// the rule runs at, `w`, or for `carry` the longest document's C, with the windows.
+fn past_window_cut(
+    rule: PastWindowRule,
+    tokens: &[u32],
+    mask: &[u8],
+    w: usize,
+) -> Result<(usize, Vec<CausalWindow>)> {
+    let bos = hs::SHEET_BOS_ID;
+    match rule {
+        PastWindowRule::Blocks => Ok((w, hs::build_document_windows(tokens, mask, w, bos)?.0)),
+        PastWindowRule::Slide { stride } => Ok((
+            w,
+            hs::build_document_windows_sliding(tokens, mask, w, stride, bos)?.0,
+        )),
+        PastWindowRule::Carry => hs::carry_windows(tokens, mask, bos),
+    }
+}
+
+/// [`QueryPrompts`] for `queries` under a past-window `rule` at window `w` and carry context `c`
+/// (claude-287), with the count of `blocks` replies whose inputs run past `w`. The queries are
+/// checked by [`query_prompts`] at the context the rule runs at (`w`, or `c` for `carry`), so a
+/// reply longer than that is counted past the window; each decoded window's inputs then start at
+/// [`query_input_start`]: the last `w` tokens under `slide` (equal to [`query_prompts`] at `w`),
+/// the block that holds the reply's opening under `blocks`, the conversation's BOS under `carry`.
+fn query_prompts_ruled(
+    tokens: &[u32],
+    mask: &[u8],
+    rule: PastWindowRule,
+    w: usize,
+    c: usize,
+    queries: &[ChainQuery],
+) -> Result<(QueryPrompts, usize)> {
+    let runs_at = if rule == PastWindowRule::Carry { c } else { w };
+    let mut prompts = query_prompts(tokens, mask, runs_at, queries)?;
+    let mut crossing = 0;
+    for (index, window) in &mut prompts.decoded {
+        let query = &queries[*index];
+        let (doc, start) = (query.document_start, query.reply_start);
+        let end = start + query.reply_tokens;
+        if rule == PastWindowRule::Carry && end - doc > c {
+            return Err(invalid(format!(
+                "query {index} at {start}: its document runs past the carry context {c}"
+            )));
+        }
+        let from = query_input_start(rule, doc, start, end, w, c);
+        if rule == PastWindowRule::Blocks && end - 1 - from > w {
+            crossing += 1;
+        }
+        *window = CausalWindow {
+            doc_id: *index,
+            input_ids: tokens[from..end - 1].to_vec(),
+            scored_offsets: (start - 1 - from..end - 1 - from).collect(),
+            scored_targets: tokens[start..end].to_vec(),
+            scored_corpus_positions: (start..end).collect(),
+        };
+    }
+    Ok((prompts, crossing))
+}
+
 /// Whether `text` states `answer`: as a whole word, not inside a longer word or number.
 fn states_answer(text: &str, answer: &str) -> bool {
     !answer.is_empty()
@@ -16736,6 +16798,125 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    /// The query fixture above: a 32-token document whose query reply sits at 29..32, then an
+    /// 8-token document (claude-287).
+    fn past_window_panel() -> (Vec<u32>, Vec<u8>, ChainQuery) {
+        let mut tokens = vec![0u32];
+        tokens.extend(100..120);
+        tokens.extend([200, 201, 202]);
+        tokens.extend(300..305);
+        tokens.extend([400, 401, 402]);
+        tokens.extend([0, 500, 501, 502, 503, 504, 600, 601]);
+        let mask: Vec<u8> = tokens
+            .iter()
+            .map(|&t| u8::from((200..203).contains(&t) || (400..403).contains(&t) || t >= 600))
+            .collect();
+        (tokens, mask, chain_query(0, 29, 3, "x", 10))
+    }
+
+    type PastWindowKey = (Vec<u32>, Vec<usize>, Vec<u32>, Vec<usize>);
+
+    fn past_window_keys(windows: &[CausalWindow]) -> Vec<PastWindowKey> {
+        windows
+            .iter()
+            .map(|w| {
+                let w = w.clone();
+                (w.input_ids, w.scored_offsets, w.scored_targets, w.scored_corpus_positions)
+            })
+            .collect()
+    }
+
+    fn past_window_decoded(prompts: &QueryPrompts) -> Vec<(usize, PastWindowKey)> {
+        prompts
+            .decoded
+            .iter()
+            .map(|(i, w)| (*i, past_window_keys(std::slice::from_ref(w)).remove(0)))
+            .collect()
+    }
+
+    #[test]
+    fn past_window_cut_is_each_rules_cutter() {
+        let (tokens, mask, _) = past_window_panel();
+        let bos = hs::SHEET_BOS_ID;
+        let (at, blocks) = past_window_cut(PastWindowRule::Blocks, &tokens, &mask, 8).unwrap();
+        assert_eq!(at, 8);
+        let want = hs::build_document_windows(&tokens, &mask, 8, bos).unwrap().0;
+        assert_eq!(past_window_keys(&blocks), past_window_keys(&want));
+        let slide = PastWindowRule::Slide { stride: 1 };
+        let (at, slid) = past_window_cut(slide, &tokens, &mask, 8).unwrap();
+        assert_eq!(at, 8);
+        let want = hs::build_document_windows_sliding(&tokens, &mask, 8, 1, bos).unwrap().0;
+        assert_eq!(past_window_keys(&slid), past_window_keys(&want));
+        assert_ne!(past_window_keys(&slid), past_window_keys(&blocks));
+        let (c, carried) = past_window_cut(PastWindowRule::Carry, &tokens, &mask, 8).unwrap();
+        let (want_c, want) = hs::carry_windows(&tokens, &mask, bos).unwrap();
+        assert_eq!(c, want_c);
+        assert!(c >= 32, "{c}");
+        assert_eq!(carried.len(), 2, "one window per document");
+        assert_eq!(past_window_keys(&carried), past_window_keys(&want));
+        assert_eq!(carried[0].input_ids[0], bos);
+    }
+
+    #[test]
+    fn past_window_slide_queries_equal_query_prompts() {
+        let (tokens, mask, query) = past_window_panel();
+        let queries = [query, chain_query(32, 38, 2, "y", 3)];
+        for w in [2, 3, 8, 2048] {
+            let slide = PastWindowRule::Slide { stride: 1 };
+            let (ruled, crossing) =
+                query_prompts_ruled(&tokens, &mask, slide, w, 4096, &queries).unwrap();
+            let plain = query_prompts(&tokens, &mask, w, &queries).unwrap();
+            assert_eq!(crossing, 0);
+            assert_eq!(ruled.past_window, plain.past_window, "{w}");
+            assert_eq!(past_window_decoded(&ruled), past_window_decoded(&plain), "{w}");
+        }
+        // The validation is query_prompts' own.
+        let bad = [chain_query(1, 29, 3, "x", 10)];
+        assert!(query_prompts_ruled(&tokens, &mask, PastWindowRule::Blocks, 8, 64, &bad).is_err());
+    }
+
+    #[test]
+    fn past_window_blocks_queries_start_at_the_block_and_count_crossings() {
+        let (tokens, mask, query) = past_window_panel();
+        let one = std::slice::from_ref(&query);
+        let rule = PastWindowRule::Blocks;
+        // At 8 the reply's opening (input 28) lies in the block 24..32: inputs 24..31, inside 8.
+        let (at8, crossing) = query_prompts_ruled(&tokens, &mask, rule, 8, 0, one).unwrap();
+        assert_eq!(crossing, 0);
+        assert_eq!(at8.decoded[0].1.input_ids, &tokens[24..31]);
+        assert_eq!(at8.decoded[0].1.scored_offsets, [4, 5, 6]);
+        // At 10 the block is 20..30 and the reply crosses into the next: 11 inputs, counted.
+        let (at10, crossing) = query_prompts_ruled(&tokens, &mask, rule, 10, 0, one).unwrap();
+        assert_eq!(crossing, 1);
+        assert_eq!(at10.decoded[0].1.input_ids, &tokens[20..31]);
+        assert_eq!(at10.decoded[0].1.scored_offsets, [8, 9, 10]);
+        assert_eq!(at10.decoded[0].1.scored_corpus_positions, [29, 30, 31]);
+        // A reply longer than W is past the window, not decoded.
+        let (at2, crossing) = query_prompts_ruled(&tokens, &mask, rule, 2, 0, one).unwrap();
+        assert!(at2.decoded.is_empty());
+        assert_eq!((at2.past_window, crossing), (vec![0], 0));
+    }
+
+    #[test]
+    fn past_window_carry_queries_start_at_bos_and_judge_against_c() {
+        let (tokens, mask, query) = past_window_panel();
+        let one = std::slice::from_ref(&query);
+        let (c, _) = past_window_cut(PastWindowRule::Carry, &tokens, &mask, 2).unwrap();
+        let rule = PastWindowRule::Carry;
+        // W = 2 is shorter than the reply, but carry runs at C: decoded from the BOS.
+        let (carried, crossing) = query_prompts_ruled(&tokens, &mask, rule, 2, c, one).unwrap();
+        assert_eq!(crossing, 0);
+        assert!(carried.past_window.is_empty());
+        assert_eq!(carried.decoded[0].1.input_ids, &tokens[..31]);
+        assert_eq!(carried.decoded[0].1.scored_offsets, [28, 29, 30]);
+        // Past the window is judged against C.
+        let (short, _) = query_prompts_ruled(&tokens, &mask, rule, 64, 2, one).unwrap();
+        assert!(short.decoded.is_empty());
+        assert_eq!(short.past_window, [0]);
+        // A document longer than C is refused, not cut.
+        assert!(query_prompts_ruled(&tokens, &mask, rule, 64, 16, one).is_err());
     }
 
     /// claude-287: the past-window rule parses by name and validates against W.
