@@ -3,7 +3,7 @@
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Base: `1c5209f8e`; run implementation:
-`1f02345e6`; repaired implementation: `9ed48a92c`.
+`1f02345e6`; final parallel implementation: `40542adf0`.
 
 ## Status
 
@@ -42,14 +42,19 @@ exportable.
   `ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84`;
 - review-repair driver SHA-256:
   `4623d93c0a1e099b5fc942b079f0e0ce2482300749250ff5817bb9bf06815bcc`;
+- final parallel driver SHA-256:
+  `e195e52ec20cac06287410fbe15bdd2d269b5ca4f37f0a4edb6616229ce850c6`;
 - panel power: **58** conversations / **616** response rows per seed;
-- seed 1 wall/RSS: **35.283 s / 47,980 KiB**;
-- seed 2 wall/RSS: **35.008 s / 47,872 KiB**;
-- repaired-driver verification: seed 1 **35.449 s / 47,680 KiB**, seed 2
+- first discovery runs (serial despite a 16-thread pool): seed 1
+  **35.283 s / 47,980 KiB**, seed 2 **35.008 s / 47,872 KiB**;
+- serial review-repair runs: seed 1 **35.449 s / 47,680 KiB**, seed 2
   **35.226 s / 47,912 KiB**;
+- final ordered parallel verification at 16 workers: seed 1
+  **2.598 s / 115,880 KiB**, seed 2 **2.593 s / 115,980 KiB**;
 - both seeds: zero raw CPU/serving query, token and kept-cell mismatches;
 - every arm repeated exactly in-process;
-- repaired-driver verification reproduced every arm field exactly.
+- both review-repair runs and the final parallel run reproduced every arm
+  field exactly.
 
 Raw, input-only, writer-only and combined readings:
 
@@ -80,12 +85,13 @@ Compact evidence:
 
 - fresh-context FIT: **FIT**;
 - fresh-context D67 pre-run review: **GO**;
-- both registered 16-worker runs with sealed report and manifest;
 - exact-head review repairs: the driver now requires the registered 616 rows
-  rather than accepting any panel with at least 200, and the missing malformed
-  writer-table refusal is tested;
-- two fresh repaired-driver verification runs reproduced every arm value and
-  produced new sealed reports without replacing the first outputs;
+  rather than accepting any panel with at least 200, tests the malformed writer
+  table, and evaluates rows and serving parity with ordered Rayon workers;
+- one-worker and four-worker driver tests produced identical ordered rows and
+  parity;
+- preserved serial discovery, serial review-repair and final 16-worker
+  parallel verification each produced sealed reports;
 - raw/raw exact CPU/serving parity on both seeds;
 - exact combined-hybrid/artifact-forward equality on both seeds;
 - table reconstruction, complete row coverage and deterministic in-process
@@ -94,7 +100,8 @@ Compact evidence:
   binary tests passed;
 - scoped strict Clippy:
   `cargo clippy --locked -p uor-r4-cpu-train --all-targets --no-deps -- -D warnings`;
-- rustfmt, `git diff --check`, D23 and D32 ratchets.
+- rustfmt, `git diff --check`, D23 and D32 ratchets;
+- `loop pr-check --local`, report/evidence and all **11 / 11** loop gates.
 
 The workspace/dependency Clippy form without `--no-deps` is red on pre-existing
 Rust 1.97 lints in `uor-r4-integer` and `uor-r4-discrete`; those files were not

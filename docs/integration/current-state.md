@@ -9,9 +9,10 @@ the recurrent input table and the writer-scoring table independently. On seed
 Input-only reproduced combined admission exactly on both seeds and combined
 top-1 exactly on seed 1. Writer-only preserved raw admission, kept cells and
 port distance exactly, moving top-1 by +14/+1 and top-8 by -3/-2 over the two
-seeds. Both runs completed in about 35 seconds at 16 workers, with zero raw
-CPU/serving mismatches. An exact review tightened the driver to the registered
-616 rows; fresh sealed verification reproduced every arm.
+seeds. Initial serial discovery runs took about 35 seconds. Exact review then
+tightened the driver to the registered 616 rows and parallelized ordered row
+evaluation; final 16-worker verification took 2.598/2.593 seconds and
+reproduced every arm with zero raw CPU/serving mismatches.
 
 This attributes deepseek-183's decoding collapse to overwriting the learned
 recurrent input code, not to direct writer-row mismatch. The hybrid tables are

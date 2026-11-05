@@ -94,39 +94,55 @@ serving session exactly.
 ## Source and binary
 
 - base: `1c5209f8e`;
-- implementation pin: `1f02345e69abc4c6fcc7bf906b63f900df6ab025`;
-- binary:
+- first-run implementation: `1f02345e69abc4c6fcc7bf906b63f900df6ab025`;
+- final implementation:
+  `40542adf069f1fe5b5d97a0df136eac4b6d35188`;
+- first-run binary:
   `target/deepseek/table-anchor-isolation/release/release/cpu-table-anchor-isolation`,
   SHA-256
   `ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84`;
-- post-review repaired binary SHA-256:
+- serial review-repair binary SHA-256:
   `4623d93c0a1e099b5fc942b079f0e0ce2482300749250ff5817bb9bf06815bcc`;
+- final ordered-parallel binary SHA-256:
+  `e195e52ec20cac06287410fbe15bdd2d269b5ca4f37f0a4edb6616229ce850c6`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
-- execution: 16 Rayon workers.
+- final execution: 16 actual Rayon workers over ordered independent rows.
 
 ## Output
 
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/table-anchor-isolation/2026-11-05/seed-1`
-and
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/table-anchor-isolation/2026-11-05/seed-2`.
+Initial serial discovery:
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/table-anchor-isolation/2026-11-05/seed-{1,2}`.
+
+Final 16-worker verification:
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/table-anchor-isolation/2026-11-05/parallel-verification/seed-{1,2}`.
 
 Both output roots are absent at registration.
 
 ## Steps
 
-Run only after FIT and D67 GO:
+### Historical initial run
+
+The first run used implementation `1f02345e6` and binary SHA-256 `ab39c515…`.
+Its sealed outputs are retained under `seed-{1,2}`. That implementation
+reported the Rayon pool size but still evaluated rows serially.
+
+### Final reproducible verification
+
+The final driver at implementation `40542adf0`, binary SHA-256 `e195e52e…`,
+evaluates independent rows and serving checks in source order with 16 workers.
+Choose a new absent output root:
 
 ```sh
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-table-anchor-isolation
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/table-anchor-isolation/2026-11-05
+OUT=$SHARED/local/deepseek/table-anchor-isolation/REPRODUCTION-DATE
 BIN=$SOURCE/target/deepseek/table-anchor-isolation/release/release/cpu-table-anchor-isolation
 PANEL=$SHARED/local/deepseek/m2-evidence/dev-panel-v3
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor 1f02345e69abc4c6fcc7bf906b63f900df6ab025 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84
+git -C "$SOURCE" merge-base --is-ancestor 40542adf069f1fe5b5d97a0df136eac4b6d35188 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = e195e52ec20cac06287410fbe15bdd2d269b5ca4f37f0a4edb6616229ce850c6
 
 mkdir -p "$OUT"
 run() {
@@ -158,6 +174,7 @@ run 2 \
 - four arms on every row, with 157,696 Q12 coordinates per arm per seed;
 - complete query, token and kept-cell signatures for every arm;
 - every arm run twice in-process with exact row equality;
+- one-worker and four-worker ordered row/parity tests are identical;
 - raw/raw exact integer-serving parity over every final query coordinate, token
   and kept-cell vector;
 - combined arm exactly equal to the parsed table-anchored artifact forward;
@@ -194,7 +211,8 @@ an instrument fault and clears no attribution.
   incomplete rows, Hamming or memory records, a hybrid serving-parity claim, or
   any need to edit serving, CUDA, float-training, exporter or Claude-owned
   source;
-- do not retune or rerun after a report is read.
+- do not retune after a report is read. Review-driven instrument repairs use
+  fresh output roots and preserve every earlier sealed report.
 
 ## Claim boundary
 
@@ -231,11 +249,13 @@ public-panel arms had not run.
 **COMPLETE (instrument).** Both sealed seeds completed, every arm was
 deterministic, and raw/raw retained exact serving parity.
 
-The first exact-head review repaired a weak driver floor: a final-driver
-verification now requires exactly 616 response rows and the malformed
-writer-table test is explicit. Fresh sealed verification roots for both seeds
-with binary SHA-256 `4623d93c…15bcc` reproduced every arm field exactly; the
-first sealed outputs were retained.
+The exact reviews repaired a weak driver floor and exposed the initial run's
+serial execution. The final driver requires exactly 616 response rows, tests
+the malformed writer table, and evaluates independent rows and serving checks
+with ordered Rayon workers. Fresh sealed 16-worker verification roots with
+binary SHA-256 `e195e52e…` reproduced every arm field exactly. Seed 1 took
+**2.598 s / 115,880 KiB** and seed 2 **2.593 s / 115,980 KiB**, against about
+35 seconds for the preserved initial serial runs on the same local host.
 
 The anchored recurrent-input arm reproduced the combined decoding collapse:
 admitted/top-1/top-8 was `120/55/89` versus raw `245/181/236` on seed 1 and
