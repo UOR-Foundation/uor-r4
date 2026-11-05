@@ -217,6 +217,13 @@ pub fn load_split(dir: &Path, tok_sha: &str, mask_sha: &str, need_manifest: bool
             tokens.first()
         ));
     }
+    if let Some(i) = tokens.iter().position(|&t| t as usize >= VOCAB) {
+        return Err(format!(
+            "{}: token {i} is {}, not below the vocabulary of {VOCAB}",
+            tp.display(),
+            tokens[i]
+        ));
+    }
     if let Some(i) = mask.iter().position(|&m| m > 1) {
         return Err(format!(
             "{}: mask[{i}] = {} is not 0 or 1",
@@ -394,6 +401,12 @@ pub struct Tables {
 
 impl Tables {
     pub fn build(tokens: &[u16], mask: &[u8]) -> R<Self> {
+        if tokens.len() > u32::MAX as usize {
+            return Err(format!(
+                "train: {} tokens could overflow a u32 bigram count",
+                tokens.len()
+            ));
+        }
         let mut uni = vec![0u64; VOCAB];
         let mut bi = vec![0u32; VOCAB * VOCAB];
         let mut scored = 0u64;
@@ -1162,6 +1175,15 @@ fn run_pair(a: &Args) -> R<String> {
                 "{}: split {} row_identity_sha256 differs from a1",
                 x.dir.display(),
                 p.0
+            ));
+        }
+        if let Some((p, q)) = x.splits.iter().zip(&g[0].splits).find(|(p, q)| p.2 != q.2) {
+            return Err(format!(
+                "{}: split {} holds {} rows, a1's {}",
+                x.dir.display(),
+                p.0,
+                p.2,
+                q.2
             ));
         }
     }

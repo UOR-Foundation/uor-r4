@@ -1,4 +1,4 @@
-//! `scale-probe mix|grade|pair key=value...`; see the README.
+//! `scale-probe mix|seen|grade|pair key=value...`; see the README.
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

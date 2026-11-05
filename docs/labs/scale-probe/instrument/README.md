@@ -5,7 +5,7 @@ is a nonzero exit that names the file (or split and row) and the reason. Outputs
 overwritten. A position is scored iff `p >= 1 && tokens[p] != 0 && mask[p] == 1`.
 
 Build from the repository root:
-`~/.cargo/bin/cargo build --offline --manifest-path docs/labs/scale-probe/instrument/Cargo.toml`.
+`~/.cargo/bin/cargo build --offline --locked --manifest-path docs/labs/scale-probe/instrument/Cargo.toml`.
 
 ## `mix`
 

@@ -507,6 +507,28 @@ fn grade_refuses_ids_beyond_vocab() {
 }
 
 #[test]
+fn grade_refuses_a_panel_token_beyond_vocab() {
+    // Token 5000 keys the scored row at 2; T2 has no row for it.
+    let b = base("grade_tok");
+    let tr = train_fx(&b.join("train"));
+    let pa = split(&b.join("panel"), &[0, 5000, 7], &[0, 0, 1], 8192, true);
+    let rp = b.join("rows.json");
+    rows_file(&rp, "p", &[2], &[7], &[7], &[7]);
+    refused(
+        grade(&b.join("g"), &tr, &[("p", &pa)], &[("p", &rp)]),
+        "token 1 is 5000, not below the vocabulary of 4096",
+    );
+}
+
+#[test]
+fn seen_refuses_existing_out() {
+    let c = clean_setup("seen_out");
+    let panels = [("p", &c.pa), ("q", &c.pa)];
+    let rows = [("p", c.rows[0].as_path()), ("q", &c.rows[1])];
+    refused(seen_cmd(&c.seen, &c.tr, &panels, &rows), "already exists");
+}
+
+#[test]
 fn grade_refuses_unmatched_panel_or_rows() {
     let b = base("grade_match");
     let (tr, pa) = (train_fx(&b.join("train")), panel_fx(&b.join("panel")));
@@ -839,7 +861,7 @@ fn pair_refuses_hits_sha_mismatch() {
     fs::write(a2.join("nearest-hits.bin"), [0x1e]).unwrap();
     refused(
         pair(&c.b.join("p.json"), &[("a1", &a1), ("a2", &a2)], Some("t2")),
-        "hits_sha256",
+        "!= hits_sha256",
     );
 }
 
@@ -853,7 +875,7 @@ fn pair_refuses_row_identity_or_split_difference() {
     grade(&a2, &c.tr, &[("p", &c.pa)], &[("p", &rp)]).unwrap();
     refused(
         pair(&c.b.join("p.json"), &[("a1", &a1), ("a2", &a2)], Some("t2")),
-        "row_identity",
+        "pooled row_identity_sha256 differs from a1",
     );
     let rq = c.b.join("q.rows.json");
     rows_file(&rq, "q", &POS, &TGT, &TGT, &TGT);
@@ -861,7 +883,7 @@ fn pair_refuses_row_identity_or_split_difference() {
     grade(&aq, &c.tr, &[("q", &c.pa)], &[("q", &rq)]).unwrap();
     refused(
         pair(&c.b.join("p.json"), &[("a1", &a1), ("a2", &aq)], Some("t2")),
-        "row_identity",
+        "pooled row_identity_sha256 differs from a1",
     );
 }
 
@@ -894,6 +916,58 @@ fn pair_refuses_both_or_neither_b_and_table() {
     refused(pair(&out, &all[..2], None), "exactly one of");
     refused(pair(&out, &all[..3], None), "exactly one of");
     assert!(!out.exists());
+}
+
+#[test]
+fn pair_refuses_a_bad_table_or_argument() {
+    let c = e2e_setup("pair_args");
+    let a1 = grade_cell(&c, "a1", &TGT);
+    let out = c.b.join("p.json");
+    let two = [("a1", a1.as_path()), ("a2", &a1)];
+    refused(
+        pair(&out, &two, Some("foo")),
+        "table=foo: expected t2 or unigram",
+    );
+    let o = out.display().to_string();
+    refused(
+        run(&args("pair", &[("out", o.clone()), ("out", o.clone())])),
+        "out= given more than once",
+    );
+    refused(
+        run(&args("pair", &[("out", o), ("seed", "1".into())])),
+        "unknown argument seed=",
+    );
+    assert!(!out.exists());
+}
+
+#[test]
+fn pair_refuses_per_split_differences() {
+    // The pooled identity is copied from a1, so only the split-by-split checks can refuse.
+    type Edit = fn(&mut Value);
+    let cases: [(Edit, &str); 3] = [
+        (
+            |v| v["splits"][1]["name"] = json!("r"),
+            "split names/order differ from a1",
+        ),
+        (
+            |v| v["splits"][0]["row_identity_sha256"] = json!("x"),
+            "split p row_identity_sha256 differs from a1",
+        ),
+        (
+            |v| {
+                v["splits"][0]["rows"] = json!(4);
+                v["splits"][1]["rows"] = json!(3);
+            },
+            "split p holds 4 rows, a1's 5",
+        ),
+    ];
+    for (i, (edit, needle)) in cases.into_iter().enumerate() {
+        let c = clean_setup(&format!("pair_split_{i}"));
+        let [a1, a2, ..] = &c.cells;
+        edit_json(&a2.join("grade.json"), edit);
+        let out = c.b.join("p.json");
+        refused(pair(&out, &[("a1", a1), ("a2", a2)], Some("t2")), needle);
+    }
 }
 
 // ---- seen, the table bitsets and clean= pairing ----
@@ -1253,10 +1327,13 @@ fn pair_table_refuses_grade_whose_counts_disagree() {
     });
     refused(
         pair(&c.b.join("u.json"), &kv, Some("unigram")),
-        "disagrees with",
+        "from the hit bitsets",
     );
     edit_json(&c.cells[0].join("grade.json"), |v| {
         v["pooled"]["vs_t2"]["c"] = json!(0)
     });
-    refused(pair(&c.b.join("t.json"), &kv, Some("t2")), "disagrees with");
+    refused(
+        pair(&c.b.join("t.json"), &kv, Some("t2")),
+        "from the hit bitsets",
+    );
 }
