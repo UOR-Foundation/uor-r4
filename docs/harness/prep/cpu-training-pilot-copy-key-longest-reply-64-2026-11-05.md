@@ -296,3 +296,8 @@ note: Attempt 1 produced no comparison result. The cap-only correction and new
 date: 2026-11-05
 
 A FIT verdict clears compute for this configuration only.
+
+The evidence-resource correction was re-reviewed at HEAD `b67d67ae8b1b`.
+Normalized reports are compared as streams and full decision reports are
+gzip-compressed before the size gate. This FIT covers the unchanged
+experiment plus that evidence-storage correction.
