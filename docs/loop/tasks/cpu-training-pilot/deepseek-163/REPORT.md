@@ -8,7 +8,8 @@ Order: [ORDER.md](ORDER.md). Base: `7fe55fdbf`.
 
 Decision: **REJECT** for the longest-32 exact-copy extension. The deeper arm
 selected depth 32 on most decisions and beat every shallower or randomized
-control, but it produced exactly the same correct body positions as nested
+control except its nested longest-4 control, but it produced exactly the same
+correct body positions as nested
 longest-4: **409/4,661 train** and **300/4,758 fresh dev** on both artifact
 seeds. The deeper history carried no additional content decision.
 
@@ -17,9 +18,11 @@ reject exact copy, longer approximate matches or a trained vector-space read.
 
 ## What did not work
 
-- Longest-32 and longest-4 selected byte-identical token trajectories. Their
-  paired body-position comparison was 0 candidate-only and 0 control-only on
-  each fresh-dev seed.
+- Fresh-dev longest-32 and longest-4 selected byte-identical token
+  trajectories. Their paired body-position comparison was 0 candidate-only
+  and 0 control-only on each seed.
+- On the training diagnostic, 101 selected tokens differed after the reference
+  body on each seed; every scored body position still matched.
 - The fresh-dev bar failed despite adequate power: 458 reachable replies,
   29,312 decisions, and non-vacuous random-32 changes on 1,612 decisions and
   33 rows per seed.
@@ -56,7 +59,7 @@ both longest-32 and longest-4 on each seed.
 Longest-32 selected depth 32 on 15,114/29,312 fresh-dev decisions and selected
 each depth one through four 458 times; the arm therefore exercised deep
 matches rather than falling back to longest-4. It still chose the same token
-as longest-4 at every decision.
+as longest-4 at every fresh-dev decision.
 
 Longest-32 beat `k2>k1`, depth 1, random-32 and writer by the paired two-sigma
 rule. The required gain over nested longest-4 was absent.
@@ -103,8 +106,8 @@ Published evidence manifest SHA-256:
 
 Against base `7fe55fdbf`, this unit changes four CPU-train files
 (**+115 / -23**), nine task, preregistration, notebook, roadmap, state and
-lab-record files (**+636 / -0**), and 30 published evidence files
-(**+380 / -0**): **43 files, +1,131 / -23**. No corpus or binary is tracked.
+lab-record files (**+642 / -0**), and 30 published evidence files
+(**+380 / -0**): **43 files, +1,137 / -23**. No corpus or binary is tracked.
 
 ## Skills used
 
@@ -121,6 +124,7 @@ delivery procedures are used.
 
 ## Plain summary
 
-Looking 32 tokens back instead of four changed which depth was selected but
-not the token it copied. The deeper arm tied its nested control exactly and
-therefore fails its bar.
+Looking 32 tokens back instead of four changed which depth was selected. On
+fresh dev it did not change the copied token; on train it changed tokens only
+after the reference. Scored body accuracy tied its nested control exactly, so
+the deeper arm fails its bar.

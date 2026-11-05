@@ -1,7 +1,7 @@
 ## 2026-11-05 — Longer exact copy depth adds no token distinction (deepseek)
 
 The longest-32 exact-suffix arm selected deeper matches than longest-4 on a
-fresh 458-reply panel but chose the same token at every decision. It tied
+fresh 458-reply panel but chose the same token at every fresh-dev decision. It tied
 longest-4 at **409/4,661** train and **300/4,758** fresh-dev correct body
 positions on both artifact seeds, so the paired nested comparison failed.
 Longest-32 still beat `k2>k1`, fixed depth 1, random-32 and writer; no arm

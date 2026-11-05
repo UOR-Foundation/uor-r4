@@ -445,8 +445,8 @@ better terminal-token construction. See
 
 The next content screen tested whether exact suffix matches deeper than four
 add information. On a fresh 458-reply panel, longest-32 selected depth 32 on
-most decisions and beat every shallower or randomized control, but it chose
-the same token as nested longest-4 at every decision. Both arms reached
+most decisions and beat every non-nested shallower or randomized control, but
+it chose the same token as nested longest-4 at every fresh-dev decision. Both arms reached
 **300/4,758** fresh-dev and **409/4,661** train correct body positions; no arm
 completed a reply. This closes exact depths eight through 32 and directs the
 next content test to a non-exact geometric read rather than a longer exact
