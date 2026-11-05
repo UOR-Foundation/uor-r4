@@ -99,6 +99,11 @@ Published attempt-8 raw manifest SHA-256:
 Published evidence manifest SHA-256:
 `3e7beaf04b89b0930fb2a618ba995599c81eaa10861a08457102246ea54cd69c`.
 
+Post-merge note: fresh-main verification found the ignored attempt-8
+`tokens.u16` file missing from the published panel. Deepseek-160 restores the
+exact local file and verifies the unchanged manifests; it does not alter this
+result or rerun the experiment.
+
 ## Checks run at the head
 
 - **286** CPU library tests passed with 4 expected ignores.

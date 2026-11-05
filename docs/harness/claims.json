@@ -111,6 +111,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/copy-exact-evidence-repair": {
+    "branch": "deepseek/copy-exact-evidence-repair",
+    "claimed_at": "2026-11-05T00:56:00-05:00",
+    "head": "8baf7c98d",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/copy-exact-stop": {
     "branch": "deepseek/copy-exact-stop",
     "claimed_at": "2026-11-05T00:07:00-05:00",
