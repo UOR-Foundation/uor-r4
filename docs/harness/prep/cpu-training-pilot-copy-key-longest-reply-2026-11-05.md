@@ -198,10 +198,112 @@ the workspace manifests and `third_party/`. The generator must remain
 byte-identical to `GENERATOR_PIN` under
 `docs/labs/one-model-end-to-end/instrument/`.
 
-Build `cpu-copy-key-reply` and `heldout-panel`, generate both panels, run all
-five arms for each artifact on each panel, repeat one artifact/panel pair in a
-fresh process, verify hashes and bars, seal `SHA256SUMS`, and record elapsed
-time, peak RSS, target size and retained evidence size.
+The run wrapper must fail closed:
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-copy-key-longest-reply
+SHARED=/home/callard/projects/codex-playground/uor-r4
+OUT=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05
+PANELS=$OUT/panels
+BUILD=$SOURCE/target/deepseek/copy-key-longest-reply
+GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
+TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
+IMPL_PIN=cdcb63cafe27
+GENERATOR_PIN=4e42ffca5
+SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
+SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
+SEED1_SHA=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+SEED2_SHA=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+TOKENIZER_SHA=a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
+
+test ! -e "$OUT"
+git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
+  .cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party
+git -C "$SOURCE" diff --quiet "$GENERATOR_PIN" -- \
+  docs/labs/one-model-end-to-end/instrument
+sha256sum -c <(printf '%s\n' \
+  "$SEED1_SHA  $SEED1" \
+  "$SEED2_SHA  $SEED2" \
+  "$TOKENIZER_SHA  $TOKENIZER") --quiet
+
+mkdir -p "$PANELS"
+seal() {
+  (cd "$OUT"; find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
+    sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
+    mv SHA256SUMS.tmp SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet)
+}
+trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
+
+/usr/bin/time -v -o "$OUT/build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+  cargo build --locked --release -p uor-r4-cpu-train --bin cpu-copy-key-reply
+/usr/bin/time -v -o "$OUT/generator-build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" \
+  cargo build --locked \
+  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
+  --features panel-writer --bin heldout-panel
+GEN=$GENERATOR_TARGET/debug/heldout-panel
+
+/usr/bin/time -v -o "$OUT/tt-panel.time.txt" \
+  timeout 900s "$GEN" out="$PANELS/tt-2701" tokenizer="$TOKENIZER" \
+  cell=train,train conversations=128 seed=2701 protocol=2 \
+  >"$OUT/tt-panel.stdout.json"
+/usr/bin/time -v -o "$OUT/dd-panel.time.txt" \
+  timeout 900s "$GEN" out="$PANELS/dd-2702" tokenizer="$TOKENIZER" \
+  cell=dev,dev conversations=128 seed=2702 protocol=2 \
+  >"$OUT/dd-panel.stdout.json"
+
+BIN=$BUILD/release/cpu-copy-key-reply
+run() {
+  name=$1
+  panel=$2
+  artifact=$3
+  expected=$4
+  /usr/bin/time -v -o "$OUT/$name.time.txt" \
+    timeout 900s env RAYON_NUM_THREADS=32 "$BIN" \
+    "$panel/tokens.u16" "$panel/response_mask.u8" "$panel/manifest.json" \
+    "$artifact" --cap 32 --seed 153 >"$OUT/$name.json"
+  jq -e '.random_nonvacuity.non_vacuous == true' "$OUT/$name.json" >/dev/null
+  jq -e '.examples.reachable >= 200' "$OUT/$name.json" >/dev/null
+  jq -e --arg expected "$expected" \
+    '.inputs.artifact_sha256 == $expected' "$OUT/$name.json" >/dev/null
+}
+
+run seed1-tt "$PANELS/tt-2701" "$SEED1" "$SEED1_SHA"
+run seed1-dd "$PANELS/dd-2702" "$SEED1" "$SEED1_SHA"
+run seed2-tt "$PANELS/tt-2701" "$SEED2" "$SEED2_SHA"
+run seed2-dd "$PANELS/dd-2702" "$SEED2" "$SEED2_SHA"
+run seed1-dd-repeat "$PANELS/dd-2702" "$SEED1" "$SEED1_SHA"
+
+for report in "$OUT"/seed*.json; do
+  base=$(basename "$report" .json)
+  case "$base" in *-repeat) continue ;; esac
+  jq -S 'walk(if type == "object"
+    then del(.wall_elapsed_us, .generated_tokens_per_second)
+    else . end)' "$report" >"$OUT/$base.normalized.json"
+done
+jq -S 'walk(if type == "object"
+  then del(.wall_elapsed_us, .generated_tokens_per_second)
+  else . end)' "$OUT/seed1-dd-repeat.json" >"$OUT/seed1-dd-repeat.normalized.json"
+cmp "$OUT/seed1-dd.normalized.json" "$OUT/seed1-dd-repeat.normalized.json"
+
+test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/build.time.txt")" \
+  -le 4194304
+test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/generator-build.time.txt")" \
+  -le 4194304
+for timing in "$OUT"/*.time.txt; do
+  case "$timing" in "$OUT/build.time.txt"|"$OUT/generator-build.time.txt") continue ;; esac
+  test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$timing")" -le 1048576
+done
+test "$(du -sb "$OUT" | cut -f1)" -le 67108864
+```
+
+Read all four comparison blocks. A pass requires the registered paired rule
+for both metrics on both artifact seeds and both panels. The complete-reply
+and termination-limited classifications are evaluated only from those
+reports; no target is selected after reading them.
 
 ## Rollback boundary
 
