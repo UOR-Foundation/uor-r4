@@ -298,3 +298,5 @@ on the train panel and 8:0 on the dev panel, and beat random depth by 32:7 and
 33:5. Public DEV reproduced the Claude-267 parity counts. The candidate passes
 the registered screen. Evidence `SHA256SUMS` is
 `bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
+Generated corpus bytes remain in the sealed local attempt and are omitted from
+Git; committed evidence verifies with `PUBLISHED-SHA256SUMS`.

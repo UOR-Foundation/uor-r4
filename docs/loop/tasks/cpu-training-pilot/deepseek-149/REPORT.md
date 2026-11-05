@@ -89,9 +89,12 @@ Resources:
 
 Exact output is under
 [`evidence-attempt-3/`](../../../../labs/cpu-training-pilot-copy-key-depth-2026-11-05/evidence-attempt-3/).
-Evidence `SHA256SUMS` is
+The raw sealed `SHA256SUMS` is
 `bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
 The two failed attempts and their hashes remain in the same lab record.
+Generated corpora are omitted from Git; the committed evidence verifies with
+`PUBLISHED-SHA256SUMS`, while the committed panel manifests pin both corpus
+hashes and generator seeds.
 
 ## Checks run at the head
 

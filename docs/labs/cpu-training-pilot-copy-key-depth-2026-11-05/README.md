@@ -11,6 +11,13 @@ This lab record contains three sealed attempts:
   generated panels.
 
 The successful evidence is in
-[`evidence-attempt-3/`](evidence-attempt-3/), with `SHA256SUMS`
+[`evidence-attempt-3/`](evidence-attempt-3/). Its raw manifest, preserved as
+`RAW-SHA256SUMS`, has digest
 `bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
+
+The full sealed attempts remain in the local CPU pipeline. Generated corpora
+are omitted from Git under CHARTER §3.11. Each published evidence directory
+therefore carries `RAW-SHA256SUMS`, byte-identical to the sealed attempt, and
+`PUBLISHED-SHA256SUMS`, covering every committed evidence file. Panel
+manifests preserve both corpus hashes and generator seeds.
 

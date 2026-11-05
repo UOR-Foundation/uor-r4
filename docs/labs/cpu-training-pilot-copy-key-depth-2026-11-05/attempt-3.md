@@ -17,6 +17,8 @@ The paired comparison had 8 candidate-only against 0 control-only decisions for
 Both panels exceeded 200 eligible positions and both random controls changed
 copyable decisions. The fresh-process dev-panel repeat matched byte for byte.
 
-Exact output is in [`evidence-attempt-3/`](evidence-attempt-3/); `SHA256SUMS`
-is `bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
+Published output is in [`evidence-attempt-3/`](evidence-attempt-3/). The raw
+manifest, preserved as `RAW-SHA256SUMS`, has digest
+`bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
+The published subset verifies with `PUBLISHED-SHA256SUMS`.
 
