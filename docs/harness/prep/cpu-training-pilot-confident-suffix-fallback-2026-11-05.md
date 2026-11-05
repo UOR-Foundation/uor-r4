@@ -378,3 +378,13 @@ reviewer: suffix_fallback_fit_review_2
 date: 2026-11-05
 note: Corrected head 67b6ea7e2; accounting, local-priority common-state,
 and end-to-end fallback/shuffle controls verified.
+
+## D67 pre-run review
+
+D67 PRE-RUN: GO - implementation `c2b2fda87`, sheet head `949e58dd6`;
+source/input pins match; seed 2773 and the output root are absent; every timed
+stage enforces its RSS limit; each fresh seed fails before repeats on
+reachability, confident-fallback count, local/shuffle non-vacuity, BOS absence
+and matched true/shuffled census; the extracted wrapper passes `bash -n`; and
+the source remains isolated from Claude's scale work. Reviewer:
+`suffix_fallback_go_review_2`, 2026-11-05.
