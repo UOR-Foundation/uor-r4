@@ -365,4 +365,9 @@ change local priority, depth comparison, confidence, shuffle or bar.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+
+reviewer: full_sequence_fit_review_2
+date: 2026-11-05
+note: Corrected head 767705441; selected-source accounting and
+global-selection trajectory test verified.
