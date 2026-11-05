@@ -216,4 +216,24 @@ describe('model source adapter', () => {
         await expect(adapter.testApi('api-b')).rejects.toThrow('non-selected API');
         expect(api.testApi).not.toHaveBeenCalled();
     });
+
+    it('turns a current worker filename mismatch into an explicit load error', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', id: 1, capabilities: { file_name: 'other.lut', artifact_sha256: 'abc' } });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain('other.lut');
+        expect(store.getState().artifact.error).toContain('model.lut');
+        expect(store.canRun()).toBe(false);
+    });
+
+    it('turns a current worker expected-hash mismatch into an explicit load error', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', id: 1, capabilities: { file_name: 'model.lut', artifact_sha256: 'deadbeef' } });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain('deadbeef');
+        expect(store.getState().artifact.error).toContain('abc');
+        expect(store.canRun()).toBe(false);
+    });
 });

@@ -325,6 +325,23 @@ const EXPECTED_32 = [
 
 await sendToWorker({
     action: 'generate',
+    id: 'gen_exact_add',
+    payload: {
+        conversationId: 'conv_verify_exact_add',
+        messages: [{ role: 'user', content: '17 + 25' }],
+        options: { max_new_tokens: 32 },
+    },
+});
+const genExact = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_add');
+assert(genExact.action === 'generate_complete', `exact arithmetic failed: ${JSON.stringify(genExact)}`);
+assert(genExact.fullText.startsWith('42\n'), `exact arithmetic must put the answer first, got ${JSON.stringify(genExact.fullText)}`);
+assert(genExact.fullText.includes('tool, not model generation'), 'exact arithmetic must identify itself as a tool');
+assert(genExact.fullText.includes('p0: 7 + 5 + 0 -> 2, carry 1'), `exact arithmetic must expose the actual carry trace, got ${JSON.stringify(genExact.fullText)}`);
+assert(genExact.tool === 'm6-exact-arithmetic', `exact arithmetic must carry a tool marker, got ${JSON.stringify(genExact)}`);
+assert(genExact.tokenCount === 0 && genExact.tokenIds.length === 0 && genExact.tps === null, `exact arithmetic must not invent model tokens or rates: ${JSON.stringify(genExact)}`);
+
+await sendToWorker({
+    action: 'generate',
     id: 'gen_full_32',
     payload: {
         conversationId: 'conv_verify_full',

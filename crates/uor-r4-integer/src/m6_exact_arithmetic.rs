@@ -856,6 +856,155 @@ impl GeometricArithmeticEngine {
     }
 }
 
+const MAX_EXACT_TOOL_PROMPT_BYTES: usize = 160;
+const MAX_EXACT_TOOL_OPERAND: u64 = 9_999_999_999;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExactArithmeticToolAnswer {
+    pub expression: String,
+    pub result: String,
+    pub text: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ExactToolOperator {
+    Add,
+    Subtract,
+}
+
+fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
+    let trimmed = prompt.trim();
+    if trimmed.is_empty() || trimmed.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
+        return Ok(None);
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let mut rest = trimmed;
+    let mut has_prefix = false;
+    for prefix in ["what is", "compute", "calculate"] {
+        if lower.starts_with(prefix) {
+            rest = trimmed[prefix.len()..].trim_start();
+            has_prefix = true;
+            break;
+        }
+    }
+    if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return Ok(None);
+    }
+
+    let expression_end = rest
+        .char_indices()
+        .find(|(_, c)| !matches!(c, '0'..='9' | '+' | '-' | ' ' | '\t'))
+        .map_or(rest.len(), |(index, _)| index);
+    let expression = rest[..expression_end].trim();
+    let mut suffix = rest[expression_end..].trim();
+    if suffix.starts_with(|c| matches!(c, '?' | '.' | '!')) {
+        suffix = suffix[1..].trim_start();
+    }
+    suffix = suffix.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' '));
+    let normalized_suffix = suffix.to_ascii_lowercase();
+    if !normalized_suffix.is_empty()
+        && ![
+            "answer with the number first",
+            "answer with number first",
+            "show your work",
+            "show the carry trace",
+            "please show your work",
+        ]
+        .contains(&normalized_suffix.as_str())
+    {
+        return Ok(None);
+    }
+
+    let fields: Vec<&str> = expression.split_whitespace().collect();
+    if fields.len() != 3 {
+        return Err(invalid(
+            "exact arithmetic expects one decimal addition or subtraction",
+        ));
+    }
+    let parse_operand = |value: &str| -> Result<u64> {
+        let parsed = value
+            .parse::<u64>()
+            .map_err(|_| invalid("exact arithmetic operand is not an unsigned decimal integer"))?;
+        if parsed > MAX_EXACT_TOOL_OPERAND {
+            return Err(invalid(
+                "exact arithmetic operand exceeds the 10-digit tool bound",
+            ));
+        }
+        Ok(parsed)
+    };
+    let left = parse_operand(fields[0])?;
+    let right = parse_operand(fields[2])?;
+    let operator = match fields[1] {
+        "+" => ExactToolOperator::Add,
+        "-" => ExactToolOperator::Subtract,
+        _ => {
+            return Err(invalid(
+                "exact arithmetic supports only one decimal + or - operator",
+            ))
+        }
+    };
+    Ok(Some((left, operator, right)))
+}
+
+/// Answer one strict decimal expression through the existing geometric place-value engine.
+pub fn exact_arithmetic_tool(prompt: &str) -> Option<Result<ExactArithmeticToolAnswer>> {
+    let (left, operator, right) = match exact_tool_expression(prompt) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return None,
+        Err(error) => return Some(Err(error)),
+    };
+    Some((|| {
+        let left_atoms = u64_to_atoms(left, 10)?;
+        let right_atoms = u64_to_atoms(right, 10)?;
+        let engine = GeometricArithmeticEngine::new(10, 11)?;
+        let trace = match operator {
+            ExactToolOperator::Add => engine.add_atoms(&left_atoms, &right_atoms, None)?,
+            ExactToolOperator::Subtract => engine.sub_atoms(&left_atoms, &right_atoms, None)?,
+        };
+        if !trace.verify_all_inverses() {
+            return Err(invalid("exact arithmetic trace failed its inverse check"));
+        }
+        let result = trace.to_u64()?;
+        let expression = format!(
+            "{left} {} {right}",
+            match operator {
+                ExactToolOperator::Add => "+",
+                ExactToolOperator::Subtract => "-",
+            }
+        );
+        let mut text = format!(
+            "{result}\n\nR4 geometric exact arithmetic — tool, not model generation\n- {expression} = {result}"
+        );
+        for step in &trace.steps {
+            match operator {
+                ExactToolOperator::Add => text.push_str(&format!(
+                    "\n- p{}: {} + {} + {} -> {}, carry {}",
+                    step.place,
+                    step.left_digit,
+                    step.right_digit,
+                    step.carry_in_trit,
+                    step.output_digit,
+                    step.carry_out_trit
+                )),
+                ExactToolOperator::Subtract => text.push_str(&format!(
+                    "\n- p{}: {} - {} - {} -> {}, borrow {}",
+                    step.place,
+                    step.left_digit,
+                    step.right_digit,
+                    -step.carry_in_trit,
+                    step.output_digit,
+                    -step.carry_out_trit
+                )),
+            }
+        }
+        Ok(ExactArithmeticToolAnswer {
+            expression,
+            result: result.to_string(),
+            text,
+        })
+    })())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1175,5 +1324,46 @@ mod tests {
         assert_eq!(none_correct, 16);
         assert_eq!(knockout_transport_correct, 0);
         assert_eq!(knockout_memory_correct, 0);
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_answers_strict_decimal_prompts() {
+        let answer = exact_arithmetic_tool("What is 17 + 25? Answer with the number first.")
+            .expect("addition should be recognized")
+            .expect("addition should be exact");
+        assert_eq!(answer.expression, "17 + 25");
+        assert_eq!(answer.result, "42");
+        assert!(answer.text.starts_with("42\n"));
+        assert!(answer.text.contains("tool, not model generation"));
+        assert!(answer.text.contains("p0: 7 + 5 + 0 -> 2, carry 1"));
+        assert!(answer.text.contains("p1: 1 + 2 + 1 -> 4, carry 0"));
+
+        let carry = exact_arithmetic_tool("Calculate 483 + 259")
+            .expect("second addition should be recognized")
+            .expect("second addition should be exact");
+        assert_eq!(carry.result, "742");
+
+        let borrow = exact_arithmetic_tool("50 - 12")
+            .expect("subtraction should be recognized")
+            .expect("subtraction should be exact");
+        assert_eq!(borrow.expression, "50 - 12");
+        assert_eq!(borrow.result, "38");
+        assert!(borrow.text.contains("p0: 0 - 2 - 0 -> 8, borrow 1"));
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_falls_through_and_refuses_invalid_input() {
+        assert!(exact_arithmetic_tool("Explain in two sentences what you are.").is_none());
+        assert!(exact_arithmetic_tool("What is the capital of Japan?").is_none());
+        assert!(exact_arithmetic_tool("What is 17 plus 25?").is_none());
+        assert!(exact_arithmetic_tool("What is 17 + ?")
+            .expect("malformed arithmetic should be recognized")
+            .is_err());
+        assert!(exact_arithmetic_tool("1 - 2")
+            .expect("underflow should be recognized")
+            .is_err());
+        assert!(exact_arithmetic_tool("What is 999999999999999999999 + 1?")
+            .expect("oversized operand should be recognized")
+            .is_err());
     }
 }

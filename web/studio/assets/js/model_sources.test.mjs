@@ -188,3 +188,14 @@ test('API provider writes roll back when browser storage fails', async () => {
     assert.deepEqual(api.active(), { kind: 'api', id: existing.id });
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed').length, 0);
 });
+
+test('the synthetic default is stable and a catalog primary flag does not auto-select', async () => {
+    const { api } = await fresh(async () => new Response(JSON.stringify({
+        schema: 'uor-r4.studio-models/1',
+        models: [{ id: 'lexlean-r4', label: 'External research model', primary: true, url: 'https://example.com/lexlean.lut' }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
+    await api.loadModelCatalog();
+    assert.equal(api.catalog().models[0].id, 'published-lexlean-r4');
+    assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
+});

@@ -55,6 +55,7 @@ export interface SessionSummary {
 export interface ChatMessage {
     role: string;
     content: string;
+    tool?: 'm6-exact-arithmetic';
 }
 
 export interface SessionApi {

@@ -289,6 +289,18 @@ function encodePromptTokens(payload, vocabSize, artifact) {
     return encodeTextWithArtifact(text, vocabSize, artifact);
 }
 
+function exactToolFromPayload(payload) {
+    if (!wasmModule || typeof wasmModule.exactArithmetic !== 'function') return null;
+    const userMessage = (payload.messages || []).filter((m) => m.role === 'user').pop();
+    const prompt = typeof payload.prompt === 'string'
+        ? payload.prompt
+        : (typeof userMessage?.content === 'string' ? userMessage.content : '');
+    if (!prompt.trim()) return null;
+    const result = JSON.parse(wasmModule.exactArithmetic(prompt));
+    if (result.error) throw new Error(result.error);
+    return result.handled ? result : null;
+}
+
 function formatTokenChunk(tokenId, index, artifact, decodeText) {
     if (decodeText && artifact && artifact.mode === BYTE_BPE_MODE) {
         return decodeTokenIdWithArtifact(tokenId, artifact);
@@ -543,6 +555,7 @@ self.onmessage = async ({ data }) => {
 
             self.postMessage({
                 action: 'model_loaded',
+                id,
                 capabilities,
                 bytes: raw.byteLength,
                 schema: headerInfo.schema,
@@ -677,6 +690,44 @@ self.onmessage = async ({ data }) => {
         }
         if (activeJob) {
             throw new Error('Another generation is active. Wait for its completion or cancellation.');
+        }
+
+        const exactTool = exactToolFromPayload(payload);
+        if (exactTool) {
+            const started = performance.now();
+            const job = { id, cancelled: false };
+            activeJob = job;
+            try {
+                self.postMessage({
+                    action: 'stream_token',
+                    id,
+                    chunk: exactTool.text,
+                    fullText: exactTool.text,
+                    tokenCount: 0,
+                    tps: null,
+                    tool: 'm6-exact-arithmetic',
+                });
+                const durationSec = (performance.now() - started) / 1000;
+                self.postMessage({
+                    action: 'generate_complete',
+                    id,
+                    fullText: exactTool.text,
+                    tokenIds: [],
+                    tokenCount: 0,
+                    durationSec,
+                    tps: null,
+                    stoppedBy: 'tool',
+                    tool: 'm6-exact-arithmetic',
+                    weightsPerToken: 0,
+                    allocDelta: 0,
+                    allocEvents: Number(wasmModule.allocEvents()),
+                    statusLabel: 'exact arithmetic tool',
+                    tokenizerLabel: 'R4 geometric decimal place-value tool',
+                });
+            } finally {
+                if (activeJob === job) activeJob = null;
+            }
+            return;
         }
 
         const hasTurnMemory = Boolean(capabilities && capabilities.turn_memory && capabilities.turn_memory.present);

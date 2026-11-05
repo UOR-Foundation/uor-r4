@@ -1494,7 +1494,7 @@
             } else if (text) {
                 appendMessageElement('assistant', text, meta);
             }
-            conversation.messages.push({ role: 'assistant', content: text, meta: meta });
+            conversation.messages.push({ role: 'assistant', content: text, meta: meta, tool: message.tool || null });
             conversation.sourceKind = 'wasm';
             touchConversation(conversation);
             app.generating = false;
@@ -1684,7 +1684,7 @@
                             var metaNode = placeholder.querySelector('.msg-meta');
                             if (metaNode) metaNode.textContent = finalMetrics;
                         }
-                        conversation.messages.push({ role: 'assistant', content: text, meta: finalMetrics });
+                        conversation.messages.push({ role: 'assistant', content: text, meta: finalMetrics, tool: result && result.uor && result.uor.tool ? result.uor.tool : null });
                         conversation.sourceKind = 'api';
                         touchConversation(conversation);
                         app.generating = false;

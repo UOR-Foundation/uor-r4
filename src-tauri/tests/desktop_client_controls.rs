@@ -698,6 +698,48 @@ fn durable_store_refuses_scope_symlink_escape() {
 }
 
 #[test]
+fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let arithmetic = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":"What is 17 + 25? Answer with the number first."}],"stream":true}),
+    )
+    .expect("arithmetic RPC should succeed");
+    assert_eq!(arithmetic["handled"], json!(true));
+    assert_eq!(arithmetic["expression"], json!("17 + 25"));
+    assert_eq!(arithmetic["result"], json!("42"));
+    assert!(arithmetic["text"]
+        .as_str()
+        .unwrap_or_default()
+        .starts_with("42\n"));
+    assert!(arithmetic["text"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("tool, not model generation"));
+
+    let ordinary = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":"Hi"}],"stream":true}),
+    )
+    .expect("ordinary RPC should succeed");
+    assert_eq!(ordinary["handled"], json!(false));
+
+    let underflow = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":"1 - 2"}]}),
+    )
+    .expect("underflow RPC should succeed");
+    assert_eq!(underflow["handled"], json!(true));
+    assert!(underflow["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("underflow"));
+}
+
+#[test]
 fn native_write_file_enforces_its_size_cap() {
     let root = unique_temp_dir("write-cap");
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());

@@ -277,3 +277,20 @@ test('a registered desktop transport handles API requests without direct browser
         globalThis.UORStudioApiTransport.register(null);
     }
 });
+
+test('exact tool exchanges stay visible but are not sent back to the model', async () => {
+    const payload = { choices: [{ index: 0, message: { role: 'assistant', content: 'synthetic continuation' }, finish_reason: 'length' }] };
+    let request;
+    globalThis.fetch = async (_url, init) => {
+        request = init;
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const messages = [
+        { role: 'user', content: 'What is 17 + 25? Answer with the number first.' },
+        { role: 'assistant', content: '42\n\nR4 geometric exact arithmetic — tool, not model generation\n- p0: 7 + 5 + 0 -> 2, carry 1', tool: 'm6-exact-arithmetic' },
+        { role: 'user', content: 'Hi' },
+    ];
+    const result = await streamChatCompletions({ config, messages });
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(request.body).messages, [messages[2]]);
+});
