@@ -76,6 +76,8 @@ SEED2_SHA=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 TOKENIZER_SHA=a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
 TT1_SHA=37715a5d621c5b8c2269940505491d13d84c37b414fa2eb9646a2de54000e6ee
 TT2_SHA=4a6a274822f287a806a52704417c3c2bd75bee604484ce610852cfd40e809372
+TT1_RAW_SHA=28a8caaffef6d815da86a6e84207729f3acd41892ced8a205cfe5248d7c2f62a
+TT2_RAW_SHA=466b94e7b4c1ae2d58337c51b07171c6d2229b23edaa366949e7a2ed8a5642e3
 TRAIN_TOKENS_SHA=140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91
 TRAIN_MASK_SHA=d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad
 TRAIN_MANIFEST_SHA=d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5
@@ -131,9 +133,23 @@ GEN=$GEN_TARGET/debug/heldout-panel
   timeout 900s "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2722 protocol=2 \
   >"$OUT/panel.stdout.json"
+jq -e --arg tokenizer_sha "$TOKENIZER_SHA" '
+  .schema == "uor-r4-chat-corpus/v1"
+  and .seed == 2722
+  and .dialogue_protocol_version == 2
+  and .cell.value == "dev"
+  and .cell.phrasing == "dev"
+  and .conversations == 128
+  and .world == "m-world-v2"
+  and .tokenizer.sha256 == $tokenizer_sha
+' "$PANEL/manifest.json" >/dev/null
 
 gzip -dc "$TRAIN/seed1-tt.json.gz" >"$OUT/reports/seed1-tt.json"
 gzip -dc "$TRAIN/seed2-tt.json.gz" >"$OUT/reports/seed2-tt.json"
+printf '%s  %s\n' \
+  "$TT1_RAW_SHA" "$OUT/reports/seed1-tt.json" \
+  "$TT2_RAW_SHA" "$OUT/reports/seed2-tt.json" |
+  sha256sum -c -
 POWER_OK=1
 for seed in seed1 seed2; do
   case "$seed" in
@@ -147,7 +163,7 @@ for seed in seed1 seed2; do
     "$artifact" --cap 64 --seed 153 >"$OUT/reports/$seed-dd.json"
   if ! jq -e '.random_nonvacuity.non_vacuous == true' \
     "$OUT/reports/$seed-dd.json" >/dev/null; then
-    printf '%s random-control-vacuous\n' "$seed" >>"$OUT/power-limited.txt"
+    printf '%s random-control-vacuous\n' "$seed" >>"$OUT/instrument-fault.txt"
     POWER_OK=0
   fi
   if ! jq -e '.examples.reachable >= 200' \
