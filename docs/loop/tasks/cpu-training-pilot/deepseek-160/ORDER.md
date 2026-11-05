@@ -1,8 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-160 (complete exact-stop evidence)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Base: `3e8780e61`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `3e8780e61`.
 
 ## Goal
 
