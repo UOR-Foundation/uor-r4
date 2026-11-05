@@ -328,8 +328,9 @@ fn run_mix(a: &Args) -> R<String> {
     }
     create_out_dir(&out)?;
     let tp = out.join("tokens.u16");
-    let mut w = CorpusWriter::create(&tp, roots[0].1.vocab)
-        .map_err(|e| format!("{}: {e}", tp.display()))?;
+    let first = &roots[0];
+    let mut w =
+        CorpusWriter::create(&tp, first.1.vocab).map_err(|e| format!("{}: {e}", tp.display()))?;
     let mut mask = Vec::with_capacity(tot_tokens as usize);
     for ((_, s), row) in roots.iter().zip(&root_rows) {
         let l = row["tokens_taken"].as_u64().expect("set above") as usize;
@@ -542,11 +543,7 @@ fn load_inputs(a: &Args, allow_all: bool) -> R<Inputs> {
     let mut panels = Vec::new();
     for (name, dir, t, m) in &specs {
         let p = load_split(dir, t, m, false)?;
-        let rp = &rows
-            .iter()
-            .find(|(n, _)| n == name)
-            .expect("matched above")
-            .1;
+        let (_, rp) = rows.iter().find(|(n, _)| n == name).expect("matched above");
         let (rf, rows_file_sha256) = if allow_all && rp.as_path() == Path::new("all") {
             let positions: Vec<usize> = (1..p.tokens.len())
                 .filter(|&q| is_scored(&p.tokens, &p.mask, q))
@@ -1160,11 +1157,11 @@ fn run_pair(a: &Args) -> R<String> {
                 x.dir.display()
             ));
         }
-        if let Some(s) = x.splits.iter().zip(&g[0].splits).find(|(p, q)| p.1 != q.1) {
+        if let Some((p, _)) = x.splits.iter().zip(&g[0].splits).find(|(p, q)| p.1 != q.1) {
             return Err(format!(
                 "{}: split {} row_identity_sha256 differs from a1",
                 x.dir.display(),
-                s.0 .0
+                p.0
             ));
         }
     }
@@ -1233,12 +1230,11 @@ fn run_pair(a: &Args) -> R<String> {
         });
     }
     let n = g[0].splits.len();
+    let names: Vec<&str> = g[0].splits.iter().map(|x| x.0.as_str()).collect();
+    let lens: Vec<u64> = g[0].splits.iter().map(|x| x.2).collect();
     let range = |split: Option<usize>| -> (usize, usize) {
         match split {
-            Some(i) => (
-                g[0].splits[..i].iter().map(|x| x.2).sum::<u64>() as usize,
-                g[0].splits[i].2 as usize,
-            ),
+            Some(i) => (lens[..i].iter().sum::<u64>() as usize, lens[i] as usize),
             None => (0, total as usize),
         }
     };
@@ -1248,7 +1244,7 @@ fn run_pair(a: &Args) -> R<String> {
                 let (start, len) = range(split);
                 let (b, c) = discordant(&g[s].hits, ys, start, len);
                 let (v, what) = match split {
-                    Some(i) => (&g[s].v["splits"][i][k], g[0].splits[i].0.as_str()),
+                    Some(i) => (&g[s].v["splits"][i][k], names[i]),
                     None => (&g[s].v["pooled"][k], "pooled"),
                 };
                 if (v["b"].as_u64(), v["c"].as_u64()) != (Some(b), Some(c)) {
@@ -1272,7 +1268,7 @@ fn run_pair(a: &Args) -> R<String> {
         let splits: Vec<Value> = (0..n)
             .map(|i| {
                 let mut v = assessment_json(&reading(Some(i), excl));
-                v["name"] = json!(g[0].splits[i].0);
+                v["name"] = json!(names[i]);
                 v
             })
             .collect();

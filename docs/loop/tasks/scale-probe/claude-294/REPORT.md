@@ -44,6 +44,19 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
   - `uor-store put` printed "0/0 uploaded" and then "3/3 uploaded" for seven files. `uor-store ls` and the read-back show all seven stored.
   - The first Stop-rule fallback said "the widest width below 1,024 in steps of 64 (768)"; that width is 960, which needs 15 heads, an odd split. It now names 768 and says why.
   - The loop guard refused a patch file in the session scratchpad. The negative gates ran from the unit's `local/claude/claude-294/` instead.
+  - **`loop pr-check` failed D32** with 6 sites in `lib.rs` and 4 in `tests/cli.rs`, where the base had none. They were not floats. Its lexer reads a tuple field taken straight after `]` or a space (`roots[0].1`, rustfmt's `s.0 .0`, a chain line opening `.1;`) as a `.5`-style literal. Each was rewritten to bind the element first, with the same behaviour; the suite passes.
+
+## What changed
+
+- **`docs/harness/prep/scale-probe-2026-11-05.md`:** the prep sheet, `TEST FITNESS: FIT`.
+- **`docs/labs/scale-probe/instrument/`:** a standalone crate with its own `[workspace]` and bin `scale-probe`, counting integers only on the laptop.
+  - `mix` writes the nested document-prefix mixes.
+  - `seen` marks each panel row short, seen or unseen against one TRAIN, and writes `excluded.bin`.
+  - `grade` scores a checkpoint's rows against its own TRAIN's unigram and T2 tables, and writes the hit bitsets.
+  - `pair` gives `b`, `c`, `d`, the band and the verdict at two or three seeds, against a cell or a table, on all rows and, with `clean=`, on the unseen rows.
+  - It refuses every inconsistency by name; 54 tests.
+- **`docs/roadmap/items/scale-probe.md`:** the Data and panel lines say real text (the card).
+- **`docs/loop/tasks/scale-probe/claude-294/`:** the ORDER, with the card and the cancel probe, and this REPORT.
 
 ## Decision: the Data and panel lines (the ORDER's card)
 
@@ -74,17 +87,38 @@ Logged on #3472 as `[claude] owner log:`, on its own fresh decision review; Case
   | D3 | 227,312 | 4,935 | 1,228,450 (84.1%) |
 
   Store `census/`, `SHA256SUMS` `88929e87931bef0fd91213ffbeb4701038354aa6cceca8be3c1621f478399f67`, read back. "Seen" is a screen, not a finding of copying: a row whose 8-token context occurs anywhere in TRAIN.
-- **The instrument:** 54 tests pass at the head (`cargo test --offline` in its own workspace), and clippy with `-D warnings` is clean. Negative gates run in this unit, each failing with its fix set aside and passing once it is restored:
+## Checks run at the head
+
+- **The instrument:** 54 tests pass (`cargo test --offline` in its own workspace), and clippy with `-D warnings` is clean.
+- **Negative gates run in this unit.** Each one failed with its fix set aside and passed once the fix was restored:
   - **The three-seed verdict and the three-seed spread:** set seed 3 aside.
   - **`clean=`'s TRAIN check:** set the check aside, and `pair_clean_refuses_other_train` fails.
   - **Seed 3 sharing its cell's TRAIN:** narrow `same_train` to two seeds, and `pair_refuses_cells_with_mixed_train` fails.
+- **The harness:** `loop report --check`, `loop pr-check --local`, `uor-harness check` and `loop gates --full`. Their results are recorded below once the head is final.
+- **FIT:** `TEST FITNESS: FIT` at `2c3a96147c98791dfd01d3304c6b0554ae77a12e`. It is posted on #3472 (comment `6666302038`) and recorded in the sheet.
+  - Three rounds, all fresh and non-author. Round 3 returned one must-fix, applied verbatim.
+  - The reviewers ran no builds; the tests and gates above are the author's.
+- **Decision review:** STANDS WITH CHANGES (above). The card is logged on #3472 as `[claude] owner log:` (comment `6666457437`).
+- **The in-unit exact-head review:** recorded below.
 
-## Reviews
+## What it unlocks
 
-- **FIT:** `TEST FITNESS: FIT` at `2c3a96147c98791dfd01d3304c6b0554ae77a12e`, posted on #3472 (comment `6666302038`) and recorded in the sheet. There were three rounds, all fresh and non-author; round 3 returned one must-fix, applied verbatim. The reviewers ran no builds; the tests and gates are the author's, listed above.
-- **Decision review:** STANDS WITH CHANGES (above). The card is logged on #3472 as `[claude] owner log:`.
-- **The in-unit exact-head review:** owed below.
+The run unit (done-when 2 and 3):
+- the D67 pre-run review, right before launch;
+- the 18 grid runs and the 2 contrast runs, sealed and read back;
+- grading on the laptop, then the Bar's table.
 
-## Next
+## Skills used
 
-The run unit (done-when 2 and 3): the D67 pre-run review right before launch, then the 18 grid runs and 2 contrast runs, sealed and read back, graded on the laptop.
+No skill applied. The loop's ORDER and REPORT procedure was used.
+
+## Still open
+
+- **The D67 pre-run review** is the run unit's, against the lease and the caps as they stand then.
+- **The width-1,024 step time is unmeasured,** so the cost is a projection. I-2 measures it and cuts steps equally if the projection passes 20 GPU-hours.
+- **The D11 export's panel top-1** is owed before any width is served or any claim is made.
+- **The census reads 8-token contexts only.** A shorter shared phrase is not screened, which makes the unseen set an upper bound on unseen text, not a proof that the text is new.
+
+## Plain summary
+
+This unit plans the project's first test of whether the model gets better as it gets bigger, and as it reads more. The model will be trained at three sizes on a quarter, a half and all of 28 million tokens of human-written text, twice each. Each copy is scored on every position of four held-out sets that no model has read. The rules for what counts as better, and what each result leads to, are written down before any run, and three rounds of independent review passed them. A new counting tool also marks the test rows whose wording the training text already holds, so a gain from recall can be told apart from a gain on new text.

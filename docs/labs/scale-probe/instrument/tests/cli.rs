@@ -223,9 +223,10 @@ fn mix_prefix_rule_nesting_and_root_order() {
     assert_eq!(q["roots"][1]["scored_taken"], 3);
     assert_eq!(q["documents"], 3);
     // Nesting: each root's 1/4 prefix is a prefix of its 1/2, which is a prefix of the whole.
-    assert!(outs
-        .windows(2)
-        .all(|w| w[0].0 <= w[1].0 && w[0].1 <= w[1].1));
+    assert!(outs.windows(2).all(|w| {
+        let (a, b) = (&w[0], &w[1]);
+        a.0 <= b.0 && a.1 <= b.1
+    }));
 }
 
 #[test]
