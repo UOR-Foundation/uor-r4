@@ -77,10 +77,12 @@ No serving, CUDA, float inference, termination or Claude-owned source changes.
 
 ## Calibration evidence
 
-- seed-1 calibration JSON SHA-256:
-  `05c5c621d238a0896022c39840ed0e91e5ec84e2faba2deb4d7917ef4c1f6607`;
-- seed-2 calibration JSON SHA-256:
-  `5fccaab34c9b2175782a6e0c9b8f5599de7de32ae29bee895c445d9865d6533b`;
+- committed normalized seed-1 SHA-256:
+  `1d3c315b0119c3f58aae1cc4c8ddabadc61c033d1d2f8c8c1e5430578f622647`;
+- committed normalized seed-2 SHA-256:
+  `ab5efaf8de343d5de1eb30b676f2d753ed858f0b6e14cf82f7d3cc5b870c88a9`;
+- evidence:
+  [`expanded-candidate-calibration-2711/`](../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/expanded-candidate-calibration-2711/);
 - calibration build wall: 7.63 s; seed 1/2 walls: 4.69/4.57 s;
 - seed 1/2 peak RSS: 227,544/219,652 KiB;
 - fresh panel read during calibration: false.

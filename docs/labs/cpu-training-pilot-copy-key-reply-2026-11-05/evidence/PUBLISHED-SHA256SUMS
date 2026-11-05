@@ -177,3 +177,6 @@ ac1ded8c63b4b1cf93f3d7c674e6900c745952db97da13908a64772ee3bb4f20  ./geometric-ca
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  ./geometric-candidate-union-2768/seed1.stderr
 ea34bab674d76798b7aa1815ff169c947aa81d2307539a8a2d042cf9e1227e19  ./geometric-candidate-union-2768/seed2.stderr
 b44a066141250930b4e16ac2b052012d730d3722d921e0d4b21e7a5ecd501973  ./geometric-candidate-union-2768/seed2.time.txt
+bbe27162e121dd014d36e7fd240fe3189837c691117d5b7057b4675544b5c2d4  ./expanded-candidate-calibration-2711/CALIBRATION.txt
+1d3c315b0119c3f58aae1cc4c8ddabadc61c033d1d2f8c8c1e5430578f622647  ./expanded-candidate-calibration-2711/seed1.normalized.json
+ab5efaf8de343d5de1eb30b676f2d753ed858f0b6e14cf82f7d3cc5b870c88a9  ./expanded-candidate-calibration-2711/seed2.normalized.json
