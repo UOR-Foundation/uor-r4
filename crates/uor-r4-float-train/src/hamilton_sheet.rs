@@ -5344,6 +5344,10 @@ mod tests {
         two.ports[0].coordinate_sum[0] = 1.0;
         two.ports[0].coordinate_square_sum[0] = 1.0;
         two.ports[0].abs_sum = 2.0;
+        // Both sides carry these, so a field the merge drops reads as one side alone.
+        two.rank_is_cell_rows = 1;
+        one.ports[1].abs_sum = 1.0;
+        two.ports[1].abs_sum = 3.0;
         let mut merged = one.clone();
         merged.merge(&two);
         assert_eq!(merged.rows, 4);
@@ -5366,6 +5370,9 @@ mod tests {
         assert_eq!(p.centre[0], 1.0);
         assert!((p.spread - 0.5f64.sqrt() / 8.0).abs() < 1e-12);
         assert_eq!(p.mean_abs, 8.0 / 32.0);
+        assert_eq!((p.target_root[2], p.target_root[5]), (3, 1));
+        assert_eq!(r.rank_is_cell_rows, 2);
+        assert_eq!(r.ports[1].mean_abs, 4.0 / 32.0);
         // Every row admitted: the miss gap reads 0, not a division by zero.
         assert_eq!(two.reading().miss_gap_mean, 0.0);
     }
