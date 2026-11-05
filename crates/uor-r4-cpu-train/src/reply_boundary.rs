@@ -876,6 +876,28 @@ mod tests {
         assert!(comparison.passes);
     }
 
+    #[test]
+    fn digests_bind_reply_length_stop_and_boundary_counts() {
+        let row = row_fixture(0, true);
+        let mut changed_row = row.clone();
+        changed_row.generated_tokens += 1;
+        assert_ne!(reply_hash(&[row]), reply_hash(&[changed_row]));
+
+        let step = ReplyBoundaryStep {
+            row: 0,
+            generated_step: 4,
+            writer_token: 7,
+            selected_token: 0,
+            copy_depth: None,
+            boundary_depth: Some(4),
+            boundary_terminal: 2,
+            boundary_nonterminal: 0,
+        };
+        let mut changed_step = step.clone();
+        changed_step.boundary_nonterminal = 1;
+        assert_ne!(decision_hash(&[step]), decision_hash(&[changed_step]));
+    }
+
     fn row_fixture(row: usize, exact: bool) -> CopyKeyReplyRow {
         CopyKeyReplyRow {
             row,
