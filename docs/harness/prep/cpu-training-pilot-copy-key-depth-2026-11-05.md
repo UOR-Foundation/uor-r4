@@ -253,22 +253,17 @@ changed.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 deepseek-149
-sheet: docs/harness/prep/cpu-training-pilot-copy-key-depth-2026-11-05.md
-reviewer: codex fresh-context FIT round 4
-note: Exact copy-key semantics, Claude-267 parity, new unopened decision
-  panels, paired controls, generator and implementation pins, power floor,
-  resource caps and command recipe verified.
-date: 2026-11-05
+The prior FIT at `70b6445d4` is superseded by attempt 1's input-path
+instrument fault.
 
-A FIT verdict clears compute for the configuration in this sheet only (D22).
+TEST FITNESS: PENDING fresh FIT for the corrected recipe.
 
 ## Pre-run GO
 
-GO - reviewer `codex fresh-context GO`, 2026-11-05. HEAD was clean at
-`3dc4dc02e`; implementation pin `70b6445d4` and generator pin `4e42ffca5`
-matched. Inputs, absent output roots, resource limits, panel-generation
-commands, failure sealing and repeat were checked read-only.
+The prior GO at `3dc4dc02e` is superseded by attempt 1's input-path instrument
+fault.
+
+GO: PENDING fresh review of the corrected recipe.
 
 ## Outcome
 
