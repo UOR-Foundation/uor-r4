@@ -477,10 +477,10 @@ fn route_copy_key(router: &CopyKeyRouter, outcome: &Outcome) -> Option<u32> {
         if stat.matches == 0 {
             continue;
         }
-        let better = best.is_none_or(|(_, current)| {
-            stat.right * current.matches > current.right * stat.matches
-                || (stat.right * current.matches == current.right * stat.matches
-                    && depth > current.depth)
+        let better = best.is_none_or(|(current_index, current)| {
+            let stat_cross = u128::from(stat.right) * u128::from(current.matches);
+            let current_cross = u128::from(current.right) * u128::from(stat.matches);
+            stat_cross > current_cross || (stat_cross == current_cross && depth > current_index)
         });
         if better {
             best = Some((depth, stat));
@@ -506,9 +506,7 @@ fn age_bucket(age: usize) -> usize {
 }
 
 fn validate_copy_key_router(router: &CopyKeyRouter) -> Result<()> {
-    if router.age_bins.is_empty()
-        || !router.age_bins.windows(2).all(|pair| pair[0] < pair[1])
-        || router.age_bins.last().copied() != Some(*COPY_KEY_AGE_BINS.last().unwrap())
+    if router.age_bins.as_slice() != COPY_KEY_AGE_BINS.as_slice()
         || router.stats.len() != router.age_bins.len() * COPY_KEY_MAX_DEPTH
     {
         return Err(invalid("copy-key router shape differs"));
@@ -790,6 +788,114 @@ mod tests {
     }
 
     #[test]
+    fn router_uses_learned_precision_instead_of_depth_preference() {
+        let mut router = CopyKeyRouter {
+            age_bins: COPY_KEY_AGE_BINS.to_vec(),
+            stats: (0..COPY_KEY_AGE_BINS.len())
+                .flat_map(|bucket| {
+                    (1..=COPY_KEY_MAX_DEPTH).map(move |depth| CopyKeyRouteStat {
+                        depth,
+                        age_upper: COPY_KEY_AGE_BINS[bucket],
+                        matches: 0,
+                        right: 0,
+                    })
+                })
+                .collect(),
+        };
+        router.stats[0] = CopyKeyRouteStat {
+            depth: 1,
+            age_upper: 1,
+            matches: 4,
+            right: 4,
+        };
+        router.stats[1] = CopyKeyRouteStat {
+            depth: 2,
+            age_upper: 1,
+            matches: 4,
+            right: 0,
+        };
+        let outcome = Outcome {
+            copyable: true,
+            fixed: [
+                Some(CopyCandidate { token: 7, age: 1 }),
+                Some(CopyCandidate { token: 9, age: 1 }),
+                None,
+                None,
+            ],
+            random: None,
+        };
+        assert_eq!(route_copy_key(&router, &outcome), Some(7));
+    }
+
+    #[test]
+    fn router_with_no_learned_cell_falls_back_to_longest() {
+        let router = CopyKeyRouter {
+            age_bins: COPY_KEY_AGE_BINS.to_vec(),
+            stats: (0..COPY_KEY_AGE_BINS.len())
+                .flat_map(|bucket| {
+                    (1..=COPY_KEY_MAX_DEPTH).map(move |depth| CopyKeyRouteStat {
+                        depth,
+                        age_upper: COPY_KEY_AGE_BINS[bucket],
+                        matches: 0,
+                        right: 0,
+                    })
+                })
+                .collect(),
+        };
+        let outcome = Outcome {
+            copyable: true,
+            fixed: [
+                Some(CopyCandidate { token: 7, age: 1 }),
+                Some(CopyCandidate { token: 9, age: 2 }),
+                None,
+                None,
+            ],
+            random: None,
+        };
+        assert_eq!(route_copy_key(&router, &outcome), Some(9));
+    }
+
+    #[test]
+    fn router_precision_comparison_cannot_overflow() {
+        let mut router = CopyKeyRouter {
+            age_bins: COPY_KEY_AGE_BINS.to_vec(),
+            stats: (0..COPY_KEY_AGE_BINS.len())
+                .flat_map(|bucket| {
+                    (1..=COPY_KEY_MAX_DEPTH).map(move |depth| CopyKeyRouteStat {
+                        depth,
+                        age_upper: COPY_KEY_AGE_BINS[bucket],
+                        matches: 0,
+                        right: 0,
+                    })
+                })
+                .collect(),
+        };
+        router.stats[0] = CopyKeyRouteStat {
+            depth: 1,
+            age_upper: 1,
+            matches: u64::MAX,
+            right: u64::MAX - 1,
+        };
+        router.stats[1] = CopyKeyRouteStat {
+            depth: 2,
+            age_upper: 1,
+            matches: u64::MAX,
+            right: u64::MAX,
+        };
+        let outcome = Outcome {
+            copyable: true,
+            fixed: [
+                Some(CopyCandidate { token: 7, age: 1 }),
+                Some(CopyCandidate { token: 9, age: 1 }),
+                None,
+                None,
+            ],
+            random: None,
+        };
+        assert_eq!(route_copy_key(&router, &outcome), Some(9));
+    }
+
+    #[test]
     fn malformed_router_tables_are_refused() {
         let mut router = CopyKeyRouter {
             age_bins: COPY_KEY_AGE_BINS.to_vec(),
@@ -807,6 +913,31 @@ mod tests {
         validate_copy_key_router(&router).unwrap();
         router.stats[0].right = 1;
         assert!(validate_copy_key_router(&router).is_err());
+
+        let mut custom_bins = CopyKeyRouter {
+            age_bins: vec![192],
+            stats: (1..=COPY_KEY_MAX_DEPTH)
+                .map(|depth| CopyKeyRouteStat {
+                    depth,
+                    age_upper: 192,
+                    matches: 0,
+                    right: 0,
+                })
+                .collect(),
+        };
+        assert!(validate_copy_key_router(&custom_bins).is_err());
+        custom_bins.age_bins = COPY_KEY_AGE_BINS.to_vec();
+        custom_bins.stats = (0..COPY_KEY_AGE_BINS.len())
+            .flat_map(|bucket| {
+                (1..=COPY_KEY_MAX_DEPTH).map(move |depth| CopyKeyRouteStat {
+                    depth,
+                    age_upper: COPY_KEY_AGE_BINS[bucket],
+                    matches: 0,
+                    right: 0,
+                })
+            })
+            .collect();
+        validate_copy_key_router(&custom_bins).unwrap();
     }
 
     #[test]
