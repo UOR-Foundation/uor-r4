@@ -69,6 +69,7 @@ pub struct SuffixArbitrationStep {
     pub local_token: Option<u32>,
     pub global_token: Option<u32>,
     pub selected_token: u32,
+    pub used_global: bool,
     pub local_copy_depth: Option<usize>,
     pub global_depth: Option<usize>,
     pub global_observations: u64,
@@ -175,6 +176,7 @@ pub fn generate_suffix_arbitration_reply(
                 local_token: None,
                 global_token: None,
                 selected_token: POINT_KEY_BOS,
+                used_global: false,
                 local_copy_depth: None,
                 global_depth: None,
                 global_observations: 0,
@@ -231,7 +233,7 @@ pub fn generate_suffix_arbitration_reply(
             None
         };
 
-        let selected_token = choose_token(arm, local.as_ref(), global, writer_token);
+        let (selected_token, used_global) = choose_token(arm, local.as_ref(), global, writer_token);
 
         steps.push(SuffixArbitrationStep {
             row,
@@ -240,6 +242,7 @@ pub fn generate_suffix_arbitration_reply(
             local_token: local.as_ref().map(|decision| decision.token),
             global_token: global.map(|prediction| prediction.token),
             selected_token,
+            used_global,
             local_copy_depth: local_depth,
             global_depth: global.map(|prediction| prediction.depth),
             global_observations: global.map_or(0, |prediction| prediction.observations),
@@ -279,7 +282,7 @@ fn choose_token(
     local: Option<&crate::copy_key_reply::CopyKeyReplyDecision>,
     global: Option<crate::suffix_memory::SuffixMemoryPrediction>,
     writer_token: u32,
-) -> u32 {
+) -> (u32, bool) {
     let local_depth = local.and_then(|decision| decision.depth);
     let use_global = match (arm, global) {
         (
@@ -293,7 +296,7 @@ fn choose_token(
         (SuffixArbitrationArm::FullSequence32Only, Some(_)) => true,
         _ => false,
     };
-    if use_global {
+    let token = if use_global {
         global
             .expect("use_global requires a global prediction")
             .token
@@ -301,7 +304,8 @@ fn choose_token(
         local.expect("local depth requires a local decision").token
     } else {
         writer_token
-    }
+    };
+    (token, use_global)
 }
 
 pub fn evaluate_suffix_arbitration_replies(
@@ -356,7 +360,11 @@ pub fn evaluate_suffix_arbitration_replies(
             let non_premature_bos = generated.stop == "bos" && !premature_bos;
             let local_decisions = steps
                 .iter()
-                .filter(|step| step.boundary_depth.is_none() && step.local_copy_depth.is_some())
+                .filter(|step| {
+                    step.boundary_depth.is_none()
+                        && !step.used_global
+                        && step.local_copy_depth.is_some()
+                })
                 .count() as u64;
             let row_reading = CopyKeyReplyRow {
                 row,
@@ -500,7 +508,7 @@ fn summarize(
     {
         if step.boundary_depth.is_some() {
             reading.boundary_stops = checked_add(reading.boundary_stops, 1)?;
-        } else if step.global_depth.is_some() && step.local_token != Some(step.selected_token) {
+        } else if step.used_global {
             reading.global_decisions = checked_add(reading.global_decisions, 1)?;
         } else if step.local_copy_depth.is_some() {
             reading.local_decisions = checked_add(reading.local_decisions, 1)?;
@@ -568,6 +576,7 @@ fn decision_hash(steps: &[SuffixArbitrationStep]) -> String {
         hasher.update(&step.local_token.unwrap_or(u32::MAX).to_le_bytes());
         hasher.update(&step.global_token.unwrap_or(u32::MAX).to_le_bytes());
         hasher.update(&step.selected_token.to_le_bytes());
+        hasher.update(&[u8::from(step.used_global)]);
         hasher.update(&(step.local_copy_depth.unwrap_or(0) as u16).to_le_bytes());
         hasher.update(&(step.global_depth.unwrap_or(0) as u16).to_le_bytes());
         hasher.update(&step.global_observations.to_le_bytes());
@@ -636,7 +645,8 @@ mod tests {
                 Some(&local),
                 Some(global(local_depth + 1, 77)),
                 99,
-            ),
+            )
+            .0,
             77
         );
         assert_eq!(
@@ -645,7 +655,8 @@ mod tests {
                 Some(&local),
                 Some(global(local_depth, 77)),
                 99,
-            ),
+            )
+            .0,
             local.token
         );
     }
@@ -671,7 +682,8 @@ mod tests {
                 Some(&local),
                 Some(global),
                 99,
-            ),
+            )
+            .0,
             77
         );
         assert_eq!(
@@ -680,7 +692,8 @@ mod tests {
                 Some(&local),
                 Some(global),
                 99,
-            ),
+            )
+            .0,
             55
         );
     }
@@ -705,6 +718,7 @@ mod tests {
             198,
         )
         .unwrap();
+        assert!(true_reply.reading.global_decisions > 0);
         let shuffled_reply = (0..64)
             .find_map(|seed| {
                 let (shuffled, _) = shuffle_suffix_memory(&table, seed).unwrap();
