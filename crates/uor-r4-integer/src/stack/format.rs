@@ -1940,6 +1940,11 @@ pub fn add_point_key_uorlut01(artifact: &[u8], image: &super::PointKeyImage) -> 
     let data_start = header_end.div_ceil(ALIGN) * ALIGN;
     let mut header: serde_json::Value =
         serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    // A point key is built on 192-token windows, while a carry stack (claude-288) keys its turn
+    // memory over the whole served context: the two would key one conversation differently.
+    if header["source"].get("trained_context").is_some() {
+        return Err(StackError::Shape("a point key is not added to a carry stack"));
+    }
     let mut b = ExportBuilder::new();
     b.data = artifact[data_start..].to_vec();
     b.push_i16("memory.point.points", &image.points);

@@ -5667,7 +5667,7 @@ fn base_export_records_no_trained_context() {
 }
 
 /// claude-288: a carry context below the trained window or past the limit is refused, and so is a
-/// recorded trained context of 0 or past the served context.
+/// recorded trained context of 0 or past the served context, and a point key on a carry stack.
 #[test]
 fn carry_export_refusals() {
     let snap = carry_trunk();
@@ -5686,6 +5686,10 @@ fn carry_export_refusals() {
     }
     let edited = with_header(&carry, |h| h["source"]["trained_context"] = json!(200));
     assert!(super::format::Container::parse(&edited).is_ok());
+    let refused = super::add_point_key_uorlut01(&carry, &synthetic_point_key(&carry, 5));
+    assert!(matches!(refused, Err(StackError::Shape(_))), "a point key on a carry stack");
+    let base = super::export_fbs_trunk_uorlut01_with(&snap, snaps).expect("base export");
+    assert!(super::add_point_key_uorlut01(&base, &synthetic_point_key(&base, 5)).is_ok());
 }
 
 /// claude-288's carry key script, written the same in the float crate's
