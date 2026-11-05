@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: []
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/fused_quantize*.rs, crates/uor-r4-float-train/src/fused_quantize*.cu, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/tests/no_training_crate_dep.rs, crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs, crates/uor-r4-float-train/tests/fused_*.rs, crates/uor-r4-float-train/Cargo.toml, docs/harness/prep/float-kernel-fusion*, docs/loop/tasks/float-kernel-fusion/**, docs/research/notebook/float-training.md, docs/roadmap/items/float-kernel-fusion.md]
+scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/fused_quantize*.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/tests/no_training_crate_dep.rs, crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs, crates/uor-r4-float-train/tests/fused_*.rs, crates/uor-r4-float-train/Cargo.toml, docs/harness/prep/float-kernel-fusion*, docs/loop/tasks/float-kernel-fusion/**, docs/research/notebook/float-training.md, docs/roadmap/items/float-kernel-fusion.md]
 ---
 
 ## Why it matters
