@@ -350,3 +350,18 @@ fi
 - **POWER_LIMITED** if fewer than 200 replies are reachable.
 - **INSTRUMENT_FAULT** if fitting, features, source, inputs, controls or report
   identity fails closed.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 geometric writer/copy candidate union
+sheet: `docs/harness/prep/cpu-training-pilot-geometric-candidate-union-2026-11-05.md`
+implementation pin: `dc17b847a2ff0fc6c9ffeafe0d8ed5abdf86c61f`
+reviewed head: `7a326d4162e952108721dd716e38c51790271ab3`
+reviewer: deepseek fresh-context subagent `geometric_candidate_fit_review_2`
+note: 128 non-BOS writer candidates, exact depths through 32 and deepest source,
+  fallback, eight integer features, reference-free inference, all controls,
+  exact floors and five-arm replay hashes were verified; source and input pins
+  match and seed 2768 remained absent.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
