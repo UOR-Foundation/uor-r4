@@ -1985,6 +1985,59 @@ pub fn build_document_windows_sliding(
     Ok((windows, doc_starts.len()))
 }
 
+/// The scorer's blocks rule (claude-287): [`build_document_windows`]'s back-to-back chunks of
+/// `context` targets, except that each chunk reads only its own block, from `doc_start` plus a
+/// multiple of `context`. [`build_document_windows`] reads a document's last, shorter chunk from
+/// the `context` tokens before its last target, back into the block before, so that block
+/// carries part of the one before it and is no forgetting control. Every full block is the same
+/// window in both.
+pub fn build_document_blocks(
+    tokens: &[u32],
+    mask: &[u8],
+    context: usize,
+    bos_id: u32,
+) -> Result<(Vec<CausalWindow>, usize)> {
+    let doc_starts: Vec<usize> = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &t)| (t == bos_id).then_some(idx))
+        .collect();
+    let mut windows = Vec::new();
+    for (doc_id, &doc_start) in doc_starts.iter().enumerate() {
+        let doc_end = doc_starts.get(doc_id + 1).copied().unwrap_or(tokens.len());
+        let mut target_cursor = doc_start + 1;
+        while target_cursor < doc_end {
+            let target_end = (target_cursor + context).min(doc_end);
+            // The block's inputs are (target_cursor - 1)..(target_end - 1): its own tokens only.
+            let win_start = target_cursor - 1;
+            let active_len = (target_end - 1) - win_start;
+            let mut input_ids = vec![bos_id; context];
+            input_ids[..active_len].copy_from_slice(&tokens[win_start..win_start + active_len]);
+            let mut scored_offsets = Vec::new();
+            let mut scored_targets = Vec::new();
+            let mut scored_corpus_positions = Vec::new();
+            for p in target_cursor..target_end {
+                if tokens[p] != bos_id && mask[p] == 1 {
+                    scored_offsets.push(p - 1 - win_start);
+                    scored_targets.push(tokens[p]);
+                    scored_corpus_positions.push(p);
+                }
+            }
+            if !scored_offsets.is_empty() {
+                windows.push(CausalWindow {
+                    doc_id,
+                    input_ids,
+                    scored_offsets,
+                    scored_targets,
+                    scored_corpus_positions,
+                });
+            }
+            target_cursor = target_end;
+        }
+    }
+    Ok((windows, doc_starts.len()))
+}
+
 /// The carry cut (claude-287): one window over a whole document, at the smallest of the stack's
 /// two long contexts that holds the longest BOS-opened document, `longest_doc_tokens` counting its
 /// BOS. Longer than 4,096 tokens is refused.
@@ -4395,12 +4448,46 @@ mod tests {
             let (slid, _) = build_document_windows_sliding(&tokens, &mask, w, stride, 0)?;
             assert_eq!(first(past_window_rows(&slid)), blocks, "stride {stride}");
         }
+        let (own, _) = build_document_blocks(&tokens, &mask, w, 0)?;
+        assert_eq!(first(past_window_rows(&own)), blocks);
         // Six scored targets in each document's first eight.
         assert_eq!(blocks.len(), 12);
         assert!(blocks.iter().all(|(p, _, inputs)| {
             let doc = past_window_doc_start(&tokens, *p);
             inputs.as_slice() == &tokens[doc..*p]
         }));
+        Ok(())
+    }
+
+    /// claude-287 pre-run review: blocks scores the base cut's targets, each read from the start
+    /// of its own block of `w`. A full block is the base cut's window; a document's later, shorter
+    /// block is not, since the base cut reads it from the `w` tokens before its last target.
+    #[test]
+    fn past_window_blocks_read_only_their_own_block() -> Result<()> {
+        let (tokens, mask) = past_window_panel();
+        let doc_end =
+            |p: usize| (p..tokens.len()).find(|&i| tokens[i] == 0).unwrap_or(tokens.len());
+        for w in [1, 3, 8, 10, 64] {
+            let (own, docs) = build_document_blocks(&tokens, &mask, w, 0)?;
+            let (base, base_docs) = build_document_windows(&tokens, &mask, w, 0)?;
+            assert_eq!(docs, base_docs);
+            let (rows, base_rows) = (past_window_rows(&own), past_window_rows(&base));
+            assert_eq!(rows.len(), base_rows.len(), "W {w}");
+            let mut short = 0;
+            for ((p, t, inputs), (base_p, base_t, base_inputs)) in rows.iter().zip(&base_rows) {
+                assert_eq!((p, t), (base_p, base_t), "W {w}");
+                let doc = past_window_doc_start(&tokens, *p);
+                let start = doc + (p - 1 - doc) / w * w;
+                assert_eq!(inputs.as_slice(), &tokens[start..*p], "W {w}, target {p}");
+                if start + w < doc_end(*p) {
+                    assert_eq!(inputs, base_inputs, "W {w}, target {p}: a full block");
+                } else if inputs != base_inputs {
+                    short += 1;
+                }
+            }
+            // At 3, 8 and 10 a document ends in a shorter block after its first.
+            assert_eq!(short > 0, [3, 8, 10].contains(&w), "W {w}: {short}");
+        }
         Ok(())
     }
 

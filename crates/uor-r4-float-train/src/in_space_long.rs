@@ -5315,7 +5315,7 @@ fn past_window_cut(
 ) -> Result<(usize, Vec<CausalWindow>)> {
     let bos = hs::SHEET_BOS_ID;
     match rule {
-        PastWindowRule::Blocks => Ok((w, hs::build_document_windows(tokens, mask, w, bos)?.0)),
+        PastWindowRule::Blocks => Ok((w, hs::build_document_blocks(tokens, mask, w, bos)?.0)),
         PastWindowRule::Slide { stride } => Ok((
             w,
             hs::build_document_windows_sliding(tokens, mask, w, stride, bos)?.0,
@@ -17191,8 +17191,11 @@ mod tests {
         let bos = hs::SHEET_BOS_ID;
         let (at, blocks) = past_window_cut(PastWindowRule::Blocks, &tokens, &mask, 8).unwrap();
         assert_eq!(at, 8);
-        let want = hs::build_document_windows(&tokens, &mask, 8, bos).unwrap().0;
+        let want = hs::build_document_blocks(&tokens, &mask, 8, bos).unwrap().0;
         assert_eq!(past_window_keys(&blocks), past_window_keys(&want));
+        // The base cut reads the first document's last block of seven from input 23, not 24.
+        let base = hs::build_document_windows(&tokens, &mask, 8, bos).unwrap().0;
+        assert_ne!(past_window_keys(&blocks), past_window_keys(&base));
         let slide = PastWindowRule::Slide { stride: 1 };
         let (at, slid) = past_window_cut(slide, &tokens, &mask, 8).unwrap();
         assert_eq!(at, 8);
@@ -17246,6 +17249,33 @@ mod tests {
         let (at2, crossing) = query_prompts_ruled(&tokens, &mask, rule, 2, 0, one).unwrap();
         assert!(at2.decoded.is_empty());
         assert_eq!((at2.past_window, crossing), (vec![0], 0));
+    }
+
+    /// claude-287 pre-run review: under blocks a scored row reads from the input start a query's
+    /// prompt has, so blocks' losses and its replies read one rule.
+    #[test]
+    fn past_window_blocks_rows_and_replies_read_one_block() {
+        let (tokens, mask, query) = past_window_panel();
+        let bos = hs::SHEET_BOS_ID;
+        for w in [3, 8, 10] {
+            let (_, blocks) = past_window_cut(PastWindowRule::Blocks, &tokens, &mask, w).unwrap();
+            for window in &blocks {
+                let scored = window.scored_offsets.iter().zip(&window.scored_corpus_positions);
+                for (&off, &p) in scored {
+                    let doc = (0..p).rev().find(|&i| tokens[i] == bos).unwrap();
+                    let start = query_input_start(PastWindowRule::Blocks, doc, p, p + 1, w, 0);
+                    assert_eq!(p - 1 - off, start, "W {w}, target {p}");
+                    assert_eq!(&window.input_ids[..=off], &tokens[start..p], "W {w}, target {p}");
+                }
+            }
+        }
+        // At 8 the reply 29..32 is decoded from the inputs of the row window that scores it.
+        let one = std::slice::from_ref(&query);
+        let rule = PastWindowRule::Blocks;
+        let (at8, _) = query_prompts_ruled(&tokens, &mask, rule, 8, 0, one).unwrap();
+        let (_, blocks) = past_window_cut(PastWindowRule::Blocks, &tokens, &mask, 8).unwrap();
+        let row = blocks.iter().find(|w| w.scored_corpus_positions.contains(&29)).unwrap();
+        assert_eq!(&row.input_ids[..7], at8.decoded[0].1.input_ids.as_slice());
     }
 
     #[test]

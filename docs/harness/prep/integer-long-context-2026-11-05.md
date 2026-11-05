@@ -69,7 +69,7 @@ There are 12 passes: two checkpoints, two seeds and three rules. Each pass write
 
 - **The decode:** the default greedy decode, as in P2b and claude-281; `--flock-end` is not passed. `--seed` is the checkpoint's own seed.
 - **a7r** scores `p-long`, and **(L)** scores `p-long4k`.
-- **blocks** runs `build_document_windows` at W, the base path.
+- **blocks** runs `build_document_blocks` at W: the base path's back-to-back chunks of W, each read from its own block's start, so nothing carries over (changed at the pre-run review, below).
 - **slide** uses stride s = W/16: 12 for a7r and 128 for (L). Each target past W then reads at least W − s + 1 tokens, 181 and 1,921, about 94% of W.
 - **carry** sets the model's context to C, the panel's longest conversation rounded up to 2,048 or 4,096, and scores one window per conversation.
 - **Queries:** each prompt ends at its reply, and starts where the rule says:
@@ -164,7 +164,7 @@ Whatever the outcome, every reading is reported with its numbers. A failed instr
 ## Instrument checks
 
 - **I-0, the suite:** the float crate's CUDA library suite passes at the pin on the pod, with `--no-fail-fast`. The past-window tests are CPU tests inside it: the windowers, the cut, the ruled query prompts, the refusals, the saved configs, the bands, and the base path unchanged.
-  - **No I-0n:** this unit fixes no defect, so no test pins a fix to set aside. Its tests pin new code.
+  - **I-0n, on the laptop:** the pre-run review's one fix, blocks reading only its own block, is pinned by two tests. With the fix's dispatch line set aside they fail (a fresh build: 14 past-window tests passed, 2 failed), and with it they pass. They are CPU tests, so the laptop's gate stands for the pod's, and I-0 runs both by name.
 - **I-1, DEV is the identity:** DEV is scored at 192 in every pass, and its rows file holds no context field.
   - **Rows:** per checkpoint and seed, `rows-dev-memory.json` and `rows-dev-no-memory.json` are equal byte for byte across the three rules, carry included. The job checks this on the pod after every carry and slide pass, against that seed's blocks pass, and stops on a miss.
   - **Why carry should match:** `set_context` changes only `config.context` (`geometric_stack_native.rs:1189`). `row_picks` sizes its batches from the window, not the model (`in_space_long.rs:1334`). The read pattern has no age term, so nothing in a forward of 192-token windows reads the model's context.
@@ -241,7 +241,7 @@ These are estimates from measured passes, not measurements:
 ## Code in this unit
 
 All of this is new code, with nothing changed on the base path:
-- **`hamilton_sheet.rs`:** `build_document_windows_sliding` (slide), and `carry_context` with `carry_windows` (C, and one window per conversation).
+- **`hamilton_sheet.rs`:** `build_document_windows_sliding` (slide), `build_document_blocks` (blocks), and `carry_context` with `carry_windows` (C, and one window per conversation).
 - **`in_space_long.rs`:**
   - `PastWindowRule` and its refusals;
   - `past_window_cut` and `query_prompts_ruled`;
@@ -266,3 +266,27 @@ Round 1 (`641ec3f57`) was FIT, with no blocker or major. It re-derived every num
 8. **Smaller points:**
    - the ORDER's carry-at-2,048 fallback is said to be impossible on p-long4k;
    - R5 names `recall-*.json` and gives its `jq`.
+
+## Changes after the pre-run review
+
+Two fresh read-only reviewers read the pod job, and the chain and the scorer, at `f2b179f18`. Both were GO with minors. Neither finished every item, and the open ones were closed here.
+
+1. **Blocks is now a forgetting control (the one fix).**
+   - **The defect:** the base cut, `build_document_windows`, reads each conversation's last, shorter chunk from the W tokens before its last target, which reaches back into the block before it. So the base path's last block carries part of the one before.
+   - **Where it bites:** for a7r it is each conversation's tail. For (L), every p-long4k conversation is longer than 2,048 and at most 4,096 tokens, so all of its targets past W sit in such a chunk.
+   - **Why it matters here:** blocks' queries already started at their block (Arms), so its losses and its replies read two rules, and a "blocks" loss past W would have read most of slide's past (lesson L-007).
+   - **The fix:** `build_document_blocks` cuts the same back-to-back chunks and reads each one from its own block's start. A full block is the base cut's window, so band 0 and every full block are unchanged, and DEV still runs the base cut.
+   - **The tests:**
+     - `past_window_blocks_read_only_their_own_block`: each target reads only its own block, and full blocks equal the base cut.
+     - `past_window_blocks_rows_and_replies_read_one_block`: each blocks row reads from its query prompt's start.
+     - I-0n above.
+   - **The class:** instrument, since no reading had been taken. The sheet's own Question already defined blocks this way ("carries nothing over"), so this brings the code to the FIT text.
+2. **Closed here:**
+   - the named tests (14, now 16) exist in plain test modules;
+   - the `[past-window]` lines and the file names match the job's checks;
+   - `uor-pod run` detaches with `nohup setsid`, and its ssh has a 10 s connect timeout and a 30 s keep-alive;
+   - the Hamming read at 4,096 holds 16.8 M elements a row, under 2³²;
+   - `set_context` refuses any change to a weight's shape, loudly.
+3. **Accepted as they are:**
+   - the job's signal trap waits for the running pass before sealing;
+   - the pin is substituted and checked in the job's copy before upload.
