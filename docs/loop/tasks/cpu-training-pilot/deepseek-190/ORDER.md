@@ -6,10 +6,11 @@ Base: `3ac40d6d5`.
 ## Goal
 
 Add a read-only exact-serving preflight for the three model widths in
-Claude's `scale-probe`: 256, 512 and 1,024. For each width and for contexts
-16, 64 and 192, generate deterministic synthetic FBS artifacts, export them
-through `UORLUT01`, reload them, and compare the independent CPU forward with
-the integer serving session over the complete token sequence.
+Claude's `scale-probe`: 256, 512 and 1,024. For each width and representative
+contexts 16, 64 and 192, generate deterministic synthetic FBS artifacts using
+the recipe's whole-table-nearest readout, export them through `UORLUT01`,
+reload them, and compare the independent CPU forward with the integer serving
+session over the complete token sequence.
 
 This is D84 CPU development research. It is not GPU qualification, corpus
 training, a scale-slope result or a model-quality claim.
@@ -35,6 +36,9 @@ Add `cpu-scale-serving-bench` in `uor-r4-cpu-train` with two read arms:
 2. `full`: Hamming reads at depth 1 and the final layer, plus opening/reply
    memory. Use `width / 64` read heads, matching the historical width-512
    requirement of eight 64-bit head codes.
+
+Both arms use the whole-table-nearest writer selected by the current
+`--objective cell` recipe.
 
 Every synthetic trunk uses:
 

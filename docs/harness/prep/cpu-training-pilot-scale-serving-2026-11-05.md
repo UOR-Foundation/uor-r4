@@ -4,15 +4,19 @@ Run ID: `cpu-training-pilot-scale-serving-2026-11-05`
 
 ## Status
 
-NOT RUN. This sheet fixes the D84 CPU development check before the registered
-compute.
+REVISED BEFORE RUN 2. The exact-head result review found that attempt 1
+exercised the cell-writer readout while the current one-model recipe serves
+whole-table nearest. Attempt 1 is preserved as a configuration/instrument
+reference, but it is not the evidence claimed here. This revision changes the
+registered readout, so TEST FITNESS and D67 GO must be obtained again before
+run 2.
 
 ## Question
 
-At the three widths and contexts registered by Claude's `scale-probe`, can the
-current exact `UORLUT01` output path export, reload and reproduce every CPU and
-integer-serving decision, and what artifact size and decode throughput does
-each shape impose?
+At Claude's three registered `scale-probe` widths and three representative
+contexts, can the current whole-table-nearest `UORLUT01` output path export,
+reload and reproduce every CPU and integer-serving decision, and what artifact
+size and decode throughput does each shape impose?
 
 This is an instrument and cost preflight. It does not train a corpus model,
 qualify GPU training, measure language quality or show that a width fits GPU
@@ -23,10 +27,13 @@ memory.
 - `cpu-fbs-forward-bench` hardcodes width 256, MLP 384, six layers and context
   192, and does not call `audit_served_forward`.
 - Existing public trained-artifact audit coverage is width 256.
-- Claude's scale-probe registers widths 256, 512 and 1,024 on real text.
+- Claude's scale-probe registers widths 256, 512 and 1,024 on real text. The
+  contexts below are this preflight's representative CPU choices, not limits
+  registered by Claude.
 - No existing CPU benchmark covers all three widths, several contexts, both a
-  read-free and a full Hamming/memory artifact, exact CPU/serving parity,
-  repeated decision digests, artifact bytes and decode throughput.
+  read-free and a full Hamming/memory artifact, the recipe's whole-table
+  nearest readout, exact CPU/serving parity, repeated decision digests,
+  artifact bytes and decode throughput.
 
 The result gives the scale run an exact output-path reference. It cannot fill
 the scale-probe quality slopes, whose qualification remains GPU research.
@@ -49,11 +56,11 @@ the reply start so the exact opening/reply memory lookup path executes.
 
 - base: `3ac40d6d5`;
 - implementation source:
-  `19f13fc13fa6812656da643981d74bcf87028460`;
+  `ed0d88f3fb5874728bcd087cb53b9b07f9124ab1`;
 - binary:
   `/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench`;
 - binary SHA-256:
-  `65c6fba90cfc36a6e55ec4d97276ad8574602b719cce7faa322af8ccc1101fe8`;
+  `ccc730000376be07badab2f01f30686ee9c960473ac0040162bea1c7b325a6ac`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: one process, platform default worker availability for library
   code, no GPU.
@@ -63,15 +70,16 @@ the reply start so the exact opening/reply memory lookup path executes.
 Every cell uses vocabulary 4,096, MLP 384, six layers, eight writer cells and a
 seed derived as `20_261_105 XOR (width << 17) XOR context`.
 
-| Width | Contexts | Arms |
+| Width | Representative contexts | Arms |
 |---:|---|---|
 | 256 | 16, 64, 192 | projection, full |
 | 512 | 16, 64, 192 | projection, full |
 | 1,024 | 16, 64, 192 | projection, full |
 
-`projection` has no Hamming or memory tables. `full` adds Hamming reads at
-depth 1 and the final layer plus opening and reply memory. Hamming heads are
-`width / 64`: 4, 8 and 16 for widths 256, 512 and 1,024.
+Both arms use the recipe's whole-table nearest writer. `projection` has no
+Hamming or memory tables. `full` adds Hamming reads at depth 1 and the final
+layer plus opening and reply memory. Hamming heads are `width / 64`: 4, 8 and
+16 for widths 256, 512 and 1,024.
 
 The token sequence is deterministic:
 
@@ -93,8 +101,8 @@ OUT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/
 BIN=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench
 
 test ! -e "$OUT/summary.json"
-git -C "$SOURCE" merge-base --is-ancestor 19f13fc13fa6812656da643981d74bcf87028460 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 65c6fba90cfc36a6e55ec4d97276ad8574602b719cce7faa322af8ccc1101fe8
+git -C "$SOURCE" merge-base --is-ancestor ed0d88f3fb5874728bcd087cb53b9b07f9124ab1 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = ccc730000376be07badab2f01f30686ee9c960473ac0040162bea1c7b325a6ac
 mkdir -p "$OUT"
 timeout 1200s "$BIN" --output "$OUT/summary.json"
 ```
@@ -116,7 +124,8 @@ the error and do not reuse the root.
   - `token_decisions_compared = context`;
   - `kept_cells_compared = context * 8`;
 - artifact SHA-256 and bytes;
-- reloaded vocabulary, width, context, MLP, layer and kept-cell shape;
+- reloaded vocabulary, width, context, MLP, layer and kept-cell shape, and the
+  `whole_table_nearest_l1` readout mode;
 - projection artifacts carry neither Hamming nor memory tables;
 - full artifacts retain their expected Hamming heads/depths and nonempty
   opening/reply memory at `key_window == context`;
@@ -169,26 +178,13 @@ The result covers synthetic structural artifacts at the registered widths and
 contexts only. It does not establish real-text quality, corpus training,
 GPU-memory feasibility, a scale slope or model qualification.
 
+## Attempt 1
+
+The first run exercised the synthetic default cell-writer readout. It passed
+its mechanical checks, but exact-head review found that it did not cover the
+current recipe's whole-table nearest readout. Its output is preserved outside
+the repository as attempt-1 evidence and is not used for the current claim.
+
 ## Verdict
 
-TEST FITNESS: FIT - M2 #2030
-sheet: docs/harness/prep/cpu-training-pilot-scale-serving-2026-11-05.md
-reviewer: deepseek fresh-context subagent scale_serving_review_round3
-note: No blockers at 2b077afbd. The reviewer verified the registered
-  widths, contexts, shapes, repeated decision hashes, side-table retention,
-  negative controls, source and binary pins, fail-closed RSS boundary and
-  D84 claim boundary.
-date: 2026-11-05
-
-A FIT verdict clears compute for the configuration in this sheet only (D22).
-
-## Pre-run GO
-
-GO - reviewer `deepseek fresh-context subagent
-scale_serving_review_round3`, 2026-11-05, at exact head
-`2b077afbdf5b72b70932f536ab0674bcd7ba7ea2`. The reviewer independently
-confirmed the implementation source and binary pins, the 18-cell grid,
-complete shape and side-table validation, three retained decision hashes,
-fail-closed peak-RSS parsing including the exactly-2-GiB rejection, and all
-four negative controls. No Claude-owned float-training, serving or exporter
-source is changed.
+TEST FITNESS: PENDING
