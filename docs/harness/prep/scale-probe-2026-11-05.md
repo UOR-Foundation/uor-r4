@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [scale-probe](../../roadmap/items/scale-probe.md) (#3472). Casey's 4 November plan, P5: "The bigger train = `scale-probe`. [sheet 1 unit; run 1–2 units]", in the order decided on #2028 (6634218223): step 6, "P5 on real text", after the real-text corpus (claude-292, claude-293) and P4.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT. Fresh non-author reviews passed this sheet at `2c3a96147c98791dfd01d3304c6b0554ae77a12e` in three rounds (#3472 comment `6666302038`). Round 1 returned FIT WITH CHANGES with seven items, fixed in `fc255e93a9a3da0c72c27e41b5596f589368e2f7` and `50048830f441ede6a495a755270d5300df12fec8`. Round 2, four narrow reviews, returned FIT WITH CHANGES, fixed in `1402f3cb66a889f27e15fa0b0de5c518572d16ea`. Round 3 returned FIT WITH CHANGES with one must-fix, applied verbatim in `2c3a96147c98791dfd01d3304c6b0554ae77a12e`. This line was added after those reviews. So were two wording edits from the card's decision review: the scores' departure from the order's words, and OASST2's English filter. They change no arm, reading or bar.
 
 PRE-RUN: owed, by a fresh non-author review in the run's unit, right before launch (D67), as P2b's sheet had (claude-276).
 
@@ -59,7 +59,7 @@ A training comparison from scratch; the candidates are the checkpoints each cell
 
 All readings are taken on the laptop from the sealed `no-memory` rows files, through `scale-probe grade` (one checkpoint against its own TRAIN's tables) and `scale-probe pair` (two cells at both seeds). A row is one scored held-out position. A hit is the whole-table nearest pick (`nearest`) equal to the target. Rows are pooled over the four panels unless a reading says otherwise.
 
-**Not §4.8's integer top-1.** The decided order scores real text by "integer top-1 against unigram and T2 count tables". Here that is read as an exact count of hits, with no likelihood. The pick is the float model's, trained as served (`--train-as-served 1`). The slope is therefore a float-model measurement. The integer artifact is checked by R9's parity, not scored on the panel, and the D11 export's panel top-1 is owed before any width is served or any claim is made (the decision card on #3472).
+**Not §4.8's integer top-1.** The decided order scores real text by "integer top-1 against unigram and T2 count tables". The decision card on #3472 departs from those words: the deciding count is an exact count of the float model's whole-table nearest top-1 hits, with no likelihood, not §4.8's integer top-1 through the D11 export. The pick is the float model's, trained as served (`--train-as-served 1`). The slope is therefore a float-model measurement. The integer artifact is checked by R9's parity, not scored on the panel, and the D11 export's panel top-1 is owed before any width is served or any claim is made (the decision card on #3472).
 
 **The two row sets.** Every row of a panel is in exactly one set:
 - **unseen:** at least 8 tokens of its own document precede it, counting its `<|bos|>`, and those 8 tokens do not occur anywhere in the TRAIN the seen set is built against (cell X's, below) as a run inside one document;
@@ -173,7 +173,8 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
   Store: `results/claude/scale-probe-2026-11-05/inputs/`, with a `SHA256SUMS` (its own SHA-256 `56a7db05a8f35b01e7231e90f95c2e7a095415263e2c16adcd93a20968c60b9c`), fetched back and checked byte for byte in this unit.
 - **Human-written text only,** under the decided order's interim §3.10 reading, until Casey's readings are given; another answer is a new configuration.
   - OASST2's node filter drops every message marked `synthetic`, and found none in either split (its manifests' `synthetic: 0`).
-  - The Wikipedia articles are its editors' text.
+  - It keeps English threads only (`lang == "en"`, `real_text.rs:574`): claude-293 dropped 8,451 roots and 4 child messages as not English.
+  - The Wikipedia articles are its editors' text, from the English edition (`20231101.en`).
   - UltraChat, SmolTalk and FineWeb-Edu stay out.
 - **The panel: the four held-out splits, in full,** from the same store root. Each was cut by source id (OASST2 tree, Wikipedia article) at 50 per mille. No model has read any of them. Only counting has: claude-293's census and its host-memory probe (which read an earlier build of `wiki-00000/heldout`), and this unit's `seen` census.
 

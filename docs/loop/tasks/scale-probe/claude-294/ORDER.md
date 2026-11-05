@@ -34,9 +34,9 @@ The decided order says: "P5's Data line changes to real text through a decision 
   - P-dev stays reserved.
   - **The contrast cell,** reported only, is scored on DEV and on the same four panels. It is reported beside claude-152's and claude-153's DEV points, which used other recipes and steps. (Revised in this unit before the card was logged; the first draft drew a new templated panel for it.)
 - **Scores:** an exact count of whole-table nearest top-1 hits by the float model trained as served, against unigram and T2 tables built from each cell's own TRAIN, with bytes per token under the pinned tokenizer.
-  - This is not §4.8's integer top-1. The slope is a float-model measurement, and the D11 export's panel top-1 is owed before any width is served or any claim is made.
+  - The decided order says "integer top-1 against unigram and T2 count tables". This card departs from those words: the deciding count is the float model's whole-table nearest top-1, not §4.8's integer top-1 through the D11 export. The slope is a float-model measurement; R9's parity checks the export, and the D11 export's panel top-1 is owed before any width is served or any claim is made.
   - Bits per byte waits for a lawful likelihood (§4.8).
-- **Reversal:** restore the item's Data line and done-when 1's panel text. The sheet's "hold" stops any launch.
+- **Reversal:** restore the item's Data line and done-when 1's panel text, taking `docs/roadmap/items/scale-probe.md` from this unit's merge-base with `origin/main`. The sheet's "hold" stops any launch. The mixes, the census, and any checkpoints and rows already sealed stay in the store. A run already made stays as its own configuration (§4.1), and the old data becomes a new configuration.
 
 ## Cancel probe (run first)
 
