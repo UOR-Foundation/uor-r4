@@ -233,3 +233,12 @@ note: No blockers at e2e756dee; filtered power, matched controls, control-fault
 date: 2026-11-05
 
 A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent query_port_pre_run_go`,
+2026-11-05, at clean HEAD `944a7fb4e`. The reviewer verified implementation
+pin `722abaff3`, binary SHA-256 `0ca75e1b…`, all inputs, 235/2,708 training
+power, 58/616 panel power, zero identical train/dev documents, absent output
+roots, matched controls, exact parity gates and CPU/D84 scope. Full CPU
+package, strict Clippy, rustfmt, diff checks and 11/11 loop gates passed.
