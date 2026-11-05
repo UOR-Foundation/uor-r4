@@ -160,7 +160,7 @@ The named model-time ledger at
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-copy-key-depth
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/copy-key-depth/2026-11-05
+OUT=$SHARED/local/deepseek/copy-key-depth/2026-11-05-attempt-2
 PANELS=$OUT/panels
 BUILD=$SOURCE/target/deepseek/copy-key-depth-run
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
@@ -210,14 +210,16 @@ BIN=$BUILD/release/cpu-copy-key-depth
 run() {
   name=$1
   dir=$2
+  token_file=$3
+  mask_file=$4
   /usr/bin/time -v -o "$OUT/$name.time.txt" \
-    timeout 600s "$BIN" "$dir/tokens.u16" "$dir/response_mask.u8" "$dir/manifest.json" \
+    timeout 600s "$BIN" "$dir/$token_file" "$dir/$mask_file" "$dir/manifest.json" \
       --context 192 --seed 149 >"$OUT/$name.json"
 }
-run dev "$DEV"
-run train-train "$PANELS/train-train-2501"
-run dev-dev "$PANELS/dev-dev-2502"
-run dev-dev-repeat "$PANELS/dev-dev-2502"
+run dev "$DEV" dev-tokens.u16 dev-response-mask.u8
+run train-train "$PANELS/train-train-2501" tokens.u16 response_mask.u8
+run dev-dev "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8
+run dev-dev-repeat "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8
 
 test "$(jq -r '.reading.copyable_positions' "$OUT/dev.json")" -eq 8243
 test "$(jq -r '.reading.fixed[0].positions_with_match' "$OUT/dev.json")" -eq 6306
@@ -270,4 +272,11 @@ commands, failure sealing and repeat were checked read-only.
 
 ## Outcome
 
-Pending the registered run.
+Attempt 1 stopped before the oracle: the public-DEV command used
+`tokens.u16`/`response_mask.u8` instead of the actual
+`dev-tokens.u16`/`dev-response-mask.u8` names. Its build and generated panels
+are preserved under `2026-11-05-attempt-1/`; no target reading was produced.
+Attempt 2 fixes only those two input filenames.
+
+Attempt 1 `SHA256SUMS`:
+`222d12634ac2c8d9f9bcda3edee332e1503f2d477737a03a4c2a234cd9667572`.
