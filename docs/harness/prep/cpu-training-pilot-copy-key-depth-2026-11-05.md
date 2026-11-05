@@ -84,6 +84,20 @@ Both are new to this decision. The earlier exploratory readings on
 `train-control-v3`, `dev-panel-v3` and `panel-dev-dev` are disclosed in the
 REPORT but do not enter the bar.
 
+### Exploratory readings, not decision results
+
+Implementation debugging opened three existing panels before FIT:
+
+- `train-control-v3`: longest 754/1,103 copyable decisions against `k2>k1`
+  744/1,103;
+- `dev-panel-v3`: longest 167/258 against `k2>k1` 167/258;
+- `panel-dev-dev`: longest 691/1,037 against `k2>k1` 682/1,037.
+
+These readings are **NOT A DECISION RESULT**. The pre-registered bar written
+before them still required both panels, and `dev-panel-v3` showed no gain. The
+small improvements on the other two motivated a properly powered new-panel
+screen, not a retrospective pass.
+
 ## Bar
 
 The candidate passes only if it beats `k2>k1` by the paired two-sigma rule on
@@ -138,6 +152,8 @@ IMPL_PIN=1c34b6951
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
   .cargo Cargo.toml Cargo.lock rust-toolchain.toml crates third_party
+git -C "$SOURCE" diff --quiet 4e42ffca5 -- \
+  docs/labs/one-model-end-to-end/instrument
 sha256sum -c <(printf '%s\n' \
   '0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  '"$DEV"'/dev-tokens.u16' \
   'a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  '"$DEV"'/dev-response-mask.u8' \
@@ -186,6 +202,8 @@ test "$(jq -r '.reading.fixed[1].positions_with_match' "$OUT/dev.json")" -eq 438
 test "$(jq -r '.reading.fixed[1].right' "$OUT/dev.json")" -eq 3506
 test "$(jq -r '.reading.k2_backoff_k1.right' "$OUT/dev.json")" -eq 4388
 test "$(jq -r '.reading.random_changed_predictions' "$OUT/dev.json")" -gt 0
+test "$(jq -r '.reading.random_changed_predictions' "$OUT/train-train.json")" -gt 0
+test "$(jq -r '.reading.random_changed_predictions' "$OUT/dev-dev.json")" -gt 0
 cmp "$OUT/dev-dev.json" "$OUT/dev-dev-repeat.json"
 test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 ```

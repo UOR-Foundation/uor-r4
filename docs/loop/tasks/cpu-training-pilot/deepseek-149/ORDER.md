@@ -67,7 +67,7 @@ The candidate is `longest`.
 - It must beat the seeded random-depth selector by the same rule.
 - Random-control novelty is counted only on copyable positions.
 - Every fixed-depth and selector arm must account for every eligible position,
-  and a fresh one-worker repeat must match.
+  and a fresh-process deterministic repeat must match.
 
 ## Stop rules
 
