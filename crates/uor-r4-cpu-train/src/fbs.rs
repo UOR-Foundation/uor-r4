@@ -1911,6 +1911,12 @@ mod tests {
             &table
         )
         .is_err());
+        assert!(CpuFbsForward::from_artifact_with_tables(
+            &bytes,
+            &table,
+            &table[..table.len() - 1]
+        )
+        .is_err());
 
         let memory = memory_artifact_with(191, CpuFbsHead::Writer, false, true, 0.5, None);
         let memory_table = CpuFbsForward::from_artifact(&memory)

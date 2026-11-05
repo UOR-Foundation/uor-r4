@@ -9,6 +9,8 @@ use uor_r4_cpu_train::{
 use uor_r4_discrete::normalization_mechanism::orbit_root_coords;
 use uor_r4_integer::stack::{read_hamming_uorlut01, read_memory_uorlut01, IntegerStackModel};
 
+const EXPECTED_RESPONSE_ROWS: usize = 616;
+
 struct Config {
     raw: PathBuf,
     anchored: PathBuf,
@@ -242,8 +244,11 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             .conversation_examples()
             .map_err(|error| error.to_string())?,
     )?;
-    if samples.len() < 200 {
-        return Err(format!("panel has only {} response rows", samples.len()));
+    if samples.len() != EXPECTED_RESPONSE_ROWS {
+        return Err(format!(
+            "panel has {} response rows; the registered panel has {EXPECTED_RESPONSE_ROWS}",
+            samples.len()
+        ));
     }
 
     let raw_forward =

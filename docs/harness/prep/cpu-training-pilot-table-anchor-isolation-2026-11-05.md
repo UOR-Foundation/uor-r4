@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-table-anchor-isolation-2026-11-05`
 
 ## Status
 
-REGISTERED with FIT and D67 GO. No panel arm has been run.
+COMPLETE. Both registered panel arms ran after FIT and D67 GO.
 
 ## Question
 
@@ -24,7 +24,7 @@ from 245/181/236 to 120/55/86 on seed 1 and from 171/136/164 to 29/10/20 on
 seed 2. That combined intervention cannot attribute the loss.
 
 This diagnostic holds the trunk, tokens and targets fixed and substitutes two
-in-memory tables independently. No artifact is written.
+in-memory tables independently. No model artifact is written.
 
 ## Base artifact
 
@@ -153,7 +153,7 @@ run 2 \
 ## Minimum power and checks
 
 - two artifact seeds and 616 response rows per seed;
-- four arms on every row, with 78,848 Q12 coordinates per arm per seed;
+- four arms on every row, with 157,696 Q12 coordinates per arm per seed;
 - complete query, token and kept-cell signatures for every arm;
 - every arm run twice in-process with exact row equality;
 - raw/raw exact integer-serving parity over every final query coordinate, token

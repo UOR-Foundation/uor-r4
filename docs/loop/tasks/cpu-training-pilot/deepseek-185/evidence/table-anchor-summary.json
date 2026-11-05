@@ -181,5 +181,5 @@
       }
     }
   ],
-  "finding": "The anchored recurrent-input table reproduces nearly all of the combined decoding loss on both seeds. Anchoring only writer scoring rows preserves raw admission and port distance, moves few tokens and changes top-1 by +14/-3 on seed 1 and +1/-2 on seed 2 across top-1/top-8. The next representation must preserve learned input identity while separating writer address rows."
+  "finding": "The anchored recurrent-input table reproduces nearly all of the combined decoding loss on both seeds. Anchoring only writer scoring rows preserves raw admission and port distance, moves few tokens, changes top-1 by +14/+1 and top-8 by -3/-2 across seeds 1/2. The next representation must preserve learned input identity while separating writer address rows."
 }
