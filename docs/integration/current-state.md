@@ -16,7 +16,7 @@ This attributes deepseek-183's decoding collapse to overwriting the learned
 recurrent input code, not to direct writer-row mismatch. The hybrid tables are
 in-memory diagnostics and cannot be represented by the current one-table
 artifact. Record:
-[CPU table-anchor isolation](../labs/cpu-training-pilot-table-anchor-isolation-2026-11-05/README.md).
+[deepseek-185](../loop/tasks/cpu-training-pilot/deepseek-185/REPORT.md).
 **Next:** design separate writer-address rows, or train root-addressed writer
 rows under an explicit input-code preservation objective, then retest through
 export and serving.

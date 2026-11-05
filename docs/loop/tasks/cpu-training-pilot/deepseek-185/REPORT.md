@@ -70,8 +70,6 @@ input-only reduced the seed-1 sum by 4,388,735 but increased the seed-2 sum by
 
 Compact evidence:
 [table-anchor-summary.json](evidence/table-anchor-summary.json).
-Dated record:
-[CPU table-anchor isolation](../../../labs/cpu-training-pilot-table-anchor-isolation-2026-11-05/README.md).
 
 ## Checks run at the head
 
