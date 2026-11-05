@@ -118,7 +118,7 @@ negative. Do not retune a shape after reading a result.
 
 Stop on source, shape, parity, determinism, output-root or evidence drift; any
 need to edit Claude-owned float-training, serving or exporter code; any parity
-mismatch; peak RSS above 2 GiB; or total wall time above 20 minutes.
+mismatch; peak RSS at or above 2 GiB; or total wall time above 20 minutes.
 
 Lab: deepseek
 Order: docs/loop/tasks/cpu-training-pilot/deepseek-190/ORDER.md

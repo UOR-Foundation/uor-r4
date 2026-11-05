@@ -171,4 +171,24 @@ GPU-memory feasibility, a scale slope or model qualification.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-scale-serving-2026-11-05.md
+reviewer: deepseek fresh-context subagent scale_serving_review_round3
+note: No blockers at 2b077afbd. The reviewer verified the registered
+  widths, contexts, shapes, repeated decision hashes, side-table retention,
+  negative controls, source and binary pins, fail-closed RSS boundary and
+  D84 claim boundary.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent
+scale_serving_review_round3`, 2026-11-05, at exact head
+`2b077afbdf5b72b70932f536ab0674bcd7ba7ea2`. The reviewer independently
+confirmed the implementation source and binary pins, the 18-cell grid,
+complete shape and side-table validation, three retained decision hashes,
+fail-closed peak-RSS parsing including the exactly-2-GiB rejection, and all
+four negative controls. No Claude-owned float-training, serving or exporter
+source is changed.
