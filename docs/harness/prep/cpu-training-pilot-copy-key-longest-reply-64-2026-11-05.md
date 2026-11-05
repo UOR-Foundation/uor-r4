@@ -169,6 +169,9 @@ The named model-time ledger at
 `.uor-models/native-joint-learning-2026-09-04/model-time.json` is `ABSENT` and
 is not treated as zero.
 
+Full per-decision reports are compared in streams and stored gzip-compressed,
+with no normalized report duplicates.
+
 ## Steps
 
 Use a fresh output root after GO:
@@ -250,17 +253,13 @@ run seed2-tt "$PANELS/tt-2711" "$SEED2" "$SEED2_SHA"
 run seed2-dd "$PANELS/dd-2712" "$SEED2" "$SEED2_SHA"
 run seed1-dd-repeat "$PANELS/dd-2712" "$SEED1" "$SEED1_SHA"
 
-for report in "$OUT"/seed*.json; do
-  base=$(basename "$report" .json)
-  case "$base" in *-repeat) continue ;; esac
+normalize() {
   jq -S 'walk(if type == "object"
     then del(.wall_elapsed_us, .generated_tokens_per_second)
-    else . end)' "$report" >"$OUT/$base.normalized.json"
-done
-jq -S 'walk(if type == "object"
-  then del(.wall_elapsed_us, .generated_tokens_per_second)
-  else . end)' "$OUT/seed1-dd-repeat.json" >"$OUT/seed1-dd-repeat.normalized.json"
-cmp "$OUT/seed1-dd.normalized.json" "$OUT/seed1-dd-repeat.normalized.json"
+    else . end)' "$1"
+}
+cmp <(normalize "$OUT/seed1-dd.json") \
+  <(normalize "$OUT/seed1-dd-repeat.json")
 
 test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/build.time.txt")" \
   -le 4194304
@@ -270,12 +269,15 @@ for timing in "$OUT"/*.time.txt; do
   case "$timing" in "$OUT/build.time.txt"|"$OUT/generator-build.time.txt") continue ;; esac
   test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$timing")" -le 1048576
 done
+gzip -9 "$OUT"/seed*.json
 test "$(du -sb "$OUT" | cut -f1)" -le 67108864
 ```
 
 Read all four comparison blocks. A pass requires the registered paired rule for
 both metrics on both artifact seeds and both panels. Complete-reply and
 termination-limited classifications are read only after all reports exist.
+The reports retain every decision in gzip-compressed form; the normalized
+repeat comparison is a stream and creates no duplicate file.
 
 ## Rollback boundary
 
