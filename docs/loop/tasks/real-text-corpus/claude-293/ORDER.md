@@ -97,7 +97,7 @@ The item's done-when reads:
 - the census needs more memory than the laptop has. Then shrink `max_docs`, and record it;
 - a frozen panel's exact prompt share is not 0.0. Then find the documents behind it, and decide between excluding them and recording why they are not shared prompts.
 
-## Cancel probe result (5 Nov, about 16:20Z)
+## Cancel probe result (5 Nov, before 16:00Z)
 
 - **No converter exists.** Five files in `crates/*/src` name both `user_turns` and `response_mask`:
   - `stack_dialogue.rs`, `synthetic-memory-corpus.rs` and `m-world-recall-corpus.rs` write turns while they generate, or read them from JSON;
