@@ -44,7 +44,7 @@ writer query.
 
 ## Base artifacts and source
 
-- implementation commit: `893fcd9a8`;
+- implementation commit: `2378b0414`;
 - base: `7018b09cd`;
 - generator tree at base:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
@@ -55,7 +55,7 @@ writer query.
 - tokenizer SHA-256
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
 - `copy_key_reply.rs` SHA-256
-  `15d1db5c10101841dc6f67e9612353fbecc0d599bcf7bab885bb3fd085adbf82`;
+  `c2b50b032dbff0061d16fcc11b103915ab5607ab01d29380ea7c5e975d02744a`;
 - `cpu-copy-key-reply.rs` SHA-256
   `232be51bcdf088ba89e3861bc18ef3184c6b726dd2c725f59cac22c8afd2d3f6`;
 - `cpu-copy-key-reply-oracle.rs` SHA-256
@@ -87,7 +87,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/copy-geometric
 GEN_TARGET=$SOURCE/target/deepseek/copy-geometric-generator
-IMPL=893fcd9a8
+IMPL=2378b0414
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 BASE=7018b09cd
 
@@ -106,7 +106,7 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/panels/tt-2711/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  15d1db5c10101841dc6f67e9612353fbecc0d599bcf7bab885bb3fd085adbf82 \
+  c2b50b032dbff0061d16fcc11b103915ab5607ab01d29380ea7c5e975d02744a \
   "$SOURCE/crates/uor-r4-cpu-train/src/copy_key_reply.rs" \
   232be51bcdf088ba89e3861bc18ef3184c6b726dd2c725f59cac22c8afd2d3f6 \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-key-reply.rs" \
