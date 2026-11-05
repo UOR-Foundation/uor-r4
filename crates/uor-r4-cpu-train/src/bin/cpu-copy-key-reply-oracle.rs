@@ -40,6 +40,9 @@ fn run() -> Result<()> {
 
     let report: Value = serde_json::from_slice(&read(&report_path)?)
         .map_err(|error| format!("{}: {error}", report_path.display()))?;
+    if report.get("schema").and_then(Value::as_str) != Some("uor-r4.cpu-copy-key-reply/1") {
+        return Err("report schema differs".to_owned());
+    }
     let token_bytes = read(&tokens_path)?;
     let mask_bytes = read(&mask_path)?;
     let manifest_bytes = read(&manifest_path)?;
@@ -90,7 +93,11 @@ fn run() -> Result<()> {
         let value = arm_values
             .get(arm.name())
             .ok_or_else(|| format!("report lacks arm {}", arm.name()))?;
-        arms.insert(arm.name().to_owned(), evaluate_arm(value, &samples)?);
+        let expected_name = arm_reading_name(arm.name());
+        arms.insert(
+            arm.name().to_owned(),
+            evaluate_arm(value, &samples, &expected_name)?,
+        );
     }
 
     let longest = arms
@@ -195,6 +202,7 @@ fn run() -> Result<()> {
 fn evaluate_arm(
     report: &Value,
     samples: &[uor_r4_cpu_train::CpuConversationSample],
+    expected_arm_name: &str,
 ) -> Result<ArmEvaluation> {
     let steps = report
         .get("steps")
@@ -206,6 +214,13 @@ fn evaluate_arm(
         .ok_or_else(|| "arm has no source generated-token count".to_owned())?;
     if steps.len() as u64 != source_generated_tokens {
         return Err("step count differs from the source generated-token count".to_owned());
+    }
+    let source_arm = report
+        .pointer("/reading/arm")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "arm has no source name".to_owned())?;
+    if source_arm != expected_arm_name {
+        return Err("source arm name differs".to_owned());
     }
     let source_rows = report
         .get("rows")
@@ -396,6 +411,7 @@ mod tests {
 
     fn report(steps: Value, tokens: &[u32]) -> Value {
         serde_json::json!({
+            "schema": "uor-r4.cpu-copy-key-reply/1",
             "steps": steps,
             "reading": {
                 "arm": "longest4_to1",
@@ -417,7 +433,7 @@ mod tests {
             ]),
             &[3, 4, 5, 9],
         );
-        let evaluated = evaluate_arm(&value, &samples).unwrap();
+        let evaluated = evaluate_arm(&value, &samples, "longest4_to1").unwrap();
         assert_eq!(evaluated.max_common_prefix, 3);
         assert_eq!(evaluated.common_prefix_sum, 3);
         assert_eq!(evaluated.trailing_mismatch_histogram.get(&0), Some(&1));
@@ -438,14 +454,14 @@ mod tests {
             ]),
             &[2, 3],
         );
-        assert!(evaluate_arm(&duplicate, &samples).is_err());
+        assert!(evaluate_arm(&duplicate, &samples, "longest4_to1").is_err());
         let short = report(
             serde_json::json!([
                 {"row": 0, "generated_step": 0, "selected_token": 2}
             ]),
             &[2],
         );
-        assert!(evaluate_arm(&short, &samples).is_err());
+        assert!(evaluate_arm(&short, &samples, "longest4_to1").is_err());
 
         let mut removed_step = report(
             serde_json::json!([
@@ -455,7 +471,7 @@ mod tests {
             &[2, 3],
         );
         removed_step["steps"].as_array_mut().unwrap().pop();
-        assert!(evaluate_arm(&removed_step, &samples).is_err());
+        assert!(evaluate_arm(&removed_step, &samples, "longest4_to1").is_err());
 
         let mut bad_hash = report(
             serde_json::json!([
@@ -465,7 +481,7 @@ mod tests {
             &[2, 3],
         );
         bad_hash["rows"][0]["reply_sha256"] = serde_json::json!("deadbeef");
-        assert!(evaluate_arm(&bad_hash, &samples).is_err());
+        assert!(evaluate_arm(&bad_hash, &samples, "longest4_to1").is_err());
     }
 
     #[test]
@@ -479,7 +495,7 @@ mod tests {
             ]),
             &[2, 3, 9],
         );
-        let evaluated = evaluate_arm(&value, &samples).unwrap();
+        let evaluated = evaluate_arm(&value, &samples, "longest4_to1").unwrap();
         assert_eq!(evaluated.oracle_exact, 0);
         assert_eq!(evaluated.max_common_prefix, 2);
         assert_eq!(evaluated.trailing_mismatch_histogram.get(&1), Some(&1));
