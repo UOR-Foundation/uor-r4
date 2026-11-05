@@ -333,10 +333,7 @@ pub fn evaluate_suffix_fallback_replies(
                 .iter()
                 .filter(|step| step.local_copy_depth.is_some())
                 .count() as u64;
-            let suffix_decisions = steps
-                .iter()
-                .filter(|step| step.suffix_depth.is_some())
-                .count() as u64;
+            let fallback_decisions = steps.len() as u64 - local_copy_decisions;
             let row_reading = CopyKeyReplyRow {
                 row,
                 reachable,
@@ -349,7 +346,7 @@ pub fn evaluate_suffix_fallback_replies(
                 reference_tokens: reference.len() as u64,
                 correct_body_positions,
                 copy_decisions: local_copy_decisions,
-                fallback_decisions: suffix_decisions,
+                fallback_decisions,
                 stop: generated.stop.to_owned(),
                 reply_sha256: token_hash(&generated.tokens),
             };
@@ -563,7 +560,7 @@ fn decision_hash(steps: &[SuffixFallbackStep]) -> String {
 mod tests {
     use super::*;
     use crate::reply_boundary::derive_reply_boundary_memory;
-    use crate::suffix_memory::derive_suffix_content_memory;
+    use crate::suffix_memory::{derive_suffix_content_memory, shuffle_suffix_memory};
     use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
@@ -666,31 +663,170 @@ mod tests {
             .map(|step| ((step.row, step.generated_step), step.selected_token))
             .collect::<BTreeMap<_, _>>();
         assert!(!local_steps.is_empty());
-        for step in treatment
+        let treatment_steps = treatment
             .steps
             .iter()
-            .filter(|step| step.local_copy_depth.is_some())
-        {
+            .map(|step| ((step.row, step.generated_step), step))
+            .collect::<BTreeMap<_, _>>();
+        let mut compared = 0;
+        for (key, local_token) in local_steps {
+            let Some(step) = treatment_steps.get(&key) else {
+                continue;
+            };
+            compared += 1;
+            assert!(step.local_copy_depth.is_some());
             assert_eq!(
-                Some(&step.selected_token),
-                local_steps.get(&(step.row, step.generated_step))
+                step.selected_token, local_token,
+                "local candidate was displaced at {key:?}"
             );
         }
+        assert!(compared > 0);
     }
 
     #[test]
-    fn treatment_uses_a_confident_global_suffix_when_local_copy_has_no_candidate() {
-        let table = derive_suffix_content_memory(&[
-            sample(&[200, 201, 202, 203, 1]),
-            sample(&[300, 201, 202, 203, 1]),
-            sample(&[301, 201, 202, 203, 1]),
-        ])
-        .unwrap();
-        let prediction = table
-            .predict_confident(&[201, 202], SUFFIX_MEMORY_MAX_DEPTH, 2)
+    fn treatment_uses_confident_suffix_after_an_uncovered_writer_step_and_shuffle_diverges() {
+        let artifact = artifact();
+        let boundary = boundary();
+        let mut fixture = None;
+        for base in (10u32..400).step_by(16) {
+            let prompt = (0..7).map(|offset| base + offset).collect::<Vec<_>>();
+            let single = [MemoryWeightSample {
+                prompt: prompt.clone(),
+                reply: vec![400, 401, 402, 403, 1],
+            }];
+            let writer = evaluate_suffix_fallback_replies(
+                &artifact,
+                &single,
+                16,
+                SuffixFallbackArm::WriterBoundary,
+                None,
+                &boundary,
+                196,
+            )
             .unwrap();
-        assert_eq!(prediction.token, 203);
-        assert_eq!(prediction.observations, 3);
-        assert_eq!(prediction.successor_count, 3);
+            let local = evaluate_suffix_fallback_replies(
+                &artifact,
+                &single,
+                16,
+                SuffixFallbackArm::LocalLongest32Boundary,
+                None,
+                &boundary,
+                196,
+            )
+            .unwrap();
+            let Some(writer_first) = writer.steps.iter().find(|step| step.generated_step == 0)
+            else {
+                continue;
+            };
+            let Some(writer_second) = writer.steps.iter().find(|step| step.generated_step == 1)
+            else {
+                continue;
+            };
+            let Some(local_step) = local.steps.iter().find(|step| step.generated_step == 1) else {
+                continue;
+            };
+            if local_step.local_copy_depth.is_none() {
+                fixture = Some((
+                    prompt,
+                    writer_first.selected_token,
+                    writer_second.writer_token,
+                ));
+                break;
+            }
+        }
+        let (prompt, first, writer_second) =
+            fixture.expect("synthetic artifact needs an uncovered second step");
+        let target = (10..512)
+            .find(|token| *token != first && *token != writer_second)
+            .expect("fallback target");
+        let first_reply = [
+            MemoryWeightSample {
+                prompt: prompt.clone(),
+                reply: vec![first, target, 403, 404],
+            },
+            MemoryWeightSample {
+                prompt: prompt.clone(),
+                reply: vec![first, target, 403, 404],
+            },
+        ];
+        let other = (10..512)
+            .find(|token| *token != first && *token != target)
+            .expect("second suffix key");
+        let other_target = (10..512)
+            .find(|token| *token != first && *token != other && *token != target)
+            .expect("shuffle target");
+        let mut training = first_reply.to_vec();
+        training.push(MemoryWeightSample {
+            prompt: prompt.clone(),
+            reply: vec![other, other_target, 411, 412],
+        });
+        training.push(MemoryWeightSample {
+            prompt: prompt.clone(),
+            reply: vec![other, other_target, 411, 412],
+        });
+        let table = derive_suffix_content_memory(&training).unwrap();
+        let prediction = table.predict(&[first], SUFFIX_MEMORY_MAX_DEPTH).unwrap();
+        assert_eq!(prediction.token, target);
+        let (shuffled, seed) = (0..64)
+            .find_map(|seed| {
+                let (control, _) = shuffle_suffix_memory(&table, seed).unwrap();
+                let prediction = control.predict(&[first], SUFFIX_MEMORY_MAX_DEPTH)?;
+                (prediction.token != target).then_some((control, seed))
+            })
+            .expect("shuffle needs a changed first-suffix target");
+        let sample = [MemoryWeightSample {
+            prompt: prompt.clone(),
+            reply: vec![400, 401, target, 403, 404, 1],
+        }];
+        let writer = evaluate_suffix_fallback_replies(
+            &artifact,
+            &sample,
+            16,
+            SuffixFallbackArm::WriterBoundary,
+            None,
+            &boundary,
+            seed,
+        )
+        .unwrap();
+        let treatment = evaluate_suffix_fallback_replies(
+            &artifact,
+            &sample,
+            16,
+            SuffixFallbackArm::LocalThenContent32,
+            Some(&table),
+            &boundary,
+            seed,
+        )
+        .unwrap();
+        let shuffled_reply = evaluate_suffix_fallback_replies(
+            &artifact,
+            &sample,
+            16,
+            SuffixFallbackArm::LocalThenShuffledContent32,
+            Some(&shuffled),
+            &boundary,
+            seed,
+        )
+        .unwrap();
+        let writer_step = writer
+            .steps
+            .iter()
+            .find(|step| step.generated_step == 1)
+            .unwrap();
+        let treatment_step = treatment
+            .steps
+            .iter()
+            .find(|step| step.generated_step == 1)
+            .unwrap();
+        let shuffled_step = shuffled_reply
+            .steps
+            .iter()
+            .find(|step| step.generated_step == 1)
+            .unwrap();
+        assert_eq!(treatment_step.selected_token, target);
+        assert_ne!(treatment_step.selected_token, writer_step.writer_token);
+        assert_eq!(treatment_step.local_copy_depth, None);
+        assert_eq!(treatment_step.suffix_depth, Some(1));
+        assert_ne!(treatment_step.selected_token, shuffled_step.selected_token);
     }
 }
