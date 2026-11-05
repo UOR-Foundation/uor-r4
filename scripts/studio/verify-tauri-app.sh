@@ -36,7 +36,7 @@ check_hash "$contents/Resources/models.json" '96e296b74530e8488a6c525c59b4dfbd9f
 check_hash "$contents/MacOS/uor-desktop-client" "$UOR_DESKTOP_SHA256"
 cmp -s "$contents/Resources/icon.icns" "$repo_root/src-tauri/icons/icon.icns" || { printf 'Icon differs from the reviewed generated icon\n' >&2; exit 1; }
 cmp -s "$contents/Resources/SHA256SUMS" "$repo_root/src-tauri/runtime/studio/SHA256SUMS" || { printf 'Runtime manifest differs from the reviewed staged frontend\n' >&2; exit 1; }
-for rel in index.html assets/js/studio_api.js; do
+for rel in index.html assets/js/studio_api.js assets/js/desktop_openai.js assets/js/uor_model_worker.js; do
     cmp -s "$repo_root/src-tauri/runtime/studio/$rel" "$repo_root/web/studio/$rel" || { printf 'Staged frontend differs from current source: %s\n' "$rel" >&2; exit 1; }
 done
 while IFS= read -r -d '' path; do

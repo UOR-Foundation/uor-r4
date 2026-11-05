@@ -915,7 +915,37 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         return Ok(None);
     }
 
-    let fields: Vec<&str> = expression.split_whitespace().collect();
+    let expression_bytes = expression.as_bytes();
+    let is_iso_date = expression_bytes.len() == 10
+        && expression_bytes[..4].iter().all(u8::is_ascii_digit)
+        && expression_bytes[4] == b'-'
+        && expression_bytes[5..7].iter().all(u8::is_ascii_digit)
+        && expression_bytes[7] == b'-'
+        && expression_bytes[8..10].iter().all(u8::is_ascii_digit);
+    if is_iso_date {
+        return Ok(None);
+    }
+    let mut normalized = String::with_capacity(expression.len() + 4);
+    let mut operator_count = 0usize;
+    for c in expression.chars() {
+        if matches!(c, '+' | '-') {
+            operator_count += 1;
+            normalized.push(' ');
+            normalized.push(c);
+            normalized.push(' ');
+        } else {
+            normalized.push(c);
+        }
+    }
+    if operator_count == 0 {
+        return Ok(None);
+    }
+    if operator_count > 1 {
+        return Err(invalid(
+            "exact arithmetic expects one decimal addition or subtraction",
+        ));
+    }
+    let fields: Vec<&str> = normalized.split_whitespace().collect();
     if fields.len() != 3 {
         return Err(invalid(
             "exact arithmetic expects one decimal addition or subtraction",
@@ -1353,6 +1383,13 @@ mod tests {
 
     #[test]
     fn exact_arithmetic_tool_falls_through_and_refuses_invalid_input() {
+        let no_space = exact_arithmetic_tool("17+25")
+            .expect("no-space addition should be recognized")
+            .expect("no-space addition should be exact");
+        assert_eq!(no_space.expression, "17 + 25");
+        assert_eq!(no_space.result, "42");
+        assert!(exact_arithmetic_tool("42").is_none());
+        assert!(exact_arithmetic_tool("2026-11-05").is_none());
         assert!(exact_arithmetic_tool("Explain in two sentences what you are.").is_none());
         assert!(exact_arithmetic_tool("What is the capital of Japan?").is_none());
         assert!(exact_arithmetic_tool("What is 17 plus 25?").is_none());

@@ -1,19 +1,21 @@
 # ORDER: repair Studio loading and share exact arithmetic
 
-Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Base: `ed9b5b9aa196f086387e8afd6564430adb793716`.
+Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Initial base: `ed9b5b9aa196f086387e8afd6564430adb793716`; current `origin/main` base: `3f08ccfd10f009590c19a9a7842df4e249cbfcad`, including registration PR #3730.
 
 ## Owner request and measured decision
 
-Inspect LexLean-R4, use it as the default if possible, and port what works to the web and Tauri clients. Research and an independent architecture review are complete. The full hosted 180 MB pack correctly computes `17 + 25 = 42` but answers self-description with a Hunger Games review and the previous-fact question with Fibonacci code. Its older `/8` memory layout, sigmoid tables, heuristic corpus and lack of an OpenAI endpoint make a default/runtime swap incompatible with the current product and charter. This unit therefore selects the narrow repair/shared-tool route; it does not change the default model, product milestone, charter or serving bar.
+Inspect LexLean-R4, use it as the default if possible, and port what works to the web and Tauri clients. Research and an independent architecture review are complete. Repository commit `23436bdcd69e5238fcda51ef2529bbd4a5dc1e73` and deployed tree `563a7549e432fc035bc603504bb3a162eb332212` identify the inspected source. The full hosted 180 MB pack correctly computes `17 + 25 = 42` but answers self-description with a Hunger Games review and the previous-fact question with Fibonacci code. Its older `/8` memory layout, sigmoid tables, heuristic corpus and lack of an OpenAI endpoint make a default/runtime swap incompatible with the current product and charter. This unit therefore selects the narrow repair/shared-tool route; it does not change the default model, product milestone, charter or serving bar.
 
 ## Files in scope
 
 - `crates/uor-r4-integer/src/m6_exact_arithmetic.rs` and `src/wasm_bindgen_exports.rs`.
 - `src-tauri/src/lib.rs` and focused tests under `src-tauri/tests/`.
-- `web/studio/assets/js/uor_model_worker.js`, `desktop_openai.js`, `model_sources.test.mjs`, and `desktop_openai.test.mjs`.
+- `web/studio/index.html`, `web/studio/assets/js/uor_model_worker.js`, `desktop_openai.js`, `studio_api.js`, `studio_api_streaming.test.mjs`, `model_sources.test.mjs`, and `desktop_openai.test.mjs`.
 - `web/studio/src/adapters/modelSourceAdapter.ts` and `modelSourceAdapter.test.ts`.
-- `web/studio/verify_studio_worker.mjs` and, only if a command contract changes, existing focused runtime/package tests.
+- `web/studio/verify_studio_worker.mjs`, `scripts/studio/verify-tauri-app.sh`, and, only if a command contract changes, existing focused runtime/package tests.
 - `docs/products/web-client.md`, `docs/products/desktop-client.md`, `docs/research/notebook/m4-serving.md`, the owning roadmap item, this task folder, and `docs/superpowers/plans/2026-11-05-lexlean-studio-tools.md`.
+
+Scope correction: a fresh D68 decision review approved exactly `web/studio/index.html`, `web/studio/assets/js/studio_api.js`, `web/studio/assets/js/studio_api_streaming.test.mjs`, and `scripts/studio/verify-tauri-app.sh` as the minimal authorization for the measured exact-tool history and package repair. This is scope authorization only: the item remains `ready` and the PR uses `References #3704`; no M7, bar, cap, owner-file or broader-path decision is made.
 
 No other paths are authorized. In particular, do not touch `.github/**`, model weights/catalogs, `openai.rs`, `loopback.rs`, sidecar binaries, `Cargo.lock`, or other labs' current training files.
 

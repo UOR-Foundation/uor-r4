@@ -43,7 +43,7 @@ describe('model source adapter', () => {
         expect(api.loadFromUrl).toHaveBeenCalledWith('https://example.com/model.lut', { operationId: 1, sourceId: 'url' });
         expect(store.getState().artifact.phase).toBe('finalizing');
         expect(store.canRun()).toBe(false);
-        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'uor-r4.lut-stack/1' } });
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'uor-r4.lut-stack/1', file_name: 'model.lut', artifact_sha256: 'abc' } });
         expect(store.getState().artifact.phase).toBe('ready');
         expect(store.canRun()).toBe(true);
     });
@@ -67,7 +67,7 @@ describe('model source adapter', () => {
     it('failed replacement leaves run disabled rather than falling back', async () => {
         const adapter = createModelSourceAdapter(store, sources(), worker());
         await adapter.loadFromUrl('https://example.com/a.lut');
-        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old' } });
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'old', file_name: 'a.lut', artifact_sha256: 'abc' } });
         expect(store.canRun()).toBe(true);
         await adapter.loadFromUrl('https://example.com/b.lut');
         adapter.handleWorkerMessage({ action: 'operation_error', id: 2, error: 'bad model' });
@@ -160,7 +160,7 @@ describe('model source adapter', () => {
     it('ignores non-load worker errors after readiness', async () => {
         const adapter = createModelSourceAdapter(store, sources(), worker());
         await adapter.loadFromUrl('https://example.com/model.lut');
-        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'model.lut' } });
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { schema: 'new', file_name: 'model.lut', artifact_sha256: 'abc' } });
         expect(store.canRun()).toBe(true);
         adapter.handleWorkerMessage({ action: 'operation_error', id: 999, error: 'unrelated error' });
         expect(store.getState().artifact.phase).toBe('ready');
@@ -233,6 +233,26 @@ describe('model source adapter', () => {
         adapter.handleWorkerMessage({ action: 'model_loaded', id: 1, capabilities: { file_name: 'model.lut', artifact_sha256: 'deadbeef' } });
         expect(store.getState().artifact.phase).toBe('error');
         expect(store.getState().artifact.error).toContain('deadbeef');
+        expect(store.getState().artifact.error).toContain('abc');
+        expect(store.canRun()).toBe(false);
+    });
+
+    it('rejects a no-id worker identity mismatch instead of leaving finalizing pending', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { file_name: 'other.lut', artifact_sha256: 'abc' } });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain('other.lut');
+        expect(store.getState().artifact.error).toContain('model.lut');
+        expect(store.canRun()).toBe(false);
+    });
+
+    it('rejects missing worker artifact identity instead of marking ready', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'model_loaded', capabilities: { file_name: 'model.lut' } });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain('SHA-256');
         expect(store.getState().artifact.error).toContain('abc');
         expect(store.canRun()).toBe(false);
     });

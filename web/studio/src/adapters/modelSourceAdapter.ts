@@ -194,16 +194,14 @@ export function createModelSourceAdapter(
             if (message.action === 'model_loaded') {
                 const capabilities = message.capabilities;
                 if (typeof message.id === 'number' && message.id !== operation.operationId) return;
-                const fileMismatch = capabilities?.file_name && capabilities.file_name !== current.result.fileName;
-                const hashMismatch = current.result.expectedSha256 && capabilities?.artifact_sha256 && capabilities.artifact_sha256 !== current.result.expectedSha256;
+                const fileMismatch = capabilities?.file_name !== current.result.fileName;
+                const hashMismatch = current.result.expectedSha256 && capabilities?.artifact_sha256 !== current.result.expectedSha256;
                 if (fileMismatch || hashMismatch) {
-                    if (typeof message.id === 'number') {
-                        complete();
-                        const detail = fileMismatch
-                            ? `Worker returned ${capabilities?.file_name} instead of the requested ${current.result.fileName}.`
-                            : `Worker returned artifact SHA-256 ${capabilities?.artifact_sha256} instead of the expected ${current.result.expectedSha256}.`;
-                        failCurrent(operation, detail);
-                    }
+                    complete();
+                    const detail = fileMismatch
+                        ? `Worker returned ${capabilities?.file_name || '<missing filename>'} instead of the requested ${current.result.fileName}.`
+                        : `Worker returned artifact SHA-256 ${capabilities?.artifact_sha256 || '<missing hash>'} instead of the expected ${current.result.expectedSha256}.`;
+                    failCurrent(operation, detail);
                     return;
                 }
                 complete();
