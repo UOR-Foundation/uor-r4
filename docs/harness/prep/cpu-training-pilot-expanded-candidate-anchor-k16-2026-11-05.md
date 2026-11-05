@@ -82,7 +82,7 @@ No serving, CUDA, float inference, termination or Claude-owned source changes.
 - committed normalized seed-2 SHA-256:
   `ab5efaf8de343d5de1eb30b676f2d753ed858f0b6e14cf82f7d3cc5b870c88a9`;
 - evidence:
-  [`expanded-candidate-calibration-2711/`](../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/expanded-candidate-calibration-2711/);
+  [`expanded-candidate-calibration-2711/`](../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/expanded-candidate-calibration-2711/);
 - calibration build wall: 7.63 s; seed 1/2 walls: 4.69/4.57 s;
 - seed 1/2 peak RSS: 227,544/219,652 KiB;
 - fresh panel read during calibration: false.
@@ -162,9 +162,11 @@ BUILD=$SOURCE/target/deepseek/expanded-candidate-anchor
 GEN_TARGET=$SOURCE/target/deepseek/expanded-candidate-anchor-generator
 IMPL=57ef4cdc1d6122cfb84d506a000a82ef554dbe88
 BASE=d416181c1
+GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL" -- crates/uor-r4-cpu-train
+test "$(git -C "$SOURCE" rev-parse "$BASE":docs/labs/one-model-end-to-end/instrument)" = "$GEN_TREE"
 printf '%s  %s\n' \
   a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 "$TOKENIZER" \
   a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$SEED1" \

@@ -11,6 +11,19 @@ selection without replacing the stronger baseline on its correct decisions.
 The served writer's eight-cell admission is unchanged. The expanded cell order
 is a CPU development candidate source only.
 
+## Attempt history and correction
+
+The first pre-registration selected 12 cells, but seed 2 had only 2,043
+target-present groups, five below the 2,048 floor. Its driver stopped before
+evaluation. The preserved classification is `INSTRUMENT_FAULT /
+K12_SELECTION_ERROR`; its raw automation outcome remains
+`INSUFFICIENT_TRAINING_DATA`. Seed 2769 is closed and must not be reused.
+
+The same train-only sweep already showed that 16 cells clear every floor on
+both artifacts. The corrected registration fixes K=16 on a new, unused seed
+2770. This is a corrected selection of an already registered sweep value, not
+a change after reading a fresh result.
+
 ## Why this is the next unit
 
 Deepseek-177 reached the served eight-cell ceiling: 4,096 tokens over 256 cells
@@ -27,7 +40,8 @@ wrong.
 
 - Confirm no other open order or merged result already tests an expanded-cell
   CPU candidate order with an anchored correction objective.
-- Confirm seed 2769 and its `dev,dev` panel are absent.
+- Preserve the K12/seed-2769 fault and confirm seed 2770 and its `dev,dev`
+  panel are absent.
 - Confirm no Claude-owned or serving source is needed.
 - Confirm the public artifacts expose at least 32 complete geometric cells.
 
@@ -65,9 +79,9 @@ wrong.
    - at least 256 groups where longest-32 is wrong and the reference target is
      present.
 7. If no setting clears all three floors, stop as
-   `INSUFFICIENT_TRAINING_DATA` without generating seed 2769.
+   `INSUFFICIENT_TRAINING_DATA` and open no fresh seed.
 8. Once a setting is selected, pre-register it with a fresh FIT and GO on
-   `cell=dev,dev`, seed 2769, 128 conversations and the two public artifacts.
+   `cell=dev,dev`, seed 2770, 128 conversations and the two public artifacts.
 9. Train an anchored correction perceptron for eight passes at learning rate
    four with weights clipped to `[-4096, 4096]`. Baseline-correct groups make
    no update. Baseline-wrong groups compare the reference target with the
@@ -87,7 +101,7 @@ wrong.
 
 ## Bar
 
-On seed 2769 and both artifact seeds, the anchored trained ranker must:
+On seed 2770 and both artifact seeds, the anchored trained ranker must:
 
 - at least 200 reachable replies per artifact;
 - beat longest-32, writer, anchored geometry-only, anchored shuffled-target and
@@ -106,7 +120,7 @@ Claude-owned source remain unchanged.
 Stop on source, candidate, feature, label, weight or report drift; failure of
 any train-only calibration floor; fewer than 200 reachable replies; a vacuous
 control; nondeterminism; or any need to edit a serving or Claude-owned path.
-Once seed 2769 is read, do not change the selected cell count, features,
+Once seed 2770 is read, do not change the selected cell count, features,
 anchor, threshold or bar.
 
 ## Done when
@@ -116,7 +130,7 @@ anchor, threshold or bar.
 2. Both artifacts are calibrated on train panel 2711; a selected cell count is
    written into a FIT/GO-reviewed pre-registration, or the run stops without a
    fresh panel.
-3. If FIT and GO pass, seed 2769 runs exactly as registered with deterministic
+3. If FIT and GO pass, seed 2770 runs exactly as registered with deterministic
    repeats and compact evidence.
 4. REPORT classifies KEEP or REJECT against the bar, updates the notebook,
    roadmap and current state, and makes no complete-reply, language or serving
