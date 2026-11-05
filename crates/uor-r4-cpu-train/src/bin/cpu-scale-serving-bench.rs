@@ -198,6 +198,12 @@ fn run_grid(
         }
     }
     let negative_controls = run_negative_controls(widths[0].max(64), base_seed ^ 0x5a17)?;
+    let peak_rss_kib = peak_rss_kib();
+    if peak_rss_kib > 2 * 1_024 * 1_024 {
+        return Err(format!(
+            "final peak RSS {peak_rss_kib} KiB exceeds the 2 GiB stop"
+        ));
+    }
     Ok(ScaleServingSummary {
         schema: SCHEMA,
         substrate: "synthetic-integer-fixed-point",
@@ -214,7 +220,7 @@ fn run_grid(
         cells,
         negative_controls,
         elapsed_ms: started.elapsed().as_secs_f64() * 1_000.0,
-        peak_rss_kib: peak_rss_kib(),
+        peak_rss_kib,
     })
 }
 
