@@ -2,8 +2,8 @@
 
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Order: [ORDER.md](ORDER.md). Base: `1c5209f8e`; implementation pin:
-`1f02345e6`.
+Order: [ORDER.md](ORDER.md). Base: `1c5209f8e`; run implementation:
+`1f02345e6`; repaired implementation: `9ed48a92c`.
 
 ## Status
 
@@ -38,13 +38,18 @@ exportable.
 ## Measurements
 
 - FIT and D67 review head: `a5e472c36`;
-- release driver SHA-256:
+- first-run driver SHA-256:
   `ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84`;
+- review-repair driver SHA-256:
+  `4623d93c0a1e099b5fc942b079f0e0ce2482300749250ff5817bb9bf06815bcc`;
 - panel power: **58** conversations / **616** response rows per seed;
 - seed 1 wall/RSS: **35.283 s / 47,980 KiB**;
 - seed 2 wall/RSS: **35.008 s / 47,872 KiB**;
+- repaired-driver verification: seed 1 **35.449 s / 47,680 KiB**, seed 2
+  **35.226 s / 47,912 KiB**;
 - both seeds: zero raw CPU/serving query, token and kept-cell mismatches;
-- every arm repeated exactly in-process.
+- every arm repeated exactly in-process;
+- repaired-driver verification reproduced every arm field exactly.
 
 Raw, input-only, writer-only and combined readings:
 
@@ -76,6 +81,11 @@ Compact evidence:
 - fresh-context FIT: **FIT**;
 - fresh-context D67 pre-run review: **GO**;
 - both registered 16-worker runs with sealed report and manifest;
+- exact-head review repairs: the driver now requires the registered 616 rows
+  rather than accepting any panel with at least 200, and the missing malformed
+  writer-table refusal is tested;
+- two fresh repaired-driver verification runs reproduced every arm value and
+  produced new sealed reports without replacing the first outputs;
 - raw/raw exact CPU/serving parity on both seeds;
 - exact combined-hybrid/artifact-forward equality on both seeds;
 - table reconstruction, complete row coverage and deterministic in-process

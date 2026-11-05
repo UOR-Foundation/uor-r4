@@ -2,9 +2,11 @@
   "schema": "uor-r4.cpu-table-anchor-isolation-summary/1",
   "implementation": {
     "base": "1c5209f8e",
-    "implementation_pin": "1f02345e69abc4c6fcc7bf906b63f900df6ab025",
+    "implementation_pin": "9ed48a92c0ec177027f3881fb57dc7dc07e33ab3",
+    "run_implementation_pin": "1f02345e69abc4c6fcc7bf906b63f900df6ab025",
     "fit_and_go_head": "a5e472c363f848be7ff4b5b462a6b5391478afeb",
-    "driver_sha256": "ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84",
+    "run_driver_sha256": "ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84",
+    "verified_driver_sha256": "4623d93c0a1e099b5fc942b079f0e0ce2482300749250ff5817bb9bf06815bcc",
     "substrate": "cpu-development-research",
     "qualification": "gpu-required",
     "threads": 16
@@ -22,6 +24,13 @@
       "peak_rss_kib": 47980,
       "report_sha256": "f2e9c4d564cde616f83f2dc4298a0f2528fbbadfdae8d9eb5f002547a7132dae",
       "sealed_manifest_sha256": "4a8d091716bcdfbe921510f826e893eeea6a696839b9676f697fade8818cc53c",
+      "review_repair_verification": {
+        "report_sha256": "ebac250681bb6b9282b90d0ca23970ea29d71af76b9d7de7647beaced7a24ae7",
+        "sealed_manifest_sha256": "0a4f31a4b52d68322ebf23216796909f23fca62ec71f505a34e45f2ce59513cf",
+        "wall_elapsed_ms": 35448.965957,
+        "peak_rss_kib": 47680,
+        "arms_identical": true
+      },
       "raw_serving_parity_exact": true,
       "arms": {
         "raw_raw": {
@@ -106,6 +115,13 @@
       "peak_rss_kib": 47872,
       "report_sha256": "926ea98e32500b9cdfc0391069512f8434a8822e1b4e27a0fb19deb4912a01c1",
       "sealed_manifest_sha256": "9543e6438ff484d3c7bea20277f24d9f1a7bcb10ec41402978b38fc813c7f5fb",
+      "review_repair_verification": {
+        "report_sha256": "fc7c6759cfbdb54517340b1b6d370a2e7d0244b70f0e49db0afb47c05e71e5e1",
+        "sealed_manifest_sha256": "a57a2de44ca5c206382311094e54099dbd24bebbe7c995da85f5e08901257953",
+        "wall_elapsed_ms": 35225.96711,
+        "peak_rss_kib": 47912,
+        "arms_identical": true
+      },
       "raw_serving_parity_exact": true,
       "arms": {
         "raw_raw": {

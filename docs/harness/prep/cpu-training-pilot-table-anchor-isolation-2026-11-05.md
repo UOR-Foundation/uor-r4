@@ -99,6 +99,8 @@ serving session exactly.
   `target/deepseek/table-anchor-isolation/release/release/cpu-table-anchor-isolation`,
   SHA-256
   `ab39c515f15856245d5681dc2230f1fa184a959224739d0933dcf10a7ec58e84`;
+- post-review repaired binary SHA-256:
+  `4623d93c0a1e099b5fc942b079f0e0ce2482300749250ff5817bb9bf06815bcc`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -228,6 +230,12 @@ public-panel arms had not run.
 
 **COMPLETE (instrument).** Both sealed seeds completed, every arm was
 deterministic, and raw/raw retained exact serving parity.
+
+The first exact-head review repaired a weak driver floor: a final-driver
+verification now requires exactly 616 response rows and the malformed
+writer-table test is explicit. Fresh sealed verification roots for both seeds
+with binary SHA-256 `4623d93c…15bcc` reproduced every arm field exactly; the
+first sealed outputs were retained.
 
 The anchored recurrent-input arm reproduced the combined decoding collapse:
 admitted/top-1/top-8 was `120/55/89` versus raw `245/181/236` on seed 1 and
