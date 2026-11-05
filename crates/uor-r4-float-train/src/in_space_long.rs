@@ -5077,6 +5077,112 @@ fn window_bound_flags(
     )))
 }
 
+/// What a scored target sees past the trained window W (claude-287): `Slide` gives every target
+/// at least `W - stride + 1` tokens of its own document
+/// ([`hs::build_document_windows_sliding`]), `Blocks` the back-to-back windows of W that
+/// training cuts ([`hs::build_document_windows`]), `Carry` one window over the whole document
+/// ([`hs::carry_windows`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PastWindowRule {
+    Slide { stride: usize },
+    Blocks,
+    Carry,
+}
+
+impl PastWindowRule {
+    /// The rule by name: `slide` wants a stride, `blocks` and `carry` refuse one. The stride's
+    /// range is checked against W in [`PastWindowRule::validate`].
+    pub fn parse(rule: &str, stride: Option<usize>) -> Result<Self> {
+        match (rule, stride) {
+            ("slide", Some(stride)) => Ok(Self::Slide { stride }),
+            ("slide", None) => Err(invalid("past-window rule slide wants a stride".to_string())),
+            ("blocks" | "carry", Some(stride)) => Err(invalid(format!(
+                "past-window rule {rule} takes no stride, not {stride}"
+            ))),
+            ("blocks", None) => Ok(Self::Blocks),
+            ("carry", None) => Ok(Self::Carry),
+            _ => Err(invalid(format!(
+                "past-window rule wants slide, blocks or carry, not {rule:?}"
+            ))),
+        }
+    }
+
+    /// W, the checkpoint's own context, when the rule can score this run: at least one panel, no
+    /// DEV or Fresh V2 (fixed 192-token windows), no requested context other than the
+    /// checkpoint's (`None` is omitted), and a slide stride within `1..=W`.
+    pub fn validate(
+        &self,
+        checkpoint_context: usize,
+        requested_context: Option<usize>,
+        scores_dev: bool,
+        scores_fresh_v2: bool,
+        panels: usize,
+    ) -> Result<usize> {
+        let rule = self.label();
+        if panels == 0 {
+            return Err(invalid(format!(
+                "past-window rule {rule} wants at least one panel"
+            )));
+        }
+        if scores_dev || scores_fresh_v2 {
+            return Err(invalid(format!(
+                "past-window rule {rule} scores panels only: DEV and Fresh V2 are fixed \
+                 192-token windows"
+            )));
+        }
+        if let Some(requested) = requested_context.filter(|&c| c != checkpoint_context) {
+            return Err(invalid(format!(
+                "past-window rule {rule} scores at the checkpoint's context \
+                 {checkpoint_context}, not {requested}"
+            )));
+        }
+        if let Self::Slide { stride } = *self {
+            if !(1..=checkpoint_context).contains(&stride) {
+                return Err(invalid(format!(
+                    "past-window slide stride wants 1 to {checkpoint_context}, not {stride}"
+                )));
+            }
+        }
+        Ok(checkpoint_context)
+    }
+
+    /// The rule's name, as [`PastWindowRule::parse`] reads it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Slide { .. } => "slide",
+            Self::Blocks => "blocks",
+            Self::Carry => "carry",
+        }
+    }
+}
+
+/// The first input index of a query's window under `rule` (claude-287), for a reply at
+/// `reply_start..reply_end` in the document opened at `doc_start`, at trained window `w` and
+/// carry context `c`. Slide ends the window at the reply, as [`query_prompts`] does; blocks
+/// starts it at the block of `w` that holds the reply's first input; carry at `doc_start`. Under
+/// blocks a reply that runs past its block's end makes the decoded input longer than `w`, so the
+/// decode slides inside the reply.
+pub fn query_input_start(
+    rule: PastWindowRule,
+    doc_start: usize,
+    reply_start: usize,
+    reply_end: usize,
+    w: usize,
+    c: usize,
+) -> usize {
+    match rule {
+        PastWindowRule::Slide { .. } => (reply_end - 1).saturating_sub(w).max(doc_start),
+        PastWindowRule::Blocks => doc_start + ((reply_start - 1 - doc_start) / w) * w,
+        PastWindowRule::Carry => {
+            debug_assert!(
+                reply_end - doc_start <= c,
+                "carry at {c} cannot hold the reply"
+            );
+            doc_start
+        }
+    }
+}
+
 /// The row stride (claude-275): from 193 to 1,536 positions several windows share one scoring
 /// forward ([`windows_per_forward`]), and [`row_picks`]' stride over them has no test there, so
 /// `--score-rows --context N` refuses that range by name. At 192, and from 1,537 up, it is
@@ -16630,6 +16736,57 @@ mod tests {
                 "{bad:?}"
             );
         }
+    }
+
+    /// claude-287: the past-window rule parses by name and validates against W.
+    #[test]
+    fn past_window_rule_parses_and_validates_each_refusal() {
+        use PastWindowRule::{Blocks, Carry};
+        let slide = PastWindowRule::parse("slide", Some(4)).unwrap();
+        assert_eq!(slide, PastWindowRule::Slide { stride: 4 });
+        assert_eq!(PastWindowRule::parse("blocks", None).unwrap(), Blocks);
+        assert_eq!(PastWindowRule::parse("carry", None).unwrap(), Carry);
+        assert!(PastWindowRule::parse("slide", None).is_err());
+        assert!(PastWindowRule::parse("blocks", Some(4)).is_err());
+        assert!(PastWindowRule::parse("carry", Some(4)).is_err());
+        assert!(PastWindowRule::parse("Slide", Some(4)).is_err());
+        assert!(PastWindowRule::parse("window", None).is_err());
+        let labels = [slide, Blocks, Carry].map(|r| r.label());
+        assert_eq!(labels, ["slide", "blocks", "carry"]);
+        for rule in [slide, Blocks, Carry] {
+            assert_eq!(rule.validate(192, None, false, false, 1).unwrap(), 192);
+            let long = rule.validate(2048, Some(2048), false, false, 3);
+            assert_eq!(long.unwrap(), 2048);
+            assert!(rule.validate(192, None, false, false, 0).is_err());
+            assert!(rule.validate(192, None, true, false, 1).is_err());
+            assert!(rule.validate(192, None, false, true, 1).is_err());
+            assert!(rule.validate(2048, Some(192), false, false, 1).is_err());
+        }
+        for (stride, ok) in [(0, false), (1, true), (192, true), (193, false)] {
+            let rule = PastWindowRule::Slide { stride };
+            let checked = rule.validate(192, None, false, false, 1);
+            assert_eq!(checked.is_ok(), ok, "stride {stride}");
+        }
+    }
+
+    /// claude-287: a query's first input under each rule, at W = 8 in a document opened at 10.
+    #[test]
+    fn past_window_query_input_start_follows_each_rule() {
+        use PastWindowRule::{Blocks, Carry};
+        let slide = PastWindowRule::Slide { stride: 1 };
+        // A reply at 22..25 inside the block 18..26 of its first input 21.
+        assert_eq!(query_input_start(slide, 10, 22, 25, 8, 2048), 16);
+        assert_eq!(query_input_start(Blocks, 10, 22, 25, 8, 2048), 18);
+        assert_eq!(query_input_start(Carry, 10, 22, 25, 8, 2048), 10);
+        // Near the BOS slide stops at the document's start.
+        assert_eq!(query_input_start(slide, 10, 12, 14, 8, 2048), 10);
+        assert_eq!(query_input_start(Blocks, 10, 12, 14, 8, 2048), 10);
+        // A reply at 25..30 crosses its block's end at 26: blocks keeps the block start 18, an
+        // input of 29 - 18 = 11 > 8 tokens.
+        assert_eq!(query_input_start(Blocks, 10, 25, 30, 8, 2048), 18);
+        assert_eq!(query_input_start(slide, 10, 25, 30, 8, 2048), 21);
+        // The first input exactly at a block start: 26 opens block 26..34.
+        assert_eq!(query_input_start(Blocks, 10, 27, 28, 8, 2048), 26);
     }
 
     /// claude-275: a reply states an answer only as a whole word, and the grade bins each query
