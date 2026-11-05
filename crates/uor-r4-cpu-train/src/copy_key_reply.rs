@@ -653,13 +653,19 @@ mod tests {
     }
 
     #[test]
-    fn longest_32_prefers_a_deep_match_over_a_shallow_alternative() {
-        let stream = (1..=8).chain(1..=8).collect::<Vec<_>>();
+    fn longest_32_prefers_the_maximum_depth_match() {
+        let stream = (1..=COPY_KEY_REPLY_MAX_DEPTH as u32)
+            .chain(1..=COPY_KEY_REPLY_MAX_DEPTH as u32)
+            .collect::<Vec<_>>();
         let matches = exact_suffix_matches(&stream);
-        assert_eq!(matches[7], Some(1), "{matches:?}");
+        assert_eq!(
+            matches[COPY_KEY_REPLY_MAX_DEPTH - 1],
+            Some(1),
+            "{matches:?}"
+        );
         let longest_32 =
             copy_key_reply_decision(&stream, 77, CopyKeyReplyArm::Longest32To1, 1, 0, 0);
-        assert_eq!(longest_32.depth, Some(8));
+        assert_eq!(longest_32.depth, Some(COPY_KEY_REPLY_MAX_DEPTH));
         assert_eq!(longest_32.token, 1);
     }
 
