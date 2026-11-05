@@ -120,11 +120,14 @@ table-anchored arm exists in this registration.
 
 ## Output
 
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/raw-query-port/2026-11-05/seed-1`
-and
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/raw-query-port/2026-11-05/seed-2`.
+Original discovery roots:
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/raw-query-port/2026-11-05/seed-{1,2}`.
 
-Both output roots are absent at registration.
+Fresh control-verification roots:
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/raw-query-port/2026-11-05/verification/seed-{1,2}`.
+
+The original roots were absent at registration. The fresh verification root
+was absent when the behavioral-control repair was registered.
 
 ## Steps
 
@@ -134,7 +137,7 @@ Run only after FIT and D67 GO:
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-raw-query-port
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/raw-query-port/2026-11-05
+OUT=$SHARED/local/deepseek/raw-query-port/2026-11-05/verification
 BIN=$SOURCE/target/deepseek/raw-query-port/release/cpu-query-port-driver
 TRAIN=$SHARED/local/deepseek/m2-evidence/train-control-v3
 PANEL=$SHARED/local/deepseek/m2-evidence/dev-panel-v3
