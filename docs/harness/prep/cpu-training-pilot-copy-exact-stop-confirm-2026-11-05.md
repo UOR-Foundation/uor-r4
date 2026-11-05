@@ -305,4 +305,7 @@ read, do not change the gate, panel, seeds or bar.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - fresh-context confirmation review at `64fac2483`; isolated
+fresh root, pinned inputs and commands, machine-enforced power/exact/control
+floors, fail-closed panel and hash validation, and evidence sealing verified.
+No fresh panel had been generated or read.
