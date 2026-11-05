@@ -23,16 +23,21 @@ The candidate arm searches depths 1 through 32, chooses the deepest available
 exact suffix, and falls back through shorter matches. The existing decoder,
 writer fallback, memory, stopping contract and artifact are unchanged.
 
+Controls are longest-4, `k2>k1`, fixed depth 1, random available depth in
+1..32, and the unmodified writer. The legacy random-depth arm keeps its
+original 1..4 domain; `random_available_depth_32` is a separate control for
+this screen. The same artifact seeds and generation cap are used.
+
 ## Base artifact
 
 - seed 1: `dual-c131-seed-1-raw_both.uorlut`, SHA-256
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
 - seed 2: `dual-c131-seed-2-raw_both.uorlut`, SHA-256
   `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`;
-- implementation pin `421fc8f65ab2`, source hashes
-  `ba02bd01a90f5bc19fc851d90e6c4016314cd5dd2233c812188870b1416ab024`
+- implementation pin `fec31bf5ca9b`, source hashes
+  `f3e8d68fe727469428fa75a2c46d20dfe910b922437faf48ef5ad7672efb1f3f`
   (`copy_key_reply.rs`) and
-  `54ed98f43fa4843850b40f58674ae18bc76099651a575b908a4c1f33109d2227`
+  `7c21b5cec0b5b9abb39e9b34942aba4ef05dad5a4f0a5f9ac8dadae140a6e9d9`
   (`cpu-copy-key-reply.rs`);
 - panel generator tree `869e65db6d0bb997a5f1094ab0de4efa1ac10c25` at base
   `7fe55fdbf`;
@@ -64,7 +69,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/copy-depth32
 GEN_TARGET=$SOURCE/target/deepseek/copy-depth32-generator
-IMPL=421fc8f65ab2
+IMPL=fec31bf5ca9b
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 BASE=7fe55fdbf
 
@@ -132,7 +137,8 @@ run() {
   /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
     timeout 900s env RAYON_NUM_THREADS=32 "$BIN" \
     "$panel/tokens.u16" "$panel/response_mask.u8" "$panel/manifest.json" \
-    "$artifact" --cap 64 --seed 163 >"$OUT/reports/$name.json"
+    "$artifact" --cap 64 --seed 163 --allow-underpowered \
+    >"$OUT/reports/$name.json"
 }
 run seed1-tt "$TRAIN/panels/tt-2711" "$SEED1"
 run seed2-tt "$TRAIN/panels/tt-2711" "$SEED2"
@@ -151,6 +157,7 @@ cmp <(normalize "$OUT/reports/seed1-dd.json") \
 cmp <(normalize "$OUT/reports/seed2-dd.json") \
   <(normalize "$OUT/reports/seed2-dd-repeat.json")
 VALID=1
+POWER_OK=1
 for name in seed1-tt seed2-tt seed1-dd seed2-dd; do
   report=$OUT/reports/$name.json
   case "$name" in
@@ -159,6 +166,11 @@ for name in seed1-tt seed2-tt seed1-dd seed2-dd; do
   esac
   if ! jq -e '.examples.reachable >= 200' "$report" >/dev/null; then
     printf '%s reachable-below-200\n' "$name" >>"$OUT/power-limited.txt"
+    POWER_OK=0
+  fi
+  if ! jq -e '.settings.maximum_copy_depth == 32' "$report" >/dev/null; then
+    printf '%s maximum-depth-mismatch\n' "$name" >>"$OUT/instrument-fault.txt"
+    VALID=0
   fi
   if ! jq -e --arg expected "$expected" \
     '.inputs.artifact_sha256 == $expected' "$report" >/dev/null; then
@@ -177,7 +189,6 @@ for name in seed1-tt seed2-tt seed1-dd seed2-dd; do
     VALID=0
   fi
 done
-POWER_OK=1
 for seed in seed1 seed2; do
   if ! jq -e '[.arms.longest_32_to_1.reading.selected_depth_counts[4:][]]
     | add > 0' "$OUT/reports/$seed-dd.json" >/dev/null; then
