@@ -2,6 +2,13 @@
 
 **Status:** `TEST FITNESS: FIT`
 
+> **Superseded by
+> [attempt 2](cpu-training-pilot-copy-key-longest-reply-64-2026-11-05.md).**
+> Attempt 1 stopped as an input/config instrument fault before any comparison
+> report: its fresh panels contained 46- and 49-token replies under the
+> registered 32-token cap. Its bar and FIT remain preserved as the historical
+> record.
+
 ## Question
 
 Does deepseek-149's small exact-copy advantage survive when longest-first

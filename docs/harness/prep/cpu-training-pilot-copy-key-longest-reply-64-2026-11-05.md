@@ -1,6 +1,6 @@
 # Longest-first copy selection in complete replies, attempt 2
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -285,6 +285,12 @@ or Claude-owned file changes.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 deepseek-153
+sheet: docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-64-2026-11-05.md
+reviewer: codex fresh-context FIT attempt-2
+note: Attempt 1 produced no comparison result. The cap-only correction and new
+  seeds 2711/2712 match the ORDER, code, fail-closed wrapper, reachable power
+  floor, paired bar and D84 isolation.
+date: 2026-11-05
 
-Pending fresh-context review of the cap-only correction and fresh panel seeds.
+A FIT verdict clears compute for this configuration only.
