@@ -588,6 +588,20 @@ closed for this raw-conditioned configuration, so the objective still needs a
 behaviorally distinct control. See
 [deepseek-188](../../loop/tasks/cpu-training-pilot/deepseek-188/REPORT.md).
 
+The exact serving path now has a cross-width scale preflight. Synthetic
+projection and full Hamming-plus-memory artifacts at widths 256, 512 and 1,024
+and contexts 16, 64 and 192 all exported, reloaded and matched
+`IntegerStackSession` on every one of three complete repeated audits. The run
+covered 4,896 token decisions, 2,924,544 Q12 coordinates and 39,168 kept cells
+with zero mismatches. Projection artifacts grew 2,145,024 -> 4,280,384 ->
+8,551,424 bytes; single-pass serving throughput fell from 6,969-7,102 to
+3,954-3,999 and then 2,116-2,138 tokens/s. Full-path throughput fell from
+6,254-6,596 to 3,527-3,720 and then 1,884-2,031 tokens/s. The run took 9.196 s
+and peaked at 78,980 KiB. This removes output-path uncertainty before Claude's
+scale run, but does not establish quality growth, real-text training or GPU
+memory feasibility. See
+[deepseek-190](../../loop/tasks/cpu-training-pilot/deepseek-190/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference
