@@ -428,3 +428,27 @@ implementation source, normalized calibration, tokenizer, artifacts, train
 panel, six-arm settings, report gates, BOS behavior, direct anchor, lane scope
 and fresh seed-2770/output absence were checked read-only. No seed-2770
 generation or evaluation occurred.
+
+## Outcome
+
+**REJECT.** Both artifacts cleared every training floor and the complete
+six-arm comparison ran on the fresh seed-2770 panel. The anchored trained
+ranker overrode longest-32 on all 27,264 decisions on both artifacts and
+scored only **13** and **4** correct body positions, against **603** for
+longest-32 on both seeds.
+
+The other seed-1/seed-2 body-position readings were:
+
+- anchored shuffled target: **2 / 8**;
+- anchored geometry-only: **202 / 68**;
+- unanchored trained: **218 / 603**;
+- writer: **47 / 48**.
+
+The trained arm passed only the shuffled comparison on seed 1 and no required
+control comparison on seed 2. Every arm emitted zero premature BOS and no exact
+reference. Both artifact processes repeated byte-identically after timing
+fields were removed. All control-vs-longest checks were non-vacuous.
+
+The anchored rule was implemented, but this fitted linear correction did not
+generalize: its positive scores displaced the stronger longest-32 baseline on
+every generated decision. Seed 2770 is closed for this construction.
