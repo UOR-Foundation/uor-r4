@@ -834,6 +834,13 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "2026-11-05T17:25+01:00",
         "2026-11-05T17:25-01:00",
         "2026-11-05 17:25+01:00",
+        "2026-11-05T17:25Z?",
+        "2026-11-05T17:25+01:00?",
+        "2026-11-05T17:25-01:00?",
+        "What is 2026-11-05T17:25+01:00?",
+        "What is 2026-11-05T17:25Z?",
+        "- this is ordinary prose",
+        "- this is ordinary prose with a longer padded bullet",
     ] {
         let iso = dispatch_rpc_command(
             &mut backend,

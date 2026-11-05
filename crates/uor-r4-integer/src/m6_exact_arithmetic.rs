@@ -914,6 +914,7 @@ fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
 }
 
 fn exact_tool_is_iso_date_time(rest: &str) -> bool {
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
     let bytes = rest.as_bytes();
     if bytes.len() < 10
         || !bytes[..4].iter().all(u8::is_ascii_digit)
@@ -1004,12 +1005,38 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
 
 fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     let expression = expression.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
-    expression.starts_with('-')
-        && (expression.len() == 1
-            || expression[1..]
-                .chars()
-                .next()
-                .is_some_and(char::is_whitespace))
+    if !expression.starts_with('-') {
+        return false;
+    }
+    let after_sign = &expression[1..];
+    let separated = after_sign.chars().next().is_some_and(char::is_whitespace);
+    let remainder = after_sign.trim_start();
+    if remainder.is_empty() {
+        return true;
+    }
+    if !separated && remainder.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    remainder.starts_with(|c: char| {
+        matches!(
+            c,
+            '0'..='9'
+                | '.'
+                | '?'
+                | '!'
+                | '('
+                | '{'
+                | '['
+                | '+'
+                | '-'
+                | '%'
+                | '^'
+                | '*'
+                | '/'
+                | '×'
+                | '÷'
+        )
+    })
 }
 
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
@@ -1683,6 +1710,11 @@ mod tests {
             "2026-11-05T17:25+01:00",
             "2026-11-05T17:25-01:00",
             "2026-11-05 17:25+01:00",
+            "2026-11-05T17:25Z?",
+            "2026-11-05T17:25+01:00?",
+            "2026-11-05T17:25-01:00?",
+            "What is 2026-11-05T17:25+01:00?",
+            "What is 2026-11-05T17:25Z?",
         ] {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
@@ -1708,6 +1740,16 @@ mod tests {
                     .expect("padded leading-minus arithmetic should be an error");
                 assert!(error.to_string().contains("leading minus"));
             }
+        }
+        for prompt in [
+            "- this is ordinary prose".to_string(),
+            format!("{}- this is ordinary prose", " ".repeat(200)),
+            format!("- this is ordinary prose{}", " ".repeat(200)),
+        ] {
+            assert!(
+                exact_arithmetic_tool(&prompt).is_none(),
+                "dash prose was intercepted: {prompt}"
+            );
         }
         let overflow = exact_arithmetic_tool("What is 999999999999999999999 + 1?")
             .expect("oversized operand should be recognized")

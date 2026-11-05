@@ -389,9 +389,11 @@ function liveWorkerContext() {
 test('live model_loaded rejects mismatched identity explicitly', async () => {
     const { source, vm } = await inlineStudioFunction('onWorkerMessage');
     const context = liveWorkerContext();
+    context.app.currentLoadId = 1;
+    context.app.workerState = 'loading';
     context.app.expectedSha256 = 'a'.repeat(64);
     vm.runInNewContext(`${source};onWorkerMessage`, context)({
-        data: { action: 'model_loaded', capabilities: { file_name: 'other.lut', artifact_sha256: 'a'.repeat(64) } },
+        data: { action: 'model_loaded', id: 1, capabilities: { file_name: 'other.lut', artifact_sha256: 'a'.repeat(64) } },
     });
     assert.equal(context.app.workerState, 'error');
     assert.equal(context.app.caps, null);
@@ -580,9 +582,11 @@ test('live model_loaded rejects a valid but wrong expected digest', async () => 
     const { source, vm } = await inlineStudioFunction('onWorkerMessage');
     const context = liveWorkerContext();
     const actual = 'b'.repeat(64);
+    context.app.currentLoadId = 1;
+    context.app.workerState = 'loading';
     context.app.expectedSha256 = 'a'.repeat(64);
     vm.runInNewContext(`${source};onWorkerMessage`, context)({
-        data: { action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: actual } },
+        data: { action: 'model_loaded', id: 1, capabilities: { file_name: 'model.lut', artifact_sha256: actual } },
     });
     assert.equal(context.app.workerState, 'error');
     assert.equal(context.app.caps, null);
@@ -608,4 +612,43 @@ test('current load operation_error preserves both full digests', async () => {
     assert.equal(context.app.caps, null);
     assert.match(context.modelStatus, new RegExp(expected));
     assert.match(context.modelStatus, new RegExp(actual));
+});
+
+
+test('live model_loaded rejects no-ID in ready and pre-load states', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    for (const state of ['ready', 'pre-load']) {
+        const context = liveWorkerContext();
+        if (state === 'ready') {
+            context.app.currentLoadId = 1;
+            context.app.readyLoadId = 1;
+            context.app.workerState = 'ready';
+        } else {
+            context.app.currentLoadId = null;
+            context.app.readyLoadId = null;
+            context.app.workerState = 'starting';
+        }
+        vm.runInNewContext(`${source};onWorkerMessage`, context)({
+            data: { action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: 'a'.repeat(64) } },
+        });
+        assert.equal(context.app.workerState, 'error', state);
+        assert.equal(context.app.caps, null, state);
+        assert.match(context.toastMessage, /without the current load operation ID/, state);
+    }
+});
+
+test('stale load errors are not recorded in current diagnostics', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    context.app.currentLoadId = 3;
+    context.app.readyLoadId = 3;
+    context.app.workerState = 'ready';
+    context.app.caps = { synthetic: true, engine_supported: true, can_generate: true };
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'operation_error', operation: 'load_model', id: 2, error: 'stale failure' },
+    });
+    assert.equal(context.app.lastWorkerError, undefined);
+    assert.equal(context.document.documentElement.dataset.lastWorkerError, undefined);
+    assert.equal(context.toastMessage, undefined);
+    assert.equal(context.app.workerState, 'ready');
 });

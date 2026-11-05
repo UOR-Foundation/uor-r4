@@ -452,7 +452,20 @@ for (const [index, expression] of ['-', '- 25', '- 2.5', '-?'].entries()) {
     }
 }
 
-for (const [index, prompt] of ['2026-11-05T17:25Z', '2026-11-05T17:25+01:00', '2026-11-05T17:25-01:00', '2026-11-05 17:25+01:00'].entries()) {
+for (const [index, prompt] of [
+    '2026-11-05T17:25Z',
+    '2026-11-05T17:25+01:00',
+    '2026-11-05T17:25-01:00',
+    '2026-11-05 17:25+01:00',
+    '2026-11-05T17:25Z?',
+    '2026-11-05T17:25+01:00?',
+    '2026-11-05T17:25-01:00?',
+    'What is 2026-11-05T17:25+01:00?',
+    'What is 2026-11-05T17:25Z?',
+    '- this is ordinary prose',
+    `${' '.repeat(200)}- this is ordinary prose`,
+    `- this is ordinary prose${' '.repeat(200)}`,
+].entries()) {
     const id = `gen_iso_${index}`;
     await sendToWorker({
         action: 'generate',

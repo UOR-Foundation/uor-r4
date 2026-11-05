@@ -228,7 +228,7 @@ export function createModelSourceAdapter(
                 }
                 return;
             }
-            if (message.action === 'operation_error' && message.id === operation.operationId) {
+            if (message.action === 'operation_error' && (message.id === undefined || message.id === operation.operationId)) {
                 complete();
                 failCurrent(operation, message.error || 'Operation failed.');
             }

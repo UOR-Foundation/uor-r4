@@ -1325,7 +1325,7 @@
                 if (typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var capabilities = message.capabilities || {};
                 var artifactSha256 = capabilities.artifact_sha256;
-                var missingCurrentId = typeof message.id !== 'number' && app.currentLoadId != null && app.workerState !== 'ready';
+                var missingCurrentId = typeof message.id !== 'number';
                 var fileMismatch = capabilities.file_name !== app.requestedFileName;
                 var invalidHash = !artifactSha256 || !/^[0-9a-f]{64}$/.test(artifactSha256);
                 var hashMismatch = app.expectedSha256 && artifactSha256 !== app.expectedSha256;
@@ -1416,11 +1416,11 @@
                 return;
             }
             if (message.action === 'operation_error') {
+                if (message.operation === 'load_model' && typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var workerError = String(message.error || 'Operation failed.');
                 app.lastWorkerError = workerError;
                 document.documentElement.dataset.lastWorkerError = workerError;
                 if (message.operation === 'load_model') {
-                    if (typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                     app.workerState = 'error';
                     clearWorkerModel();
                     setModelStatus(workerError, 'err');
