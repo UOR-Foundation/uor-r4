@@ -53,7 +53,8 @@ Training corpus:
   `89144e366a9b9856a10376e983b4dc98c673fb6aa1bd6315f970f4bdfe57234f`;
 - manifest SHA-256:
   `980b91b33946457350151c1044b33eaeabb2034bb8137dcbc49b324f29c26672`;
-- split `train`, 7,906 tokens and 2,708 response targets.
+- split `train`, 7,906 tokens and 2,708 manifest response targets; after
+  context filtering, 210 conversations and 2,092 response rows remain.
 
 Held-out panel:
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/m2-evidence/dev-panel-v3`
@@ -64,7 +65,8 @@ Held-out panel:
   `da1ae9ee3bdc4fe1bf4a84a12ee9c1ac02ee51a419e3806cb77df430a44a3c01`;
 - manifest SHA-256:
   `ce489b38e91b2514f302560e65ac8bf7c337ca8a15b2aedba428e312bb003949`;
-- split `dev`, 1,925 tokens and 616 response targets.
+- split `dev`, 1,925 tokens and 616 manifest response targets; after context
+  filtering, 53 conversations and 497 response rows remain.
 
 Both manifests bind tokenizer
 `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`,
@@ -100,7 +102,7 @@ and kept-cell mismatches.
 | raw frozen | source artifact, no projection and no gain move |
 | table anchor baseline | each token row's two table port blocks set to its own cell roots |
 | trained | eight actual-cell query-port-root steps from the table-anchor baseline |
-| shuffled cell | the same trainer from the baseline, with every target cell rotated by one |
+| shuffled cell | the same trainer from the baseline, with every target cell rotated by one; runs up to 32 attempts until its accepted count equals the trained count |
 | random gain | exactly the trained arm's accepted move count from the baseline, selected deterministically from port coordinates |
 
 The raw-frozen arm exposes the cost of Claude-290's table-side projection. The
@@ -109,10 +111,10 @@ trained arm is judged against the table-anchor baseline, not raw-frozen.
 ## Source and binary
 
 - base: `7787313b2`;
-- implementation pin: `b9c4f51c8`;
+- implementation pin: `2c86fed6b`;
 - driver:
   `target/deepseek/query-port-root/release/cpu-query-port-driver`,
-  SHA-256 `17189223571174c3e46fde7d6ec7b5946906b8a6b7be066d29e3d136879db847`;
+  SHA-256 `0ab213964443f8b67a118d06f03a8acade36d6ba412020b6019dc0434b8e952e`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -139,7 +141,8 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-test "$(git -C "$SOURCE" rev-parse --short=9 HEAD)" = b9c4f51c8
+git -C "$SOURCE" diff --quiet 2c86fed6b -- crates/uor-r4-cpu-train
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 0ab213964443f8b67a118d06f03a8acade36d6ba412020b6019dc0434b8e952e
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -175,7 +178,8 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 ## Minimum test power
 
 - two public artifact seeds;
-- 2,708 training response targets and 616 panel response targets;
+- 2,092 training response rows and 497 panel response rows after the exact
+  context filter;
 - eight candidate sweeps of 34 port-gain moves each;
 - at least one accepted actual-cell move per artifact;
 - non-empty shuffled-cell and random-gain controls;
