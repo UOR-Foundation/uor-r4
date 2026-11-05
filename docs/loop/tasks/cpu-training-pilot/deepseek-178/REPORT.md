@@ -52,7 +52,7 @@ fresh-process repeat.
 
 ## Size
 
-This release changes three documentation paths against base `4ea097661`.
+This release changes four documentation paths against base `4ea097661`.
 
 ## Skills used
 
