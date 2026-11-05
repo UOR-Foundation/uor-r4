@@ -20,4 +20,3 @@ the 14-row limit.
 Exact output is in [`evidence-attempt-1/`](evidence-attempt-1/); its original
 sealed `SHA256SUMS` is
 `f56a5dc8be880189fb71776cac9f9979c6a7a0a6daa4a1c249230bcfa6c90467`.
-
