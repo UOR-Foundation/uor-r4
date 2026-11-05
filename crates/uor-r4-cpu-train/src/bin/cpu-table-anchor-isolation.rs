@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use rayon::prelude::*;
 use uor_r4_core::report_output;
 use uor_r4_cpu_train::{
     validate_corpus_manifest, CpuConversationSample, CpuFbsForward, CpuFbsHead, CpuMaskedCorpus,
@@ -30,7 +31,7 @@ struct Arm {
     forward: CpuFbsForward,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct RowOutcome {
     query: Vec<i32>,
     token: u32,
@@ -55,7 +56,7 @@ struct ArmReading {
     serving_parity: Option<ServingParity>,
 }
 
-#[derive(Default, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
 struct ServingParity {
     query_coordinate_mismatches: u64,
     token_mismatches: u64,
@@ -353,26 +354,28 @@ fn evaluate(
     forward: &CpuFbsForward,
     samples: &[RankMarginSample],
 ) -> Result<Vec<RowOutcome>, String> {
-    let mut forward = forward.clone();
     samples
-        .iter()
-        .map(|sample| {
-            forward.reset();
-            let mut step = None;
-            for &token in &sample.input {
-                step = Some(
-                    forward
-                        .step(token, CpuFbsHead::Writer)
-                        .map_err(|error| error.to_string())?,
-                );
-            }
-            let step = step.ok_or_else(|| "sample input is empty".to_owned())?;
-            Ok(RowOutcome {
-                query: step.query_q12,
-                token: step.token,
-                kept_cells: step.kept_cells,
-            })
-        })
+        .par_iter()
+        .map_init(
+            || forward.clone(),
+            |forward, sample| {
+                forward.reset();
+                let mut step = None;
+                for &token in &sample.input {
+                    step = Some(
+                        forward
+                            .step(token, CpuFbsHead::Writer)
+                            .map_err(|error| error.to_string())?,
+                    );
+                }
+                let step = step.ok_or_else(|| "sample input is empty".to_owned())?;
+                Ok(RowOutcome {
+                    query: step.query_q12,
+                    token: step.token,
+                    kept_cells: step.kept_cells,
+                })
+            },
+        )
         .collect()
 }
 
@@ -449,27 +452,40 @@ fn serving_parity(
     samples: &[RankMarginSample],
     rows: &[RowOutcome],
 ) -> Result<ServingParity, String> {
-    let mut session = model.session();
+    let readings: Result<Vec<_>, String> = samples
+        .par_iter()
+        .zip(rows)
+        .map_init(
+            || model.session(),
+            |session, (sample, row)| {
+                session.reset();
+                let mut served = None;
+                for &token in &sample.input {
+                    served = Some(
+                        session
+                            .step_native(token)
+                            .map_err(|error| error.to_string())?,
+                    );
+                }
+                let served = served.ok_or_else(|| "sample input is empty".to_owned())?;
+                Ok(ServingParity {
+                    query_coordinate_mismatches: served
+                        .query_q12
+                        .iter()
+                        .zip(&row.query)
+                        .filter(|(left, right)| left != right)
+                        .count() as u64,
+                    token_mismatches: u64::from(served.token != row.token),
+                    kept_cell_mismatches: u64::from(served.kept_cells != row.kept_cells),
+                })
+            },
+        )
+        .collect();
     let mut parity = ServingParity::default();
-    for (sample, row) in samples.iter().zip(rows) {
-        session.reset();
-        let mut served = None;
-        for &token in &sample.input {
-            served = Some(
-                session
-                    .step_native(token)
-                    .map_err(|error| error.to_string())?,
-            );
-        }
-        let served = served.ok_or_else(|| "sample input is empty".to_owned())?;
-        parity.query_coordinate_mismatches += served
-            .query_q12
-            .iter()
-            .zip(&row.query)
-            .filter(|(left, right)| left != right)
-            .count() as u64;
-        parity.kept_cell_mismatches += u64::from(served.kept_cells != row.kept_cells);
-        parity.token_mismatches += u64::from(served.token != row.token);
+    for reading in readings? {
+        parity.query_coordinate_mismatches += reading.query_coordinate_mismatches;
+        parity.token_mismatches += reading.token_mismatches;
+        parity.kept_cell_mismatches += reading.kept_cell_mismatches;
     }
     Ok(parity)
 }
@@ -655,6 +671,30 @@ mod tests {
         let samples = [sample(vec![3, 5], 8), sample(vec![13, 21], 34)];
         let rows = evaluate(&forward, &samples).unwrap();
         assert!(serving_parity(&model, &samples, &rows).unwrap().exact());
+    }
+
+    #[test]
+    fn ordered_parallel_rows_match_one_worker() {
+        let artifact = synthetic_artifact();
+        let model = IntegerStackModel::parse(&artifact).unwrap();
+        let forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let samples = [
+            sample(vec![3, 5, 8], 13),
+            sample(vec![21, 34], 55),
+            sample(vec![89, 144, 233], 377),
+        ];
+        let read = |workers| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(workers)
+                .build()
+                .unwrap()
+                .install(|| {
+                    let rows = evaluate(&forward, &samples)?;
+                    let parity = serving_parity(&model, &samples, &rows)?;
+                    Ok::<_, String>((rows, parity))
+                })
+        };
+        assert_eq!(read(1).unwrap(), read(4).unwrap());
     }
 
     #[test]
