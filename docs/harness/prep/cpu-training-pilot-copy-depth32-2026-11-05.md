@@ -319,4 +319,6 @@ change the depth, cap, arms or bar.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - fresh-context review at `89ef35587`; legacy five-arm
+consumers preserved, new seven-arm evaluation separated, fresh panel absent,
+input/source pins and fail-closed power/determinism checks verified.
