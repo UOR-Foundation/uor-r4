@@ -417,7 +417,7 @@ fn evaluate_gate(
         reading.premature += u64::from(premature);
         reading.at_reference += u64::from(at_reference);
         reading.no_fire += u64::from(fired.is_none());
-        reading.generated_tokens += fired.unwrap_or(trajectory.reference.len()) as u64;
+        reading.generated_tokens += fired.unwrap_or(trajectory.selected.len()) as u64;
         rows.push(ReplyRow {
             row: trajectory.row,
             fired_step: fired,
