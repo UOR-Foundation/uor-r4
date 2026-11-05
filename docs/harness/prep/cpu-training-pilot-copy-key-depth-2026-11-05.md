@@ -1,6 +1,6 @@
 # Hierarchical copy-key depth screen
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -251,7 +251,15 @@ changed.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING independent fresh-context review.
+TEST FITNESS: FIT - M2 #2030 deepseek-149
+sheet: docs/harness/prep/cpu-training-pilot-copy-key-depth-2026-11-05.md
+reviewer: codex fresh-context FIT round 4
+note: Exact copy-key semantics, Claude-267 parity, new unopened decision
+  panels, paired controls, generator and implementation pins, power floor,
+  resource caps and command recipe verified.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 ## Pre-run GO
 
