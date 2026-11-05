@@ -10,4 +10,3 @@ The zero-byte `dev.json` and published attempt output are in
 `RAW-SHA256SUMS`, has digest
 `222d12634ac2c8d9f9bcda3edee332e1503f2d477737a03a4c2a234cd9667572`.
 The published subset verifies with `PUBLISHED-SHA256SUMS`.
-

@@ -94,4 +94,3 @@ change serving or Claude-owned source.
    reading is accepted; the two decisions panels are newly drawn at the fixed
    seeds.
 4. The result is sealed, classified and delivered through protected main.
-

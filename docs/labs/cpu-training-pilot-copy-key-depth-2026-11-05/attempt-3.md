@@ -21,4 +21,3 @@ Published output is in [`evidence-attempt-3/`](evidence-attempt-3/). The raw
 manifest, preserved as `RAW-SHA256SUMS`, has digest
 `bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
 The published subset verifies with `PUBLISHED-SHA256SUMS`.
-

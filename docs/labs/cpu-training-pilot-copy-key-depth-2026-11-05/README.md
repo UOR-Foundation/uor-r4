@@ -20,4 +20,3 @@ are omitted from Git under CHARTER §3.11. Each published evidence directory
 therefore carries `RAW-SHA256SUMS`, byte-identical to the sealed attempt, and
 `PUBLISHED-SHA256SUMS`, covering every committed evidence file. Panel
 manifests preserve both corpus hashes and generator seeds.
-
