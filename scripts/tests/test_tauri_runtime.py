@@ -115,6 +115,24 @@ class TauriRuntimeContractTests(unittest.TestCase):
             )
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn('Unexpected runtime file', rejected.stderr)
+            (dest / 'models/unexpected.txt').unlink()
+            for name in ['extra.uorlut', 'extra.tokenizer.json', 'extra.uorlut.audit.json']:
+                extra = dest / 'models' / name
+                extra.write_bytes(b'undeclared but allowed suffix')
+                rejected = subprocess.run(
+                    ['bash', str(RUNTIME), '--verify', str(dest)],
+                    text=True, capture_output=True,
+                )
+                self.assertNotEqual(rejected.returncode, 0, name)
+                extra.unlink()
+            artifact = dest / 'models/trained-fixture.uorlut'
+            artifact.write_bytes(b'tampered declared artifact')
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('hash', rejected.stderr.lower())
 
     def test_prepare_check_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmp:

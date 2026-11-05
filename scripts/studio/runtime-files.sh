@@ -72,6 +72,65 @@ case "${1:-}" in
                 exit 1
             fi
         done < <(find "$dest" -type f -print0)
+        node - "$dest" <<'NODE'
+const { createHash } = require('node:crypto');
+const { existsSync, lstatSync, readFileSync, readdirSync } = require('node:fs');
+const { resolve, sep } = require('node:path');
+
+const dest = resolve(process.argv[2]);
+const modelsRoot = resolve(dest, 'models');
+const manifest = JSON.parse(readFileSync(resolve(dest, 'models.json'), 'utf8'));
+const declared = new Map();
+
+function declare(url, sha) {
+  if (typeof url !== 'string') return;
+  const rel = url.replace(/^\.\//, '');
+  if (!rel.startsWith('models/')) return;
+  const file = resolve(dest, rel);
+  if (file === modelsRoot || !file.startsWith(modelsRoot + sep)) {
+    throw new Error('Model catalog path escapes models/: ' + url);
+  }
+  if (!/^[0-9a-f]{64}$/.test(String(sha || ''))) {
+    throw new Error('Model catalog hash is missing or invalid: ' + url);
+  }
+  if (declared.has(file) && declared.get(file) !== sha) {
+    throw new Error('Conflicting model catalog hashes: ' + url);
+  }
+  declared.set(file, sha);
+}
+
+for (const model of manifest.models || []) {
+  declare(model.url, model.sha256);
+  declare(model.tokenizer_url, model.tokenizer_sha256);
+  declare(model.audit_url, model.served_forward_audit_sha256);
+}
+
+function actualFiles(directory) {
+  const files = [];
+  if (!existsSync(directory)) return files;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isSymbolicLink()) throw new Error('Model artifact symlinks are refused: ' + path);
+    if (entry.isDirectory()) files.push(...actualFiles(path));
+    else if (entry.isFile()) files.push(path);
+  }
+  return files;
+}
+
+for (const file of actualFiles(modelsRoot)) {
+  if (!declared.has(file)) throw new Error('Unexpected model artifact: ' + file);
+}
+for (const [file, expected] of declared) {
+  if (!existsSync(file) || !lstatSync(file).isFile()) {
+    throw new Error('Declared model artifact is missing: ' + file);
+  }
+  const actual = createHash('sha256').update(readFileSync(file)).digest('hex');
+  if (actual !== expected) {
+    throw new Error('Model artifact hash mismatch: ' + file);
+  }
+}
+console.log('Catalog-bound model artifacts verified: ' + declared.size);
+NODE
         printf 'Runtime allowlist verified: %s\n' "$dest"
         ;;
     *)

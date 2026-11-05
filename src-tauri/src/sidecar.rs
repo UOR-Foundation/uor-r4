@@ -4,8 +4,13 @@ use std::net::{Shutdown, TcpStream};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::Barrier;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+#[cfg(test)]
+static REGISTRATION_PROBE: Mutex<Option<(Arc<Barrier>, Arc<Barrier>)>> = Mutex::new(None);
 
 use serde::{Deserialize, Serialize};
 
@@ -264,13 +269,18 @@ impl SidecarProcess {
             .active
             .lock()
             .map_err(|_| "request registry mutex poisoned".to_string())?
-            .get(request_id)
-            .cloned()
-            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
-        self.active
+            .entry(request_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone();
+        #[cfg(test)]
+        if let Some(probe) = REGISTRATION_PROBE
             .lock()
-            .map_err(|_| "request registry mutex poisoned".to_string())?
-            .insert(request_id.to_string(), cancel.clone());
+            .map_err(|_| "registration probe mutex poisoned".to_string())?
+            .clone()
+        {
+            probe.0.wait();
+            probe.1.wait();
+        }
         let result = self.stream_chat_inner(request_id, body, cancel, emit);
         self.active
             .lock()
@@ -552,4 +562,54 @@ fn generate_token() -> String {
         hasher.update(b"fallback-entropy");
     }
     hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod cancellation_registration_tests {
+    use super::*;
+
+    #[test]
+    fn immediate_cancel_after_registration_is_not_overwritten() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let sidecar = SidecarProcess::start(
+            &root.join("binaries/uor-chat-aarch64-apple-darwin"),
+            &root.join("runtime/studio/pkg/synthetic-stack.lut"),
+            &root.join("runtime/studio/pkg/tokenizer.json"),
+        )
+        .expect("start pinned uor-chat");
+        let entered = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        *REGISTRATION_PROBE
+            .lock()
+            .expect("install registration probe") = Some((entered.clone(), release.clone()));
+        let worker = sidecar.clone();
+        let pending = std::thread::spawn(move || {
+            let mut events = Vec::new();
+            let result = worker.stream_chat(
+                "registration-race",
+                r#"{"model":"uor-chat","messages":[{"role":"user","content":"Hi"}],"stream":false,"max_tokens":1}"#,
+                |event| events.push(event),
+            );
+            (result, events)
+        });
+        entered.wait();
+        sidecar
+            .cancel("registration-race")
+            .expect("cancel at registration boundary");
+        release.wait();
+        let (result, events) = pending.join().expect("registration thread joined");
+        *REGISTRATION_PROBE
+            .lock()
+            .expect("remove registration probe") = None;
+        let cancelled = match result {
+            Ok(()) => events.iter().any(|event| {
+                event
+                    .error
+                    .as_deref()
+                    .is_some_and(|message| message.contains("cancelled"))
+            }),
+            Err(error) => error.contains("cancelled"),
+        };
+        assert!(cancelled, "registration overwrote the cancellation flag");
+    }
 }

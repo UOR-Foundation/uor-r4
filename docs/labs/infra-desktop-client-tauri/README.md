@@ -24,7 +24,7 @@ CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target ~/.car
 CARGO_TARGET_DIR=/Users/casey.allard/uor-r4/local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --features gui --locked
 ```
 
-The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **3** library, **12** controls, **5** MCP, **7** review and **8** sidecar tests by default, and **5** library, **16** controls, **6** MCP, **7** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
+The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **5** library, **12** controls, **6** MCP, **10** review and **8** sidecar tests by default, and **7** library, **16** controls, **7** MCP, **10** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
 
 | Test | Verified contract | Result |
 |---|---|---|
@@ -66,7 +66,7 @@ Output:
 
 ## 3. Six-Column Research Notebook Rows
 
-Because `docs/research/notebook/` is outside the `scope:` declaration on [`docs/roadmap/items/infra-desktop-client-tauri.md`](../../roadmap/items/infra-desktop-client-tauri.md), the two six-column research notebook rows for `m4-serving.md` and `m3-durable-memory.md` are recorded here for verbatim inclusion when a notebook-scoped item lands:
+The `m4-serving.md` notebook now carries the current harness rows. The older six-column research notebook rows below are preserved as historical records:
 
 ### Row for `docs/research/notebook/m4-serving.md`
 
