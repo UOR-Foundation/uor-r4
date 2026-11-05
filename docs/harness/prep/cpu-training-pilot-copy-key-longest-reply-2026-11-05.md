@@ -23,7 +23,7 @@ qualification bar.
 
 | Input | Identity |
 |---|---|
-| implementation source | `ba44398cf14f` |
+| implementation source | `567db41c01d4` |
 | panel-generator source | `4e42ffca5` (`docs/labs/one-model-end-to-end/instrument`) |
 | tokenizer | `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` |
 | public FBS seed 1 | `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd` |
@@ -180,7 +180,7 @@ PANELS=$OUT/panels
 BUILD=$SOURCE/target/deepseek/copy-key-longest-reply
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
-IMPL_PIN=ba44398cf14f
+IMPL_PIN=567db41c01d4
 GENERATOR_PIN=4e42ffca5
 ```
 
