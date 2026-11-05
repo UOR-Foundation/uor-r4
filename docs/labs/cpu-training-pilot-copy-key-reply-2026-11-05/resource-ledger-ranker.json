@@ -20,8 +20,8 @@
     "generator_binary_bytes": 134345864,
     "generator_binary_sha256": "1c8dab3cf86ef5e2eb0c3ebb425f79368e7bb35cac1fa86537d9b255ffc4755f",
     "fresh_target_bytes": 1504080968,
-    "raw_evidence_bytes": 55659,
-    "published_evidence_bytes": 7811,
+    "raw_evidence_bytes": 55791,
+    "published_evidence_bytes": 8310,
     "free_space_after_run_bytes": 416783175680
   },
   "controls": {
