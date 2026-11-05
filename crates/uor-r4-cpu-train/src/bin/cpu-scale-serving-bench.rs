@@ -109,6 +109,10 @@ struct ScaleServingSummary {
     widths: Vec<usize>,
     contexts: Vec<usize>,
     arms: Vec<&'static str>,
+    vocab: usize,
+    mlp: usize,
+    layers: usize,
+    kept_cells: usize,
     repeats: usize,
     cpu_model: String,
     logical_cpus: usize,
@@ -187,7 +191,7 @@ fn run_grid(
             let seed = cell_seed(base_seed, width, context);
             for arm in Arm::ALL {
                 cells.push(run_cell(width, context, arm, seed, repeats)?);
-                let rss = peak_rss_kib();
+                let rss = peak_rss_kib()?;
                 if rss > 2 * 1_024 * 1_024 {
                     return Err(format!(
                         "peak RSS {rss} KiB exceeds the 2 GiB stop at width {width}, context {context}, arm {}",
@@ -198,7 +202,7 @@ fn run_grid(
         }
     }
     let negative_controls = run_negative_controls(widths[0].max(64), base_seed ^ 0x5a17)?;
-    let peak_rss_kib = peak_rss_kib();
+    let peak_rss_kib = peak_rss_kib()?;
     if peak_rss_kib > 2 * 1_024 * 1_024 {
         return Err(format!(
             "final peak RSS {peak_rss_kib} KiB exceeds the 2 GiB stop"
@@ -212,6 +216,10 @@ fn run_grid(
         widths: widths.to_vec(),
         contexts: contexts.to_vec(),
         arms: Arm::ALL.into_iter().map(Arm::name).collect(),
+        vocab: VOCAB,
+        mlp: MLP,
+        layers: LAYERS,
+        kept_cells: KEPT_CELLS,
         repeats,
         cpu_model: cpu_model(),
         logical_cpus: std::thread::available_parallelism()
@@ -350,7 +358,7 @@ fn run_cell(
         cpu_oracle_tokens_per_second,
         serving_tokens_per_second,
         audit_elapsed_ms: started.elapsed().as_secs_f64() * 1_000.0,
-        peak_rss_kib: peak_rss_kib(),
+        peak_rss_kib: peak_rss_kib()?,
     })
 }
 
@@ -484,17 +492,20 @@ fn cpu_model() -> String {
         .unwrap_or_else(|| "unknown".to_owned())
 }
 
-fn peak_rss_kib() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|status| {
-            status.lines().find_map(|line| {
-                line.strip_prefix("VmHWM:")
-                    .and_then(|value| value.split_whitespace().next())
-                    .and_then(|value| value.parse().ok())
-            })
-        })
-        .unwrap_or(0)
+fn peak_rss_kib() -> Result<u64, String> {
+    let status = std::fs::read_to_string("/proc/self/status")
+        .map_err(|error| format!("cannot read /proc/self/status: {error}"))?;
+    parse_peak_rss_kib(&status)
+}
+
+fn parse_peak_rss_kib(status: &str) -> Result<u64, String> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))
+        .and_then(|value| value.split_whitespace().next())
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "VmHWM is missing, malformed or zero".to_owned())
 }
 
 #[cfg(test)]
@@ -524,5 +535,16 @@ mod tests {
             .negative_controls
             .iter()
             .all(|control| control.refused));
+    }
+
+    #[test]
+    fn peak_rss_requires_a_positive_vmhwm() {
+        assert_eq!(
+            parse_peak_rss_kib("Name:\ttest\nVmHWM:\t  1234 kB\n").unwrap(),
+            1_234
+        );
+        for invalid in ["Name:\ttest\n", "VmHWM:\t0 kB\n", "VmHWM:\tmany kB\n"] {
+            assert!(parse_peak_rss_kib(invalid).is_err());
+        }
     }
 }
