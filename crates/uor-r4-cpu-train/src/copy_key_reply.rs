@@ -24,16 +24,25 @@ pub enum CopyKeyReplyArm {
     K2BackoffK1,
     FixedDepth1,
     RandomAvailableDepth,
+    RandomAvailableDepth32,
     Writer,
 }
 
 impl CopyKeyReplyArm {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 5] = [
+        Self::Longest4To1,
+        Self::K2BackoffK1,
+        Self::FixedDepth1,
+        Self::RandomAvailableDepth,
+        Self::Writer,
+    ];
+    pub const EVALUATION_ARMS: [Self; 7] = [
         Self::Longest32To1,
         Self::Longest4To1,
         Self::K2BackoffK1,
         Self::FixedDepth1,
         Self::RandomAvailableDepth,
+        Self::RandomAvailableDepth32,
         Self::Writer,
     ];
 
@@ -44,6 +53,7 @@ impl CopyKeyReplyArm {
             Self::K2BackoffK1 => "k2_backoff_k1",
             Self::FixedDepth1 => "fixed_depth_1",
             Self::RandomAvailableDepth => "random_available_depth",
+            Self::RandomAvailableDepth32 => "random_available_depth_32",
             Self::Writer => "writer",
         }
     }
@@ -174,6 +184,21 @@ pub fn copy_key_reply_decision(
             .find(|&depth| matches[depth - 1].is_some()),
         CopyKeyReplyArm::FixedDepth1 => matches[0].is_some().then_some(1),
         CopyKeyReplyArm::RandomAvailableDepth => {
+            let available = (1..=COPY_KEY_MAX_DEPTH)
+                .filter(|&depth| matches[depth - 1].is_some())
+                .collect::<Vec<_>>();
+            if available.is_empty() {
+                None
+            } else {
+                let draw = splitmix64(
+                    seed ^ (row as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+                        ^ (generated_step as u64).wrapping_mul(0xd1b5_4a32_d192_ed03),
+                ) as usize
+                    % available.len();
+                Some(available[draw])
+            }
+        }
+        CopyKeyReplyArm::RandomAvailableDepth32 => {
             let available = (1..=COPY_KEY_REPLY_MAX_DEPTH)
                 .filter(|&depth| matches[depth - 1].is_some())
                 .collect::<Vec<_>>();
@@ -595,6 +620,22 @@ mod tests {
         let writer = copy_key_reply_decision(&stream, 77, CopyKeyReplyArm::Writer, 1, 0, 0);
         assert_eq!(writer.token, 77);
         assert_eq!(writer.depth, None);
+    }
+
+    #[test]
+    fn copy_arm_serde_names_are_stable() {
+        assert_eq!(
+            serde_json::to_string(&CopyKeyReplyArm::Longest4To1).unwrap(),
+            "\"longest4_to1\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CopyKeyReplyArm::Longest32To1).unwrap(),
+            "\"longest32_to1\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CopyKeyReplyArm::RandomAvailableDepth32).unwrap(),
+            "\"random_available_depth32\""
+        );
     }
 
     #[test]
