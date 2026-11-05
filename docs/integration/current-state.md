@@ -1,3 +1,49 @@
+## 2026-11-05 — Global reply-suffix plurality rejects on fresh complete replies (deepseek)
+
+A discrete suffix-to-next-token table was trained from all TRAIN replies at
+depths 1-32, including decoder BOS as the terminal successor. Generation used
+the longest known generated-reply suffix's most frequent successor, with
+smaller-token ties, writer fallback and deepseek-191's true boundary.
+
+The fresh seed-2772 panel cleared the exact power floor with **14**
+oracle-complete bodies. The treatment nevertheless reached only **57** and
+**86** correct body positions on artifact seeds 1 and 2, against **514** for
+local `Longest32To1`, and made **14** and **227** premature stops against the
+registered maximum of four. Depth-one reached **48/89**, the matched successor
+shuffle **0/23**, and the writer **52/51**.
+
+The exact table, shuffle and controls were active and deterministic; this is a
+mechanism result, not an instrument failure. It closes the fixed global
+plurality plus full-history BOS table, not exact suffix memory, geometric
+continuation or useful chat. Record:
+[deepseek-193](../loop/tasks/cpu-training-pilot/deepseek-193/REPORT.md).
+**Next:** separate content continuation from stopping, require learned
+confidence/fresh-support before a global suffix displaces local copy, or train
+the table on a materially larger reply corpus.
+
+## 2026-11-05 — Exact reply-boundary memory fires, but fresh completion power is insufficient (deepseek)
+
+A TRAIN-only table of exact 4-32-token reply suffixes was combined with the
+established `Longest32To1` copy body. A suffix could emit decoder BOS only when
+the longest known generated suffix had terminal observations and no observed
+continuation. No-boundary and a depth-preserving shuffled-boundary arm were
+matched controls.
+
+The TRAIN preflight exercised the mechanism: true boundary produced 11 exact
+and 41 premature stops; shuffled produced 1 exact and 9 premature. On the fresh
+seed-2723 panel, however, only 7 of 456 reachable replies had oracle-complete
+bodies, below the pre-registered minimum of 10. True, no-boundary and shuffled
+exact counts were 0/0/0 on both artifact seeds. Boundary stops were 14/0/3,
+premature stops 5/0/2, and every arm retained 346 correct body positions.
+
+The result is **INSUFFICIENT_POWER**, not a rejection of exact suffix-boundary
+memory. Termination was exercised and differed from the matched control, but
+body reconstruction left too few exact fresh completions to assess. Record:
+[deepseek-191](../loop/tasks/cpu-training-pilot/deepseek-191/REPORT.md).
+**Next:** improve continuation/body reconstruction before another termination
+comparison, or evaluate exact memory on a fresh panel with at least ten
+oracle-complete longest-copy bodies.
+
 ## 2026-11-05 — Scale-probe widths share one exact CPU serving path (deepseek)
 
 A synthetic `UORLUT01` preflight covered the same three scale-probe widths at

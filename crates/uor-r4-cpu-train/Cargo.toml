@@ -28,6 +28,14 @@ name = "cpu-scale-serving-bench"
 path = "src/bin/cpu-scale-serving-bench.rs"
 
 [[bin]]
+name = "cpu-copy-boundary-reply"
+path = "src/bin/cpu-copy-boundary-reply.rs"
+
+[[bin]]
+name = "cpu-copy-suffix-memory"
+path = "src/bin/cpu-copy-suffix-memory.rs"
+
+[[bin]]
 name = "cpu-rank-margin-bench"
 path = "src/bin/cpu-rank-margin-bench.rs"
 

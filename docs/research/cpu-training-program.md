@@ -86,6 +86,33 @@ output-path and cost evidence only; it does not train a real-text model or show
 that a width fits GPU memory. See
 [deepseek-190](../loop/tasks/cpu-training-pilot/deepseek-190/REPORT.md).
 
+Exact reply-boundary memory was then tested as a termination path for the
+`Longest32To1` body selector. TRAIN-only suffixes of 4-32 generated tokens
+could emit BOS only when no continuation was observed; a depth-preserving
+shuffle supplied the matched control. The TRAIN preflight exercised the
+mechanism, but the fresh seed-2723 panel contained only 7 oracle-complete
+bodies against a pre-registered minimum of 10. True and shuffled boundaries
+stopped 14 and 3 replies, with zero exact replies in either, while all arms had
+346 correct body positions. The result is **INSUFFICIENT_POWER**, not a
+mechanism rejection: termination acted, but body quality left too few valid
+completions to compare. See
+[deepseek-191](../loop/tasks/cpu-training-pilot/deepseek-191/REPORT.md).
+
+Global reply-suffix plurality was then tested as the next continuation
+mechanism. A TRAIN-only table counted every reply suffix of depth 1-32, used
+the longest known generated suffix's most frequent successor, and included
+decoder BOS as an ordinary terminal target. Fresh seed 2772 supplied 447
+reachable replies and 14 oracle-exact bodies. The treatment nevertheless scored
+only **57/86** correct body positions against **514/514** for local
+`Longest32To1`, while making **14/227** premature stops against a four-stop
+limit. The depth-one, shuffled-successor and writer arms were active and
+deterministic. This rejects the fixed full-history content-plus-BOS plurality
+construction: it displaced a stronger local copy signal and over-stopped. The
+next continuation design must separate content and termination, gate global
+overrides by learned confidence or fresh support, or train on a materially
+larger reply corpus. See
+[deepseek-193](../loop/tasks/cpu-training-pilot/deepseek-193/REPORT.md).
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.

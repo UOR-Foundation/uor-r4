@@ -26,10 +26,12 @@ mod memory;
 mod memory_train;
 mod panel;
 mod quant_shadow;
+mod reply_boundary;
 mod reply_eval;
 mod self_prefix;
 mod served_forward;
 mod stop_signature;
+mod suffix_memory;
 mod train;
 
 pub use content_readout::{
@@ -140,6 +142,13 @@ pub use quant_shadow::{
     CpuQuantizationPanelReading, CpuQuantizationShadow, CpuQuantizationStep, QuantizationGate,
     CPU_QUANTIZATION_CHECKPOINT_SCHEMA,
 };
+pub use reply_boundary::{
+    boundary_stop_changes, compare_boundary_rows, derive_reply_boundary_memory,
+    evaluate_boundary_replies, generate_boundary_reply, shuffle_reply_boundary_memory,
+    ReplyBoundaryArm, ReplyBoundaryCensus, ReplyBoundaryComparison, ReplyBoundaryCounts,
+    ReplyBoundaryHit, ReplyBoundaryMemory, ReplyBoundaryReading, ReplyBoundaryStep,
+    TimedReplyBoundaryReading, REPLY_BOUNDARY_MAX_DEPTH, REPLY_BOUNDARY_MIN_DEPTH,
+};
 pub use reply_eval::{
     derive_termination_cell_gates, derive_termination_orbit_gates, derive_termination_point_gates,
     evaluate_memory_target_replies, evaluate_replies, evaluate_replies_memory_off,
@@ -172,6 +181,13 @@ pub use stop_signature::{
     shuffle_stop_signature_rows, stop_signature_fires, StopSignature, StopSignatureDecision,
     StopSignatureEvaluation, StopSignatureGate, StopSignatureReading, StopSignatureReplyReading,
     StopSignatureRow, StopSignatureTraining, STOP_SIGNATURE_BITS, STOP_SIGNATURE_WORDS,
+};
+pub use suffix_memory::{
+    compare_suffix_memory_rows, derive_suffix_memory, evaluate_suffix_memory_replies,
+    generate_suffix_memory_reply, shuffle_suffix_memory, suffix_decision_changes,
+    SuffixDecisionChanges, SuffixMemoryArm, SuffixMemoryCensus, SuffixMemoryPrediction,
+    SuffixMemoryReading, SuffixMemoryStep, SuffixMemoryTable, TimedSuffixMemoryReading,
+    SUFFIX_MEMORY_MAX_DEPTH,
 };
 pub use train::{
     CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,
