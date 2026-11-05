@@ -215,7 +215,7 @@ for seed in seed1 seed2; do
     fresh_passes_depth_1:
       .comparisons.fixed_depth_1.correct_body_positions.passes,
     fresh_passes_random:
-      .comparisons.random_available_depth.correct_body_positions.passes,
+      .comparisons.random_available_depth_32.correct_body_positions.passes,
     fresh_passes_writer:
       .comparisons.writer.correct_body_positions.passes,
     fresh_premature_zero:
