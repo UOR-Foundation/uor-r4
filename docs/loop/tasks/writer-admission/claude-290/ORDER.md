@@ -28,8 +28,11 @@ Done-when 2 of the item, and only that. The run is done-when 3, in the next unit
   - **An uninformed trunk.** Averaged over rows whose ports do not depend on the target, the signs cancel, and the centre is still a fixed point in expectation. That is the caution in claude-289's Still open, item 1.
   - **Seed 2's timing.** Seed 2 had already fallen there before step 2,048, while nearest read 76. The run in done-when 3 decides whether anchoring holds, and must read the ports before step 2,048.
 - **Decay on the query side is left as it is.** `decayed()` (`geometric_stack_native.rs:784`) decays every rank-2 `.weight` by `1 − lr · 0.1` a step, with or without a gradient. That includes the trunk's maps that produce the query's port coordinates.
-  - Seed 2's fall of about 40× from step 4,096 to 32,768 fits that decay. This is an inference, not checked against the schedule.
-  - The anchor protects only the table side. Done-when 3's sheet reads the query ports' |x| before step 2,048, with a stop rule. Excluding the port-producing weights from decay is held as the fix if the run shows it.
+  - **Checked against claude-150's schedule, decay alone does not explain the fall.** Its lr ran from 0.0005 at step 0 down to 0 at step 32,768, linearly.
+    - From step 4,096 to 32,768 the sum of the lr is 0.0005 × 12,544 ≈ 6.27.
+    - So decay scaled each decayed weight by about e^(−0.1 × 6.27) ≈ 0.53, about 1.9×.
+    - The ports fell about 40× over the same steps (`2.2e-5` to `5.4e-7`), so most of the fall came from the gradient: the L1 pull toward the median of the targets' port values.
+  - The anchor protects only the table side. Done-when 3's sheet reads the query ports' |x| before step 2,048, with a stop rule. Excluding the port-producing weights from decay is held in reserve, not as the expected fix.
 - **Where the code lives:** `in_space_long.rs`, not `native_vector_writer.rs`. Editing the writer's file moves `source_sha256` in its `binding()` (line 47), which existing writer checkpoints carry. The anchor builds the roots from the same `ProjectionPlan::new(8, 8)` the writer reads, at scale 1. A CUDA test pins that the two agree: an anchored token's vector, read as a query, scores 0 on its own cell.
 - **Gradients and steps:**
   - The table's gradient is masked to 0 on the port columns before the main step. Otherwise the clip norm (taken over all gradients) and the Adam moments would be spent on columns that are overwritten anyway.
