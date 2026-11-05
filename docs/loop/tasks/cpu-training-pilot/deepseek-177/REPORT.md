@@ -85,6 +85,11 @@ and [`evidence/geometric-candidate-union-2768/`](../../../../labs/cpu-training-p
 - Raw and published evidence seals.
 - Lane-scope and no-corpus checks.
 
+## Skills used
+
+No system-provided Codex skill applied. The repository's experiment
+pre-registration, compute-admission and evidence-delivery procedures were used.
+
 ## Still open
 
 The writer/copy union is a useful supervision direction but did not reach the
@@ -94,11 +99,6 @@ artifacts without lowering it. Seed 2768 must not be reused.
 
 The project still needs an independent termination path and a genuinely fresh
 complete-reply capability test before a useful local chat claim can be made.
-
-## Skills used
-
-No system-provided Codex skill applied. The repository's experiment
-pre-registration, compute-admission and evidence-delivery procedures were used.
 
 ## Plain summary
 
