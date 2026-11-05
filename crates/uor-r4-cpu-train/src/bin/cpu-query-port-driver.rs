@@ -286,13 +286,15 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         },
     )
     .map_err(|error| error.to_string())?;
-    let mut shuffled_steps = Vec::with_capacity(STEPS);
-    for _ in 0..STEPS {
-        shuffled_steps.push(shuffled.train_step().map_err(|error| error.to_string())?);
+    let mut shuffled_steps = Vec::new();
+    let mut shuffled_accepted = 0usize;
+    while shuffled_accepted < accepted && shuffled_steps.len() < 32 {
+        let step = shuffled.train_step().map_err(|error| error.to_string())?;
+        shuffled_accepted += usize::from(step.updated);
+        shuffled_steps.push(step);
         check_stop(started)?;
     }
     let shuffled_artifact = shuffled.artifact().to_vec();
-    let shuffled_accepted = shuffled_steps.iter().filter(|step| step.updated).count();
     assert_only_port_gain_changed(&anchored, &shuffled_artifact)?;
     write_new(&config.out.join("shuffled.uorlut"), &shuffled_artifact)?;
     let (random_artifact, random_moves) =
@@ -372,6 +374,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             "accepted": accepted,
             "steps": trained_steps,
             "shuffled_accepted": shuffled_accepted,
+            "shuffled_attempts": shuffled_steps.len(),
             "shuffled_steps": shuffled_steps,
             "random_moves": random_moves,
         },

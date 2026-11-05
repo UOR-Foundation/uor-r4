@@ -31,8 +31,9 @@ or candidate-ranker width experiment.
    gain coordinates and model tables remain fixed.
 6. Every accepted artifact is reparsed. CPU/serving query, token and kept-cell
    parity must remain exact.
-7. Matched controls use the same move count: random port-gain moves and a
-   shuffled-cell root objective.
+7. Random port-gain moves use exactly the trained arm's accepted count. The
+   shuffled-cell objective runs for up to 32 attempts until it has the same
+   accepted count.
 
 No serving, CUDA, float-training, exporter or Claude-owned source changes.
 
