@@ -335,4 +335,23 @@ integer-session parity.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-copy-boundary-2026-11-05.md
+reviewer: deepseek fresh-context subagent copy_boundary_fit_go_round3
+note: No remaining blockers at 1b747597a. The reviewer verified strict
+  reachability parity, manifest hashes, total time and RSS gates, terminal-only
+  shuffled controls, complete state digests, finite behavior tests, and the
+  train-only preflight before fresh-panel generation.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent copy_boundary_fit_go_round3`,
+2026-11-05, at exact head `1b747597ac185af812840f2d6c38b9511baa262c`.
+The reviewer independently confirmed the implementation and binary pins, exact
+no-boundary parity, strict reachability, manifest evidence, time/RSS gates,
+finite terminal/no-boundary/oracle behavior, stop-change accounting, paired
+threshold, and the fresh input boundary. No Claude-owned serving, exporter,
+CUDA or float-training source is changed.
