@@ -53,8 +53,8 @@ Training corpus:
   `89144e366a9b9856a10376e983b4dc98c673fb6aa1bd6315f970f4bdfe57234f`;
 - manifest SHA-256:
   `980b91b33946457350151c1044b33eaeabb2034bb8137dcbc49b324f29c26672`;
-- split `train`, 7,906 tokens and 2,708 manifest response targets; after
-  context filtering, 210 conversations and 2,092 response rows remain.
+- split `train`, 7,906 tokens; after filtering at the artifact's 192-token
+  context, 235 conversations and 2,708 response rows remain.
 
 Held-out panel:
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/m2-evidence/dev-panel-v3`
@@ -65,8 +65,8 @@ Held-out panel:
   `da1ae9ee3bdc4fe1bf4a84a12ee9c1ac02ee51a419e3806cb77df430a44a3c01`;
 - manifest SHA-256:
   `ce489b38e91b2514f302560e65ac8bf7c337ca8a15b2aedba428e312bb003949`;
-- split `dev`, 1,925 tokens and 616 manifest response targets; after context
-  filtering, 53 conversations and 497 response rows remain.
+- split `dev`, 1,925 tokens; after filtering at the artifact's 192-token
+  context, 58 conversations and 616 response rows remain.
 
 Both manifests bind tokenizer
 `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`,
@@ -178,8 +178,8 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 ## Minimum test power
 
 - two public artifact seeds;
-- 2,092 training response rows and 497 panel response rows after the exact
-  context filter;
+- 2,708 training response rows and 616 panel response rows after the exact
+  192-token context filter;
 - eight candidate sweeps of 34 port-gain moves each;
 - at least one accepted actual-cell move per artifact;
 - non-empty shuffled-cell and random-gain controls;
