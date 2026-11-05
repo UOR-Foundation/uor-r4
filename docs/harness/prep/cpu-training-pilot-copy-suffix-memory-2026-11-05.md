@@ -348,4 +348,10 @@ change the depth cap, target tie, fallback, shuffle or bar.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 spiralcore-fbs
+
+reviewer: suffix_memory_fit_review_2
+date: 2026-11-05
+note: Fresh review found seed 2772 unused; end-to-end
+override/BOS/fallback/shuffle controls present; per-depth target multiset and
+reachable-only decision accounting verified.
