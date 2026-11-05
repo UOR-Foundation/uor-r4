@@ -13014,6 +13014,12 @@ mod tests {
             let grad = grads.get(query.as_tensor()).expect("the query has a gradient");
             let port_grad = ports(grad).abs().unwrap().sum_all().unwrap();
             assert!(port_grad.to_scalar::<f32>().unwrap() > 0.0, "token {t}");
+            // Coordinate by coordinate, a descent step never moves a port away from its root.
+            let g = ports(grad).to_vec2::<f32>().unwrap();
+            let q = ports(query.as_tensor()).to_vec2::<f32>().unwrap();
+            for k in 0..16 {
+                assert!(g[0][k] * (q[0][k] - host[0][k]) >= 0.0, "token {t} port coordinate {k}");
+            }
             let step = query.as_tensor().sub(&grad.affine(1e-3, 0.0).unwrap()).unwrap();
             let distance = |q: &Tensor| -> f32 {
                 ports(q).sub(&roots).unwrap().abs().unwrap().sum_all().unwrap().to_scalar().unwrap()
