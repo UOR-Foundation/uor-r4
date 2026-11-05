@@ -19,12 +19,14 @@ The item's done-when reads:
 > 4. **The cost,** on an RTX 5090 at P2b's recipe: kernel launches and seconds per training step, chain against fused, by the trainer clock (and `nsys`, if the pod has it). Also the seconds per cached decode step at 2,048, set against claude-279's estimate of 8–9 ms.
 > 5. The flag defaults on only when 2 and 3 hold. One notebook row and a REPORT.
 
-Done-when 1 merged in claude-282 (#3684). claude-283 (#3685) found the cancel rule does not fire. **This unit takes done-whens 2 and 3 together:** they share one kernel module, one flag and one GPU gate pod. Done-whens 4 and 5 are the next unit.
+Done-when 1 merged in claude-282 (#3684). claude-283 (#3685) found the cancel rule does not fire.
+
+**This unit lands the cancel probe and the scope the kernels need.** The loop's scope rule reads an item's scope at the merge base (`loopprcheck.rs:431-446`), and a separate `infra-loop-harness` claim is refused while this item's claim is open: its `docs/roadmap/items/*.md` overlaps this item's own file. So the scope reaches main in this unit. **claude-285 then takes done-whens 2 and 3 together,** under the plan below: they share one kernel module, one flag and one GPU gate pod. Done-whens 4 and 5 follow.
 
 ## Claim check
 
 - **The step it advances:** THE ORDER's step 5, the kernel unit (Casey, 4 Nov, #2028 6638209391: "Yes, please build this too to do it the smarter way going forward"). It serves every later trained-as-served run (P2b's and P5's).
-- **What it changes in the model:** nothing the model computes. Under `--train-as-served 1` and the new flag, each served quantizer runs as one kernel a direction, instead of 51 stock ops (`activation_quantize16` with its bridge) and 14 (`q16_residual`), with equal values. The flag is off by default.
+- **What it changes in the model:** this unit, nothing; it unblocks claude-285. That unit changes nothing the model computes either: under `--train-as-served 1` and the new flag, each served quantizer runs as one kernel a direction, instead of 51 stock ops (`activation_quantize16` with its bridge) and 14 (`q16_residual`), with equal values. The flag is off by default.
 
 ## Cancel probe (run first)
 
@@ -50,7 +52,24 @@ Done-when 1 merged in claude-282 (#3684). claude-283 (#3685) found the cancel ru
 - **`crates/uor-r4-float-train/src/in_space_long.rs`, its `tests` module only:** the one-step gate needs the served model parts and the step's loss. Only that module reaches them (`served_parts` `:16095`, `served_vars` `:16124`, `with_training_forward` `:295`, `batch_loss` `:1116`). No line outside `tests` changes.
 - **Reversal cost:** low; the files are new or test-only. The item's scope line records both in this unit.
 
-## Files in scope
+## Files in scope (this unit)
+
+- `docs/loop/tasks/float-kernel-fusion/claude-284/`: this ORDER and the REPORT.
+- `docs/roadmap/items/float-kernel-fusion.md`: the scope line, and one *How to start* bullet saying where the kernels go and why.
+
+## Done when (this unit)
+
+1. The cancel probe and the scope decision above, recorded.
+2. The item's scope adds `crates/uor-r4-float-train/src/fused_quantize*.cu` and `crates/uor-r4-float-train/src/in_space_long.rs`, and its *How to start* says why.
+3. The REPORT, negatives first. No notebook row: no result is measured.
+
+## Stop and ask if (this unit; stop and decide, never wait)
+
+- **The scope edit is refused at the head** (`loop pr-check`). Then the scope goes through whichever unit the harness admits, and this unit closes on the probe alone.
+
+## The plan for claude-285 (done-whens 2 and 3)
+
+### Files in scope
 
 - `crates/uor-r4-float-train/build.rs`: the new module.
 - `crates/uor-r4-float-train/src/fused_quantize.cu`: the four kernels.
@@ -63,7 +82,7 @@ Done-when 1 merged in claude-282 (#3684). claude-283 (#3685) found the cancel ru
 - `crates/uor-r4-float-train/tests/fused_*.rs`, `tests/no_training_crate_dep.rs`: the GPU gates and the scan.
 - `docs/loop/tasks/float-kernel-fusion/**`, `docs/research/notebook/float-training.md`, `docs/roadmap/items/float-kernel-fusion.md`.
 
-## Done when
+### Done when
 
 1. **The module.** `src/fused_quantize.cu` holds `activation_quantize16_fwd`, `activation_quantize16_bwd`, `q16_residual_fwd` and `q16_residual_bwd`, built f32 only as its own PTX module, in the generated kernel list, admitted by `admit_launch`, and covered by the banned-token scan. Every f32 add, subtract, multiply and divide is a non-contracting intrinsic (`__fadd_rn`, `__fsub_rn`, `__fmul_rn`, `__fdiv_rn`) and every affine an `__fmaf_rn`, in the chain's order. So its arithmetic does not depend on nvcc's `--fmad` choice.
 2. **The ops.** `src/fused_quantize.rs` has two candle custom ops, each with a CUDA forward and a backward (`grad · inside`, recomputed from the input), for contiguous f32 only. Each kernel has a CPU twin in f32, in the kernel's order.
@@ -80,7 +99,7 @@ Done-when 1 merged in claude-282 (#3684). claude-283 (#3685) found the cancel ru
 6. **claude-283's two other carry-overs:** `QuantizerTiming::check` requires each forward's skipped calls to equal its kept calls (I-4). A record that fails its check is written as `quantizer-timing.invalid.json`; the checked name is written only after `check()` passes.
 7. **The REPORT,** negatives first, with one notebook row and the item's text after the result.
 
-## Stop and ask if (stop and decide; never wait)
+### Stop and ask if (stop and decide; never wait)
 
 - **A gate differs in any bit.** First the instrument: the A/A, and the counts that show both paths ran. Then repair the kernel. If a difference cannot be removed, the flag stays off, and the REPORT names the rows, the op and the bits.
 - **The pod or a cap.** At most one 5090 pod, a $3 bound for the unit, a watcher on every job, and results off the pod before `down`.
