@@ -238,15 +238,26 @@ seal() {
 }
 trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
 
+check_rss() {
+  local log=$1
+  local limit_kib=$2
+  local rss
+  rss=$(awk '/Maximum resident set size/ { print $NF }' "$log")
+  test -n "$rss"
+  test "$rss" -le "$limit_kib"
+}
+
 cd "$SOURCE"
 /usr/bin/time -v -o "$OUT/build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
   cargo build --locked --release -p uor-r4-cpu-train --bin cpu-copy-suffix-fallback
+check_rss "$OUT/build.time.txt" 4194304
 /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
   cargo build --locked \
   --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
   --features panel-writer --bin heldout-panel
+check_rss "$OUT/generator-build.time.txt" 4194304
 GEN=$GEN_TARGET/debug/heldout-panel
 BIN=$BUILD/release/cpu-copy-suffix-fallback
 
@@ -267,6 +278,7 @@ TRAIN_MANIFEST_SHA=$(sha256sum "$TRAIN/manifest.json" | cut -d ' ' -f1)
   --expected-panel-manifest "$TRAIN_MANIFEST_SHA" \
   --expected-artifact a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd \
   --cap 64 --seed 196 >"$OUT/reports/train-preflight.json"
+check_rss "$OUT/reports/train-preflight.time.txt" 2097152
 jq -e '
   .examples.reachable >= 200
   and .table.content.bos_transitions == 0
@@ -281,6 +293,7 @@ jq -e '
   timeout 900s "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2773 protocol=2 \
   >"$OUT/panel.stdout.json"
+check_rss "$OUT/panel.time.txt" 2097152
 jq -e --arg tokenizer_sha a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 '
   .schema == "uor-r4-chat-corpus/v1"
   and .seed == 2773 and .dialogue_protocol_version == 2
@@ -307,9 +320,33 @@ run() {
     --expected-panel-manifest "$PANEL_MANIFEST_SHA" \
     --expected-artifact "$expected" \
     --cap 64 --seed 196 >"$OUT/reports/$name.json"
+  check_rss "$OUT/reports/$name.time.txt" 2097152
 }
 run seed1 "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 run seed2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+
+for report in "$OUT/reports/seed1.json" "$OUT/reports/seed2.json"; do
+  jq -e --arg panel_tokens "$PANEL_TOKENS_SHA" \
+    --arg panel_mask "$PANEL_MASK_SHA" \
+    --arg panel_manifest "$PANEL_MANIFEST_SHA" '
+    .inputs.panel.tokens_sha256 == $panel_tokens
+    and .inputs.panel.mask_sha256 == $panel_mask
+    and .inputs.panel.manifest_sha256 == $panel_manifest
+    and .examples.reachable >= 200
+    and .table.content.bos_transitions == 0
+    and .table.changed_targets > 0
+    and .bar.suffix_decisions >= 100
+    and .changes.from_local.changed_steps > 0
+    and .changes.from_shuffled.changed_steps > 0
+    and .table.content.suffixes == .table.shuffled.suffixes
+    and .table.content.transitions == .table.shuffled.transitions
+    and .table.content.suffixes_by_depth == .table.shuffled.suffixes_by_depth
+    and .table.content.transitions_by_depth == .table.shuffled.transitions_by_depth
+    and .table.content.distinct_targets_by_depth
+      == .table.shuffled.distinct_targets_by_depth
+  ' "$report" >/dev/null
+done
+
 run seed1-repeat "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 run seed2-repeat "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 
