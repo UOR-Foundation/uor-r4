@@ -500,15 +500,15 @@ an independent termination path rather than retune this scalar. See
 
 The next candidate-ranking unit changed the learning target rather than another
 scalar. It represented every exact-copy candidate by depth, sign agreement,
-eight rotated-row agreements, recency, frequency and writer agreement, then
-fit an eight-pass integer pairwise perceptron with shuffled-target and
-depth-only controls. The fresh seed-2766 run stopped at its first power gate:
-longest-32-generated train panel 2711 produced only **74** two-candidate groups
-with the reference next token present, against the registered **640** floor. No
-ranker selection or reply evaluation ran. This is an insufficiency result for
-the longest-32 trajectory source, not a negative for pairwise candidate
-ranking. The next attempt must create materially more candidate-labelled
-states, with a new seed and registration. See
+eight rotated-row agreements, recency, frequency and writer agreement and
+defined an eight-pass integer pairwise perceptron with shuffled-target and
+depth-only controls. The seed-2766 fit stopped before that perceptron was
+called: longest-32-generated train panel 2711 produced only **74**
+two-candidate groups with the reference next token present, against the
+registered **640** floor. No ranker selection or reply evaluation ran. This is
+an insufficiency result for the longest-32 trajectory source, not a negative
+for pairwise candidate ranking. The next attempt must create materially more
+candidate-labelled states, with a new seed and registration. See
 [deepseek-173](../../loop/tasks/cpu-training-pilot/deepseek-173/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes

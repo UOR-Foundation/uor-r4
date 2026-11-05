@@ -57,7 +57,7 @@ No serving, CUDA, float inference, termination or Claude-owned source changed.
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`
   and `cb84ab9105443b5116ae31855b7d188596f2b914f68e2dd39a3356459444c599`;
 - raw local manifest SHA-256:
-  `6ec5f81f15724bc83a61d2c13b501b56bb12cea65ad5a1e5bf64d4736ef835e2`;
+  `13f2a81e9027e57c7bf14c5fb598bf2217738e2ce43c6410891628d5fea499f1`;
 - sealed outcome: `INSUFFICIENT_TRAINING_DATA`.
 
 The fresh panel was generated only after FIT and GO. No reply evaluation ran.

@@ -51,9 +51,9 @@
     "sheet": "docs/harness/prep/cpu-training-pilot-copy-ranker-2026-11-05.md",
     "report": "docs/loop/tasks/cpu-training-pilot/deepseek-173/REPORT.md",
     "implementation_pin": "f54ab142c30330cc9aa0212b715b5010fd57ef26",
-    "local_run_manifest_sha256": "6ec5f81f15724bc83a61d2c13b501b56bb12cea65ad5a1e5bf64d4736ef835e2",
-    "raw_sums_sha256": "6ec5f81f15724bc83a61d2c13b501b56bb12cea65ad5a1e5bf64d4736ef835e2",
-    "published_sums_sha256": "b10f7177141414c867ecdb8841fb1d762e230dc2e9ad13f744b1caab7d16fd2d"
+    "local_run_manifest_sha256": "13f2a81e9027e57c7bf14c5fb598bf2217738e2ce43c6410891628d5fea499f1",
+    "raw_sums_sha256": "13f2a81e9027e57c7bf14c5fb598bf2217738e2ce43c6410891628d5fea499f1",
+    "published_sums_sha256": "556badd8db24d294414461481340ce7dfd01145b3936503141f207e947c9369b"
   },
   "normal_close": {
     "gpu_pods": 0,
