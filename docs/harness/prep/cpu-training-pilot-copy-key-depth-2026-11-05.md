@@ -125,8 +125,8 @@ resource breach, or any need to change serving or Claude-owned source.
 | delivery and evidence | 240 s |
 | total increment | **1,200 s** |
 
-- Build jobs: 16.
-- Run cap: 600 s and 1 GiB RSS per command.
+- Build jobs: 16; build RSS cap: 4 GiB.
+- Screen-run cap: 600 s and 1 GiB RSS per command.
 - Evidence cap: 33,554,432 bytes.
 - Previous measured cumulative: `36,068.788816343 s`; previous admitted
   cumulative: `69,727.677487699 s`.
@@ -201,9 +201,15 @@ test "$(jq -r '.reading.fixed[0].right' "$OUT/dev.json")" -eq 3859
 test "$(jq -r '.reading.fixed[1].positions_with_match' "$OUT/dev.json")" -eq 4383
 test "$(jq -r '.reading.fixed[1].right' "$OUT/dev.json")" -eq 3506
 test "$(jq -r '.reading.k2_backoff_k1.right' "$OUT/dev.json")" -eq 4388
-test "$(jq -r '.reading.random_changed_predictions' "$OUT/dev.json")" -gt 0
-test "$(jq -r '.reading.random_changed_predictions' "$OUT/train-train.json")" -gt 0
-test "$(jq -r '.reading.random_changed_predictions' "$OUT/dev-dev.json")" -gt 0
+test "$(jq -r '.reading.eligible_positions' "$OUT/train-train.json")" -ge 200
+test "$(jq -r '.reading.eligible_positions' "$OUT/dev-dev.json")" -ge 200
+test "$(jq -r '.reading.random_changed_from_longest' "$OUT/train-train.json")" -gt 0
+test "$(jq -r '.reading.random_changed_from_longest' "$OUT/dev-dev.json")" -gt 0
+test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/build.time.txt")" -le 4194304
+for t in "$OUT"/*.time.txt; do
+  [ "$t" = "$OUT/build.time.txt" ] ||
+    test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$t")" -le 1048576
+done
 cmp "$OUT/dev-dev.json" "$OUT/dev-dev-repeat.json"
 test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 ```

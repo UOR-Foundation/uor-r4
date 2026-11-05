@@ -65,7 +65,8 @@ The candidate is `longest`.
   positions: candidate sum greater than control sum and candidate-only
   disagreements at least `max(2, ceil(2*sqrt(control-only)))`.
 - It must beat the seeded random-depth selector by the same rule.
-- Random-control novelty is counted only on copyable positions.
+- Random-control novelty is counted only on copyable positions and against the
+  `longest` candidate it controls.
 - Every fixed-depth and selector arm must account for every eligible position,
   and a fresh-process deterministic repeat must match.
 

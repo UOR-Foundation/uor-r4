@@ -34,8 +34,9 @@ pub struct CopyKeyDepthReading {
     pub longest: CopyKeyDepthArm,
     pub k2_backoff_k1: CopyKeyDepthArm,
     pub random_depth: CopyKeyDepthArm,
-    pub random_changed_predictions: u64,
-    pub random_changed_predictions_all: u64,
+    pub random_changed_from_depth1: u64,
+    pub random_changed_from_depth1_all: u64,
+    pub random_changed_from_longest: u64,
     pub longest_vs_k2_backoff: CopyKeyComparison,
     pub longest_vs_random: CopyKeyComparison,
 }
@@ -174,13 +175,20 @@ pub fn evaluate_copy_key_depth(
         outcomes.iter().map(|outcome| outcome.copyable),
         outcomes.iter().map(|outcome| outcome.random),
     );
-    let random_changed_predictions_all = outcomes
+    let random_changed_from_depth1_all = outcomes
         .iter()
         .filter(|outcome| outcome.random != outcome.fixed[0])
         .count() as u64;
-    let random_changed_predictions = outcomes
+    let random_changed_from_depth1 = outcomes
         .iter()
         .filter(|outcome| outcome.copyable && outcome.random != outcome.fixed[0])
+        .count() as u64;
+    let random_changed_from_longest = outcomes
+        .iter()
+        .filter(|outcome| {
+            outcome.copyable
+                && outcome.random != outcome.fixed.iter().rev().flatten().copied().next()
+        })
         .count() as u64;
 
     let longest_predictions = outcomes
@@ -204,8 +212,9 @@ pub fn evaluate_copy_key_depth(
         longest,
         k2_backoff_k1,
         random_depth,
-        random_changed_predictions,
-        random_changed_predictions_all,
+        random_changed_from_depth1,
+        random_changed_from_depth1_all,
+        random_changed_from_longest,
         longest_vs_k2_backoff: compare(
             tokens,
             mask,
@@ -363,10 +372,11 @@ mod tests {
         mask[10] = 1;
         let changed = (0..100)
             .map(|seed| evaluate_copy_key_depth(&tokens, &mask, 12, 0, seed).unwrap())
-            .find(|reading| reading.random_changed_predictions_all > 0)
+            .find(|reading| reading.random_changed_from_depth1_all > 0)
             .expect("some seed changes a random depth on a noncopyable position");
         assert_eq!(changed.copyable_positions, 0);
-        assert_eq!(changed.random_changed_predictions, 0);
+        assert_eq!(changed.random_changed_from_depth1, 0);
+        assert_eq!(changed.random_changed_from_longest, 0);
     }
 
     #[test]
