@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-raw-query-port-2026-11-05`
 
 ## Status
 
-REGISTERED with FIT and D67 GO. No public model arm has been run.
+First registered runs completed and exposed a vacuous shuffled control. The
+driver now fails that condition closed; fresh verification is pending.
 
 ## Question
 
@@ -109,11 +110,11 @@ table-anchored arm exists in this registration.
 ## Source and binary
 
 - base: `d634c77e5`;
-- implementation pin: `15ddc753267d9ec1283187a3716ac63fe98aa036`;
+- implementation pin: `47c9d53a9bdcc2e9711ade9868b47a1846822d68`;
 - driver:
   `target/deepseek/raw-query-port/release/cpu-query-port-driver`,
   SHA-256
-  `f314747053c697b111e0e116db7420eca3b2e9a277448875d818fe2318ebbd84`;
+  `73294b424e1e61e83f0bfd046c979ec5017ab20dba8336847b5de05a67603866`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -141,8 +142,8 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor 15ddc753267d9ec1283187a3716ac63fe98aa036 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = f314747053c697b111e0e116db7420eca3b2e9a277448875d818fe2318ebbd84
+git -C "$SOURCE" merge-base --is-ancestor 47c9d53a9bdcc2e9711ade9868b47a1846822d68 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 73294b424e1e61e83f0bfd046c979ec5017ab20dba8336847b5de05a67603866
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -183,6 +184,7 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 - eight candidate sweeps of 34 port-gain moves;
 - at least one accepted true-cell move per seed;
 - non-empty, moved-count-matched shuffled-cell and random-gain controls;
+- the shuffled-cell artifact must differ from the trained artifact;
 - raw baseline bytes exactly equal the source artifact;
 - only port final-gain coordinates change; all table and other artifact bytes
   remain identical;
@@ -208,6 +210,8 @@ On both seeds the trained arm must:
 - **INSTRUMENT_FAULT:** input, parity, byte-isolation or repeat identity drift.
 - **NO_MOVE:** the trained arm accepts zero moves.
 - **CONTROL_FAULT:** shuffled cells cannot match the accepted move count.
+- **CONTROL_FAULT:** the shuffled-cell artifact is behaviorally identical to
+  the trained artifact.
 
 ## Cost and stop
 
@@ -243,3 +247,20 @@ GO - reviewer `deepseek fresh-context subagent raw_query_port_fit_d67_2`,
 byte-for-byte preservation, anchored-mode compatibility, separate
 admission/top-1/top-8 fields, exact parity, matched controls, deterministic
 replay, complete input pins and absence of both public output roots.
+
+## Outcome
+
+The first sealed discovery runs at binary `f3147470…` completed with eight
+accepted moves on seed 1 and five on seed 2. Both seeds produced the same
+trained and shuffled artifact. The raw query objective lowered held-out
+distance relative to raw frozen, but the independent random-gain control was
+lower still:
+
+- seed 1 raw/trained/random: `29,882,444 / 29,613,365 / 29,818,562`;
+- seed 2 raw/trained/random: `23,870,298 / 23,863,304 / 23,802,494`.
+
+That fails against a valid random control, while the shuffled arm cannot
+support an independent comparison. The repaired driver classifies identical
+shuffled and trained artifacts as **CONTROL_FAULT** and uses a fresh
+verification root. No promotion follows; the original sealed reports remain
+preserved.
