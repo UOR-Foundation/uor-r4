@@ -687,6 +687,20 @@ impl CpuFbsForward {
         })
     }
 
+    /// Sign-Hamming distance between the current Q12 query and one token's
+    /// shared vector-table row. Each coordinate contributes one bit.
+    pub fn token_sign_hamming(&self, query: &[i32], token: u32) -> Result<u32> {
+        if query.len() != self.width || token as usize >= self.vocab {
+            return Err(invalid("token sign-Hamming query or token differs"));
+        }
+        let row = &self.writer_table[token as usize * self.width..][..self.width];
+        Ok(query
+            .iter()
+            .zip(row)
+            .map(|(&query, &table)| u32::from((query >= 0) != (table >= 0)))
+            .sum())
+    }
+
     pub(crate) fn replay_final_gain(
         &self,
         norm_before_final_gain: &[i64],
