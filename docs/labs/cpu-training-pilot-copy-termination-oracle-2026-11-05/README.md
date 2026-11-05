@@ -6,7 +6,9 @@ length and given an oracle BOS.
 
 Attempts 1 and 2 are preserved instrument faults: they correctly computed the
 oracle body but reported the original no-stop `exact_reference` field.
-Attempt 3 reports the oracle-stopped reading.
+Attempt 3 reports the oracle-stopped reading but omitted report binding and
+mean-prefix output. Attempt 4 found the row/aggregate hash mismatch. Attempt 5
+produced the correct bounded result; attempt 6 adds schema and arm-name checks.
 
 On both trained artifact seeds:
 

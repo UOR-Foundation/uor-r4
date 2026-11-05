@@ -12,12 +12,12 @@
   "measured": {
     "release_build_seconds": 18.92,
     "incremental_build_seconds": 0.4,
-    "attempt_5_walls_seconds": [0.53, 0.53, 0.53, 0.52],
-    "peak_rss_kib": 159424,
-    "driver_binary_bytes": 1349440,
-    "driver_binary_sha256": "32b6e72c5eafb4c33f92dcf46b04c69f26679cb90d83cb85fb0c9625c2a8f2e0",
+    "attempt_6_walls_seconds": [0.57, 0.51, 0.53, 0.54],
+    "peak_rss_kib": 159464,
+    "driver_binary_bytes": 1350696,
+    "driver_binary_sha256": "a6fffd70b67a220a5b699ca86398ee6caa1ceabf3c2de4b3b1278fa8c937413e",
     "fresh_target_bytes": 4663321830,
-    "published_evidence_bytes": 155159,
+    "published_evidence_bytes": 198944,
     "free_space_after_run_bytes": 469521399808
   },
   "attempts": [
@@ -43,6 +43,11 @@
     },
     {
       "attempt": 5,
+      "status": "INSTRUMENT_INCOMPLETE",
+      "reason": "correct result and trace binding, but schema and source arm-name checks were absent"
+    },
+    {
+      "attempt": 6,
       "status": "COMPLETED",
       "cells": 4
     }
@@ -56,7 +61,8 @@
     "rustfmt": "pass",
     "published_evidence_verified": true,
     "raw_attempt_4_sha256": "8b6639383884c7aa82af903616cb114052c8c263e868ad33a96750da4cc03cd1",
-    "raw_attempt_5_sha256": "f82b075e59e751b7eea1bc676dc361ce00f0552d845292ce0c3c9bfb4b5172de"
+    "raw_attempt_5_sha256": "f82b075e59e751b7eea1bc676dc361ce00f0552d845292ce0c3c9bfb4b5172de",
+    "raw_attempt_6_sha256": "e697083ccd8bcdd7fa7e7bf15ad047bcf04260ce359e57d82c9402bd31104914"
   },
   "threads": {
     "build_jobs": 16,
@@ -72,8 +78,8 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-155/ORDER.md",
     "sealed_copy_result": "docs/loop/tasks/cpu-training-pilot/deepseek-153/REPORT.md",
-    "implementation_pin": "1290cb7eb7d2",
-    "published_sums_sha256": "f3c116d2506944b084cf2f82830212bea04ebd981905c2cab90d613d3d7a54fe"
+    "implementation_pin": "9ef58001dd3f",
+    "published_sums_sha256": "a07ac236a5645f98a252ecce0c2b0737263c025203de50e730818f85af520891"
   },
   "normal_close": {
     "gpu_pods": 0,
