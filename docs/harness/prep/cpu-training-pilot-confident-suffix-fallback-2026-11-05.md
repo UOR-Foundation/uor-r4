@@ -39,9 +39,9 @@ bar. Serving remains integer-only and unchanged.
 ## Base artifact and source
 
 - base: `ebbe084e9`;
-- implementation commit: `35d3668ba0b9e6f22e518bedfa30ed5144b65c7d`;
+- implementation commit: `c2b2fda872f3ba19e74cad80de01a9ba84ca6ec6`;
 - `suffix_fallback.rs` SHA-256:
-  `b5ef2f8cc919cb5b0b96476130d2867a05743e49e031b4c24d86a189ac7eec91`;
+  `3dfd23c11f74af472a94868e2c9cdc21ff37a914b93e7a17bdc87b4a17c4f926`;
 - `suffix_memory.rs` SHA-256:
   `a5d8a13a15beae8112b4575e31985a501a7949e34ace71fbe95c20d08f3de7c2`;
 - `cpu-copy-suffix-fallback.rs` SHA-256:
@@ -207,7 +207,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/suffix-fallback
 GEN_TARGET=$SOURCE/target/deepseek/suffix-fallback-generator
-IMPL=35d3668ba0b9e6f22e518bedfa30ed5144b65c7d
+IMPL=c2b2fda872f3ba19e74cad80de01a9ba84ca6ec6
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
 test ! -e "$OUT"
@@ -221,7 +221,7 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  b5ef2f8cc919cb5b0b96476130d2867a05743e49e031b4c24d86a189ac7eec91 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_fallback.rs" \
+  3dfd23c11f74af472a94868e2c9cdc21ff37a914b93e7a17bdc87b4a17c4f926 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_fallback.rs" \
   a5d8a13a15beae8112b4575e31985a501a7949e34ace71fbe95c20d08f3de7c2 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   00c9b41cb1fa235ccc2d21e79c4a0a3d78d86b2c08ee3aeba51243caf6776df2 "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-suffix-fallback.rs" |
   sha256sum -c -
