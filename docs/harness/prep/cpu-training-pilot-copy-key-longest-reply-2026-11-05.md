@@ -148,9 +148,12 @@ single-row difference.
 
 Stop on artifact, tokenizer or panel hash drift; fewer than 200
 reference-reachable examples for any artifact/panel cell; nondeterminism; a
-vacuous random control; a prompt/reference outside context or cap; malformed
-trace; resource breach; or any need to modify serving, integer, CUDA,
-float-training or Claude-owned source.
+vacuous random control; a prompt outside the artifact context or a reference
+longer than the 32-token cap; malformed trace; resource breach; or any need to
+modify serving, integer, CUDA, float-training or Claude-owned source. A
+reference that fits the cap but leaves no room for the following BOS remains in
+the census and is excluded from paired comparisons; it is not an instrument
+stop unless the reachable floor then fails.
 
 ## Cost
 

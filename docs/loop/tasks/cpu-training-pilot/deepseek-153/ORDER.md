@@ -114,11 +114,14 @@ byte after paths and timing fields are excluded.
 
 ## Stop rules
 
-Stop on an artifact, tokenizer or panel hash mismatch; fewer than 200 examples
-on a panel; nondeterminism; a vacuous random control; a prompt/reply outside the
-artifact context or selected cap; a malformed or unsupported policy trace; a
-resource breach; or any need to change serving, CUDA, float training or
-Claude-owned source.
+Stop on an artifact, tokenizer or panel hash mismatch; fewer than 200
+reference-reachable examples for any artifact-seed and panel cell;
+nondeterminism; a vacuous random control; a prompt outside the artifact context
+or a reference longer than the 32-token cap; a malformed or unsupported policy
+trace; a resource breach; or any need to change serving, CUDA, float training or
+Claude-owned source. A recovered example whose prompt plus reply leaves no room
+to request BOS remains in the input census but is excluded from paired
+comparisons.
 
 ## Instrument gate
 
