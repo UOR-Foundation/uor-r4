@@ -19,12 +19,12 @@ Make the Studio more useful without mislabeling a heuristic dispatcher or an inc
 
 ## Implementation
 
-- Add a strict bounded parser for one decimal `+` or `-` expression with only recognized optional instruction wording. Return `None` for ordinary prompts and an explicit error for recognized invalid/underflow requests.
+- Add a strict bounded parser for one decimal `+` or `-` expression with only recognized optional instruction wording. Return `None` for ordinary prompts, signed literals, ISO date/time forms and no-space subtraction; return an explicit error for recognized invalid/underflow requests, unsupported arithmetic-shaped forms and arithmetic over 160 bytes.
 - Format the numeric answer first, then `R4 geometric exact arithmetic — tool, not model generation` and the actual `PlaceStepRecord` trace. Reuse `GeometricArithmeticEngine`; do not copy LexLean's solver or probability labels.
-- Export the function to WASM. The worker handles it before model state/tokenization and emits one text result with zero model completion tokens; ordinary generation remains on the existing path.
+- Export the function to WASM. The worker handles it before model state/tokenization and emits one text result with zero model completion tokens; ordinary generation remains on the existing path. Browser and native renderers label the result `0 model tokens · tool`, with no computed model rate, model stop reason or allocation delta.
 - Add a Tauri RPC command with the same shared function. `desktop_openai.js` tries it before starting a sidecar request and returns a normal JSON fallback envelope with zero model usage. The sidecar remains unchanged for all other prompts.
 - Keep the exact-tool exchange visible locally but remove its user prompt and assistant result from subsequent OpenAI context. A real native probe first proved that removing only the answer still left an 81-position turn; the paired-filter regression failed before the repair and now leaves only the ordinary follow-up.
-- Convert worker filename/expected-hash mismatches into an explicit error. Add a no-storage/default regression; `primary` remains display metadata, not an automatic selector.
+- Convert worker filename/expected-hash mismatches into an explicit error. Live loads carry monotonically increasing operation IDs and the worker uses an internal latest-load token, so stale responses cannot replace current capabilities or report errors. A current failure clears capabilities and model metadata and disables the composer; legacy no-ID responses remain valid only when identity matches and no new load awaits correlation. Add a no-storage/default regression; `primary` remains display metadata, not an automatic selector.
 
 ## Verification and remaining limits
 
