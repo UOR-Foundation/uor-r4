@@ -9,7 +9,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
   - splits by source id;
   - refuses a wrong tokenizer, and screens every document against the panels' user turns.
 - `prepare-real-text` writes `train/` and `heldout/`, which the CPU trainer's manifest check reads.
-- On the real OASST2 file it reads 13,854 trees and keeps 5,391 threads (5,110 train, 281 held out), in about 3 s on the laptop. On one real Wikipedia shard, it reads and builds 2,028 articles in under 2 s.
+- On the real OASST2 file it reads 13,854 trees and keeps 5,391 threads (5,110 train, 281 held out).
+- On one real Wikipedia shard, it reads and builds 2,028 articles.
+- Both runs take seconds on the laptop: 2.7 s and 1.7 s by `time` at `8d10c7469`. That is a single measurement each, not recorded in a file.
 
 **Claim check.** This is unit 1 of the real-text corpus, which the decided order (#2028 6634218223) puts before P5 on real text. Nothing that trains or serves changes yet: this unit builds the data path P5 trains and scores on.
 
@@ -30,12 +32,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
     - The tokenizer's sha is taken from the bytes the pin was checked on, not from a second read.
     - Two panels with the same file name are refused, since a hit names its panel by file name.
     - Both manifests are written to `.partial` files before either is renamed into place.
-    - `totals.stopped_at_max_docs` says when `max_docs` cut the run short. The source counts then describe the input read up to that point, not the whole input.
+    - `totals.stopped_at_max_docs` says when `max_docs` was reached and reading stopped there. The source counts then describe the input read up to that point. If the cap falls exactly on a batch's end, that can still be the whole input (from the second review, documented, not tested).
     - The argument test asserts each refusal's text. The end-to-end test checks `bytes_per_token` against its formula.
   - **Low, recorded, not fixed:**
     - A failing test leaves its temp folder behind.
     - The wiki test builds its expected tokens with the same `clean_article` the bin calls. The library's tests pin the cleaning rule on its own.
     - The accounting check (kept + excluded + dropped = considered) cannot fail as the code stands; it stays as a guard.
+    - If the second manifest's rename fails, the first manifest is already in place. Both renames are within one output root, so this is unlikely.
   - **The library's fix delta:** all nine findings from the first review are fixed. One new low item was fixed too: `walk_tree` kept a thread that opens on an assistant turn, and the builder then dropped it. The walk now applies the builder's rule. No OASST2 tree has an assistant root, so the smoke counts did not move.
 - **Two builder subagents ran out of context** at about 214k and 200k tokens before handing back. So I wrote the bin myself and gave the library's first review fixes to a smaller agent. Nothing they committed was lost; the cost was time.
 - **28 of 2,028 Wikipedia articles (1.4%) are dropped as too long** at `max_tokens` 8,192. They are the longest articles, so their share of the tokens is larger. The item does not say whether a long article is dropped, cut or split, so unit 2 decides before it builds the corpus. The count is in each manifest.
@@ -43,12 +46,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
   - It used the repo's `data/panels/conversational-v2..v5.json`: 448 requests and 714 user turns.
   - DEV, Fresh V2, P-dev and the long panels were not found in this unit as lists of user turns. Unit 2 writes each one's user turns in the `{id, user_turns}` form `parse_panel` reads, then runs the census against them.
 - **The short-request rule excludes common phrases.**
-  - Six of the nine OASST2 exclusions are 4-word panel turns found whole inside a thread: "i have a problem" (2), "can you make it longer" (2), "what is her name" and "how old am i".
+  - Six of the nine OASST2 exclusions are 4- and 5-word panel turns found whole inside a thread: "i have a problem" (2), "can you make it longer" (2), "what is her name" and "how old am i".
   - That is the rule ported from `knowledge_corpus.rs` working as written, and it errs toward excluding. It costs 6 of 5,400 threads.
 - **Workspace clippy with `-D warnings` was red before this unit,** in `uor-r4-integer` and at `chat-grade.rs:4893`. Neither is this unit's. The two new files lint clean in both the normal and the test profile.
 - **The EOS count is checked only in total.**
   - BOS equals the document count in both splits.
-  - The kept documents hold 9,979 EOS. The oracle's count over all 5,400 threads is 9,996, so the 9 excluded threads should hold the other 17. That was not checked thread by thread.
+  - The kept documents hold 9,979 EOS.
+  - Over all 5,400 threads the expected count is 9,996. That figure is derived from the oracle's thread-length table: one EOS per assistant turn, plus one at the end of a thread that ends on a user turn.
+  - So the 9 excluded threads should hold the other 17. That was not checked thread by thread.
 
 ## What changed
 
@@ -76,7 +81,7 @@ The smoke runs used the pinned tokenizer, `heldout_per_mille` 50, and panels `co
 
 | | OASST2 (`trees.jsonl`, rev `179dd21f`) | Wikipedia (`20231101.en` shard 00020, rev `b04c8d1c`, `max_docs` 2,000) |
 |---|---|---|
-| Read | 13,854 trees | 4,096 rows (one batch) |
+| Read | 13,854 trees | 4,096 rows (one batch: the bin's `BATCH` is 4,096) |
 | Before documents | root dropped: not English 8,451, deleted 2; no assistant reply 1 | — |
 | Child nodes dropped | deleted 953, review not true 616, not English 4, synthetic 0 | — |
 | Documents considered | 5,400, equal to the oracle's count | 2,028 (stopped at `max_docs`) |
@@ -111,7 +116,10 @@ The smoke runs used the pinned tokenizer, `heldout_per_mille` 50, and panels `co
     - the panel-name check.
   - **The library, by me:** the walk's admission rule.
 - **Style:** `rustfmt` on both new files; no line over 100 characters; no banned word. Clippy is clean on the bin in the normal and test profiles.
-- **Review:** the fresh exact-head review of `8d10c7469` (four slices), then a review of the fix commit `c810bdd2b`.
+- **Review, in three parts:**
+  - The fresh exact-head review of `8d10c7469`, in four slices, asked for changes.
+  - The review of the fix commit `c810bdd2b` approved with two low items, recorded above.
+  - A separate fact check of this REPORT against the manifests, token files, oracle and logs found three wording fixes, now made.
 
 ## What it unlocks
 

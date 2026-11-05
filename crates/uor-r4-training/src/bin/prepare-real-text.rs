@@ -616,8 +616,9 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
             &totals.excluded),
         "dropped": every_label(DocDrop::ALL.map(DocDrop::label), &totals.dropped),
         "not_processed_after_max_docs": totals.not_processed_after_max_docs,
-        // True when max_docs stopped the run: the counts here then describe
-        // the input read up to that point, not the whole input.
+        // True when max_docs was reached and reading stopped there: the counts
+        // here then describe the input read up to that point. When the cap
+        // falls exactly on a batch's end, that may still be the whole input.
         "stopped_at_max_docs": stopped_at_max_docs,
     });
     let extra = match config.mode {
