@@ -95,9 +95,9 @@ Fresh copy-report hashes:
 Local confirmation-run manifest SHA-256:
 `e936ec3bd7cbb7c42ee97ee6ce46b4ee933a3f7f558f12c72d1062f81bbdd595`.
 Published attempt-8 raw manifest SHA-256:
-`941ae3e8f8b4ff8def62648c5282c745989be84a1deeb832d272c4a9afa351bb`.
+`f35e2d3ed6a7bf36433d888b8c7e24e47475b7338bd3ab353b34dc96731e0c28`.
 Published evidence manifest SHA-256:
-`5e283c31dedbd7f6f81560ae56c5fe505a81bb9e3d8ed610a290463b6e942df1`.
+`3e7beaf04b89b0930fb2a618ba995599c81eaa10861a08457102246ea54cd69c`.
 
 ## Checks run at the head
 
@@ -120,8 +120,8 @@ Published evidence manifest SHA-256:
 
 Against base `330185de6`, this unit changes one CPU-train binary (**+307 /
 -48**), 11 task, preregistration, notebook, roadmap, state and lab-record
-files (**+903 / -0**), and 38 published evidence files (**+264,424 / -0**):
-**50 files, +265,634 / -48**. No binary, corpus or scratch artifact is
+files (**+905 / -0**), and 38 published evidence files (**+264,409 / -0**):
+**50 files, +265,621 / -48**. No binary, corpus or scratch artifact is
 tracked.
 
 ## Skills used

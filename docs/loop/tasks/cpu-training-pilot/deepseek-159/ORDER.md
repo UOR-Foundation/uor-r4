@@ -73,6 +73,7 @@ power-limited result rather than retuning after observing dev.
 
 - `crates/uor-r4-cpu-train/**`
 - `docs/harness/prep/cpu-training-pilot-copy-exact-stop-2026-11-05.md`
+- `docs/harness/prep/cpu-training-pilot-copy-exact-stop-confirm-2026-11-05.md`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-159/**`
 - `docs/labs/cpu-training-pilot-copy-generated-stop-2026-11-05/**`
 - `docs/research/notebook/cpu-training.md`
