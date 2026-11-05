@@ -402,3 +402,18 @@ fi
 - **POWER_LIMITED** if fewer than 200 replies are reachable.
 - **INSTRUMENT_FAULT** if fitting, features, sources, inputs, controls or
   report identity fails closed.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 corrected K16 anchored candidate ranker
+sheet: `docs/harness/prep/cpu-training-pilot-expanded-candidate-anchor-k16-2026-11-05.md`
+implementation pin: `57ef4cdc1d6122cfb84d506a000a82ef554dbe88`
+reviewed head: `ef9413826d90d2dec5b026cbbd97ca95f4ed9734`
+reviewer: deepseek fresh-context subagent `expanded_anchor_k16_fit_review_3`
+note: K16 is the smallest predeclared setting clearing both artifacts;
+  normalized calibration evidence, generator provenance, observed writer cap,
+  all six arms, control-vs-longest non-vacuity, BOS behavior, signatures and
+  repeated-run gates were verified.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
