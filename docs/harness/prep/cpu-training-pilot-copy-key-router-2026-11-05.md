@@ -274,4 +274,9 @@ fixed here without moving the bar.
 
 ## Outcome
 
-Pending the registered run.
+Decision: **REJECT**. On seed 2602 the router was right on **913 / 1,655**
+copyable positions versus **921** for longest-first. It beat `k2>k1` at
+**913 / 912** and random depth at **913 / 876**, but all three comparisons were
+required. See
+[REPORT.md](../../loop/tasks/cpu-training-pilot/deepseek-151/REPORT.md) and
+[the sealed evidence](../../labs/cpu-training-pilot-copy-key-router-2026-11-05/evidence/PUBLISHED-SHA256SUMS).
