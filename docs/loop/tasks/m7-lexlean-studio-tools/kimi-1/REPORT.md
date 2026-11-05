@@ -1,6 +1,6 @@
 # REPORT: repair Studio loading and share exact arithmetic
 
-Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Current `origin/main` base: `e052abf4104fc33ba28a489cf0dfdc4e94ab70b1`, including registration PR #3730. Tested product revision: `cff818eab5ef5f5bd9fe63512cd79c8af88abf6b`; subsequent changes in this PR are documentation-only. The final exact commit and tree are certified in the PR's `uor-review v1` record rather than claimed by embedding an impossible self-hash here. Delivery is **pending** until protected merge, fresh-main verification, Pages publication and cleanup.
+Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Current `origin/main` base: `719a3ce42909180f4f35a74e86f5ba96f80e1147`, including registration PR #3730. Tested product revision: `cff818eab5ef5f5bd9fe63512cd79c8af88abf6b`; subsequent changes in this PR are documentation-only. The final exact commit and tree are certified in the PR's `uor-review v1` record rather than claimed by embedding an impossible self-hash here. Delivery is **pending** until protected merge, fresh-main verification, Pages publication and cleanup.
 
 ## What did not work
 
