@@ -60,12 +60,6 @@ fn run() -> Result<(), String> {
     let examples = corpus
         .conversation_examples()
         .map_err(|error| error.to_string())?;
-    if examples.len() < 200 {
-        return Err(format!(
-            "copy-key reply panel has {} complete-reply examples, below the 200-row floor",
-            examples.len()
-        ));
-    }
     let samples = examples
         .iter()
         .map(|sample| MemoryWeightSample {
@@ -78,6 +72,13 @@ fn run() -> Result<(), String> {
     for arm in CopyKeyReplyArm::ALL {
         let reading = evaluate_copy_key_replies(&artifact_bytes, &samples, cap, arm, seed)
             .map_err(|error| error.to_string())?;
+        if reading.reading.reference_reachable < 200 {
+            return Err(format!(
+                "{} has {} reachable complete-reply examples, below the 200-row floor",
+                arm.name(),
+                reading.reading.reference_reachable
+            ));
+        }
         arms.insert(arm.name().to_owned(), reading);
     }
 
@@ -139,6 +140,7 @@ fn run() -> Result<(), String> {
             "documents": corpus.document_count(),
             "total": examples.len(),
             "evaluated": samples.len(),
+            "reachable": longest.reading.reference_reachable,
         },
         "comparisons": comparisons,
         "random_nonvacuity": random_changes,
@@ -155,6 +157,12 @@ fn random_changes(
     longest: &uor_r4_cpu_train::TimedCopyKeyReplyReading,
     random: &uor_r4_cpu_train::TimedCopyKeyReplyReading,
 ) -> serde_json::Value {
+    let reachable_rows = longest
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .collect::<BTreeSet<_>>();
     let longest_steps = longest
         .steps
         .iter()
@@ -168,6 +176,9 @@ fn random_changes(
     let changed = longest_steps
         .iter()
         .filter_map(|(key, token)| {
+            if !reachable_rows.contains(&key.0) {
+                return None;
+            }
             random_steps
                 .get(key)
                 .filter(|random_token| *random_token != token)

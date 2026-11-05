@@ -67,8 +67,9 @@ same policy is applied to every artifact seed.
 
 Panel generation uses protocol 2 and the pinned tokenizer. The decision run
 uses every recovered prompt/reply example from each panel, with a 32-token
-generation cap. Each panel must supply at least 200 examples; otherwise the run
-stops as a power or instrument fault before a result is read.
+generation cap. Each artifact seed and panel must supply at least 200
+reference-reachable examples; paired comparisons use only those examples.
+Otherwise the run stops as a power or instrument fault before a result is read.
 
 ## Measurements
 

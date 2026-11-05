@@ -66,7 +66,10 @@ Two new m-world-v2 panels are generated after FIT and GO:
 - `copy-key-reply-dd-2702`: `cell=dev,dev`, 128 conversations, seed `2702`.
 
 Both public artifact seeds run on both panels. Every recovered prompt/reply
-example is evaluated; no parameter is fit. Each panel must provide at least 200
+example is evaluated; no parameter is fit. Each artifact seed and panel must
+provide at least 200 reference-reachable examples, meaning the reply is shorter
+than the 32-token cap and prompt plus reply is shorter than artifact context so
+the following BOS can still be requested. Paired comparisons use only reachable
 examples. The examples are held out from this unit because no panel at either
 seed has been opened before this registration.
 
@@ -133,18 +136,21 @@ path.
 
 ## Minimum test power
 
-At least 200 complete replies per panel and two independently trained artifact
-seeds. The paired unit is one prompt/reply example. The random control must be
-non-vacuous on each panel. A fresh process must reproduce the final reading.
-The two-sigma bar is based on observed paired discordance, not a single-row
-difference.
+At least 200 reference-reachable complete replies per artifact seed and panel,
+plus two independently trained artifact seeds. Unreachable rows remain in the
+input census but are excluded from paired decisions because they cannot finish
+with BOS. The paired unit is one reachable prompt/reply example. The random
+control must be non-vacuous on each panel. A fresh process must reproduce the
+final reading. The two-sigma bar is based on observed paired discordance, not a
+single-row difference.
 
 ## Stop rules
 
-Stop on artifact, tokenizer or panel hash drift; fewer than 200 examples;
-nondeterminism; a vacuous random control; a prompt/reference outside context or
-cap; malformed trace; resource breach; or any need to modify serving, integer,
-CUDA, float-training or Claude-owned source.
+Stop on artifact, tokenizer or panel hash drift; fewer than 200
+reference-reachable examples for any artifact/panel cell; nondeterminism; a
+vacuous random control; a prompt/reference outside context or cap; malformed
+trace; resource breach; or any need to modify serving, integer, CUDA,
+float-training or Claude-owned source.
 
 ## Cost
 

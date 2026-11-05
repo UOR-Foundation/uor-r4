@@ -359,6 +359,9 @@ pub fn compare_copy_key_reply_rows(
         if candidate.row != control.row {
             return Err(invalid("copy-key reply comparison rows differ"));
         }
+        if !candidate.reachable || !control.reachable {
+            continue;
+        }
         let candidate = metric_value(candidate, metric);
         let control = metric_value(control, metric);
         candidate_sum = checked_add(candidate_sum, candidate)?;
@@ -673,6 +676,39 @@ mod tests {
         assert_eq!(comparison.candidate_sum, 2);
         assert_eq!(comparison.threshold, 2);
         assert!(comparison.passes);
+    }
+
+    #[test]
+    fn paired_comparison_excludes_unreachable_replies() {
+        let reachable = CopyKeyReplyRow {
+            row: 0,
+            reachable: true,
+            exact_reference: true,
+            bos_complete: true,
+            opening_correct: true,
+            premature_bos: false,
+            non_premature_bos: true,
+            generated_tokens: 1,
+            reference_tokens: 1,
+            correct_body_positions: 1,
+            copy_decisions: 1,
+            fallback_decisions: 0,
+            stop: "bos".to_owned(),
+            reply_sha256: token_hash(&[1]),
+        };
+        let mut unreachable = reachable.clone();
+        unreachable.row = 1;
+        unreachable.reachable = false;
+        let comparison = compare_copy_key_reply_rows(
+            &[reachable.clone(), unreachable.clone()],
+            &[reachable, unreachable],
+            CopyKeyReplyMetric::ExactReference,
+        )
+        .unwrap();
+        assert_eq!(comparison.candidate_sum, 1);
+        assert_eq!(comparison.control_sum, 1);
+        assert_eq!(comparison.candidate_only, 0);
+        assert_eq!(comparison.control_only, 0);
     }
 
     #[test]
