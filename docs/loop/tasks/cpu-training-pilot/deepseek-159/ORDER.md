@@ -90,3 +90,21 @@ power-limited result rather than retuning after observing dev.
 4. REPORT classifies the outcome as KEEP, REJECT or power-limited without
    broad claims about geometric termination.
 5. Exact-head review, protected merge and fresh-main verification complete.
+
+## Attempt 2: fresh-dev confirmation
+
+Attempt 7 evaluated an already-opened dev panel before an independent FIT
+verdict had been recorded. That attempt therefore remains preserved as
+exploratory evidence and is not the registered decision.
+
+The registered confirmation refits on the same unmodified train panel 2711
+and artifact seeds, then evaluates the unchanged gate on a newly generated
+`cell=dev,dev` panel seed 2722. The fresh panel is generated only after FIT and
+GO. Its oracle ceiling must be measured from the sealed copy trajectory before
+the gate report is read; the candidate must reach at least seven exact replies
+and at least half that ceiling. All prior controls and paired rules remain.
+Details and commands are fixed in
+`docs/harness/prep/cpu-training-pilot-copy-exact-stop-confirm-2026-11-05.md`.
+
+The fresh confirmation, not attempt 7, determines KEEP, REJECT or
+POWER-LIMITED for this task.

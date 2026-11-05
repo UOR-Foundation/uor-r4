@@ -134,3 +134,17 @@ reported as rejection of geometric termination generally.
   close this exact-body prototype-label construction.
 - POWER-LIMITED: terminal rows or distinct signatures cannot support eight
   prototypes; do not read that as a mechanism negative.
+
+## Steps
+
+The planned command used the sealed train report and train panel 2711 for
+fitting, the sealed dev report and panel 2712 for evaluation, two artifact
+seeds, driver seed 157, eight prototypes and `--exact-body`, followed by a
+fresh-process repeat for each artifact seed.
+
+## TEST FITNESS
+
+TEST FITNESS: PENDING - no independent pre-run verdict was recorded before
+attempt 7. Attempt 7 is therefore preserved as exploratory evidence, not a
+registered decision. The fresh-dev confirmation is registered separately in
+`cpu-training-pilot-copy-exact-stop-confirm-2026-11-05.md`.

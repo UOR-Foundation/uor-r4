@@ -6,13 +6,13 @@ Order: [ORDER.md](ORDER.md). Base: `330185de6`.
 
 ## Status
 
-Decision: **REJECT** for the fixed exact-body generated-stop construction. The
-same eight-prototype sign-signature gate learned termination on the filtered
-training trajectories (**7/11** exact on both artifact seeds), but transferred
-only **1/13** exact dev replies. Seed 2 also produced **9** premature dev stops
-against the registered four-reply limit. This closes exact-body filtering with
-this gate and threshold family; it does not reject geometric termination,
-copy-boundary learning or terminal-token construction.
+Attempt 7 is **EXPLORATORY READING**, not the registered decision: it ran
+before an independent FIT verdict was recorded. The same eight-prototype
+sign-signature gate learned termination on the filtered training trajectories
+(**7/11** exact on both artifact seeds), but transferred only **1/13** exact
+dev replies on the already-opened panel. Seed 2 also produced **9** premature
+dev stops. These observations motivated a fresh-dev confirmation; they do not
+close the configuration.
 
 ## What did not work
 
