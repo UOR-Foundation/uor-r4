@@ -40,11 +40,11 @@ bar. Serving remains integer-only and unchanged.
 ## Base artifact and source
 
 - base: `1f1e3a756`;
-- implementation commit: `939632ac28e17418c906f2afd3895f524375b362`;
+- implementation commit: `c62574669a6cb90dc9bbbe33a8485001d3e84376`;
 - `suffix_memory.rs` SHA-256:
-  `9e0199a54c1ed708d390da455f0d2e85928c44adaed047609f3a1d7b2ef6bc2c`;
+  `7f987ecdda618144ea24133066e6c9ecc60fc910cdf01e675fa9913a464a5817`;
 - `cpu-copy-suffix-memory.rs` SHA-256:
-  `046d5e4d18b315e3d66ddf655889cc822b02f914474ec101c73febd0be7c92a5`;
+  `dc78a4080a8a7e8ee7bac83e57e813225f6817fe9babcffdc3c085475e04997b`;
 - panel generator tree:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
 - tokenizer SHA-256:
@@ -217,7 +217,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/copy-suffix-memory
 GEN_TARGET=$SOURCE/target/deepseek/copy-suffix-memory-generator
-IMPL=939632ac28e17418c906f2afd3895f524375b362
+IMPL=c62574669a6cb90dc9bbbe33a8485001d3e84376
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
 test ! -e "$OUT"
@@ -233,9 +233,9 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  9e0199a54c1ed708d390da455f0d2e85928c44adaed047609f3a1d7b2ef6bc2c \
+  7f987ecdda618144ea24133066e6c9ecc60fc910cdf01e675fa9913a464a5817 \
   "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
-  046d5e4d18b315e3d66ddf655889cc822b02f914474ec101c73febd0be7c92a5 \
+  dc78a4080a8a7e8ee7bac83e57e813225f6817fe9babcffdc3c085475e04997b \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-suffix-memory.rs" |
   sha256sum -c -
 
