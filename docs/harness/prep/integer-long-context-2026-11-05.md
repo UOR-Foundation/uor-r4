@@ -121,7 +121,7 @@ Every reading is per checkpoint, seed, rule and memory setting. Each comes from 
   ```
 - **R6, the memory (L-010, reported):** R1 and R2 with the memory out, and memory on minus memory out for each rule.
 
-## The band, and the decision
+## Bar: the band, and the decision
 
 **The band, an equivalence margin.** Within one seed, every rule reads the same model on the same targets (I-3) and the same queries (I-4), on one pod with one binary. So a rule's difference has no sampling noise of its own. The band is what two seeds of one recipe differ by, with a floor and a ceiling:
 
@@ -196,7 +196,7 @@ Whatever the outcome, every reading is reported with its numbers. A failed instr
 4. Seal every output with a `SHA256SUMS` under `results/claude/integer-long-context-2026-11-05/`, read it back, and only then take the pod down.
 5. On the laptop: run I-1 to I-4 and I-8, compute R0 to R6, and read the table.
 
-## What the test can tell apart
+## Minimum test power: what the test can tell apart
 
 - **Within a seed,** the rules are compared exactly, with no sampling noise (I-1 to I-4). The band is the seeds' own spread, so a difference inside it is no larger than what retraining moves.
 - **Past W:**
@@ -297,3 +297,4 @@ The run at pin `be2defc00004daa8c020350c6a6f4baeb8aa2fda` is unchanged; these co
 1. **Slide's query prompt.** Arms says slide's prompt is "the W positions before the reply". The code ends the W-token window at the reply's last input, as the base scorer's `query_prompts` does (`query_input_start`). So the prompt holds W + 1 − n tokens before a reply of n tokens: 172 to 187 at a7r and 2,028 to 2,043 at (L), for the panels' replies of 6 to 21 tokens. Under blocks a reply's first token reads anywhere from 1 to W tokens. Every slide query in the run used this.
 2. **"Nothing changed on the base path"** (Code in this unit) rests on reading the code, by two exact-head reviewers. No CPU test pins `score_rows`' default path, which runs on the GPU. One refusal order changed: a panel that fails both the windowing and the query checks now reports the windowing error first.
 3. **Refusals still owed,** filed as #3714 and touching none of this run: a missing run config, a losses vector shorter than the bands, carry over panels of different C, and blocks at W = 0. The laptop readout checks the first two on the sealed files: every band with targets has a numeric, non-zero `loss_sum` (156 of 156).
+4. **Two headings renamed** to the names the harness's shape rule reads: "The band, and the decision" is now "Bar: the band, and the decision", and "What the test can tell apart" is now "Minimum test power: what the test can tell apart". Their text is unchanged.
