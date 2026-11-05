@@ -134,10 +134,10 @@ Published evidence verifies with `PUBLISHED-SHA256SUMS`, SHA-256
 ## Size
 
 Against base `e06635e3a`, this unit changes **4** code/manifest files
-(**+948 / -0**), **10** ORDER, preregistration, report, notebook, roadmap,
-current-state and lab-record files (**+1,181 / -1**), and **29** published
-evidence files (**+1,901 / -0**): **43 files, +4,030 / -1**. No generated
-corpus or binary is tracked.
+(**+948 / -0**), **11** ORDER, preregistration, report, ledger, notebook,
+roadmap, current-state and lab-record files (**+1,193 / -1**), and **29**
+published evidence files (**+1,901 / -0**): **44 files, +4,042 / -1**. No
+generated corpus or binary is tracked.
 
 ## Independent result audit
 
