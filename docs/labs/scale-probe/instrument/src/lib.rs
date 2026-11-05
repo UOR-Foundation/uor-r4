@@ -562,6 +562,11 @@ fn load_inputs(a: &Args, allow_all: bool) -> R<Inputs> {
             };
             (rf, None)
         } else {
+            if rp.as_path() == Path::new("all") {
+                return Err(format!(
+                    "rows={name}:all is for seen only; this command grades a rows file"
+                ));
+            }
             let bytes = read(rp)?;
             let rf: RowsFile = serde_json::from_slice(&bytes)
                 .map_err(|e| format!("{}: not a rows file: {e}", rp.display()))?;

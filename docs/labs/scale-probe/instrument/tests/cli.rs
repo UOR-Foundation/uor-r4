@@ -894,7 +894,10 @@ fn grade_refuses_rows_all() {
     let c = clean_setup("grade_all");
     let out = c.b.join("g-all");
     let all = Path::new("all");
-    refused(grade(&out, &c.tr, &[("p", &c.pa)], &[("p", all)]), "all: ");
+    refused(
+        grade(&out, &c.tr, &[("p", &c.pa)], &[("p", all)]),
+        "is for seen only",
+    );
     assert!(!out.exists());
 }
 

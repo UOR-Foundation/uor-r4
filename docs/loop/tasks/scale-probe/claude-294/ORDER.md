@@ -26,9 +26,17 @@ The item's done-when reads:
 ## Decision card (the Data line)
 
 The decided order says: "P5's Data line changes to real text through a decision card in its sheet unit. The templated data stays as one contrast cell." This unit makes that card, on its own fresh decision review, logged on #3472 as `[claude] owner log:` and open to Casey's reversal:
-- **Data:** the real-text corpus of claude-293 (OASST2 and Wikipedia, about 28M TRAIN tokens), at several fractions, in place of "the corpus at several fractions".
-- **Panel:** the corpus's own held-out splits, cut by source id and read by no model yet, in place of a panel drawn by `heldout-panel`, which draws only templated M-world conversations. `heldout-panel` at a new seed still draws the contrast cell's panel. P-dev stays reserved.
-- **Scores:** integer top-1 on held-out text against unigram and T2 count tables, with bytes per token under the pinned tokenizer. Bits per byte waits for a lawful likelihood (§4.8).
+- **Data:** the real-text corpus of claude-293 (OASST2 and Wikipedia, about 28M TRAIN tokens), at several fractions, in place of "the corpus at several fractions". This is under the order's interim §3.10 reading, human-written text only; if Casey answers otherwise, that is a new configuration.
+- **Panel:** the corpus's own held-out splits, cut by source id, in place of a panel drawn by `heldout-panel`, which draws only templated M-world conversations. The order implies a panel taken from the corpus ("the corpus panel scores…").
+  - No model has read them. Only claude-293's census, and its memory probe, have read them; the probe read an earlier build of `wiki-00000/heldout`.
+  - **The overlap is counted.** `scale-probe seen` counts, against each cell's TRAIN (D1, D2, D3), the held-out scored positions whose preceding 8 tokens appear in that TRAIN.
+  - **The deciding readings R1 to R3** are read on all rows and on the rows unseen in D3, the largest TRAIN. A deciding reading that holds on one row set and not the other is read as mixed.
+  - P-dev stays reserved.
+  - **The contrast cell,** reported only, is scored on DEV and on the same four panels. It is reported beside claude-152's and claude-153's DEV points, which used other recipes and steps. (Revised in this unit before the card was logged; the first draft drew a new templated panel for it.)
+- **Scores:** an exact count of whole-table nearest top-1 hits by the float model trained as served, against unigram and T2 tables built from each cell's own TRAIN, with bytes per token under the pinned tokenizer.
+  - This is not §4.8's integer top-1. The slope is a float-model measurement, and the D11 export's panel top-1 is owed before any width is served or any claim is made.
+  - Bits per byte waits for a lawful likelihood (§4.8).
+- **Reversal:** restore the item's Data line and done-when 1's panel text. The sheet's "hold" stops any launch.
 
 ## Cancel probe (run first)
 
