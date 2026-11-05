@@ -12,13 +12,13 @@
   "measured": {
     "release_build_seconds": 19.71,
     "incremental_build_seconds": 0.48,
-    "final_run_walls_seconds": [8.73, 8.71, 8.80],
-    "peak_rss_kib": 198436,
-    "driver_binary_bytes": 1992976,
-    "driver_binary_sha256": "45f56540678c7a24727df5bd668585f2235e969e23c21e005d92325e967d6fe7",
-    "fresh_target_bytes": 4944305451,
-    "published_evidence_bytes": 2393850,
-    "free_space_after_run_bytes": 466986061824
+    "final_run_walls_seconds": [8.78, 8.71, 8.77],
+    "peak_rss_kib": 198460,
+    "driver_binary_bytes": 1993000,
+    "driver_binary_sha256": "c9a2f9836c6a7250e370e3c8ac9e9f626a76390e1ec700a2d95382cea89f1d05",
+    "fresh_target_bytes": 4944779271,
+    "published_evidence_bytes": 4750278,
+    "free_space_after_run_bytes": 463231012864
   },
   "attempts": [
     {
@@ -43,6 +43,11 @@
     },
     {
       "attempt": 5,
+      "status": "INSTRUMENT_INCOMPLETE",
+      "reason": "result and row records correct, but no-fire generated-token accounting stopped at the reference horizon"
+    },
+    {
+      "attempt": 6,
       "status": "COMPLETED_REJECT",
       "cells": 2
     }
@@ -56,7 +61,8 @@
     "rustfmt": "pass",
     "fresh_process_repeat": "byte-identical after timing fields",
     "raw_attempt_4_sha256": "ef781834bea50a3552e095de58069b09a95c39c3d1f329add13ecac5aac7740b",
-    "raw_attempt_5_sha256": "548465da3874c6a8fa322844e75e82b89ff13da0cff7d7e3dacf35bf04bd3099"
+    "raw_attempt_5_sha256": "548465da3874c6a8fa322844e75e82b89ff13da0cff7d7e3dacf35bf04bd3099",
+    "raw_attempt_6_sha256": "49aaf5c7608b20e40f5da44d8ba1b72d7860e1572400c49be79c96250e13085d"
   },
   "threads": {
     "build_jobs": 16,
@@ -71,8 +77,8 @@
   },
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-157/ORDER.md",
-    "implementation_pin": "8a7a0186e655",
-    "published_sums_sha256": "8c4c1e77a8b9b96fabb8c21e5b866f7b41746f84fa0b061d22834c90a7bbd120"
+    "implementation_pin": "1a6681d80e70",
+    "published_sums_sha256": "fd468c7257b0d04f7007133ab76f2f7cbd8f26c6a1945a28ebb157b54327dfee"
   },
   "normal_close": {
     "gpu_pods": 0,

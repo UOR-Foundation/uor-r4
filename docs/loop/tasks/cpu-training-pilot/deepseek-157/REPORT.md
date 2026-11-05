@@ -23,6 +23,7 @@ not geometric termination generally.
   process substitution had already been consumed.
 - Attempt 4 reproduced the result but did not publish per-row fired decisions
   or selected-trace hashes.
+- Attempt 5 published those rows but undercounted no-fire trajectory cost.
 - The final gate learned only **8/453** training terminal rows on seed 1 and
   **13/453** on seed 2 under the 46-row false-stop cap.
 - Training at-reference stops were 7 and 11, but none matched an exact body.
@@ -77,18 +78,18 @@ failed.
 Resources:
 
 - release build **19.71 s**, peak unavailable from that compile; final CLI
-  processes peaked at **198,412 KiB**;
-- final runs **8.73 / 8.71 / 8.80 s**;
-- driver binary **1,992,976 bytes**, SHA-256
-  `45f56540678c7a24727df5bd668585f2235e969e23c21e005d92325e967d6fe7`;
-- fresh target **4,944,305,451 bytes**;
-- published evidence **2,393,850 bytes**;
+  processes peaked at **198,460 KiB**;
+- final runs **8.78 / 8.71 / 8.77 s**;
+- driver binary **1,993,000 bytes**, SHA-256
+  `c9a2f9836c6a7250e370e3c8ac9e9f626a76390e1ec700a2d95382cea89f1d05`;
+- fresh target **4,944,779,271 bytes**;
+- published evidence **4,750,278 bytes**;
 - admitted cumulative projection: **79,427.677487699 s**.
 
-Attempt-5 raw manifest SHA-256:
-`548465da3874c6a8fa322844e75e82b89ff13da0cff7d7e3dacf35bf04bd3099`.
+Attempt-6 raw manifest SHA-256:
+`49aaf5c7608b20e40f5da44d8ba1b72d7860e1572400c49be79c96250e13085d`.
 Published evidence SHA-256:
-`8c4c1e77a8b9b96fabb8c21e5b866f7b41746f84fa0b061d22834c90a7bbd120`.
+`fd468c7257b0d04f7007133ab76f2f7cbd8f26c6a1945a28ebb157b54327dfee`.
 
 ## Checks run at the head
 
@@ -108,8 +109,8 @@ Published evidence SHA-256:
 
 Against base `ed9b5b9aa`, this unit changes **5** code/API files
 (**+665 / -4**), **8** task, notebook, roadmap, current-state and lab-record
-files (**+363 / -1**), and **26** published evidence files
-(**+74,571 / -0**): **39 files, +75,599 / -5**.
+files (**+372 / -1**), and **33** published evidence files
+(**+148,222 / -0**): **46 files, +149,259 / -5**.
 
 ## Skills used
 

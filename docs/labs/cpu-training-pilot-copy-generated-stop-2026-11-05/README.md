@@ -14,15 +14,17 @@ The oracle ceiling remains 11/453 train and 13/449 dev. The current gate does
 not recover it. This closes the fixed all-reference-length labeling with eight
 signed prototypes; it does not close geometric termination generally.
 
-Attempts 1–4 are preserved:
+Attempts 1–5 are preserved:
 
 - attempt 1 used the wrong report schema literal;
 - attempt 2 completed but wrote transient `/dev/fd` report paths;
 - attempt 3 stopped after report reads were moved to hashes because a process
   substitution could not be read twice;
 - attempt 4 reproduced the result but omitted per-row fired decisions and
-  selected-trace hashes.
+  selected-trace hashes;
+- attempt 5 added those records but counted no-fire cost only to the reference
+  horizon.
 
-Attempt 5 is final, includes per-row audit records and a byte-identical repeat
+Attempt 6 is final, includes per-row audit records and a byte-identical repeat
 after timing removal.
 Published evidence is in [`evidence/`](evidence/).
