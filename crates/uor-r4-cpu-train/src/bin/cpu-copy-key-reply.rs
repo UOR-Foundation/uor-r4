@@ -83,13 +83,17 @@ fn run() -> Result<(), String> {
     }
 
     let longest = arms
+        .get(CopyKeyReplyArm::Longest32To1.name())
+        .ok_or_else(|| "longest-32 reading is missing".to_owned())?;
+    let longest_4 = arms
         .get(CopyKeyReplyArm::Longest4To1.name())
-        .ok_or_else(|| "longest-first reading is missing".to_owned())?;
+        .ok_or_else(|| "longest-4 reading is missing".to_owned())?;
     let random = arms
         .get(CopyKeyReplyArm::RandomAvailableDepth.name())
         .ok_or_else(|| "random-depth reading is missing".to_owned())?;
     let mut comparisons = BTreeMap::new();
     for control in [
+        CopyKeyReplyArm::Longest4To1,
         CopyKeyReplyArm::K2BackoffK1,
         CopyKeyReplyArm::FixedDepth1,
         CopyKeyReplyArm::RandomAvailableDepth,
@@ -113,7 +117,8 @@ fn run() -> Result<(), String> {
         comparisons.insert(control.name().to_owned(), by_metric);
     }
 
-    let random_changes = random_changes(longest, random);
+    let random_changes_from_longest_32 = random_changes(longest, random);
+    let random_changes = random_changes(longest_4, random);
     let input_sha256 = uor_r4_discrete::corpus::sha256(&artifact_bytes);
     let output = serde_json::json!({
         "schema": "uor-r4.cpu-copy-key-reply/1",
@@ -133,7 +138,7 @@ fn run() -> Result<(), String> {
         "settings": {
             "cap": cap,
             "seed": seed,
-            "maximum_copy_depth": uor_r4_cpu_train::COPY_KEY_MAX_DEPTH,
+            "maximum_copy_depth": uor_r4_cpu_train::COPY_KEY_REPLY_MAX_DEPTH,
             "arms": CopyKeyReplyArm::ALL.iter().map(|arm| arm.name()).collect::<Vec<_>>(),
         },
         "examples": {
@@ -144,6 +149,7 @@ fn run() -> Result<(), String> {
         },
         "comparisons": comparisons,
         "random_nonvacuity": random_changes,
+        "random_nonvacuity_from_longest_32": random_changes_from_longest_32,
         "arms": arms,
     });
     println!(
