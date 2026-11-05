@@ -1002,6 +1002,16 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
     }
 }
 
+fn exact_tool_leading_operator_minus(expression: &str) -> bool {
+    let expression = expression.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
+    expression.starts_with('-')
+        && (expression.len() == 1
+            || expression[1..]
+                .chars()
+                .next()
+                .is_some_and(char::is_whitespace))
+}
+
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -1022,6 +1032,11 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     }
     if exact_tool_is_iso_date_time(rest) {
         return Ok(None);
+    }
+    if exact_tool_leading_operator_minus(rest) {
+        return Err(invalid(
+            "exact arithmetic does not accept an operator-only leading minus",
+        ));
     }
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
         if exact_tool_arithmetic_shaped(rest) {
@@ -1076,13 +1091,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if is_iso_date {
         return Ok(None);
     }
-    if expression.starts_with('-')
-        && (expression.len() == 1
-            || expression[1..]
-                .chars()
-                .next()
-                .is_some_and(char::is_whitespace))
-    {
+    if exact_tool_leading_operator_minus(expression) {
         return Err(invalid(
             "exact arithmetic does not accept an operator-only leading minus",
         ));
@@ -1687,6 +1696,18 @@ mod tests {
             assert!(exact_arithmetic_tool(&prompt)
                 .expect("whitespace-padded overlong arithmetic should be recognized")
                 .is_err());
+        }
+        for expression in ["-", "- 25", "- 2.5", "-?"] {
+            for prompt in [
+                format!("{}{}", " ".repeat(200), expression),
+                format!("{}{}", expression, " ".repeat(200)),
+            ] {
+                let error = exact_arithmetic_tool(&prompt)
+                    .expect("padded leading-minus arithmetic should be recognized")
+                    .err()
+                    .expect("padded leading-minus arithmetic should be an error");
+                assert!(error.to_string().contains("leading minus"));
+            }
         }
         let overflow = exact_arithmetic_tool("What is 999999999999999999999 + 1?")
             .expect("oversized operand should be recognized")
