@@ -109,10 +109,10 @@ trained arm is judged against the table-anchor baseline, not raw-frozen.
 ## Source and binary
 
 - base: `7787313b2`;
-- implementation pin: `b66f2e1d7`;
+- implementation pin: `b9c4f51c8`;
 - driver:
   `target/deepseek/query-port-root/release/cpu-query-port-driver`,
-  SHA-256 `19dcb744944eb7c5318dc8d01f4b5d0caae8b89178e5f9008dcbce82c4d4d653`;
+  SHA-256 `17189223571174c3e46fde7d6ec7b5946906b8a6b7be066d29e3d136879db847`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -139,7 +139,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-test "$(git -C "$SOURCE" rev-parse --short=9 HEAD)" = b66f2e1d7
+test "$(git -C "$SOURCE" rev-parse --short=9 HEAD)" = b9c4f51c8
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
