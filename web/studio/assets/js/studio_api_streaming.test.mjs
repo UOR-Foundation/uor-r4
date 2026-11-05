@@ -294,3 +294,61 @@ test('exact tool exchanges stay visible but are not sent back to the model', asy
     assert.equal(result.ok, true);
     assert.deepEqual(JSON.parse(request.body).messages, [messages[2]]);
 });
+
+async function inlineStudioFunction(name) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    const start = html.indexOf(`function ${name}(`);
+    assert.notEqual(start, -1, `missing inline function ${name}`);
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) return { source: html.slice(start, index + 1), vm };
+        }
+    }
+    throw new Error(`unterminated inline function ${name}`);
+}
+
+test('apiMessages preserves exact-tool metadata for the next request', async () => {
+    const { source, vm } = await inlineStudioFunction('apiMessages');
+    const apiMessages = vm.runInNewContext(`${source};apiMessages`, {
+        window: {},
+        app: { apiConfig: null, abortController: null },
+        decomposeNativeImage: null,
+        imageUrlPart: null,
+    });
+    const messages = apiMessages({
+        messages: [
+            { role: 'user', content: 'What is 17 + 25? Answer with the number first.' },
+            { role: 'assistant', content: '42\n\nR4 geometric exact arithmetic — tool, not model generation', tool: 'm6-exact-arithmetic' },
+            { role: 'user', content: 'Hi' },
+        ],
+    });
+    assert.equal(messages[1].tool, 'm6-exact-arithmetic');
+});
+
+test('loadConversations preserves exact-tool metadata across restore', async () => {
+    const { source, vm } = await inlineStudioFunction('loadConversations');
+    const stored = [{
+        id: 'saved-chat',
+        title: 'Saved chat',
+        messages: [
+            { role: 'user', content: 'What is 17 + 25? Answer with the number first.' },
+            { role: 'assistant', content: '42\n\nR4 geometric exact arithmetic — tool, not model generation', tool: 'm6-exact-arithmetic' },
+            { role: 'user', content: 'Hi' },
+        ],
+    }];
+    const context = {
+        CONVERSATIONS_KEY: 'conversations',
+        app: { conversations: [], activeConversationId: null },
+        readJson(key, fallback) {
+            return key === 'conversations' ? stored : fallback;
+        },
+    };
+    vm.runInNewContext(`${source};loadConversations`, context)();
+    assert.equal(context.app.conversations[0].messages[1].tool, 'm6-exact-arithmetic');
+});

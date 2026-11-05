@@ -676,7 +676,7 @@
                     messages: conversation.messages.filter(function (message) {
                         return message && typeof message.content === 'string' && message.role;
                     }).map(function (message) {
-                        return { role: message.role, content: message.content, meta: message.meta || null };
+                        return { role: message.role, content: message.content, meta: message.meta || null, tool: message.tool || null };
                     }),
                     checkpoint: typeof conversation.checkpoint === 'string' ? conversation.checkpoint : null,
                     lastToken: typeof conversation.lastToken === 'number' ? conversation.lastToken : null,
@@ -1592,7 +1592,7 @@
                     // historical user turn that the native API rejects. The final turn
                     // remains empty so a live image-only request has no text part.
                     if (message.role === 'user' && content === '' && index !== lastIndex) content = '[Image patch input]';
-                    return { role: message.role, content: content };
+                    return { role: message.role, content: content, tool: message.tool || null };
                 });
             var attachments = window.__studioUi && typeof window.__studioUi.getAttachments === 'function'
                 ? window.__studioUi.getAttachments()
