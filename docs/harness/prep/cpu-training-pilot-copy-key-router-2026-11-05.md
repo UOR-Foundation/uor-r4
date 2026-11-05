@@ -1,6 +1,6 @@
 # Copy-key depth-age router
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -122,6 +122,7 @@ TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 IMPL_PIN=ab2836f13
 FREE_FLOOR=32346472448
 TARGET_CAP=17179869184
+EVIDENCE_CAP=33554432
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
@@ -148,7 +149,8 @@ seal() {
   (cd "$OUT"; find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
     sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
     mv SHA256SUMS.tmp SHA256SUMS
-    sha256sum -c SHA256SUMS --quiet)
+    sha256sum -c SHA256SUMS --quiet
+    test "$(du -sb . | cut -f1)" -le "$EVIDENCE_CAP")
 }
 trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
 
@@ -228,7 +230,7 @@ for t in "$OUT"/*.time.txt; do
   [ "$t" = "$OUT/build.time.txt" ] || [ "$t" = "$OUT/generator-build.time.txt" ] ||
     test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$t")" -le 1048576
 done
-test "$(du -sb "$OUT" | cut -f1)" -le 33554432
+test "$(du -sb "$OUT" | cut -f1)" -le "$EVIDENCE_CAP"
 ```
 
 Read `.test.router_vs_longest.passes`, `.test.router_vs_k2_backoff.passes` and
@@ -261,7 +263,14 @@ A FIT verdict clears compute for this configuration only (D22).
 
 ## Pre-run GO
 
-GO: PENDING independent fresh-context review after FIT.
+GO - reviewer `codex-fresh-context-go` (session
+01a1a992-ee86-7571-9a73-2977b32e9044), 2026-11-04. HEAD was clean at
+`edcbfab83aad5fe1f5ad0d1d3c5357b8280b8139`; implementation `ab2836f13` and
+generator `4e42ffca5` matched. The four public inputs verified, the decision root
+was absent, all registered provenance/power/control/resource gates were present,
+and the host had sufficient CPU, RAM and storage. Its two non-gating findings
+(the stale top status and the evidence cap's placement before final sealing) are
+fixed here without moving the bar.
 
 ## Outcome
 
