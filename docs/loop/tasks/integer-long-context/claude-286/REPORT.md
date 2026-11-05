@@ -9,7 +9,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3695, item #3471. Plan step: P4 in Casey's
   - The export writes 192-token models only.
   - Data past any window needs no generator change.
   - P2b's (L) recalls no far note, so recall cannot decide the rule yet.
-- **What this unit lands:** the probe, nine scope additions for the two units that follow, the item's text brought up to the base, and the plan:
+- **What this unit lands:** the probe, fourteen scope additions for the two units that follow, the item's text brought up to the base, and the plan:
   - claude-287 measures slide, blocks and carry in float on a GPU and decides;
   - claude-288 serves the chosen rule in the integer session.
 - **What it changes in the model:** nothing.
@@ -21,7 +21,7 @@ Nothing was measured, and no training or serving speed changes. The one reading 
 ## What did not work
 
 1. **The rule cannot be chosen by recall yet** (ORDER, probe 5). P2b's (L) states no far note even inside its own window: 0 of 283 on trained phrasings and 0 of 306 on p-long, at both seeds (claude-281, Mechanism). Recall past the window would read 0 under every rule. So claude-287 decides on held-out loss, greedy reply agreement and speed, and reports recall. The decision has to be re-read on the first checkpoint that recalls far notes inside its window.
-2. **The item's scope lacked every file the later units edit.** The 2 Nov owner log (#3471 6585646011) named `hamilton_sheet.rs` and `in_space_long.rs`, and the scope rule reads an item at the merge base. So this unit adds them, and seven more.
+2. **The item's scope lacked every file the later units edit.** The 2 Nov owner log (#3471 6585646011) named `hamilton_sheet.rs` and `in_space_long.rs`, and the scope rule reads an item at the merge base. So this unit adds them, and twelve more. The first draft had nine. The read and memory modules were added after the probe: a rule past the window changes what each read and reply table may see.
 3. **One file the owner log named is not needed.** The log (6585860957) named `milestone_world_v2.rs` because its `CONTEXT = 256` capped every episode. That cap bounds one episode; the chained conversations P2 added (claude-271, claude-275) pass it. `heldout-panel chain=N` and `m-world-recall-corpus chain=N` take any budget, so a 4,096-token panel needs only a flag. The file stays out of scope.
 4. **My own P4 scout (in the claude lab's place record) missed probe 1.** It read the export blockers but not claude-242's re-export, which shows the integer session already carries the state at a larger `context`. This changes the plan: if carry is chosen, claude-288 records the rule and tests it rather than building it. claude-287 must build the float carry to test it against.
 5. **The item's title and done-whens still say 192.** They are left as they are. They still hold for the served 192-token model (`a7r`), and the title is rendered into `docs/roadmap/README.md`, which this unit's scope does not cover. A title change goes with a roadmap render in a later unit.
@@ -31,10 +31,12 @@ Nothing was measured, and no training or serving speed changes. The one reading 
 
 - **The ORDER** records:
   - the cancel probe: where the session stops, what a larger `context` already serves, the 192-only export, the data, recall, and the overlap;
-  - the scope decision: nine files, what edits each, three left out and why, and the reversal cost;
+  - the scope decision: fourteen files, what edits each, three left out and why, and the reversal cost;
   - the plans for claude-287 (the float rules, the panels, the sheet's checkpoints, readings and decision table, one pod) and claude-288 (the served rule, its tests, tok/s and memory to 8,192, gap 6).
 - **The item** `docs/roadmap/items/integer-long-context.md`:
-  - **its scope** adds four float-crate files (`in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs`, `geometric_stack_native.rs`), the float `bin/fbs-snapshot.rs`, and four integer files (`stack/format.rs`, `stack/point_key.rs`, `bin/fbs-export.rs`, `fbs_snapshot.rs`);
+  - **its scope** adds seven float-crate files and seven integer ones:
+    - float: `in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs`, `geometric_stack_native.rs`, `flock_read_hamming.rs`, `flock_read_memory.rs` and `bin/fbs-snapshot.rs`;
+    - integer: `stack/format.rs`, `stack/point_key.rs`, `stack/hamming.rs`, `stack/memory.rs`, `stack/dialogue_memory.rs`, `bin/fbs-export.rs` and `fbs_snapshot.rs`;
   - ***What is true now*** describes the base: the stop, claude-242's carry, the 192-only export, training's `--context`, the slide in both decodes, and claude-281's recall reading;
   - **option (c)** in *What is missing* says the integer session already computes it;
   - ***How to start*** has the current line references, every item sharing the scope, and what is kept out;

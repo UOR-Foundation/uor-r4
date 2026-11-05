@@ -62,7 +62,7 @@ The item's done-when reads:
 
 **Result:** not cancelled. **Class: instrument.** The probe settles which files the later units edit and what their measurement can decide; it does not touch any mechanism.
 
-## Decision: nine scope additions (claude's own decision review)
+## Decision: fourteen scope additions (claude's own decision review)
 
 | File | What edits it | Why |
 |---|---|---|
@@ -75,6 +75,12 @@ The item's done-when reads:
 | `crates/uor-r4-integer/src/stack/point_key.rs` | claude-288 | `POINT_KEY_WINDOW` follows the model's window. |
 | `crates/uor-r4-integer/src/bin/fbs-export.rs` | claude-288 | It reads that window. |
 | `crates/uor-r4-integer/src/fbs_snapshot.rs` | claude-288 | The snapshot reader's 192-token key window. |
+| `crates/uor-r4-float-train/src/flock_read_hamming.rs` | claude-287 | The read's decode and row cuts name the window's positions (claude-279). Carry reads past W; a read bounded to the last W keys, if the sheet keeps one, cuts here. |
+| `crates/uor-r4-float-train/src/flock_read_memory.rs` | claude-287 | The turn memory's reply table is read only while the prompt is inside the window. Each rule says what it answers past W. |
+| `crates/uor-r4-integer/src/stack/hamming.rs` | claude-288 | The served read scans every earlier position (claude-242); a bounded read, if chosen, bounds it here. |
+| `crates/uor-r4-integer/src/stack/memory.rs`, `stack/dialogue_memory.rs` | claude-288 | The served reply table and its key window, which must follow the float table's rule past W. |
+
+- **None of the last five adds a lock.** Every item that lists them is done or held, or already overlaps this item through `session.rs` or `in_space_long.rs` (`one-model-end-to-end`, `turn-memory-integer`, `point-key-integer`, `integer-nearest-readout`).
 
 - **Left out:**
   - `bin/uor-chat.rs`: `cpu-training-pilot` holds it, and the session applies the rule itself.
@@ -92,7 +98,7 @@ The item's done-when reads:
 ## Done when (this unit)
 
 1. The cancel probe and the scope decision above, recorded, with the decision review's record posted on #3471 as a `[claude] owner log:`.
-2. The item's scope adds the nine files. Its text describes the base: training's `--context`, the slide in both decodes, the 192-only export, and claude-281's recall reading. Its title and done-whens stay as they are: they still hold for the served 192-token model.
+2. The item's scope adds the fourteen files. Its text describes the base: training's `--context`, the slide in both decodes, the 192-only export, and claude-281's recall reading. Its title and done-whens stay as they are: they still hold for the served 192-token model.
 3. The REPORT, negatives first. No notebook row: nothing is measured.
 
 ## Stop and ask if (this unit; stop and decide, never wait)
@@ -104,7 +110,7 @@ The item's done-when reads:
 
 ### Files in scope
 
-`in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs` and `geometric_stack_native.rs` in the float crate, `docs/harness/prep/integer-long-context*`, the item file, its task folder, and `docs/research/notebook/m4-serving.md`.
+`in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs`, `geometric_stack_native.rs`, `flock_read_hamming.rs` and `flock_read_memory.rs` in the float crate, `docs/harness/prep/integer-long-context*`, the item file, its task folder, and `docs/research/notebook/m4-serving.md`.
 
 ### Done when
 
@@ -134,7 +140,7 @@ The item's done-when reads:
 
 ### Files in scope
 
-`stack/session.rs`, `stack/format.rs`, `stack/mod.rs`, `stack/tests.rs`, `stack/synthetic.rs`, `stack/point_key.rs`, `fbs_snapshot.rs`, `bin/fbs-export.rs` and `bin/fbs-toks.rs` in the integer crate; the float crate's `src/bin/fbs-snapshot.rs`; `docs/model/pipeline-map.md`, the item file, its task folder and `m4-serving.md`.
+`stack/session.rs`, `stack/format.rs`, `stack/mod.rs`, `stack/tests.rs`, `stack/synthetic.rs`, `stack/point_key.rs`, `stack/hamming.rs`, `stack/memory.rs`, `stack/dialogue_memory.rs`, `fbs_snapshot.rs`, `bin/fbs-export.rs` and `bin/fbs-toks.rs` in the integer crate; the float crate's `src/bin/fbs-snapshot.rs`; `docs/model/pipeline-map.md`, the item file, its task folder and `m4-serving.md`.
 
 ### Done when
 
