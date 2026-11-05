@@ -64,7 +64,10 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
 - **`in_space_long.rs` (+26):** `--inspect` prints the `admission` block at every checkpoint, and fails the inspection when its admitted or row count disagrees with the DEV panel (I-1).
 - **Docs:** the sheet and its outcome, the ORDER, this REPORT, one notebook row, and the item's "What is missing".
 - **No change** to the writer, the trainer, any objective or any served path. `native_vector_writer.rs` is untouched, since every checkpoint pins its sha256.
-- **The evidence branch** (+630 on `074d54b2`) carries the same instrument for run 2 and is not merged. Its worktree is removed and the pushed branch kept.
+- **The evidence branch** (+630 on `074d54b2`) carries the same instrument for run 2 and is not merged.
+  - Its worktree is removed and the pushed branch kept.
+  - Its one commit is also stored as `evidence-8cb2ff98.patch` beside the results (SHA-256 `b4745e5cf0db6115b56dbae84a215ae9ece25c1719cee9f904a0e76a5fbbfc58`).
+  - `uor-harness check` warns that the branch has no PR. It is kept rather than archived, because this REPORT and the store's `job.sh` name its commit (Still open, item 5).
 - **Size:** the ORDER gave no line estimate. The PR adds 640 lines of code, about a quarter of them tests, and no code line is removed.
 
 ## Measurements
@@ -152,7 +155,7 @@ At step 14,336, all 14,287 rows lie under 1e-2, so it reads N.
 - **The binary:** `train-in-space-8cb2ff98`, SHA-256 `f31f8cbed5c96262e2d892a99066ff8266f3914b6b4b2e644e5542fb4c56734d`, built on the pod at the evidence pin. Run 1's binary is `train-in-space-dae2911b`, SHA-256 `018de9b5bfbdfbcd0d10d84a31bbae73cf1be3b506272b6c8ad1701898b01dbc`.
 - **The seal:** `SHA256SUMS-claude-289`, SHA-256 `c90671ea97d068a3674e9bab40c18f265c7bdd82856ab231f3e935dcc0f38a99`.
   - It checks 86 of 86 files on the laptop copy after a read-back from the store, and the read-back's `inspect-s2.out` is identical.
-  - **The store:** `caseyallard/uor-r4-store:results/claude/writer-admission-diagnosis-2026-11-05/` holds the seal, `job.sh`, `dae2911b/` (run 1), `8cb2ff98/` (run 2) and `classify.jq`.
+  - **The store:** `caseyallard/uor-r4-store:results/claude/writer-admission-diagnosis-2026-11-05/` holds the seal, `job.sh`, `dae2911b/` (run 1) and `8cb2ff98/` (run 2), with `classify.jq` and `evidence-8cb2ff98.patch` added after the seal.
 - **The pod** was released and deleted after the read-back. `uor-pod status` then showed 0 running pods.
 - **`loop report --check`, `loop pr-check --local` and `uor-harness check`** were run at the head before the review.
 - **Reviews, each in a fresh context:**
@@ -176,6 +179,7 @@ None applied.
    - Any later reading of pre-29-Oct checkpoints on main needs either an evidence branch, as here, or a load that pins the forward alone.
    - The second is a change to the checkpoint identity rule outside this item's scope, so it is not taken here.
 4. **Done-whens 3 and 4,** the pre-registered run and its REPORT, follow done-when 2.
+5. **The evidence branch** `claude/evidence/writer-admission-074d54b2` stays on origin until an archive unit moves it to `archive/history/branch-archive/` with an INDEX row. That folder is outside this item's scope. Its patch is already in the store.
 
 ## Plain summary
 
