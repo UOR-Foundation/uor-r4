@@ -321,7 +321,11 @@ A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 ## Pre-run GO
 
-GO: PENDING independent fresh-context review after FIT.
+GO - reviewer `codex fresh-context GO`, 2026-11-04. HEAD was clean at
+`42ff65e1c`; implementation pin `1bf1a72fa` matched the runtime paths. The five
+public inputs, host/toolchain/resource limits, absent output roots, failure-seal
+trap, seed ordering, full-run commands and repeat comparison were checked
+read-only.
 
 ## Outcome
 
