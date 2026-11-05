@@ -23,7 +23,7 @@ None. This is a registration unit; the preserved implementation commit separatel
 - `cargo run -q --locked -p xtask -- roadmap check` and `roadmap render --check`, with the actual legacy result reported rather than bypassed.
 - `UOR_LAB=kimi uor-harness loop gates --full`
 - `UOR_LAB=kimi uor-harness loop report --check --order docs/loop/tasks/m7-studio-live-model-sources/kimi-7/ORDER.md`
-- `UOR_LAB=kimi uor-harness loop pr-check --local --base 04fae9eaf2f0ff504de33ce0aa8fcb64fd3b0853`
+- `UOR_LAB=kimi uor-harness loop pr-check --local --base d416181c16923748991a41e2206f5c9ed1de572e`
 - Fresh exact-head review and required GitHub checks before protected queueing; results are posted on the PR.
 
 ## Skills used

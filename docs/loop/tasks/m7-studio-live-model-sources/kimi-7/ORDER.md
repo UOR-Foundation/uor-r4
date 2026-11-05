@@ -1,6 +1,6 @@
 # ORDER: register LexLean Studio repairs, kimi-7
 
-Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440). Base: `04fae9eaf` from fresh `origin/main`.
+Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440). Base: `d416181c1` from fresh `origin/main`.
 
 ## Goal
 
