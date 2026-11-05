@@ -6,14 +6,14 @@ Order: [ORDER.md](ORDER.md). Base: `663129a83`.
 
 ## Status
 
-Complete. PR #3701 delivered the deepseek-157 generated-trajectory stop-gate
-negative and merged at `663129a8336438755800c09f11d9bc3983ef2079`.
+Complete. PR #3701 delivered the deepseek-157 generated-stop rejection and
+merged at `663129a8336438755800c09f11d9bc3983ef2079`.
 
 ## What did not work
 
-Nothing failed in this bookkeeping unit. The deepseek-157 bounded negative
-remains recorded: the gate produced zero exact replies and excessive premature
-stops on the train panel.
+Nothing failed in this bookkeeping unit. The deepseek-157 negative remains
+recorded: the fixed generated-trajectory gate learned some endpoints but
+produced zero exact replies and exceeded the premature-stop limit.
 
 ## What changed
 
@@ -25,7 +25,7 @@ source or serving result changed.
 
 PR #3701's exact head `72ab72717` passed independent review and all required
 checks. Fresh main passed 286 CPU library tests with 4 expected ignores, 77
-binary tests, the attempt-6 evidence seal and the recorded zero-exact result.
+binary tests, the attempt-6 evidence seal and the recorded zero-exact fields.
 
 ## Checks run at the head
 
@@ -42,9 +42,9 @@ No system-provided Codex skill applies.
 ## Still open
 
 Nothing in this coordination-only unit. The next technical action is a
-copy-boundary or exact-body termination objective.
+copy-boundary or exact-body-only termination objective.
 
 ## Plain summary
 
-This closes the bookkeeping for the generated stop-gate negative. It contains
+This closes the bookkeeping for the rejected generated stop gate. It contains
 no new model result.
