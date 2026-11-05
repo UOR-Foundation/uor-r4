@@ -38,6 +38,13 @@ impl ContentSignatureMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StopSignatureMode {
+    Code,
+    Phase,
+    PhaseTrajectory,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContentExample {
@@ -178,6 +185,46 @@ fn pack_content_trajectory_from_code(
             .enumerate()
             .map(|(index, word)| previous.map_or(0, |previous| word ^ previous[index])),
     );
+    Ok(signature)
+}
+
+pub fn pack_content_phase_transition_signature(
+    query: &[i32],
+    previous: Option<&[u64]>,
+) -> Result<ContentSignature> {
+    let current = pack_content_signature(query, ContentSignatureMode::Code)?;
+    pack_content_phase_transition_from_code(&current, previous)
+}
+
+fn pack_content_phase_transition_from_code(
+    current: &[u64],
+    previous: Option<&[u64]>,
+) -> Result<ContentSignature> {
+    let Some(previous) = previous else {
+        return Ok(vec![0; current.len()]);
+    };
+    if previous.len() != current.len() {
+        return Err(invalid("content phase transition previous width differs"));
+    }
+    let rotation = previous
+        .iter()
+        .fold(0u32, |sum, word| sum.wrapping_add(word.count_ones()))
+        % 64;
+    Ok(current
+        .iter()
+        .zip(previous)
+        .map(|(&current, &previous)| current.rotate_left(rotation) ^ previous)
+        .collect())
+}
+
+fn pack_content_phase_trajectory_from_code(
+    current: &[u64],
+    previous: Option<&[u64]>,
+) -> Result<ContentSignature> {
+    let phase = pack_content_phase_transition_from_code(current, previous)?;
+    let mut signature = Vec::with_capacity(current.len() + phase.len());
+    signature.extend_from_slice(current);
+    signature.extend(phase);
     Ok(signature)
 }
 
@@ -766,6 +813,13 @@ pub struct ContentStopDensityTraining {
     pub leave_one_out_neighbors: usize,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentStopPhaseAudit {
+    pub decisions: u64,
+    pub mismatches: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContentContinuationRow {
@@ -821,11 +875,63 @@ pub fn derive_content_stop_rows(
     memory_enabled: bool,
     readout: &ContentReadout,
 ) -> Result<Vec<ContentStopRow>> {
+    derive_content_stop_rows_mode(
+        artifact,
+        samples,
+        cap,
+        memory_enabled,
+        readout,
+        StopSignatureMode::Code,
+    )
+}
+
+pub fn derive_content_stop_phase_rows(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+) -> Result<Vec<ContentStopRow>> {
+    derive_content_stop_rows_mode(
+        artifact,
+        samples,
+        cap,
+        memory_enabled,
+        readout,
+        StopSignatureMode::Phase,
+    )
+}
+
+pub fn derive_content_stop_trajectory_rows(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+) -> Result<Vec<ContentStopRow>> {
+    derive_content_stop_rows_mode(
+        artifact,
+        samples,
+        cap,
+        memory_enabled,
+        readout,
+        StopSignatureMode::PhaseTrajectory,
+    )
+}
+
+fn derive_content_stop_rows_mode(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    mode: StopSignatureMode,
+) -> Result<Vec<ContentStopRow>> {
     validate_content_readout(readout)?;
     if readout.mode != ContentSignatureMode::Code || readout.includes_reference_end {
         return Err(invalid("content stop rows need a plain code readout"));
     }
-    let rows = samples
+    let grouped = samples
         .par_iter()
         .map(|sample| {
             let reference_len = normalized_reference(&sample.reply).len();
@@ -838,22 +944,37 @@ pub fn derive_content_stop_rows(
                 false,
                 Some(readout),
             )
-            .map(|(decisions, _)| {
+            .and_then(|(decisions, _)| {
+                let mut previous = None;
                 decisions
                     .into_iter()
-                    .map(|decision| ContentStopRow {
-                        signature: decision.signature,
-                        terminal: decision.offset == reference_len,
-                        writer_token: decision.content_chosen,
-                        offset: decision.offset as u16,
+                    .map(|decision| {
+                        let signature = match mode {
+                            StopSignatureMode::Code => decision.signature.clone(),
+                            StopSignatureMode::Phase => pack_content_phase_transition_from_code(
+                                &decision.signature,
+                                previous.as_deref(),
+                            )?,
+                            StopSignatureMode::PhaseTrajectory => {
+                                pack_content_phase_trajectory_from_code(
+                                    &decision.signature,
+                                    previous.as_deref(),
+                                )?
+                            }
+                        };
+                        previous = Some(decision.signature);
+                        Ok(ContentStopRow {
+                            signature,
+                            terminal: decision.offset == reference_len,
+                            writer_token: decision.content_chosen,
+                            offset: decision.offset as u16,
+                        })
                     })
-                    .collect::<Vec<_>>()
+                    .collect::<Result<Vec<_>>>()
             })
         })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
+    let rows = grouped.into_iter().flatten().collect::<Vec<_>>();
     if !rows.iter().any(|row| row.terminal) || !rows.iter().any(|row| !row.terminal) {
         return Err(invalid("content stop rows need both classes"));
     }
@@ -1310,6 +1431,19 @@ pub fn fit_content_stop_density_gate(
     if terminal == 0 || nonterminal == 0 {
         return Err(invalid("content stop density fitting needs both classes"));
     }
+    let signature_bits = rows
+        .first()
+        .map(|row| row.signature.len() * 64)
+        .ok_or_else(|| invalid("content stop density fitting needs rows"))?;
+    if !matches!(
+        signature_bits,
+        CONTENT_CODE_SIGNATURE_BITS | CONTENT_TRAJECTORY_SIGNATURE_BITS
+    ) || rows
+        .iter()
+        .any(|row| row.signature.len() * 64 != signature_bits)
+    {
+        return Err(invalid("content stop density signature width differs"));
+    }
     let nonterminal_stop_limit = nonterminal as u64 / 100;
     let mut best: Option<(u64, u64, i64, usize)> = None;
     for neighbors in [1usize, 2, 4, 8, 16] {
@@ -1382,7 +1516,7 @@ pub fn fit_content_stop_density_gate(
     };
     Ok(ContentStopDensityTraining {
         gate: ContentStopDensityGate {
-            signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+            signature_bits,
             terminal_rows: points(true),
             nonterminal_rows: points(false),
             neighbors,
@@ -1409,8 +1543,171 @@ pub fn evaluate_content_stop_density_gate(
     validate_content_readout(readout)?;
     validate_content_stop_density_gate(gate)?;
     evaluate_generated(samples, cap, |sample| {
-        generate_with_content_density_gate(artifact, sample, cap, memory_enabled, readout, gate)
+        generate_with_content_density_gate(
+            artifact,
+            sample,
+            cap,
+            memory_enabled,
+            readout,
+            gate,
+            StopSignatureMode::Code,
+        )
     })
+}
+
+pub fn evaluate_content_stop_phase_density_gate(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+) -> Result<(ContentReadoutReading, Vec<ContentPromptReading>)> {
+    validate_content_readout(readout)?;
+    validate_content_stop_density_gate(gate)?;
+    evaluate_generated(samples, cap, |sample| {
+        generate_with_content_density_gate(
+            artifact,
+            sample,
+            cap,
+            memory_enabled,
+            readout,
+            gate,
+            StopSignatureMode::Phase,
+        )
+    })
+}
+
+pub fn evaluate_content_stop_trajectory_density_gate(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+) -> Result<(ContentReadoutReading, Vec<ContentPromptReading>)> {
+    validate_content_readout(readout)?;
+    validate_content_stop_density_gate(gate)?;
+    evaluate_generated(samples, cap, |sample| {
+        generate_with_content_density_gate(
+            artifact,
+            sample,
+            cap,
+            memory_enabled,
+            readout,
+            gate,
+            StopSignatureMode::PhaseTrajectory,
+        )
+    })
+}
+
+pub fn audit_content_stop_phase_content_prefix(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+) -> Result<ContentStopPhaseAudit> {
+    audit_content_stop_content_prefix(
+        artifact,
+        samples,
+        cap,
+        memory_enabled,
+        readout,
+        gate,
+        StopSignatureMode::Phase,
+    )
+}
+
+pub fn audit_content_stop_trajectory_content_prefix(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+) -> Result<ContentStopPhaseAudit> {
+    audit_content_stop_content_prefix(
+        artifact,
+        samples,
+        cap,
+        memory_enabled,
+        readout,
+        gate,
+        StopSignatureMode::PhaseTrajectory,
+    )
+}
+
+fn audit_content_stop_content_prefix(
+    artifact: &[u8],
+    samples: &[MemoryWeightSample],
+    cap: usize,
+    memory_enabled: bool,
+    readout: &ContentReadout,
+    gate: &ContentStopDensityGate,
+    signature_mode: StopSignatureMode,
+) -> Result<ContentStopPhaseAudit> {
+    validate_content_readout(readout)?;
+    validate_content_stop_density_gate(gate)?;
+    let audits = samples
+        .par_iter()
+        .map(|sample| {
+            let (code, _) = generate_with_readout(
+                artifact,
+                sample,
+                cap,
+                memory_enabled,
+                ContentSignatureMode::Code,
+                false,
+                Some(readout),
+            )?;
+            let (phase, _) = generate_with_content_density_gate(
+                artifact,
+                sample,
+                cap,
+                memory_enabled,
+                readout,
+                gate,
+                signature_mode,
+            )?;
+            let prefix = phase
+                .iter()
+                .position(|decision| decision.gate_fired)
+                .unwrap_or(phase.len());
+            if code.len() < prefix {
+                return Err(invalid("phase content prefix exceeds the code arm"));
+            }
+            let mismatches = code
+                .iter()
+                .zip(&phase[..prefix])
+                .filter(|(code, phase)| {
+                    code.offset != phase.offset
+                        || code.chosen != phase.chosen
+                        || code.content_chosen != phase.content_chosen
+                        || code.writer_chosen != phase.writer_chosen
+                        || code.signature != phase.signature
+                })
+                .count() as u64;
+            Ok(ContentStopPhaseAudit {
+                decisions: prefix as u64,
+                mismatches,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    audits
+        .into_iter()
+        .try_fold(ContentStopPhaseAudit::default(), |mut total, audit| {
+            total.decisions = total
+                .decisions
+                .checked_add(audit.decisions)
+                .ok_or_else(|| invalid("phase content decision count overflows"))?;
+            total.mismatches = total
+                .mismatches
+                .checked_add(audit.mismatches)
+                .ok_or_else(|| invalid("phase content mismatch count overflows"))?;
+            Ok(total)
+        })
 }
 
 pub fn evaluate_content_continuation_gate(
@@ -1556,8 +1853,10 @@ pub fn content_stop_gate_fires(
 }
 
 fn validate_content_stop_density_gate(gate: &ContentStopDensityGate) -> Result<()> {
-    if gate.signature_bits != CONTENT_CODE_SIGNATURE_BITS
-        || gate.terminal_rows.is_empty()
+    if !matches!(
+        gate.signature_bits,
+        CONTENT_CODE_SIGNATURE_BITS | CONTENT_TRAJECTORY_SIGNATURE_BITS
+    ) || gate.terminal_rows.is_empty()
         || gate.nonterminal_rows.is_empty()
         || gate.neighbors == 0
         || gate.neighbors > 16
@@ -1584,10 +1883,12 @@ fn content_stop_density_distance_sum(
     neighbors: usize,
     offset_radius: u16,
 ) -> u64 {
+    let signature_bits = signature.len() * 64;
     let eligible = |index: usize, row: &ContentStopRow| {
         Some(index) != skip
             && row.terminal == terminal
             && row.offset.abs_diff(offset) <= offset_radius
+            && row.signature.len() == signature.len()
     };
     let mut distances = rows
         .iter()
@@ -1603,7 +1904,7 @@ fn content_stop_density_distance_sum(
         .map(u64::from)
         .sum::<u64>();
     let missing = neighbors.saturating_sub(available) as u64;
-    observed + missing * CONTENT_CODE_SIGNATURE_BITS as u64
+    observed + missing * signature_bits as u64
 }
 
 fn content_stop_density_score(
@@ -1690,6 +1991,51 @@ pub fn content_stop_density_gate_fires(
     content_stop_density_fires(gate, signature, offset)
 }
 
+pub fn content_stop_density_predictions_changed(
+    candidate_rows: &[ContentStopRow],
+    control_rows: &[ContentStopRow],
+    candidate: &ContentStopDensityGate,
+    control: &ContentStopDensityGate,
+) -> Result<u64> {
+    validate_content_stop_density_gate(candidate)?;
+    validate_content_stop_density_gate(control)?;
+    if candidate_rows.len() != control_rows.len() {
+        return Err(invalid("content stop density control row count differs"));
+    }
+    candidate_rows
+        .iter()
+        .zip(control_rows)
+        .enumerate()
+        .map(|(index, (row, control_row))| {
+            if row.offset != control_row.offset || row.signature != control_row.signature {
+                return Err(invalid("content stop density control rows differ"));
+            }
+            let candidate_score = content_stop_density_score(
+                candidate_rows,
+                Some(index),
+                row.offset,
+                &row.signature,
+                candidate.neighbors,
+                candidate.offset_radius,
+            )?;
+            let control_score = content_stop_density_score(
+                control_rows,
+                Some(index),
+                row.offset,
+                &row.signature,
+                control.neighbors,
+                control.offset_radius,
+            )?;
+            Ok(u64::from(
+                (candidate_score >= candidate.margin) != (control_score >= control.margin),
+            ))
+        })
+        .try_fold(0u64, |sum, changed| {
+            sum.checked_add(changed?)
+                .ok_or_else(|| invalid("content stop density prediction count overflows"))
+        })
+}
+
 fn generate_with_content_gate(
     artifact: &[u8],
     sample: &MemoryWeightSample,
@@ -1771,6 +2117,7 @@ fn generate_with_content_density_gate(
     memory_enabled: bool,
     readout: &ContentReadout,
     gate: &ContentStopDensityGate,
+    signature_mode: StopSignatureMode,
 ) -> Result<(Vec<Decision>, Generated)> {
     if cap == 0 || cap > 64 || sample.prompt.is_empty() {
         return Err(invalid(
@@ -1799,14 +2146,25 @@ fn generate_with_content_density_gate(
     let mut current = current.ok_or_else(|| invalid("content stop density prompt is empty"))?;
     let mut decisions = Vec::new();
     let mut tokens = Vec::new();
+    let mut previous_signature = None;
     let stop = loop {
         let offset = decisions.len();
         let signature = pack_content_signature(&current.query_q12, ContentSignatureMode::Code)?;
+        let gate_signature = match signature_mode {
+            StopSignatureMode::Code => signature.clone(),
+            StopSignatureMode::Phase => {
+                pack_content_phase_transition_from_code(&signature, previous_signature.as_deref())?
+            }
+            StopSignatureMode::PhaseTrajectory => {
+                pack_content_phase_trajectory_from_code(&signature, previous_signature.as_deref())?
+            }
+        };
+        previous_signature = Some(signature.clone());
         let (content_chosen, nearest_distance, ambiguous_nearest, used_readout) =
             select_content_target(readout, &signature, current.token)?;
         let gate_fired = content_stop_density_fires(
             gate,
-            &signature,
+            &gate_signature,
             offset.try_into().map_err(|_| {
                 invalid("content stop density offset exceeds the row representation")
             })?,
@@ -2263,6 +2621,58 @@ mod tests {
         assert!(first[current.len()..].iter().all(|word| *word == 0));
         assert!(pack_content_trajectory_signature(&query, Some(&previous[1..])).is_err());
         assert!(pack_content_signature(&query, ContentSignatureMode::Trajectory).is_err());
+    }
+
+    #[test]
+    fn phase_transition_uses_previous_code_and_zero_offset_history() {
+        let query = (0..CONTENT_SIGNATURE_BITS)
+            .map(|index| index as i32 - 128)
+            .collect::<Vec<_>>();
+        let previous_query = (0..CONTENT_SIGNATURE_BITS)
+            .map(|index| (index as i32 * 7).wrapping_sub(63))
+            .collect::<Vec<_>>();
+        let current = pack_content_signature(&query, ContentSignatureMode::Code).unwrap();
+        let previous = pack_content_signature(&previous_query, ContentSignatureMode::Code).unwrap();
+        let rotation = previous
+            .iter()
+            .fold(0u32, |sum, word| sum.wrapping_add(word.count_ones()))
+            % 64;
+        let expected = current
+            .iter()
+            .zip(&previous)
+            .map(|(&current, &previous)| current.rotate_left(rotation) ^ previous)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            pack_content_phase_transition_signature(&query, Some(&previous)).unwrap(),
+            expected
+        );
+        assert_eq!(
+            pack_content_phase_transition_signature(&query, None).unwrap(),
+            vec![0; CONTENT_CODE_SIGNATURE_BITS / 64]
+        );
+        assert!(pack_content_phase_transition_signature(&query, Some(&previous[1..])).is_err());
+    }
+
+    #[test]
+    fn phase_trajectory_places_current_code_then_phase_transition() {
+        let query = (0..CONTENT_SIGNATURE_BITS)
+            .map(|index| index as i32 - 128)
+            .collect::<Vec<_>>();
+        let previous_query = (0..CONTENT_SIGNATURE_BITS)
+            .map(|index| (index as i32 * 11).wrapping_sub(101))
+            .collect::<Vec<_>>();
+        let current = pack_content_signature(&query, ContentSignatureMode::Code).unwrap();
+        let previous = pack_content_signature(&previous_query, ContentSignatureMode::Code).unwrap();
+        let transition =
+            pack_content_phase_transition_from_code(&current, Some(&previous)).unwrap();
+        let combined = pack_content_phase_trajectory_from_code(&current, Some(&previous)).unwrap();
+        assert_eq!(combined.len(), CONTENT_TRAJECTORY_SIGNATURE_BITS / 64);
+        assert_eq!(&combined[..current.len()], current.as_slice());
+        assert_eq!(&combined[current.len()..], transition.as_slice());
+        let first = pack_content_phase_trajectory_from_code(&current, None).unwrap();
+        assert_eq!(&first[..current.len()], current.as_slice());
+        assert!(first[current.len()..].iter().all(|word| *word == 0));
+        assert!(pack_content_phase_trajectory_from_code(&current, Some(&previous[1..])).is_err());
     }
 
     #[test]
@@ -2732,6 +3142,13 @@ mod tests {
             shuffled.iter().filter(|row| row.terminal).count(),
             rows.iter().filter(|row| row.terminal).count()
         );
+        let mut never = training.gate.clone();
+        never.margin = i64::MAX;
+        assert!(
+            content_stop_density_predictions_changed(&rows, &shuffled, &training.gate, &never)
+                .unwrap()
+                > 0
+        );
     }
 
     fn continuation_row(signature: usize, remaining: i16, offset: u16) -> ContentContinuationRow {
@@ -2863,6 +3280,40 @@ mod tests {
         let mut malformed = training.gate;
         malformed.terminal_rows[0].signature.pop();
         assert!(content_stop_density_gate_fires(&malformed, &code_signature(0), 0).is_err());
+    }
+
+    #[test]
+    fn content_stop_density_fits_combined_phase_trajectory_width() {
+        let zero = vec![0u64; CONTENT_TRAJECTORY_SIGNATURE_BITS / 64];
+        let mut rows = (0..20)
+            .map(|_| ContentStopRow {
+                signature: zero.clone(),
+                terminal: true,
+                writer_token: 7,
+                offset: 4,
+            })
+            .collect::<Vec<_>>();
+        rows.extend((0..20).map(|index| {
+            let mut signature = zero.clone();
+            signature[CONTENT_CODE_SIGNATURE_BITS / 64] = 1u64 << (index % 8);
+            ContentStopRow {
+                signature,
+                terminal: false,
+                writer_token: 8,
+                offset: 0,
+            }
+        }));
+        let training = fit_content_stop_density_gate(&rows, 1, 0).unwrap();
+        assert_eq!(
+            training.gate.signature_bits,
+            CONTENT_TRAJECTORY_SIGNATURE_BITS
+        );
+        assert!(content_stop_density_gate_fires(&training.gate, &zero, 4).unwrap());
+        let mut mixed = rows;
+        mixed[0]
+            .signature
+            .truncate(CONTENT_CODE_SIGNATURE_BITS / 64);
+        assert!(fit_content_stop_density_gate(&mixed, 1, 0).is_err());
     }
 
     #[test]
@@ -3037,6 +3488,159 @@ mod tests {
         assert_eq!(reading.ungated_token_mismatches, 0);
         assert_eq!(reading.bos_stopped, 1);
         assert_eq!(prompts[0].stop, "bos");
+    }
+
+    #[test]
+    fn generated_phase_density_gate_tracks_previous_state() {
+        let artifact = artifact();
+        let samples = vec![sample()];
+        let (writer, _) = generate_with_readout(
+            &artifact,
+            &samples[0],
+            4,
+            false,
+            ContentSignatureMode::Code,
+            false,
+            None,
+        )
+        .unwrap();
+        let content = ContentReadout {
+            mode: ContentSignatureMode::Code,
+            signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+            includes_reference_end: false,
+            rows: writer
+                .iter()
+                .map(|decision| ContentExample {
+                    signature: decision.signature.clone(),
+                    target: decision.content_chosen,
+                })
+                .collect(),
+            max_distance: 0,
+        };
+        let mut previous = None;
+        let phase = writer
+            .iter()
+            .map(|decision| {
+                let signature = pack_content_phase_transition_from_code(
+                    &decision.signature,
+                    previous.as_deref(),
+                )
+                .unwrap();
+                previous = Some(decision.signature.clone());
+                signature
+            })
+            .collect::<Vec<_>>();
+        assert!(phase[0].iter().all(|word| *word == 0));
+        assert_ne!(phase[1], vec![0; CONTENT_CODE_SIGNATURE_BITS / 64]);
+        let gate = ContentStopDensityGate {
+            signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+            terminal_rows: vec![ContentStopDensityPoint {
+                signature: phase[2].clone(),
+                offset: 2,
+            }],
+            nonterminal_rows: vec![
+                ContentStopDensityPoint {
+                    signature: phase[0].clone(),
+                    offset: 0,
+                },
+                ContentStopDensityPoint {
+                    signature: phase[1].clone(),
+                    offset: 1,
+                },
+            ],
+            neighbors: 1,
+            offset_radius: 0,
+            margin: 1,
+        };
+        let (reading, prompts) = evaluate_content_stop_phase_density_gate(
+            &artifact, &samples, 4, false, &content, &gate,
+        )
+        .unwrap();
+        assert_eq!(reading.gate_fires, 1);
+        assert_eq!(reading.ungated_token_mismatches, 0);
+        assert_eq!(prompts[0].stop, "bos");
+    }
+
+    #[test]
+    fn generated_phase_trajectory_gate_tracks_current_and_previous_state() {
+        let artifact = artifact();
+        let samples = vec![sample()];
+        let (writer, _) = generate_with_readout(
+            &artifact,
+            &samples[0],
+            4,
+            false,
+            ContentSignatureMode::Code,
+            false,
+            None,
+        )
+        .unwrap();
+        let content = ContentReadout {
+            mode: ContentSignatureMode::Code,
+            signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+            includes_reference_end: false,
+            rows: writer
+                .iter()
+                .map(|decision| ContentExample {
+                    signature: decision.signature.clone(),
+                    target: decision.content_chosen,
+                })
+                .collect(),
+            max_distance: 0,
+        };
+        let mut previous = None;
+        let signatures = writer
+            .iter()
+            .map(|decision| {
+                let signature = pack_content_phase_trajectory_from_code(
+                    &decision.signature,
+                    previous.as_deref(),
+                )
+                .unwrap();
+                previous = Some(decision.signature.clone());
+                signature
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &signatures[0][..CONTENT_CODE_SIGNATURE_BITS / 64],
+            writer[0].signature.as_slice()
+        );
+        assert!(signatures[1][CONTENT_CODE_SIGNATURE_BITS / 64..]
+            .iter()
+            .any(|word| *word != 0));
+        let gate = ContentStopDensityGate {
+            signature_bits: CONTENT_TRAJECTORY_SIGNATURE_BITS,
+            terminal_rows: vec![ContentStopDensityPoint {
+                signature: signatures[2].clone(),
+                offset: 2,
+            }],
+            nonterminal_rows: vec![
+                ContentStopDensityPoint {
+                    signature: signatures[0].clone(),
+                    offset: 0,
+                },
+                ContentStopDensityPoint {
+                    signature: signatures[1].clone(),
+                    offset: 1,
+                },
+            ],
+            neighbors: 1,
+            offset_radius: 0,
+            margin: 1,
+        };
+        let (reading, prompts) = evaluate_content_stop_trajectory_density_gate(
+            &artifact, &samples, 4, false, &content, &gate,
+        )
+        .unwrap();
+        assert_eq!(reading.gate_fires, 1);
+        assert_eq!(reading.ungated_token_mismatches, 0);
+        assert_eq!(prompts[0].stop, "bos");
+        let audit = audit_content_stop_trajectory_content_prefix(
+            &artifact, &samples, 4, false, &content, &gate,
+        )
+        .unwrap();
+        assert_eq!(audit.decisions, 2);
+        assert_eq!(audit.mismatches, 0);
     }
 
     #[test]
