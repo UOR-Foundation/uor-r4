@@ -101,7 +101,7 @@ I-2 and I-3 are the ORDER's I-1 and I-2.
 2. **The inputs:** fetch them and check every SHA256SUMS and the pins above.
 3. **The runs:** T1-L, U-L, T2-L, T1-S, U-S and T2-S, each into its own new folder, with `nvidia-smi` logged.
 4. **Seal** with `SHA256SUMS.files`, then DONE, then EXIT.
-5. **On the laptop:** copy the folder off and put it in `results/claude/float-kernel-fusion-measurement-2026-11-05/`. Read it back and check it. Only then take the pod down. Grade R1–R5 and I-1 to I-4 from the copies (jq and awk, in `local/claude/`).
+5. **On the laptop:** copy the folder off and put it in `results/claude/float-kernel-fusion-measurement-2026-11-05/`. Read it back and check it. Only then take the pod down. Grade R1–R5 and I-1 to I-5 from the copies (jq and awk, in `local/claude/`).
 
 ## Minimum test power
 
