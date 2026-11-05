@@ -147,6 +147,12 @@ jq -e --arg tokenizer_sha a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457
   and .conversations == 128 and .world == "m-world-v2"
   and .tokenizer.sha256 == $tokenizer_sha
 ' "$PANEL/manifest.json" >/dev/null
+TRAIN_TOKENS_SHA=$(sha256sum "$TRAIN/tokens.u16" | cut -d ' ' -f1)
+TRAIN_MASK_SHA=$(sha256sum "$TRAIN/response_mask.u8" | cut -d ' ' -f1)
+TRAIN_MANIFEST_SHA=$(sha256sum "$TRAIN/manifest.json" | cut -d ' ' -f1)
+PANEL_TOKENS_SHA=$(sha256sum "$PANEL/tokens.u16" | cut -d ' ' -f1)
+PANEL_MASK_SHA=$(sha256sum "$PANEL/response_mask.u8" | cut -d ' ' -f1)
+PANEL_MANIFEST_SHA=$(sha256sum "$PANEL/manifest.json" | cut -d ' ' -f1)
 
 BIN=$BUILD/release/cpu-learned-copy-read
 run() {
@@ -181,9 +187,25 @@ for name in seed1 seed2; do
     seed1) expected=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd ;;
     seed2) expected=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 ;;
   esac
-  if ! jq -e --arg expected "$expected" '
+  if ! jq -e --arg expected "$expected" \
+    --arg train_tokens "$TRAIN_TOKENS_SHA" \
+    --arg train_mask "$TRAIN_MASK_SHA" \
+    --arg train_manifest "$TRAIN_MANIFEST_SHA" \
+    --arg test_tokens "$PANEL_TOKENS_SHA" \
+    --arg test_mask "$PANEL_MASK_SHA" \
+    --arg test_manifest "$PANEL_MANIFEST_SHA" \
+    --arg tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 '
     .schema == "uor-r4.cpu-learned-copy-read/1"
     and .inputs.artifact_sha256 == $expected
+    and .inputs.train_tokens_sha256 == $train_tokens
+    and .inputs.train_mask_sha256 == $train_mask
+    and .inputs.train_manifest_sha256 == $train_manifest
+    and .inputs.test_tokens_sha256 == $test_tokens
+    and .inputs.test_mask_sha256 == $test_mask
+    and .inputs.test_manifest_sha256 == $test_manifest
+    and .inputs.tokenizer_sha256 == $tokenizer
+    and .inputs.train_split == "train"
+    and .inputs.test_split == "dev"
     and .settings.cap == 64 and .settings.seed == 163
     and .settings.signature_mode == "modulo_256_code"
     and .training.generated_rows >= 640
@@ -191,13 +213,13 @@ for name in seed1 seed2; do
     and .training.target_values >= 16
     and (.training.covered_rows * 10 >= .training.retained_rows * 9)
     and .training.mapping_sha256 != .training.shuffled_mapping_sha256
-    and .changes.learned_from_longest_32.non_vacuous == true
-    and .changes.shuffled_from_learned.non_vacuous == true
-    and .changes.random_32_from_longest_32.non_vacuous == true
-    and .learned.reading.learned_arbitrations > 0
-    and .learned.reading.premature_bos == 0
-    and .shuffled.reading.premature_bos == 0
-    and all(.learned.steps[];
+    and .test.changes.learned_from_longest_32.non_vacuous == true
+    and .test.changes.shuffled_from_learned.non_vacuous == true
+    and .test.changes.random_32_from_longest_32.non_vacuous == true
+    and .test.learned.reading.learned_arbitrations > 0
+    and .test.learned.reading.premature_bos == 0
+    and .test.shuffled.reading.premature_bos == 0
+    and all(.test.learned.steps[];
       .readout_distance != null
       and (if .learned_arbitrated
         then .readout_in_candidates and .selected_token == .readout_target
@@ -210,7 +232,7 @@ for name in seed1 seed2; do
     printf '%s instrument-or-control-fault\n' "$name" >>"$OUT/instrument-fault.txt"
     VALID=0
   fi
-  if ! jq -e '.examples.reachable >= 200' "$report" >/dev/null; then
+  if ! jq -e '.test.examples.reachable >= 200' "$report" >/dev/null; then
     printf '%s reachable-below-200\n' "$name" >>"$OUT/power-limited.txt"
     POWER_OK=0
   fi
