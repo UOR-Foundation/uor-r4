@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -56,7 +57,8 @@ enum StopClass {
 #[derive(Clone, Debug)]
 struct PanelTrace {
     trajectories: Vec<Trajectory>,
-    rows: Vec<StopSignatureRow>,
+    all_rows: Vec<StopSignatureRow>,
+    exact_rows: Vec<StopSignatureRow>,
 }
 
 fn main() {
@@ -79,7 +81,12 @@ fn run() -> Result<()> {
     let dev_manifest = PathBuf::from(values.next().ok_or_else(usage)?);
     let mut prototypes = 8usize;
     let mut seed = 157u64;
+    let mut exact_body_terminal = false;
     while let Some(flag) = values.next() {
+        if flag == "--exact-body" {
+            exact_body_terminal = true;
+            continue;
+        }
         let value = values
             .next()
             .ok_or_else(|| format!("{flag} needs a value\n{}", usage()))?;
@@ -131,25 +138,38 @@ fn run() -> Result<()> {
         &dev_manifest,
     )?;
 
-    let true_training = fit_stop_signature_gate(&train.rows, prototypes)
+    let training_rows = select_training_rows(&train, exact_body_terminal);
+    let true_training = fit_stop_signature_gate(training_rows, prototypes)
         .map_err(|error| format!("true gate fit: {error}"))?;
-    let shuffled_rows = shuffle_stop_signature_rows(&train.rows, seed)
+    let shuffled_rows = shuffle_stop_signature_rows(training_rows, seed)
         .map_err(|error| format!("shuffled rows: {error}"))?;
     if shuffled_rows
         .iter()
-        .zip(&train.rows)
+        .zip(training_rows)
         .all(|(left, right)| left.terminal == right.terminal)
     {
         return Err("shuffled gate is vacuous".to_owned());
     }
     let shuffled_training = fit_stop_signature_gate(&shuffled_rows, prototypes)
         .map_err(|error| format!("shuffled gate fit: {error}"))?;
+    let all_reference_training = exact_body_terminal
+        .then(|| fit_stop_signature_gate(&train.all_rows, prototypes))
+        .transpose()
+        .map_err(|error| format!("all-reference gate fit: {error}"))?;
 
     let train_true = evaluate_gate(&train.trajectories, &true_training.gate)?;
     let train_shuffled = evaluate_gate(&train.trajectories, &shuffled_training.gate)?;
+    let train_all_reference = all_reference_training
+        .as_ref()
+        .map(|training| evaluate_gate(&train.trajectories, &training.gate))
+        .transpose()?;
     let train_none = evaluate_gate(&train.trajectories, &no_gate())?;
     let dev_true = evaluate_gate(&dev.trajectories, &true_training.gate)?;
     let dev_shuffled = evaluate_gate(&dev.trajectories, &shuffled_training.gate)?;
+    let dev_all_reference = all_reference_training
+        .as_ref()
+        .map(|training| evaluate_gate(&dev.trajectories, &training.gate))
+        .transpose()?;
     let dev_none = evaluate_gate(&dev.trajectories, &no_gate())?;
 
     let train_oracle = oracle_exact(&train.trajectories);
@@ -159,6 +179,9 @@ fn run() -> Result<()> {
         train_oracle,
         &train_true.1,
         &train_shuffled.1,
+        train_all_reference
+            .as_ref()
+            .map(|(_, rows)| rows.as_slice()),
         &train_none.1,
     )?;
     let dev_bar = panel_bar(
@@ -166,6 +189,7 @@ fn run() -> Result<()> {
         dev_oracle,
         &dev_true.1,
         &dev_shuffled.1,
+        dev_all_reference.as_ref().map(|(_, rows)| rows.as_slice()),
         &dev_none.1,
     )?;
 
@@ -189,16 +213,23 @@ fn run() -> Result<()> {
         "settings": {
             "prototypes": prototypes,
             "seed": seed,
-            "terminal_label": "generated_step == normalized reference length",
+            "terminal_label": if exact_body_terminal {
+                "exact body + generated_step == normalized reference length"
+            } else {
+                "generated_step == normalized reference length"
+            },
         },
         "training": {
             "true": gate_summary(&true_training),
             "shuffled": gate_summary(&shuffled_training),
+            "all_reference": all_reference_training.as_ref().map(gate_summary),
+            "selected_census": signature_census(training_rows),
         },
         "train": {
             "oracle_exact": train_oracle,
             "true": reply_summary(&train_true),
             "shuffled": reply_summary(&train_shuffled),
+            "all_reference": train_all_reference.as_ref().map(reply_summary),
             "no_gate": reply_summary(&train_none),
             "bar": train_bar,
         },
@@ -206,6 +237,7 @@ fn run() -> Result<()> {
             "oracle_exact": dev_oracle,
             "true": reply_summary(&dev_true),
             "shuffled": reply_summary(&dev_shuffled),
+            "all_reference": dev_all_reference.as_ref().map(reply_summary),
             "no_gate": reply_summary(&dev_none),
             "bar": dev_bar,
         },
@@ -304,7 +336,8 @@ fn load_panel(
     }
 
     let mut trajectories = Vec::with_capacity(samples.len());
-    let mut rows = Vec::new();
+    let mut all_rows = Vec::new();
+    let mut exact_rows = Vec::new();
     for (row, sample) in samples.iter().enumerate() {
         let mut trace = std::mem::take(&mut by_row[row]);
         trace.sort_unstable_by_key(|(step, _)| *step);
@@ -325,13 +358,16 @@ fn load_panel(
             return Err(format!("row {row} full-trace hash differs"));
         }
         let reference = normalized_reference(&sample.reply).to_vec();
+        let body_exact = body_matches_reference(&selected, &reference);
         let decisions = replay_decisions(
             artifact,
             &sample.prompt,
             &selected,
             reference.len(),
             row,
-            &mut rows,
+            body_exact,
+            &mut all_rows,
+            &mut exact_rows,
         )?;
         trajectories.push(Trajectory {
             row,
@@ -340,7 +376,11 @@ fn load_panel(
             decisions,
         });
     }
-    Ok(PanelTrace { trajectories, rows })
+    Ok(PanelTrace {
+        trajectories,
+        all_rows,
+        exact_rows,
+    })
 }
 
 fn replay_decisions(
@@ -349,7 +389,9 @@ fn replay_decisions(
     selected: &[u32],
     reference_len: usize,
     row: usize,
-    rows: &mut Vec<StopSignatureRow>,
+    body_exact: bool,
+    all_rows: &mut Vec<StopSignatureRow>,
+    exact_rows: &mut Vec<StopSignatureRow>,
 ) -> Result<Vec<Decision>> {
     let mut forward = CpuFbsForward::from_artifact(artifact)
         .map_err(|error| format!("replay forward: {error}"))?;
@@ -379,11 +421,15 @@ fn replay_decisions(
             generated_step,
             signature,
         });
-        rows.push(StopSignatureRow {
+        let row_reading = StopSignatureRow {
             signature,
             terminal,
             writer_token: step.token,
-        });
+        };
+        all_rows.push(row_reading.clone());
+        if body_exact {
+            exact_rows.push(row_reading);
+        }
         if terminal {
             break;
         }
@@ -440,10 +486,20 @@ fn evaluate_gate(
 fn oracle_exact(trajectories: &[Trajectory]) -> u64 {
     trajectories
         .iter()
-        .filter(|trajectory| {
-            trajectory.selected[..trajectory.reference.len()] == trajectory.reference
-        })
+        .filter(|trajectory| body_matches_reference(&trajectory.selected, &trajectory.reference))
         .count() as u64
+}
+
+fn body_matches_reference(selected: &[u32], reference: &[u32]) -> bool {
+    selected.len() >= reference.len() && &selected[..reference.len()] == reference
+}
+
+fn select_training_rows(panel: &PanelTrace, exact_body: bool) -> &[StopSignatureRow] {
+    if exact_body {
+        &panel.exact_rows
+    } else {
+        &panel.all_rows
+    }
 }
 
 fn panel_bar(
@@ -451,27 +507,38 @@ fn panel_bar(
     oracle: u64,
     true_rows: &[ReplyRow],
     shuffled_rows: &[ReplyRow],
+    all_reference_rows: Option<&[ReplyRow]>,
     no_gate_rows: &[ReplyRow],
 ) -> Result<Value> {
     let true_reading = summarize_rows(true_rows);
     let shuffled_reading = summarize_rows(shuffled_rows);
+    let all_reference_reading = all_reference_rows.map(summarize_rows);
     let no_gate_reading = summarize_rows(no_gate_rows);
     let floor = oracle.div_ceil(2);
     let false_stop_limit = replies as u64 / 100;
     let shuffled = compare_rows(true_rows, shuffled_rows)?;
+    let all_reference = all_reference_rows
+        .map(|rows| compare_rows(true_rows, rows))
+        .transpose()?;
     let no_gate = compare_rows(true_rows, no_gate_rows)?;
+    let all_reference_passes = all_reference
+        .as_ref()
+        .is_none_or(|comparison| comparison["passes"].as_bool() == Some(true));
     Ok(serde_json::json!({
         "oracle_floor": floor,
         "true_exact": true_reading.exact,
         "true_premature": true_reading.premature,
         "false_stop_limit": false_stop_limit,
         "shuffled_exact": shuffled_reading.exact,
+        "all_reference_exact": all_reference_reading.map(|reading| reading.exact),
         "no_gate_exact": no_gate_reading.exact,
         "true_vs_shuffled": shuffled,
+        "true_vs_all_reference": all_reference,
         "true_vs_no_gate": no_gate,
         "passes": true_reading.exact >= floor
             && true_reading.premature <= false_stop_limit
             && shuffled["passes"].as_bool() == Some(true)
+            && all_reference_passes
             && no_gate["passes"].as_bool() == Some(true),
     }))
 }
@@ -531,6 +598,25 @@ fn gate_summary(training: &StopSignatureTraining) -> Value {
     })
 }
 
+fn signature_census(rows: &[StopSignatureRow]) -> Value {
+    let terminal = rows
+        .iter()
+        .filter(|row| row.terminal)
+        .map(|row| row.signature)
+        .collect::<BTreeSet<_>>();
+    let nonterminal = rows
+        .iter()
+        .filter(|row| !row.terminal)
+        .map(|row| row.signature)
+        .collect::<BTreeSet<_>>();
+    serde_json::json!({
+        "terminal_rows": rows.iter().filter(|row| row.terminal).count(),
+        "nonterminal_rows": rows.iter().filter(|row| !row.terminal).count(),
+        "distinct_terminal": terminal.len(),
+        "distinct_nonterminal": nonterminal.len(),
+    })
+}
+
 fn no_gate() -> StopSignatureGate {
     StopSignatureGate {
         signature_bits: uor_r4_cpu_train::STOP_SIGNATURE_BITS,
@@ -574,7 +660,7 @@ fn read(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn usage() -> String {
-    "usage: cpu-copy-generated-stop ARTIFACT TRAIN_REPORT TRAIN_TOKENS TRAIN_MASK TRAIN_MANIFEST DEV_REPORT DEV_TOKENS DEV_MASK DEV_MANIFEST [--prototypes N] [--seed N]".to_owned()
+    "usage: cpu-copy-generated-stop ARTIFACT TRAIN_REPORT TRAIN_TOKENS TRAIN_MASK TRAIN_MANIFEST DEV_REPORT DEV_TOKENS DEV_MASK DEV_MANIFEST [--prototypes N] [--seed N] [--exact-body]".to_owned()
 }
 
 #[cfg(test)]
@@ -642,5 +728,49 @@ mod tests {
             }]),
             0
         );
+    }
+
+    #[test]
+    fn exact_body_requires_complete_reference_prefix() {
+        assert!(body_matches_reference(&[1, 2, 3], &[1, 2]));
+        assert!(!body_matches_reference(&[1, 9, 3], &[1, 2]));
+        assert!(!body_matches_reference(&[1], &[1, 2]));
+    }
+
+    #[test]
+    fn exact_body_selection_uses_only_clean_rows() {
+        let row = |terminal| StopSignatureRow {
+            signature: [u64::from(terminal); uor_r4_cpu_train::STOP_SIGNATURE_WORDS],
+            terminal,
+            writer_token: u32::from(terminal),
+        };
+        let panel = PanelTrace {
+            trajectories: Vec::new(),
+            all_rows: vec![row(false), row(true), row(false)],
+            exact_rows: vec![row(true)],
+        };
+        assert_eq!(select_training_rows(&panel, false).len(), 3);
+        assert_eq!(select_training_rows(&panel, true).len(), 1);
+        assert!(select_training_rows(&panel, true)[0].terminal);
+    }
+
+    #[test]
+    fn signature_census_deduplicates_each_class() {
+        let row = |signature_word, terminal| StopSignatureRow {
+            signature: [signature_word; uor_r4_cpu_train::STOP_SIGNATURE_WORDS],
+            terminal,
+            writer_token: 0,
+        };
+        let census = signature_census(&[
+            row(1, true),
+            row(1, true),
+            row(2, true),
+            row(3, false),
+            row(3, false),
+        ]);
+        assert_eq!(census["terminal_rows"], 3);
+        assert_eq!(census["nonterminal_rows"], 2);
+        assert_eq!(census["distinct_terminal"], 2);
+        assert_eq!(census["distinct_nonterminal"], 1);
     }
 }
