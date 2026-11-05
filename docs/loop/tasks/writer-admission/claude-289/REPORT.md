@@ -76,7 +76,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
   - Each assert fails with its own merge line set aside, reading 1 against 2, 0.03125 against 0.125, and (3, 0) against (3, 1).
   - The test passes again after the restore and a rebuild.
   - The instrument block itself is unchanged, and stays byte-identical to the evidence branch's.
-- **Size:** the ORDER gave no line estimate. The PR adds 640 lines of code, about a quarter of them tests, and no code line is removed.
+- **Size:** the ORDER gave no line estimate. The PR adds 647 lines of code (621 in `hamilton_sheet.rs`, 26 in `in_space_long.rs`), about a quarter of them tests, and removes none.
 
 ## Measurements
 
