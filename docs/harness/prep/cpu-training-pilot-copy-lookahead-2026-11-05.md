@@ -74,7 +74,7 @@ depth cap, rollout, threshold, controls or bar.
 
 ## Base artifacts and source
 
-- implementation commit: `466a68b2f`;
+- implementation commit: `4b05143cb`;
 - base: `97c4c5a4a`;
 - generator tree:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
@@ -85,7 +85,7 @@ depth cap, rollout, threshold, controls or bar.
 - tokenizer SHA-256:
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
 - `learned_copy_reply.rs` SHA-256:
-  `f4d76bfba5778fd22344bd4435e49ad780fb4127dfd9b6fc80c36daaa11b13d3`;
+  `dd611569937c21eac5afb1975151b4bad73ceb11a21a9abfcd6b04cd5a47ab91`;
 - `cpu-learned-copy-read.rs` SHA-256:
   `5af29377adec20eead10387c07d5377e046111e72dfe04786909c9c64f687660`.
 
@@ -110,7 +110,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/copy-lookahead
 GEN_TARGET=$SOURCE/target/deepseek/copy-lookahead-generator
-IMPL=466a68b2f
+IMPL=4b05143cb
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 BASE=97c4c5a4a
 
@@ -127,7 +127,7 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  f4d76bfba5778fd22344bd4435e49ad780fb4127dfd9b6fc80c36daaa11b13d3 \
+  dd611569937c21eac5afb1975151b4bad73ceb11a21a9abfcd6b04cd5a47ab91 \
   "$SOURCE/crates/uor-r4-cpu-train/src/learned_copy_reply.rs" \
   5af29377adec20eead10387c07d5377e046111e72dfe04786909c9c64f687660 \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-learned-copy-read.rs" |
@@ -241,11 +241,17 @@ for name in seed1 seed2; do
     and .test.lookahead.reading.premature_bos == 0
     and .test.lookahead_shuffled.reading.premature_bos == 0
     and all(.test.lookahead.steps[];
-      .lookahead_evaluated == true
-      and .lookahead_distance != null
-      and (if .learned_arbitrated
-        then (.selected_depth != null and .selected_depth <= 4)
-        else .selected_token == .longest_token
+      (if .lookahead_evaluated
+        then
+          .lookahead_distance != null
+          and (if .learned_arbitrated
+            then (.selected_depth != null and .selected_depth <= 4)
+            else .selected_token == .longest_token
+            end)
+        else
+          .lookahead_distance == null
+          and .selected_token == .writer_token
+          and .selected_token == .longest_token
         end)
       and (if .used_copy then .selected_depth != null
         else .selected_token == .writer_token

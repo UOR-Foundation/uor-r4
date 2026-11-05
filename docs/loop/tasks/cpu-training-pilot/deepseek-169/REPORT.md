@@ -33,14 +33,14 @@ model lookahead.
 
 ## Measurements
 
-- implementation pin: `466a68b2fb240cb861d399124ce0eda046c1b74c`;
+- implementation pin: `4b05143cbcd9f9a7e8959fb1610acfc0bf14c841`;
 - fresh-panel result: **not run at registration**.
 
 ## Checks run at the head
 
 - CPU library: **304 passed**, 4 expected ignores.
 - All CPU-training binary test targets passed.
-- Focused learned/lookahead tests: **9 passed**.
+- Focused learned/lookahead tests: **10 passed**.
 - Scoped Clippy with `-D warnings`: passed.
 - rustfmt and `git diff --check`: passed.
 - Fresh output root and seed 2764: absent before compute.
