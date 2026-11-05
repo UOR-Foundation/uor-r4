@@ -411,3 +411,15 @@ note: K=12 is the smallest cell count clearing both artifacts' group, target and
 date: 2026-11-05
 
 A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent expanded_anchor_pre_run_go`,
+2026-11-05. HEAD was clean at
+`304818effe1560f1d61f4ac75d107dab3c123d76`; `prep-check` reported the sheet
+complete FIT. Implementation source, calibration, tokenizer, artifacts, train
+panel, registered shell and jq predicates matched or parsed; seed 2769 and its
+output root remained absent. The six matched arms, K=12 settings, fail-closed
+floors, control-vs-longest non-vacuity, BOS direct stop, deterministic replay,
+local resource plan and lane isolation were checked read-only. No seed-2769
+generation or evaluation occurred.
