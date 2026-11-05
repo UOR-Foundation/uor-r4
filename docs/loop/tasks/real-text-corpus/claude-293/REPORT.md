@@ -16,13 +16,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
 ## What did not work, first
 
 - **The ORDER's size estimate for Wikipedia was three times too low,** so decision 4 did not survive.
-  - It planned 15,000 kept articles a shard, at about 15M tokens each. Shard 00000's first 15,000 articles hold 43,283,854 TRAIN tokens. The shard opens on the oldest articles: its first 2,000 average about 8,800 tokens, its first 900 about 9,300.
+  - It planned 15,000 kept articles a shard, at about 15M tokens each. Shard 00000's first 15,000 articles hold 43,283,854 TRAIN tokens. The shard opens on the oldest articles: counting TRAIN and held out, its first 15,000 average about 3,050 tokens and its first 900 about 9,340.
   - The record is kept in the store's `superseded/`.
+  - **Shard 00000 was built three times:** at `max_docs=15000` (`superseded/`); at `max_docs=2000`, whose held-out split the memory probe read (88 articles, 700,665 tokens), with only the probe's JSON as its record; and at 900, kept.
 - **The census costs 0.67 to 0.75 GB per million TRAIN tokens on real text, not 150 bytes a token.**
   - Peak footprint over TRAIN tokens: 0.67 for `oasst2/` (2.51 GB at 3.77M); 0.70, 0.74 and 0.75 for the Wikipedia roots (5.64–6.08 GB at 7.9–8.3M).
   - The probe peaked at 0.61 GB on 0.70M tokens. It read an earlier build of `wiki-00000/heldout` (88 articles, tokens `3b5869ca…`, in its JSON), since rebuilt at 396,081 tokens.
   - The 150 bytes came from claude-202's run on the templated M-world. The census's M1/M2 reply-memory probe keeps a row for every reply target (`reply_rows`, then six `reply_table`s, `in_space_long.rs:4961-4993`). On templated data those collapse; on real text almost every row is distinct.
-  - At 43.3M tokens the census would need about 29 to 33 GB; the laptop has 16 GB, about 8 GB of it free.
+  - At 43.3M tokens the census would need about 29 to 32 GB; the laptop has 16 GB, about 8 GB of it free.
   - So the ORDER's stop rule applied ("shrink `max_docs`, and record it"). Each Wikipedia root was cut to about 8M TRAIN tokens: `max_docs` 900, 8,400 and 4,350, because article length differs by shard.
   - Wikipedia is 24.2M TRAIN tokens, not the planned ~45M. The corpus is 3.7 times today's 7.5M-token M-world corpus, not 7 times.
 - **The exact prompt share is not 0.0 for DEV and Fresh V2 against `oasst2/`.**
@@ -44,6 +45,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
   - **Two comments in `real_text.rs` were wrong.** One claimed the bin compares turns on real data; the other gave a wrong reason for the `<|unk|>` refusal.
   - **`panel-turns` hashed the split after writing `out`,** so a hashing failure left a file behind. It now hashes first.
   - **This REPORT quoted the census at 0.62 GB per million tokens and 27 GB for 43.3M,** a slope through the probe that understates the measured 0.67–0.75. It also gave the probe's 0.70M tokens without saying that the folder was since rebuilt.
+  - **The second round** found the first rewording of the `<|unk|>` comment still wrong, and four record gaps: the harness checks were not listed, no file records the build commit, the `max_docs=2000` build went unrecorded, and an "8,800 tokens" figure had no stored source. Each is fixed or stated below.
 - **The ORDER's cancel probe was stamped "about 16:20Z";** it ran before the ORDER commit at 16:00Z. Corrected in the ORDER.
 - **Small slips, each caught at once:**
   - The first push failed with a transient error; the retry pushed.
@@ -230,7 +232,12 @@ All on the laptop, with the release binaries at `9911a2e1c`.
   - The targets: lib 123, `chat-grade` 26, `m-world-recall-corpus` 8 (1 ignored), `prepare-real-text` 11, `prepare-chat-parquet` 1, `prepare-text-parquet` 1, and `mix-chat-corpus` and the doc tests 0 each.
   - At the base it was 163/0/1 over the same 8 targets. The difference is the 5 new library tests and the 2 new bin tests.
   - At `9911a2e1c`, the commit that built the corpus, it was 169/0/1, before the second bin test.
-- **The review fixes change no output.** `panel-turns` at the fix tree, re-run on the five frozen panels, writes files byte-identical to the stored `panel-turns/`. The build modes are untouched.
+- **The review fixes change no output.** `panel-turns` at the fix tree, re-run on the five frozen panels, writes files byte-identical to the stored `panel-turns/`.
+- **The stored corpus is what this code builds.** `oasst2/` was rebuilt at `a8d07553e` from the stored raw file, with its `attempt.json` argv. Its tokens, masks, both manifests and `excluded.jsonl` are byte-identical to the stored root.
+  - No file records the build's commit. `9911a2e1c` is the commit its release binary was built at.
+  - Since that commit the build modes changed in no line; `real_text.rs` changed only in comments.
+  - The Wikipedia roots were not rebuilt, since that needs their shards fetched again.
+- **The harness checks, run on the commit that carries this REPORT:** `loop report --check` PASS, `loop pr-check --local` PASS, `uor-harness check` exit 0, and `loop gates --full` exit 0. The gates also passed at `088d225` and `a8d07553e`.
 - **Negative gates.** Each was set aside with an edit, its test seen to fail, and the code restored. Then the suite was rebuilt and seen green again.
   - **NG1, the leading space after the role marker kept:** the round-trip test fails.
   - **NG2, the marker scan inside a run removed:** the round-trip test and the bin's `panel_turns_reads_back_the_user_turns_a_build_wrote` both fail.
@@ -241,10 +248,11 @@ All on the laptop, with the release binaries at `9911a2e1c`.
   - The crate's only clippy error is the earlier one at `chat-grade.rs:4893`, which claude-292 recorded.
 - **Storage:** all 61 files read back from the store into a fresh folder. `shasum -c` passes every one, and the stored `SHA256SUMS` is byte-identical to the local one.
   - The review fixes changed the store's `README.md`, so it and `SHA256SUMS` were uploaded again and the whole root read back a second time. All 61 files pass, the sums are byte-identical again, and `raw/SHA256SUMS` passes for the raw files beside them.
+  - The second round changed `README.md` once more. It and `SHA256SUMS` were uploaded a third time, and each read back byte-identical. The other 60 files were unchanged since the second full read-back.
 - **Raw inputs:**
   - each Wikipedia shard's SHA-256 matches `raw/SHA256SUMS` before its build;
   - `raw/SHA256SUMS` passes for the stored OASST2 file and both READMEs;
-  - each shard was deleted after its build.
+  - the shards were fetched one at a time, 00000, then 00020, then 00040, and each was deleted after its build.
 
 ## What it unlocks
 

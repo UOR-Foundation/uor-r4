@@ -270,8 +270,8 @@ pub fn split_user_turns(
             let turns = documents.last_mut().expect("the split opens on <|bos|>");
             flush(&mut run, turns)?;
         } else if id == protocol.unk_id {
-            // It stands for text the split does not hold, so the turn cannot be
-            // read back as written.
+            // Byte-level encoding never emits it: it comes only from the literal
+            // text `<|unk|>`, special text the builder drops (`DocDrop::SpecialText`).
             return Err(RealTextError::Defect("an <|unk|> in a prompt run".into()));
         } else if id != protocol.eos_id {
             run.push(id);
