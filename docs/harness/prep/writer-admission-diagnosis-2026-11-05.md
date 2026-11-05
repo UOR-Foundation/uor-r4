@@ -117,3 +117,4 @@ One RTX 5090 at about `$0.5/h`.
 - **Run 2, on the evidence branch `claude/evidence/writer-admission-074d54b2` at `8cb2ff9813515463665ab8c2c6269a0f976222c0`** (`074d54b2` plus this reading): I-1 to I-4 hold, I-2 exactly at all 34 checkpoints, and I-3b fails the near-tie test as it must.
 - **Seed 2 reads F** (14 of 15 checkpoints from step 4,096, N at 14,336). **Seed 1 reads L** (15 of 15). Both read U at step 0. At step 2,048 seed 1 reads O and seed 2 U.
 - The numbers, the store folder and the seal are in [claude-289's REPORT](../../loop/tasks/writer-admission/claude-289/REPORT.md).
+- **One line of the table is an inference, not tested here:** the F row's "A margin alone does not leave the tie" follows from the near-tie reading. This run tried no margin change. The table stays as pre-registered.

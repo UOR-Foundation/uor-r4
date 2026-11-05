@@ -13,14 +13,14 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
   - **The ports shrink:** their coordinates' mean absolute value falls from 2.2e-5 and 2.9e-5 at step 4,096 to 5.4e-7 and 8.3e-7 at 32,768. Over the same steps the whole query's grows from 1.06 to 3.97.
   - **The scores tie:** at step 32,768 every one of the 14,287 DEV rows has its 256 cell scores within 1e-4 of each other, and 5,625 rows within 1e-6.
 - **It is a near-tie, not an exact one.** An exact tie would keep cells 0–7 on every row. Instead:
-  - only 30–84 rows rank the target's cell at its own id. That is about the 56 (14,287 / 256) that a rank unrelated to the id gives by coincidence, where an exact tie gives every row;
+  - only 30–84 rows rank the target's cell at its own id. That is near the 56 (14,287 / 256) a rank unrelated to the id gives by coincidence, though not a fit to it (56 ± 7.5 at one checkpoint), and far from the 14,287 an exact tie gives;
   - 110–246 distinct cells are kept first;
   - residual differences pick the kept cells. Admission is then a lottery: 208–714 rows a checkpoint, a mean of 442 over the 15, against chance's 446 (8 of 256 cells).
 - **The ports carry no target information the mean rank can see:** the target root's mean rank is 6.47–8.10 against chance's 7.5.
 - **The trunk learned anyway:** nearest's hits rose from 3,702 at step 4,096 to 6,909 at 32,768. The failure lies in the 16 port coordinates, not the trunk.
 - **By the sheet's rule, the split arises in training:** both seeds read U alike at step 0.
   - That rule does not exclude a difference in the two seeds' initializations or data order, which a step-0 class cannot see.
-  - Still open, item 2, names the rerun that would show it.
+  - Still open, item 2's rerun would time the split, not separate those causes. That would take runs that change the initialization with the data order held, and the reverse.
   - By step 2,048 they have split. Seed 1's ports point at the target's roots (mean ranks 2.68 and 3.32, class O).
   - Seed 2's ports have shrunk to 0.02, with mean root ranks near chance (7.08 and 7.28, U), and its nearest reads 76 hits, against seed 1's 2,630.
 - **What it points done-when 2 to (the sheet's F row):** a change the tie point cannot satisfy, built from the roots' own geometry. Examples: cells kept by the target's own ports in training, or a port-to-target-root term that reads 0 only on the root.
@@ -73,7 +73,10 @@ Lab: claude. [ORDER](./ORDER.md). PR #3722, item #3394. Plan step: P6 of Casey's
   - Its one commit is also stored as `evidence-8cb2ff98.patch` beside the results (SHA-256 `b4745e5cf0db6115b56dbae84a215ae9ece25c1719cee9f904a0e76a5fbbfc58`).
   - `uor-harness check` warns that the branch has no PR. It is kept rather than archived, because this REPORT and the store's `job.sh` name its commit (Still open, item 6).
 - **After the exact-head review,** test only: `admission_counts_merge_and_read` also asserts `rank_is_cell_rows`, the second port's `mean_abs` and `target_root` after a merge, each carried on both sides.
-  - Each assert fails with its own merge line set aside, reading 1 against 2, 0.03125 against 0.125, and (3, 0) against (3, 1).
+  - Each assert fails with its part of the merge set aside:
+    - dropping the `rank_is_cell_rows` line reads 1 against 2;
+    - merging only `ports[0]` (the port loop cut to one) reads 0.03125 against 0.125;
+    - dropping the `target_root` line reads (3, 0) against (3, 1).
   - The test passes again after the restore and a rebuild.
   - The instrument block itself is unchanged, and stays byte-identical to the evidence branch's.
 - **Size:** the ORDER gave no line estimate. The PR adds 647 lines of code (621 in `hamilton_sheet.rs`, 26 in `in_space_long.rs`), about a quarter of them tests, and removes none.
@@ -179,7 +182,7 @@ At step 14,336, all 14,287 rows lie under 1e-2, so it reads N.
   - the D67 pre-run review: GO (6657781139);
   - the run 1 note (6657976950);
   - the exact-head review of this PR, at `94e513ac4`, in three fresh slices, each APPROVE WITH CHANGES with no blocker:
-    - **the instrument code:** it confirms the reading's port scores, cell layout and tie rule match the writer's, and that the bands, means and merge are right. Its three minors are Still open, item 5, with the coincidence reading of `rank_is_cell_rows` now in the paragraph above.
+    - **the instrument code:** it confirms the reading's port scores, cell layout and tie rule match the writer's, and that the bands, means and merge are right. Its three minors are Still open, item 5, with the coincidence reading of `rank_is_cell_rows` now in "In one paragraph".
     - **the tests and wiring:** it confirms the evidence patch's `hamilton_sheet.rs` lines equal the head's, and its `in_space_long.rs` port is equivalent for a non-served inspection. Its merge-test gaps are fixed (What changed); its other points are Still open, item 5.
     - **a claims check of every number:** it reproduced both seeds' classes and every table value and range it checked. Its two majors were a causal sentence and an untested margin claim; both are reworded here, in the notebook row and in the item, and so are its two minors.
   - It is recorded by `loop review` at the final head.
