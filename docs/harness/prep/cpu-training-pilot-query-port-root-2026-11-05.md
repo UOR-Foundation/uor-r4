@@ -224,4 +224,12 @@ unseen-key transfer, language quality, complete replies, or GPU qualification.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-query-port-root-2026-11-05.md
+reviewer: deepseek fresh-context subagent query_port_fit_review_3
+note: No blockers at e2e756dee; filtered power, matched controls, control-fault
+  classification, table-anchor preconditioning, exact parity and scope verified.
+  Component calibration only; no comparison executed.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
