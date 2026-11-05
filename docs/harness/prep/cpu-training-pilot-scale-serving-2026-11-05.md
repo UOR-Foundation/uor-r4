@@ -187,4 +187,21 @@ the repository as attempt-1 evidence and is not used for the current claim.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-scale-serving-2026-11-05.md
+reviewer: deepseek fresh-context subagent scale_serving_run2_fit
+note: No pre-run blockers at 50f0d7d76. The reviewer verified that run 2
+  exercises whole-table nearest, the contexts are representative rather than
+  scale-probe registrations, attempt 1 is excluded, the output path is fresh,
+  and both binary/source pins match.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent scale_serving_run2_fit`,
+2026-11-05, at exact head `50f0d7d76`. The reviewer confirmed the nearest
+readout, 18-cell controls, shape/repeat checks, fail-closed negative controls
+and RSS boundary, pins, fresh output and D84 boundary. No Claude-owned source
+is changed.
