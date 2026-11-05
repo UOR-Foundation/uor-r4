@@ -145,6 +145,7 @@ artifacts must parse and their pinned hashes must match before panel generation.
 - `docs/roadmap/items/cpu-training-pilot.md`
 - `docs/integration/current-state.md`
 - `docs/harness/claims.json`
+- `docs/harness/ledger/deepseek-2026-11.jsonl`
 
 ## Done when
 
