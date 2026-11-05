@@ -626,7 +626,8 @@ pub fn boundary_stop_changes(
     left: &TimedReplyBoundaryReading,
     right: &TimedReplyBoundaryReading,
 ) -> u64 {
-    let key = |step: &ReplyBoundaryStep| (step.row, step.generated_step);
+    let key =
+        |step: &ReplyBoundaryStep| (step.row, step.generated_step, step.boundary_depth.unwrap());
     let left = left
         .steps
         .iter()
