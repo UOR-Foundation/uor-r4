@@ -407,6 +407,30 @@ fn grade_refuses_sha_mismatch() {
 }
 
 #[test]
+fn grade_refuses_train_sha_or_panel_mask_sha() {
+    let b = base("grade_sha2");
+    let (mut tr, pa) = (train_fx(&b.join("train")), panel_fx(&b.join("panel")));
+    let rp = b.join("rows.json");
+    rows_file(&rp, "p", &[1], &[5], &[5], &[5]);
+    let good = tr.t.clone();
+    tr.t = pa.t.clone();
+    refused(
+        grade(&b.join("g1"), &tr, &[("p", &pa)], &[("p", &rp)]),
+        "train/tokens.u16: sha256",
+    );
+    tr.t = good;
+    let pm = Fx {
+        dir: pa.dir.clone(),
+        t: pa.t.clone(),
+        m: tr.m.clone(),
+    };
+    refused(
+        grade(&b.join("g2"), &tr, &[("p", &pm)], &[("p", &rp)]),
+        "panel/response_mask.u8: sha256",
+    );
+}
+
+#[test]
 fn grade_refuses_count_mask_length_mismatch() {
     let b = base("grade_len");
     let tr = split(&b.join("train"), &[0, 5, 7], &[0, 1], 4096, false);
@@ -602,6 +626,83 @@ fn pair(out: &Path, kv: &[(&str, &Path)], table: Option<&str>) -> Result<String,
         v.push(("table", t.to_string()));
     }
     run(&args("pair", &v))
+}
+
+#[test]
+fn pair_refuses_cells_with_mixed_train() {
+    let c = e2e_setup("mixed_train");
+    let tr2 = split(
+        &c.b.join("train2"),
+        &[0, 5, 7, 0, 5, 6, 0, 9, 9, 0, 5],
+        &[0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1],
+        4096,
+        true,
+    );
+    let pa = Fx {
+        dir: c.pa.dir.clone(),
+        t: c.pa.t.clone(),
+        m: c.pa.m.clone(),
+    };
+    let c2 = Cell {
+        b: c.b.clone(),
+        tr: tr2,
+        pa,
+    };
+    let [a1, a2, a3, b1, b2, b3] =
+        ["a1", "a2", "a3", "b1", "b2", "b3"].map(|n| grade_cell(&c, n, &TGT));
+    let [x1, x2, x3] = ["x1", "x2", "x3"].map(|n| grade_cell(&c2, n, &TGT));
+    let go = |name: &str, kv: &[(&str, &PathBuf)]| {
+        let kv: Vec<(&str, &Path)> = kv.iter().map(|(k, p)| (*k, p.as_path())).collect();
+        pair(&c.b.join(name), &kv, None)
+    };
+    let a = [("a1", &a1), ("a2", &a2)];
+    let cell_a = "cell a's seeds share TRAIN";
+    let cell_b = "cell b's seeds share TRAIN";
+    refused(
+        go(
+            "a3.json",
+            &[
+                a[0],
+                a[1],
+                ("a3", &x3),
+                ("b1", &b1),
+                ("b2", &b2),
+                ("b3", &b3),
+            ],
+        ),
+        cell_a,
+    );
+    refused(
+        go("b2.json", &[a[0], a[1], ("b1", &b1), ("b2", &x2)]),
+        cell_b,
+    );
+    refused(
+        go(
+            "b3.json",
+            &[
+                a[0],
+                a[1],
+                ("a3", &a3),
+                ("b1", &b1),
+                ("b2", &b2),
+                ("b3", &x3),
+            ],
+        ),
+        cell_b,
+    );
+    // The two cells may train on different TRAIN: a data-size pair does.
+    go(
+        "bx.json",
+        &[
+            a[0],
+            a[1],
+            ("a3", &a3),
+            ("b1", &x1),
+            ("b2", &x2),
+            ("b3", &x3),
+        ],
+    )
+    .unwrap();
 }
 
 #[test]
@@ -1081,6 +1182,33 @@ fn pair_clean_refuses_identity_or_split_name() {
         v["splits"][1]["name"] = json!("r")
     });
     refused(go(&c.seen), "split names/order");
+}
+
+#[test]
+fn pair_clean_refuses_other_train() {
+    let c = clean_setup("clean_train");
+    let (mut t, mut m) = seen_train_tokens();
+    t.extend([0, 50, 51]);
+    m.extend([0, 1, 1]);
+    let tr2 = split(&c.b.join("train2"), &t, &m, 4096, true);
+    let other = c.b.join("seen-other");
+    let panels = [("p", &c.pa), ("q", &c.pa)];
+    seen_cmd(
+        &other,
+        &tr2,
+        &panels,
+        &[("p", &c.rows[0]), ("q", &c.rows[1])],
+    )
+    .unwrap();
+    let kv = [
+        ("a1", c.cells[0].as_path()),
+        ("a2", &c.cells[1]),
+        ("clean", &other),
+    ];
+    refused(
+        pair(&c.b.join("p.json"), &kv, Some("t2")),
+        "train.tokens_sha256 differs from a1's grade",
+    );
 }
 
 #[test]

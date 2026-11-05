@@ -24,7 +24,8 @@ scale-probe mix out=local/claude/mix-q1 fraction=1/4 \
 
 Scores one checkpoint's rows files (`{split, memory, positions, targets, nearest, writer}`)
 against TRAIN count tables: the unigram top-1 and T2, the previous-token bigram top-1 (ties to
-the lower id; an unseen key falls back to the unigram top-1). Writes `out/grade.json`
+the lower id; an unseen key falls back to the unigram top-1). The key is `tokens[p-1]`, so a
+document's first scored token is keyed on its BOS (token 0). Writes `out/grade.json`
 (`uor-r4-scale-probe-grade/v1`) and `out/nearest-hits.bin` (one bit per row, LSB-first, splits
 in argument order). A split's `row_identity_sha256` is SHA-256 over its `(position u64 LE,
 target u32 LE)` pairs; the pooled one is SHA-256 over, per split in order, the name length
@@ -82,9 +83,12 @@ grade that lacks them. It also recounts each split's and the pooled `vs_t2` or `
 `(b, c)` from the bitsets and refuses a grade that disagrees.
 
 `clean=SEENDIR` adds an `unseen` object: the same readings over only the rows whose excluded
-bit is 0. The seen directory must match a1's grade: the same pooled identity, the same split
-names, order and identities, and an `excluded.bin` of the right length whose SHA-256 matches
-`seen.json`. Its `seen.json` SHA-256 is recorded as `clean_seen_sha256`.
+bit is 0. The seen directory must match a1's grade: the same TRAIN (`train.tokens_sha256`), the
+same pooled identity, the same split names, order and identities, and an `excluded.bin` of the
+right length whose SHA-256 matches `seen.json`. Its `seen.json` SHA-256 is recorded as
+`clean_seen_sha256`. When the two cells train on different mixes, put the larger mix as cell A
+and build the seen directory against it: a row unseen in the larger mix is unseen in its
+prefixes.
 
 ```
 scale-probe pair out=local/claude/w512-vs-w256.json a1=g-w512-s1 a2=g-w512-s2 \

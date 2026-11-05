@@ -33,13 +33,13 @@ A training comparison from scratch; the candidates are the checkpoints each cell
 ## Arms
 
 **The grid:** 3 widths × 3 data sizes × 2 seeds = 18 runs. Every run takes the same positions: `--context 192 --batch 16 --steps 8192 --eval-every 1024`, that is 25,165,824 positions.
-- **Widths:** `--width 256 --hamming-read 4`, `--width 512 --hamming-read 8`, `--width 1024 --hamming-read 16`. Each Hamming head is 64 wide, the most a head may be (`HammingRead::new`, `flock_read_hamming.rs:956-964`). The readout's writer admits widths up to 1,024 in whole 8-wide blocks (`native_vector_writer.rs:32-40`). `--width` widens the stream only (`build_hamilton_model_at`, as claude-153 ran 512). These parts stay as they are at every width:
-  - the six layers;
-  - the 4 stack heads, 256 wide at width 1,024 (`StackConfig::validate`, `geometric_stack_native.rs:945-957`, asks only for a width the heads divide into an even head width);
-  - the Hamilton gate's hidden width of 384 (`SHEET_MLP_HIDDEN`);
-  - the vocabulary of 4,096.
+- **Widths:** `--width 256 --hamming-read 4`, `--width 512 --hamming-read 8`, `--width 1024 --hamming-read 16`. `--hamming-read` is the width over 64, so each Hamming head is 64 wide, the most a head may be, and half the heads are copy heads (`HammingRead::new`, `flock_read_hamming.rs:956-964` and `:1028-1030`).
+  - **Every limit admits 1,024, inclusively:** `HammingRead::new` asks for at least 2 heads that divide the width, each a multiple of 4 and at most 64 wide; the stack asks for a width divisible by 4 that its heads divide into an even head width (`StackConfig::validate`, `geometric_stack_native.rs:945-957`); the readout's writer admits at most 1,024 in whole 8-wide blocks (`WriterSpec::validate`, `native_vector_writer.rs:32-40`).
+  - **The model:** the trainer builds it with `build_fbs_model_at` (`in_space_long.rs:870`), which reaches `build_hamilton_model_at` (`hamilton_sheet.rs:3111-3133`) with only the width changed, as claude-153 ran 512.
+  - **What grows with the width:** the stream; the 4 stack heads' width, width/4 (64, 128, 256); the Hamming heads' count; and the writer's 8-wide blocks, width/8.
+  - **What stays:** the six layers, the 4 stack heads' count, the Hamilton gate's hidden width of 384 (`SHEET_MLP_HIDDEN`), and the vocabulary of 4,096.
 
-  So "width" here means the stream's width, not every part's.
+  So "width" here means the stream's width and what is sized from it, not every part's.
 - **Data:** `--train-split Dk --train-sha256 HEX --train-mask-sha256 HEX` with D1, D2 or D3 (Data split). The run's `--data-root` is claude-261's pinned DATA, for the trainer's in-run DEV evaluation, which is reported only.
 - **Seeds:** `--seed 1` and `--seed 2`.
 - **The contrast cell** (the decided order: "The templated data stays as one contrast cell"). Widths 256 and 1,024 on the pinned templated TRAIN (`mw-balp`, `--train-split` omitted), seed 1, the same positions and flags. 2 runs, reported only.
@@ -65,7 +65,10 @@ All readings are taken on the laptop from the sealed `no-memory` rows files, thr
 - **unseen:** at least 8 tokens of its own document precede it, counting its `<|bos|>`, and those 8 tokens do not occur anywhere in D3's TRAIN as a run inside one document;
 - **excluded:** every other row.
 
-`scale-probe seen` writes this bit for every row (`excluded.bin`), against D3, the largest TRAIN. Since D1 ⊂ D2 ⊂ D3, a row unseen in D3 is unseen in every cell's TRAIN. `pair clean=` reads every comparison on all rows and again on the unseen rows. The counts against D1 and D2 are reported too.
+`scale-probe seen` writes this bit for every row (`excluded.bin`) against one TRAIN. `pair clean=` reads every comparison on all rows and again on the unseen rows, with the seen set of cell X's TRAIN:
+- **X is always the larger mix.** Since D1 ⊂ D2 ⊂ D3, a row unseen in X's TRAIN is unseen in Y's too, so the unseen rows are unseen by both cells.
+- **So R1, R2 and R3 read D3's set,** and a pair at D1 or D2 reads that mix's set.
+- **`pair` refuses** a seen set built on any TRAIN but X's.
 - **R1 (deciding): width.** (1,024, D3) against (256, D3), paired by row at each seed.
 - **R2 (deciding): data.** (1,024, D3) against (1,024, D1), paired the same way.
 - **R3 (deciding): the tables.** (1,024, D3) against its own TRAIN's T2, and against its unigram (`pair table=t2`, `table=unigram`).
@@ -75,10 +78,15 @@ All readings are taken on the laptop from the sealed `no-memory` rows files, thr
 - **R5: the slopes.**
   - **Per doubling:** the width slope at each data size and the data slope at each width, in rows a doubling. With three evenly spaced points, the least-squares slope is half the end-to-end difference, `(y_last − y_first)/2`. Paired by row, that difference is the end pair's `d`, so a slope is distinguishable from flat exactly when that pair's verdict is ahead or behind. The two deciding slopes are R1's and R2's.
   - **The end pairs' verdicts:** each other width pair (1,024 against 256 at D1 and at D2) and data pair (D3 against D1 at widths 256 and 512) is read by `pair`, reported.
-- **R6: the shape.** Adjacent pairs (256 against 512 and 512 against 1,024 at D3; D1 against D2 and D2 against D3 at 1,024) by `pair`, and the curvature `y_last − 2·y_mid + y_first`. Reported only.
+- **R6: the shape.** Adjacent pairs (512 against 256 and 1,024 against 512 at D3; D2 against D1 and D3 against D2 at 1,024) by `pair`, and the curvature `y_last − 2·y_mid + y_first`. Reported only.
 - **R7: by source.** R1 to R3 on OASST2's replies alone, and on the three Wikipedia panels together; `pair` prints each split. Reported only.
 - **R8: the contrast.** Reported only.
-  - DEV top-1 for the contrast cell's two widths. The source is the trainer's in-run DEV evaluation `T` (of 14,287) at step 8,192, the same reading claude-152's and claude-153's `T` came from. It is set beside claude-152's `9,328 / 10,573` (arm (a), seeds 1 and 2, width 256, step 16,384) and claude-153's `10,152 / 11,140` at 512. Those came from other recipes and steps, so they are context, not a series. `--score-rows` also writes DEV's rows (`rows-dev-no-memory.json`); `grade` counts them against the cell's TRAIN, and both counts are reported.
+  - DEV top-1 for the contrast cell's two widths, of 14,287, from three sources:
+    - **`T`,** the writer's top-1 in the trainer's in-run DEV evaluation at step 8,192 (`dev_top1_hits`, `in_space_long.rs:11586`). The writer reads at Q12 in the D11 mode, on tables rounded as exported, and picks from its admitted cells and their rivals, not the whole table. It is the reading claude-152's and claude-153's `T` came from, and it is set beside claude-152's `9,328 / 10,573` (arm (a), seeds 1 and 2, width 256, step 16,384) and claude-153's `10,152 / 11,140` at 512, as writer top-1 context: other recipes and steps, not a series.
+    - **The trainer's whole-table nearest count** (`dev_nearest.hits`) on the same `progress.jsonl` line.
+    - **`--score-rows`' DEV rows** (`rows-dev-no-memory.json`): their nearest count, and `grade`'s count against the cell's TRAIN tables.
+
+    The two nearest counts should agree. A gap is reported and classified (the rows or the served rounding) before R8 is read. The panel readings come from `--score-rows` alone and do not rest on it.
   - The contrast cell's top-1 on the four real-text panels, beside the grid's (256, D3) and (1,024, D3): what a model trained on templated text carries to human text.
 - **R9: export parity.** `fbs-compare --parity-only` of each R4 export against its own D11 readout, on its pod. An integer panel top-1 is not run here; it is owed for any width served later.
 - **Bytes per token,** per source under the pinned tokenizer, from each held-out manifest's `content_bytes` and `tokens`: OASST2 560,402 / 214,758 (2.609), Wikipedia 3,100,628 / 1,276,860 (2.428), pooled 3,661,030 / 1,491,618 (2.454). Reported beside every top-1, so a reading per token can be read per byte. Bits per byte waits for a lawful likelihood (§4.8).
@@ -95,7 +103,7 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
   - **mixed:** otherwise.
 
   "Inside" means not distinguishable from flat at this power. It is never read as "no difference" (L-007).
-- **At three seeds** (only when the table below sends a reading to seed 3), `s` runs over {1, 2, 3}. The spread is taken over all three, and ahead, behind and inside each need all three seeds. `scale-probe pair a1= a2= a3= b1= b2= b3=` computes it, and `a1= a2= a3= table=` against a table. Its tests pin both the three-seed spread and the three-seed agreement, each with a negative gate.
+- **At three seeds** (only when the table below sends a reading to seed 3), `s` runs over {1, 2, 3}. The spread is taken over all three, and ahead, behind and inside each need all three seeds. `scale-probe pair a1= a2= a3= b1= b2= b3=` computes it, and `a1= a2= a3= table=` against a table. Its tests pin the three-seed spread, the three-seed agreement, and that a third seed trains on its cell's TRAIN, each with a negative gate.
 - **Both row sets.** R1, R2 and R3 each take the verdict above on all rows and on the unseen rows.
   - If either set's verdict is mixed, the reading is **mixed (seeds)**.
   - Otherwise, if the two verdicts agree, the reading is that shared verdict.
@@ -108,14 +116,16 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
 | 1 | mixed (seeds) | or mixed (seeds) | **Undecided.** | A pre-registered seed 3 runs for the three cells R1 and R2 read: (1,024, D3), (256, D3) and (1,024, D1). The table is then read again at three seeds, on both row sets. If row 1 still matches, the result is inconclusive, and nothing is named or closed. |
 | 2 | mixed (row sets) | or mixed (row sets) | **Seen and unseen text disagree.** | Nothing is named. The next unit classifies it (overlap or power); no seed 3. |
 | 3 | behind | or behind | **Worse with size.** | The next unit classifies it, instrument or mechanism, before anything is scaled: equal positions may under-train a wider model. The other reading's verdict is reported beside it. |
-| 4 | ahead | ahead or inside | **The model grows with width.** | Scaling the trunk is next, with R2's verdict reported beside it. A width past 1,024 needs the writer changed first (`native_vector_writer.rs:32-40` admits at most 1,024), so that item is opened. |
-| 5 | inside | ahead | **It grows with data, not width, at these sizes.** | Growing the data is next: more Wikipedia shards, with the same bin. |
-| 6 | inside | inside | **Flat at these sizes.** | This closes this configuration only: recipe (b) without memory, 25M positions, these widths and fractions (§4.1). The next unit classifies it, instrument or mechanism, starting with under-training and the learning rate held at 0.001 for every width. |
+| 4 | ahead | ahead or inside | **Width 1,024 beats 256 at D3 (the float model, these panels).** | Scaling the trunk is next, with R2's verdict reported beside it. A width past 1,024 needs the writer changed first (`native_vector_writer.rs:32-40` admits at most 1,024), so that item is opened. |
+| 5 | inside | ahead | **All of D3 beats a quarter of it at width 1,024 (the float model, these panels); width is inside the band.** | Growing the data is next: more Wikipedia shards, with the same bin. Width is not read as flat (L-007). |
+| 6 | inside | inside | **Neither is distinguishable from flat at this power.** | Nothing is named or closed yet. The next unit classifies it first, instrument or mechanism (§4.2): the band against the gain these sizes could show, under-training at equal positions, and the learning rate held at 0.001 for every width. Only a mechanism classification closes this configuration, recipe (b) without memory at 25M positions and these widths and fractions (§4.1), and never the mechanism. |
 
-- **R3, read on its own:**
-  - **Ahead of T2:** the REPORT says "Measured: the float model trained as served at width 1,024 on D3 gets more whole-table nearest top-1 hits than D3's bigram table (T2) on these four held-out panels, beyond the paired band at both seeds." The same form is used against the unigram.
-  - **Inside or behind:** the REPORT says the model does not beat T2 on these panels.
-  - **Mixed:** it says the two are not distinguishable at these seeds. No seed 3 runs for R3.
+- **R3, read on its own,** with the both-row-sets rule above. The same forms are used against the unigram.
+  - **Ahead:** the REPORT says "Measured: the float model trained as served at width 1,024 on D3 gets more whole-table nearest top-1 hits than D3's bigram table (T2) on these four held-out panels, on all rows and on the rows whose context D3 does not hold, beyond the paired band at both seeds."
+  - **Inside:** it says the model and T2 are not distinguishable at this power on these panels. That is never read as "no better than T2" (L-007).
+  - **Behind:** it says T2 gets more of these panels' rows right than the model, beyond the band at both seeds. The next unit classifies it, instrument or mechanism, before anything is built on it.
+  - **Mixed (seeds):** it says the two are not distinguishable at these seeds. No seed 3 runs for R3.
+  - **Mixed (row sets):** it gives each row set's verdict by name (for example, ahead on all rows and inside on the unseen rows), and names nothing.
 - **Whatever the outcome:**
   - R4 to R9 are reported with their numbers.
   - No reading here is a served result or a milestone claim.
@@ -135,8 +145,8 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
   - a duplicate position;
   - a panel or TRAIN file whose SHA-256 is not the one given.
 
-  `scale-probe pair` refuses two checkpoints whose rows are not the same positions, in the same order. So all 18 grid checkpoints must score the same rows. Coverage, rows over the panel's scored positions (1,460,697), is reported.
-- **I-5 (the scorer's determinism):** for each checkpoint, the `memory` and `no-memory` rows files are compared. With no turn memory they read the same model. Reported: whether their SHA-256s match, and if not, how many rows differ and between which picks. A mismatch does not stop the run; the `no-memory` files are graded either way.
+  `scale-probe pair` refuses two checkpoints whose rows are not the same positions, in the same order. So all 18 grid checkpoints must score the same rows. Coverage, rows over the panel's scored positions (1,460,697), is reported. It should be all of them (Data split); a shortfall is reported with the positions it misses.
+- **I-5 (the scorer's determinism):** for each checkpoint, the `memory` and `no-memory` rows files are compared. With no turn memory they read the same model. The scoring command passes no decision-trace option: the trace is taken in the memory pass alone (`in_space_long.rs:7871-7873`), so it would make the two passes differ. Reported: whether their SHA-256s match, and if not, how many rows differ and between which picks. A mismatch does not stop the run; the `no-memory` files are graded either way.
 
 ## Data split
 
@@ -174,7 +184,7 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
   | `wiki-00020` | 430 | 443,682 | 443,252 | `9b7f1432b105f161ed8b54b01900d8fa791efc6dbfd5ad1d62a8d4d94a86d640` | `a6803ab3de3fae60c382416639ffa583c26ac822db78a37afd2c2d718767e00d` |
   | `wiki-00040` | 239 | 437,097 | 436,858 | `c927243b540bccdda8af8fb5a11aafa8b9041d4af30dd614f23d2ebb9aa5962d` | `9d95ea6de0eba07d4cdbc258b5fa6ae88def952f062d166ba417d783724fa625` |
 
-  The panel holds 1,460,697 scored positions. `--score-rows` cuts each panel into 192-token windows and drops a window with fewer than four scored offsets, so the rows are at most that.
+  The panel holds 1,460,697 scored positions. `--score-rows` cuts each document's targets into windows of at most 192 (`build_document_windows`, `hamilton_sheet.rs:1880-1920`). It drops only a document of one token or none and a window with no scored target, and it scores every other scored target exactly once. So the rows should be all 1,460,697 (I-4).
 - **Its census (claude-293):**
   - **OASST2:** 2 of its held-out split's 511 prompts are also in its TRAIN, "Thank you" and "Can you write stories?", in other trees. The split is by tree, and people repeat openers. They are kept; they are two prompts, and the rows scored are replies.
   - **Wikipedia:** a split has no prompt runs, so the prompt census measures nothing. The builder's exclusion screen dropped 5 articles across the corpus against the frozen panels.
@@ -190,7 +200,7 @@ For cell X against cell or table Y, pooled, at each seed `s` in {1, 2}:
   - **The seen share grows with the mix,** 8.8% to 12.1% to 15.6%, as nesting requires. So part of any gain R2 reads on all rows could be recall of contexts D3 holds and D1 does not. That is why R2 is also read on the rows unseen in D3.
   - **"Seen" is a screen, not a finding of copying.** It marks a row whose 8-token context occurs anywhere in TRAIN, whatever token followed it there. Common phrases count. So the unseen set is the conservative one.
   - Stored with a `SHA256SUMS` (its own SHA-256 `88929e87931bef0fd91213ffbeb4701038354aa6cceca8be3c1621f478399f67`) at `results/claude/scale-probe-2026-11-05/census/`, read back in this unit.
-  - **The readings' bits are made in the run unit.** `--score-rows` may drop a window, so a checkpoint's rows can be fewer than every scored position. `pair clean=` refuses a `seen` directory whose row identity is not the grade's. So step 8 runs `seen` once more against D3, with a grid checkpoint's own rows files (I-4 makes every grid checkpoint score the same rows), and `pair clean=` reads that.
+  - **The readings' bits are made in the run unit.** The census reads the panels' positions (`rows=NAME:all`), not a checkpoint's rows files, and `pair clean=` refuses a `seen` directory whose row identity is not the grade's. So step 8 runs `seen` again against D1, D2 and D3, with a grid checkpoint's own rows files (I-4 makes every grid checkpoint score the same rows), and `pair clean=` reads those. If the rows are every scored position, their counts equal the census's; any difference is reported.
 - **The contrast cell:** the pinned templated TRAIN (`mw-balp/train`, tokens `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`, mask `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`) and DEV (tokens `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`, mask `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078`), under claude-261's DATA pins. The tokenizer is `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
 - **P-dev stays reserved** for `one-model-end-to-end`'s run, and nothing here reads it.
 
@@ -205,7 +215,7 @@ No model output was read to set any panel, mix or bar.
 5. Train each pod's cells in its order, then score each checkpoint.
 6. On pods A and C, snapshot the D3 seed-1 checkpoints at their widths, and run R9's parity once each export is made on the laptop.
 7. Seal every output with a `SHA256SUMS` under the store root, read it back, and only then take the pod down.
-8. On the laptop: grade every checkpoint, and check I-4 and I-5. Run `seen` against D3 with one grid checkpoint's rows files. Then compute R1 to R9 (R1 to R3 with and without `clean=` that directory), apply the Bar, and time the exports (R4).
+8. On the laptop: grade every checkpoint, and check I-4 and I-5. Run `seen` against D1, D2 and D3 with one grid checkpoint's rows files. Then compute R1 to R9 (each pair with and without `clean=` the directory of its cell X's TRAIN), apply the Bar, and time the exports (R4).
 
 ## Minimum test power
 

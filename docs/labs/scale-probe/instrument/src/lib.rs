@@ -1193,6 +1193,9 @@ fn run_pair(a: &Args) -> R<String> {
                 sn.dir.join("seen.json").display()
             )
         };
+        if sn.v["train"]["tokens_sha256"] != g[0].v["train"]["tokens_sha256"] {
+            return Err(bad("train.tokens_sha256"));
+        }
         if sn.v["pooled"]["row_identity_sha256"] != g[0].v["pooled"]["row_identity_sha256"] {
             return Err(bad("pooled row_identity_sha256"));
         }
