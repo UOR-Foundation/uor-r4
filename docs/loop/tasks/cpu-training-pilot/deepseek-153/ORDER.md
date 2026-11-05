@@ -59,15 +59,18 @@ same policy is applied to every artifact seed.
   `local/deepseek/m2-evidence/tokenizer.json`,
   SHA-256
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`.
-- Two new m-world-v2 panels, drawn after FIT and GO with the pinned
+- Attempt 1 stopped before producing a result because its generated panels
+  contained 46- and 49-token assistant replies under a 32-token cap.
+- The corrected attempt uses two new m-world-v2 panels, drawn after FIT and GO
+  with the pinned
   `heldout-panel` generator:
-  - `copy-key-reply-tt-2701`: `cell=train,train`, 128 conversations, seed
-    `2701`;
-  - `copy-key-reply-dd-2702`: `cell=dev,dev`, 128 conversations, seed `2702`.
+  - `copy-key-reply-tt-2711`: `cell=train,train`, 128 conversations, seed
+    `2711`;
+  - `copy-key-reply-dd-2712`: `cell=dev,dev`, 128 conversations, seed `2712`.
 
 Panel generation uses protocol 2 and the pinned tokenizer. The decision run
-uses every recovered prompt/reply example from each panel, with a 32-token
-generation cap. Each artifact seed and panel must supply at least 200
+uses every recovered prompt/reply example from each panel, with the maximum
+supported 64-token generation cap. Each artifact seed and panel must supply at least 200
 reference-reachable examples; paired comparisons use only those examples.
 Otherwise the run stops as a power or instrument fault before a result is read.
 
@@ -117,7 +120,7 @@ byte after paths and timing fields are excluded.
 Stop on an artifact, tokenizer or panel hash mismatch; fewer than 200
 reference-reachable examples for any artifact-seed and panel cell;
 nondeterminism; a vacuous random control; a prompt outside the artifact context
-or a reference longer than the 32-token cap; a malformed or unsupported policy
+or a reference longer than the 64-token cap; a malformed or unsupported policy
 trace; a resource breach; or any need to change serving, CUDA, float training or
 Claude-owned source. A recovered example whose prompt plus reply leaves no room
 to request BOS remains in the input census but is excluded from paired
@@ -135,6 +138,7 @@ artifacts must parse and their pinned hashes must match before panel generation.
 
 - `crates/uor-r4-cpu-train/**`
 - `docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-2026-11-05.md`
+- `docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-64-2026-11-05.md`
 - `docs/labs/cpu-training-pilot-copy-key-longest-reply-2026-11-05/**`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-153/**`
 - `docs/research/notebook/cpu-training.md`
