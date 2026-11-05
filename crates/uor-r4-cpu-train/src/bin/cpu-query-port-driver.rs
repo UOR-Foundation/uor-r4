@@ -373,10 +373,12 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         < baseline_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < random_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < shuffled_port.target_port_distance_sum;
-    let safety_pass = trained_port.target_admitted >= baseline_port.target_admitted
-        && trained_port.top1_correct >= baseline_port.top1_correct
-        && (config.baseline_mode != BaselineMode::Raw
-            || trained_port.top8_correct >= baseline_port.top8_correct);
+    let admission_non_fall = trained_port.target_admitted >= baseline_port.target_admitted;
+    let top1_non_fall = trained_port.top1_correct >= baseline_port.top1_correct;
+    let top8_non_fall = trained_port.top8_correct >= baseline_port.top8_correct;
+    let safety_pass = admission_non_fall
+        && top1_non_fall
+        && (config.baseline_mode != BaselineMode::Raw || top8_non_fall);
     let control_moves_matched = accepted == shuffled_accepted;
     let status = run_status(
         parity_exact,
@@ -425,20 +427,29 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         serde_json::json!(control_moves_matched),
     );
     bar.insert(
+        "admission_non_fall".to_owned(),
+        serde_json::json!(admission_non_fall),
+    );
+    bar.insert("top1_non_fall".to_owned(), serde_json::json!(top1_non_fall));
+    bar.insert(
         distance_key.to_owned(),
         serde_json::json!(trained_distance_pass),
     );
-    bar.insert(
-        "admission_and_top1_non_fall".to_owned(),
-        serde_json::json!(safety_pass),
-    );
-    if config.baseline_mode == BaselineMode::Raw {
-        bar.insert(
-            "top8_non_fall".to_owned(),
-            serde_json::json!(trained_port.top8_correct >= baseline_port.top8_correct),
-        );
+    match config.baseline_mode {
+        BaselineMode::Anchored => {
+            bar.insert(
+                "admission_and_top1_non_fall".to_owned(),
+                serde_json::json!(safety_pass),
+            );
+        }
+        BaselineMode::Raw => {
+            bar.insert("top8_non_fall".to_owned(), serde_json::json!(top8_non_fall));
+            bar.insert(
+                "admission_top1_top8_non_fall".to_owned(),
+                serde_json::json!(safety_pass),
+            );
+        }
     }
-
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-query-port-driver/1",
         "status": status,
