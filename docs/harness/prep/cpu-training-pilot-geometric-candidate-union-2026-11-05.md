@@ -86,7 +86,7 @@ seed 2768 is read, do not retune this construction.
 
 ## Base artifacts and source
 
-- implementation commit: `43e861ec9c3e6c27df0d6752ddb32c8135659137`;
+- implementation commit: `dc17b847a2ff0fc6c9ffeafe0d8ed5abdf86c61f`;
 - base: `04fae9eaf`;
 - generator tree:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
@@ -97,9 +97,9 @@ seed 2768 is read, do not retune this construction.
 - tokenizer SHA-256:
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
 - `geometric_candidate_rank.rs` SHA-256:
-  `b4d038e86d278199ff3328fc5c17b638557ba858b7afb04ab6fdb30621ceb939`;
+  `8278dcbf179f6ef6d42b2f4a91c6640a671bd5dcbad5498aef145a5e112366bd`;
 - `cpu-learned-copy-read.rs` SHA-256:
-  `2b904b57482f1349bf801a963e38e81da924015e31022189bc725bc92d244d4b`;
+  `89261efe09d05e214b3d1617379409be6e43ab066d3567370f4315ce06f241c2`;
 - `fbs.rs` SHA-256:
   `6bcf3d606ec6f44ff9dba828c900132362fe6bff94f9d1543ee4bf898304080f`;
 - `lib.rs` SHA-256:
@@ -126,7 +126,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/geometric-candidate-union
 GEN_TARGET=$SOURCE/target/deepseek/geometric-candidate-union-generator
-IMPL=43e861ec9c3e6c27df0d6752ddb32c8135659137
+IMPL=dc17b847a2ff0fc6c9ffeafe0d8ed5abdf86c61f
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 BASE=04fae9eaf
 
@@ -143,9 +143,9 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  b4d038e86d278199ff3328fc5c17b638557ba858b7afb04ab6fdb30621ceb939 \
+  8278dcbf179f6ef6d42b2f4a91c6640a671bd5dcbad5498aef145a5e112366bd \
   "$SOURCE/crates/uor-r4-cpu-train/src/geometric_candidate_rank.rs" \
-  2b904b57482f1349bf801a963e38e81da924015e31022189bc725bc92d244d4b \
+  89261efe09d05e214b3d1617379409be6e43ab066d3567370f4315ce06f241c2 \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-learned-copy-read.rs" \
   6bcf3d606ec6f44ff9dba828c900132362fe6bff94f9d1543ee4bf898304080f \
   "$SOURCE/crates/uor-r4-cpu-train/src/fbs.rs" \
@@ -253,10 +253,12 @@ for name in seed1 seed2; do
     and .inputs.artifact_sha256 == $expected
     and .inputs.train_split == "train" and .inputs.test_split == "dev"
     and .settings.cap == 64 and .settings.seed == 163
-    and .settings.candidate_set == "writer_top128_exact32_fallback"
+    and .settings.candidate_set == "writer_top128_nonbos_exact32_fallback"
+    and .training.trajectory == "reference_prefix"
     and .training.supervised_groups >= 2048
     and .training.target_values >= 64
     and .training.shuffled_target_changes > 0
+    and .candidate_ranker.depth_only_weights == [0,1,0,0,0,0,0,0]
     and .test.trained.premature_bos == 0
     and .test.shuffled.premature_bos == 0
     and .test.geometry_only.premature_bos == 0
@@ -266,6 +268,16 @@ for name in seed1 seed2; do
     and .test.changes.geometry_only.non_vacuous == true
     and .test.changes.shuffled.non_vacuous == true
     and .test.changes.longest_32.non_vacuous == true
+    and (.test.signatures.trained.reply_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.trained.decision_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.shuffled.reply_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.shuffled.decision_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.geometry_only.reply_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.geometry_only.decision_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.longest_32.reply_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.longest_32.decision_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.writer.reply_sha256 | test("^[0-9a-f]{64}$"))
+    and (.test.signatures.writer.decision_sha256 | test("^[0-9a-f]{64}$"))
   ' "$report" >/dev/null; then
     printf '%s instrument-or-control-fault\n' "$name" >>"$OUT/instrument-fault.txt"
     VALID=0
@@ -322,8 +334,8 @@ fi
 - host: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads, 59 GiB RAM;
 - one release build, one generator build and one fresh panel;
 - four driver processes at up to 32 Rayon workers and 1,800 s each;
-- at most 128 writer candidates, 32 exact-copy candidates and one fallback per
-  state;
+- at most 128 non-BOS writer candidates, 32 exact-copy candidates and one
+  fallback per state;
 - local CPU cost $0, no GPU pod, paid API or remote upload;
 - fresh output capped at 64 MiB after gzip.
 
