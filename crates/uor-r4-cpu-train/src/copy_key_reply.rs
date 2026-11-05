@@ -842,6 +842,46 @@ mod tests {
     }
 
     #[test]
+    fn random_depth_32_is_deterministic_covers_its_domain_and_never_invents_a_match() {
+        let stream = (1..=COPY_KEY_REPLY_MAX_DEPTH as u32)
+            .chain(1..=COPY_KEY_REPLY_MAX_DEPTH as u32)
+            .collect::<Vec<_>>();
+        let matches = exact_suffix_matches(&stream);
+        assert!(matches.iter().all(Option::is_some), "{matches:?}");
+
+        let mut depths = std::collections::BTreeSet::new();
+        for seed in 0..64 {
+            let decision = copy_key_reply_decision(
+                &stream,
+                88,
+                CopyKeyReplyArm::RandomAvailableDepth32,
+                seed,
+                0,
+                0,
+            );
+            let repeat = copy_key_reply_decision(
+                &stream,
+                88,
+                CopyKeyReplyArm::RandomAvailableDepth32,
+                seed,
+                0,
+                0,
+            );
+            assert_eq!(decision, repeat);
+            let depth = decision.depth.expect("every depth is available");
+            depths.insert(depth);
+            assert_eq!(decision.token, matches[depth - 1].unwrap());
+        }
+        assert_eq!(depths.first(), Some(&1));
+        assert_eq!(depths.last(), Some(&COPY_KEY_REPLY_MAX_DEPTH));
+
+        let none =
+            copy_key_reply_decision(&[1], 88, CopyKeyReplyArm::RandomAvailableDepth32, 7, 2, 3);
+        assert_eq!(none.token, 88);
+        assert_eq!(none.depth, None);
+    }
+
+    #[test]
     fn generated_reply_feeds_the_selected_copy_token_and_stops() {
         let artifact = artifact();
         let forward_arm = CpuFbsForward::from_artifact(&artifact).unwrap();
@@ -975,6 +1015,40 @@ mod tests {
         let repeat =
             evaluate_copy_key_replies(&artifact, &samples, 8, CopyKeyReplyArm::Longest4To1, 153)
                 .unwrap();
+        assert_eq!(first.reading, repeat.reading);
+        assert_eq!(first.rows, repeat.rows);
+        assert_eq!(first.steps, repeat.steps);
+        assert_eq!(first.reply_sha256, repeat.reply_sha256);
+        assert_eq!(first.decision_sha256, repeat.decision_sha256);
+    }
+
+    #[test]
+    fn geometric_arm_replay_binds_query_state_and_selected_distance() {
+        let artifact = artifact();
+        let samples = vec![MemoryWeightSample {
+            prompt: vec![3, 4, 5, 4],
+            reply: vec![5, 4, 5, POINT_KEY_BOS],
+        }];
+        let first = evaluate_copy_key_replies(
+            &artifact,
+            &samples,
+            8,
+            CopyKeyReplyArm::GeometricCopy32,
+            153,
+        )
+        .unwrap();
+        let repeat = evaluate_copy_key_replies(
+            &artifact,
+            &samples,
+            8,
+            CopyKeyReplyArm::GeometricCopy32,
+            153,
+        )
+        .unwrap();
+        assert!(first
+            .steps
+            .iter()
+            .any(|step| step.used_copy && step.selected_sign_hamming.is_some()));
         assert_eq!(first.reading, repeat.reading);
         assert_eq!(first.rows, repeat.rows);
         assert_eq!(first.steps, repeat.steps);
