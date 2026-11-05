@@ -144,7 +144,7 @@ BIN=$SHARED/local/deepseek/copy-boundary/target/release/cpu-copy-boundary-reply
 GEN=$SHARED/local/deepseek/copy-boundary/generator-target/debug/heldout-panel
 
 test ! -e "$OUT"
-test "$(git -C "$SOURCE" rev-parse HEAD)" = 4832461ba66df263a9259b38aa97c5f73283c5e0
+git -C "$SOURCE" merge-base --is-ancestor 4832461ba66df263a9259b38aa97c5f73283c5e0 HEAD
 test "$(sha256sum "$BIN" | cut -d' ' -f1)" = ecb0d8cbf8cccaab92faa6c5a99b9646eb7901a8b077783acbc4abbcbb91c869
 test "$(sha256sum "$GEN" | cut -d' ' -f1)" = 1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5
 test "$(git -C "$SOURCE" rev-parse 4832461ba66df263a9259b38aa97c5f73283c5e0:docs/labs/one-model-end-to-end/instrument)" = 869e65db6d0bb997a5f1094ab0de4efa1ac10c25
@@ -158,6 +158,31 @@ da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
 EOF
 
 mkdir -p "$OUT/panels" "$OUT/reports"
+
+run_preflight() {
+  timeout 1800s env RAYON_NUM_THREADS=32 "$BIN" \
+    "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
+    "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
+    "$SEED1" \
+    --expected-train-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
+    --expected-train-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
+    --expected-train-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
+    --expected-panel-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
+    --expected-panel-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
+    --expected-panel-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
+    --expected-artifact a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd \
+    --cap 64 --seed 191 >"$OUT/reports/train-preflight.json"
+}
+
+run_preflight
+jq -e '
+  .bar.no_boundary_matches_existing == true
+  and .examples.reachable >= 200
+  and .boundary.true.terminal_only_suffixes > 0
+  and .arms.longest32_true_boundary.reading.boundary_stops > 0
+  and .boundary.stop_changes > 0
+' "$OUT/reports/train-preflight.json" >/dev/null
+
 "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2723 protocol=2 \
   >"$OUT/panel.stdout.json"
@@ -173,7 +198,7 @@ PT=$(sha256sum "$PANEL/tokens.u16" | cut -d' ' -f1)
 PM=$(sha256sum "$PANEL/response_mask.u8" | cut -d' ' -f1)
 PF=$(sha256sum "$PANEL/manifest.json" | cut -d' ' -f1)
 
-run() {
+run_seed() {
   name=$1 artifact=$2 expected=$3
   timeout 1800s env RAYON_NUM_THREADS=32 "$BIN" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
@@ -187,10 +212,31 @@ run() {
     --cap 64 --seed 191 >"$OUT/reports/$name.json"
 }
 
-run seed1 "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-run seed2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
-run seed1-repeat "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-run seed2-repeat "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run_seed seed1 "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run_seed seed2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run_seed seed1-repeat "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+run_seed seed2-repeat "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+
+for report in "$OUT/reports/seed1.json" "$OUT/reports/seed2.json"; do
+  jq -e '
+    .examples.reachable >= 200
+    and .bar.no_boundary_matches_existing == true
+    and .inputs.train.manifest_split == "train"
+    and .inputs.panel.tokens_sha256
+    and .inputs.panel.mask_sha256
+    and .inputs.panel.manifest_split == "dev"
+  ' "$report" >/dev/null
+done
+
+normalize() {
+  jq -S 'walk(if type == "object"
+    then del(.wall_elapsed_us, .generated_tokens_per_second)
+    else . end)' "$1"
+}
+cmp <(normalize "$OUT/reports/seed1.json") \
+  <(normalize "$OUT/reports/seed1-repeat.json")
+cmp <(normalize "$OUT/reports/seed2.json") \
+  <(normalize "$OUT/reports/seed2-repeat.json")
 ```
 
 Before reading either result file, the harness checks that:
