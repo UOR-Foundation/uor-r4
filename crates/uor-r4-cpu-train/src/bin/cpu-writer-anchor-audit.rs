@@ -14,14 +14,9 @@ fn run() -> Result<(), String> {
     let (artifact, expected_sha256, output) = parse_args()?;
     let bytes =
         std::fs::read(&artifact).map_err(|error| format!("{}: {error}", artifact.display()))?;
+    reject_output_aliasing_artifact(&artifact, output.as_deref())?;
     let actual_sha256 = sha256(&bytes);
-    if let Some(expected) = expected_sha256 {
-        if actual_sha256 != expected {
-            return Err(format!(
-                "artifact SHA-256 differs: expected {expected}, got {actual_sha256}"
-            ));
-        }
-    }
+    verify_expected_sha256(&actual_sha256, expected_sha256.as_deref())?;
     let report =
         CpuFbsForward::audit_writer_port_anchors(&bytes).map_err(|error| error.to_string())?;
     let json = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
@@ -38,6 +33,37 @@ fn run() -> Result<(), String> {
             "anchor mismatch in {} port coordinates across {} tokens",
             report.mismatch_count, report.mismatch_tokens
         ));
+    }
+    Ok(())
+}
+
+fn verify_expected_sha256(actual: &str, expected: Option<&str>) -> Result<(), String> {
+    if let Some(expected) = expected {
+        if actual != expected {
+            return Err(format!(
+                "artifact SHA-256 differs: expected {expected}, got {actual}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_output_aliasing_artifact(
+    artifact: &std::path::Path,
+    output: Option<&std::path::Path>,
+) -> Result<(), String> {
+    let Some(output) = output else {
+        return Ok(());
+    };
+    let artifact = std::fs::canonicalize(artifact)
+        .map_err(|error| format!("{}: {error}", artifact.display()))?;
+    let output = match std::fs::canonicalize(output) {
+        Ok(output) => output,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("{}: {error}", output.display())),
+    };
+    if artifact == output {
+        return Err("--output must not overwrite --artifact".to_owned());
     }
     Ok(())
 }
@@ -108,5 +134,28 @@ mod tests {
         assert!(parse_expected_sha256("ab".repeat(31)).is_err());
         assert!(parse_expected_sha256("ab".repeat(33)).is_err());
         assert!(parse_expected_sha256("gg".repeat(32)).is_err());
+    }
+
+    #[test]
+    fn expected_sha_mismatch_fails_closed() {
+        let error = verify_expected_sha256(&"ab".repeat(32), Some(&"cd".repeat(32))).unwrap_err();
+        assert!(error.contains("artifact SHA-256 differs"));
+    }
+
+    #[test]
+    fn output_cannot_alias_the_artifact() {
+        let root = std::env::temp_dir().join(format!(
+            "uor-writer-anchor-audit-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let artifact = root.join("artifact.uorlut");
+        std::fs::write(&artifact, b"artifact").unwrap();
+        assert!(reject_output_aliasing_artifact(&artifact, Some(&artifact)).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
