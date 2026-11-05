@@ -19,7 +19,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `9827a1a41` |
+| implementation source | `632f4e601` |
 | panel-generator source | `4e42ffca5` |
 | tokenizer | `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` |
 | public M1 DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -116,7 +116,7 @@ CONTROL=$SOURCE/target/deepseek/copy-key-router-controls
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-router-generator
 DEV=$SHARED/local/deepseek/public-m1-parity
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
-IMPL_PIN=9827a1a41
+IMPL_PIN=632f4e601
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
