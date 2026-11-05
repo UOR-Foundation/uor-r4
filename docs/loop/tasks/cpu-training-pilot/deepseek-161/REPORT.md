@@ -47,13 +47,14 @@ source or REJECT decision.
 - Attempt-8 and top-level public manifests verify without corpus payloads.
 - The original local run manifest verifies from its own root.
 - The local token hash matches the original panel manifest.
-- No `.u16` or other corpus file is tracked.
+- No `.u16` or other new corpus payload is added by this PR; the existing
+  16,339-byte response mask remains unchanged from the base.
 - Report, scope, policy and `git diff --check` pass.
 
 ## Size
 
 Against base `3e8780e61`, this repair changes eight bookkeeping/evidence paths
-(**+135 / -10**). No corpus payload is added.
+(**+136 / -10**). No corpus payload is added.
 
 ## Skills used
 
