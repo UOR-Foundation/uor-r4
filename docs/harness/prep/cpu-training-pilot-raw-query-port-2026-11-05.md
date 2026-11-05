@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-raw-query-port-2026-11-05`
 
 ## Status
 
-PENDING FIT and D67 pre-run GO. No public model arm has been run.
+REGISTERED with FIT and D67 GO. No public model arm has been run.
 
 ## Question
 
@@ -225,4 +225,21 @@ fresh-panel transfer, language quality, complete replies or GPU qualification.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-raw-query-port-2026-11-05.md
+reviewer: deepseek fresh-context subagent raw_query_port_fit_d67_2
+note: No blockers at ad4340df0; raw byte preservation, anchored
+  compatibility, split safety reporting, exact parity, controls, pins and
+  D84 scope verified; public arms not run.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent raw_query_port_fit_d67_2`,
+2026-11-05, at clean review head
+`ad4340df0244727759cf19bc94b4445a86c97e3f`. The reviewer verified raw
+byte-for-byte preservation, anchored-mode compatibility, separate
+admission/top-1/top-8 fields, exact parity, matched controls, deterministic
+replay, complete input pins and absence of both public output roots.
