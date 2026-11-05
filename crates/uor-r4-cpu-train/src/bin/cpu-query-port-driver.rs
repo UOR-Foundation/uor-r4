@@ -4,8 +4,9 @@ use std::time::Instant;
 use uor_r4_core::report_output;
 use uor_r4_cpu_train::{
     anchor_writer_ports, random_port_gain_control, read_gain, replace_final_gain,
-    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuPanelEvaluator,
-    CpuPortRootTrainer, PortRootConfig, PortRootReading, RankMarginSample,
+    validate_corpus_manifest, CpuConversationSample, CpuFbsForward, CpuFbsHead, CpuMaskedCorpus,
+    CpuPanelEvaluator, CpuPortRootTrainer, PanelReading, PortRootConfig, PortRootReading,
+    RankMarginSample,
 };
 use uor_r4_integer::stack::{read_hamming_uorlut01, read_memory_uorlut01, IntegerStackModel};
 
@@ -33,6 +34,23 @@ impl BaselineMode {
             Self::Raw => "raw",
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct BehavioralSignature {
+    token_digest: [u8; 32],
+    kept_cell_digest: [u8; 32],
+    samples: usize,
+    target_admitted: u64,
+    top1_correct: u64,
+    top8_correct: u64,
+    target_port_distance_sum: u64,
+    target_port_abs_sum: u64,
+    margin_loss_sum: i64,
+    target_rank_sum: u64,
+    query_coordinate_mismatches: u64,
+    token_mismatches: u64,
+    kept_cell_mismatches: u64,
 }
 
 struct Config {
@@ -380,7 +398,19 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         && top1_non_fall
         && (config.baseline_mode != BaselineMode::Raw || top8_non_fall);
     let control_moves_matched = accepted == shuffled_accepted;
-    let shuffled_arm_distinct = shuffled_artifact != trained_artifact;
+    let trained_behavior = behavior_signature(
+        &trained_artifact,
+        &panel_samples,
+        &trained_panel,
+        &trained_port,
+    )?;
+    let shuffled_behavior = behavior_signature(
+        &shuffled_artifact,
+        &panel_samples,
+        &shuffled_panel,
+        &shuffled_port,
+    )?;
+    let shuffled_arm_distinct = trained_behavior != shuffled_behavior;
     let status = run_status(
         parity_exact,
         accepted,
@@ -566,13 +596,73 @@ fn assert_only_port_gain_changed(before: &[u8], after: &[u8]) -> Result<(), Stri
     Ok(())
 }
 
-fn panel_reading(
-    artifact: &[u8],
-    samples: &[RankMarginSample],
-) -> Result<uor_r4_cpu_train::PanelReading, String> {
+fn panel_reading(artifact: &[u8], samples: &[RankMarginSample]) -> Result<PanelReading, String> {
     CpuPanelEvaluator::from_artifact(artifact, samples.to_vec(), 1)
         .and_then(|mut evaluator| evaluator.evaluate())
         .map_err(|error| error.to_string())
+}
+
+fn behavior_signature(
+    artifact: &[u8],
+    samples: &[RankMarginSample],
+    panel: &PanelReading,
+    port: &PortRootReading,
+) -> Result<BehavioralSignature, String> {
+    let mut forward = CpuFbsForward::from_artifact(artifact).map_err(|error| error.to_string())?;
+    let mut token_bytes = Vec::with_capacity(samples.len() * 4);
+    let mut kept_cell_bytes = Vec::new();
+    for sample in samples {
+        forward.reset();
+        let mut step = None;
+        for &token in &sample.input {
+            step = Some(
+                forward
+                    .step(token, CpuFbsHead::Writer)
+                    .map_err(|error| error.to_string())?,
+            );
+        }
+        let step = step.ok_or_else(|| "behavior sample input is empty".to_owned())?;
+        token_bytes.extend_from_slice(&step.token.to_le_bytes());
+        for cell in step.kept_cells {
+            kept_cell_bytes.extend_from_slice(&cell.to_le_bytes());
+        }
+    }
+    behavior_signature_from(
+        panel,
+        port,
+        digest32(&token_bytes),
+        digest32(&kept_cell_bytes),
+    )
+}
+
+fn behavior_signature_from(
+    panel: &PanelReading,
+    port: &PortRootReading,
+    token_digest: [u8; 32],
+    kept_cell_digest: [u8; 32],
+) -> Result<BehavioralSignature, String> {
+    Ok(BehavioralSignature {
+        token_digest,
+        kept_cell_digest,
+        samples: panel.samples,
+        target_admitted: u64::try_from(panel.target_admitted)
+            .map_err(|_| "panel admitted count does not fit u64".to_owned())?,
+        top1_correct: u64::try_from(panel.top1_correct)
+            .map_err(|_| "panel top-1 count does not fit u64".to_owned())?,
+        top8_correct: u64::try_from(panel.top8_correct)
+            .map_err(|_| "panel top-8 count does not fit u64".to_owned())?,
+        target_port_distance_sum: port.target_port_distance_sum,
+        target_port_abs_sum: port.target_port_abs_sum,
+        margin_loss_sum: panel.margin_loss_sum,
+        target_rank_sum: panel.target_rank_sum,
+        query_coordinate_mismatches: panel.export.query_coordinate_mismatches,
+        token_mismatches: panel.export.token_mismatches,
+        kept_cell_mismatches: panel.export.kept_cell_mismatches,
+    })
+}
+
+fn digest32(bytes: &[u8]) -> [u8; 32] {
+    *blake3::hash(bytes).as_bytes()
 }
 
 fn port_reading(artifact: &[u8], samples: &[RankMarginSample]) -> Result<PortRootReading, String> {
@@ -581,11 +671,7 @@ fn port_reading(artifact: &[u8], samples: &[RankMarginSample]) -> Result<PortRoo
         .map_err(|error| error.to_string())
 }
 
-fn arm_json(
-    artifact: &[u8],
-    panel: &uor_r4_cpu_train::PanelReading,
-    port: &PortRootReading,
-) -> serde_json::Value {
+fn arm_json(artifact: &[u8], panel: &PanelReading, port: &PortRootReading) -> serde_json::Value {
     serde_json::json!({
         "artifact_sha256": uor_r4_discrete::corpus::sha256(artifact),
         "panel": panel,
@@ -665,6 +751,7 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_cpu_train::PanelExportReading;
     use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
@@ -759,6 +846,62 @@ mod tests {
             baseline_artifact(&artifact, BaselineMode::Anchored).unwrap(),
             artifact
         );
+    }
+
+    fn behavior_fixtures() -> (PanelReading, PortRootReading) {
+        (
+            PanelReading {
+                artifact_digest: [1; 32],
+                sample_fingerprint: [2; 32],
+                margin_q12: 1,
+                samples: 616,
+                target_admitted: 10,
+                top1_correct: 8,
+                top8_correct: 9,
+                margin_loss_sum: 100,
+                target_rank_sum: 200,
+                export: PanelExportReading {
+                    query_coordinates_checked: 157_696,
+                    query_coordinate_mismatches: 0,
+                    token_mismatches: 0,
+                    kept_cells_checked: 4_928,
+                    kept_cell_mismatches: 0,
+                },
+            },
+            PortRootReading {
+                artifact_sha256: "00".repeat(32),
+                samples: 616,
+                target_admitted: 10,
+                top1_correct: 8,
+                top8_correct: 9,
+                target_port_distance_sum: 1_000,
+                target_port_abs_sum: 2_000,
+                port_coordinates_checked: 9_856,
+            },
+        )
+    }
+
+    #[test]
+    fn behavioral_signature_ignores_artifact_identity() {
+        let (panel, port) = behavior_fixtures();
+        let first = behavior_signature_from(&panel, &port, [3; 32], [4; 32]).unwrap();
+        let second = behavior_signature_from(&panel, &port, [3; 32], [4; 32]).unwrap();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn behavioral_signature_detects_decision_and_port_differences() {
+        let (panel, port) = behavior_fixtures();
+        let baseline = behavior_signature_from(&panel, &port, [3; 32], [4; 32]).unwrap();
+
+        let decision_changed = behavior_signature_from(&panel, &port, [5; 32], [4; 32]).unwrap();
+        assert_ne!(baseline, decision_changed);
+
+        let mut port_changed = port.clone();
+        port_changed.target_port_distance_sum -= 1;
+        let port_changed =
+            behavior_signature_from(&panel, &port_changed, [3; 32], [4; 32]).unwrap();
+        assert_ne!(baseline, port_changed);
     }
 
     #[test]
