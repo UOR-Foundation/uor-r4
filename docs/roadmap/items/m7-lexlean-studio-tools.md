@@ -16,6 +16,12 @@ done_class: host
 
 The owner asked to inspect LexLean-R4's repository and hosted model, use it as the Studio default if possible, and port its useful behavior to the web and Tauri clients. The live full-pack browser probe answered `17 + 25` correctly through its exact-arithmetic path, but returned an unrelated Hunger Games review for self-description and a Fibonacci example instead of recalling `42`. The deployed runtime is an older `/8` layout with different memory keys and table-form squashing, so it is not a compatible or charter-lawful drop-in default. UOR already owns the geometric arithmetic engine used for the useful path, but does not expose it as a distinct tool result. The Studio also leaves a mismatched worker identity silently stuck in `finalizing`.
 
+## What is missing
+
+- A truthful, shared way to answer bounded exact arithmetic without sending the prompt through an unhelpful synthetic model or attributing the result to learned generation.
+- An explicit terminal error when the worker reports an artifact identity different from the requested file or expected hash.
+- Regressions proving that a catalog's presentation metadata cannot silently replace the user's active model, plus real browser and native evidence for both tool and ordinary paths.
+
 ## Done when
 
 1. A strict, bounded decimal addition/subtraction prompt returns an exact result and actual geometric place-value trace through the existing Rust engine, with the answer first and an explicit not-model-generation label. Ordinary prompts fall through unchanged; unsupported input fails loudly.
@@ -31,12 +37,6 @@ The shared engine cannot produce the same exact result in both clients, the nati
 ## How to start
 
 Read `docs/loop/tasks/m7-lexlean-studio-tools/kimi-1/ORDER.md`, `crates/uor-r4-integer/src/m6_exact_arithmetic.rs`, the Studio worker/source adapter and desktop transport. Add failing regressions first, then implement the shared Rust tool and two thin transport adapters. Do not import LexLean's heuristic corpus, sigmoid tables, WASM, stale labels or cosmetic streaming.
-
-## What is missing
-
-- A truthful, shared way to answer bounded exact arithmetic without sending the prompt through an unhelpful synthetic model or attributing the result to learned generation.
-- An explicit terminal error when the worker reports an artifact identity different from the requested file or expected hash.
-- Regressions proving that a catalog's presentation metadata cannot silently replace the user's active model, plus real browser and native evidence for both tool and ordinary paths.
 
 ## Rules that apply
 
