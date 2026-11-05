@@ -36,9 +36,9 @@ bar. Serving remains integer-only and unchanged.
 ## Base artifact and source
 
 - base: `0e3924274`;
-- implementation commit: `360e1f3caf3e10bedf4276c28c188df9c2403e7a`;
+- implementation commit: `fb439a0666366971b87b40697416dd50ee9d4de4`;
 - `suffix_arbitration.rs` SHA-256:
-  `192cb14de6127291c5814e23472bd92cb24587fce5dac140bfdc2a5a4cdfb7bf`;
+  `2cd67076025a66801b7fc141b7bd68094b83fad796a38f403928ce307a31e9c5`;
 - `suffix_memory.rs` SHA-256:
   `7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37`;
 - `cpu-copy-suffix-arbitration.rs` SHA-256:
@@ -203,7 +203,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/full-sequence-suffix
 GEN_TARGET=$SOURCE/target/deepseek/full-sequence-suffix-generator
-IMPL=360e1f3caf3e10bedf4276c28c188df9c2403e7a
+IMPL=fb439a0666366971b87b40697416dd50ee9d4de4
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
 test ! -e "$OUT"
@@ -217,7 +217,7 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  192cb14de6127291c5814e23472bd92cb24587fce5dac140bfdc2a5a4cdfb7bf "$SOURCE/crates/uor-r4-cpu-train/src/suffix_arbitration.rs" \
+  2cd67076025a66801b7fc141b7bd68094b83fad796a38f403928ce307a31e9c5 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_arbitration.rs" \
   7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   c03976fd9d8079a8323d2e7fd2ba88bf593f846a4fe0de084bf5cc0b1972422f "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-suffix-arbitration.rs" |
   sha256sum -c -
