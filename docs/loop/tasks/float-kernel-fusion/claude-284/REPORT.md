@@ -16,7 +16,7 @@ Nothing was measured; no training or serving speed changes. The ceiling for what
 
 1. **The kernels could not start in this unit.** The loop's scope rule reads an item's scope at the merge base (`loopprcheck.rs:431-446`). So a file the item does not list yet, such as the kernels' own `.cu` source, fails the check until a scope change reaches `main`.
 2. **The scope could not go through its usual item.** Earlier scope changes went through `infra-loop-harness` units (claude-223, #3453). `loop claim infra-loop-harness` was refused: its scope `docs/roadmap/items/*.md` overlaps this item's own file, which this item's open claim holds. So this unit lands the scope itself; the item file is in its own scope.
-3. **Appending to `cuda_stack.cu` was ruled out** (the ORDER's probe, item 5). `git grep` at the base finds its hash in 12 files: `spiralcore_fbs_sheet.rs:54` (the test at `:4156` asserts that the pin matches), one lab runner's code, eight lab records across three sheets, and three docs. One appended kernel would turn that test red and re-identify those sheets' source.
+3. **Appending to `cuda_stack.cu` was ruled out** (the ORDER's probe, item 5). `git grep` at the base finds its hash in 12 files: two of code (`spiralcore_fbs_sheet.rs:54`, whose test at `:4156` asserts that the pin matches, and one lab runner), seven lab records and notes across three sheets, and three docs. One appended kernel would turn that test red and re-identify those sheets' source.
 
 ## What changed
 
@@ -43,7 +43,7 @@ None. The probe is a reading of the code:
 
 ## Checks run at the head
 
-Run at `a1db79136`. The commits after it change this unit's ORDER and REPORT only.
+First run at `a1db79136`, then again at the final head, after round 2's fixes, with the same results. The commits after `a1db79136` change this unit's ORDER and REPORT only.
 - **`uor-harness loop report --check --order <ORDER>`:** PASS.
 - **`uor-harness loop pr-check --local`:** PASS, with two advisory warnings: the ORDER's size on the read path, and four rows missing from `docs/start/FILEMAP.md`, none of them this unit's.
 - **`uor-harness loop gates --full`:** 11 of 11 green.
@@ -54,7 +54,7 @@ Run at `a1db79136`. The commits after it change this unit's ORDER and REPORT onl
     - the pin's records were undercounted; the ORDER now lists all 12 files;
     - this section was unfilled;
     - the nits: the compare's line reference, the bounds sentence, the `in_space_long.rs` wording, the early returns the flag must keep first, and G3, now supporting evidence that also rejects `.ftz`;
-  - round 2, a fresh reviewer on the delta from `a1db79136`: its verdict is in the PR's review record.
+  - round 2, a fresh reviewer on the delta from `a1db79136` to `6ba36c1ff`: CHANGES, one should-fix and two nits, all fixed. The REPORT's breakdown of the pin's 12 files summed to 13; the checks named the head they ran at, not the final one; and G3 said subnormal rows would catch a contraction, which random rows catch. The final verdict is in the PR's review record.
 
 ## Skills used
 
