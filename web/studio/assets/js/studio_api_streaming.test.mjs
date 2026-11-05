@@ -352,3 +352,51 @@ test('loadConversations preserves exact-tool metadata across restore', async () 
     vm.runInNewContext(`${source};loadConversations`, context)();
     assert.equal(context.app.conversations[0].messages[1].tool, 'm6-exact-arithmetic');
 });
+
+function liveWorkerContext() {
+    const context = {
+        app: {
+            caps: null,
+            workerState: 'loading',
+            expectedSha256: '',
+            requestedFileName: 'model.lut',
+            loadStartedAt: null,
+        },
+        setEngineStatus() {},
+        describeCapabilities() { return ''; },
+        document: { documentElement: { dataset: {} } },
+        fillPredictorSha() {},
+        fillPredictorModelInfo() {},
+        updateCapabilitiesFooter() {},
+        updateComposerState() {},
+        renderMessages() {},
+        restoreActiveConversation() {},
+        isDiscreteCapabilities() { return false; },
+        setPredictorMode() {},
+    };
+    context.setModelStatus = (detail) => { context.modelStatus = detail; };
+    context.toast = (detail) => { context.toastMessage = detail; };
+    return context;
+}
+
+test('live model_loaded rejects mismatched identity explicitly', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    context.app.expectedSha256 = 'a'.repeat(64);
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', capabilities: { file_name: 'other.lut', artifact_sha256: 'a'.repeat(64) } },
+    });
+    assert.equal(context.app.workerState, 'error');
+    assert.equal(context.app.caps, null);
+    assert.match(context.toastMessage, /other\.lut/);
+});
+
+test('live model_loaded accepts a valid no-ID response', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: 'a'.repeat(64) } },
+    });
+    assert.equal(context.app.workerState, 'ready');
+    assert.equal(context.app.caps.file_name, 'model.lut');
+});

@@ -1317,7 +1317,23 @@
                 return;
             }
             if (message.action === 'model_loaded') {
-                app.caps = message.capabilities;
+                var capabilities = message.capabilities || {};
+                var artifactSha256 = capabilities.artifact_sha256;
+                var fileMismatch = capabilities.file_name !== app.requestedFileName;
+                var invalidHash = !artifactSha256 || !/^[0-9a-f]{64}$/.test(artifactSha256);
+                var hashMismatch = app.expectedSha256 && artifactSha256 !== app.expectedSha256;
+                if (fileMismatch || invalidHash || hashMismatch) {
+                    app.workerState = 'error';
+                    var identityError = fileMismatch
+                        ? 'Worker returned ' + (capabilities.file_name || '<missing filename>') + ' instead of the requested ' + app.requestedFileName + '.'
+                        : invalidHash
+                            ? 'Worker returned missing or invalid artifact SHA-256 ' + (artifactSha256 || '<missing hash>') + '; expected a 64-character lowercase hex digest' + (app.expectedSha256 ? ' (' + app.expectedSha256 + ')' : '') + '.'
+                            : 'Worker returned artifact SHA-256 ' + artifactSha256 + ' instead of the expected ' + app.expectedSha256 + '.';
+                    setModelStatus(identityError, 'err');
+                    toast(identityError, 'error');
+                    return;
+                }
+                app.caps = capabilities;
                 app.workerState = 'ready';
                 setEngineStatus('ready', 'ok', 'Engine: ' + (app.caps.engine || 'serving-wasm') + ' · ' + describeCapabilities());
                 setModelStatus((app.caps.status_label || 'loaded') + ' · ' + (app.caps.schema || 'schema?'), app.caps.synthetic ? 'warn' : 'ok', describeCapabilities());
@@ -1894,6 +1910,7 @@
                 app.apiConfig = null;
                 app.tokenizerArtifact = detail.tokenizerArtifact || null;
                 app.expectedSha256 = detail.expectedSha256 || '';
+                app.requestedFileName = detail.fileName || 'stack.lut';
                 app.modelMeta = detail.meta || null;
                 setModelStatus('loading ' + (detail.fileName || 'artifact') + '…', 'warn');
                 updatePrivacyStatus();
