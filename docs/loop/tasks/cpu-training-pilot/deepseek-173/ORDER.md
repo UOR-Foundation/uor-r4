@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-173 (pairwise copy-candidate ranker)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `1f56a8e7b`.
 
 ## Goal

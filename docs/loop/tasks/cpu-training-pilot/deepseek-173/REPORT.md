@@ -21,6 +21,11 @@ least two unique exact-copy candidates existed and the reference next token was
 among them. The pre-registered floor was **640**. It stopped before fitting a
 usable ranker, before any model evaluation, and before seed 2.
 
+The first local policy check found that the new ORDER's item link was wrapped
+across two lines and therefore not recognized by the ORDER parser. The link was
+joined onto the required `Item:` line. This parser repair changed no source,
+configuration, input, threshold or result.
+
 This threshold was not lowered after seeing the result. Seed 2766 is closed for
 this construction. The result says that longest-32-generated train trajectories
 rarely expose a supervised choice among available copy candidates; it is not a
