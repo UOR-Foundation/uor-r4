@@ -268,10 +268,10 @@ A FIT verdict clears compute for this configuration only (D22).
 
 ## Pre-run GO
 
-The prior GO at `3dc4dc02e` is superseded by attempt 1's input-path instrument
-fault.
-
-GO: PENDING fresh review of the corrected recipe.
+GO - reviewer `codex fresh-context GO`, 2026-11-05. HEAD was clean at
+`1a2f0c081`; implementation pin `70b6445d4` and generator pin `4e42ffca5`
+matched. Attempt 1 was sealed, attempt 2 was absent, corrected filenames,
+hashes, resources, panel powers and failure sealing were checked read-only.
 
 ## Outcome
 
