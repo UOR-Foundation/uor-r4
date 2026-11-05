@@ -49,11 +49,11 @@ the reply start so the exact opening/reply memory lookup path executes.
 
 - base: `3ac40d6d5`;
 - implementation source:
-  `bf3d44dd47faaf7531edd089b464c328990291bc`;
+  `19f13fc13fa6812656da643981d74bcf87028460`;
 - binary:
   `/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench`;
 - binary SHA-256:
-  `d652a9d4056b9534000ddb2b53b027e1eb7cdd02c2c3cec38452b95d5cb866fe`;
+  `65c6fba90cfc36a6e55ec4d97276ad8574602b719cce7faa322af8ccc1101fe8`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: one process, platform default worker availability for library
   code, no GPU.
@@ -93,8 +93,8 @@ OUT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/
 BIN=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench
 
 test ! -e "$OUT/summary.json"
-git -C "$SOURCE" merge-base --is-ancestor bf3d44dd47faaf7531edd089b464c328990291bc HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = d652a9d4056b9534000ddb2b53b027e1eb7cdd02c2c3cec38452b95d5cb866fe
+git -C "$SOURCE" merge-base --is-ancestor 19f13fc13fa6812656da643981d74bcf87028460 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 65c6fba90cfc36a6e55ec4d97276ad8574602b719cce7faa322af8ccc1101fe8
 mkdir -p "$OUT"
 timeout 1200s "$BIN" --output "$OUT/summary.json"
 ```
@@ -109,12 +109,17 @@ the error and do not reuse the root.
 - every artifact rebuilt from the same seed and byte-identical;
 - zero query-coordinate, token and kept-cell mismatches;
 - CPU and serving decision hashes equal in every repeat;
+- every repeat's CPU decision hash is retained in the output;
 - complete grid coverage:
   - `positions_checked = context`;
   - `query_coordinates_compared = context * width`;
   - `token_decisions_compared = context`;
   - `kept_cells_compared = context * 8`;
 - artifact SHA-256 and bytes;
+- reloaded vocabulary, width, context, MLP, layer and kept-cell shape;
+- projection artifacts carry neither Hamming nor memory tables;
+- full artifacts retain their expected Hamming heads/depths and nonempty
+  opening/reply memory at `key_window == context`;
 - serialized table-payload and decoded-resident bytes;
 - CPU-oracle and integer-serving tokens/s from the timed final repeat;
 - peak RSS and total wall time.
@@ -133,7 +138,7 @@ The preflight passes only if:
 - all 18 cells complete;
 - every exact-parity and decision-hash check repeats;
 - all four negative controls fail closed;
-- peak RSS is below 2 GiB;
+- peak RSS is below 2 GiB; exactly 2 GiB fails;
 - total wall time is at most 20 minutes.
 
 ## Outcomes
