@@ -5,10 +5,8 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 ## Goal
 
 Test whether exact copy retrieval improves when the Hamming read backs off from
-the longest available suffix key, depth four to one, instead of fixing one key
-for every position. This is a data-only geometric read screen that decides
-whether Claude's next copy-read unit should extend the trained key beyond depth
-two.
+the longest available suffix key, depth four to one. This screen decides
+whether Claude's next copy-read unit should extend beyond depth two.
 
 This is D84 CPU development research. It changes no float training, integer
 serving, CUDA or Claude-owned source.

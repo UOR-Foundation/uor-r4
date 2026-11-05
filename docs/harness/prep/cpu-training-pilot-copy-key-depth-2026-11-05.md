@@ -60,6 +60,16 @@ then three, two, one. Controls are fixed depths one through four,
 `k2>k1`, and a deterministic random choice over available depths. The seed is
 149. `fixed_depth_1` is the `shortest` control.
 
+## Data split
+
+- Public M1 DEV: 400 conversations, 14,287 eligible targets, instrument only.
+- `copy-key-depth-tt-2501`: a new 64-conversation `train,train` panel.
+- `copy-key-depth-dd-2502`: a new 64-conversation `dev,dev` panel.
+
+The two decision panels are generated independently at fixed seeds. Neither is
+used to fit a parameter. Each must contain at least 200 eligible target
+positions.
+
 ## Instrument gate
 
 Public DEV must reproduce Claude-267 exactly before the bar is read:
@@ -108,6 +118,15 @@ on both. Random-control novelty is counted only on copyable positions. The paire
 A pass makes depths three and four a supported CPU read candidate for the next
 Claude copy-read build. A fail closes the fixed longest-first 1–4 exact suffix
 router at this context, not deeper keys generally.
+
+## Minimum test power
+
+Each decision panel must contribute at least 200 eligible positions, with the
+paired rule computed per target position. Two independently generated
+64-conversation panels guard against a seed-specific ordering. The seeded
+random control must change at least one copyable `longest` decision on each
+panel, and a fresh process must reproduce the dev-panel report byte for byte.
+The result is a read-screen decision, not a model or language claim.
 
 ## Stop rules
 
@@ -173,14 +192,19 @@ trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-copy-key-depth
 
-env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo run --locked \
-  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" -- \
-  out="$PANELS/train-train-2501" tokenizer="$TOKENIZER" cell=train,train \
-  conversations=64 seed=2501 protocol=2
-env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo run --locked \
-  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" -- \
-  out="$PANELS/dev-dev-2502" tokenizer="$TOKENIZER" cell=dev,dev \
-  conversations=64 seed=2502 protocol=2
+/usr/bin/time -v -o "$OUT/generator-build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo build --locked \
+  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
+  --features panel-writer --bin heldout-panel
+GEN=$GENERATOR_TARGET/debug/heldout-panel
+/usr/bin/time -v -o "$OUT/train-panel-gen.time.txt" \
+  timeout 600s "$GEN" out="$PANELS/train-train-2501" tokenizer="$TOKENIZER" \
+  cell=train,train conversations=64 seed=2501 protocol=2 \
+  >"$OUT/train-panel-gen.stdout.json"
+/usr/bin/time -v -o "$OUT/dev-panel-gen.time.txt" \
+  timeout 600s "$GEN" out="$PANELS/dev-dev-2502" tokenizer="$TOKENIZER" \
+  cell=dev,dev conversations=64 seed=2502 protocol=2 \
+  >"$OUT/dev-panel-gen.stdout.json"
 
 BIN=$BUILD/release/cpu-copy-key-depth
 run() {
@@ -206,8 +230,9 @@ test "$(jq -r '.reading.eligible_positions' "$OUT/dev-dev.json")" -ge 200
 test "$(jq -r '.reading.random_changed_from_longest' "$OUT/train-train.json")" -gt 0
 test "$(jq -r '.reading.random_changed_from_longest' "$OUT/dev-dev.json")" -gt 0
 test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/build.time.txt")" -le 4194304
+test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/generator-build.time.txt")" -le 4194304
 for t in "$OUT"/*.time.txt; do
-  [ "$t" = "$OUT/build.time.txt" ] ||
+  [ "$t" = "$OUT/build.time.txt" ] || [ "$t" = "$OUT/generator-build.time.txt" ] ||
     test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$t")" -le 1048576
 done
 cmp "$OUT/dev-dev.json" "$OUT/dev-dev-repeat.json"
