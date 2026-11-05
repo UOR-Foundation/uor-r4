@@ -79,7 +79,10 @@ For every response target `t`:
 - calculate exact Q12 L1 distance from query columns `0..8` to the first root
   and columns `W-8..W` to the second.
 
-Only final-gain coordinates `0..8` and `W-8..W` are trainable. A step evaluates
+First project every token row's two 8-coordinate port blocks to its own cell
+roots. This table-anchored artifact is the baseline and the starting point for
+the query-side trainer, matching Claude-290's construction. Only final-gain
+coordinates `0..8` and `W-8..W` are trainable. A step evaluates
 every coordinate at `±1` code and reexports/read-backs the complete artifact.
 It accepts a strictly lower training target-root distance only if training
 target admission, top-1 and top-8 do not fall. Ties retain the lower coordinate
@@ -94,22 +97,22 @@ and kept-cell mismatches.
 
 | Arm | Construction |
 |---|---|
-| frozen | source artifact, no gain move |
-| trained | eight actual-cell port-root steps |
-| shuffled cell | same trainer with every target cell rotated by one |
-| random gain | exactly the trained arm's accepted move count, selected deterministically from port coordinates |
-| table anchor only | source artifact with each token row's two table port blocks set to its own cell roots |
+| raw frozen | source artifact, no projection and no gain move |
+| table anchor baseline | each token row's two table port blocks set to its own cell roots |
+| trained | eight actual-cell query-port-root steps from the table-anchor baseline |
+| shuffled cell | the same trainer from the baseline, with every target cell rotated by one |
+| random gain | exactly the trained arm's accepted move count from the baseline, selected deterministically from port coordinates |
 
-The table-anchor arm is diagnostic for Claude-290's table-side projection. It
-is not the trained arm.
+The raw-frozen arm exposes the cost of Claude-290's table-side projection. The
+trained arm is judged against the table-anchor baseline, not raw-frozen.
 
 ## Source and binary
 
 - base: `7787313b2`;
-- implementation pin: `b73a5e6ee`;
+- implementation pin: `b66f2e1d7`;
 - driver:
   `target/deepseek/query-port-root/release/cpu-query-port-driver`,
-  SHA-256 `64424c8ca04516547cf589057c83827efa814a471b88d76727014f7f1875dbba`;
+  SHA-256 `19dcb744944eb7c5318dc8d01f4b5d0caae8b89178e5f9008dcbce82c4d4d653`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -136,7 +139,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-test "$(git -C "$SOURCE" rev-parse --short=9 HEAD)" = b73a5e6ee
+test "$(git -C "$SOURCE" rev-parse --short=9 HEAD)" = b66f2e1d7
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -183,10 +186,11 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 
 On both artifact seeds, the trained arm must:
 
-- reduce held-out target-port distance below frozen;
+- reduce held-out target-port distance below the table-anchored baseline;
 - reduce it below the equal-move random-gain control;
 - reduce it below the shuffled-cell control;
-- retain held-out target admission and top-1 at or above frozen;
+- retain held-out target admission and top-1 at or above the table-anchored
+  baseline;
 - retain zero CPU/serving query, token and kept-cell mismatches;
 - reproduce the artifact and all step records on an in-process repeat.
 
