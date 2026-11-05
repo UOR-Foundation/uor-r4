@@ -35,11 +35,11 @@ generalization, useful chat or GPU qualification.
 
 - base: `86d654170`;
 - implementation source:
-  `4832461ba66df263a9259b38aa97c5f73283c5e0`;
+  `eaea60356c7cfcdeb070a7b1a975ad3cc48b42af`;
 - evaluator binary:
   `local/deepseek/copy-boundary/target/release/cpu-copy-boundary-reply`,
   SHA-256
-  `ecb0d8cbf8cccaab92faa6c5a99b9646eb7901a8b077783acbc4abbcbb91c869`;
+  `788ced8e5c60b8c814720bb4f6aea5ea5cd70870aa8b4acb49e235776cddf453`;
 - panel-generator source tree:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
 - panel-generator binary:
@@ -144,10 +144,10 @@ BIN=$SHARED/local/deepseek/copy-boundary/target/release/cpu-copy-boundary-reply
 GEN=$SHARED/local/deepseek/copy-boundary/generator-target/debug/heldout-panel
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor 4832461ba66df263a9259b38aa97c5f73283c5e0 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = ecb0d8cbf8cccaab92faa6c5a99b9646eb7901a8b077783acbc4abbcbb91c869
+git -C "$SOURCE" merge-base --is-ancestor eaea60356c7cfcdeb070a7b1a975ad3cc48b42af HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 788ced8e5c60b8c814720bb4f6aea5ea5cd70870aa8b4acb49e235776cddf453
 test "$(sha256sum "$GEN" | cut -d' ' -f1)" = 1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5
-test "$(git -C "$SOURCE" rev-parse 4832461ba66df263a9259b38aa97c5f73283c5e0:docs/labs/one-model-end-to-end/instrument)" = 869e65db6d0bb997a5f1094ab0de4efa1ac10c25
+test "$(git -C "$SOURCE" rev-parse eaea60356c7cfcdeb070a7b1a975ad3cc48b42af:docs/labs/one-model-end-to-end/instrument)" = 869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 sha256sum -c <<EOF
 a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  $TOKENIZER
 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91  $TRAIN/tokens.u16
@@ -158,9 +158,35 @@ da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
 EOF
 
 mkdir -p "$OUT/panels" "$OUT/reports"
+DEADLINE=$((SECONDS + 1800))
+
+remaining() {
+  local left=$((DEADLINE - SECONDS))
+  if [ "$left" -le 1 ]; then
+    echo "30-minute run deadline reached" >&2
+    exit 124
+  fi
+  printf '%ss' "$left"
+}
+
+check_rss() {
+  local log=$1
+  local rss
+  rss=$(awk '/Maximum resident set size/ { print $NF }' "$log")
+  test -n "$rss"
+  test "$rss" -lt 2097152
+}
+
+run_limited() {
+  local name=$1
+  shift
+  /usr/bin/time -v -o "$OUT/reports/$name.time.log" \
+    timeout "$(remaining)" "$@"
+  check_rss "$OUT/reports/$name.time.log"
+}
 
 run_preflight() {
-  timeout 1800s env RAYON_NUM_THREADS=32 "$BIN" \
+  run_limited train-preflight env RAYON_NUM_THREADS=32 "$BIN" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
     "$SEED1" \
@@ -183,7 +209,7 @@ jq -e '
   and .boundary.stop_changes > 0
 ' "$OUT/reports/train-preflight.json" >/dev/null
 
-"$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
+run_limited panel "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2723 protocol=2 \
   >"$OUT/panel.stdout.json"
 
@@ -200,7 +226,7 @@ PF=$(sha256sum "$PANEL/manifest.json" | cut -d' ' -f1)
 
 run_seed() {
   name=$1 artifact=$2 expected=$3
-  timeout 1800s env RAYON_NUM_THREADS=32 "$BIN" \
+  run_limited "$name" env RAYON_NUM_THREADS=32 "$BIN" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
     "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
     "$artifact" \
@@ -218,12 +244,13 @@ run_seed seed1-repeat "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248
 run_seed seed2-repeat "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 
 for report in "$OUT/reports/seed1.json" "$OUT/reports/seed2.json"; do
-  jq -e '
+  jq -e --arg tokens "$PT" --arg mask "$PM" --arg manifest "$PF" '
     .examples.reachable >= 200
     and .bar.no_boundary_matches_existing == true
     and .inputs.train.manifest_split == "train"
-    and .inputs.panel.tokens_sha256
-    and .inputs.panel.mask_sha256
+    and .inputs.panel.tokens_sha256 == $tokens
+    and .inputs.panel.mask_sha256 == $mask
+    and .inputs.panel.manifest_sha256 == $manifest
     and .inputs.panel.manifest_split == "dev"
   ' "$report" >/dev/null
 done
