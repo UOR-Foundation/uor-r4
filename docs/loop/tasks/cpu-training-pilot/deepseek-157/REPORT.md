@@ -114,21 +114,6 @@ Published evidence SHA-256:
 - Fresh merge-main verification passed **286** CPU library tests with 4
   expected ignores, 77 binary tests, the attempt-6 evidence seal and the
   recorded zero-exact result fields.
-- Exact-head adversarial review approved `72ab72717` in
-  [#issuecomment-6650080017](https://github.com/UOR-Foundation/uor-r4/pull/3701#issuecomment-6650080017).
-  PR [#3701](https://github.com/UOR-Foundation/uor-r4/pull/3701) merged as
-  `663129a8336438755800c09f11d9bc3983ef2079`.
-- Fresh merge-main verification passed **286** CPU library tests with 4
-  expected ignores, 77 binary tests, the attempt-6 evidence seal and the
-  recorded zero-exact result.
-- Exact-head adversarial review approved `72ab72717` in
-  [#issuecomment-6650091979](https://github.com/UOR-Foundation/uor-r4/pull/3701#issuecomment-6650091979).
-  PR [#3701](https://github.com/UOR-Foundation/uor-r4/pull/3701) merged as
-  `663129a8336438755800c09f11d9bc3983ef2079`.
-- Fresh merge-main verification passed **286** CPU library tests with 4
-  expected ignores, 77 binary tests, the generated-stop evidence seal and the
-  recorded rejection fields.
-
 ## Size
 
 Against base `ed9b5b9aa`, this unit changes **5** code/API files
