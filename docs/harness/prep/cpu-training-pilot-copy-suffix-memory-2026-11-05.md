@@ -2,6 +2,16 @@
 
 Run ID: `cpu-training-pilot-copy-suffix-memory-2026-11-05`
 
+## Status
+
+COMPLETE - REJECT. The fresh seed-2772 panel cleared the exact-body power floor
+with 14 oracle-complete replies. Trained suffix-32 reached only 57 and 86
+correct body positions on artifact seeds 1 and 2, against 514 for local
+longest-32, and made 14 and 227 premature stops against the four-stop ceiling.
+The table and shuffled control were active and deterministic. This closes the
+tested global suffix plurality plus full-history BOS construction. Record:
+[deepseek-193](../../loop/tasks/cpu-training-pilot/deepseek-193/REPORT.md).
+
 ## Question
 
 Can a discrete suffix-to-next-token memory trained only from TRAIN replies
