@@ -74,12 +74,16 @@ Training and table derivation:
 
 Fresh evaluation panel:
 
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/copy-suffix-memory/2026-11-05/panels/dd-2771`
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/copy-suffix-memory/2026-11-05/panels/dd-2772`
 
 - generated only after FIT and GO;
-- `cell=dev,dev`, seed 2771, protocol 2, 128 conversations;
+- `cell=dev,dev`, seed 2772, protocol 2, 128 conversations;
 - the output root and panel directory are absent at registration;
 - no evaluation reply enters table derivation.
+
+The initial registration named seed 2771. The first fresh review found that
+deepseek's completed `integer-long-context` unit had already used that seed, so
+the panel identity was corrected to unused seed 2772 before FIT or compute.
 
 ## Fixed construction
 
@@ -207,7 +211,7 @@ SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-copy-s
 SHARED=/home/callard/projects/codex-playground/uor-r4
 OUT=$SHARED/local/deepseek/copy-suffix-memory/2026-11-05
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
-PANEL=$OUT/panels/dd-2771
+PANEL=$OUT/panels/dd-2772
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
@@ -288,11 +292,11 @@ jq -e '
 
 /usr/bin/time -v -o "$OUT/panel.time.txt" \
   timeout 900s "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
-  cell=dev,dev conversations=128 seed=2771 protocol=2 \
+  cell=dev,dev conversations=128 seed=2772 protocol=2 \
   >"$OUT/panel.stdout.json"
 jq -e --arg tokenizer_sha a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 '
   .schema == "uor-r4-chat-corpus/v1"
-  and .seed == 2771 and .dialogue_protocol_version == 2
+  and .seed == 2772 and .dialogue_protocol_version == 2
   and .cell.value == "dev" and .cell.phrasing == "dev"
   and .conversations == 128 and .world == "m-world-v2"
   and .tokenizer.sha256 == $tokenizer_sha
@@ -339,7 +343,7 @@ Stop on source, artifact, tokenizer, panel, table, shuffle, report, output-root
 or repeat drift; fewer than 200 reachable replies; fewer than 100 known-suffix
 treatment decisions; a vacuous shuffle; nondeterminism; wall time above 30
 minutes; peak RSS at or above 2 GiB; or any need to edit serving, CUDA,
-float-training, exporter or Claude-owned source. Once seed 2771 is read, do not
+float-training, exporter or Claude-owned source. Once seed 2772 is read, do not
 change the depth cap, target tie, fallback, shuffle or bar.
 
 ## Verdict

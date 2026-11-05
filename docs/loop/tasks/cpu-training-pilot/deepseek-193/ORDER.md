@@ -73,7 +73,7 @@ serving session, Hamming read, point key, CUDA or float-training code.
 ## Data and power
 
 - derive the suffix table only from the fixed TRAIN panel `tt-2711`;
-- evaluate a new unopened `cell=dev,dev`, seed-2771, protocol-2, 128-conversation
+- evaluate a new unopened `cell=dev,dev`, seed-2772, protocol-2, 128-conversation
   m-world-v2 panel generated only after FIT and GO;
 - both public dual-c131 raw artifact seeds;
 - 64-token generation cap;

@@ -174,6 +174,8 @@ impl SuffixMemoryTable {
             ambiguous_suffixes: 0,
             bos_transitions: 0,
         };
+        let mut targets_by_depth: [BTreeSet<u32>; SUFFIX_MEMORY_MAX_DEPTH] =
+            std::array::from_fn(|_| BTreeSet::new());
         for (suffix, successors) in &self.entries {
             let depth = suffix.len();
             if !(1..=SUFFIX_MEMORY_MAX_DEPTH).contains(&depth) {
@@ -183,14 +185,15 @@ impl SuffixMemoryTable {
             census.suffixes_by_depth[depth - 1] += 1;
             census.transitions_by_depth[depth - 1] =
                 census.transitions_by_depth[depth - 1].saturating_add(observations);
-            census.distinct_targets_by_depth[depth - 1] = census.distinct_targets_by_depth
-                [depth - 1]
-                .saturating_add(successors.counts.len() as u64);
+            targets_by_depth[depth - 1].extend(successors.counts.keys().copied());
             census.transitions = census.transitions.saturating_add(observations);
             census.ambiguous_suffixes += u64::from(successors.counts.len() > 1);
             census.bos_transitions = census
                 .bos_transitions
                 .saturating_add(successors.counts.get(&POINT_KEY_BOS).copied().unwrap_or(0));
+        }
+        for (depth, targets) in targets_by_depth.iter().enumerate() {
+            census.distinct_targets_by_depth[depth] = targets.len() as u64;
         }
         census
     }
@@ -609,14 +612,22 @@ pub fn suffix_decision_changes(
     candidate: &TimedSuffixMemoryReading,
     control: &TimedSuffixMemoryReading,
 ) -> SuffixDecisionChanges {
+    let reachable_rows = candidate
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .collect::<BTreeSet<_>>();
     let candidate_steps = candidate
         .steps
         .iter()
+        .filter(|step| reachable_rows.contains(&step.row))
         .map(|step| ((step.row, step.generated_step), step.selected_token))
         .collect::<BTreeMap<_, _>>();
     let control_steps = control
         .steps
         .iter()
+        .filter(|step| reachable_rows.contains(&step.row))
         .map(|step| ((step.row, step.generated_step), step.selected_token))
         .collect::<BTreeMap<_, _>>();
     let changed = candidate_steps
@@ -772,12 +783,55 @@ fn splitmix64(mut value: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     fn sample(reply: &[u32]) -> MemoryWeightSample {
         MemoryWeightSample {
             prompt: vec![9],
             reply: reply.to_vec(),
         }
+    }
+
+    fn artifact() -> Vec<u8> {
+        export_fbs_trunk_uorlut01(&synthetic_fbs_trunk_with(
+            193,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 3,
+                context: 32,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        ))
+        .unwrap()
+    }
+
+    fn boundary() -> ReplyBoundaryMemory {
+        crate::reply_boundary::derive_reply_boundary_memory(&[sample(&[40, 10, 20, 30, 1])])
+            .unwrap()
+    }
+
+    fn writer_prefix(artifact: &[u8]) -> Vec<u32> {
+        generate_suffix_memory_reply(
+            artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::WriterBoundary,
+            None,
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap()
+        .0
+        .tokens
     }
 
     #[test]
@@ -843,15 +897,141 @@ mod tests {
                 shuffled.entries[suffix].observations()
             );
         }
-        let target_sum = |memory: &SuffixMemoryTable| {
-            let mut totals = BTreeMap::<u32, u64>::new();
-            for successors in memory.entries.values() {
+        let target_sum_by_depth = |memory: &SuffixMemoryTable| {
+            let mut totals = std::array::from_fn::<_, SUFFIX_MEMORY_MAX_DEPTH, _>(|_| {
+                BTreeMap::<u32, u64>::new()
+            });
+            for (suffix, successors) in &memory.entries {
                 for (&target, &count) in &successors.counts {
-                    *totals.entry(target).or_default() += count;
+                    *totals[suffix.len() - 1].entry(target).or_default() += count;
                 }
             }
             totals
         };
-        assert_eq!(target_sum(&table), target_sum(&shuffled));
+        assert_eq!(target_sum_by_depth(&table), target_sum_by_depth(&shuffled));
+    }
+
+    #[test]
+    fn complete_reply_integration_overrides_writer_predicts_bos_and_falls_back() {
+        let artifact = artifact();
+        let prefix = writer_prefix(&artifact);
+        assert!(prefix.len() >= 2);
+        let writer_first = prefix[0];
+        let writer_second = prefix[1];
+        let predicted = (10..512).find(|token| *token != writer_second).unwrap();
+        let override_table =
+            derive_suffix_memory(&[sample(&[writer_first, predicted, 1])]).unwrap();
+        let trained = generate_suffix_memory_reply(
+            &artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::TrainedSuffix32,
+            Some(&override_table),
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap();
+        assert_eq!(trained.0.tokens[0], writer_first);
+        assert_eq!(trained.0.tokens[1], predicted);
+        assert_eq!(trained.1[1].suffix_depth, Some(1));
+
+        let terminal_table = derive_suffix_memory(&[sample(&[writer_first])]).unwrap();
+        let stopped = generate_suffix_memory_reply(
+            &artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::TrainedSuffix32,
+            Some(&terminal_table),
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap();
+        assert_eq!(stopped.0.tokens, [writer_first]);
+        assert_eq!(stopped.0.stop, "bos");
+        assert_eq!(stopped.1[1].suffix_depth, Some(1));
+        assert_eq!(stopped.1[1].selected_token, POINT_KEY_BOS);
+
+        let other = (10..512)
+            .find(|token| *token != writer_first && *token != predicted)
+            .unwrap();
+        let unknown_table = derive_suffix_memory(&[sample(&[other, predicted, 1])]).unwrap();
+        let fallback = generate_suffix_memory_reply(
+            &artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::TrainedSuffix32,
+            Some(&unknown_table),
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap();
+        assert_eq!(fallback.0.tokens[0], writer_first);
+        assert_eq!(fallback.0.tokens[1], writer_second);
+        assert_eq!(fallback.1[1].suffix_depth, None);
+    }
+
+    #[test]
+    fn shuffled_complete_reply_takes_a_different_trajectory() {
+        let artifact = artifact();
+        let prefix = writer_prefix(&artifact);
+        let writer_first = prefix[0];
+        let other_a = (10..512).find(|token| *token != writer_first).unwrap();
+        let other_b = (10..512)
+            .find(|token| *token != writer_first && *token != other_a)
+            .unwrap();
+        let predicted = (10..512)
+            .find(|token| *token != other_a && *token != other_b)
+            .unwrap();
+        let table = derive_suffix_memory(&[
+            sample(&[writer_first, predicted, 1]),
+            sample(&[other_a, other_b, 1]),
+        ])
+        .unwrap();
+        let original = table
+            .predict(&[writer_first], SUFFIX_MEMORY_MAX_DEPTH)
+            .unwrap();
+        let (shuffled, _) = (0..64)
+            .find_map(|seed| {
+                let (control, changed) = shuffle_suffix_memory(&table, seed).unwrap();
+                (changed > 0
+                    && control.predict(&[writer_first], SUFFIX_MEMORY_MAX_DEPTH) != Some(original))
+                .then_some((control, seed))
+            })
+            .unwrap();
+        let true_reply = generate_suffix_memory_reply(
+            &artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::TrainedSuffix32,
+            Some(&table),
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap();
+        let shuffled_reply = generate_suffix_memory_reply(
+            &artifact,
+            &[10, 20, 30, 40, 10, 20, 30],
+            16,
+            8,
+            SuffixMemoryArm::ShuffledSuffix32,
+            Some(&shuffled),
+            Some(&boundary()),
+            193,
+            0,
+        )
+        .unwrap();
+        assert_ne!(true_reply.0.tokens, shuffled_reply.0.tokens);
+        assert_ne!(
+            true_reply.1[1].selected_token,
+            shuffled_reply.1[1].selected_token
+        );
     }
 }

@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use uor_r4_cpu_train::{
     compare_suffix_memory_rows, derive_reply_boundary_memory, derive_suffix_memory,
-    evaluate_suffix_memory_replies, shuffle_reply_boundary_memory, shuffle_suffix_memory,
-    suffix_decision_changes, validate_corpus_manifest, CopyKeyReplyMetric, CpuCorpusIdentity,
-    CpuMaskedCorpus, MemoryWeightSample, SuffixMemoryArm, TimedSuffixMemoryReading,
+    evaluate_suffix_memory_replies, shuffle_suffix_memory, suffix_decision_changes,
+    validate_corpus_manifest, CopyKeyReplyMetric, CpuCorpusIdentity, CpuMaskedCorpus,
+    MemoryWeightSample, SuffixMemoryArm, TimedSuffixMemoryReading,
 };
 
 struct Panel {
@@ -42,8 +42,6 @@ fn run() -> Result<(), String> {
         shuffle_suffix_memory(&suffix, config.seed).map_err(|error| error.to_string())?;
     let boundary =
         derive_reply_boundary_memory(&train.samples).map_err(|error| error.to_string())?;
-    let (_, changed_boundary_keys) =
-        shuffle_reply_boundary_memory(&boundary, config.seed).map_err(|error| error.to_string())?;
 
     let mut arms = BTreeMap::new();
     for arm in SuffixMemoryArm::EVALUATION_ARMS {
@@ -101,7 +99,6 @@ fn run() -> Result<(), String> {
         .as_bool()
         .unwrap_or(false);
     let control_non_vacuous = changed_targets > 0
-        && changed_boundary_keys > 0
         && changes_from_local.changed_steps > 0
         && changes_from_shuffled.changed_steps > 0
         && treatment.reading.suffix_decisions >= 100;
@@ -164,7 +161,6 @@ fn run() -> Result<(), String> {
             "premature_bos_at_most_4": premature_ok,
             "control_non_vacuous": control_non_vacuous,
             "changed_targets": changed_targets,
-            "changed_boundary_keys": changed_boundary_keys,
             "suffix_decisions": treatment.reading.suffix_decisions,
             "outcome": outcome,
         },
