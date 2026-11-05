@@ -325,6 +325,13 @@ change the code packing, row cap, threshold, tie rule, arms or bar.
 - **INSTRUMENT FAULT** if fit, source, input, readout, control or report
   identity fails closed.
 
+## Independent GO
+
+GO - fresh-context Codex subagent `go_learned_copy_read` reviewed head
+`d809016d146c7717d1f0af536a18912f7f8c4478` and implementation pin
+`d32825212b90b8821afa36314d8d0f70a36499df`. The registered seed-2763 run is
+authorized; the fresh panel and output root were absent at review.
+
 ## TEST FITNESS
 
 TEST FITNESS: FIT - M1 #2029 learned modulo-code copy arbitration
