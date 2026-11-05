@@ -110,11 +110,11 @@ table-anchored arm exists in this registration.
 ## Source and binary
 
 - base: `d634c77e5`;
-- implementation pin: `47c9d53a9bdcc2e9711ade9868b47a1846822d68`;
+- implementation pin: `771c99ecf42ee344b43f439dfff8666d953f04da`;
 - driver:
   `target/deepseek/raw-query-port/release/cpu-query-port-driver`,
   SHA-256
-  `73294b424e1e61e83f0bfd046c979ec5017ab20dba8336847b5de05a67603866`;
+  `7210266b5c71e838f5b7e8a7f29ce3275abd57bc11ca20dbf2ea17612d295e81`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -142,8 +142,8 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor 47c9d53a9bdcc2e9711ade9868b47a1846822d68 HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 73294b424e1e61e83f0bfd046c979ec5017ab20dba8336847b5de05a67603866
+git -C "$SOURCE" merge-base --is-ancestor 771c99ecf42ee344b43f439dfff8666d953f04da HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 7210266b5c71e838f5b7e8a7f29ce3275abd57bc11ca20dbf2ea17612d295e81
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -184,7 +184,7 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 - eight candidate sweeps of 34 port-gain moves;
 - at least one accepted true-cell move per seed;
 - non-empty, moved-count-matched shuffled-cell and random-gain controls;
-- the shuffled-cell artifact must differ from the trained artifact;
+- the shuffled-cell behavior signature must differ from the trained behavior;
 - raw baseline bytes exactly equal the source artifact;
 - only port final-gain coordinates change; all table and other artifact bytes
   remain identical;
@@ -260,7 +260,8 @@ lower still:
 - seed 2 raw/trained/random: `23,870,298 / 23,863,304 / 23,802,494`.
 
 That fails against a valid random control, while the shuffled arm cannot
-support an independent comparison. The repaired driver classifies identical
-shuffled and trained artifacts as **CONTROL_FAULT** and uses a fresh
-verification root. No promotion follows; the original sealed reports remain
-preserved.
+support an independent comparison. The repaired driver hashes ordered token
+and kept-cell decisions plus all panel and port metrics, ignoring artifact
+identity, and classifies behaviorally identical shuffled/trained arms as
+**CONTROL_FAULT**. It uses a fresh verification root. No promotion follows;
+the original sealed reports remain preserved.
