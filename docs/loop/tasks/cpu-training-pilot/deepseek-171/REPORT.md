@@ -68,7 +68,7 @@ No serving, CUDA, float-training, termination or Claude-owned source changed.
 - every arm had zero exact, BOS-complete and premature-BOS replies;
 - fresh-process repeats were byte-identical after timing fields;
 - compact evidence:
-  [`continuation-2765/`](../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/continuation-2765/),
+  [`continuation-2765/`](../../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/continuation-2765/),
   raw local manifest SHA-256
   `c2523410a33a4cbe130efd63440d4534f3b718443e07e4155d3cae0a95decc70`;
 - sealed outcome: `REJECT`.
