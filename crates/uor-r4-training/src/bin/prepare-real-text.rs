@@ -511,8 +511,8 @@ const TURN_KEYS: [&str; 4] = ["split", "tokenizer", "name", "out"];
 /// `panel-turns`: a frozen panel's user turns, read back from its split by
 /// [`real_text::split_user_turns`] and written as the `{id, user_turns}` list
 /// `panel=` reads. The id is `NAME:<document index>`; a document with no user
-/// turn is skipped and counted.
-fn panel_turns(args: &[String], pin: &str) -> Result<()> {
+/// turn is skipped and counted. Returns the summary line `run` prints.
+fn panel_turns(args: &[String], pin: &str) -> Result<Value> {
     let values = key_values(args, &TURN_KEYS, &TURN_KEYS)?;
     let split = Path::new(values["split"]);
     let out = Path::new(values["out"]);
@@ -551,6 +551,8 @@ fn panel_turns(args: &[String], pin: &str) -> Result<()> {
             split.display()
         ));
     }
+    // Hashed before `out` is created, so a failure here writes nothing.
+    let tokens_sha256 = uor_r4_training::sha256_file(&tokens_path).map_err(|e| e.to_string())?;
     let mut file = File::options()
         .write(true)
         .create_new(true)
@@ -558,18 +560,14 @@ fn panel_turns(args: &[String], pin: &str) -> Result<()> {
         .map_err(|e| format!("{}: {e}", out.display()))?;
     file.write_all(&serde_json::to_vec_pretty(&rows).map_err(|e| e.to_string())?)
         .map_err(|e| format!("{}: {e}", out.display()))?;
-    println!(
-        "{}",
-        json!({
-            "split": split.display().to_string(),
-            "tokens_sha256": uor_r4_training::sha256_file(&tokens_path).map_err(|e| e.to_string())?,
-            "documents": documents.len(),
-            "with_user_turns": rows.len(),
-            "without_user_turns": documents.len() - rows.len(),
-            "user_turns": documents.iter().map(Vec::len).sum::<usize>(),
-        })
-    );
-    Ok(())
+    Ok(json!({
+        "split": split.display().to_string(),
+        "tokens_sha256": tokens_sha256,
+        "documents": documents.len(),
+        "with_user_turns": rows.len(),
+        "without_user_turns": documents.len() - rows.len(),
+        "user_turns": documents.iter().map(Vec::len).sum::<usize>(),
+    }))
 }
 
 fn run(args: &[String]) -> Result<()> {
@@ -578,7 +576,8 @@ fn run(args: &[String]) -> Result<()> {
 
 fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
     if args.first().map(String::as_str) == Some("panel-turns") {
-        return panel_turns(&args[1..], pin);
+        println!("{}", panel_turns(&args[1..], pin)?);
+        return Ok(());
     }
     let config = parse_args(args)?;
     for path in config.inputs.iter().chain(&config.panels) {
@@ -1555,6 +1554,66 @@ mod tests {
         let error = run_with_pin(&turn_args(&fresh), &"0".repeat(64)).unwrap_err();
         assert!(error.contains("is not the pinned"), "{error}");
         assert!(!fresh.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_turns_skips_and_counts_a_document_with_no_user_turn() {
+        let dir = scratch("turns-skip");
+        // An article first (no prompt run), then two conversations, laid out
+        // as protocol 2 writes them: the prompt runs have mask 0.
+        let documents: [&[(&str, u8)]; 3] = [
+            &[("Just an article.", 1)],
+            &[("User: Hello there\nAssistant:", 0), (" Hi", 1)],
+            &[("User: First\nUser: Second\nAssistant:", 0), (" Both", 1)],
+        ];
+        let (mut tokens, mut mask) = (Vec::new(), Vec::new());
+        for document in documents {
+            tokens.push(BOS);
+            mask.push(0);
+            for &(text, m) in document {
+                let ids = bytes_of(text);
+                mask.resize(mask.len() + ids.len(), m);
+                tokens.extend(ids);
+            }
+            tokens.push(EOS);
+            mask.push(1);
+        }
+        let split = dir.join("split");
+        fs::create_dir(&split).unwrap();
+        let mut writer = CorpusWriter::create(split.join("tokens.u16"), 3 + 256).unwrap();
+        writer.write_tokens(&tokens).unwrap();
+        writer.finish().unwrap();
+        fs::write(split.join("response_mask.u8"), &mask).unwrap();
+        let turns = dir.join("turns.json");
+        let turn_args = [
+            "panel-turns".to_owned(),
+            format!("split={}", split.display()),
+            format!("tokenizer={}", dir.join("tokenizer.json").display()),
+            "name=t".to_owned(),
+            format!("out={}", turns.display()),
+        ];
+        let summary = panel_turns(&turn_args[1..], &pin(&dir)).unwrap();
+        // The ids keep each document's index in the split, skipped ones included.
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(&turns).unwrap()).unwrap(),
+            json!([
+                {"id": "t:1", "user_turns": ["Hello there"]},
+                {"id": "t:2", "user_turns": ["First", "Second"]},
+            ])
+        );
+        let sha = uor_r4_training::sha256_file(&split.join("tokens.u16")).unwrap();
+        assert_eq!(
+            summary,
+            json!({
+                "split": split.display().to_string(),
+                "tokens_sha256": sha,
+                "documents": 3,
+                "with_user_turns": 2,
+                "without_user_turns": 1,
+                "user_turns": 3,
+            })
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

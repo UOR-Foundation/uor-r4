@@ -18,10 +18,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
 - **The ORDER's size estimate for Wikipedia was three times too low,** so decision 4 did not survive.
   - It planned 15,000 kept articles a shard, at about 15M tokens each. Shard 00000's first 15,000 articles hold 43,283,854 TRAIN tokens. The shard opens on the oldest articles: its first 2,000 average about 8,800 tokens, its first 900 about 9,300.
   - The record is kept in the store's `superseded/`.
-- **The census costs about 0.62 GB per million TRAIN tokens on real text, not 150 bytes a token.**
-  - Measured peaks: 0.61 GB at 0.70M tokens; 2.51 GB at 3.77M; 5.64–6.08 GB at 7.9–8.3M.
+- **The census costs 0.67 to 0.75 GB per million TRAIN tokens on real text, not 150 bytes a token.**
+  - Peak footprint over TRAIN tokens: 0.67 for `oasst2/` (2.51 GB at 3.77M); 0.70, 0.74 and 0.75 for the Wikipedia roots (5.64–6.08 GB at 7.9–8.3M).
+  - The probe peaked at 0.61 GB on 0.70M tokens. It read an earlier build of `wiki-00000/heldout` (88 articles, tokens `3b5869ca…`, in its JSON), since rebuilt at 396,081 tokens.
   - The 150 bytes came from claude-202's run on the templated M-world. The census's M1/M2 reply-memory probe keeps a row for every reply target (`reply_rows`, then six `reply_table`s, `in_space_long.rs:4961-4993`). On templated data those collapse; on real text almost every row is distinct.
-  - At 43.3M tokens the census would need about 27 GB; the laptop has 16 GB, about 8 GB of it free.
+  - At 43.3M tokens the census would need about 29 to 33 GB; the laptop has 16 GB, about 8 GB of it free.
   - So the ORDER's stop rule applied ("shrink `max_docs`, and record it"). Each Wikipedia root was cut to about 8M TRAIN tokens: `max_docs` 900, 8,400 and 4,350, because article length differs by shard.
   - Wikipedia is 24.2M TRAIN tokens, not the planned ~45M. The corpus is 3.7 times today's 7.5M-token M-world corpus, not 7 times.
 - **The exact prompt share is not 0.0 for DEV and Fresh V2 against `oasst2/`.**
@@ -38,6 +39,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
 - **Done-when 4 asked the REPORT to list every uncovered short turn; it lists them by count.**
   - There are 3,219, and 3,218 of them are the five frozen panels' turns, the sealed Fresh V2's among them.
   - That panel text stays in the private store. Each manifest's `exclusion.uncovered` holds the full list, under `SHA256SUMS`. The counts are under Measurements.
+- **The in-unit fresh review found four items in the code and two in this REPORT.** Each is fixed at the head:
+  - **The bin test never covered a skipped document,** so the ids' document index was not pinned: with `enumerate` moved after the filter, every test still passed. A new test puts an article first, and NG4 below shows it failing under that change.
+  - **Two comments in `real_text.rs` were wrong.** One claimed the bin compares turns on real data; the other gave a wrong reason for the `<|unk|>` refusal.
+  - **`panel-turns` hashed the split after writing `out`,** so a hashing failure left a file behind. It now hashes first.
+  - **This REPORT quoted the census at 0.62 GB per million tokens and 27 GB for 43.3M,** a slope through the probe that understates the measured 0.67–0.75. It also gave the probe's 0.70M tokens without saying that the folder was since rebuilt.
 - **The ORDER's cancel probe was stamped "about 16:20Z";** it ran before the ORDER commit at 16:00Z. Corrected in the ORDER.
 - **Small slips, each caught at once:**
   - The first push failed with a transient error; the retry pushed.
@@ -66,6 +72,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [real-text-corpus](../../../../r
   - It writes `[{id: "NAME:<doc index>", user_turns}]`, skipping a document with no user turn, and prints the counts.
   - Argument parsing is shared with the build modes (`key_values`).
   - One test runs a two-tree build, reads its turns back, has `parse_panel` read them, and checks both refusals.
+  - A second writes a split whose first document is an article, and checks the ids `t:1` and `t:2` and every printed count.
 - **`docs/research/notebook/data-tokenizer.md`:** the line's first result row.
 - **`docs/roadmap/items/real-text-corpus.md`:** `status: done`.
 - **`docs/loop/tasks/real-text-corpus/claude-293/`:** the ORDER, its probe time corrected, and this REPORT.
@@ -140,7 +147,7 @@ All on the laptop, with the release binaries at `9911a2e1c`.
   | `wiki-00000/` | 5.64 GB | 3.72 GB | 30.5 s |
   | `wiki-00020/` | 6.08 GB | 4.10 GB | 29.9 s |
   | `wiki-00040/` | 5.93 GB | 3.92 GB | 28.7 s |
-  | the probe (`wiki-00000/heldout` as TRAIN) | 0.61 GB | — | 1.6 s |
+  | the probe (an earlier `wiki-00000/heldout`, 0.70M tokens, as TRAIN) | 0.61 GB | — | 1.6 s |
 
 **Uncovered short panel turns** (under four words, counted in every manifest): 3,219.
 
@@ -219,17 +226,21 @@ All on the laptop, with the release binaries at `9911a2e1c`.
 
 ## Checks run at the head
 
-- **The training crate's suite at `9911a2e1c`** (`--features parquet-input --no-fail-fast`): **169 passed, 0 failed, 1 ignored, over 8 targets.**
-  - The targets: lib 123, `chat-grade` 26, `m-world-recall-corpus` 8 (1 ignored), `prepare-real-text` 10, `prepare-chat-parquet` 1, `prepare-text-parquet` 1, and `mix-chat-corpus` and the doc tests 0 each.
-  - At the base it was 163/0/1 over the same 8 targets. The difference is the 5 new library tests and the 1 new bin test.
-- **Negative gates.** Each was set aside with an edit, its test seen to fail, and the file restored from git. Then the suite was rebuilt and seen green again (lib 5/5, bin 10/10).
+- **The training crate's suite on the review-fix tree** (`--features parquet-input --no-fail-fast`): **170 passed, 0 failed, 1 ignored, over 8 targets.**
+  - The targets: lib 123, `chat-grade` 26, `m-world-recall-corpus` 8 (1 ignored), `prepare-real-text` 11, `prepare-chat-parquet` 1, `prepare-text-parquet` 1, and `mix-chat-corpus` and the doc tests 0 each.
+  - At the base it was 163/0/1 over the same 8 targets. The difference is the 5 new library tests and the 2 new bin tests.
+  - At `9911a2e1c`, the commit that built the corpus, it was 169/0/1, before the second bin test.
+- **The review fixes change no output.** `panel-turns` at the fix tree, re-run on the five frozen panels, writes files byte-identical to the stored `panel-turns/`. The build modes are untouched.
+- **Negative gates.** Each was set aside with an edit, its test seen to fail, and the code restored. Then the suite was rebuilt and seen green again.
   - **NG1, the leading space after the role marker kept:** the round-trip test fails.
   - **NG2, the marker scan inside a run removed:** the round-trip test and the bin's `panel_turns_reads_back_the_user_turns_a_build_wrote` both fail.
   - **NG3, the `<|unk|>` refusal removed:** `user_turns_refuse_an_unk_in_a_prompt_run` fails.
+  - **NG4, `enumerate` moved after the filter in `panel_turns`:** `panel_turns_skips_and_counts_a_document_with_no_user_turn` fails, with ids `t:0` and `t:1`. The earlier bin test passes under it, which is the gap the review found.
 - **On real data:** p-long's and p-long4k's turns equal their stored files, by the SHA-256 of `[.[].user_turns]` (`4e5c524b…` and `21f52874…`).
-- **Style:** `rustfmt` on both changed files, no line over 100 characters, and no banned word. Clippy reports nothing in either file, in the normal and the test profile.
+- **Style:** `rustfmt` on both changed files, no line over 100 characters, and no banned word. Clippy reports nothing in either file, in the normal and the test profile, at `9911a2e1c` and again on the fix tree.
   - The crate's only clippy error is the earlier one at `chat-grade.rs:4893`, which claude-292 recorded.
 - **Storage:** all 61 files read back from the store into a fresh folder. `shasum -c` passes every one, and the stored `SHA256SUMS` is byte-identical to the local one.
+  - The review fixes changed the store's `README.md`, so it and `SHA256SUMS` were uploaded again and the whole root read back a second time. All 61 files pass, the sums are byte-identical again, and `raw/SHA256SUMS` passes for the raw files beside them.
 - **Raw inputs:**
   - each Wikipedia shard's SHA-256 matches `raw/SHA256SUMS` before its build;
   - `raw/SHA256SUMS` passes for the stored OASST2 file and both READMEs;
@@ -240,7 +251,7 @@ All on the laptop, with the release binaries at `9911a2e1c`.
 - **P5's sheet unit** can move P5's Data line to real text, through a decision card. It reads this folder's `README.md` and picks the mix and the mask.
 - **For that sheet:**
   - report the six-phrase rows apart on DEV and Fresh V2;
-  - a census of a larger real-text split needs about 0.62 GB per million TRAIN tokens, so a pod with that much memory.
+  - a census of a larger real-text split needs up to 0.75 GB per million TRAIN tokens, so a machine with that much memory.
 - **A larger Wikipedia build** comes from the same raw shards with a larger `max_docs`.
 
 ## Skills used
@@ -252,7 +263,9 @@ No skill applied. The loop's ORDER and REPORT procedure was used.
 - **The roadmap render:** owed until main's roadmap check is green.
 - **No census reads panel prompts against TRAIN reply text,** the only place a panel prompt could sit in Wikipedia. Only the builder's exclusion screens it; P5's sheet decides whether that is needed.
 - **The panel replies verbatim in OASST2** (DEV 18, …) are counted, not named.
+- **`split_user_turns` skips a mask-0 `<|eos|>` wherever it falls.** One inside a prompt run would join the text around it. The builder admits no document holding special text, so no split it writes has one; another generator's split could. The fresh review rated it low.
+- **No issue exists for this item yet,** so the PR closes none; the render that makes one is the owed one above.
 
 ## Plain summary
 
-The project now has real human-written training text: about 28 million tokens of OASST2 conversations and Wikipedia articles, with held-out parts that no training run sees, stored privately with checksums. Every document was screened against the frozen test panels, and the count of shared prompts reads zero for the three panels that test memory. The two older panels share six greetings with real conversations, such as "Thank you!" and "Who are you?"; they are kept and named, so a score can set them apart. Wikipedia came out smaller than planned, because the counting tool needs about four times more memory on real text than on the old templated data.
+The project now has real human-written training text: about 28 million tokens of OASST2 conversations and Wikipedia articles, with held-out parts that no training run sees, stored privately with checksums. Every document was screened against the frozen test panels, and the count of shared prompts reads zero for the three panels that test memory. The two older panels share six greetings with real conversations, such as "Thank you!" and "Who are you?"; they are kept and named, so a score can set them apart. Wikipedia came out smaller than planned, because the counting tool needs about five times more memory per token on real text than on the old templated data.

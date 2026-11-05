@@ -228,9 +228,8 @@ const ROLE_MARKERS: [(&str, bool); 3] =
 /// marker ends in it; v2 content starts with it).
 ///
 /// Returns one list per document, in order; a document without a user turn
-/// gives an empty list. A content line that itself opens on a role marker
-/// would split there, so the bin's real-data check compares the turns of the
-/// panels whose generator stored its own.
+/// gives an empty list. A content line that itself opens on a role marker is
+/// read as a new segment there, since the layout cannot tell the two apart.
 pub fn split_user_turns(
     tokens: &[u32],
     mask: &[u8],
@@ -271,7 +270,8 @@ pub fn split_user_turns(
             let turns = documents.last_mut().expect("the split opens on <|bos|>");
             flush(&mut run, turns)?;
         } else if id == protocol.unk_id {
-            // Decoding would lose it, so the turn could not be read back exactly.
+            // It stands for text the split does not hold, so the turn cannot be
+            // read back as written.
             return Err(RealTextError::Defect("an <|unk|> in a prompt run".into()));
         } else if id != protocol.eos_id {
             run.push(id);
