@@ -4,8 +4,11 @@ Run ID: `cpu-training-pilot-copy-boundary-2026-11-05`
 
 ## Status
 
-NOT RUN. This sheet fixes the D84 CPU development comparison before the fresh
-panel is generated or read.
+COMPLETE - INSUFFICIENT_POWER. The TRAIN-only control exercise passed, the
+seed-2723 panel was generated after FIT/GO, and both artifacts plus their
+repeats completed. The fresh oracle completed only 7 replies, below the
+pre-registered minimum of 10, so the true-vs-control exact-reply comparison is
+not assessed.
 
 ## Question
 
@@ -355,3 +358,18 @@ no-boundary parity, strict reachability, manifest evidence, time/RSS gates,
 finite terminal/no-boundary/oracle behavior, stop-change accounting, paired
 threshold, and the fresh input boundary. No Claude-owned serving, exporter,
 CUDA or float-training source is changed.
+
+## Outcome
+
+**INSUFFICIENT_POWER.** The fresh panel had 456 reachable replies but only 7
+oracle-complete longest-copy bodies on each artifact seed.
+
+The true boundary fired on 14 replies versus 3 for the shuffled control on both
+artifact seeds, with 5 versus 2 premature stops and 0 exact replies. All arms
+retained 346 correct body positions. The TRAIN-only preflight exercised the
+mechanism and control: true boundary produced 11 exact and 41 premature stops,
+while the shuffled control produced 1 exact and 9 premature stops.
+
+The stopping rule therefore acted and was behaviorally distinct, but this fresh
+body set cannot decide its capability. Sealed output:
+`local/deepseek/copy-boundary/2026-11-05`.
