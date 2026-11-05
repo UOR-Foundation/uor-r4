@@ -1,0 +1,10 @@
+Original local run root:
+local/deepseek/copy-ranker/2026-11-05
+
+Original local run manifest:
+SHA256SUMS
+
+Original local run manifest SHA-256:
+6ec5f81f15724bc83a61d2c13b501b56bb12cea65ad5a1e5bf64d4736ef835e2
+
+Verify from the original run root with `sha256sum -c SHA256SUMS`.

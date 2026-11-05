@@ -1,0 +1,4 @@
+Supervised candidate groups: 74
+Required candidate groups: 640
+Failed seed: 1
+Reason: CPU driver stopped while fitting the candidate ranker, before model evaluation.
