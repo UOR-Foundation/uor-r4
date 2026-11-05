@@ -18,3 +18,4 @@ A row needs the frozen panel identity, deterministic oracle results with denomin
 
 - [Format and verdict words](./README.md).
 - [`CHARTER.md`](../../../CHARTER.md), sections 3.10, 4.3 and 5.6.
+- [`verify_code_tasks`](../../../crates/uor-r4-harness/src/verify_code_tasks.rs): `rustc --test` verifier that compiles and runs all 80 frozen CodeTasks rows (instrument QA, not a capability result).
