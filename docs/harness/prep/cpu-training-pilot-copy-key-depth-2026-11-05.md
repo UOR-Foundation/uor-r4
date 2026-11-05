@@ -271,9 +271,10 @@ A FIT verdict clears compute for this configuration only (D22).
 
 ## Pre-run GO
 
-The prior GO is superseded by attempt 2's public-DEV manifest-path fault.
-
-GO: PENDING fresh review of attempt 3.
+GO - reviewer `codex fresh-context GO`, 2026-11-05. HEAD was clean at
+`694b59e0f`; implementation pin `70b6445d4` and generator pin `4e42ffca5`
+matched. Attempts 1 and 2, absent attempt 3, all input filenames and hashes,
+panel seeds, resources and failure sealing were checked read-only.
 
 ## Outcome
 
