@@ -33,7 +33,7 @@ Hardware: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
 
 ## Fixed construction
 
-At each generated decision, form the token stream from the prompt and every
+At each generated decision, form the last 192 tokens of the prompt and every
 generated token. An exact suffix candidate at depth `1..=4` uses:
 
 ```text

@@ -15,9 +15,10 @@ training, integer serving, CUDA or Claude-owned source.
 
 ## Fixed construction
 
-At every generated decision, use the exact stream consisting of the prompt and
-all generated tokens so far. For a query ending at the current final token,
-search backward for the latest exact suffix key at each depth one through four:
+At every generated decision, use the last 192 tokens of the exact stream
+consisting of the prompt and all generated tokens so far. For a query ending at
+the current final token, search backward inside that fixed window for the latest
+exact suffix key at each depth one through four:
 
 ```text
 query_d(t) = x[t], x[t-1], ..., x[t-d+1]

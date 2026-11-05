@@ -13,6 +13,7 @@ use crate::reply_eval::{normalized_reference, GeneratedReply};
 use crate::{invalid, CpuFbsForward, CpuFbsHead, CpuTrainError, MemoryWeightSample};
 
 type Result<T> = std::result::Result<T, CpuTrainError>;
+const COPY_KEY_REPLY_WINDOW: usize = 192;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -436,9 +437,10 @@ fn exact_suffix_matches(stream: &[u32]) -> [Option<u32>; COPY_KEY_MAX_DEPTH] {
     let Some(current) = stream.len().checked_sub(1) else {
         return [None; COPY_KEY_MAX_DEPTH];
     };
+    let window_start = stream.len().saturating_sub(COPY_KEY_REPLY_WINDOW);
     let mut matches = [None; COPY_KEY_MAX_DEPTH];
     for depth in 1..=COPY_KEY_MAX_DEPTH {
-        matches[depth - 1] = (1..current).rev().find_map(|candidate| {
+        matches[depth - 1] = ((window_start + 1)..current).rev().find_map(|candidate| {
             (0..depth)
                 .all(|back| {
                     stream[candidate.saturating_sub(back + 1)]
@@ -583,6 +585,15 @@ mod tests {
         let none = copy_key_reply_decision(&[5], 9, CopyKeyReplyArm::Longest4To1, 0, 0, 0);
         assert_eq!(none.token, 9);
         assert_eq!(none.depth, None);
+    }
+
+    #[test]
+    fn candidates_do_not_cross_the_fixed_copy_window() {
+        let mut stream = vec![1; COPY_KEY_REPLY_WINDOW + 1];
+        stream[0] = 9;
+        stream.extend([2, 9]);
+        let matches = exact_suffix_matches(&stream);
+        assert!(matches.iter().all(Option::is_none), "{matches:?}");
     }
 
     #[test]
