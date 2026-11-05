@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-raw-query-port-2026-11-05`
 
 ## Status
 
-First registered runs completed and exposed a vacuous shuffled control. The
-driver now fails that condition closed; fresh verification is pending.
+COMPLETE - CONTROL_FAULT. Both seeds completed and exact verification
+reproduced a behaviorally vacuous shuffled control. No model change is
+promoted.
 
 ## Question
 
@@ -268,3 +269,19 @@ and kept-cell decisions plus all panel and port metrics, ignoring artifact
 identity, and classifies behaviorally identical shuffled/trained arms as
 **CONTROL_FAULT**. It uses a fresh verification root. No promotion follows;
 the original sealed reports remain preserved.
+
+Final verification at binary `7210266b…` returned **CONTROL_FAULT** on both
+seeds. Seed 1 took **71.766 s / 157,000 KiB**, and seed 2 took
+**52.274 s / 154,856 KiB**. Its report/manifest SHA-256 pins are:
+
+- seed 1:
+  `5e1f102aa2d0491696116643adc17e37ac7db33e1d7541f490fee0e303ef40ee` /
+  `f523f2a8dce30d670da6c362288d0b01c796a44d1b54ac86eaf72744327c6cc3`;
+- seed 2:
+  `f89d577977a2be9d49e4f15c8c82410adc90c836bfe0917c0678c336dfa3c967` /
+  `d6762369d50b2de37bce83a8bc3c0ddfc3b8a6beedab00e8448d97cb5450f7e8`.
+
+The valid random-gain control remained lower in target-port distance than the
+trained arm on both seeds. The query-port configuration is closed without
+promotion; the cell-rotation control needs redesign before this objective can
+produce a valid mechanism comparison.
