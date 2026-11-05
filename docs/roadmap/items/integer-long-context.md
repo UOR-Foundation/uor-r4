@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [integer-hamming-read]
 notebook: docs/research/notebook/m4-serving.md
-scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/dialogue_memory.rs, docs/model/pipeline-map.md, docs/harness/prep/integer-long-context*, docs/roadmap/items/integer-long-context.md, docs/loop/tasks/integer-long-context/**, docs/research/notebook/m4-serving.md]
+scope: [crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/point_key.rs, crates/uor-r4-integer/src/bin/fbs-export.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/bin/fbs-snapshot.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/memory.rs, crates/uor-r4-integer/src/stack/dialogue_memory.rs, docs/model/pipeline-map.md, docs/harness/prep/integer-long-context*, docs/roadmap/items/integer-long-context.md, docs/loop/tasks/integer-long-context/**, docs/research/notebook/m4-serving.md]
 ---
 
 ## Why it matters
@@ -16,14 +16,14 @@ scope: [crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/src/st
 The pipeline map's gap 6: "The serving session cannot slide its 192-token window ... Long context, the geometry's main claim, cannot be served yet." A conversation of a few turns passes 192 tokens, so a served model can hold no real conversation until this is solved.
 
 **What is true now** (read at `e06635e3a` by claude-286):
-- **The integer session stops at its artifact's `context`.** Every served step returns `StackError::ContextFull { context }` once the session holds `context` tokens (`stack/session.rs`, and `stack/format.rs:2332, 2665`). No code outside `stack/` handles it.
+- **The integer session stops at its artifact's `context`.** Every served step returns `StackError::ContextFull { context }` once the session holds `context` tokens (`stack/session.rs`, and `stack/format.rs:2332, 2665`). No non-test code outside `stack/` names it; one oracle test asserts it (`crates/uor-r4-training/tests/stack_d11_oracle.rs:394`).
 - **A larger `context` already serves the carry rule (c).** claude-242 re-exported a 192-trained artifact at a context of 32,768 by changing the snapshot's one `context` field; the payload bytes were identical. `fbs-toks --context-sweep` then decoded it past 192, with the trunk's state running on and the Hamming read scanning every earlier position:
   - 4,647 tok/s at 192, 1,851 at 2,112, 177 at 32,768;
   - the trunk alone flat at about 5,500 to 6,100 tok/s;
   - peak memory 145 MB at 32,768.
 
   No float forward under carry exists to test it against, and nothing has read what carry does to the model's predictions.
-- **The export writes 192-token models only.** The float `fbs-snapshot` refuses any other context (`src/bin/fbs-snapshot.rs:222, 237`), and the point key's window is `POINT_KEY_WINDOW = 192` (`stack/point_key.rs:374`, read by `bin/fbs-export.rs:106`). So the served artifacts, claude-243's `a7r-s{1,2,3}.uorlut` in `uor-chat`, are 192-token models.
+- **Every served artifact is a 192-token model,** claude-243's `a7r-s{1,2,3}.uorlut` in `uor-chat`, and no export at another window has been tested. The float `fbs-snapshot` refuses any other context when it reads out on DEV (`--dev`, `src/bin/fbs-snapshot.rs:222, 237`), and the point key's window is `POINT_KEY_WINDOW = 192` (`stack/point_key.rs:374`, read by `bin/fbs-export.rs:106`).
 - **Training cuts back-to-back windows of `--context`**, 192 by default and 2 to 4,096 since claude-273, carrying nothing between them (`build_document_windows`, `hamilton_sheet.rs:1870`). P2b's (L) trained at 2,048 on long chained conversations (claude-276).
 - **The float greedy decode slides** over the checkpoint's own window (claude-274), in the serial decode (`in_space_long.rs:5849, 5860`) and the cached one (`:6124`; `CacheRefusal::WindowFull`, `geometric_stack_native.rs:1569`). It reads no reply table once the prompt has slid out (`turn-memory-integer`). Scoring refuses a `--context` past the checkpoint's window (`in_space_long.rs:7165-7169`).
 - **Recall cannot decide the rule yet.** P2b's (L) states no far note even inside its window: 0 of 283 on trained phrasings and 0 of 306 on p-long, at both seeds (claude-281, Mechanism). Recall past the window is reported, and the choice rests on held-out loss, reply agreement and speed.
@@ -62,6 +62,7 @@ The trunk's recurrence makes (c) the geometry's own answer, which is why long co
   - `docs-status-refresh`'s scope covers `docs/model/*.md`, the pipeline map included.
 - **Kept out of scope:**
   - `bin/uor-chat.rs`: `cpu-training-pilot` holds it, and the session applies the rule itself.
+  - `stack/session.rs` and `stack/mod.rs`, until claude-287's last commit returns them for claude-288. They are this item's only overlap with `cpu-training-pilot` (DeepSeek's lane), and `loop claim` refuses an overlapping claim while either item has an open order. So the float units hold no lock on that lane.
   - `milestone_world_v2.rs`: its `CONTEXT = 256` caps one episode. `chain=` in `heldout-panel` and `m-world-recall-corpus` writes conversations past any window (claude-271, claude-275).
 
 ## Where it stands (5 Nov, claude-286)

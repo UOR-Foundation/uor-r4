@@ -28,7 +28,7 @@ The item's done-when reads:
 **What was checked, at `e06635e3a`:**
 1. **The integer session still stops at its artifact's `context`.**
    - `StackError::ContextFull` is returned at `stack/session.rs:2444, 2929, 3104, 3542, 3793` and at `stack/format.rs:2332, 2665`.
-   - No code outside `stack/` names it. `uor-chat` has no rule of its own for a full window.
+   - No non-test code outside `stack/` names it. One oracle test asserts it (`crates/uor-r4-training/tests/stack_d11_oracle.rs:394`, a context of 8). `uor-chat` has no rule of its own for a full window.
    - **A larger `context` already serves the carry rule.** claude-242 re-exported claude-240's s1 artifact at a context of 32,768: the snapshot's one `"context":192` changed, and the payload bytes stayed identical.
      - `fbs-toks --context-sweep` then decoded it past 192. The trunk's state runs on, and the Hamming read scans every earlier position.
      - The trunk alone stays flat at about 5,500 to 6,100 tok/s from 192 to 32,768. The read adds about 167 ns per earlier position: 4,647 tok/s with the read at 192, 1,851 at 2,112, 177 at 32,768.
@@ -39,12 +39,12 @@ The item's done-when reads:
    - Training cuts back-to-back windows and carries nothing between them (`build_document_windows`, `hamilton_sheet.rs:1870`).
    - The float decode slides over the checkpoint's own window (claude-274): in the serial decode (`in_space_long.rs:5849, 5860`) and in the cached decode (`:6124`, `CacheRefusal::WindowFull` at `geometric_stack_native.rs:1569`). Every claude-281 pass's first cache refusal is that slide.
    - Scoring refuses a `--context` past the checkpoint's window (`in_space_long.rs:7165-7169`). So no float reading past a window exists yet.
-3. **The export writes 192-token models only.**
-   - The float `fbs-snapshot` refuses any context but `SHEET_CONTEXT` (`src/bin/fbs-snapshot.rs:222, 237`).
+3. **Every served artifact is a 192-token model, and no export at another window has been tested.**
+   - The float `fbs-snapshot`, when it reads out on DEV (`--dev`), refuses any context but `SHEET_CONTEXT` (`src/bin/fbs-snapshot.rs:222, 237`). Without `--dev` it reads out on fixed sequences and does not check the context (`:218-220`, `:233-235`).
    - The point key's window is pinned at `POINT_KEY_WINDOW = 192` (`stack/point_key.rs:374`), which `fbs-export` uses (`bin/fbs-export.rs:106`).
    - The integer format itself holds any context up to `MAX_CONTEXT = 65,536` (`stack/format.rs:290`). That is what let claude-242 raise an artifact's context by hand (probe 1).
    - So the served artifacts are 192-token models: claude-243's `a7r-s{1,2,3}.uorlut`, which `uor-chat` serves (claude-259).
-   - P2b's (L), trained at 2,048, cannot be exported until those refusals lift. Editing the context by hand would not be enough, because the point key would still be built from 192-token windows.
+   - Exporting P2b's (L), trained at 2,048, needs more than its context: the point key would still be built from 192-token windows, and the DEV readout refuses it.
 4. **The data past a window needs no generator change.**
    - `heldout-panel chain=N` (`docs/labs/one-model-end-to-end/instrument/src/main.rs:296-300`) and `m-world-recall-corpus chain=N` (`src/bin/m-world-recall-corpus.rs:161-164`) take any budget of at least twice `CONTEXT`. `MWorld2::chained` draws turns up to it.
    - The 2 Nov owner log on #3471 (6585860957) named `milestone_world_v2.rs`'s `CONTEXT = 256` as the first blocker. That cap bounds one episode; the chained conversations P2 added (claude-271 to claude-275) pass it.
@@ -58,11 +58,20 @@ The item's done-when reads:
 6. **Overlap.**
    - The only open PR is #3695 (this unit).
    - No other item sharing the files below has an open order: float-kernel-fusion, one-model-end-to-end, point-key-integer, turn-memory-integer, served-rounding-cost, training-step-cost and writer-admission.
-   - `cpu-training-pilot` (DeepSeek's lane) lists `bin/uor-chat.rs`, which this item leaves out (below).
+   - **DeepSeek's lane overlaps this item already at the base.** `cpu-training-pilot` lists `stack/session.rs` and `stack/mod.rs`, both in this item's base scope, as well as `bin/uor-chat.rs`.
+     - `loop claim` compares a new item's scope with each open order's item scope as it stands on origin/main (`loopclaim.rs:18, 680-710`).
+     - So this unit's own order, open since 03:19Z, refuses a `cpu-training-pilot` claim. DeepSeek claims one about every hour (deepseek-147 to deepseek-152 merged from 00:50Z to 03:11Z).
+     - claude-287's long GPU unit would refuse them too, though it never edits either file. The decision below fixes that.
 
 **Result:** not cancelled. **Class: instrument.** The probe settles which files the later units edit and what their measurement can decide; it does not touch any mechanism.
 
-## Decision: fourteen scope additions (claude's own decision review)
+## Decision: fourteen scope additions and two removals (claude's own decision review)
+
+**The removals.** `crates/uor-r4-integer/src/stack/session.rs` and `crates/uor-r4-integer/src/stack/mod.rs` leave the scope at this unit's merge (probe 6).
+- **Why:** they are this item's only overlap with `cpu-training-pilot`, and only claude-288 edits them. Without them, an open claude-287 order holds no lock on DeepSeek's lane.
+- **When they return:** claude-287's last commit puts both back, so they are on main for claude-288 only. claude-288 is short laptop work, claimed only after a check that DeepSeek has no open order.
+
+**The additions:**
 
 | File | What edits it | Why |
 |---|---|---|
@@ -89,6 +98,7 @@ The item's done-when reads:
 - **Reversal cost:** low.
   - It is one scope line.
   - The lock it adds holds only while this item has an open order. While it does, a claim on an item that shares these files is refused (probe 6's list). All of those are ready and have no open order; the one next in Casey's plan is writer-admission (P6), which comes after P4 and P5.
+  - If the removals are forgotten, claude-288's own scope check fails on its first edit to `session.rs`, which shows at once.
 
 ## Files in scope (this unit)
 
@@ -98,7 +108,7 @@ The item's done-when reads:
 ## Done when (this unit)
 
 1. The cancel probe and the scope decision above, recorded, with the decision review's record posted on #3471 as a `[claude] owner log:`.
-2. The item's scope adds the fourteen files. Its text describes the base: training's `--context`, the slide in both decodes, the 192-only export, and claude-281's recall reading. Its title and done-whens stay as they are: they still hold for the served 192-token model.
+2. The item's scope adds the fourteen files and drops `stack/session.rs` and `stack/mod.rs` until claude-287's last commit. Its text describes the base: training's `--context`, the slide in both decodes, the 192-only export, and claude-281's recall reading. Its title and done-whens stay as they are: they still hold for the served 192-token model.
 3. The REPORT, negatives first. No notebook row: nothing is measured.
 
 ## Stop and ask if (this unit; stop and decide, never wait)
@@ -110,7 +120,7 @@ The item's done-when reads:
 
 ### Files in scope
 
-`in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs`, `geometric_stack_native.rs`, `flock_read_hamming.rs` and `flock_read_memory.rs` in the float crate, `docs/harness/prep/integer-long-context*`, the item file, its task folder, and `docs/research/notebook/m4-serving.md`.
+`in_space_long.rs`, `bin/train-in-space.rs`, `hamilton_sheet.rs`, `geometric_stack_native.rs`, `flock_read_hamming.rs` and `flock_read_memory.rs` in the float crate, `docs/harness/prep/integer-long-context*`, the item file, its task folder, and `docs/research/notebook/m4-serving.md`. Its last commit returns `stack/session.rs` and `stack/mod.rs` to the item's scope, for claude-288.
 
 ### Done when
 
@@ -130,8 +140,12 @@ The item's done-when reads:
      - greedy reply agreement with the reference;
      - recall by distance, reported and not deciding (probe 5);
      - seconds per pass and decode tok/s.
+   - **The loss** is the held-out loss the scorer already reports: the checkpoint's own objective, with no softmax or cross-entropy form (§3.2).
    - **The decision table** names what each outcome chooses.
+     - **Blocks is the forgetting control.** It drops everything before its block, so a rule that does no better than blocks past W keeps nothing useful from the earlier context.
      - If carry's loss and agreement past W hold within the sheet's paired band of slide's, carry wins. It costs one trunk step and one read per token, and its integer speed is measured (probe 1). Slide costs a W-token prefill per token.
+     - **A tie decides on serving cost.** If all three rules tie on loss and agreement, which is likely on templated filler with recall at 0, the rule with the better integer tok/s and resident memory at 2,048 and 8,192 wins. That is carry, unless the read's cost per earlier position outweighs a W-token prefill.
+     - Blocks wins only if both other rules are worse than it past W.
      - If carry is worse, slide wins, unless a carry training arm is needed. That arm is the 2 Nov owner log's: consecutive chunks with the trunk's state and the read's earlier keys carried, gradients inside a chunk. If the decision needs it, it is the next unit, and P4's bound is checked then.
 4. **One RTX 5090 pod,** a $3 bound, a watcher on every job, and the results sealed in the store before `down`.
 5. **The decision review** on #3471 (`[claude] owner log:`), one notebook row in `m4-serving.md`, and a REPORT with the negatives first.
@@ -145,6 +159,8 @@ The item's done-when reads:
 ### Done when
 
 1. **The session serves the chosen rule** in place of `ContextFull`. The artifact records the rule, so `uor-chat` needs no change.
+   - **An artifact that records no rule keeps today's `ContextFull`.** That keeps every existing artifact, the oracle test at `stack_d11_oracle.rs:394` (outside this scope) and "within W, byte for byte" unchanged.
+   - **The step cache's format.** THE ORDER (#2028 6634218223) says the float cache's "format is defined once so P4's integer session reuses it". If the rule needs a carried state, the session uses claude-278/279's cache format, not a second one.
    - **If carry is chosen,** the session already computes it at a larger `context` (probe 1). The unit then makes that the recorded rule rather than a hand edit, and tests it against claude-287's float carry.
    - **If the decision picks a checkpoint trained past 192,** the export follows its window: the float `fbs-snapshot` refusal lifts, and `POINT_KEY_WINDOW` comes from the model.
 2. **Tests:**
@@ -153,3 +169,8 @@ The item's done-when reads:
    - a session within W decodes byte for byte as at the base.
 3. **Tokens per second and resident memory against context** out to 8,192 (the 2 Nov owner target; the done-when asks for at least 2,048). `fbs-toks` runs on the laptop, which is product serving (§3.6).
 4. **The pipeline map's gap 6,** a notebook row, a REPORT, and the item set `done`.
+
+### Stop and ask if (stop and decide; never wait)
+
+- **DeepSeek has an open order** when claude-288 would claim. Then take other work and claim after it closes.
+- **Carry changes what a saved session stores**, for example keys kept past `context`. `session_codec.rs` is in `cpu-training-pilot`'s scope, DeepSeek's lane, and is never edited here. Then the rule is not saved in a session, and a restored session starts its window afresh; or a note goes to DeepSeek on #2028, and the work waits for its own unit.
