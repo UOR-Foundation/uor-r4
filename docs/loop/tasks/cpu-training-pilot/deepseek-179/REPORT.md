@@ -82,7 +82,8 @@ under `evidence/expanded-candidate-*`.
 
 ## Checks run at the head
 
-- Independent fresh-context TEST FITNESS: FIT after four review rounds.
+- Independent fresh-context TEST FITNESS: both registrations reached FIT after
+  three review rounds each.
 - Independent fresh-context pre-run review: GO.
 - CPU library, driver tests, strict Clippy, package rustfmt and
   `git diff --check`.
