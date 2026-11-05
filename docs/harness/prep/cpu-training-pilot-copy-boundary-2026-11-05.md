@@ -35,11 +35,11 @@ generalization, useful chat or GPU qualification.
 
 - base: `86d654170`;
 - implementation source:
-  `eaea60356c7cfcdeb070a7b1a975ad3cc48b42af`;
+  `3e372b8526ee45496a5fc03f5e11a2b7b02277f3`;
 - evaluator binary:
   `local/deepseek/copy-boundary/target/release/cpu-copy-boundary-reply`,
   SHA-256
-  `788ced8e5c60b8c814720bb4f6aea5ea5cd70870aa8b4acb49e235776cddf453`;
+  `9d58d3bb546c0277198ecbc55cf3dae4427b3284bf00697ecf6e4c07b66ddabf`;
 - panel-generator source tree:
   `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
 - panel-generator binary:
@@ -144,10 +144,10 @@ BIN=$SHARED/local/deepseek/copy-boundary/target/release/cpu-copy-boundary-reply
 GEN=$SHARED/local/deepseek/copy-boundary/generator-target/debug/heldout-panel
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor eaea60356c7cfcdeb070a7b1a975ad3cc48b42af HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 788ced8e5c60b8c814720bb4f6aea5ea5cd70870aa8b4acb49e235776cddf453
+git -C "$SOURCE" merge-base --is-ancestor 3e372b8526ee45496a5fc03f5e11a2b7b02277f3 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 9d58d3bb546c0277198ecbc55cf3dae4427b3284bf00697ecf6e4c07b66ddabf
 test "$(sha256sum "$GEN" | cut -d' ' -f1)" = 1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5
-test "$(git -C "$SOURCE" rev-parse eaea60356c7cfcdeb070a7b1a975ad3cc48b42af:docs/labs/one-model-end-to-end/instrument)" = 869e65db6d0bb997a5f1094ab0de4efa1ac10c25
+test "$(git -C "$SOURCE" rev-parse 3e372b8526ee45496a5fc03f5e11a2b7b02277f3:docs/labs/one-model-end-to-end/instrument)" = 869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 sha256sum -c <<EOF
 a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  $TOKENIZER
 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91  $TRAIN/tokens.u16
@@ -268,7 +268,7 @@ cmp <(normalize "$OUT/reports/seed2.json") \
 
 Before reading either result file, the harness checks that:
 
-- all four commands exited zero;
+- all five evaluator invocations, and the panel generator, exited zero;
 - each report has 200 or more reachable replies;
 - the no-boundary arm equals the existing evaluator;
 - each report names the same fresh-panel hashes and its expected artifact;
@@ -319,7 +319,8 @@ termination generally.
 ## Cost and stop
 
 - local CPU only, $0;
-- four driver processes, at most 30 minutes total;
+- five evaluator processes plus one panel-generator process, at most 30
+  minutes total;
 - at most 2 GiB peak RSS;
 - stop on source, input, panel, artifact, control, parity, output or repeat
   drift;
