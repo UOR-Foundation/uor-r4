@@ -109,11 +109,11 @@ table-anchored arm exists in this registration.
 ## Source and binary
 
 - base: `d634c77e5`;
-- implementation pin: `a70d8292a0b699aebfa38ed91649d14d420ee39c`;
+- implementation pin: `15ddc753267d9ec1283187a3716ac63fe98aa036`;
 - driver:
   `target/deepseek/raw-query-port/release/cpu-query-port-driver`,
   SHA-256
-  `b2b9f07b3757e50628113f35044cd55bb140700e894680376a5688c0a264b5eb`;
+  `f314747053c697b111e0e116db7420eca3b2e9a277448875d818fe2318ebbd84`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -141,8 +141,8 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-git -C "$SOURCE" merge-base --is-ancestor a70d8292a0b699aebfa38ed91649d14d420ee39c HEAD
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = b2b9f07b3757e50628113f35044cd55bb140700e894680376a5688c0a264b5eb
+git -C "$SOURCE" merge-base --is-ancestor 15ddc753267d9ec1283187a3716ac63fe98aa036 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = f314747053c697b111e0e116db7420eca3b2e9a277448875d818fe2318ebbd84
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -188,6 +188,7 @@ run 2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
   remain identical;
 - every trained and control artifact parses as `UORLUT01`;
 - exact CPU/serving query, token and kept-cell parity in every arm;
+- admission, top-1 and top-8 safety recorded as separate predicates;
 - artifact and step replay identity within the run.
 
 ## Bar
