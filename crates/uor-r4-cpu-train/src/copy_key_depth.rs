@@ -242,17 +242,31 @@ pub fn evaluate_copy_key_depth(
     );
     let random_changed_from_depth1_all = outcomes
         .iter()
-        .filter(|outcome| outcome.random != outcome.fixed[0])
+        .filter(|outcome| {
+            outcome.random.map(|candidate| candidate.token)
+                != outcome.fixed[0].map(|candidate| candidate.token)
+        })
         .count() as u64;
     let random_changed_from_depth1 = outcomes
         .iter()
-        .filter(|outcome| outcome.copyable && outcome.random != outcome.fixed[0])
+        .filter(|outcome| {
+            outcome.copyable
+                && outcome.random.map(|candidate| candidate.token)
+                    != outcome.fixed[0].map(|candidate| candidate.token)
+        })
         .count() as u64;
     let random_changed_from_longest = outcomes
         .iter()
         .filter(|outcome| {
             outcome.copyable
-                && outcome.random != outcome.fixed.iter().rev().flatten().next().copied()
+                && outcome.random.map(|candidate| candidate.token)
+                    != outcome
+                        .fixed
+                        .iter()
+                        .rev()
+                        .flatten()
+                        .next()
+                        .map(|candidate| candidate.token)
         })
         .count() as u64;
 
@@ -422,7 +436,14 @@ pub fn evaluate_copy_key_router(
         .iter()
         .filter(|outcome| {
             outcome.copyable
-                && outcome.random != outcome.fixed.iter().rev().flatten().next().copied()
+                && outcome.random.map(|candidate| candidate.token)
+                    != outcome
+                        .fixed
+                        .iter()
+                        .rev()
+                        .flatten()
+                        .next()
+                        .map(|candidate| candidate.token)
         })
         .count() as u64;
     Ok(CopyKeyRouterReading {
@@ -677,11 +698,17 @@ fn eligible_targets(tokens: &[u32], mask: &[u8], bos: u32) -> Result<Vec<u32>> {
 }
 
 fn ceil_two_sqrt(value: u64) -> u64 {
-    let mut root = 0u64;
-    while root.saturating_mul(root) < value.saturating_mul(4) {
-        root += 1;
+    let target = u128::from(value) * 4;
+    let (mut low, mut high) = (0u128, (1u128 << 33) + 1);
+    while low + 1 < high {
+        let middle = (low + high) / 2;
+        if middle * middle >= target {
+            high = middle;
+        } else {
+            low = middle;
+        }
     }
-    root
+    high as u64
 }
 
 fn splitmix64(mut value: u64) -> u64 {
@@ -756,6 +783,27 @@ mod tests {
     }
 
     #[test]
+    fn random_novelty_counts_the_emitted_token_not_candidate_age() {
+        let tokens = [0, 10, 20, 30, 40, 50, 40, 50, 10, 20, 30, 40, 50];
+        let mut mask = [0u8; 13];
+        mask[12] = 1;
+        for seed in 0..100 {
+            let reading = evaluate_copy_key_depth(&tokens, &mask, 13, 0, seed).unwrap();
+            assert_eq!(reading.copyable_positions, 1);
+            assert_eq!(reading.fixed[0].right, 1);
+            assert_eq!(reading.fixed[3].right, 1);
+            assert_eq!(reading.random_depth.right, 1);
+            assert_eq!(reading.random_changed_from_longest, 0, "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn ceil_two_sqrt_handles_the_u64_limit() {
+        assert_eq!(ceil_two_sqrt((1u64 << 62) + 1), (1u64 << 32) + 1);
+        assert_eq!(ceil_two_sqrt(u64::MAX), 1u64 << 33);
+    }
+
+    #[test]
     fn random_depth_is_deterministic_for_one_seed() {
         let tokens = [0, 1, 2, 3, 1, 2, 4, 1, 2, 5];
         let mask = [0, 1, 1, 1, 1, 1, 1, 1, 1, 1];
@@ -825,6 +873,46 @@ mod tests {
             random: None,
         };
         assert_eq!(route_copy_key(&router, &outcome), Some(7));
+    }
+
+    #[test]
+    fn router_equal_precision_prefers_the_deeper_key() {
+        let mut router = CopyKeyRouter {
+            age_bins: COPY_KEY_AGE_BINS.to_vec(),
+            stats: (0..COPY_KEY_AGE_BINS.len())
+                .flat_map(|bucket| {
+                    (1..=COPY_KEY_MAX_DEPTH).map(move |depth| CopyKeyRouteStat {
+                        depth,
+                        age_upper: COPY_KEY_AGE_BINS[bucket],
+                        matches: 0,
+                        right: 0,
+                    })
+                })
+                .collect(),
+        };
+        router.stats[0] = CopyKeyRouteStat {
+            depth: 1,
+            age_upper: 1,
+            matches: 2,
+            right: 1,
+        };
+        router.stats[1] = CopyKeyRouteStat {
+            depth: 2,
+            age_upper: 1,
+            matches: 4,
+            right: 2,
+        };
+        let outcome = Outcome {
+            copyable: true,
+            fixed: [
+                Some(CopyCandidate { token: 7, age: 1 }),
+                Some(CopyCandidate { token: 9, age: 1 }),
+                None,
+                None,
+            ],
+            random: None,
+        };
+        assert_eq!(route_copy_key(&router, &outcome), Some(9));
     }
 
     #[test]
