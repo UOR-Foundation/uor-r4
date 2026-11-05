@@ -2,8 +2,9 @@
   "schema": "uor-r4.cpu-copy-key-depth-resource/1",
   "status": "COMPLETED_CANDIDATE_SCREEN",
   "experiment": "hierarchical exact copy-key depths one through four",
-  "started_utc": "2026-11-05T01:22:00Z",
-  "completed_utc": "2026-11-05T01:30:00Z",
+  "started_utc": "2026-11-05T01:23:49Z",
+  "completed_utc": "2026-11-05T01:37:22Z",
+  "elapsed_interval_seconds": 813,
   "increment_seconds": 21.42,
   "complete_projection_seconds": 1200,
   "cumulative_measured_seconds": 36090.208816343,
@@ -56,7 +57,7 @@
     "driver_binary_sha256": "7e83410218a111f4f741bf86946209eb3efb8da1d393f7e22246cb04964f26ce",
     "driver_build_target_bytes": 268208707,
     "generator_target_bytes": 1228936700,
-    "retained_evidence_bytes": 54584
+    "retained_evidence_bytes": 54619
   },
   "controls": {
     "library_tests_passed": 267,
@@ -79,7 +80,7 @@
   },
   "storage": {
     "retained_evidence_limit_bytes": 33554432,
-    "retained_evidence_bytes": 54584
+    "retained_evidence_bytes": 54619
   },
   "host": {
     "cpu": "AMD Ryzen 9 9950X",
