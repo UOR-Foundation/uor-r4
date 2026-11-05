@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-query-port-root-2026-11-05`
 
 ## Status
 
-READY FOR FIT REVIEW
+COMPLETE - REJECT
 
 ## Question
 
@@ -242,3 +242,12 @@ pin `722abaff3`, binary SHA-256 `0ca75e1b…`, all inputs, 235/2,708 training
 power, 58/616 panel power, zero identical train/dev documents, absent output
 roots, matched controls, exact parity gates and CPU/D84 scope. Full CPU
 package, strict Clippy, rustfmt, diff checks and 11/11 loop gates passed.
+
+## Outcome
+
+**REJECT.** Eight moves were accepted on both artifacts and the shuffled
+controls were moved-count matched in eight attempts. Seed 1 reduced port
+distance over the table anchor and random control but lost to shuffled roots,
+25,331,024 against 25,327,969. Seed 2 reduced port distance below all controls
+but lost one admitted target and one top-1 against the table-anchor baseline.
+All five arms on both seeds retained exact CPU/serving parity.

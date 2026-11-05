@@ -12,9 +12,10 @@ admitted target and one top-1 against the table-anchor baseline.
 
 The larger signal is the table anchor's cost to ordinary decoding: admitted /
 top-1 fell from 245 / 181 to 120 / 55 on seed 1 and from 171 / 136 to 29 / 10
-on seed 2 because the shared table is also the input embedding. The next
-design should preserve learned token identity while adding cell addressing,
-not overwrite the same ports. Record:
+on seed 2. The treatment changes both recurrent inputs and writer rows, so this
+run does not separate those effects. The next design should preserve learned
+token identity while adding cell addressing, not overwrite the same ports
+without a preservation control. Record:
 [deepseek-183](../loop/tasks/cpu-training-pilot/deepseek-183/REPORT.md).
 
 ## 2026-11-05 — Expanded-cell anchored correction rejects (deepseek)

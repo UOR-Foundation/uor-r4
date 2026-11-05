@@ -30,16 +30,18 @@ target and one top-1 against the table-anchor baseline:
 - random: **28 / 9 / 19**, distance **27,618,635**;
 - shuffled cells: **28 / 9 / 19**, distance **27,443,854**.
 
-The table-side anchor itself was much more damaging than the query-side
-training recovered. Against raw frozen, admitted/top-1/top-8 fell:
+The combined table-anchor intervention was much more damaging than the
+query-side training recovered. Against raw frozen, admitted/top-1/top-8 fell:
 
 - seed 1: **245/181/236 → 120/55/86**;
 - seed 2: **171/136/164 → 29/10/20**.
 
 Both seeds accepted all eight moves, matched shuffled-control accepted counts,
 and had zero query, token or kept-cell parity mismatches. This is a mechanism
-negative for the tested objective and an important warning about the table
-anchor's input-embedding cost, not a rejection of geometric admission.
+negative for the tested objective and an important warning about changing the
+shared input/writer table's ports. It does not separate changed recurrent
+inputs from direct writer-row mismatch, and it does not reject geometric
+admission.
 
 ## What changed
 
@@ -98,12 +100,12 @@ admission, evidence and review procedures were used.
 
 ## Still open
 
-The result argues against replacing the shared input embedding's port blocks
-with cell roots without protecting the learned token code. A later unit should
-separate writer addressing from input embedding, or train the projected ports
-jointly with an input-code preservation objective. Do not retune this exact
-eight-step configuration on these panels. Claude's actual anchored training
-artifact should still be measured for the same table-anchor cost.
+The result argues against replacing the shared input/writer table's port blocks
+without controlling their dual effect. A later unit should separate writer
+addressing from input embedding, or train the projected ports jointly with an
+input-code preservation objective. Do not retune this exact eight-step
+configuration on these panels. Claude's actual anchored training artifact
+should still be measured for the same combined table-anchor cost.
 
 ## Plain summary
 
@@ -111,6 +113,7 @@ Training only the query's 16 port-scaling gain codes can move those ports
 toward the right roots, but it did not win both matched controls. On one seed
 the shuffled-root control was slightly better; on the other, the trained arm
 lost one admitted token and one top-1. More importantly, pinning every token
-table row's ports to roots sharply damaged ordinary writer decoding, because
-the writer table is also the input embedding. The next geometric path needs
-to preserve learned token identity while adding cell-address structure.
+table row's ports to roots sharply damaged ordinary writer decoding. That
+treatment changes both recurrent inputs and writer rows, so this run does not
+say which effect dominates. The next geometric path needs to preserve learned
+token identity while adding cell-address structure.

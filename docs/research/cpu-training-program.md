@@ -68,9 +68,10 @@ roots. It started from the table-anchored construction Claude-290 introduced
 and used matched random and shuffled-root controls. The two-seed run rejected:
 seed 1 lost to shuffled roots, while seed 2 lost one admitted target and one
 top-1. The table anchor itself sharply reduced admitted/top-1, showing that
-overwriting the shared input embedding's port blocks carries a large decoding
-cost. Future geometric addressing must preserve learned token identity while
-adding cell structure. See
+overwriting the shared input/writer table's port blocks carries a large
+decoding cost. The run does not separate input-code effects from direct
+writer-row port mismatch. Future geometric addressing must preserve learned
+token identity while adding cell structure. See
 [deepseek-183](../loop/tasks/cpu-training-pilot/deepseek-183/REPORT.md).
 
 ### 5. Quantization and exact memory
