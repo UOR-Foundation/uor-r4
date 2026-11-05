@@ -417,3 +417,14 @@ note: K16 is the smallest predeclared setting clearing both artifacts;
 date: 2026-11-05
 
 A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent expanded_anchor_k16_pre_run_go`,
+2026-11-05. HEAD was clean at
+`181dc76e902882e024fe9c3a6b0c179d5f635571`; `prep-check` reported the sheet
+complete FIT. The K12/seed-2769 fault is preserved and isolated. Generator tree,
+implementation source, normalized calibration, tokenizer, artifacts, train
+panel, six-arm settings, report gates, BOS behavior, direct anchor, lane scope
+and fresh seed-2770/output absence were checked read-only. No seed-2770
+generation or evaluation occurred.
