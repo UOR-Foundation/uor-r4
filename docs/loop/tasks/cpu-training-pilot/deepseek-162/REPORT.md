@@ -21,8 +21,8 @@ and fresh-main verification.
 
 - Removed `deepseek/copy-exact-stop` and
   `deepseek/copy-exact-evidence-manifest` claims.
-- Retained the separate `deepseek/copy-exact-release` claim for this
-  bookkeeping unit.
+- Released the temporary `deepseek/copy-exact-release` claim after recording
+  the close, leaving no exact-stop claim behind.
 - Recorded PR #3703 and #3706 reviews, merges and fresh-main checks in their
   task reports.
 - No model, source, serving, CUDA, float-training or Claude-owned file changed.
@@ -51,7 +51,7 @@ and fresh-main verification.
 ## Size
 
 Against base `e29a7f8eb`, this release changes five bookkeeping paths
-(**+120 / -11**).
+(**+116 / -14**).
 
 ## Skills used
 

@@ -5,8 +5,8 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 ## Goal
 
 Release the completed `deepseek/copy-exact-stop` and
-`deepseek/copy-exact-evidence-manifest` claims and record final merge and
-fresh-main verification receipts.
+`deepseek/copy-exact-evidence-manifest` claims, release this temporary release
+claim, and record final merge and fresh-main verification receipts.
 
 This is bookkeeping only. It changes no model output, source, serving, CUDA,
 float-training or Claude-owned file.
@@ -26,7 +26,7 @@ to release.
 
 ## Done when
 
-1. Both completed claims are removed; no unrelated claim changes.
+1. No DeepSeek exact-stop claim remains; no unrelated claim changes.
 2. DeepSeek-159 records the merged exact-head review, merge and fresh-main code
    and evidence verification.
 3. DeepSeek-161 records its merge and fresh-main manifest verification.
