@@ -16,7 +16,7 @@ This record documents the implementation of the native Rust desktop client backe
 
 ### 2.1 Native Rust Integration Controls (`src-tauri/tests/desktop_client_controls.rs`)
 
-Clean-checkout commands for the current implementation:
+From the repository root, clean-checkout commands for the current implementation:
 
 ```sh
 ./scripts/studio/prepare-tauri-runtime.sh
@@ -24,7 +24,7 @@ CARGO_TARGET_DIR=local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifes
 CARGO_TARGET_DIR=local/kimi/harness-app-target ~/.cargo/bin/cargo test --manifest-path src-tauri/Cargo.toml --features gui --locked
 ```
 
-The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **6** library, **12** controls, **7** MCP, **12** review and **8** sidecar tests by default, and **8** library, **16** controls, **8** MCP, **12** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
+The original backend acceptance table below is historical: all `7/7` controls (`6/6` headless, `7/7` GUI) passed at that stage. The repaired unified-harness head passes **7** library, **12** controls, **7** MCP, **13** review and **8** sidecar tests by default, and **9** library, **16** controls, **8** MCP, **13** review and **9** sidecar tests with GUI features. The current REPORT records the full verification matrix.
 
 | Test | Verified contract | Result |
 |---|---|---|

@@ -56,13 +56,14 @@ case "${1:-}" in
     --verify)
         [ "$#" -eq 2 ] || { printf 'usage: runtime-files.sh --verify <dest>\n' >&2; exit 2; }
         dest=$2
+        symlink=$(find "$dest" -type l -print -quit)
+        if [ -n "$symlink" ]; then
+            printf 'Runtime symlinks are refused: %s\n' "$symlink" >&2
+            exit 1
+        fi
         while IFS= read -r rel; do
             [ -f "$dest/$rel" ] || { printf 'Runtime file is missing: %s\n' "$dest/$rel" >&2; exit 1; }
         done < <(list_files)
-        if [ -L "$dest/models" ]; then
-            printf 'Model artifact root symlinks are refused: %s\n' "$dest/models" >&2
-            exit 1
-        fi
         while IFS= read -r -d '' path; do
             rel=${path#"$dest"/}
             [ "$rel" = 'SHA256SUMS' ] && continue

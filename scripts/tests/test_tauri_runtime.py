@@ -153,6 +153,28 @@ class TauriRuntimeContractTests(unittest.TestCase):
             )
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn('symlink', rejected.stderr.lower())
+            models.unlink()
+            (dest / 'models-real').rename(models)
+            pkg = dest / 'pkg'
+            pkg.rename(dest / 'pkg-real')
+            pkg.symlink_to(dest / 'pkg-real', target_is_directory=True)
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('symlink', rejected.stderr.lower())
+            pkg.unlink()
+            (dest / 'pkg-real').rename(pkg)
+            extra = dest / 'assets/js/unexpected-link.js'
+            extra.symlink_to(artifact)
+            rejected = subprocess.run(
+                ['bash', str(RUNTIME), '--verify', str(dest)],
+                text=True, capture_output=True,
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn('symlink', rejected.stderr.lower())
+            extra.unlink()
 
     def test_prepare_check_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmp:

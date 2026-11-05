@@ -461,7 +461,6 @@ fn failed_stdio_tool_listing_releases_session_slot_and_child() {
     let _ = fs::remove_dir_all(&root);
 }
 
-
 #[test]
 fn exited_stdio_parent_with_pipe_holding_descendant_times_out() {
     let root = temp_dir("exited-parent-pipes");
@@ -479,7 +478,10 @@ fn exited_stdio_parent_with_pipe_holding_descendant_times_out() {
     )
     .expect_err("exited parent with open descendant pipes must fail");
     println!("exited-parent fixture error: {error}");
-    assert!(error.contains("timed out") || error.contains("exited"), "{error}");
+    assert!(
+        error.contains("timed out") || error.contains("exited"),
+        "{error}"
+    );
     assert!(
         started.elapsed() < Duration::from_secs(2),
         "reader join hung after the direct child exited"

@@ -447,7 +447,6 @@ fn git_diff_and_repository_config_writes_are_serialized() {
     let _ = fs::remove_dir_all(&root);
 }
 
-
 #[test]
 fn rg_pre_and_git_configuration_overrides_are_refused_before_execution() {
     for command in ["rg --pre ./hook pattern", "rg --pre=./hook pattern"] {
@@ -468,8 +467,14 @@ fn rg_pre_and_git_configuration_overrides_are_refused_before_execution() {
         let error = backend
             .native_run_terminal_command(&approved_request(&root, command))
             .expect_err("rg --pre must be refused before execution");
-        assert!(matches!(error, DesktopClientError::InvalidInput(_)), "{error:?}");
-        assert!(!marker.exists(), "rg --pre executed project code: {command}");
+        assert!(
+            matches!(error, DesktopClientError::InvalidInput(_)),
+            "{error:?}"
+        );
+        assert!(
+            !marker.exists(),
+            "rg --pre executed project code: {command}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -489,7 +494,9 @@ fn rg_pre_and_git_configuration_overrides_are_refused_before_execution() {
     assert!(init.status.success());
     let command = "git -c core.fsmonitor=./hook status --porcelain";
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    backend.native_grant_folder(&root).expect("grant repository");
+    backend
+        .native_grant_folder(&root)
+        .expect("grant repository");
     backend.native_set_terminal_enabled(true);
     backend
         .host_approve_terminal_command(&root, command)
@@ -497,7 +504,10 @@ fn rg_pre_and_git_configuration_overrides_are_refused_before_execution() {
     let error = backend
         .native_run_terminal_command(&approved_request(&root, command))
         .expect_err("Git configuration overrides must be refused");
-    assert!(matches!(error, DesktopClientError::InvalidInput(_)), "{error:?}");
+    assert!(
+        matches!(error, DesktopClientError::InvalidInput(_)),
+        "{error:?}"
+    );
     assert!(!marker.exists(), "Git -c re-enabled an execution hook");
     let _ = fs::remove_dir_all(&root);
 }
@@ -507,7 +517,9 @@ fn git_exec_path_override_is_refused_before_execution() {
     let root = temp_dir("git-exec-path");
     let command = "git --exec-path=/tmp status --porcelain";
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    backend.native_grant_folder(&root).expect("grant repository");
+    backend
+        .native_grant_folder(&root)
+        .expect("grant repository");
     backend.native_set_terminal_enabled(true);
     backend
         .host_approve_terminal_command(&root, command)
@@ -515,6 +527,52 @@ fn git_exec_path_override_is_refused_before_execution() {
     let error = backend
         .native_run_terminal_command(&approved_request(&root, command))
         .expect_err("Git exec-path override must be refused");
-    assert!(matches!(error, DesktopClientError::InvalidInput(_)), "{error:?}");
+    assert!(
+        matches!(error, DesktopClientError::InvalidInput(_)),
+        "{error:?}"
+    );
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn attached_git_config_and_worktree_overrides_are_refused_before_execution() {
+    for command in [
+        "git -ccore.fsmonitor=./hook status --porcelain",
+        "git -C/tmp status --porcelain",
+    ] {
+        let root = temp_dir("attached-git-overrides");
+        let marker = root.join("attached-git-ran");
+        let hook = root.join("hook");
+        fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\n", marker.display()))
+            .expect("write attached override fixture");
+        let mut permissions = fs::metadata(&hook).expect("hook metadata").permissions();
+        std::os::unix::fs::PermissionsExt::set_mode(&mut permissions, 0o755);
+        fs::set_permissions(&hook, permissions).expect("make hook executable");
+        let init = Command::new("git")
+            .arg("init")
+            .current_dir(&root)
+            .output()
+            .expect("init repository");
+        assert!(init.status.success());
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        backend
+            .native_grant_folder(&root)
+            .expect("grant repository");
+        backend.native_set_terminal_enabled(true);
+        backend
+            .host_approve_terminal_command(&root, command)
+            .expect("approve exact command");
+        let error = backend
+            .native_run_terminal_command(&approved_request(&root, command))
+            .expect_err("attached Git overrides must be refused");
+        assert!(
+            matches!(error, DesktopClientError::InvalidInput(_)),
+            "{error:?}"
+        );
+        assert!(
+            !marker.exists(),
+            "attached Git override executed: {command}"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
 }

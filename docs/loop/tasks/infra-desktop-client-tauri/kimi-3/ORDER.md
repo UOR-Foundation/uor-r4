@@ -26,7 +26,7 @@ No other paths are authorized. The retired current-state file and old out-of-sco
 3. Verify every generated local model/tokenizer/audit path and SHA-256 against `models.json`; reject extra files even with allowed suffixes, undeclared paths and hash mismatches. Add those negatives before implementation.
 4. Correct default/GUI matrices and working-directory-qualified commands in the lab/product/REPORT records.
 5. Replace stale API, networking/consent and trained-artifact wording. Call the staging fixture a trained-manifest-format fixture using synthetic bytes, not a trained model.
-6. Restore kimi-1 design history and carry current repair evidence only in the kimi-4 record. Update the stale notebook-scope note.
+6. Restore kimi-1 design history and carry current repair evidence only in the kimi-5 record. Update the stale notebook-scope note.
 
 ## Done when
 

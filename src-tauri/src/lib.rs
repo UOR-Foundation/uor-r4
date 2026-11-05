@@ -1385,7 +1385,7 @@ fn run_bounded_process(
         timed_out = true;
         process_control::terminate(&mut child);
     }
-    if !readers_disconnected {
+    if !readers_disconnected && !killed {
         timed_out = true;
     }
     let status = child
@@ -1610,10 +1610,19 @@ fn validate_terminal_argument_shape(
         if matches!(*arg, "-exec" | "-execdir" | "-ok" | "-okdir")
             || (program == "rg" && (*arg == "--pre" || arg.starts_with("--pre=")))
             || (program == "git"
-                && (matches!(
-                    *arg,
-                    "-c" | "-C" | "--config" | "--config-env" | "--exec-path" | "--git-dir" | "--work-tree"
-                ) || ["-c=", "--config=", "--config-env=", "--exec-path=", "--git-dir=", "--work-tree="]
+                && (arg.starts_with("-c")
+                    || arg.starts_with("-C")
+                    || matches!(
+                        *arg,
+                        "--config" | "--config-env" | "--exec-path" | "--git-dir" | "--work-tree"
+                    )
+                    || [
+                        "--config=",
+                        "--config-env=",
+                        "--exec-path=",
+                        "--git-dir=",
+                        "--work-tree=",
+                    ]
                     .iter()
                     .any(|prefix| arg.starts_with(prefix))))
         {
@@ -1785,6 +1794,16 @@ mod bounded_process_tests {
         let output = run_bounded_process(&mut command, std::time::Duration::from_millis(50), 1024)
             .expect("exited parent with open descendant pipes must return bounded");
         assert!(output.timed_out, "open descendant pipes hid the timeout");
+    }
+
+    #[test]
+    fn output_cap_does_not_impersonate_a_wall_clock_timeout() {
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg("yes x");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 64)
+            .expect("output cap must terminate without a timeout claim");
+        assert!(output.truncated, "output cap was not reported");
+        assert!(!output.timed_out, "output cap was mislabeled as a timeout");
     }
 }
 
