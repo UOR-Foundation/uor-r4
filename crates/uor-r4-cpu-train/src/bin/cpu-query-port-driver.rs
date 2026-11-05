@@ -273,9 +273,6 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         check_stop(started)?;
     }
     let accepted = trained_steps.iter().filter(|step| step.updated).count();
-    if accepted == 0 {
-        return Err("port-root training accepted no changing move".to_owned());
-    }
     let trained_artifact = trained.artifact().to_vec();
     assert_only_port_gain_changed(&anchored, &trained_artifact)?;
     write_new(&config.out.join("trained.uorlut"), &trained_artifact)?;
@@ -296,9 +293,6 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     }
     let shuffled_artifact = shuffled.artifact().to_vec();
     let shuffled_accepted = shuffled_steps.iter().filter(|step| step.updated).count();
-    if shuffled_accepted == 0 {
-        return Err("shuffled-cell control accepted no changing move".to_owned());
-    }
     assert_only_port_gain_changed(&anchored, &shuffled_artifact)?;
     write_new(&config.out.join("shuffled.uorlut"), &shuffled_artifact)?;
     let (random_artifact, random_moves) =
@@ -346,6 +340,8 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         && trained_port.top1_correct >= anchored_port.top1_correct;
     let status = if !parity_exact {
         "INSTRUMENT_FAULT"
+    } else if accepted == 0 || shuffled_accepted == 0 {
+        "NO_MOVE"
     } else if trained_distance_pass && safety_pass {
         "KEEP"
     } else {
@@ -388,6 +384,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         },
         "bar": {
             "parity_exact": parity_exact,
+            "actual_and_shuffled_arms_moved": accepted > 0 && shuffled_accepted > 0,
             "target_port_distance_below_table_anchor_random_and_shuffled": trained_distance_pass,
             "admission_and_top1_non_fall": safety_pass,
         },
