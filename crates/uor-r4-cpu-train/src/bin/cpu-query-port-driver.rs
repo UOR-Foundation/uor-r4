@@ -262,7 +262,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     let anchored_port = port_reading(&anchored, &panel_samples)?;
 
     let mut trained = CpuPortRootTrainer::from_artifact(
-        &artifact,
+        &anchored,
         training_samples.clone(),
         PortRootConfig::default(),
     )
@@ -277,11 +277,11 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         return Err("port-root training accepted no changing move".to_owned());
     }
     let trained_artifact = trained.artifact().to_vec();
-    assert_only_port_gain_changed(&artifact, &trained_artifact)?;
+    assert_only_port_gain_changed(&anchored, &trained_artifact)?;
     write_new(&config.out.join("trained.uorlut"), &trained_artifact)?;
 
     let mut shuffled = CpuPortRootTrainer::from_artifact(
-        &artifact,
+        &anchored,
         training_samples.clone(),
         PortRootConfig {
             cell_shift: 1,
@@ -299,12 +299,12 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     if shuffled_accepted == 0 {
         return Err("shuffled-cell control accepted no changing move".to_owned());
     }
-    assert_only_port_gain_changed(&artifact, &shuffled_artifact)?;
+    assert_only_port_gain_changed(&anchored, &shuffled_artifact)?;
     write_new(&config.out.join("shuffled.uorlut"), &shuffled_artifact)?;
     let (random_artifact, random_moves) =
-        random_port_gain_control(&artifact, accepted, config.seed)
+        random_port_gain_control(&anchored, accepted, config.seed)
             .map_err(|error| error.to_string())?;
-    assert_only_port_gain_changed(&artifact, &random_artifact)?;
+    assert_only_port_gain_changed(&anchored, &random_artifact)?;
     write_new(&config.out.join("random.uorlut"), &random_artifact)?;
     write_new(&config.out.join("table-anchored.uorlut"), &anchored)?;
 
@@ -316,7 +316,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     let random_port = port_reading(&random_artifact, &panel_samples)?;
 
     let mut repeat = CpuPortRootTrainer::from_artifact(
-        &artifact,
+        &anchored,
         training_samples.clone(),
         PortRootConfig::default(),
     )
@@ -339,11 +339,11 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     .iter()
     .all(|reading| reading.export.is_exact());
     let trained_distance_pass = trained_port.target_port_distance_sum
-        < frozen_port.target_port_distance_sum
+        < anchored_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < random_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < shuffled_port.target_port_distance_sum;
-    let safety_pass = trained_port.target_admitted >= frozen_port.target_admitted
-        && trained_port.top1_correct >= frozen_port.top1_correct;
+    let safety_pass = trained_port.target_admitted >= anchored_port.target_admitted
+        && trained_port.top1_correct >= anchored_port.top1_correct;
     let status = if !parity_exact {
         "INSTRUMENT_FAULT"
     } else if trained_distance_pass && safety_pass {
@@ -369,6 +369,9 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             "training_rows": training_samples.len(),
             "panel_rows": panel_samples.len(),
         },
+        "preconditioning": {
+            "table_anchor_artifact_sha256": uor_r4_discrete::corpus::sha256(&anchored),
+        },
         "training": {
             "accepted": accepted,
             "steps": trained_steps,
@@ -377,15 +380,15 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             "random_moves": random_moves,
         },
         "arms": {
-            "frozen": arm_json(&artifact, &frozen_panel, &frozen_port),
+            "raw_frozen": arm_json(&artifact, &frozen_panel, &frozen_port),
+            "table_anchor_baseline": arm_json(&anchored, &anchored_panel, &anchored_port),
             "trained": arm_json(&trained_artifact, &trained_panel, &trained_port),
             "shuffled_cells": arm_json(&shuffled_artifact, &shuffled_panel, &shuffled_port),
             "random_gain": arm_json(&random_artifact, &random_panel, &random_port),
-            "table_anchor_only": arm_json(&anchored, &anchored_panel, &anchored_port),
         },
         "bar": {
             "parity_exact": parity_exact,
-            "target_port_distance_below_frozen_random_and_shuffled": trained_distance_pass,
+            "target_port_distance_below_table_anchor_random_and_shuffled": trained_distance_pass,
             "admission_and_top1_non_fall": safety_pass,
         },
     });

@@ -17,19 +17,21 @@ or candidate-ranker width experiment.
 
 ## Fixed construction
 
-1. Build a cached exact trajectory from causal `RankMarginSample`s. For each
+1. Project every token row's two 8-coordinate port blocks to its own cell roots,
+   forming the table-anchored baseline used by Claude's writer recipe.
+2. Build a cached exact trajectory from causal `RankMarginSample`s. For each
    target token `t`, the target cell is `t mod 256` and its two roots are
    `cell / 16` and `cell % 16`.
-2. A trial changes one final-gain code by `±1` and replays only normalization,
+3. A trial changes one final-gain code by `±1` and replays only normalization,
    final gain, Q12 conversion and the writer through the patched artifact.
-3. Candidate safety requires no fall in held-out-independent training target
+4. Candidate safety requires no fall in held-out-independent training target
    admission, top-1 or top-8. Among safe candidates, lower exact Q12 L1 distance
    from the query's two ports to the target cell's roots wins.
-4. Only final-gain coordinates `0..8` and `W-8..W` are trainable. All other
+5. Only final-gain coordinates `0..8` and `W-8..W` are trainable. All other
    gain coordinates and model tables remain fixed.
-5. Every accepted artifact is reparsed. CPU/serving query, token and kept-cell
+6. Every accepted artifact is reparsed. CPU/serving query, token and kept-cell
    parity must remain exact.
-6. Matched controls use the same move count: random port-gain moves and a
+7. Matched controls use the same move count: random port-gain moves and a
    shuffled-cell root objective.
 
 No serving, CUDA, float-training, exporter or Claude-owned source changes.
@@ -50,8 +52,8 @@ No serving, CUDA, float-training, exporter or Claude-owned source changes.
 - use both public dual-c131 artifacts;
 - use the existing repeated-key conversation split, with train and evaluation
   documents separated before trajectories are read;
-- compare frozen, trained, shuffled-root and random-gain artifacts, with table
-  port anchoring as a diagnostic arm only;
+- compare raw-frozen, table-anchored, trained, shuffled-root and random-gain
+  artifacts;
 - report target-root distance, target admission, writer top-1/top-8, exact
   parity, moved coordinates, repeat identity, wall time and peak RSS.
 
@@ -60,8 +62,10 @@ No serving, CUDA, float-training, exporter or Claude-owned source changes.
 On both artifacts, the trained arm must:
 
 - accept at least one changing port-gain move;
-- reduce held-out target-port distance below frozen and random;
-- not reduce held-out target admission or top-1 below frozen;
+- reduce held-out target-port distance below the table-anchored baseline and
+  random;
+- not reduce held-out target admission or top-1 below the table-anchored
+  baseline;
 - beat the shuffled-root arm on target-root distance;
 - retain zero CPU/serving parity mismatches;
 - repeat after timing fields are removed.
