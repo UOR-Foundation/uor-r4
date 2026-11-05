@@ -6,17 +6,21 @@
 //! prepare-real-text <oasst|wiki> out=NEW_DIR tokenizer=TOKENIZER.json \
 //!   input=FILE[,FILE...] panel=PANEL.json[,PANEL.json...] \
 //!   source=STR revision=STR licence=STR attribution=STR heldout_per_mille=K \
-//!   [protocol=2] [vocab_size=4096] [max_tokens=8192] [max_docs=N]
+//!   [protocol=2] [vocab_size=N] [max_tokens=8192] [max_docs=N]
 //! ```
 //!
 //! - `oasst` reads the `trees.jsonl` export, one tree per line, and keeps each
 //!   tree's best-ranked thread ([`real_text::walk_tree`]).
 //! - `wiki` reads `wikimedia/wikipedia` parquet rows (`id`, `title`, `text`);
 //!   a column chunk compressed with a codec other than UNCOMPRESSED, SNAPPY or
-//!   ZSTD is refused by name before any row is read.
+//!   ZSTD is refused by name before the output root is claimed.
 //!
-//! The tokenizer's SHA-256 must equal [`real_text::PINNED_TOKENIZER_SHA256`];
-//! a mismatch is refused before the output root is claimed. Every document is
+//! The tokenizer's SHA-256 must equal [`real_text::PINNED_TOKENIZER_SHA256`],
+//! and `vocab_size`, the tokenizer's id count when omitted, must equal it;
+//! either mismatch is refused before the output root is claimed. With
+//! `max_docs`, the run stops once that many documents are kept, and the
+//! manifest's source counts cover only the input read up to then
+//! (`totals.stopped_at_max_docs`). Every document is
 //! built by [`real_text::DocumentBuilder`] (panel exclusion, special text,
 //! round trip, length) and written to `out/heldout/` when
 //! [`real_text::heldout`] holds for its source id, else to `out/train/`. Each
@@ -104,7 +108,7 @@ struct Config {
     attribution: String,
     heldout_per_mille: u64,
     protocol: u8,
-    vocab_size: u32,
+    vocab_size: Option<u32>,
     max_tokens: usize,
     max_docs: Option<usize>,
 }
@@ -154,9 +158,17 @@ fn parse_args(args: &[String]) -> Result<Config> {
     if heldout_per_mille > 1000 {
         return Err("heldout_per_mille= must be 0..=1000".into());
     }
-    let protocol = u8::try_from(number("protocol", 2)?).map_err(|_| "protocol= must be 1 or 2")?;
-    let vocab_size =
-        u32::try_from(number("vocab_size", 4096)?).map_err(|_| "vocab_size= too large")?;
+    let protocol = match number("protocol", 2)? {
+        1 => 1,
+        2 => 2,
+        _ => return Err("protocol= must be 1 or 2".into()),
+    };
+    let vocab_size = match values.get("vocab_size") {
+        None => None,
+        Some(_) => {
+            Some(u32::try_from(number("vocab_size", 0)?).map_err(|_| "vocab_size= too large")?)
+        }
+    };
     let max_tokens =
         usize::try_from(number("max_tokens", 8192)?).map_err(|_| "max_tokens= too large")?;
     if max_tokens == 0 {
@@ -195,6 +207,11 @@ fn codec_supported(codec: Compression) -> std::result::Result<(), String> {
         Compression::UNCOMPRESSED | Compression::SNAPPY | Compression::ZSTD(_) => Ok(()),
         other => Err(other.to_string()),
     }
+}
+
+fn open_shard(path: &Path) -> Result<SerializedFileReader<File>> {
+    SerializedFileReader::new(File::open(path).map_err(|e| format!("{}: {e}", path.display()))?)
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn check_codecs(path: &Path, reader: &SerializedFileReader<File>) -> Result<()> {
@@ -245,19 +262,25 @@ fn article_from_row(path: &Path, row: &Row) -> Result<Item> {
     let mut title = None;
     let mut text = None;
     for (name, field) in row.get_column_iter() {
+        let slot = match name.as_str() {
+            "id" => &mut id,
+            "title" => &mut title,
+            "text" => &mut text,
+            _ => continue,
+        };
         let value = match field {
             Field::Str(s) => Some(s.clone()),
             Field::Null => None,
             Field::Long(v) => Some(v.to_string()),
             Field::Int(v) => Some(v.to_string()),
-            _ => continue,
+            _ => {
+                return Err(format!(
+                    "{}: column {name} holds a value that is not a string, an integer or null",
+                    path.display()
+                ))
+            }
         };
-        match name.as_str() {
-            "id" => id = Some(value),
-            "title" => title = value,
-            "text" => text = Some(value),
-            _ => {}
-        }
+        *slot = Some(value);
     }
     let id = id
         .flatten()
@@ -265,7 +288,7 @@ fn article_from_row(path: &Path, row: &Row) -> Result<Item> {
     let text = text.ok_or_else(|| format!("{}: a row has no text column", path.display()))?;
     Ok(Item::Article {
         id,
-        title,
+        title: title.flatten(),
         text: text.unwrap_or_default(),
     })
 }
@@ -477,13 +500,22 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
     real_text::check_tokenizer_sha(&tokenizer_json, pin).map_err(|e| e.to_string())?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_json)
         .ok_or("unreadable tokenizer.json")?;
-    let tokenizer_sha256 =
-        uor_r4_training::sha256_file(&config.tokenizer).map_err(|e| e.to_string())?;
+    // The bytes the pin was checked on, not a second read of the file.
+    let tokenizer_sha256 = uor_r4_training::sha256_bytes(&tokenizer_json);
+    let tokenizer_ids =
+        u32::try_from(tokenizer.vocab_size()).map_err(|_| "the tokenizer has too many ids")?;
+    let vocab_size = config.vocab_size.unwrap_or(tokenizer_ids);
+    if vocab_size != tokenizer_ids {
+        return Err(format!(
+            "vocab_size={vocab_size} differs from the tokenizer's {tokenizer_ids} ids"
+        ));
+    }
     let protocol = DialogueProtocol::literal_roles_version(&tokenizer, config.protocol)
         .map_err(|e| e.to_string())?;
 
     let mut requests: Vec<PanelRequest> = Vec::new();
     let mut panel_entries = Vec::new();
+    let mut panel_names = std::collections::BTreeSet::new();
     for path in &config.panels {
         let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let panel =
@@ -495,6 +527,10 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
             || path.display().to_string(),
             |n| n.to_string_lossy().into(),
         );
+        // A hit names its panel by file name, so two panels may not share one.
+        if !panel_names.insert(name.clone()) {
+            return Err(format!("two panels share the file name {name}"));
+        }
         panel_entries.push(json!({
             "path": path.display().to_string(),
             "sha256": uor_r4_training::sha256_file(path).map_err(|e| e.to_string())?,
@@ -522,12 +558,19 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
         }));
     }
 
+    // A shard this build cannot decode is refused before anything is written.
+    if matches!(config.mode, Mode::Wiki) {
+        for path in &config.inputs {
+            check_codecs(path, &open_shard(path)?)?;
+        }
+    }
+
     // Claim the root exclusively before writing anything into it.
     report_output::claim(&config.out).map_err(|e| e.to_string())?;
     let excluded_path = config.out.join("excluded.jsonl");
     let mut writers = Writers {
-        train: Split::create(&config.out, "train", config.vocab_size)?,
-        heldout: Split::create(&config.out, "heldout", config.vocab_size)?,
+        train: Split::create(&config.out, "train", vocab_size)?,
+        heldout: Split::create(&config.out, "heldout", vocab_size)?,
         excluded: BufWriter::new(File::create(&excluded_path).map_err(|e| e.to_string())?),
         totals: Totals::default(),
         heldout_per_mille: config.heldout_per_mille,
@@ -536,11 +579,12 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
     };
 
     let mut batch: Vec<Item> = Vec::with_capacity(BATCH);
-    match config.mode {
+    let stopped_early = match config.mode {
         Mode::Oasst => read_oasst(&config.inputs, &mut writers, &mut batch)?,
         Mode::Wiki => read_wiki(&config.inputs, &mut writers, &mut batch)?,
-    }
+    };
     writers.flush(&mut batch)?;
+    let stopped_at_max_docs = stopped_early || writers.totals.not_processed_after_max_docs > 0;
     writers
         .excluded
         .flush()
@@ -572,6 +616,9 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
             &totals.excluded),
         "dropped": every_label(DocDrop::ALL.map(DocDrop::label), &totals.dropped),
         "not_processed_after_max_docs": totals.not_processed_after_max_docs,
+        // True when max_docs stopped the run: the counts here then describe
+        // the input read up to that point, not the whole input.
+        "stopped_at_max_docs": stopped_at_max_docs,
     });
     let extra = match config.mode {
         Mode::Oasst => json!({
@@ -596,6 +643,7 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
         Mode::Oasst => real_text::OASST_CONTENT_CONVENTION,
         Mode::Wiki => real_text::WIKI_CONTENT_CONVENTION,
     };
+    let mut manifests = Vec::new();
     for split in &finished {
         let manifest = json!({
             "schema": "uor-r4-chat-corpus/v1",
@@ -611,7 +659,7 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
             "tokenizer": {
                 "path": config.tokenizer.display().to_string(),
                 "sha256": tokenizer_sha256,
-                "vocab_size": config.vocab_size,
+                "vocab_size": vocab_size,
                 "bos_id": protocol.bos_id,
             },
             "dialogue_protocol": protocol.schema,
@@ -657,11 +705,18 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
             .parent()
             .ok_or("split without a directory")?
             .join("manifest.json");
-        fs::write(
-            &path,
-            serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+        let bytes = serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?;
+        manifests.push((path, bytes));
+    }
+    // Both manifests are written before either is put in place, so a failed
+    // write never leaves one split looking complete without the other.
+    for (path, bytes) in &manifests {
+        let partial = path.with_extension("json.partial");
+        fs::write(&partial, bytes).map_err(|e| format!("{}: {e}", partial.display()))?;
+    }
+    for (path, _) in &manifests {
+        let partial = path.with_extension("json.partial");
+        fs::rename(&partial, path).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     println!(
         "{}: considered {}, kept train {} ({} tokens) heldout {} ({} tokens), excluded {}, \
@@ -678,7 +733,12 @@ fn run_with_pin(args: &[String], pin: &str) -> Result<()> {
     Ok(())
 }
 
-fn read_oasst(inputs: &[PathBuf], writers: &mut Writers<'_>, batch: &mut Vec<Item>) -> Result<()> {
+/// Returns true when `max_docs` was reached and the read stopped there.
+fn read_oasst(
+    inputs: &[PathBuf],
+    writers: &mut Writers<'_>,
+    batch: &mut Vec<Item>,
+) -> Result<bool> {
     for path in inputs {
         let reader = BufReader::new(File::open(path).map_err(|e| e.to_string())?);
         for (index, line) in reader.lines().enumerate() {
@@ -702,18 +762,18 @@ fn read_oasst(inputs: &[PathBuf], writers: &mut Writers<'_>, batch: &mut Vec<Ite
                 TreeOutcome::NoAssistantReply => writers.totals.tree_no_assistant_reply += 1,
             }
             if batch.len() == BATCH && !writers.flush(batch)? {
-                return Ok(());
+                return Ok(true);
             }
         }
     }
-    Ok(())
+    Ok(false)
 }
 
-fn read_wiki(inputs: &[PathBuf], writers: &mut Writers<'_>, batch: &mut Vec<Item>) -> Result<()> {
+/// Returns true when `max_docs` was reached and the read stopped there. The
+/// codecs were checked before the output root was claimed.
+fn read_wiki(inputs: &[PathBuf], writers: &mut Writers<'_>, batch: &mut Vec<Item>) -> Result<bool> {
     for path in inputs {
-        let reader = SerializedFileReader::new(File::open(path).map_err(|e| e.to_string())?)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        check_codecs(path, &reader)?;
+        let reader = open_shard(path)?;
         for row in reader
             .get_row_iter(None)
             .map_err(|e| format!("{}: {e}", path.display()))?
@@ -722,11 +782,11 @@ fn read_wiki(inputs: &[PathBuf], writers: &mut Writers<'_>, batch: &mut Vec<Item
             writers.totals.rows_read += 1;
             batch.push(article_from_row(path, &row)?);
             if batch.len() == BATCH && !writers.flush(batch)? {
-                return Ok(());
+                return Ok(true);
             }
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 fn main() {
@@ -742,6 +802,7 @@ mod tests {
     use super::*;
     use parquet::basic::{GzipLevel, ZstdLevel};
     use parquet::data_type::{ByteArray, ByteArrayType};
+    use parquet::file::metadata::ParquetMetaDataWriter;
     use parquet::file::properties::WriterProperties;
     use parquet::file::writer::SerializedFileWriter;
     use parquet::schema::parser::parse_message_type;
@@ -843,11 +904,17 @@ mod tests {
     }
 
     fn write_wiki_parquet(path: &Path, rows: &[(&str, &str, &str)]) {
+        write_wiki_parquet_typed(path, rows, "(STRING)");
+    }
+
+    /// `title_type` is the title column's annotation: `(STRING)`, or empty
+    /// for plain bytes.
+    fn write_wiki_parquet_typed(path: &Path, rows: &[(&str, &str, &str)], title_type: &str) {
         let schema = Arc::new(
-            parse_message_type(
-                "message m { required binary id (STRING); required binary url (STRING); \
-                 required binary title (STRING); required binary text (STRING); }",
-            )
+            parse_message_type(&format!(
+                "message m {{ required binary id (STRING); required binary url (STRING); \
+                 required binary title {title_type}; required binary text (STRING); }}"
+            ))
             .unwrap(),
         );
         let props = Arc::new(WriterProperties::builder().build());
@@ -1033,11 +1100,19 @@ mod tests {
                 uor_r4_training::sha256_file(&out.join(split).join("response_mask.u8")).unwrap()
             );
             assert_eq!(manifest["tokenizer"]["sha256"], pin(&dir));
-            assert_eq!(manifest["tokenizer"]["vocab_size"], 4096);
+            // The test tokenizer's own id count: 3 specials and 256 bytes.
+            assert_eq!(manifest["tokenizer"]["vocab_size"], 259);
             assert_eq!(manifest["tokenizer"]["bos_id"], 0);
             assert_eq!(manifest["max_tokens"], 8192);
+            assert_eq!(manifest["totals"]["stopped_at_max_docs"], false);
             assert_eq!(tokens[0], BOS);
-            assert!(manifest["bytes_per_token"].as_f64().unwrap() > 0.0);
+            // Content bytes over all tokens; one token per byte here, plus
+            // markers, so at most 1.
+            let content = manifest["content_bytes"].as_f64().unwrap();
+            let per_token = manifest["bytes_per_token"].as_f64().unwrap();
+            assert!(content > 0.0);
+            assert!((per_token - content / tokens.len() as f64).abs() < 1e-12);
+            assert!(per_token <= 1.0, "{per_token}");
         }
         // Each split holds its own thread, and no excluded one.
         let text_of = |tokens: &[u16]| -> String {
@@ -1131,18 +1206,45 @@ mod tests {
             let error = parse_args(&without).err().unwrap_or_default();
             assert_eq!(error, format!("missing {key}="), "{key}");
         }
+        let refusal = |with: &[String]| parse_args(with).err().unwrap_or_default();
         let mut unknown = full.clone();
         unknown.push("colour=blue".into());
-        assert!(parse_args(&unknown).is_err());
+        assert_eq!(refusal(&unknown), "unknown argument colour=");
         let mut twice = full.clone();
         twice.push("source=again".into());
-        assert!(parse_args(&twice).is_err());
+        assert_eq!(refusal(&twice), "source= given twice");
+        let mut empty_value = full.clone();
+        empty_value[5] = "source=".into();
+        assert_eq!(refusal(&empty_value), "source= is empty");
         let mut bad_mode = full.clone();
         bad_mode[0] = "books".into();
-        assert!(parse_args(&bad_mode).is_err());
+        assert!(refusal(&bad_mode).starts_with("unknown mode"));
+        assert_eq!(full[9], "heldout_per_mille=0");
         let mut over = full.clone();
         over[9] = "heldout_per_mille=1001".into();
-        assert!(parse_args(&over).is_err());
+        assert_eq!(refusal(&over), "heldout_per_mille= must be 0..=1000");
+        for (extra, expected) in [
+            ("protocol=3", "protocol= must be 1 or 2"),
+            ("vocab_size=many", "vocab_size= must be a number"),
+            ("max_tokens=0", "max_tokens= must be positive"),
+            ("max_docs=0", "max_docs= must be positive"),
+        ] {
+            let mut with = full.clone();
+            with.push(extra.into());
+            assert_eq!(refusal(&with), expected, "{extra}");
+        }
+        // Two panels with one file name would make hits ambiguous.
+        let other = dir.join("other");
+        fs::create_dir_all(&other).unwrap();
+        let second = write_panel(&other, &json!([{"id": "q", "user_turns": ["more words"]}]));
+        let mut same_name = full.clone();
+        same_name[4] = format!("panel={},{}", panel.display(), second.display());
+        let error = run_with_pin(&same_name, &pin(&dir)).unwrap_err();
+        assert!(
+            error.contains("two panels share the file name panel.json"),
+            "{error}"
+        );
+        assert!(!dir.join("out").exists());
         let mut empty_panel = full;
         let empty = dir.join("empty.json");
         fs::write(&empty, "[]").unwrap();
@@ -1162,5 +1264,135 @@ mod tests {
         assert!(lz4.contains("LZ4"), "{lz4}");
         let gzip = codec_supported(Compression::GZIP(GzipLevel::default())).unwrap_err();
         assert!(gzip.contains("GZIP"), "{gzip}");
+    }
+
+    /// Rewrite a parquet file's footer so every column chunk names `codec`,
+    /// leaving the pages as written. This build can write only the codecs it
+    /// reads, so a shard with an unsupported one is made this way.
+    fn mark_codec(path: &Path, codec: Compression) {
+        let bytes = fs::read(path).unwrap();
+        let tail = bytes.len() - 8;
+        let footer = u32::from_le_bytes(bytes[tail..tail + 4].try_into().unwrap()) as usize;
+        let metadata = open_shard(path).unwrap().metadata().clone();
+        // Without a loaded page index the writer re-encodes only the footer,
+        // and every offset in it still points into the pages kept above.
+        assert!(metadata.page_index().is_none());
+        let mut builder = metadata.into_builder();
+        let groups = builder
+            .take_row_groups()
+            .into_iter()
+            .map(|group| {
+                let columns = group
+                    .columns()
+                    .iter()
+                    .map(|c| {
+                        c.clone()
+                            .into_builder()
+                            .set_compression(codec)
+                            .build()
+                            .unwrap()
+                    })
+                    .collect();
+                group
+                    .into_builder()
+                    .set_column_metadata(columns)
+                    .build()
+                    .unwrap()
+            })
+            .collect();
+        let metadata = builder.set_row_groups(groups).build();
+        let mut out = bytes[..tail - footer].to_vec();
+        ParquetMetaDataWriter::new(&mut out, &metadata)
+            .finish()
+            .unwrap();
+        fs::write(path, out).unwrap();
+    }
+
+    #[test]
+    fn a_shard_with_an_unsupported_codec_is_refused_before_anything_is_written() {
+        let dir = scratch("codec");
+        let input = dir.join("shard.parquet");
+        write_wiki_parquet(&input, &[("a", "Title", "Body text here.")]);
+        mark_codec(&input, Compression::GZIP(GzipLevel::default()));
+        let panel = write_panel(&dir, &json!([{"id": "p", "user_turns": ["any words"]}]));
+        let args = args(&dir, "wiki", &input, &panel, 0);
+        let error = run_with_pin(&args, &pin(&dir)).unwrap_err();
+        assert!(
+            error.contains("column id uses the unsupported codec GZIP"),
+            "{error}"
+        );
+        assert!(
+            !dir.join("out").exists(),
+            "the codecs must be checked before the out root is claimed"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_vocab_size_unlike_the_tokenizers_is_refused_before_anything_is_written() {
+        let dir = scratch("vocab");
+        let input = dir.join("trees.jsonl");
+        fs::write(&input, "").unwrap();
+        let panel = write_panel(&dir, &json!([{"id": "p", "user_turns": ["any words"]}]));
+        let mut args = args(&dir, "oasst", &input, &panel, 0);
+        args.push("vocab_size=4096".into());
+        let error = run_with_pin(&args, &pin(&dir)).unwrap_err();
+        assert!(
+            error.contains("vocab_size=4096 differs from the tokenizer's 259 ids"),
+            "{error}"
+        );
+        assert!(!dir.join("out").exists());
+        // The tokenizer's own count is accepted, and recorded.
+        let last = args.len() - 1;
+        args[last] = "vocab_size=259".into();
+        run_with_pin(&args, &pin(&dir)).unwrap();
+        let (tokens, _, manifest) = read_split(&dir.join("out"), "train");
+        assert!(tokens.is_empty());
+        assert_eq!(manifest["tokenizer"]["vocab_size"], 259);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn max_docs_stops_the_run_and_the_manifest_says_so() {
+        let dir = scratch("max-docs");
+        let input = dir.join("shard.parquet");
+        write_wiki_parquet(
+            &input,
+            &[
+                ("a", "A", "First body."),
+                ("b", "B", "Second body."),
+                ("c", "C", "Third body."),
+            ],
+        );
+        let panel = write_panel(&dir, &json!([{"id": "p", "user_turns": ["any words"]}]));
+        let mut args = args(&dir, "wiki", &input, &panel, 0);
+        args.push("max_docs=1".into());
+        run_with_pin(&args, &pin(&dir)).unwrap();
+        let (_, _, train) = read_split(&dir.join("out"), "train");
+        let (_, _, heldout) = read_split(&dir.join("out"), "heldout");
+        assert_eq!(train["documents"], 1);
+        assert_eq!(heldout["documents"], 0);
+        let totals = &train["totals"];
+        assert_eq!(totals["documents_considered"], 1);
+        assert_eq!(totals["not_processed_after_max_docs"], 2);
+        assert_eq!(totals["rows_read"], 3);
+        assert_eq!(totals["stopped_at_max_docs"], true);
+        assert_eq!(heldout["totals"], train["totals"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_column_holding_an_unexpected_type_is_refused() {
+        let dir = scratch("column-type");
+        let input = dir.join("shard.parquet");
+        // A title stored as plain bytes, not a string.
+        write_wiki_parquet_typed(&input, &[("a", "A", "Body.")], "");
+        let panel = write_panel(&dir, &json!([{"id": "p", "user_turns": ["any words"]}]));
+        let error = run_with_pin(&args(&dir, "wiki", &input, &panel, 0), &pin(&dir)).unwrap_err();
+        assert!(
+            error.contains("column title holds a value that is not a string"),
+            "{error}"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }

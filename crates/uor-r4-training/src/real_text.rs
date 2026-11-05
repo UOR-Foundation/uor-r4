@@ -74,7 +74,8 @@ pub const NODE_FILTER_RULE: &str = "a message is dropped when deleted == true, e
 /// The reply walk, as recorded in the manifest.
 pub const WALK_RULE: &str = "from the root, take the best remaining child at each node: \
     lowest rank first, a null rank after every ranked child, ties by message_id ascending; \
-    stop when no child passes the node filter";
+    stop when no child passes the node filter; prompter maps to user; the thread is kept only \
+    if its first assistant turn has a user turn before it";
 
 #[derive(Debug)]
 pub enum RealTextError {
@@ -570,10 +571,11 @@ pub fn walk_tree(
             })
         })
         .collect::<Result<Vec<_>, RealTextError>>()?;
+    // The builder applies the same rule again to the normalized contents.
     let replied = messages
         .iter()
-        .position(|m| m.role == "user")
-        .is_some_and(|u| messages[u + 1..].iter().any(|m| m.role == "assistant"));
+        .position(|m| m.role == "assistant")
+        .is_some_and(|a| messages[..a].iter().any(|m| m.role == "user"));
     if !replied {
         return Ok(TreeOutcome::NoAssistantReply);
     }
@@ -1225,7 +1227,9 @@ mod tests {
     }
 
     #[test]
-    fn oasst_walk_keeps_an_assistant_root_when_a_user_turn_and_reply_follow() {
+    fn oasst_walk_drops_a_thread_that_opens_on_an_assistant_turn() {
+        // The builder drops the same thread (its first assistant reply has no
+        // user turn before it), so the walk and the builder agree.
         let t = tree(node(
             "root",
             "assistant",
@@ -1238,14 +1242,10 @@ mod tests {
             )],
         ));
         let (outcome, _) = walk(&t);
-        assert_eq!(ids(&outcome), ["root", "u1", "a1"]);
-        let TreeOutcome::Thread(thread) = outcome else {
-            unreachable!()
-        };
-        let roles: Vec<&str> = thread.messages.iter().map(|m| m.role).collect();
-        assert_eq!(roles, ["assistant", "user", "assistant"]);
-        // The first user turn is the second message, not the root.
-        assert_eq!(thread.first_user_turn(), "text of u1");
+        assert!(
+            matches!(outcome, TreeOutcome::NoAssistantReply),
+            "{outcome:?}"
+        );
     }
 
     #[test]
