@@ -335,4 +335,11 @@ mismatches, and repeat byte-identically after timing fields are removed.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - fresh-context review is required before generation.
+TEST FITNESS: FIT - M1 #2029 candidate-conditioned exact model lookahead
+sheet: docs/harness/prep/cpu-training-pilot-copy-lookahead-2026-11-05.md
+reviewer: fresh-context Codex subagent fit_copy_lookahead_2
+note: Fresh FIT after correcting empty-candidate fallback checks; exact cloned-forward lookahead, candidate-only semantics, no-lookahead/control comparisons, identity checks and deterministic replay verified; seed 2764 remains absent.
+date: 2026-11-05
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
