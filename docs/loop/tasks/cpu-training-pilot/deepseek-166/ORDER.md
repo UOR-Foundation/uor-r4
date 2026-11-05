@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-166 (release geometric-copy claim)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `38ab13578`.
 
 ## Goal
