@@ -34,6 +34,8 @@ or candidate-ranker width experiment.
 7. Random port-gain moves use exactly the trained arm's accepted count. The
    shuffled-cell objective runs for up to 32 attempts until it has the same
    accepted count.
+8. A failed move match is a non-negative `CONTROL_FAULT`, distinct from a real
+   `NO_MOVE` result.
 
 No serving, CUDA, float-training, exporter or Claude-owned source changes.
 

@@ -340,15 +340,14 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         && trained_port.target_port_distance_sum < shuffled_port.target_port_distance_sum;
     let safety_pass = trained_port.target_admitted >= anchored_port.target_admitted
         && trained_port.top1_correct >= anchored_port.top1_correct;
-    let status = if !parity_exact {
-        "INSTRUMENT_FAULT"
-    } else if accepted == 0 || shuffled_accepted == 0 {
-        "NO_MOVE"
-    } else if trained_distance_pass && safety_pass {
-        "KEEP"
-    } else {
-        "REJECT"
-    };
+    let control_moves_matched = accepted == shuffled_accepted;
+    let status = run_status(
+        parity_exact,
+        accepted,
+        shuffled_accepted,
+        trained_distance_pass,
+        safety_pass,
+    );
 
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-query-port-driver/1",
@@ -387,7 +386,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         },
         "bar": {
             "parity_exact": parity_exact,
-            "actual_and_shuffled_arms_moved": accepted > 0 && shuffled_accepted > 0,
+            "control_moves_matched": control_moves_matched,
             "target_port_distance_below_table_anchor_random_and_shuffled": trained_distance_pass,
             "admission_and_top1_non_fall": safety_pass,
         },
@@ -514,6 +513,26 @@ fn check_stop(started: Instant) -> Result<(), String> {
     Ok(())
 }
 
+fn run_status(
+    parity_exact: bool,
+    accepted: usize,
+    shuffled_accepted: usize,
+    distance_pass: bool,
+    safety_pass: bool,
+) -> &'static str {
+    if !parity_exact {
+        "INSTRUMENT_FAULT"
+    } else if accepted == 0 {
+        "NO_MOVE"
+    } else if shuffled_accepted != accepted {
+        "CONTROL_FAULT"
+    } else if distance_pass && safety_pass {
+        "KEEP"
+    } else {
+        "REJECT"
+    }
+}
+
 fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if path.exists() {
         return Err(format!("{} already exists", path.display()));
@@ -584,5 +603,14 @@ mod tests {
         ] {
             assert!(usage().contains(name));
         }
+    }
+
+    #[test]
+    fn status_distinguishes_no_move_from_an_unmatched_control() {
+        assert_eq!(run_status(true, 0, 0, false, false), "NO_MOVE");
+        assert_eq!(run_status(true, 2, 1, true, true), "CONTROL_FAULT");
+        assert_eq!(run_status(true, 2, 2, true, true), "KEEP");
+        assert_eq!(run_status(true, 2, 2, false, true), "REJECT");
+        assert_eq!(run_status(false, 2, 2, true, true), "INSTRUMENT_FAULT");
     }
 }
