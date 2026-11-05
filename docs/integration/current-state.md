@@ -1,3 +1,69 @@
+## 2026-11-05 — Raw query-port geometry preserves input but its cell control collapses (deepseek)
+
+The final-gain query-port objective was rerun from unmodified public artifacts,
+keeping every learned token table row raw and changing only the 16 port-gain
+codes. Both outputs remain exportable one-table `UORLUT01` artifacts with exact
+616-row CPU/serving parity.
+
+Trained port distance improved over raw frozen on seed 1
+(`29,882,444→29,613,365`) and seed 2 (`23,870,298→23,786,304`) while retaining
+admission, top-1 and top-8. But the moved-count-matched shuffled-cell arm was
+behaviorally identical to trained on both seeds. The trained arm beat random
+gain (`29,613,365 < 29,818,562` and `23,786,304 < 23,802,494`).
+
+The result is **CONTROL_FAULT**, not a promoted model result. The one-step
+cell-rotation control needs redesign before this objective can yield a valid
+mechanism comparison. Record:
+[deepseek-188](../loop/tasks/cpu-training-pilot/deepseek-188/REPORT.md).
+**Next:** preserve learned input identity while testing a behaviorally
+independent writer-address representation; do not reuse this cell-rotation
+control.
+
+## 2026-11-05 — Table-anchor decoding loss is an input-code effect, not writer-row mismatch (deepseek)
+
+A four-arm CPU diagnostic kept the FBS trunk and targets fixed while replacing
+the recurrent input table and the writer-scoring table independently. On seed
+1, raw/input-only/writer-only/combined admitted-top-1-top-8 was
+245/181/236, 120/55/89, 245/195/233 and 120/55/86. On seed 2 it was
+171/136/164, 29/9/20, 171/137/162 and 29/10/20.
+
+Input-only reproduced combined admission exactly on both seeds and combined
+top-1 exactly on seed 1. Writer-only preserved raw admission, kept cells and
+port distance exactly, moving top-1 by +14/+1 and top-8 by -3/-2 over the two
+seeds. Initial serial discovery runs took about 35 seconds. Exact review then
+tightened the driver to the registered 616 rows and parallelized ordered row
+evaluation; final 16-worker verification took 2.598/2.593 seconds and
+reproduced every arm with zero raw CPU/serving mismatches.
+
+This attributes deepseek-183's decoding collapse to overwriting the learned
+recurrent input code, not to direct writer-row mismatch. The hybrid tables are
+in-memory diagnostics and cannot be represented by the current one-table
+artifact. Record:
+[deepseek-185](../loop/tasks/cpu-training-pilot/deepseek-185/REPORT.md).
+**Next:** design separate writer-address rows, or train root-addressed writer
+rows under an explicit input-code preservation objective, then retest through
+export and serving.
+
+## 2026-11-05 — Query-port root training rejects; table anchoring has a large shared input/writer cost (deepseek)
+
+A new CPU trainer moved only the 16 final-gain codes that scale the writer
+query's two 8-coordinate ports, starting from a table-anchored baseline that
+matches Claude-290. It accepted all eight moves on both public artifacts with
+exact CPU/serving parity.
+
+The result is **REJECT**. Seed 1 reduced port distance over the anchored and
+random controls but lost to the matched shuffled-root control, 25,331,024
+versus 25,327,969. Seed 2 reduced distance below every control, but lost one
+admitted target and one top-1 against the table-anchor baseline.
+
+The larger signal is the table anchor's cost to ordinary decoding: admitted /
+top-1 fell from 245 / 181 to 120 / 55 on seed 1 and from 171 / 136 to 29 / 10
+on seed 2. The treatment changes both recurrent inputs and writer rows, so this
+run does not separate those effects. The next design should preserve learned
+token identity while adding cell addressing, not overwrite the same ports
+without a preservation control. Record:
+[deepseek-183](../loop/tasks/cpu-training-pilot/deepseek-183/REPORT.md).
+
 ## 2026-11-05 — Expanded-cell anchored correction rejects (deepseek)
 
 The CPU writer’s candidate source can be widened beyond its served eight cells
