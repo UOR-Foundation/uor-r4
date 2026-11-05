@@ -3,13 +3,37 @@ use std::time::Instant;
 
 use uor_r4_core::report_output;
 use uor_r4_cpu_train::{
-    anchor_writer_ports, random_port_gain_control, read_gain, validate_corpus_manifest,
-    CpuConversationSample, CpuMaskedCorpus, CpuPanelEvaluator, CpuPortRootTrainer, PortRootConfig,
-    PortRootReading, RankMarginSample,
+    anchor_writer_ports, random_port_gain_control, read_gain, replace_final_gain,
+    validate_corpus_manifest, CpuConversationSample, CpuMaskedCorpus, CpuPanelEvaluator,
+    CpuPortRootTrainer, PortRootConfig, PortRootReading, RankMarginSample,
 };
 use uor_r4_integer::stack::{read_hamming_uorlut01, read_memory_uorlut01, IntegerStackModel};
 
 const STEPS: usize = 8;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum BaselineMode {
+    #[default]
+    Anchored,
+    Raw,
+}
+
+impl BaselineMode {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "anchored" => Ok(Self::Anchored),
+            "raw" => Ok(Self::Raw),
+            _ => Err(format!("baseline mode must be anchored or raw: {value}")),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Anchored => "anchored",
+            Self::Raw => "raw",
+        }
+    }
+}
 
 struct Config {
     artifact: PathBuf,
@@ -21,6 +45,7 @@ struct Config {
     panel_manifest: PathBuf,
     out: PathBuf,
     seed: u64,
+    baseline_mode: BaselineMode,
     expected_artifact_sha256: String,
     expected_train_tokens_sha256: String,
     expected_train_mask_sha256: String,
@@ -48,7 +73,8 @@ fn usage() -> String {
      PANEL_TOKENS PANEL_MASK PANEL_MANIFEST OUT --expected-artifact-sha256 HEX \
      --expected-train-tokens-sha256 HEX --expected-train-mask-sha256 HEX \
      --expected-train-manifest-sha256 HEX --expected-panel-tokens-sha256 HEX \
-     --expected-panel-mask-sha256 HEX --expected-panel-manifest-sha256 HEX [--seed N]"
+     --expected-panel-mask-sha256 HEX --expected-panel-manifest-sha256 HEX \
+     [--baseline-mode anchored|raw] [--seed N]"
         .to_owned()
 }
 
@@ -65,6 +91,7 @@ fn parse_args() -> Result<Config, String> {
         panel_manifest: path()?,
         out: path()?,
         seed: 183,
+        baseline_mode: BaselineMode::Anchored,
         expected_artifact_sha256: String::new(),
         expected_train_tokens_sha256: String::new(),
         expected_train_mask_sha256: String::new(),
@@ -79,6 +106,7 @@ fn parse_args() -> Result<Config, String> {
             .ok_or_else(|| format!("{flag} needs a value"))?;
         match flag.as_str() {
             "--seed" => config.seed = number(&value)?,
+            "--baseline-mode" => config.baseline_mode = BaselineMode::parse(&value)?,
             "--expected-artifact-sha256" => config.expected_artifact_sha256 = hex(&value)?,
             "--expected-train-tokens-sha256" => config.expected_train_tokens_sha256 = hex(&value)?,
             "--expected-train-mask-sha256" => config.expected_train_mask_sha256 = hex(&value)?,
@@ -257,12 +285,15 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
 
     let frozen_panel = panel_reading(&artifact, &panel_samples)?;
     let frozen_port = port_reading(&artifact, &panel_samples)?;
-    let anchored = anchor_writer_ports(&artifact).map_err(|error| error.to_string())?;
-    let anchored_panel = panel_reading(&anchored, &panel_samples)?;
-    let anchored_port = port_reading(&anchored, &panel_samples)?;
+    let baseline = baseline_artifact(&artifact, config.baseline_mode)?;
+    if config.baseline_mode == BaselineMode::Raw && baseline != artifact {
+        return Err("raw baseline differs from the source artifact".to_owned());
+    }
+    let baseline_panel = panel_reading(&baseline, &panel_samples)?;
+    let baseline_port = port_reading(&baseline, &panel_samples)?;
 
     let mut trained = CpuPortRootTrainer::from_artifact(
-        &anchored,
+        &baseline,
         training_samples.clone(),
         PortRootConfig::default(),
     )
@@ -274,11 +305,11 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     }
     let accepted = trained_steps.iter().filter(|step| step.updated).count();
     let trained_artifact = trained.artifact().to_vec();
-    assert_only_port_gain_changed(&anchored, &trained_artifact)?;
+    assert_only_port_gain_changed(&baseline, &trained_artifact)?;
     write_new(&config.out.join("trained.uorlut"), &trained_artifact)?;
 
     let mut shuffled = CpuPortRootTrainer::from_artifact(
-        &anchored,
+        &baseline,
         training_samples.clone(),
         PortRootConfig {
             cell_shift: 1,
@@ -295,14 +326,18 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         check_stop(started)?;
     }
     let shuffled_artifact = shuffled.artifact().to_vec();
-    assert_only_port_gain_changed(&anchored, &shuffled_artifact)?;
+    assert_only_port_gain_changed(&baseline, &shuffled_artifact)?;
     write_new(&config.out.join("shuffled.uorlut"), &shuffled_artifact)?;
     let (random_artifact, random_moves) =
-        random_port_gain_control(&anchored, accepted, config.seed)
+        random_port_gain_control(&baseline, accepted, config.seed)
             .map_err(|error| error.to_string())?;
-    assert_only_port_gain_changed(&anchored, &random_artifact)?;
+    assert_only_port_gain_changed(&baseline, &random_artifact)?;
     write_new(&config.out.join("random.uorlut"), &random_artifact)?;
-    write_new(&config.out.join("table-anchored.uorlut"), &anchored)?;
+    let baseline_name = match config.baseline_mode {
+        BaselineMode::Anchored => "table-anchored.uorlut",
+        BaselineMode::Raw => "raw-baseline.uorlut",
+    };
+    write_new(&config.out.join(baseline_name), &baseline)?;
 
     let trained_panel = panel_reading(&trained_artifact, &panel_samples)?;
     let trained_port = port_reading(&trained_artifact, &panel_samples)?;
@@ -312,7 +347,7 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     let random_port = port_reading(&random_artifact, &panel_samples)?;
 
     let mut repeat = CpuPortRootTrainer::from_artifact(
-        &anchored,
+        &baseline,
         training_samples.clone(),
         PortRootConfig::default(),
     )
@@ -330,16 +365,18 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         &trained_panel,
         &shuffled_panel,
         &random_panel,
-        &anchored_panel,
+        &baseline_panel,
     ]
     .iter()
     .all(|reading| reading.export.is_exact());
     let trained_distance_pass = trained_port.target_port_distance_sum
-        < anchored_port.target_port_distance_sum
+        < baseline_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < random_port.target_port_distance_sum
         && trained_port.target_port_distance_sum < shuffled_port.target_port_distance_sum;
-    let safety_pass = trained_port.target_admitted >= anchored_port.target_admitted
-        && trained_port.top1_correct >= anchored_port.top1_correct;
+    let safety_pass = trained_port.target_admitted >= baseline_port.target_admitted
+        && trained_port.top1_correct >= baseline_port.top1_correct
+        && (config.baseline_mode != BaselineMode::Raw
+            || trained_port.top8_correct >= baseline_port.top8_correct);
     let control_moves_matched = accepted == shuffled_accepted;
     let status = run_status(
         parity_exact,
@@ -348,6 +385,59 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         trained_distance_pass,
         safety_pass,
     );
+    let mut arms = serde_json::Map::new();
+    arms.insert(
+        "raw_frozen".to_owned(),
+        arm_json(&artifact, &frozen_panel, &frozen_port),
+    );
+    let baseline_arm = match config.baseline_mode {
+        BaselineMode::Anchored => "table_anchor_baseline",
+        BaselineMode::Raw => "raw_baseline",
+    };
+    arms.insert(
+        baseline_arm.to_owned(),
+        arm_json(&baseline, &baseline_panel, &baseline_port),
+    );
+    arms.insert(
+        "trained".to_owned(),
+        arm_json(&trained_artifact, &trained_panel, &trained_port),
+    );
+    arms.insert(
+        "shuffled_cells".to_owned(),
+        arm_json(&shuffled_artifact, &shuffled_panel, &shuffled_port),
+    );
+    arms.insert(
+        "random_gain".to_owned(),
+        arm_json(&random_artifact, &random_panel, &random_port),
+    );
+    let table_anchor_sha256 = match config.baseline_mode {
+        BaselineMode::Anchored => Some(uor_r4_discrete::corpus::sha256(&baseline)),
+        BaselineMode::Raw => None,
+    };
+    let distance_key = match config.baseline_mode {
+        BaselineMode::Anchored => "target_port_distance_below_table_anchor_random_and_shuffled",
+        BaselineMode::Raw => "target_port_distance_below_raw_random_and_shuffled",
+    };
+    let mut bar = serde_json::Map::new();
+    bar.insert("parity_exact".to_owned(), serde_json::json!(parity_exact));
+    bar.insert(
+        "control_moves_matched".to_owned(),
+        serde_json::json!(control_moves_matched),
+    );
+    bar.insert(
+        distance_key.to_owned(),
+        serde_json::json!(trained_distance_pass),
+    );
+    bar.insert(
+        "admission_and_top1_non_fall".to_owned(),
+        serde_json::json!(safety_pass),
+    );
+    if config.baseline_mode == BaselineMode::Raw {
+        bar.insert(
+            "top8_non_fall".to_owned(),
+            serde_json::json!(trained_port.top8_correct >= baseline_port.top8_correct),
+        );
+    }
 
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-query-port-driver/1",
@@ -367,7 +457,9 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             "panel_rows": panel_samples.len(),
         },
         "preconditioning": {
-            "table_anchor_artifact_sha256": uor_r4_discrete::corpus::sha256(&anchored),
+            "baseline_mode": config.baseline_mode.as_str(),
+            "baseline_artifact_sha256": uor_r4_discrete::corpus::sha256(&baseline),
+            "table_anchor_artifact_sha256": table_anchor_sha256,
         },
         "training": {
             "accepted": accepted,
@@ -377,19 +469,8 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
             "shuffled_steps": shuffled_steps,
             "random_moves": random_moves,
         },
-        "arms": {
-            "raw_frozen": arm_json(&artifact, &frozen_panel, &frozen_port),
-            "table_anchor_baseline": arm_json(&anchored, &anchored_panel, &anchored_port),
-            "trained": arm_json(&trained_artifact, &trained_panel, &trained_port),
-            "shuffled_cells": arm_json(&shuffled_artifact, &shuffled_panel, &shuffled_port),
-            "random_gain": arm_json(&random_artifact, &random_panel, &random_port),
-        },
-        "bar": {
-            "parity_exact": parity_exact,
-            "control_moves_matched": control_moves_matched,
-            "target_port_distance_below_table_anchor_random_and_shuffled": trained_distance_pass,
-            "admission_and_top1_non_fall": safety_pass,
-        },
+        "arms": arms,
+        "bar": bar,
     });
     write_new(
         &config.out.join("report.json"),
@@ -413,6 +494,13 @@ fn corpus(
     }
     CpuMaskedCorpus::from_bytes(tokens, mask, vocab, context, identity.bos)
         .map_err(|error| error.to_string())
+}
+
+fn baseline_artifact(artifact: &[u8], mode: BaselineMode) -> Result<Vec<u8>, String> {
+    match mode {
+        BaselineMode::Anchored => anchor_writer_ports(artifact).map_err(|error| error.to_string()),
+        BaselineMode::Raw => Ok(artifact.to_vec()),
+    }
 }
 
 fn response_samples(examples: &[CpuConversationSample]) -> Result<Vec<RankMarginSample>, String> {
@@ -441,18 +529,22 @@ fn response_samples(examples: &[CpuConversationSample]) -> Result<Vec<RankMargin
 }
 
 fn assert_only_port_gain_changed(before: &[u8], after: &[u8]) -> Result<(), String> {
-    let before = read_gain(before).map_err(|error| error.to_string())?;
-    let after = read_gain(after).map_err(|error| error.to_string())?;
-    if before.len() != after.len() {
+    let before_gain = read_gain(before).map_err(|error| error.to_string())?;
+    let after_gain = read_gain(after).map_err(|error| error.to_string())?;
+    if before_gain.len() != after_gain.len() {
         return Err("final-gain length changed".to_owned());
     }
-    if before
+    if before_gain
         .iter()
-        .zip(&after)
+        .zip(&after_gain)
         .enumerate()
-        .any(|(index, (left, right))| left != right && (8..before.len() - 8).contains(&index))
+        .any(|(index, (left, right))| left != right && (8..before_gain.len() - 8).contains(&index))
     {
         return Err("a non-port final-gain coordinate changed".to_owned());
+    }
+    let restored = replace_final_gain(after, &before_gain).map_err(|error| error.to_string())?;
+    if restored != before {
+        return Err("bytes outside the final-gain table changed".to_owned());
     }
     Ok(())
 }
@@ -555,6 +647,8 @@ fn peak_rss_kib() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     #[test]
     fn response_samples_cover_each_reply_target_after_the_prompt() {
@@ -600,9 +694,71 @@ mod tests {
             "PANEL_MASK",
             "PANEL_MANIFEST",
             "OUT",
+            "--baseline-mode",
         ] {
             assert!(usage().contains(name));
         }
+    }
+
+    #[test]
+    fn baseline_mode_defaults_to_anchored_and_parses_raw() {
+        assert_eq!(BaselineMode::default(), BaselineMode::Anchored);
+        assert_eq!(
+            BaselineMode::parse("anchored").unwrap(),
+            BaselineMode::Anchored
+        );
+        assert_eq!(BaselineMode::parse("raw").unwrap(), BaselineMode::Raw);
+        assert!(BaselineMode::parse("table").is_err());
+    }
+
+    fn synthetic_artifact() -> Vec<u8> {
+        export_fbs_trunk_uorlut01(&synthetic_fbs_trunk_with(
+            194,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 64,
+                layers: 2,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn raw_mode_does_not_substitute_table_rows() {
+        let artifact = synthetic_artifact();
+        assert_eq!(
+            baseline_artifact(&artifact, BaselineMode::Raw).unwrap(),
+            artifact
+        );
+        assert_ne!(
+            baseline_artifact(&artifact, BaselineMode::Anchored).unwrap(),
+            artifact
+        );
+    }
+
+    #[test]
+    fn port_gain_guard_checks_full_artifact_identity() {
+        let artifact = synthetic_artifact();
+        let gain = read_gain(&artifact).unwrap();
+        let restored = replace_final_gain(&artifact, &gain).unwrap();
+        assert_only_port_gain_changed(&artifact, &restored).unwrap();
+
+        let mut port = gain.clone();
+        port[3] += 1;
+        let port_changed = replace_final_gain(&artifact, &port).unwrap();
+        assert_only_port_gain_changed(&artifact, &port_changed).unwrap();
+
+        let mut interior = gain;
+        interior[16] += 1;
+        let interior_changed = replace_final_gain(&artifact, &interior).unwrap();
+        assert!(assert_only_port_gain_changed(&artifact, &interior_changed).is_err());
     }
 
     #[test]
