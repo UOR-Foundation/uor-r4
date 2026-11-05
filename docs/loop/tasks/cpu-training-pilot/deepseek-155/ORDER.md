@@ -43,6 +43,7 @@ For each artifact/panel cell and arm, report:
 - opening-correct bodies;
 - correct body positions within the reference horizon;
 - mean and maximum common-prefix length;
+- histogram of replies one, two or three trailing tokens from exact;
 - reconstructed token count and trace-hash agreement with the sealed report.
 
 Use the paired two-sigma helper on exact oracle-stopped bodies for longest-first
