@@ -35,11 +35,11 @@ the scale-probe quality slopes, whose qualification remains GPU research.
 
 - base: `3ac40d6d5`;
 - implementation source:
-  `3da7c4d00b5e75ab6c133ee073fa4dc2cdc9de03`;
+  `8f0766915f175ff3497be29664ab278e228a8271`;
 - binary:
   `/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench`;
 - binary SHA-256:
-  `2fa97b5206d053bcb73562949ca0ebaae2477e720b21ea583b280cba0b2e662c`;
+  `68bd9957f556dcb903ab035cfad6c48c09f3a7b92bfd64fd32086dbfc48c6771`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: one process, platform default worker availability for library
   code, no GPU.
@@ -79,8 +79,8 @@ OUT=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/
 BIN=/home/callard/projects/codex-playground/uor-r4/local/deepseek/scale-serving/harness-target/release/cpu-scale-serving-bench
 
 test ! -e "$OUT/summary.json"
-test "$(git -C "$SOURCE" rev-parse HEAD)" = 3da7c4d00b5e75ab6c133ee073fa4dc2cdc9de03
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 2fa97b5206d053bcb73562949ca0ebaae2477e720b21ea583b280cba0b2e662c
+git -C "$SOURCE" merge-base --is-ancestor 8f0766915f175ff3497be29664ab278e228a8271 HEAD
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 68bd9957f556dcb903ab035cfad6c48c09f3a7b92bfd64fd32086dbfc48c6771
 mkdir -p "$OUT"
 timeout 1200s "$BIN" --output "$OUT/summary.json"
 ```
