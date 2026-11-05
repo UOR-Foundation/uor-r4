@@ -690,7 +690,15 @@ fn summarize(
         reading.correct_body_positions =
             checked_add(reading.correct_body_positions, row.correct_body_positions)?;
     }
-    for step in steps {
+    let reachable_rows = rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .collect::<BTreeSet<_>>();
+    for step in steps
+        .iter()
+        .filter(|step| reachable_rows.contains(&step.row))
+    {
         if let Some(depth) = step.suffix_depth {
             reading.suffix_decisions = checked_add(reading.suffix_decisions, 1)?;
             if depth <= SUFFIX_MEMORY_MAX_DEPTH {
