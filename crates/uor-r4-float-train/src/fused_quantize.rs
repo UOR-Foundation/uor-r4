@@ -215,7 +215,7 @@ mod cuda {
 
     /// Threads per row of the activation kernels: a whole number of warps, as their full-mask
     /// shuffle needs.
-    const ROW_THREADS: usize = 256;
+    pub(super) const ROW_THREADS: usize = 256;
 
     fn view<'a>(storage: &'a CudaStorage, layout: &Layout) -> CResult<CudaView<'a, f32>> {
         if storage.dtype() != DType::F32 {
@@ -619,11 +619,18 @@ mod tests {
             rows.concat()
         }
 
-        /// [`RANDOM_WIDTH`]-wide random rows, with every fourth value well under its row's
-        /// largest moved to an exact .5 tie of the row's scale, so the scale stays as it was.
-        fn activation_random_rows(rows: usize) -> Vec<f32> {
-            let mut values = lcg_values(285, rows * RANDOM_WIDTH);
-            for row in values.chunks_mut(RANDOM_WIDTH) {
+        /// Random rows of `width`, with every fourth value well under its row's largest moved
+        /// to an exact .5 tie of the row's scale, so the scale stays as it was. With `wide`, each
+        /// row's largest magnitude is first moved past index [`cuda::ROW_THREADS`], so a thread's
+        /// strided loop must reach it, and the first row's saturates the 2^62 clamp.
+        fn activation_random_rows(rows: usize, width: usize, wide: bool) -> Vec<f32> {
+            let mut values = lcg_values(285 + width as u64, rows * width);
+            for (r, row) in values.chunks_mut(width).enumerate() {
+                if wide {
+                    let max = row.iter().fold(0f32, |max, value| max.max(value.abs()));
+                    let sign = if r % 2 == 0 { 1.0 } else { -1.0 };
+                    row[width - 1 - 3 * r] = if r == 0 { 1e20 } else { sign * 4.0 * max };
+                }
                 let max = row.iter().fold(0f32, |max, value| max.max(value.abs()));
                 let scale = row_scale(max, constants());
                 for value in row.iter_mut().step_by(4) {
@@ -731,6 +738,11 @@ mod tests {
             })
         }
 
+        /// The chain outside the served wrapper, where its bridge is off.
+        fn activation_chain_unbridged(x: &Tensor) -> crate::Result<Tensor> {
+            Ok(hamilton_sheet::activation_quantize16(x)?)
+        }
+
         fn residual_chain(x: &Tensor) -> crate::Result<Tensor> {
             hamilton_sheet::with_served_surrogate_training(1, 0, || {
                 hamilton_sheet::q16_residual(x.clone())
@@ -745,11 +757,18 @@ mod tests {
         #[ignore = "needs a CUDA device; run on the pod"]
         fn g1_the_activation_kernels_equal_the_chain_and_the_twin_bit_for_bit() {
             let edge = activation_edge_rows();
-            let random = activation_random_rows(16);
-            let cases: [(&[f32], Vec<usize>); 3] = [
+            let random = activation_random_rows(16, RANDOM_WIDTH, false);
+            let (wide, wider) = (
+                activation_random_rows(6, 1000, true),
+                activation_random_rows(2, 2048, true),
+            );
+            assert!(1000 - 1 - 3 * 5 > cuda::ROW_THREADS);
+            let cases: [(&[f32], Vec<usize>); 5] = [
                 (&edge, vec![edge.len() / EDGE_WIDTH, EDGE_WIDTH]),
                 (&edge, vec![3, 3, EDGE_WIDTH]),
                 (&random, vec![16, RANDOM_WIDTH]),
+                (&wide, vec![6, 1000]),
+                (&wider, vec![2, 2048]),
             ];
             for (values, shape) in cases {
                 let width = *shape.last().unwrap();
@@ -770,6 +789,21 @@ mod tests {
                     bits(&twin),
                     bits(&chain_grad),
                     "{shape:?}: the twin's gradient"
+                );
+                // The kernel computes the bridged form only, so with the bridge off the flag
+                // leaves the call on the chain.
+                let chain = run(values, &shape, false, activation_chain_unbridged);
+                let fused = run(values, &shape, true, activation_chain_unbridged);
+                assert_eq!((fused.2.activation_chain, fused.2.activation_fused), (1, 0));
+                assert_eq!(
+                    bits(&fused.0),
+                    bits(&chain.0),
+                    "{shape:?}: unbridged forward"
+                );
+                assert_eq!(
+                    fused.1.as_deref().map(bits),
+                    chain.1.as_deref().map(bits),
+                    "{shape:?}: unbridged gradient"
                 );
             }
         }

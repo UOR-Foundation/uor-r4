@@ -1015,7 +1015,7 @@ impl FusedQuantizeCounts {
 
 /// Runs `f` with the fused quantizers' flag set to `on` and the path counts started at zero, and
 /// returns the counts its calls made. It restores the flag and the counts as they were on every
-/// exit. With the flag on, a quantizer call past its early returns takes the fused op
+/// exit, so a nested scope's calls are not in the outer scope's counts. With the flag on, a quantizer call past its early returns takes the fused op
 /// ([`crate::fused_quantize`]) when its input is a contiguous f32 CUDA tensor (for the activation
 /// quantizer, under its bridge as well), and its op chain otherwise.
 pub fn with_fused_quantize<T>(
