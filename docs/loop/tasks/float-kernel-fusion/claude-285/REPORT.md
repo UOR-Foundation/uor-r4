@@ -7,7 +7,7 @@ Lab: claude. [ORDER](./ORDER.md). PR #3691, item #3678. Plan step: THE ORDER of 
 - **one training step at P2b's recipe:** the loss and every gradient, at (S) and (L);
 - **eight training steps:** the same models, samples and progress bytes as two chain runs.
 
-The kernels sit behind a flag, `train-in-space --fused-quantize 1`, whose default stays 0. What the fusion saves (done-when 4) and whether the flag defaults on (done-when 5) are later units. Run 1 failed two gates, both on the test side, and both were repaired before run 2.
+The kernels sit behind a flag, `train-in-space --fused-quantize 1`, whose default stays 0. What the fusion saves (done-when 4) and whether the flag defaults on (done-when 5) are later units. Run 1 failed two gates, and no value bit differed in either. G1 failed on the test side: its reference model of candle's gradients was wrong. G3 failed on the kernel source's form: nvcc compiled four of its adds without explicit rounding. Both were repaired before run 2.
 
 ## Tokens per second first
 
@@ -23,7 +23,7 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
 
 ## What did not work
 
-1. **Run 1** (pin `a93ac5bd0`, `runs/c285`): EXIT 4, two faults on the test side, no kernel bit.
+1. **Run 1** (pin `a93ac5bd0`, `runs/c285`): EXIT 4, one fault on the test side and one in the kernel source's form; no value bit differed.
    - **S1 passed:** 350 passed, 0 failed, 12 ignored (154.7 s).
    - **G1, the activation and the residual tests, failed at "the twin's gradient".** Each test's kernel-against-chain forward and gradient checks had already passed on its first case ([9, 8] and [4, 6]).
      - **The difference:** the twin had +0 where the device had −0 (`0x80000000`), exactly where w = −0, or a negative weight met inside = 0.
@@ -32,8 +32,8 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
      - **The fix:** the twin stores directly, and the gradients are compared without an accumulation step.
    - **G3 failed** at the first plain `add.f32` without `.rn`: `add.f32 %f96, %f91, 0f00000000`. Reading the PTX on the pod found four, beside 42 `.rn` ops: lines 208 and 457 were `x + 0`, and lines 241 and 543 were `x + 0.5`. That PTX was not kept; run 2's G3 passed on the rebuilt one.
      - **The cause:** nvcc folds `__fmaf_rn(1, x, c)`, whose product is exact, into a plain add, which ptxas may contract. The value is the same today, but the module no longer rounded every op by name.
-     - **The class:** form. The gate caught a real compiler behaviour.
-     - **The fix:** the four affines with multiplier 1 are `__fadd_rn(x, c)`, one rounding of the same sum.
+     - **The class:** form, in the kernel source. It broke done-when 1's rule that every add is a non-contracting intrinsic, and the gate caught a real compiler behaviour.
+     - **The fix:** in `fused_quantize.cu`, the four affines with a factor of 1 (an input of 1, or a multiplier of 1) are `__fadd_rn`, one rounding of the same sum, since their product is exact.
    - G2, S2, S3, G3b and E did not run, because the job stops at its first failed gate.
 2. **The first pod never started.** `vast-59193389` (South Korea, $0.563/h) never answered SSH, and `uor-pod up` deleted it at 900 s. The five cheapest 5090 offers were all on that one host, and `up` cannot exclude a host. Pinning the driver (`UOR_POD_VAST_DRIVER_VERSION=595.91.07`, which needs all three parts) moved the next `up` to Czechia.
 3. **Deviations from the ORDER** (done-whens 1, 2 and 4):
@@ -41,18 +41,22 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
      - the ops' CPU forwards refuse with the same message;
      - the f32 twins could not be compared with the chains on the CPU, because the chains cannot run there. They moved into the GPU test module, where G1 compares the kernel, the chain on the device and the twin three ways;
      - the laptop test checks only that, with the flag on, a CPU tensor takes each chain (which then refuses), and that the ops refuse the CPU.
-   - **Not every affine is an `__fmaf_rn`.** The four with multiplier 1 are `__fadd_rn`, for run 1's G3 finding. The `.cu` header says why.
+   - **Not every affine is an `__fmaf_rn`.** The four with a factor of 1 are `__fadd_rn`, for run 1's G3 finding. The `.cu` header says why.
    - **An empty input keeps the chain.** `fused_applies` requires `elem_count() > 0`: the chain returns an empty tensor as it is, and the activation op would refuse a row of width 0.
 4. **The fresh review's nits, not fixed:**
    - **N1:** G3 cannot tell whether an `fma.rn.f32` came from `__fmaf_rn` or from a contracted multiply and add; the two look the same in PTX. The source has no plain `a * b + c` and `build.rs` passes no `--fmad`, so the fma clause holds by the source, not by G3. G1 is the gate.
    - **N3:** `DIR/fused-quantize.json` is written only when `--fused-quantize` is given, 0 or 1, as the option's docs say. A run without the option writes no record.
    - **N4:** G2 leaves the thread's Hamming-read, turn-memory and served-model state set if a step returns an error. The test fails then anyway; a drop guard would keep later tests on that thread clean.
    - **N5:** the twin's forward comparison treats any NaN as equal to any NaN. Kernel against chain is compared strictly, NaN payload included, and so is the twin's gradient.
+   - **The final review's code nits,** left for the done-when 4 unit, which runs G1 again. They are not fixed here because the GPU gates ran at `a1588bcc4`, and a code change after that pin would need another pod run.
+     - G1's unbridged activation case runs the chain in both arms, so its bit comparison is an A/A. Its gradient comparison is `None == None`, since candle treats `Floor` as a leaf. The `(1, 0)` count assertion is the gate there; an `assert!(fused.1.is_none())` would state that `x` gets no gradient.
+     - The `.cu` header says "an affine whose multiplier is 1". In `row_scale` the two such affines have an input of 1 instead (`ones.affine(unit, 0)`). The argument holds either way, because the product is exact.
+     - Two lines are over the width: `fused_quantize.cu:16` and a doc line in `hamilton_sheet.rs`.
 
 ## What changed
 
 - **The module** `src/fused_quantize.cu` has four kernels: `activation_quantize16_fwd` and `_bwd`, and `q16_residual_fwd` and `_bwd`.
-  - **Rounding:** every f32 add, subtract, multiply and divide is an `__f*_rn` intrinsic, and every affine whose multiplier is not 1 is an `__fmaf_rn`, in the chains' order.
+  - **Rounding:** every f32 add, subtract, multiply and divide is an `__f*_rn` intrinsic, and every affine with no factor of 1 is an `__fmaf_rn`, in the chains' order.
   - **The build:** `build.rs` builds it f32 only as its own PTX module, `fused_quantize_f32.ptx` (module `uor_r4_fused_quantize`), so the pinned `cuda_stack.cu` is unchanged.
   - **The checks:** its four names are in the generated `kernel_lists::FUSED_QUANTIZE_F32`, `admit_launch` admits them, and the banned-token scan covers the file.
 - **The ops** `src/fused_quantize.rs`: two candle custom ops for contiguous f32, `activation_quantize16(x)` and `q16_residual(x, bridge)`, each with a CUDA forward.
