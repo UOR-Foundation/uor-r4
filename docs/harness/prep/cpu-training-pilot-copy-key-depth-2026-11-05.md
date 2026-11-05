@@ -1,6 +1,6 @@
 # Hierarchical copy-key depth screen
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -256,7 +256,15 @@ changed.
 The prior FIT at `70b6445d4` is superseded by attempt 1's input-path
 instrument fault.
 
-TEST FITNESS: PENDING fresh FIT for the corrected recipe.
+TEST FITNESS: FIT - M2 #2030 deepseek-149
+sheet: docs/harness/prep/cpu-training-pilot-copy-key-depth-2026-11-05.md
+reviewer: codex fresh-context FIT round 5
+note: Attempt-1 fault is sealed and disclosed; corrected recipe uses the exact
+  public-DEV filenames and preserves all panel, power, control, pin, timeout,
+  RSS and failure-sealing terms.
+date: 2026-11-05
+
+A FIT verdict clears compute for this configuration only (D22).
 
 ## Pre-run GO
 
