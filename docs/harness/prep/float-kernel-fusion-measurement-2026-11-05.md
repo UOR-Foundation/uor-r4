@@ -2,7 +2,7 @@
 
 Lab: claude. Item: float-kernel-fusion (#3678). Order: [claude-283](../../loop/tasks/float-kernel-fusion/claude-283/ORDER.md), THE ORDER (#2028 6634218223) step 5(c).
 
-TEST FITNESS: pending.
+TEST FITNESS: FIT (round 1, a fresh non-author reviewer, 5 Nov). Its three should-fixes are in: R1 takes out U's batch difference, I-5 gates the stages that hold no chain call, and the re-run keeps its noise margin.
 
 **Why.** The item's *Cancel if* stops the fused quantizer kernels (done-whens 2 and 3) if the two chains take under 5% of a trained-as-served step at P2b's recipe. No existing measurement splits them (the ORDER's cancel probe):
 - [claude-157](../../loop/tasks/fbs-cost-profile/claude-157/REPORT.md) predates training as served;
@@ -49,10 +49,14 @@ At P2b's recipe with `--train-as-served 1`, what share of a training step's wall
 
 Every reading comes from `profile.jsonl`. Row `j` holds step `8 + 2j`, its stage GPU times, its `step_ms` (profiled), and `next_unprofiled_ms`, the clean-clock time of step `9 + 2j`. In a T run, a row is kept if `j` is even and skipped if `j` is odd.
 
-- **R1, the share** (decides): per T run, `(median kept next_unprofiled_ms − median skipped next_unprofiled_ms) / median kept`. The arm's share is the mean of T1's and T2's.
-- **R2, the noise:** the larger of two A/A differences.
-  - U's even rows against its odd rows, measured the same way. Nothing is skipped in U, so this should be 0 up to noise.
-  - T1's share against T2's.
+Write `K(r)` and `S(r)` for run r's median `next_unprofiled_ms` over its even and odd rows.
+- **R1, the share** (decides): per T run, `[(K(T) − S(T)) − (K(U) − S(U))] / K(T)`. The arm's share is the mean of T1's and T2's.
+  - Even and odd pairs train on different batches in every run, at the same seed. U skips nothing, so `K(U) − S(U)` is what the batches alone put between the classes, and it is taken out.
+  - The uncorrected share, `(K(T) − S(T)) / K(T)`, is reported beside it.
+- **R2, the noise,** per arm: the largest of two spreads and a floor.
+  - **T1 against T2:** `|share(T1) − share(T2)|`.
+  - **U split in halves:** U's `(K − S) / K` over rows 0–31 against the same over rows 32–63.
+  - **The floor, 0.25% of a step:** each spread is one draw, so a near-zero R2 would leave the bar no margin. The grader was checked on synthetic runs, where a 4.99% share reads inconclusive.
 - **R3, where the time sits:** per class, the median GPU time of each stage, and their difference by group (forward, objective, `backward`, optimizer). The `served.round` and `served.restore` stages (the export rounding, not these chains) are reported apart.
 - **R4, the counts:** from `quantizer-timing.json`, the calls and elements per forward of each chain in each class.
   - The tensor ops per call, read from the source at the pin, are given with their lines.
@@ -65,7 +69,10 @@ Every reading comes from `profile.jsonl`. Row `j` holds step `8 + 2j`, its stage
 |---|---|---|
 | **Cancel** | At both arms, share < 5% and `5% − share > 2 × noise` | Done-when 1 stands alone. The item is set done, and the fusion is reported as not worth its pin. |
 | **Go** | At either arm, `share − 5% > 2 × noise` | Done-whens 2 and 3, the fused kernels, are the next units. Development may use the 4090; qualification stays on a 5090. |
-| **Inconclusive** | Anything else | One re-run at `--profile 256` (steps and eval-every 521), then the same table without the noise margin. |
+| **Inconclusive** | Anything else | One re-run at `--profile 256` (steps and eval-every 521), read by the same table with its own R2. |
+
+- **If the re-run is inconclusive too,** the arm reads Go. A wrong Go is caught by done-when 4, which times chain against fused, and the flag defaults on only when the fused kernels pay. A wrong Cancel is never revisited.
+- **The ORDER's done-when 5** reads Go at "at or above 5%" and takes noise from kept pairs split into halves. This bar is stricter: it asks for the margin both ways, and takes the noise from T1 against T2 and from U. The REPORT records the change.
 
 ## Instrument checks
 
@@ -79,9 +86,14 @@ Every reading comes from `profile.jsonl`. Row `j` holds step `8 + 2j`, its stage
 I-2 and I-3 are the ORDER's I-1 and I-2.
 - **I-2, nothing acts before pair 1:** T1's row-0 loss (step 8) equals U's, as text. If it fails, compare T1 with T2.
   - If T1 equals T2 but not U, the switch leaks: an instrument fault, repaired before any reading counts.
-  - If T1 differs from T2 as well, training is not reproducible from run to run. Then I-2 tells nothing, and that is reported.
+  - If T1 differs from T2 as well, training is not reproducible from run to run. Then I-2 and I-3 tell nothing, and that is reported. The evidence that the switch acts, and only on its pairs, then rests on I-0's CUDA test and the record's check.
 - **I-3, the switch acts:** T1's row-1 loss (step 10, the first skipped step) differs from U's.
 - **I-4, the same graph:** in each T run, the kept and skipped forwards make the same calls per forward to each chain, and more than zero.
+- **I-5, nothing else moves:** in each T run, the stages that hold no chain call take the same time in both classes.
+  - **The set:** `final_norm`, `readout.*`, `points.select`, `objective.*`, `optimizer.*`, `served.round`, `served.restore` and `end`. The chains are called only from the trunk's `q16` sites, from `linear`'s rank-3 projections and from the two gates. The read and memory modules (`flock_read_hamming.rs`, `flock_read_memory.rs`, `flock_read_register.rs`) call neither chain.
+  - **The test:** per row, the sum of the set's GPU times; its median over skipped rows against kept rows differs by at most `max(R2, 0.5%)` of `K(T)`.
+  - **If it fails:** skipping changed work outside the two chains (for one, compute that depends on values, after the activations leave the grid). That is an instrument fault, and R1 is not read.
+- **The last evaluation is outside the switch.** It passes `step + 1 = 137` as its served step (`in_space_long.rs:11185-11188`), which `quantizer_timing_skip` places past the window. If it did not, the record's check would fail the run (exit 5), not misread it.
 
 ## Steps
 
@@ -95,7 +107,7 @@ I-2 and I-3 are the ORDER's I-1 and I-2.
 
 - **Samples:** each T run gives 32 kept and 32 skipped clean-clock steps, and each arm has two T runs.
 - **The size of a 5% share:** P2b measured 0.645 s a step at (L) and 0.125 s at (S) ([claude-276](../../loop/tasks/one-model-end-to-end/claude-276/REPORT.md)). So 5% is about 32 ms and 6 ms.
-- **Known drift:** P2b's two seeds' mean steps differ by 0.08% at (L) (0.6449 and 0.6444 s) and 0.16% at (S) (0.1253 and 0.1255 s), far under the 2.5% margin below.
+- **Known drift:** P2b's two seeds' mean steps differ by 0.08% at (L) (0.6449 and 0.6444 s) and 0.16% at (S) (0.1253 and 0.1255 s). These are means of whole runs, not the spread of single steps. The margin that counts is R2, measured in this run.
 - **If the noise is larger:** if R2 exceeds 2.5% of a step at an arm, that arm cannot cancel, and reads go only with a share past `5% + 2 × noise`, over 10%. Otherwise the table reads inconclusive, and the re-run at `--profile 256` gives 128 samples a class.
 
 ## Cost
