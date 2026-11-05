@@ -2,6 +2,15 @@
 
 Run ID: `cpu-training-pilot-confident-suffix-fallback-2026-11-05`
 
+## Status
+
+STOPPED AT PREFLIGHT - INSUFFICIENT FALLBACK COVERAGE. Local exact copy had a
+candidate at every one of the 25,202 reachable generated decisions, so the
+confident content fallback made zero decisions against the required minimum of
+100. Seed 2773 was not generated. This is not a mechanism negative; it shows
+that strict local priority made the proposed treatment unreachable on TRAIN.
+Record: [deepseek-196](../../loop/tasks/cpu-training-pilot/deepseek-196/REPORT.md).
+
 ## Question
 
 Can a reply-only suffix memory improve complete-reply body reconstruction when
