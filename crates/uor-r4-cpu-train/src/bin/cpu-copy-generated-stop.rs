@@ -358,14 +358,12 @@ fn load_panel(
             return Err(format!("row {row} full-trace hash differs"));
         }
         let reference = normalized_reference(&sample.reply).to_vec();
-        let body_exact = body_matches_reference(&selected, &reference);
         let decisions = replay_decisions(
             artifact,
             &sample.prompt,
             &selected,
-            reference.len(),
+            &reference,
             row,
-            body_exact,
             &mut all_rows,
             &mut exact_rows,
         )?;
@@ -387,12 +385,13 @@ fn replay_decisions(
     artifact: &[u8],
     prompt: &[u32],
     selected: &[u32],
-    reference_len: usize,
+    reference: &[u32],
     row: usize,
-    body_exact: bool,
     all_rows: &mut Vec<StopSignatureRow>,
     exact_rows: &mut Vec<StopSignatureRow>,
 ) -> Result<Vec<Decision>> {
+    let reference_len = reference.len();
+    let body_exact = body_matches_reference(selected, reference);
     let mut forward = CpuFbsForward::from_artifact(artifact)
         .map_err(|error| format!("replay forward: {error}"))?;
     let context = forward.context_length();

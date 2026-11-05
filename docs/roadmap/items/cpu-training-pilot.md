@@ -431,6 +431,17 @@ body, and training premature stops were 34/31 against the 4-reply limit. This
 rejects all-reference-length terminal labeling for the fixed prototype gate.
 See [deepseek-157](../../loop/tasks/cpu-training-pilot/deepseek-157/REPORT.md).
 
+The exact-body follow-up then fitted the same gate only on generated
+trajectories whose train bodies already reached the full reference. The gate
+fit 7/11 terminal trajectories on both artifact seeds with no selected-row
+false stops, but the unchanged dev panel produced only **1/13** exact replies
+per seed, and seed 2 emitted nine premature stops against a four-stop limit.
+All shuffled, all-reference and no-gate controls returned zero exact dev
+replies. Exact-body filtering is closed for this prototype family; the next
+termination test needs a copy-boundary or continuation objective and better
+terminal-token construction. See
+[deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

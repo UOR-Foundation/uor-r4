@@ -1,8 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-159 (exact-body generated stop gate)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Base: `330185de6`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `330185de6`.
 
 ## Goal
 
@@ -63,7 +61,7 @@ The candidate passes only if, for both artifact seeds:
 - all fired rows and unchanged selected-trace hashes are recorded;
 - a fresh-process repeat produces byte-identical decision fields.
 
-## Stop rules
+## Abort conditions
 
 Stop on source report, token, mask, artifact or hash drift; a trace that cannot
 be replayed; non-monotonic decisions; fewer than eight distinct exact-body
@@ -92,8 +90,3 @@ power-limited result rather than retuning after observing dev.
 4. REPORT classifies the outcome as KEEP, REJECT or power-limited without
    broad claims about geometric termination.
 5. Exact-head review, protected merge and fresh-main verification complete.
-
-## Stop and ask if
-
-The run would require changing D84 scope, a serving/runtime file, a Claude-owned
-worktree, a frozen source artifact or the registered panel.

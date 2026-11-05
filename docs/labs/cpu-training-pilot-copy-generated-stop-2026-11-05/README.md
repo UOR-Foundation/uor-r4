@@ -30,3 +30,19 @@ after timing removal.
 `no_fire` means no gate firing through the reference horizon; token cost is
 charged to the complete 64-token selected trace.
 Published evidence is in [`evidence/`](evidence/).
+
+## Exact-body follow-up
+
+Deepseek-159 filtered training to the 11 trajectories whose generated body
+already equalled the reference before fitting the same gate. Both artifact
+seeds then fit **7/11** terminal rows with zero false stops on 308 selected
+nonterminal rows. On the unchanged dev panel the gate produced only **1/13**
+exact replies on each seed. Seed 2 also emitted **9** premature stops against
+the four-stop limit.
+
+This shows that the filtered training state is separable in sample but does
+not transfer. The shuffled, deepseek-157 all-reference and no-gate controls
+each produced zero exact dev replies. Attempt 7 is the sealed exact-body run,
+with a byte-identical fresh-process repeat for each artifact seed. The result
+closes exact-body filtering for this eight-prototype gate, not geometric
+termination. See [deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).

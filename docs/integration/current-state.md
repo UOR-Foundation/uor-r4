@@ -1,3 +1,18 @@
+## 2026-11-05 — Exact-body stop filter does not transfer (deepseek)
+
+Filtering the deepseek-157 replay to the 11 train trajectories with exact
+generated bodies let the same eight-prototype gate fit **7/11** terminal
+trajectories on both artifact seeds, with zero false stops over 308 selected
+nonterminal rows. On the unchanged 449-reply dev panel it produced only
+**1/13** exact replies. Seed 2 emitted **9** premature stops against the
+four-stop limit; seed 1 exactly reached it at 4. The shuffled, all-reference
+and no-gate controls each produced zero exact dev replies. This closes
+exact-body filtering with this prototype and threshold family, not geometric
+termination. Record:
+[deepseek-159](../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
+**Next:** use copy phrase boundaries or an independent continuation objective,
+and improve terminal-token reconstruction before retrying termination.
+
 ## 2026-11-05 — Copy-trained prototype stop gate rejected (deepseek)
 
 The actual longest-first copy trajectories were replayed through the exact CPU
