@@ -239,7 +239,7 @@ fn geometric_copy_key_reply_decision(
     query: &[i32],
     forward: &CpuFbsForward,
 ) -> Result<CopyKeyReplyDecision> {
-    let mut best = None;
+    let mut candidates = Vec::new();
     for depth in (1..=COPY_KEY_REPLY_MAX_DEPTH).rev() {
         let Some(token) = decision.matches[depth - 1] else {
             continue;
@@ -247,19 +247,22 @@ fn geometric_copy_key_reply_decision(
         let distance = forward
             .token_sign_hamming(query, token)
             .map_err(|error| invalid(format!("geometric copy candidate: {error}")))?;
-        let candidate = (token, depth, distance);
-        if best.is_none_or(|current| {
-            geometric_candidate_key(candidate) < geometric_candidate_key(current)
-        }) {
-            best = Some(candidate);
-        }
+        candidates.push((token, depth, distance));
     }
-    if let Some((token, depth, distance)) = best {
+    if let Some((token, depth, distance)) = select_geometric_candidate(candidates) {
         decision.token = token;
         decision.depth = Some(depth);
         decision.sign_hamming = Some(distance);
     }
     Ok(decision)
+}
+
+fn select_geometric_candidate(
+    candidates: impl IntoIterator<Item = (u32, usize, u32)>,
+) -> Option<(u32, usize, u32)> {
+    candidates
+        .into_iter()
+        .min_by_key(|&candidate| geometric_candidate_key(candidate))
 }
 
 fn geometric_candidate_key(
@@ -756,18 +759,22 @@ mod tests {
             (8, 4, 7),
             (8, COPY_KEY_REPLY_MAX_DEPTH, 3),
         ];
-        let best = candidates
-            .into_iter()
-            .min_by_key(|&candidate| geometric_candidate_key(candidate))
-            .unwrap();
+        let best = select_geometric_candidate(candidates).unwrap();
         assert_eq!(best, (8, COPY_KEY_REPLY_MAX_DEPTH, 3));
 
         let same_depth = [(9, 5, 3), (3, 5, 3)];
-        let best = same_depth
-            .into_iter()
-            .min_by_key(|&candidate| geometric_candidate_key(candidate))
-            .unwrap();
+        let best = select_geometric_candidate(same_depth).unwrap();
         assert_eq!(best, (3, 5, 3));
+    }
+
+    #[test]
+    fn geometric_ranking_uses_the_smallest_measured_distance() {
+        let candidates = [(3, 1, 12), (9, 7, 4), (7, 2, 8)];
+        assert_eq!(
+            select_geometric_candidate(candidates),
+            Some((9, 7, 4)),
+            "the nearer distinct token must win regardless of candidate order"
+        );
     }
 
     #[test]
