@@ -92,6 +92,10 @@ fn run() -> Result<()> {
 
     let artifact = read(&artifact_path)?;
     let artifact_sha256 = uor_r4_discrete::corpus::sha256(&artifact);
+    let train_report_bytes = read(&train_report)?;
+    let dev_report_bytes = read(&dev_report)?;
+    let train_report_sha256 = uor_r4_discrete::corpus::sha256(&train_report_bytes);
+    let dev_report_sha256 = uor_r4_discrete::corpus::sha256(&dev_report_bytes);
     if CpuFbsForward::from_artifact(&artifact)
         .map_err(|error| error.to_string())?
         .context_length()
@@ -102,7 +106,7 @@ fn run() -> Result<()> {
     let train = load_panel(
         &artifact,
         &artifact_sha256,
-        &train_report,
+        &train_report_bytes,
         &train_tokens,
         &train_mask,
         &train_manifest,
@@ -110,7 +114,7 @@ fn run() -> Result<()> {
     let dev = load_panel(
         &artifact,
         &artifact_sha256,
-        &dev_report,
+        &dev_report_bytes,
         &dev_tokens,
         &dev_mask,
         &dev_manifest,
@@ -162,11 +166,11 @@ fn run() -> Result<()> {
         "inputs": {
             "artifact": artifact_path,
             "artifact_sha256": artifact_sha256,
-            "train_report": train_report,
+            "train_report_sha256": train_report_sha256,
             "train_tokens": train_tokens,
             "train_mask": train_mask,
             "train_manifest": train_manifest,
-            "dev_report": dev_report,
+            "dev_report_sha256": dev_report_sha256,
             "dev_tokens": dev_tokens,
             "dev_mask": dev_mask,
             "dev_manifest": dev_manifest,
@@ -205,13 +209,13 @@ fn run() -> Result<()> {
 fn load_panel(
     artifact: &[u8],
     artifact_sha256: &str,
-    report_path: &Path,
+    report_bytes: &[u8],
     tokens_path: &Path,
     mask_path: &Path,
     manifest_path: &Path,
 ) -> Result<PanelTrace> {
-    let report: Value = serde_json::from_slice(&read(report_path)?)
-        .map_err(|error| format!("{}: {error}", report_path.display()))?;
+    let report: Value =
+        serde_json::from_slice(report_bytes).map_err(|error| format!("report: {error}"))?;
     if report.get("schema").and_then(Value::as_str) != Some("uor-r4.cpu-copy-key-reply/1") {
         return Err("source report schema differs".to_owned());
     }
