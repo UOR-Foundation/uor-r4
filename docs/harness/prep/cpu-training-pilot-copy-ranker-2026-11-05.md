@@ -334,4 +334,9 @@ Every mechanism pre-registration gets a TEST FITNESS review on its milestone bef
 
 ## Independent GO
 
-PENDING
+GO - fresh-context Codex subagent `go_copy_ranker` reviewed head
+`05d639782cb04a14a1c8fe6f752f053c59a93032`. The registered seed-2766 run is
+authorized; the fresh panel and output root were absent at review. The
+implementation pin, source and input hashes, candidate-only feature path,
+shuffled and depth-only controls, power floors, deterministic replay and
+fail-closed gates passed. No experiment was executed during review.
