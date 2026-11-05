@@ -60,7 +60,7 @@ TRAIN 8-grams, the counts of seen, short and unseen rows per split and pooled, a
 of `excluded.bin`.
 
 `rows=NAME:all` takes every scored position of panel `NAME`, in corpus order, with target
-`tokens[p]`. Only `seen` accepts it; `grade` reads `all` as a file name.
+`tokens[p]`. Only `seen` accepts it; `grade` refuses it by name.
 
 ```
 scale-probe seen out=local/claude/seen-q1 train=local/claude/mix-q1:<tok>:<mask> \
@@ -69,10 +69,13 @@ scale-probe seen out=local/claude/seen-q1 train=local/claude/mix-q1:<tok>:<mask>
 
 ## `pair`
 
-Compares cell A (seeds 1, 2) with cell B, or with a count table, row by row:
-`band(s) = max(⌈2·√(b(s)+c(s))⌉, max_s d(s) − min_s d(s))`; a seed is `ahead` if
-`d(s) > band(s)`, `behind` if `d(s) < −band(s)`, else `inside`; the verdict is the seeds'
-common position, or `mixed`. Inputs must share every row identity; a cell's seeds share TRAIN.
+Compares cell A (seeds 1, 2, and 3 when `a3=` is given) with cell B, or with a count table,
+row by row:
+`band(s) = max(⌈2·√(b(s)+c(s))⌉, max_s d(s) − min_s d(s))`, the spread taken over every seed
+given; a seed is `ahead` if `d(s) > band(s)`, `behind` if `d(s) < −band(s)`, else `inside`; the
+verdict is the seeds' common position, or `mixed`. Inputs must share every row identity; a
+cell's seeds share TRAIN. A third seed goes to both cells (`a3=` with `b3=`) or, against a
+table, to cell A alone; pair refuses any other combination.
 
 With `table=`, pair reads the grade's `t2-hits.bin` or `unigram-hits.bin`. It refuses an older
 grade that lacks them. It also recounts each split's and the pooled `vs_t2` or `vs_unigram`

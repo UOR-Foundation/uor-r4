@@ -528,6 +528,23 @@ fn band_ahead_behind_inside_mixed() {
 }
 
 #[test]
+fn band_reads_a_third_seed() {
+    // The third seed must agree: two ahead and one inside is mixed.
+    let m = assess([100, 100, 20], [0, 0, 0]);
+    assert_eq!(m.seeds.len(), 3);
+    assert_eq!(
+        m.seeds.iter().map(|s| s.position).collect::<Vec<_>>(),
+        ["ahead", "ahead", "inside"]
+    );
+    assert_eq!(m.verdict, "mixed");
+    // The spread runs over all three seeds: d = 100, 50, 0 gives a band of 100, so all are
+    // inside. The first two alone (spread 50) would read seed 1 as ahead.
+    let s = assess([100, 50, 0], [0, 0, 0]);
+    assert_eq!((s.spread, s.verdict), (100, "inside"));
+    assert_eq!(assess([100, 50], [0, 0]).verdict, "mixed");
+}
+
+#[test]
 fn band_spread_sets_the_band() {
     // Hits as LSB-first bitsets: X gets rows 0..100 at seed 1 and none at seed 2; Y gets none.
     let x1 = vec![0xffu8; 13];
@@ -585,6 +602,66 @@ fn pair(out: &Path, kv: &[(&str, &Path)], table: Option<&str>) -> Result<String,
         v.push(("table", t.to_string()));
     }
     run(&args("pair", &v))
+}
+
+#[test]
+fn pair_takes_a_third_seed() {
+    let c = e2e_setup("three");
+    let a1 = grade_cell(&c, "a1", &TGT);
+    let a2 = grade_cell(&c, "a2", &TGT);
+    let a3 = grade_cell(&c, "a3", &[5, 0, 0, 0, 0]);
+    let b1 = grade_cell(&c, "b1", &[5, 0, 0, 0, 0]);
+    let b2 = grade_cell(&c, "b2", &[5, 0, 0, 0, 0]);
+    let b3 = grade_cell(&c, "b3", &[5, 0, 0, 0, 0]);
+    let six = [
+        ("a1", &a1),
+        ("a2", &a2),
+        ("a3", &a3),
+        ("b1", &b1),
+        ("b2", &b2),
+        ("b3", &b3),
+    ];
+    let po = c.b.join("ab3.json");
+    pair(&po, &six.map(|(k, p)| (k, p.as_path())), None).unwrap();
+    let p = json_of(&po);
+    let two = json!({"b": 4, "c": 0, "d": 4, "band": 4, "position": "inside"});
+    let third = json!({"b": 0, "c": 0, "d": 0, "band": 4, "position": "inside"});
+    assert_eq!(p["pooled"]["seeds"], json!([two, two, third]));
+    assert_eq!(p["pooled"]["spread"], 4);
+    assert_eq!(p["inputs_grade_sha256"]["a3"], sha(&a3.join("grade.json")));
+    assert_eq!(p["inputs_grade_sha256"]["b3"], sha(&b3.join("grade.json")));
+    // Table mode takes a3 alone; seed 3's (b, c) is its own grade's.
+    let pt = c.b.join("a3t2.json");
+    let three = [("a1", &a1), ("a2", &a2), ("a3", &a3)];
+    pair(&pt, &three.map(|(k, p)| (k, p.as_path())), Some("t2")).unwrap();
+    let t = json_of(&pt);
+    let g3 = json_of(&a3.join("grade.json"));
+    assert_eq!(t["pooled"]["seeds"][2]["b"], g3["pooled"]["vs_t2"]["b"]);
+    assert_eq!(t["pooled"]["seeds"][2]["c"], g3["pooled"]["vs_t2"]["c"]);
+    // A third seed is given to both cells or to neither.
+    let five = |skip: &str| {
+        six.iter()
+            .filter(|(k, _)| *k != skip)
+            .map(|(k, p)| (*k, p.as_path()))
+            .collect::<Vec<_>>()
+    };
+    refused(
+        pair(&c.b.join("r1.json"), &five("b3"), None),
+        "a3= needs b3=",
+    );
+    refused(
+        pair(&c.b.join("r2.json"), &five("a3"), None),
+        "b3= needs a3=",
+    );
+    let tb = [("a1", &a1), ("a2", &a2), ("a3", &a3), ("b3", &b3)];
+    refused(
+        pair(
+            &c.b.join("r3.json"),
+            &tb.map(|(k, p)| (k, p.as_path())),
+            Some("t2"),
+        ),
+        "b3= is for cell mode",
+    );
 }
 
 #[test]

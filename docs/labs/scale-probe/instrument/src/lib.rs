@@ -898,19 +898,26 @@ pub struct Seed {
     pub position: &'static str,
 }
 
-/// The band rule over two seeds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The band rule over two or three seeds.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assessment {
-    pub seeds: [Seed; 2],
+    pub seeds: Vec<Seed>,
     pub spread: u64,
     pub verdict: &'static str,
 }
 
-/// `band(s) = max(⌈2·√(b(s)+c(s))⌉, max_s d − min_s d)`; ahead iff `d(s) > band(s)`,
-/// behind iff `d(s) < −band(s)`; the verdict needs both seeds to agree, else `mixed`.
-pub fn assess(b: [u64; 2], c: [u64; 2]) -> Assessment {
-    let d = [b[0] as i64 - c[0] as i64, b[1] as i64 - c[1] as i64];
-    let spread = (d[0].max(d[1]) - d[0].min(d[1])) as u64;
+/// `band(s) = max(⌈2·√(b(s)+c(s))⌉, max_s d − min_s d)` over every seed given; ahead iff
+/// `d(s) > band(s)`, behind iff `d(s) < −band(s)`; the verdict needs every seed to agree, else
+/// `mixed`.
+pub fn assess(b: impl AsRef<[u64]>, c: impl AsRef<[u64]>) -> Assessment {
+    let (b, c) = (b.as_ref(), c.as_ref());
+    assert!(b.len() == c.len() && !b.is_empty(), "one (b, c) per seed");
+    let d: Vec<i64> = b
+        .iter()
+        .zip(c)
+        .map(|(&x, &y)| x as i64 - y as i64)
+        .collect();
+    let spread = (d.iter().max().unwrap() - d.iter().min().unwrap()) as u64;
     let seed = |s: usize| {
         let band = mcnemar_floor(b[s] + c[s]).max(spread);
         let position = if d[s] > band as i64 {
@@ -928,8 +935,8 @@ pub fn assess(b: [u64; 2], c: [u64; 2]) -> Assessment {
             position,
         }
     };
-    let seeds = [seed(0), seed(1)];
-    let verdict = if seeds[0].position == seeds[1].position {
+    let seeds: Vec<Seed> = (0..b.len()).map(seed).collect();
+    let verdict = if seeds.iter().all(|s| s.position == seeds[0].position) {
         seeds[0].position
     } else {
         "mixed"
@@ -1110,24 +1117,35 @@ fn load_seen(dir: &Path) -> R<SeenDir> {
 }
 
 fn run_pair(a: &Args) -> R<String> {
-    a.known(&["out", "a1", "a2", "b1", "b2", "table", "clean"])?;
+    a.known(&["out", "a1", "a2", "a3", "b1", "b2", "b3", "table", "clean"])?;
     let out = PathBuf::from(a.one("out")?);
     refuse_existing(&out)?;
     let (b1, b2, table) = (a.opt("b1")?, a.opt("b2")?, a.opt("table")?);
+    let (a3, b3) = (a.opt("a3")?, a.opt("b3")?);
     let table = match (b1, b2, table) {
         (Some(_), Some(_), None) => None,
         (None, None, Some(t @ ("t2" | "unigram"))) => Some(t),
         (None, None, Some(t)) => return Err(format!("table={t}: expected t2 or unigram")),
         _ => return Err("give exactly one of b1= b2= (both) or table=".into()),
     };
-    let mut g = vec![
-        load_grade(Path::new(a.one("a1")?))?,
-        load_grade(Path::new(a.one("a2")?))?,
-    ];
-    if let (Some(x), Some(y)) = (b1, b2) {
-        g.push(load_grade(Path::new(x))?);
-        g.push(load_grade(Path::new(y))?);
+    match (table, a3, b3) {
+        (None, Some(_), None) => return Err("a3= needs b3=: both cells take a third seed".into()),
+        (_, None, Some(_)) => return Err("b3= needs a3=: both cells take a third seed".into()),
+        (Some(_), _, Some(_)) => return Err("b3= is for cell mode; a table has no seed".into()),
+        _ => {}
     }
+    // `k` seeds per cell: cell a's grades are g[0..k], cell b's (cell mode) g[k..2k].
+    let k = if a3.is_some() { 3 } else { 2 };
+    let mut names: Vec<&str> = vec![a.one("a1")?, a.one("a2")?];
+    names.extend(a3);
+    if let (Some(x), Some(y)) = (b1, b2) {
+        names.extend([x, y]);
+        names.extend(b3);
+    }
+    let g = names
+        .iter()
+        .map(|p| load_grade(Path::new(p)))
+        .collect::<R<Vec<Grade>>>()?;
     for x in &g[1..] {
         if x.v["pooled"]["row_identity_sha256"] != g[0].v["pooled"]["row_identity_sha256"] {
             return Err(format!(
@@ -1151,7 +1169,10 @@ fn run_pair(a: &Args) -> R<String> {
         }
     }
     let train = |y: &Grade| y.v["train"]["tokens_sha256"].clone();
-    for (p, q, cell) in [(0, 1, "a"), (2, 3, "b")] {
+    let same_train = (1..k)
+        .map(|s| (0, s, "a"))
+        .chain((1..k).map(|s| (k, k + s, "b")));
+    for (p, q, cell) in same_train {
         if q < g.len() && train(&g[p]) != train(&g[q]) {
             return Err(format!(
                 "{}: train.tokens_sha256 differs from {}; cell {cell}'s seeds share TRAIN",
@@ -1195,9 +1216,9 @@ fn run_pair(a: &Args) -> R<String> {
         }
     }
     let mut y: Vec<&[u8]> = Vec::new();
-    for s in 0..2 {
+    for s in 0..k {
         y.push(match table {
-            None => &g[s + 2].hits,
+            None => &g[k + s].hits,
             Some(t) => {
                 let bits = if t == "t2" { &g[s].t2 } else { &g[s].unigram };
                 bits.as_deref().ok_or(format!(
@@ -1238,11 +1259,9 @@ fn run_pair(a: &Args) -> R<String> {
     }
     let reading = |split: Option<usize>, excl: Option<&[u8]>| -> Assessment {
         let (start, len) = range(split);
-        let mut b = [0u64; 2];
-        let mut c = [0u64; 2];
-        for s in 0..2 {
-            (b[s], c[s]) = discordant_where(&g[s].hits, y[s], start, len, excl);
-        }
+        let (b, c): (Vec<u64>, Vec<u64>) = (0..k)
+            .map(|s| discordant_where(&g[s].hits, y[s], start, len, excl))
+            .unzip();
         assess(b, c)
     };
     let section = |excl: Option<&[u8]>| -> (Assessment, Value) {
@@ -1257,13 +1276,15 @@ fn run_pair(a: &Args) -> R<String> {
         (pooled, json!(splits))
     };
     let (pooled, splits) = section(None);
-    let mut inputs = json!({"a1": g[0].sha256, "a2": g[1].sha256});
-    match table {
-        Some(t) => inputs["table"] = json!(t),
-        None => {
-            inputs["b1"] = json!(g[2].sha256);
-            inputs["b2"] = json!(g[3].sha256);
+    let mut inputs = json!({});
+    for s in 0..k {
+        inputs[format!("a{}", s + 1)] = json!(g[s].sha256);
+        if table.is_none() {
+            inputs[format!("b{}", s + 1)] = json!(g[k + s].sha256);
         }
+    }
+    if let Some(t) = table {
+        inputs["table"] = json!(t);
     }
     let mut doc = json!({
         "schema": PAIR_SCHEMA,
