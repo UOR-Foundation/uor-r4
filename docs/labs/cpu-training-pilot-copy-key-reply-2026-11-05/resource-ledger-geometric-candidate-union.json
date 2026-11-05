@@ -23,7 +23,7 @@
     "generator_binary_sha256": "99ed39638a38de014581fceb3f633e4451511592055a1cf2fdaeaa3d70f5c840",
     "fresh_target_bytes": 1571108514,
     "raw_evidence_bytes": 68079,
-    "published_evidence_bytes": 19073,
+    "published_evidence_bytes": 17842,
     "free_space_after_run_bytes": 412686819328
   },
   "controls": {
@@ -63,7 +63,7 @@
     "report": "docs/loop/tasks/cpu-training-pilot/deepseek-177/REPORT.md",
     "implementation_pin": "dc17b847a2ff0fc6c9ffeafe0d8ed5abdf86c61f",
     "raw_sums_sha256": "ba4e2f238cbd113417bd818e64181e9d1ff71261c60277a50b48721d195d3b08",
-    "published_sums_sha256": "6909a1d8f39a84f0b1c2cd188e79e937676a9cc598ff129c4930432a512a3542"
+    "published_sums_sha256": "81d8b1d3babccc43bd1f7f99ecccc9a3a69ab6c1c5c9e55826877ff6da1f9bf0"
   },
   "normal_close": {
     "gpu_pods": 0,

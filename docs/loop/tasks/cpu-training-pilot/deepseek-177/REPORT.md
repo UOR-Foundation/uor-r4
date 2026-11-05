@@ -72,7 +72,8 @@ No serving, CUDA, float-inference, termination or Claude-owned source changed.
 - raw local evidence: **68,079 bytes**, sealed and verified;
 
 Published evidence is in
-[`../../../../labs/cpu-training-pilot-geometric-candidate-union-2026-11-05/`](../../../../labs/cpu-training-pilot-geometric-candidate-union-2026-11-05/).
+[`../../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/`](../../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/)
+and [`evidence/geometric-candidate-union-2768/`](../../../../labs/cpu-training-pilot-copy-key-reply-2026-11-05/evidence/geometric-candidate-union-2768/).
 
 ## Checks run at the head
 
