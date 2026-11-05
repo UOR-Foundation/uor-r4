@@ -71,6 +71,9 @@ Held-out panel:
 Both manifests bind tokenizer
 `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`,
 vocabulary 4,096 and BOS 0. The panel is not used to select targets or moves.
+The two corpora have no identical tokenized documents. Both were read in
+earlier exploratory CPU experiments, so this run is component calibration, not
+fresh-panel capability evidence.
 
 ## Fixed construction
 
@@ -111,10 +114,10 @@ trained arm is judged against the table-anchor baseline, not raw-frozen.
 ## Source and binary
 
 - base: `7787313b2`;
-- implementation pin: `2c86fed6b`;
+- implementation pin: `722abaff3`;
 - driver:
   `target/deepseek/query-port-root/release/cpu-query-port-driver`,
-  SHA-256 `0ab213964443f8b67a118d06f03a8acade36d6ba412020b6019dc0434b8e952e`;
+  SHA-256 `0ca75e1b2204c0907e79c1d8a2fd9f3a3c80b6054b8787d1b0d251d0307ed1d9`;
 - host: AMD Ryzen 9 9950X, 16 physical cores and 32 hardware threads;
 - execution: 16 Rayon workers.
 
@@ -141,8 +144,8 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 
 test ! -e "$OUT"
-git -C "$SOURCE" diff --quiet 2c86fed6b -- crates/uor-r4-cpu-train
-test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 0ab213964443f8b67a118d06f03a8acade36d6ba412020b6019dc0434b8e952e
+git -C "$SOURCE" diff --quiet 722abaff3 -- crates/uor-r4-cpu-train
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = 0ca75e1b2204c0907e79c1d8a2fd9f3a3c80b6054b8787d1b0d251d0307ed1d9
 sha256sum -c <<EOF
 a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
 da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
@@ -204,6 +207,7 @@ On both artifact seeds, the trained arm must:
 - **REJECT:** either artifact completes but misses a distance or safety bar.
 - **INSTRUMENT_FAULT:** inputs, artifacts, parity or repeat identity drift.
 - **NO_MOVE:** an arm accepts zero port-gain moves.
+- **CONTROL_FAULT:** the shuffled arm cannot match the trained accepted count.
 
 ## Cost and stop
 
