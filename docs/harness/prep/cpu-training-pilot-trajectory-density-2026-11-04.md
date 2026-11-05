@@ -1,6 +1,6 @@
 # Combined trajectory-density termination readout
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -309,7 +309,15 @@ serving, `UORLUT01`, CUDA and Claude-owned paths untouched.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING independent fresh-context review.
+TEST FITNESS: FIT - M2 #2030 deepseek-147
+sheet: docs/harness/prep/cpu-training-pilot-trajectory-density-2026-11-04.md
+reviewer: codex fresh-context FIT round 2
+note: Combined 4,096-bit signature, previous-state history, select-only
+  content-prefix audit, fixed density controls, public inputs, pinned 16-job
+  build controls, resource limits and full-run recipe verified.
+date: 2026-11-04
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 ## Pre-run GO
 
