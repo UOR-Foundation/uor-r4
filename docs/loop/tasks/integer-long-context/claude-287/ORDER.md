@@ -15,7 +15,10 @@ This unit delivers done-whens 1 and 2. Done-whens 3 to 5 are claude-288's.
 
 Read at `d6c2c3ecd` (`origin/main`) by two read-only scouts and checked here.
 
-1. **No past-window reading exists yet.** `git grep -n -e past_window -e past-window d6c2c3ecd -- crates` finds nothing. `score_rows` refuses a `--context` past the checkpoint's window (`in_space_long.rs:7165-7170`).
+1. **No rule past the window exists yet.**
+   - `git grep -n -e past_window -e past-window d6c2c3ecd -- crates` finds only `QueryPrompts::past_window` (`in_space_long.rs:5144`), the queries whose reply is longer than the window. Those are counted, not decoded.
+   - `score_rows` refuses a `--context` past the checkpoint's window (`:7165-7170`).
+   - The new code names its rule `PastWindowRule`, so that it does not clash with that field.
 2. **The scorer counts hits; it reports no loss.**
    - Each scored row records the whole table's nearest token and the served writer's pick (`ScoredRows`, `in_space_long.rs:6797-6815`).
    - `batch_loss` → `query_loss` (`:1116-1150`), the checkpoint's own objective, is called only in training.
@@ -93,7 +96,7 @@ The integer files stay untouched until claude-288.
      - s is a flag, recorded in the output.
    - **carry:** `set_context(C)` after load, with C the panel's longest conversation rounded up to 2,048 or 4,096. Then `build_document_windows` at C, which gives one window per conversation.
    - **Queries,** for greedy replies and recall. The prompt ends at the reply, and its start depends on the rule:
-     - slide: today's `query_prompts`, the last W tokens;
+     - slide: today's `query_prompts`, the W positions ending at the reply's last target, cut at the conversation's `<|bos|>`;
      - blocks: the start of the reply's block, a multiple of W from `<|bos|>`;
      - carry: the conversation's `<|bos|>`.
 
