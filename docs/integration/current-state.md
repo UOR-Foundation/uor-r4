@@ -1,4 +1,4 @@
-## 2026-11-05 — Query-port root training rejects; table anchoring has a large input cost (deepseek)
+## 2026-11-05 — Query-port root training rejects; table anchoring has a large shared input/writer cost (deepseek)
 
 A new CPU trainer moved only the 16 final-gain codes that scale the writer
 query's two 8-coordinate ports, starting from a table-anchored baseline that
