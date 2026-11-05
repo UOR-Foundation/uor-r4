@@ -25,7 +25,7 @@ candidate tokens available from its cells:
 | 24 | 384 | 3,005 | 1,117 | 2,444 | 860 |
 | 32 | 512 | 3,181 | 1,293 | 2,732 | 1,148 |
 
-Both artifacts have 345+ distinct target tokens at 12 cells. Twelve is the
+Both artifacts have at least 330 distinct target tokens at 12 cells. Twelve is the
 smallest setting that clears 2,048 target-present groups, 64 target tokens and
 256 baseline-wrong groups on both artifacts. The 192-candidate value is a
 non-BOS cap: observed writer-candidate counts are 191-192 per supervised group.
@@ -114,7 +114,7 @@ selected cell count, features, anchor, threshold or bar.
 
 ## Base artifacts and source
 
-- implementation commit: `47d28ea592d9a28231f45591b1b8a7358ef0a618`;
+- implementation commit: `57ef4cdc1d6122cfb84d506a000a82ef554dbe88`;
 - base: `d416181c1`;
 - seed-1 artifact SHA-256:
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
@@ -127,9 +127,9 @@ selected cell count, features, anchor, threshold or bar.
   `d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad`,
   `d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5`;
 - `geometric_candidate_anchor.rs` SHA-256:
-  `1d122e3ceb1f23ce88fdf3e90daf2f5d6e2cfc5be00512dcfd4348322d1fd53c`;
+  `0bd0ae0de443afb55530de291cf9d700b4d21b33fec852cd36aa26e8a38202b0`;
 - `cpu-learned-copy-read.rs` SHA-256:
-  `e956c73ae16a345685041dfb2cc80f4cf5fe7b618923bee52e0c29608cef6415`;
+  `66646c06cf11315c8544b915eeddd44628bbbaf78e344198ebfd944bd59c0d7d`;
 - `fbs.rs` SHA-256:
   `a8bfc9a40a651688d0c0e625f31cd379a15fbaed37dd8a5a1df2d3050da1647d`;
 - `lib.rs` SHA-256:
@@ -156,7 +156,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/expanded-candidate-anchor
 GEN_TARGET=$SOURCE/target/deepseek/expanded-candidate-anchor-generator
-IMPL=47d28ea592d9a28231f45591b1b8a7358ef0a618
+IMPL=57ef4cdc1d6122cfb84d506a000a82ef554dbe88
 BASE=d416181c1
 
 test ! -e "$OUT"
@@ -170,9 +170,9 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  1d122e3ceb1f23ce88fdf3e90daf2f5d6e2cfc5be00512dcfd4348322d1fd53c \
+  0bd0ae0de443afb55530de291cf9d700b4d21b33fec852cd36aa26e8a38202b0 \
   "$SOURCE/crates/uor-r4-cpu-train/src/geometric_candidate_anchor.rs" \
-  e956c73ae16a345685041dfb2cc80f4cf5fe7b618923bee52e0c29608cef6415 \
+  66646c06cf11315c8544b915eeddd44628bbbaf78e344198ebfd944bd59c0d7d \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-learned-copy-read.rs" \
   a8bfc9a40a651688d0c0e625f31cd379a15fbaed37dd8a5a1df2d3050da1647d \
   "$SOURCE/crates/uor-r4-cpu-train/src/fbs.rs" \
@@ -305,6 +305,9 @@ for name in seed1 seed2; do
     and .test.changes.geometry_only.non_vacuous == true
     and .test.changes.shuffled.non_vacuous == true
     and .test.changes.unanchored.non_vacuous == true
+    and .test.control_changes_vs_longest.geometry_only.non_vacuous == true
+    and .test.control_changes_vs_longest.shuffled.non_vacuous == true
+    and .test.control_changes_vs_longest.unanchored.non_vacuous == true
     and (.test.signatures.trained.reply_sha256 | test("^[0-9a-f]{64}$"))
     and (.test.signatures.trained.decision_sha256 | test("^[0-9a-f]{64}$"))
     and (.test.signatures.shuffled.reply_sha256 | test("^[0-9a-f]{64}$"))
