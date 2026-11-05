@@ -351,6 +351,13 @@ the fresh panel is read, do not change the ranking, cap, arms or bar.
 - **INSTRUMENT FAULT** if source, artifact, tokenizer, panel or report identity
   differs, or any geometric decision lacks its distance.
 
+## Independent GO
+
+GO - fresh-context Codex subagent `go_geometric_review` reviewed head
+`8c941102764f61538e4aa4a9beb4669d87a53901` and implementation pin
+`2378b0414c674923a2c62de44865260f3b778abc`. The registered seed-2762 run is
+authorized; the fresh panel and output root were absent at review.
+
 ## TEST FITNESS
 
 TEST FITNESS: FIT - M1 #2029 geometric exact-copy arbitration
