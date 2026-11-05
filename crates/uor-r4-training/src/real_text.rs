@@ -170,7 +170,11 @@ pub fn parse_panel(bytes: &[u8]) -> Result<Vec<PanelRequest>, RealTextError> {
     let rows = value
         .as_array()
         .ok_or_else(|| RealTextError::Panel("not a JSON list".into()))?;
-    rows.iter()
+    if rows.is_empty() {
+        return Err(RealTextError::Panel("panel has no requests".into()));
+    }
+    let requests = rows
+        .iter()
         .enumerate()
         .map(|(index, row)| {
             let id = row["id"]
@@ -195,7 +199,17 @@ pub fn parse_panel(bytes: &[u8]) -> Result<Vec<PanelRequest>, RealTextError> {
                 user_turns,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, RealTextError>>()?;
+    let mut seen = std::collections::HashSet::new();
+    for request in &requests {
+        if !seen.insert(request.id.as_str()) {
+            return Err(RealTextError::Panel(format!(
+                "duplicate request id {}",
+                request.id
+            )));
+        }
+    }
+    Ok(requests)
 }
 
 fn window_key(window: &[String]) -> u64 {
@@ -576,7 +590,8 @@ pub fn walk_tree(
 pub enum DocDrop {
     /// No non-empty content after normalisation.
     Empty,
-    /// No assistant content survived normalisation.
+    /// No assistant content survived normalisation, or the first one has no
+    /// non-empty user turn before it.
     NoAssistantReply,
     /// Content holds literal `<|bos|>`/`<|eos|>`/`<|unk|>` text.
     SpecialText,
@@ -624,8 +639,10 @@ pub enum Built {
 }
 
 /// Encodes threads and articles and applies the exclusion, round-trip and
-/// length rules. Checks run in this order: exclusion, empty, special text,
-/// round trip, length.
+/// length rules. Checks run in this order. Article: empty, exclusion, special
+/// text, round trip, length. Thread: exclusion, empty, no assistant reply
+/// (including a first assistant reply with no non-empty user turn before it),
+/// special text, round trip, length.
 pub struct DocumentBuilder<'a> {
     tokenizer: &'a ByteBpeTokenizer,
     protocol: &'a DialogueProtocol,
@@ -663,14 +680,14 @@ impl<'a> DocumentBuilder<'a> {
         mask: Vec<u8>,
         content_bytes: usize,
     ) -> Result<Built, RealTextError> {
-        if self.max_tokens.is_some_and(|limit| tokens.len() > limit) {
-            return Ok(Built::Dropped(DocDrop::TooLong));
-        }
         let tokens = tokens
             .iter()
             .map(|&t| u16::try_from(t))
             .collect::<Result<Vec<u16>, _>>()
             .map_err(|_| RealTextError::Defect("a token id above u16".into()))?;
+        if self.max_tokens.is_some_and(|limit| tokens.len() > limit) {
+            return Ok(Built::Dropped(DocDrop::TooLong));
+        }
         if tokens.len() != mask.len() {
             return Err(RealTextError::Defect("a token/mask length mismatch".into()));
         }
@@ -692,6 +709,20 @@ impl<'a> DocumentBuilder<'a> {
         for (_, content) in &contents {
             if let Some(hit) = self.exclusion.first_hit(content) {
                 return Ok(Built::Excluded(hit));
+            }
+        }
+        // The encoder skips blank turns, so admission holds on the normalized
+        // contents: the first non-empty assistant reply needs a non-empty user
+        // turn before it.
+        if let Some(first) = contents
+            .iter()
+            .position(|(role, content)| *role == "assistant" && !content.is_empty())
+        {
+            let asked = contents[..first]
+                .iter()
+                .any(|(role, content)| *role == "user" && !content.is_empty());
+            if !asked {
+                return Ok(Built::Dropped(DocDrop::NoAssistantReply));
             }
         }
         let messages: Vec<Message<'_>> = contents
@@ -1153,6 +1184,86 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_panel_list_is_refused() {
+        let err = parse_panel(b"[]").unwrap_err();
+        assert!(
+            matches!(&err, RealTextError::Panel(m) if m == "panel has no requests"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn duplicate_request_ids_across_rows_are_refused() {
+        let err = parse_panel(
+            br#"[{"id":"x","user_turns":["a"]},{"id":"y","user_turns":["b"]},
+                {"id":"x","user_turns":["c"]}]"#,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, RealTextError::Panel(m) if m.contains("duplicate") && m.contains('x')),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_short_document_still_hits_a_short_panel_turn() {
+        // Five words, fewer than PANEL_NGRAM, holding a four-word panel turn.
+        let exclusion = PanelExclusion::new(&[request("ask-02", &["what do bees make"])]);
+        let hit = exclusion.first_hit("so what do bees make").expect("hit");
+        assert_eq!(hit.kind, HitKind::ShortRequest);
+        assert_eq!(hit.request_id, "ask-02");
+        assert_eq!(hit.words, "what do bees make");
+    }
+
+    #[test]
+    fn the_pinned_tokenizer_sha_is_the_one_in_hamilton_sheet() {
+        let source = include_str!("../../uor-r4-float-train/src/hamilton_sheet.rs");
+        assert!(
+            source.contains(PINNED_TOKENIZER_SHA256),
+            "PINNED_TOKENIZER_SHA256 is not in hamilton_sheet.rs"
+        );
+    }
+
+    #[test]
+    fn oasst_walk_keeps_an_assistant_root_when_a_user_turn_and_reply_follow() {
+        let t = tree(node(
+            "root",
+            "assistant",
+            None,
+            vec![node(
+                "u1",
+                "prompter",
+                Some(0),
+                vec![node("a1", "assistant", Some(0), vec![])],
+            )],
+        ));
+        let (outcome, _) = walk(&t);
+        assert_eq!(ids(&outcome), ["root", "u1", "a1"]);
+        let TreeOutcome::Thread(thread) = outcome else {
+            unreachable!()
+        };
+        let roles: Vec<&str> = thread.messages.iter().map(|m| m.role).collect();
+        assert_eq!(roles, ["assistant", "user", "assistant"]);
+        // The first user turn is the second message, not the root.
+        assert_eq!(thread.first_user_turn(), "text of u1");
+    }
+
+    #[test]
+    fn oasst_negative_rank_sorts_before_rank_zero() {
+        let t = tree(node(
+            "root",
+            "prompter",
+            None,
+            vec![
+                node("zero", "assistant", Some(0), vec![]),
+                node("null", "assistant", None, vec![]),
+                node("neg", "assistant", Some(-3), vec![]),
+            ],
+        ));
+        assert_eq!(ids(&walk(&t).0), ["root", "neg"]);
+    }
+
+    #[test]
     fn articles_are_cleaned() {
         assert_eq!(
             clean_article(Some(" Title "), "\r\nline one  \r\n\r\n\r\n\nline two\n"),
@@ -1214,11 +1325,74 @@ mod tests {
         assert_eq!(doc.tokens[0], 0);
         assert_eq!(doc.mask[0], 0);
         assert_eq!(doc.tokens.last(), Some(&1));
-        assert_eq!(
-            doc.mask.iter().filter(|&&m| m == 1).count(),
-            " Hello".len() + 1
-        );
+        // <|bos|> "User:" " Hi" "\n" "Assistant:" are unmasked; " Hello" and
+        // its closing <|eos|> are masked in.
+        let unmasked = 1 + "User:".len() + " Hi".len() + "\n".len() + "Assistant:".len();
+        let expected = [vec![0u8; unmasked], vec![1u8; " Hello".len() + 1]].concat();
+        assert_eq!(doc.mask, expected);
+        assert_eq!(doc.tokens.len(), expected.len());
         assert_eq!(doc.content_bytes, "Hi".len() + "Hello".len());
+
+        // A thread ending on an unanswered user turn: the assistant's eos has
+        // mask 1, the terminal eos has mask 0.
+        let Built::Kept(doc) = builder
+            .thread(&thread(&[
+                ("user", "Hi"),
+                ("assistant", "Yo"),
+                ("user", "More"),
+            ]))
+            .unwrap()
+        else {
+            panic!("open thread dropped");
+        };
+        let head = 1 + "User:".len() + " Hi".len() + "\n".len() + "Assistant:".len();
+        let tail = "\n".len() + "User:".len() + " More".len() + 1;
+        let expected = [vec![0u8; head], vec![1u8; " Yo".len() + 1], vec![0u8; tail]].concat();
+        assert_eq!(doc.mask, expected);
+        assert_eq!(doc.tokens.len(), expected.len());
+        let assistant_eos = head + " Yo".len();
+        assert_eq!(doc.tokens[assistant_eos], 1);
+        assert_eq!(doc.mask[assistant_eos], 1);
+        assert_eq!(doc.tokens.last(), Some(&1));
+        assert_eq!(doc.mask.last(), Some(&0));
+    }
+
+    #[test]
+    fn a_token_id_above_u16_is_a_defect_even_in_a_too_long_document() {
+        let tok = tokenizer(None);
+        let protocol = DialogueProtocol::literal_roles_version(&tok, 2).unwrap();
+        let exclusion = PanelExclusion::new(&[]);
+        let builder = DocumentBuilder::new(&tok, &protocol, &exclusion, Some(0)).unwrap();
+        let err = builder.finish(&[0, 70_000], vec![0, 1], 0).unwrap_err();
+        assert!(matches!(err, RealTextError::Defect(_)), "{err}");
+    }
+
+    #[test]
+    fn a_blank_user_turn_before_the_first_reply_drops_the_thread() {
+        let tok = tokenizer(None);
+        let protocol = DialogueProtocol::literal_roles_version(&tok, 2).unwrap();
+        let exclusion = PanelExclusion::new(&[]);
+        let builder = DocumentBuilder::new(&tok, &protocol, &exclusion, None).unwrap();
+        assert_eq!(
+            builder
+                .thread(&thread(&[("user", "   "), ("assistant", "Hi")]))
+                .unwrap(),
+            Built::Dropped(DocDrop::NoAssistantReply)
+        );
+    }
+
+    #[test]
+    fn special_text_in_a_thread_reply_drops_the_thread() {
+        let tok = tokenizer(None);
+        let protocol = DialogueProtocol::literal_roles_version(&tok, 2).unwrap();
+        let exclusion = PanelExclusion::new(&[]);
+        let builder = DocumentBuilder::new(&tok, &protocol, &exclusion, None).unwrap();
+        assert_eq!(
+            builder
+                .thread(&thread(&[("user", "Hi"), ("assistant", "say <|eos|> now")]))
+                .unwrap(),
+            Built::Dropped(DocDrop::SpecialText)
+        );
     }
 
     #[test]
