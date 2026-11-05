@@ -74,6 +74,11 @@ SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 SEED1_SHA=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 SEED2_SHA=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 TOKENIZER_SHA=a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
+TT1_SHA=37715a5d621c5b8c2269940505491d13d84c37b414fa2eb9646a2de54000e6ee
+TT2_SHA=4a6a274822f287a806a52704417c3c2bd75bee604484ce610852cfd40e809372
+TRAIN_TOKENS_SHA=140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91
+TRAIN_MASK_SHA=d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad
+TRAIN_MANIFEST_SHA=d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5
 BUILD=$SOURCE/target/deepseek/copy-exact-stop
 GEN_TARGET=$SOURCE/target/deepseek/copy-exact-panel
 IMPL_PIN=466101669649
@@ -86,7 +91,16 @@ git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
 git -C "$SOURCE" diff --quiet "$BASE" -- \
   crates/uor-r4-cpu-train/src/bin/cpu-copy-key-reply.rs \
   docs/labs/one-model-end-to-end/instrument
-sha256sum "$TOKENIZER" "$SEED1" "$SEED2"
+printf '%s  %s\n' \
+  "$TOKENIZER_SHA" "$TOKENIZER" \
+  "$SEED1_SHA" "$SEED1" \
+  "$SEED2_SHA" "$SEED2" \
+  "$TT1_SHA" "$TRAIN/seed1-tt.json.gz" \
+  "$TT2_SHA" "$TRAIN/seed2-tt.json.gz" \
+  "$TRAIN_TOKENS_SHA" "$TRAIN/panels/tt-2711/tokens.u16" \
+  "$TRAIN_MASK_SHA" "$TRAIN/panels/tt-2711/response_mask.u8" \
+  "$TRAIN_MANIFEST_SHA" "$TRAIN/panels/tt-2711/manifest.json" |
+  sha256sum -c -
 
 mkdir -p "$PANELS" "$OUT/reports" "$OUT/oracle" "$OUT/gate"
 /usr/bin/time -v -o "$OUT/build.time.txt" \
@@ -108,22 +122,55 @@ GEN=$GEN_TARGET/debug/heldout-panel
 
 gzip -dc "$TRAIN/seed1-tt.json.gz" >"$OUT/reports/seed1-tt.json"
 gzip -dc "$TRAIN/seed2-tt.json.gz" >"$OUT/reports/seed2-tt.json"
+POWER_OK=1
 for seed in seed1 seed2; do
-  artifact=$SEED1
-  test "$seed" = seed2 && artifact=$SEED2
+  case "$seed" in
+    seed1) artifact=$SEED1; artifact_sha=$SEED1_SHA ;;
+    seed2) artifact=$SEED2; artifact_sha=$SEED2_SHA ;;
+  esac
   /usr/bin/time -v -o "$OUT/reports/$seed-dd.time.txt" \
     timeout 900s env RAYON_NUM_THREADS=32 \
     "$BUILD/release/cpu-copy-key-reply" \
     "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
     "$artifact" --cap 64 --seed 153 >"$OUT/reports/$seed-dd.json"
-  jq -e '.random_nonvacuity.non_vacuous == true' "$OUT/reports/$seed-dd.json"
-  jq -e '.examples.reachable >= 200' "$OUT/reports/$seed-dd.json"
+  if ! jq -e '.random_nonvacuity.non_vacuous == true' \
+    "$OUT/reports/$seed-dd.json" >/dev/null; then
+    printf '%s random-control-vacuous\n' "$seed" >>"$OUT/power-limited.txt"
+    POWER_OK=0
+  fi
+  if ! jq -e '.examples.reachable >= 200' \
+    "$OUT/reports/$seed-dd.json" >/dev/null; then
+    printf '%s reachable-below-200\n' "$seed" >>"$OUT/power-limited.txt"
+    POWER_OK=0
+  fi
+  if ! jq -e --arg expected "$artifact_sha" \
+    '.inputs.artifact_sha256 == $expected' \
+    "$OUT/reports/$seed-dd.json" >/dev/null; then
+    printf '%s artifact-hash-mismatch\n' "$seed" >>"$OUT/instrument-fault.txt"
+    POWER_OK=0
+  fi
   "$BUILD/release/cpu-copy-key-reply-oracle" \
     "$OUT/reports/$seed-dd.json" "$PANEL/tokens.u16" \
     "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
     >"$OUT/oracle/$seed-dd.json"
-  jq -e '.arms.longest_4_to_1.reading.exact_reference >= 7' \
-    "$OUT/oracle/$seed-dd.json"
+  if ! jq -e '.arms.longest_4_to_1.reading.exact_reference >= 7' \
+    "$OUT/oracle/$seed-dd.json" >/dev/null; then
+    printf '%s fresh-oracle-below-7\n' "$seed" >>"$OUT/power-limited.txt"
+    POWER_OK=0
+  fi
+done
+
+test ! -e "$OUT/instrument-fault.txt"
+if test "$POWER_OK" -ne 1; then
+  printf 'POWER_LIMITED\n' >"$OUT/outcome.txt"
+  exit 0
+fi
+
+for seed in seed1 seed2; do
+  case "$seed" in
+    seed1) artifact=$SEED1 ;;
+    seed2) artifact=$SEED2 ;;
+  esac
   /usr/bin/time -v -o "$OUT/gate/$seed.time.txt" \
     "$BUILD/release/cpu-copy-generated-stop" \
     "$artifact" "$OUT/reports/$seed-tt.json" \
