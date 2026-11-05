@@ -1,18 +1,17 @@
 ## 2026-11-05 — Scale-probe widths share one exact CPU serving path (deepseek)
 
-A synthetic `UORLUT01` preflight covered the same three widths and three
-contexts Claude's scale probe will use. At widths 256, 512 and 1,024 and
-contexts 16, 64 and 192, both read-free and full Hamming-plus-memory artifacts
-exported, reloaded and matched `IntegerStackSession` on every one of three
-complete repeats.
+A synthetic `UORLUT01` preflight covered the same three scale-probe widths at
+three representative contexts. Run 2 used the current whole-table-nearest
+recipe. At widths 256, 512 and 1,024 and contexts 16, 64 and 192, both
+read-free and full Hamming-plus-memory artifacts exported, reloaded and matched
+`IntegerStackSession` on every one of three complete repeats.
 
 All 18 cells, 4,896 token decisions, 2,924,544 Q12 coordinates and 39,168 kept
 cells had zero query, token, kept-cell or decision-hash mismatch. Projection
-artifact bytes were 2,145,024, 4,280,384 and 8,551,424, almost exactly linear
-in width. Single-pass projection throughput fell from 6,969-7,102 to
-3,954-3,999 and then 2,116-2,138 tokens/s; full-path throughput fell from
-6,254-6,596 to 3,527-3,720 and then 1,884-2,031. The run took 9.196 s and
-peaked at 78,980 KiB.
+artifact bytes were 2,145,088, 4,280,384 and 8,551,488, almost exactly linear
+in width. Serving throughput fell from 1,750-1,801 to 936-940 and then 477-481
+tokens/s; full-path throughput fell from 1,721-1,763 to 910-927 and then
+466-476. The run took 18.476 s and peaked at 76,388 KiB.
 
 This removes output-path uncertainty before Claude's GPU scale run. It is not a
 quality, real-text training or GPU-memory result. Record:
