@@ -21,6 +21,8 @@ not geometric termination generally.
   fresh-process identity check was not stable.
 - Attempt 3 stopped after report replay was moved to buffered bytes because a
   process substitution had already been consumed.
+- Attempt 4 reproduced the result but did not publish per-row fired decisions
+  or selected-trace hashes.
 - The final gate learned only **8/453** training terminal rows on seed 1 and
   **13/453** on seed 2 under the 46-row false-stop cap.
 - Training at-reference stops were 7 and 11, but none matched an exact body.
@@ -76,17 +78,17 @@ Resources:
 
 - release build **19.71 s**, peak unavailable from that compile; final CLI
   processes peaked at **198,412 KiB**;
-- final runs **8.83 / 8.73 / 8.75 s**;
-- driver binary **1,984,112 bytes**, SHA-256
-  `063027209e489702941743adb78d0992f0d434a63fa5c58998ef5592681153d4`;
-- fresh target **4,943,306,173 bytes**;
-- published evidence **37,440 bytes**;
+- final runs **8.73 / 8.71 / 8.80 s**;
+- driver binary **1,992,976 bytes**, SHA-256
+  `45f56540678c7a24727df5bd668585f2235e969e23c21e005d92325e967d6fe7`;
+- fresh target **4,944,305,451 bytes**;
+- published evidence **2,393,850 bytes**;
 - admitted cumulative projection: **79,427.677487699 s**.
 
-Attempt-4 raw manifest SHA-256:
-`ef781834bea50a3552e095de58069b09a95c39c3d1f329add13ecac5aac7740b`.
+Attempt-5 raw manifest SHA-256:
+`548465da3874c6a8fa322844e75e82b89ff13da0cff7d7e3dacf35bf04bd3099`.
 Published evidence SHA-256:
-`0a3dba95fe8b4157fa82abfe320c8dccf092efd5561c3cc7d3bc90b4f84c7c9c`.
+`8c4c1e77a8b9b96fabb8c21e5b866f7b41746f84fa0b061d22834c90a7bbd120`.
 
 ## Checks run at the head
 
@@ -95,6 +97,8 @@ Published evidence SHA-256:
 - Strict scoped Clippy, rustfmt, D23/D25/D32, report/input hashes and evidence
   manifests passed.
 - The seed-1 repeat matched every field after timing removal.
+- Every true/shuffled/no-gate row records fired step, stop class, exact status
+  and the unchanged selected-token trace hash.
 - Both artifact seeds fit on train panel 2711 and evaluated unchanged on dev
   panel 2712.
 - No serving, integer runtime, CUDA, float-training or Claude-owned source
@@ -103,9 +107,9 @@ Published evidence SHA-256:
 ## Size
 
 Against base `ed9b5b9aa`, this unit changes **5** code/API files
-(**+643 / -4**), **8** task, notebook, roadmap, current-state and lab-record
-files (**+349 / -1**), and **19** published evidence files
-(**+920 / -0**): **32 files, +1,913 / -5**.
+(**+665 / -4**), **8** task, notebook, roadmap, current-state and lab-record
+files (**+363 / -1**), and **26** published evidence files
+(**+74,571 / -0**): **39 files, +75,599 / -5**.
 
 ## Skills used
 

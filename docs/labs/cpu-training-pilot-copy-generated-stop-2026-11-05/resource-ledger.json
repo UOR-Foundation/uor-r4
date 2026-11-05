@@ -12,12 +12,12 @@
   "measured": {
     "release_build_seconds": 19.71,
     "incremental_build_seconds": 0.48,
-    "final_run_walls_seconds": [8.83, 8.73, 8.75],
-    "peak_rss_kib": 198412,
-    "driver_binary_bytes": 1984112,
-    "driver_binary_sha256": "063027209e489702941743adb78d0992f0d434a63fa5c58998ef5592681153d4",
-    "fresh_target_bytes": 4943306173,
-    "published_evidence_bytes": 37440,
+    "final_run_walls_seconds": [8.73, 8.71, 8.80],
+    "peak_rss_kib": 198436,
+    "driver_binary_bytes": 1992976,
+    "driver_binary_sha256": "45f56540678c7a24727df5bd668585f2235e969e23c21e005d92325e967d6fe7",
+    "fresh_target_bytes": 4944305451,
+    "published_evidence_bytes": 2393850,
     "free_space_after_run_bytes": 466986061824
   },
   "attempts": [
@@ -38,6 +38,11 @@
     },
     {
       "attempt": 4,
+      "status": "INSTRUMENT_INCOMPLETE",
+      "reason": "result reproduced, but per-row fired decisions and selected-trace hashes were not published"
+    },
+    {
+      "attempt": 5,
       "status": "COMPLETED_REJECT",
       "cells": 2
     }
@@ -50,7 +55,8 @@
     "clippy": "pass",
     "rustfmt": "pass",
     "fresh_process_repeat": "byte-identical after timing fields",
-    "raw_attempt_4_sha256": "ef781834bea50a3552e095de58069b09a95c39c3d1f329add13ecac5aac7740b"
+    "raw_attempt_4_sha256": "ef781834bea50a3552e095de58069b09a95c39c3d1f329add13ecac5aac7740b",
+    "raw_attempt_5_sha256": "548465da3874c6a8fa322844e75e82b89ff13da0cff7d7e3dacf35bf04bd3099"
   },
   "threads": {
     "build_jobs": 16,
@@ -65,8 +71,8 @@
   },
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-157/ORDER.md",
-    "implementation_pin": "b9a9b7b076fd",
-    "published_sums_sha256": "0a3dba95fe8b4157fa82abfe320c8dccf092efd5561c3cc7d3bc90b4f84c7c9c"
+    "implementation_pin": "8a7a0186e655",
+    "published_sums_sha256": "8c4c1e77a8b9b96fabb8c21e5b866f7b41746f84fa0b061d22834c90a7bbd120"
   },
   "normal_close": {
     "gpu_pods": 0,
