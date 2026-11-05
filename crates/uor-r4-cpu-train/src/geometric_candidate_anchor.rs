@@ -273,6 +273,12 @@ pub fn derive_anchored_candidate_rankers(
             ANCHORED_CANDIDATE_MIN_BASELINE_WRONG
         )));
     }
+    if calibration.writer_candidate_rows == 0
+        || calibration.min_writer_candidates_per_group == 0
+        || calibration.max_writer_candidates_per_group > calibration.writer_candidate_limit
+    {
+        return Err(invalid("anchored candidate writer-candidate counts differ"));
+    }
     let trained = fit_anchored(&groups, seed, false)?;
     let shuffled = fit_anchored(&groups, seed, true)?;
     let unanchored = fit_unanchored(&groups, seed)?;

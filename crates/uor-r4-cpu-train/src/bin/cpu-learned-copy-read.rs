@@ -763,6 +763,23 @@ fn run_anchored_candidate_union(inputs: AnchoredCandidateInputs<'_>) -> Result<(
             &unanchored.steps,
         ),
     });
+    let control_changes_vs_longest = serde_json::json!({
+        "geometry_only": copy_control_changes(
+            &trained.rows,
+            &geometry_only.steps,
+            &longest.steps,
+        ),
+        "shuffled": copy_control_changes(
+            &trained.rows,
+            &shuffled.steps,
+            &longest.steps,
+        ),
+        "unanchored": copy_control_changes(
+            &trained.rows,
+            &unanchored.steps,
+            &longest.steps,
+        ),
+    });
     let output = serde_json::json!({
         "schema": "uor-r4.cpu-anchored-expanded-candidate-ranker/1",
         "substrate": "cpu-development-research",
@@ -831,6 +848,7 @@ fn run_anchored_candidate_union(inputs: AnchoredCandidateInputs<'_>) -> Result<(
             "writer": writer.reading,
             "comparisons": comparisons,
             "changes": changes,
+            "control_changes_vs_longest": control_changes_vs_longest,
             "signatures": {
                 "trained": {
                     "reply_sha256": trained.reply_sha256,
@@ -1376,5 +1394,42 @@ mod tests {
         assert_eq!(parse_cells("8,12,16,24,32").unwrap(), [8, 12, 16, 24, 32]);
         assert!(parse_cells("8,x,16").is_err());
         assert!(parse_cells("").is_err());
+    }
+
+    #[test]
+    fn control_changes_are_bound_against_longest_not_only_the_trained_arm() {
+        let row = CopyKeyReplyRow {
+            row: 0,
+            reachable: true,
+            exact_reference: false,
+            bos_complete: false,
+            opening_correct: false,
+            premature_bos: false,
+            non_premature_bos: false,
+            generated_tokens: 1,
+            reference_tokens: 1,
+            correct_body_positions: 0,
+            copy_decisions: 0,
+            fallback_decisions: 1,
+            stop: "cap".to_owned(),
+            reply_sha256: "00".repeat(32),
+        };
+        let step = |token| GeometricCandidateStep {
+            row: 0,
+            generated_step: 0,
+            writer_token: 5,
+            longest_token: 7,
+            selected_token: token,
+            selected_exact_depth: None,
+            selected_writer_rank: None,
+            selected_score: Some(1),
+            candidate_count: 3,
+            used_exact_copy: false,
+        };
+        let unchanged =
+            geometric_candidate_changes(std::slice::from_ref(&row), &[step(7)], &[step(7)]);
+        assert_eq!(unchanged["non_vacuous"], false);
+        let changed = geometric_candidate_changes(&[row], &[step(9)], &[step(7)]);
+        assert_eq!(changed["non_vacuous"], true);
     }
 }
