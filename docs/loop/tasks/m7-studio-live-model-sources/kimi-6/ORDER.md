@@ -1,24 +1,28 @@
-# ORDER: record the conversation-first Studio publish
+# ORDER: register LexLean Studio repairs, kimi-6
 
-Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440). Base: `a877ef9162d86908873c5edca0f1d0711bb6321a`. The implementation and native prerelease are already delivered; this unit records their actual publish and hosted verification without changing code, model quality, milestone state or owner rules.
+Lab: kimi. Item: [m7-studio-live-model-sources](../../../../roadmap/items/m7-studio-live-model-sources.md) (#3440). Base: `04fae9eaf` from fresh `origin/main`.
 
 ## Goal
 
-Bind the live records to source merge `a877ef916`, reviewed tree `3c4c6470`, `gh-pages` `eb832431a` / tree `2d5fe037`, the Pages built status, runtime-only files and preserved five-card catalog. Distinguish hosted desktop generation from mobile layout inspection. Keep GitHub Pages static-only and do not claim useful conversation, visual understanding, M7/M8 completion or production readiness.
+Register `m7-lexlean-studio-tools` as the separate roadmap item for the already tested exact-arithmetic and Studio identity repairs. This item/scope PR is required so the implementation PR has that item at its merge base. It delivers no implementation, model change, publish or completion claim.
 
-## Files in scope
+## Scope
 
-- `docs/integration/current-state.md`
-- `docs/products/web-client.md`
-- `docs/research/notebook/m4-serving.md`
-- `docs/roadmap/items/m7-studio-live-model-sources.md`
-- `web/studio/README.md`
-- `docs/loop/tasks/m7-studio-live-model-sources/kimi-5/REPORT.md`
-- This task folder only
+- New `docs/roadmap/items/m7-lexlean-studio-tools.md`
+- `docs/loop/tasks/m7-studio-live-model-sources/kimi-6/**`
+
+No generated roadmap files, source code, tests, model weights/catalogs, Pages, desktop, `.github/**`, owner records or other labs' files. Existing issue #3704 is referenced, not duplicated or closed.
+
+## Cancel probe
+
+The new item is absent from protected `main`; both dependencies exist. Issue #3704 is open and describes this exact gap. The implementation candidate's local policy failed only because the new item was absent at its merge base, confirming this registration is necessary.
 
 ## Done when
 
-- Exact source/Pages/tree/hash identifiers match live GitHub and hosted files.
-- `models.json` remains byte-identical and development files return 404.
-- Hosted desktop generation, mobile layout, Native setup and all five cards are stated at their actual evidence scope.
-- Independent exact-head review, report/PR checks, protected merge and fresh-main verification pass; merged worktrees are then cleaned while preserving evidence and at least 30 GiB free.
+- The item is `ready`, depends on `m7-studio-live-model-sources` and `infra-desktop-client-tauri`, and records the measured LexLean rejection, bounded implementation and honest non-capabilities.
+- Roadmap validation and repository gates run; any pre-existing generated-roadmap mismatch is reported without changing unrelated records.
+- Local policy and fresh exact-head review pass at this PR's head, then the protected PR merges with `References #3440` and `References #3704`.
+
+## Stop and report
+
+Stop after registration merges and rebase the preserved implementation commit onto that base. Do not add implementation to this PR, close either issue, publish Pages or claim useful conversation, visual understanding or milestone completion.
