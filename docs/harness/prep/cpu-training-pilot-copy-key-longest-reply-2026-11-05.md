@@ -1,6 +1,6 @@
 # Longest-first copy selection in complete replies
 
-**Status:** `TEST FITNESS: PENDING`
+**Status:** `TEST FITNESS: FIT`
 
 ## Question
 
@@ -211,6 +211,14 @@ Claude-owned file changes.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 deepseek-153
+sheet: docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-2026-11-05.md
+reviewer: codex fresh-context FIT round 4
+note: The 192-token window, strict BOS headroom, reachable-row floor,
+  paired-row exclusion, random non-vacuity and R12 authority terms match the
+  code and ORDER at HEAD 2e27e5c12df4 with implementation pin cdcb63cafe27.
+date: 2026-11-05
 
-Pending fresh-context review.
+A FIT verdict clears compute for this configuration only. One stated advisory
+remains: the run wrapper must fail when `random_nonvacuity.non_vacuous` is not
+true.
