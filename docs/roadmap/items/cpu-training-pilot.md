@@ -9,7 +9,7 @@ needs_gpu: false
 depends_on: [cpu-discrete-training-path, cpu-shared-vector-train, cpu-quantization-exact-memory, cpu-whole-path-exact-updates]
 notebook: docs/research/notebook/cpu-training.md
 done_class: host
-scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/README.md, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/session_codec.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/content_readout.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/tests/session_codec_interop_fixture.rs, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/integration/current-state.md, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/labs/cpu-training-pilot-content-serving-2026-11-04/**, docs/labs/cpu-training-pilot-trajectory-density-2026-11-04/**, docs/labs/cpu-training-pilot-copy-key-depth-2026-11-05/**, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
+scope: [crates/uor-r4-cpu-train/**, crates/uor-r4-integer/Cargo.toml, crates/uor-r4-integer/README.md, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/src/openai.rs, crates/uor-r4-integer/src/session_codec.rs, crates/uor-r4-integer/src/stack/chat.rs, crates/uor-r4-integer/src/stack/content_readout.rs, crates/uor-r4-integer/src/stack/mod.rs, crates/uor-r4-integer/src/stack/session.rs, crates/uor-r4-integer/tests/openai_loopback.rs, crates/uor-r4-integer/tests/session_codec_interop_fixture.rs, crates/uor-r4-core/Cargo.toml, crates/uor-r4-core/src/native_support.rs, crates/uor-r4-discrete/Cargo.toml, Cargo.toml, Cargo.lock, docs/harness/claims.json, docs/harness/prep/cpu-training-pilot*, docs/integration/current-state.md, docs/labs/cpu-training-pilot-*/resource-ledger.json, docs/labs/cpu-training-pilot-content-serving-2026-11-04/**, docs/labs/cpu-training-pilot-trajectory-density-2026-11-04/**, docs/labs/cpu-training-pilot-copy-key-depth-2026-11-05/**, docs/labs/cpu-training-pilot-copy-key-reply-2026-11-05/**, docs/labs/cpu-training-pilot-copy-termination-oracle-2026-11-05/**, docs/labs/cpu-training-pilot-copy-generated-stop-2026-11-05/**, docs/loop/tasks/cpu-training-pilot/**, docs/research/cpu-training-program.md, docs/research/notebook/cpu-training.md, docs/roadmap/items/cpu-training-pilot.md]
 ---
 
 ## Why it matters
@@ -400,6 +400,81 @@ pre-registered comparisons were required. Longest-first therefore remains the
 selected exact-copy candidate; the negative closes this fitted depth/age table,
 not learned copy reads generally. See
 [deepseek-151](../../loop/tasks/cpu-training-pilot/deepseek-151/REPORT.md).
+
+The complete-reply bridge then applied the five fixed selectors to generated
+trajectories on two new panels and two public artifact seeds. Longest-first
+exact copy beat `k2>k1`, fixed depth 1, random depth and the unmodified writer
+on correct reference body positions in all four artifact/panel cells. However,
+every decision was a copy decision, no writer fallback occurred, and every
+reply hit the 64-token cap with zero BOS-complete or exact replies. Because the
+prompt-derived copy domain excludes BOS, longest-first copy carries content
+headroom but cannot terminate by itself. The result preserves depth-three/four
+geometry for a combined copy-plus-termination read rather than selecting an
+exact-copy decoder. See
+[deepseek-153](../../loop/tasks/cpu-training-pilot/deepseek-153/REPORT.md).
+
+An oracle-stop replay of those sealed traces then separated termination from
+content. Truncating longest-first output at the reference length and inserting
+BOS would complete **11/453** train and **13/449** dev replies on both artifact
+seeds; `k2>k1` reached 8/8, random 0/2, and depth-1 and writer zero. Every
+paired exact and body-position comparison favored longest-first. Most current
+copy bodies still miss, so termination is the immediate blocker and
+terminal-token accuracy is the next content target. See
+[deepseek-155](../../loop/tasks/cpu-training-pilot/deepseek-155/REPORT.md).
+
+The first generated-trajectory stop-gate attempt then replayed those trace
+paths through the exact CPU forward and fitted eight terminal/eight nonterminal
+sign prototypes on the train panel. The gate fit under the 1% training
+false-stop cap but produced **0 exact replies** on both artifact seeds and both
+panels. It fired at the reference position on some rows, but never on an exact
+body, and training premature stops were 34/31 against the 4-reply limit. This
+rejects all-reference-length terminal labeling for the fixed prototype gate.
+See [deepseek-157](../../loop/tasks/cpu-training-pilot/deepseek-157/REPORT.md).
+
+The exact-body follow-up then fitted the same gate only on generated
+trajectories whose train bodies already reached the full reference. The gate
+fit 7/11 terminal trajectories on both artifact seeds with no selected-row
+false stops. A registered confirmation on an unopened seed-2722 dev panel had
+458 reachable replies and a ten-reply oracle ceiling, but the gate produced
+**0/10** exact replies on both seeds and 5/9 premature stops against a
+four-stop limit. All shuffled, all-reference and no-gate controls returned zero
+exact dev replies. Exact-body filtering is closed for this prototype family;
+the next termination test needs a copy-boundary or continuation objective and
+better terminal-token construction. See
+[deepseek-159](../../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
+
+The next content screen tested whether exact suffix matches deeper than four
+add information. On a fresh 458-reply panel, longest-32 selected depth 32 on
+most decisions and beat every non-nested shallower or randomized control, but
+it chose the same token as nested longest-4 at every fresh-dev decision. Both arms reached
+**300/4,758** fresh-dev and **409/4,661** train correct body positions; no arm
+completed a reply. This closes exact depths eight through 32 and directs the
+next content test to a non-exact geometric read rather than a longer exact
+suffix. See
+[deepseek-163](../../loop/tasks/cpu-training-pilot/deepseek-163/REPORT.md).
+
+Static token-row geometry did not repair that gap. A second fresh screen ranked
+the same exact-copy candidates by sign-Hamming distance between the current
+Q12 writer query and each token's shared vector-table row. It changed
+thousands of decisions and remained deterministic, but scored only **270 and
+286/4,822** fresh body positions against **624** for longest-32, and **174 and
+195/4,661** against **409** on train. It beat fixed depth 1 and writer but lost
+longest-32, `k2>k1` and random-32. This closes raw per-token writer-row sign
+proximity as an arbitration rule. The next geometric-copy read must learn or
+derive candidate agreement from context instead of treating a static row as a
+copy key. See
+[deepseek-165](../../loop/tasks/cpu-training-pilot/deepseek-165/REPORT.md).
+
+Learning from generated query codes did not escape that ceiling. A modulo-256
+readout fitted on 4,661 longest-copy train states was restricted to exact-copy
+candidates and evaluated on a fresh seed-2763 panel. It arbitrated 210 and 174
+decisions but scored with longest-32 on seed 1 and gained one body position on
+seed 2, below the paired threshold; the shuffled learned read also failed the
+comparison. Leave-one-out training top-1 was only 116 and 125 of 1,024. This
+closes the fixed row-level nearest-example copy read. The next candidate
+representation must model multi-token continuation or candidate-specific
+context rather than map one writer state to one token. See
+[deepseek-167](../../loop/tasks/cpu-training-pilot/deepseek-167/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through

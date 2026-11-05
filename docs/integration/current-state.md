@@ -1,3 +1,113 @@
+## 2026-11-05 — Learned query-code copy read rejects (deepseek)
+
+A learned modulo-256 code read was fitted on longest-32 train trajectories and
+allowed to choose only from the exact-copy candidate set. On a fresh seed-2763
+panel with 453 reachable replies it scored **474 and 475/4,686** correct body
+positions against **474** for longest-32 on both artifact seeds. It arbitrated
+210 and 174 candidates and changed 52 and 245 decisions, but the paired
+longest and shuffled-read comparisons failed. Training leave-one-out top-1 was
+only **116 and 125/1,024**, with a 957/2,048 fitted radius. All learned and
+control arms remained deterministic with zero exact, BOS-complete or premature
+BOS replies. Record:
+[deepseek-167](../loop/tasks/cpu-training-pilot/deepseek-167/REPORT.md).
+**Next:** change the trained copy representation or target rather than adding
+rows or loosening this readout.
+
+## 2026-11-05 — Token-row sign distance rejects as copy arbitration (deepseek)
+
+The geometric copy arm ranked every available exact-copy candidate by
+sign-Hamming distance between the current 256-coordinate Q12 writer query and
+the token's shared vector-table row. On a fresh seed-2762 panel it changed
+thousands of decisions but scored only **270 and 286 / 4,822** correct body
+positions against **624** for longest-32 on both artifact seeds. Train also
+fell to **174 and 195 / 4,661** against **409**. The arm beat fixed depth 1
+and writer, but lost longest-32, longest-4, `k2>k1` and random-32. All runs
+were deterministic, every copied geometric decision carried a distance, and
+all arms remained at zero exact, BOS-complete and premature-BOS replies.
+Record: [deepseek-165](../loop/tasks/cpu-training-pilot/deepseek-165/REPORT.md).
+**Next:** derive the geometric copy ranking from learned context/query-read
+geometry; do not retune raw token-row sign distance on this panel.
+
+## 2026-11-05 — Longer exact copy depth adds no token distinction (deepseek)
+
+The longest-32 exact-suffix arm selected deeper matches than longest-4 on a
+fresh 458-reply panel but chose the same token at every fresh-dev decision. It tied
+longest-4 at **409/4,661** train and **300/4,758** fresh-dev correct body
+positions on both artifact seeds, so the paired nested comparison failed.
+Longest-32 still beat `k2>k1`, fixed depth 1, random-32 and writer; no arm
+emitted BOS or completed a reply. This closes the tested depth-8-through-32
+exact-suffix extension, not exact copy or a different geometric read. Record:
+[deepseek-163](../loop/tasks/cpu-training-pilot/deepseek-163/REPORT.md).
+**Next:** test a non-exact geometric copy/read representation, then combine the
+selected content path with independent termination.
+
+## 2026-11-05 — Exact-body stop filter does not transfer (deepseek)
+
+Filtering the deepseek-157 replay to the 11 train trajectories with exact
+generated bodies let the same eight-prototype gate fit **7/11** terminal
+trajectories on both artifact seeds, with zero false stops over 308 selected
+nonterminal rows. A registered confirmation then evaluated the unchanged gate
+on a newly generated seed-2722 dev panel with 458 reachable replies and a
+10-reply oracle ceiling. It produced **0/10** exact replies on both seeds.
+Premature stops were **5** and **9** against the four-stop limit. The shuffled,
+all-reference and no-gate controls each produced zero exact dev replies.
+Attempt 7, which used an earlier panel without a recorded pre-run FIT, remains
+exploratory evidence. This closes exact-body filtering with this prototype and
+threshold family, not geometric termination. Record:
+[deepseek-159](../loop/tasks/cpu-training-pilot/deepseek-159/REPORT.md).
+**Next:** use copy phrase boundaries or an independent continuation objective,
+and improve terminal-token reconstruction before retrying termination.
+
+## 2026-11-05 — Copy-trained prototype stop gate rejected (deepseek)
+
+The actual longest-first copy trajectories were replayed through the exact CPU
+FBS forward. Eight terminal and eight nonterminal 256-bit Hamming prototypes
+were fitted on train panel 2711 with reference length as the terminal label,
+then evaluated unchanged on dev panel 2712. The gates fit under the 46-row
+training false-stop cap but produced **0 exact replies on both artifact seeds
+and panels**. Train at-reference stops of 7/11 were all wrong bodies; dev
+at-reference stops of 0/8 were also non-exact. Premature stops were **34/31
+train** and **3/8 dev**, exceeding the 4-row reply limit on training and
+seed-2 dev. This rejects all-reference-length labeling for this prototype gate.
+Record: [deepseek-157](../loop/tasks/cpu-training-pilot/deepseek-157/REPORT.md).
+**Next:** train termination only over exact-body trajectories or use a
+copy-boundary continuation objective; improve terminal-token reconstruction
+before retrying this gate.
+
+## 2026-11-05 — Perfect stopping would rescue a bounded copy subset (deepseek)
+
+The four sealed deepseek-153 traces were replayed without new model forwards,
+then truncated at each reference length and given an oracle BOS. Longest-first
+produced **11/453** exact train and **13/449** exact dev replies on both
+artifact seeds; `k2>k1` produced 8/8, random 0/2, and depth-1 and writer zero.
+Every paired exact and body-position comparison favored longest-first. The
+copy bodies still missed most references: common-prefix totals were
+**325/4,661** and **451/4,614**, with maximum prefixes of 41 and 48 tokens.
+Perfect termination is therefore the immediate blocker, while terminal-token
+accuracy remains the next content target. Record:
+[deepseek-155](../loop/tasks/cpu-training-pilot/deepseek-155/REPORT.md).
+**Next:** pair longest-first copy with a trainable geometric stop and test
+whether it recovers the 11/13 exact ceiling without premature stops.
+
+## 2026-11-05 — Longest-first copy carries body headroom but cannot terminate (deepseek)
+
+Five fixed selectors controlled a complete generated reply over the last 192
+prompt/generated tokens. Attempt 1 stopped before a result because its
+32-token cap was below observed assistant lengths; the corrected run used cap
+64 and new m-world-v2 panels at seeds 2711/2712 over both public artifact
+seeds. Longest-first beat `k2>k1`, fixed depth 1, random depth and the writer on
+correct reference body positions in all four artifact/panel cells:
+**409/4,661** and **556/4,614** against **376/458**, **158/192**, **216/307**
+and **60-59/55-49**. Every arm had **0** exact and **0** BOS-complete replies;
+all 453 train and 449 dev replies hit the cap. Every copy decision replaced the
+writer, and the prompt-derived copy stream excludes BOS, so exact copy cannot
+stop itself. This preserves depth-three/four copy geometry for a combined
+copy-plus-termination read; it is not a complete-reply result. Record:
+[deepseek-153](../loop/tasks/cpu-training-pilot/deepseek-153/REPORT.md).
+**Next:** combine longest-first copy content with a writer or explicit
+geometric BOS path, then test whether termination can fire without losing the
+body-position gain.
+
 ## 2026-11-05 — Depth-age router loses to longest-first (deepseek)
 
 A 36-cell discrete router fitted on new `train,train` seed 2601 was tested on

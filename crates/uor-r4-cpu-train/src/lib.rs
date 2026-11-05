@@ -11,12 +11,14 @@ use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_c
 
 mod content_readout;
 mod copy_key_depth;
+mod copy_key_reply;
 mod corpus;
 mod counterfactual;
 mod discrete_route;
 mod fbs;
 mod gain_train;
 mod hamming;
+mod learned_copy_reply;
 mod memory;
 mod memory_train;
 mod panel;
@@ -55,6 +57,12 @@ pub use copy_key_depth::{
     CopyKeyDepthArm, CopyKeyDepthReading, CopyKeyRouteStat, CopyKeyRouter, CopyKeyRouterReading,
     COPY_KEY_AGE_BINS, COPY_KEY_MAX_DEPTH,
 };
+pub use copy_key_reply::{
+    compare_copy_key_reply_rows, copy_key_reply_decision, evaluate_copy_key_replies,
+    generate_copy_key_reply, CopyKeyReplyArm, CopyKeyReplyComparison, CopyKeyReplyDecision,
+    CopyKeyReplyMetric, CopyKeyReplyReading, CopyKeyReplyRow, CopyKeyReplyStep,
+    TimedCopyKeyReplyReading, COPY_KEY_REPLY_MAX_DEPTH,
+};
 pub use corpus::{
     validate_corpus_manifest, CpuConversationSample, CpuCorpusIdentity, CpuCorpusSplit,
     CpuMaskedCorpus,
@@ -83,6 +91,10 @@ pub use gain_train::{
     CpuTerminationGainTrainer, ServedGainConfig, ServedGainMove, ServedGainStep,
     TerminationGainConfig, TerminationGainEvaluation, TerminationGainReading, TerminationGainStep,
     CPU_SERVED_GAIN_TRAINER_SCHEMA, CPU_TERMINATION_GAIN_TRAINER_SCHEMA,
+};
+pub use learned_copy_reply::{
+    derive_learned_copy_readout, evaluate_learned_copy_replies, LearnedCopyArm, LearnedCopyReading,
+    LearnedCopyStep, LearnedCopyTraining, TimedLearnedCopyReading, LEARNED_COPY_MAX_TRAINING_ROWS,
 };
 pub use memory_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
@@ -129,9 +141,9 @@ pub use served_forward::{
 pub use stop_signature::{
     derive_stop_signature_rows, evaluate_stop_signature_no_gate, evaluate_stop_signature_replies,
     evaluate_stop_signature_rows, fit_stop_signature_gate, hamming_distance, pack_stop_signature,
-    shuffle_stop_signature_rows, StopSignature, StopSignatureDecision, StopSignatureEvaluation,
-    StopSignatureGate, StopSignatureReading, StopSignatureReplyReading, StopSignatureRow,
-    StopSignatureTraining, STOP_SIGNATURE_BITS, STOP_SIGNATURE_WORDS,
+    shuffle_stop_signature_rows, stop_signature_fires, StopSignature, StopSignatureDecision,
+    StopSignatureEvaluation, StopSignatureGate, StopSignatureReading, StopSignatureReplyReading,
+    StopSignatureRow, StopSignatureTraining, STOP_SIGNATURE_BITS, STOP_SIGNATURE_WORDS,
 };
 pub use train::{
     CpuRankMarginTrainer, RankMarginConfig, RankMarginReading, RankMarginSample, RankMarginStep,

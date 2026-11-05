@@ -70,3 +70,19 @@ path = "src/bin/cpu-memory-panel-driver.rs"
 [[bin]]
 name = "cpu-gain-panel-driver"
 path = "src/bin/cpu-gain-panel-driver.rs"
+
+[[bin]]
+name = "cpu-copy-key-reply"
+path = "src/bin/cpu-copy-key-reply.rs"
+
+[[bin]]
+name = "cpu-copy-key-reply-oracle"
+path = "src/bin/cpu-copy-key-reply-oracle.rs"
+
+[[bin]]
+name = "cpu-learned-copy-read"
+path = "src/bin/cpu-learned-copy-read.rs"
+
+[[bin]]
+name = "cpu-copy-generated-stop"
+path = "src/bin/cpu-copy-generated-stop.rs"
