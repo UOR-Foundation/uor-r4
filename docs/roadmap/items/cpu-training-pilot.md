@@ -372,6 +372,16 @@ recalled 16/84. The preflight stopped before generation. This closes the fixed
 phase-alignment/density configuration, not transition geometry generally. See
 [deepseek-146](../../loop/tasks/cpu-training-pilot/deepseek-146/REPORT.md).
 
+The following termination attempt concatenated the surviving current code with
+that phase-aligned transition. The fixed 4,096-bit state selected k=2 and a 775
+margin, changed 58 leave-one-out decisions and preserved the ungated content
+prefix exactly over 1,145 decisions. Seed 1 still recalled only 16/84 endpoints
+against the 26/84 floor; its 11/1,484 false stops stayed inside the 14-row
+limit, while the shuffled control recalled 18/84 with 13/1,484 false stops. The
+preflight stopped before seed 2 or generation. This closes the exact
+current-code-plus-phase-transition density configuration. See
+[deepseek-147](../../loop/tasks/cpu-training-pilot/deepseek-147/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

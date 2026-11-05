@@ -329,4 +329,16 @@ read-only.
 
 ## Outcome
 
-Pending the registered run.
+Seed 1 of the registered preflight stopped before seed 2 or generation. The
+combined trajectory-density gate retained the exact 1,568 generated rows,
+recalled **16/84** terminal endpoints against the **26/84** floor, and emitted
+**11/1,484** false stops inside the 14-row limit. Its shuffled-label control
+changed **58** leave-one-out firing decisions, recalled 18/84 and emitted
+13/1,484 false stops. The ungated code-prefix audit covered 1,145 decisions
+with zero mismatches.
+
+The stopped evidence is in
+`docs/labs/cpu-training-pilot-trajectory-density-2026-11-04/evidence-attempt-1/`
+with `SHA256SUMS`
+`f56a5dc8be880189fb71776cac9f9979c6a7a0a6daa4a1c249230bcfa6c90467`.
+No threshold or representation was changed after observing the result.
