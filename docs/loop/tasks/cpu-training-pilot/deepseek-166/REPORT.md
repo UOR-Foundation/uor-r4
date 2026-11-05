@@ -39,7 +39,7 @@ Nothing in this bookkeeping unit. The released experiment remains a bounded
 
 ## Size
 
-This release changes three bookkeeping paths against base `38ab13578`.
+This release changes four bookkeeping paths against base `38ab13578`.
 
 ## Skills used
 
