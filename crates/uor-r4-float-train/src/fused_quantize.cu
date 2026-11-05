@@ -8,10 +8,12 @@
 // built with -ftz=false -prec-div=true -prec-sqrt=true and no fast math, so each op rounds once,
 // to nearest. Here every f32 add, subtract, multiply and divide is a non-contracting `__f*_rn`
 // intrinsic, and every `affine(mul, add)` is `__fmaf_rn(x, mul, add)`, each in the chain's order.
-// For the constants the chains use (a power of two with add 0, or mul 1), an fma and a separate
-// multiply and add round alike, a -0 product included (-0 + +0 is +0 both ways), so the result
-// does not depend on whether nvcc contracts Candle's `x * mul + add`, nor on this file's
-// `--fmad` choice. Comparisons, `fmaxf`/`fminf` (Candle's `maximum`/`minimum`, so `clamp`),
+// An affine whose multiplier is 1 is `__fadd_rn(x, add)` instead: `1 · x` is exact, so it is one
+// rounding of the same sum, and nvcc folds `__fmaf_rn(1, x, add)` into a plain `add.f32`, which
+// ptxas may contract (claude-285's G3 found four). For the constants the chains use (a power of
+// two with add 0, or mul 1), an fma and a separate multiply and add round alike, a -0 product
+// included (-0 + +0 is +0 both ways), so the result does not depend on whether nvcc contracts
+// Candle's `x * mul + add`, nor on this file's `--fmad` choice. Comparisons, `fmaxf`/`fminf` (Candle's `maximum`/`minimum`, so `clamp`),
 // `fabsf` and `floorf` are exact. The chains' scale constants arrive as f32 bit patterns, cast
 // from f64 as the chains cast them (`fused_quantize.rs`), so each has one source.
 
@@ -49,11 +51,11 @@ __device__ float row_abs_max(const float* x, u64 offset, uint width, float* shar
 __device__ float row_scale(float max, float unit, float saturated) {
     float integer = __fmaf_rn(max, unit, 0.0f);
     integer = fminf(fmaxf(integer, 0.0f), saturated);
-    float scale = __fmaf_rn(1.0f, unit, 0.0f);
+    float scale = __fadd_rn(unit, 0.0f);
     const int passes[6] = {32, 16, 8, 4, 2, 1};
     for (int p = 0; p < 6; ++p) {
         int bits = passes[p];
-        float factor = integer >= pow2f(14 + bits) ? __fmaf_rn(1.0f, pow2f(-bits), 0.0f) : 1.0f;
+        float factor = integer >= pow2f(14 + bits) ? __fadd_rn(pow2f(-bits), 0.0f) : 1.0f;
         integer = __fmul_rn(integer, factor);
         scale = __fmul_rn(scale, factor);
     }
@@ -77,7 +79,7 @@ extern "C" __global__ void activation_quantize16_fwd(
     for (uint i = threadIdx.x; i < width; i += blockDim.x) {
         float v = x[offset + i];
         float scaled = __fmul_rn(v, scale);
-        float q = floorf(__fmaf_rn(scaled, 1.0f, 0.5f));
+        float q = floorf(__fadd_rn(scaled, 0.5f));
         q = fminf(fmaxf(q, -32767.0f), 32767.0f);
         q = __fdiv_rn(q, scale);
         float kept = __fmul_rn(v, activation_inside(scaled));
@@ -120,7 +122,7 @@ extern "C" __global__ void q16_residual_fwd(
     if (id >= total) return;
     float v = x[id];
     float scaled = __fmaf_rn(v, __uint_as_float(scale_bits), 0.0f);
-    float r = floorf(__fmaf_rn(scaled, 1.0f, 0.5f));
+    float r = floorf(__fadd_rn(scaled, 0.5f));
     r = fminf(fmaxf(r, -pow2f(31)), pow2f(31));
     r = __fmaf_rn(r, __uint_as_float(inverse_bits), 0.0f);
     if (bridge == 0u) {

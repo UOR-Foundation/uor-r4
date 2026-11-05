@@ -433,10 +433,10 @@ mod tests {
         /// The twin of the kernels' `row_scale`.
         fn row_scale(max: f32, c: Constants) -> f32 {
             let mut integer = max.mul_add(c.unit, 0.0).max(0.0).min(c.saturated);
-            let mut scale = 1f32.mul_add(c.unit, 0.0);
+            let mut scale = c.unit + 0.0;
             for bits in [32, 16, 8, 4, 2, 1] {
                 let factor = if integer >= pow2(14 + bits) {
-                    1f32.mul_add(pow2(-bits), 0.0)
+                    pow2(-bits) + 0.0
                 } else {
                     1.0
                 };
@@ -484,8 +484,7 @@ mod tests {
                 .flat_map(|(row, scale)| {
                     row.iter().map(move |&value| {
                         let scaled = value * scale;
-                        let quantized =
-                            scaled.mul_add(1.0, 0.5).floor().max(-32767.0).min(32767.0) / scale;
+                        let quantized = (scaled + 0.5).floor().max(-32767.0).min(32767.0) / scale;
                         let kept = value * activation_inside(scaled);
                         kept + (quantized - kept)
                     })
@@ -510,8 +509,7 @@ mod tests {
             x.iter()
                 .map(|&value| {
                     let scaled = value.mul_add(c.scale, 0.0);
-                    let rounded = scaled
-                        .mul_add(1.0, 0.5)
+                    let rounded = (scaled + 0.5)
                         .floor()
                         .max(-pow2(31))
                         .min(pow2(31))
@@ -723,14 +721,12 @@ mod tests {
                     .all(|(t, d)| (t.is_nan() && d.is_nan()) || t.to_bits() == d.to_bits())
         }
 
-        /// The gradient candle hands a quantizer for `loss = Σ out · w`: `w`, summed into zeros.
+        /// The gradient candle hands a quantizer for `loss = Σ out · w`: `1 · w`, which is `w`,
+        /// −0 included. The patched candle stores a tensor's first gradient as it is
+        /// (`backprop.rs` `store_directly`), where upstream added it to zeros, which turns −0
+        /// into +0.
         fn out_grad(n: usize) -> Vec<f32> {
-            weights(n).iter().map(|w| 0.0 + w).collect()
-        }
-
-        /// The gradient candle leaves on `x` from the op's `dx`: summed into zeros.
-        fn accumulated(dx: Vec<f32>) -> Vec<f32> {
-            dx.iter().map(|d| 0.0 + d).collect()
+            weights(n)
         }
 
         fn activation_chain(x: &Tensor) -> crate::Result<Tensor> {
@@ -785,7 +781,7 @@ mod tests {
                     twin_matches(&twin, &chain.0),
                     "{shape:?}: the twin's forward"
                 );
-                let twin = accumulated(activation_backward(values, &out_grad(values.len()), width));
+                let twin = activation_backward(values, &out_grad(values.len()), width);
                 assert_eq!(
                     bits(&twin),
                     bits(&chain_grad),
@@ -829,7 +825,7 @@ mod tests {
                     "{shape:?}: bridged gradient"
                 );
                 assert!(twin_matches(&residual_forward(values, true), &chain.0));
-                let twin = accumulated(residual_backward(values, &out_grad(values.len())));
+                let twin = residual_backward(values, &out_grad(values.len()));
                 assert_eq!(
                     bits(&twin),
                     bits(&chain_grad),
