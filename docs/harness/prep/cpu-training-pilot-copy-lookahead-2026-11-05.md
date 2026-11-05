@@ -332,6 +332,13 @@ mismatches, and repeat byte-identically after timing fields are removed.
 - **INSTRUMENT FAULT** if fit, source, input, lookahead or report identity
   fails closed.
 
+## Independent GO
+
+GO - fresh-context Codex subagent `go_copy_lookahead_2` reviewed head
+`12e1a3911efd01aba909ab242791e2f89762d6f5` and implementation pin
+`4b05143cbcd9f9a7e8959fb1610acfc0bf14c841`. The registered seed-2764 run is
+authorized; the fresh panel and output root were absent at review.
+
 ## TEST FITNESS
 
 TEST FITNESS: FIT - M1 #2029 candidate-conditioned exact model lookahead
