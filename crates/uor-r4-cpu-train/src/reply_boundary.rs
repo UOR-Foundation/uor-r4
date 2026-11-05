@@ -686,7 +686,19 @@ fn reply_hash(rows: &[CopyKeyReplyRow]) -> String {
     for row in rows {
         hasher.update(&(row.row as u64).to_le_bytes());
         hasher.update(row.reply_sha256.as_bytes());
+        hasher.update(&[
+            u8::from(row.reachable),
+            u8::from(row.exact_reference),
+            u8::from(row.bos_complete),
+            u8::from(row.opening_correct),
+            u8::from(row.premature_bos),
+            u8::from(row.non_premature_bos),
+        ]);
         hasher.update(&row.generated_tokens.to_le_bytes());
+        hasher.update(&row.reference_tokens.to_le_bytes());
+        hasher.update(&row.correct_body_positions.to_le_bytes());
+        hasher.update(&row.copy_decisions.to_le_bytes());
+        hasher.update(&row.fallback_decisions.to_le_bytes());
         hasher.update(row.stop.as_bytes());
     }
     hasher.finalize().to_hex().to_string()
