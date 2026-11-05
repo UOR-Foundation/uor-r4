@@ -324,3 +324,12 @@ date: 2026-11-05
 A FIT verdict clears compute for this configuration only. One stated advisory
 remains: the run wrapper must fail when `random_nonvacuity.non_vacuous` is not
 true.
+
+## Pre-run GO
+
+GO - reviewer `codex fresh-context GO`, 2026-11-05. HEAD was clean at
+`3d44126fc763`; implementation pin `cdcb63cafe27` and generator pin
+`4e42ffca5` matched. The output root was absent, all input hashes matched, the
+executable wrapper passed `bash -n`, and the fail-closed random, reachable-power
+and artifact-identity checks were present. The 64 MiB evidence cap is tight but
+enforced; an overrun stops cleanly before a result.
