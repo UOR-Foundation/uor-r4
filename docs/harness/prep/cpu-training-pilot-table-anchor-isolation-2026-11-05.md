@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-table-anchor-isolation-2026-11-05`
 
 ## Status
 
-PENDING FIT and D67 pre-run GO. No panel arm has been run.
+REGISTERED with FIT and D67 GO. No panel arm has been run.
 
 ## Question
 
@@ -203,4 +203,23 @@ language, memory or complete-reply gain.
 
 ## Verdict
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/cpu-training-pilot-table-anchor-isolation-2026-11-05.md
+reviewer: deepseek fresh-context subagent table_anchor_fit_d67_2
+note: No blockers at a5e472c36; source, binary, hashes, panel power, absent
+  outputs, hybrid serving boundary, determinism/parity and D84 scope verified;
+  public arms not run.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
+
+## Pre-run GO
+
+GO - reviewer `deepseek fresh-context subagent table_anchor_fit_d67_2`,
+2026-11-05, at clean review head
+`a5e472c363f848be7ff4b5b462a6b5391478afeb`. The reviewer verified the
+four-arm construction, raw/raw serving parity, hybrid no-serving boundary,
+combined-artifact equality, fail-closed Hamming/memory/shape checks, all input
+and binary hashes, absent outputs, 58/616 panel power, full CPU tests, focused
+tests, scoped strict Clippy, formatting, D23/D32 ratchets and D84 scope. The
+public-panel arms had not run.
