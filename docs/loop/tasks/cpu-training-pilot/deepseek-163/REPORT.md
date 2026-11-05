@@ -106,9 +106,9 @@ Published evidence manifest SHA-256:
 ## Size
 
 Against base `7fe55fdbf`, this unit changes four CPU-train files
-(**+115 / -23**), nine task, preregistration, notebook, roadmap, state and
+(**+121 / -23**), nine task, preregistration, notebook, roadmap, state and
 lab-record files (**+643 / -0**), and 30 published evidence files
-(**+380 / -0**): **43 files, +1,138 / -23**. No corpus or binary is tracked.
+(**+380 / -0**): **43 files, +1,144 / -23**. No corpus or binary is tracked.
 
 ## Skills used
 
