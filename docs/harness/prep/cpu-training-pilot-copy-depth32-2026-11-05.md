@@ -120,25 +120,26 @@ jq -e --arg tokenizer_sha a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457
 
 gzip -dc "$TRAIN/seed1-tt.json.gz" >"$OUT/reports/seed1-tt-source.json"
 gzip -dc "$TRAIN/seed2-tt.json.gz" >"$OUT/reports/seed2-tt-source.json"
+printf '%s  %s\n' \
+  28a8caaffef6d815da86a6e84207729f3acd41892ced8a205cfe5248d7c2f62a \
+  "$OUT/reports/seed1-tt-source.json" \
+  466b94e7b4c1ae2d58337c51b07171c6d2229b23edaa366949e7a2ed8a5642e3 \
+  "$OUT/reports/seed2-tt-source.json" |
+  sha256sum -c -
 BIN=$BUILD/release/cpu-copy-key-reply
 run() {
-  name=$1 panel=$2 artifact=$3 expected=$4
+  name=$1 panel=$2 artifact=$3
   /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
     timeout 900s env RAYON_NUM_THREADS=32 "$BIN" \
     "$panel/tokens.u16" "$panel/response_mask.u8" "$panel/manifest.json" \
     "$artifact" --cap 64 --seed 163 >"$OUT/reports/$name.json"
-  jq -e '.examples.reachable >= 200' "$OUT/reports/$name.json" >/dev/null
-  jq -e '.random_nonvacuity_from_longest_32.non_vacuous == true' \
-    "$OUT/reports/$name.json" >/dev/null
-  jq -e --arg expected "$expected" \
-    '.inputs.artifact_sha256 == $expected' "$OUT/reports/$name.json" >/dev/null
 }
-run seed1-tt "$TRAIN/panels/tt-2711" "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-run seed2-tt "$TRAIN/panels/tt-2711" "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
-run seed1-dd "$PANEL" "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-run seed2-dd "$PANEL" "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
-run seed1-dd-repeat "$PANEL" "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-run seed2-dd-repeat "$PANEL" "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+run seed1-tt "$TRAIN/panels/tt-2711" "$SEED1"
+run seed2-tt "$TRAIN/panels/tt-2711" "$SEED2"
+run seed1-dd "$PANEL" "$SEED1"
+run seed2-dd "$PANEL" "$SEED2"
+run seed1-dd-repeat "$PANEL" "$SEED1"
+run seed2-dd-repeat "$PANEL" "$SEED2"
 
 normalize() {
   jq -S 'walk(if type == "object"
@@ -149,12 +150,110 @@ cmp <(normalize "$OUT/reports/seed1-dd.json") \
   <(normalize "$OUT/reports/seed1-dd-repeat.json")
 cmp <(normalize "$OUT/reports/seed2-dd.json") \
   <(normalize "$OUT/reports/seed2-dd-repeat.json")
-for seed in seed1 seed2; do
-  jq -e '[.arms.longest_32_to_1.reading.selected_depth_counts[4:][]]
-    | add > 0' "$OUT/reports/$seed-dd.json" >/dev/null
+VALID=1
+for name in seed1-tt seed2-tt seed1-dd seed2-dd; do
+  report=$OUT/reports/$name.json
+  case "$name" in
+    seed1*) expected=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd ;;
+    seed2*) expected=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 ;;
+  esac
+  if ! jq -e '.examples.reachable >= 200' "$report" >/dev/null; then
+    printf '%s reachable-below-200\n' "$name" >>"$OUT/power-limited.txt"
+  fi
+  if ! jq -e --arg expected "$expected" \
+    '.inputs.artifact_sha256 == $expected' "$report" >/dev/null; then
+    printf '%s artifact-hash-mismatch\n' "$name" >>"$OUT/instrument-fault.txt"
+    VALID=0
+  fi
+  if ! jq -e '.random_nonvacuity_from_longest_32.non_vacuous == true' \
+    "$report" >/dev/null; then
+    printf '%s random-control-vacuous\n' "$name" >>"$OUT/instrument-fault.txt"
+    VALID=0
+  fi
+  if ! jq -e 'all(.arms[].steps[];
+    if .used_copy then true else .selected_token == .writer_token end)' \
+    "$report" >/dev/null; then
+    printf '%s ungated-token-mismatch\n' "$name" >>"$OUT/instrument-fault.txt"
+    VALID=0
+  fi
 done
-gzip -9 "$OUT"/reports/seed*.json
+POWER_OK=1
+for seed in seed1 seed2; do
+  if ! jq -e '[.arms.longest_32_to_1.reading.selected_depth_counts[4:][]]
+    | add > 0' "$OUT/reports/$seed-dd.json" >/dev/null; then
+    printf '%s no-depth-above-four\n' "$seed" >>"$OUT/power-limited.txt"
+    POWER_OK=0
+  fi
+  jq '{
+    train_not_below_longest_4: (
+      .arms.longest_32_to_1.reading.correct_body_positions
+      >= .arms.longest_4_to_1.reading.correct_body_positions
+    ),
+    candidate_premature_zero:
+      .arms.longest_32_to_1.reading.premature_bos == 0,
+    candidate_body_positions:
+      .arms.longest_32_to_1.reading.correct_body_positions,
+    longest_4_body_positions:
+      .arms.longest_4_to_1.reading.correct_body_positions
+  }' "$OUT/reports/$seed-tt.json" >"$OUT/reports/$seed-train-outcome.json"
+  jq '{
+    fresh_passes_longest_4:
+      .comparisons.longest_4_to_1.correct_body_positions.passes,
+    fresh_passes_k2:
+      .comparisons.k2_backoff_k1.correct_body_positions.passes,
+    fresh_passes_depth_1:
+      .comparisons.fixed_depth_1.correct_body_positions.passes,
+    fresh_passes_random:
+      .comparisons.random_available_depth.correct_body_positions.passes,
+    fresh_passes_writer:
+      .comparisons.writer.correct_body_positions.passes,
+    fresh_premature_zero:
+      .arms.longest_32_to_1.reading.premature_bos == 0,
+    exact_reference: .arms.longest_32_to_1.reading.exact_reference,
+    bos_complete: .arms.longest_32_to_1.reading.bos_complete
+  }' "$OUT/reports/$seed-dd.json" >"$OUT/reports/$seed-dev-outcome.json"
+done
+gzip -9 "$OUT"/reports/seed1-tt-source.json "$OUT"/reports/seed2-tt-source.json \
+  "$OUT"/reports/seed1-tt.json "$OUT"/reports/seed2-tt.json \
+  "$OUT"/reports/seed1-dd.json "$OUT"/reports/seed2-dd.json \
+  "$OUT"/reports/seed1-dd-repeat.json "$OUT"/reports/seed2-dd-repeat.json
 test "$(du -sb "$OUT" | cut -f1)" -le 67108864
+if test "$VALID" -ne 1; then
+  printf 'INSTRUMENT_FAULT\n' >"$OUT/outcome.txt"
+  exit 1
+fi
+if test "$POWER_OK" -ne 1; then
+  printf 'POWER_LIMITED\n' >"$OUT/outcome.txt"
+  exit 0
+fi
+jq -s '
+  {
+    passes:
+      (all(.[]; .train_not_below_longest_4 == true)),
+    outcomes: .
+  }
+' "$OUT/reports/seed1-train-outcome.json" \
+  "$OUT/reports/seed2-train-outcome.json" \
+  >"$OUT/reports/train-outcome.json"
+jq -s '
+  {
+    passes:
+      (all(.[];
+        .fresh_passes_longest_4 == true
+        and .fresh_passes_k2 == true
+        and .fresh_passes_depth_1 == true
+        and .fresh_passes_random == true
+        and .fresh_passes_writer == true
+        and .fresh_premature_zero == true)),
+    outcomes: .
+  }
+' "$OUT/reports/seed1-dev-outcome.json" \
+  "$OUT/reports/seed2-dev-outcome.json" \
+  >"$OUT/reports/dev-outcome.json"
+jq -s -r '
+  if .[0].passes and .[1].passes then "KEEP" else "REJECT" end
+' "$OUT/reports/train-outcome.json" "$OUT/reports/dev-outcome.json" \
+  >"$OUT/outcome.txt"
 ```
 
 ## Minimum test power
