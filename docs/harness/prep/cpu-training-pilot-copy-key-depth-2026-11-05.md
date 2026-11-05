@@ -1,6 +1,6 @@
 # Hierarchical copy-key depth screen
 
-**Status:** `TEST FITNESS: FIT`
+**Status:** `TEST FITNESS: PENDING`
 
 ## Question
 
@@ -160,7 +160,7 @@ The named model-time ledger at
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-copy-key-depth
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/copy-key-depth/2026-11-05-attempt-2
+OUT=$SHARED/local/deepseek/copy-key-depth/2026-11-05-attempt-3
 PANELS=$OUT/panels
 BUILD=$SOURCE/target/deepseek/copy-key-depth-run
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
@@ -212,14 +212,15 @@ run() {
   dir=$2
   token_file=$3
   mask_file=$4
+  manifest_file=$5
   /usr/bin/time -v -o "$OUT/$name.time.txt" \
-    timeout 600s "$BIN" "$dir/$token_file" "$dir/$mask_file" "$dir/manifest.json" \
+    timeout 600s "$BIN" "$dir/$token_file" "$dir/$mask_file" "$dir/$manifest_file" \
       --context 192 --seed 149 >"$OUT/$name.json"
 }
-run dev "$DEV" dev-tokens.u16 dev-response-mask.u8
-run train-train "$PANELS/train-train-2501" tokens.u16 response_mask.u8
-run dev-dev "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8
-run dev-dev-repeat "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8
+run dev "$DEV" dev-tokens.u16 dev-response-mask.u8 dev-manifest.json
+run train-train "$PANELS/train-train-2501" tokens.u16 response_mask.u8 manifest.json
+run dev-dev "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8 manifest.json
+run dev-dev-repeat "$PANELS/dev-dev-2502" tokens.u16 response_mask.u8 manifest.json
 
 test "$(jq -r '.reading.copyable_positions' "$OUT/dev.json")" -eq 8243
 test "$(jq -r '.reading.fixed[0].positions_with_match' "$OUT/dev.json")" -eq 6306
@@ -256,22 +257,16 @@ changed.
 The prior FIT at `70b6445d4` is superseded by attempt 1's input-path
 instrument fault.
 
-TEST FITNESS: FIT - M2 #2030 deepseek-149
-sheet: docs/harness/prep/cpu-training-pilot-copy-key-depth-2026-11-05.md
-reviewer: codex fresh-context FIT round 5
-note: Attempt-1 fault is sealed and disclosed; corrected recipe uses the exact
-  public-DEV filenames and preserves all panel, power, control, pin, timeout,
-  RSS and failure-sealing terms.
-date: 2026-11-05
+The prior corrected FIT is superseded by attempt 2's public-DEV manifest-path
+fault.
 
-A FIT verdict clears compute for this configuration only (D22).
+TEST FITNESS: PENDING fresh FIT for attempt 3.
 
 ## Pre-run GO
 
-GO - reviewer `codex fresh-context GO`, 2026-11-05. HEAD was clean at
-`1a2f0c081`; implementation pin `70b6445d4` and generator pin `4e42ffca5`
-matched. Attempt 1 was sealed, attempt 2 was absent, corrected filenames,
-hashes, resources, panel powers and failure sealing were checked read-only.
+The prior GO is superseded by attempt 2's public-DEV manifest-path fault.
+
+GO: PENDING fresh review of attempt 3.
 
 ## Outcome
 
@@ -283,3 +278,9 @@ Attempt 2 fixes only those two input filenames.
 
 Attempt 1 `SHA256SUMS`:
 `222d12634ac2c8d9f9bcda3edee332e1503f2d477737a03a4c2a234cd9667572`.
+
+Attempt 2 repeated the run with the corrected token and mask filenames but
+still used `manifest.json` for public DEV instead of `dev-manifest.json`. No
+target reading occurred. Attempt 2 is preserved under
+`2026-11-05-attempt-2/`; its `SHA256SUMS` is
+`ed23906414c6420e1162d3497ef60819f029d7cb06da07f124b14b9e4acfe833`.
