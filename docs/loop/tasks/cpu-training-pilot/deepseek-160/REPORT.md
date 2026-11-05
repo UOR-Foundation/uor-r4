@@ -50,7 +50,7 @@ Claude-owned file changes.
 ## Size
 
 Against base `3e8780e61`, this repair changes five bookkeeping/evidence paths
-(**+123 / -0**): one binary evidence file, the task ORDER and REPORT, the
+(**+121 / -0**): one binary evidence file, the task ORDER and REPORT, the
 deepseek-159 post-merge note and the new claim. The regenerated manifests are
 byte-identical because they already named the correct token hash.
 
