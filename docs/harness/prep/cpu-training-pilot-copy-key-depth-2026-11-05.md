@@ -292,3 +292,9 @@ still used `manifest.json` for public DEV instead of `dev-manifest.json`. No
 target reading occurred. Attempt 2 is preserved under
 `2026-11-05-attempt-2/`; its `SHA256SUMS` is
 `ed23906414c6420e1162d3497ef60819f029d7cb06da07f124b14b9e4acfe833`.
+
+Attempt 3 completed. `longest_4_to_1` beat `k2>k1` by 9:1 discordant decisions
+on the train panel and 8:0 on the dev panel, and beat random depth by 32:7 and
+33:5. Public DEV reproduced the Claude-267 parity counts. The candidate passes
+the registered screen. Evidence `SHA256SUMS` is
+`bec19988e1b161973de1037f444ffc1516093f2bd33f54df4a35ee52a09c3a22`.
