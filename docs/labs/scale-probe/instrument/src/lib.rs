@@ -1,5 +1,6 @@
 //! P5 scale-probe laptop side: nested training mixes (`mix`), count-table grading of one
-//! checkpoint's rows (`grade`) and the paired-band comparison of two cells (`pair`).
+//! checkpoint's rows (`grade`), the TRAIN 8-gram context census of the rows (`seen`) and the
+//! paired-band comparison of two cells (`pair`).
 //! Counting only; integer arithmetic only; every inconsistency is a refusal.
 
 use serde::Deserialize;
@@ -16,6 +17,12 @@ pub const MIX_SCHEMA: &str = "uor-r4-scale-probe-mix/v1";
 pub const GRADE_SCHEMA: &str = "uor-r4-scale-probe-grade/v1";
 pub const PAIR_SCHEMA: &str = "uor-r4-scale-probe-pair/v1";
 pub const HITS_FILE: &str = "nearest-hits.bin";
+pub const T2_HITS_FILE: &str = "t2-hits.bin";
+pub const UNIGRAM_HITS_FILE: &str = "unigram-hits.bin";
+pub const SEEN_SCHEMA: &str = "uor-r4-scale-probe-seen/v1";
+pub const EXCLUDED_FILE: &str = "excluded.bin";
+/// Context length of the TRAIN n-gram census.
+pub const NGRAM: usize = 8;
 
 type R<T> = Result<T, String>;
 
@@ -23,11 +30,12 @@ type R<T> = Result<T, String>;
 pub fn run(args: &[String]) -> R<String> {
     let (cmd, rest) = args
         .split_first()
-        .ok_or("usage: scale-probe mix|grade|pair key=value...")?;
+        .ok_or("usage: scale-probe mix|grade|seen|pair key=value...")?;
     let a = Args::parse(rest)?;
     match cmd.as_str() {
         "mix" => run_mix(&a),
         "grade" => run_grade(&a),
+        "seen" => run_seen(&a),
         "pair" => run_pair(&a),
         other => Err(format!("unknown command {other:?}")),
     }
@@ -476,17 +484,36 @@ impl Counts {
     }
 }
 
-fn run_grade(a: &Args) -> R<String> {
+/// One panel split with its rows, every row check passed.
+struct Panel {
+    name: String,
+    split: Split,
+    /// None for `rows=NAME:all`.
+    rows_file_sha256: Option<String>,
+    rows: RowsFile,
+    /// SHA-256 over the split's `(position u64 LE, target u32 LE)` pairs.
+    id: [u8; 32],
+}
+
+/// The inputs `grade` and `seen` share: `out`, TRAIN and the checked panels in order.
+struct Inputs {
+    out: PathBuf,
+    train: Split,
+    panels: Vec<Panel>,
+}
+
+/// `allow_all`: `rows=NAME:all` takes every scored panel position, target `tokens[p]`.
+fn load_inputs(a: &Args, allow_all: bool) -> R<Inputs> {
     a.known(&["out", "train", "panel", "rows"])?;
     let out = PathBuf::from(a.one("out")?);
     refuse_existing(&out)?;
     let (tdir, tt, tm) = split_spec(a.one("train")?)?;
-    let panels: Vec<_> = a
+    let specs: Vec<_> = a
         .all("panel")
         .into_iter()
         .map(named_spec)
         .collect::<R<_>>()?;
-    if panels.is_empty() {
+    if specs.is_empty() {
         return Err("at least one panel= is required".into());
     }
     let mut rows: Vec<(String, PathBuf)> = Vec::new();
@@ -499,105 +526,167 @@ fn run_grade(a: &Args) -> R<String> {
         }
         rows.push((n.to_string(), PathBuf::from(f)));
     }
-    let mut seen = BTreeSet::new();
-    for (name, ..) in &panels {
-        if !seen.insert(name.as_str()) {
+    let mut names = BTreeSet::new();
+    for (name, ..) in &specs {
+        if !names.insert(name.as_str()) {
             return Err(format!("panel {name}: given more than once"));
         }
         if !rows.iter().any(|(n, _)| n == name) {
             return Err(format!("panel {name}: no rows file with that name"));
         }
     }
-    if let Some((n, _)) = rows.iter().find(|(n, _)| !seen.contains(n.as_str())) {
+    if let Some((n, _)) = rows.iter().find(|(n, _)| !names.contains(n.as_str())) {
         return Err(format!("rows {n}: no panel with that name"));
     }
     let train = load_split(&tdir, &tt, &tm, false)?;
-    let tables = Tables::build(&train.tokens, &train.mask)?;
-    let mut splits = Vec::new();
-    let mut pooled = Counts::default();
-    let mut pooled_id = Sha256::new();
-    let mut bits: Vec<bool> = Vec::new();
-    for (name, dir, t, m) in &panels {
+    let mut panels = Vec::new();
+    for (name, dir, t, m) in &specs {
         let p = load_split(dir, t, m, false)?;
         let rp = &rows
             .iter()
             .find(|(n, _)| n == name)
             .expect("matched above")
             .1;
-        let bytes = read(rp)?;
-        let rf: RowsFile = serde_json::from_slice(&bytes)
-            .map_err(|e| format!("{}: not a rows file: {e}", rp.display()))?;
-        if rf.split != *name {
-            return Err(format!(
-                "{}: split {:?} != rows name {name}",
-                rp.display(),
-                rf.split
-            ));
-        }
-        let k = rf.positions.len();
-        if [rf.targets.len(), rf.nearest.len(), rf.writer.len()] != [k; 3] {
-            return Err(format!(
-                "{}: split {name}: unequal list lengths",
-                rp.display()
-            ));
-        }
-        let mut used = vec![false; p.tokens.len()];
-        let mut c = Counts::default();
+        let (rf, rows_file_sha256) = if allow_all && rp.as_path() == Path::new("all") {
+            let positions: Vec<usize> = (1..p.tokens.len())
+                .filter(|&q| is_scored(&p.tokens, &p.mask, q))
+                .collect();
+            let targets = positions.iter().map(|&q| u32::from(p.tokens[q])).collect();
+            let rf = RowsFile {
+                split: name.clone(),
+                memory: false,
+                positions,
+                targets,
+                nearest: Vec::new(),
+                writer: Vec::new(),
+            };
+            (rf, None)
+        } else {
+            let bytes = read(rp)?;
+            let rf: RowsFile = serde_json::from_slice(&bytes)
+                .map_err(|e| format!("{}: not a rows file: {e}", rp.display()))?;
+            check_rows(&rf, &p, name, rp)?;
+            (rf, Some(sha_bytes(&bytes)))
+        };
         let mut id = Sha256::new();
-        for i in 0..k {
+        for (&pos, &target) in rf.positions.iter().zip(&rf.targets) {
+            id.update((pos as u64).to_le_bytes());
+            id.update(target.to_le_bytes());
+        }
+        panels.push(Panel {
+            name: name.clone(),
+            split: p,
+            rows_file_sha256,
+            rows: rf,
+            id: id.finalize().into(),
+        });
+    }
+    Ok(Inputs { out, train, panels })
+}
+
+/// Every row check of a rows file against its panel.
+fn check_rows(rf: &RowsFile, p: &Split, name: &str, rp: &Path) -> R<()> {
+    if rf.split != *name {
+        return Err(format!(
+            "{}: split {:?} != rows name {name}",
+            rp.display(),
+            rf.split
+        ));
+    }
+    let k = rf.positions.len();
+    if [rf.targets.len(), rf.nearest.len(), rf.writer.len()] != [k; 3] {
+        return Err(format!(
+            "{}: split {name}: unequal list lengths",
+            rp.display()
+        ));
+    }
+    let mut used = vec![false; p.tokens.len()];
+    for i in 0..k {
+        let (pos, target) = (rf.positions[i], rf.targets[i]);
+        let bad = |why: String| format!("split {name} row {i}: position {pos}: {why}");
+        if pos == 0 {
+            return Err(bad("position 0 is never scored".into()));
+        }
+        if pos >= p.tokens.len() {
+            return Err(bad(format!("beyond panel length {}", p.tokens.len())));
+        }
+        for (what, v) in [
+            ("target", target),
+            ("nearest", rf.nearest[i]),
+            ("writer", rf.writer[i]),
+        ] {
+            if v as usize >= VOCAB {
+                return Err(bad(format!("{what} id {v} >= {VOCAB}")));
+            }
+        }
+        if u32::from(p.tokens[pos]) != target {
+            return Err(bad(format!(
+                "panel token {} != target {target}",
+                p.tokens[pos]
+            )));
+        }
+        if p.tokens[pos] == 0 {
+            return Err(bad("target is BOS".into()));
+        }
+        if p.mask[pos] != 1 {
+            return Err(bad("mask is 0".into()));
+        }
+        if std::mem::replace(&mut used[pos], true) {
+            return Err(bad("duplicate position".into()));
+        }
+    }
+    Ok(())
+}
+
+/// The pooled row identity: SHA-256 over, per split in order, the name length (u64 LE), the
+/// name bytes and the split's 32-byte identity.
+fn pooled_identity(panels: &[Panel]) -> String {
+    let mut h = Sha256::new();
+    for p in panels {
+        h.update((p.name.len() as u64).to_le_bytes());
+        h.update(p.name.as_bytes());
+        h.update(p.id);
+    }
+    hex::encode(h.finalize())
+}
+
+/// One bit per row in pooled row order, LSB-first, zero-padded to whole bytes.
+fn pack_bits(bits: &[bool]) -> Vec<u8> {
+    let mut v = vec![0u8; bits.len().div_ceil(8)];
+    for (i, &b) in bits.iter().enumerate() {
+        v[i / 8] |= u8::from(b) << (i % 8);
+    }
+    v
+}
+
+fn run_grade(a: &Args) -> R<String> {
+    let inp = load_inputs(a, false)?;
+    let tables = Tables::build(&inp.train.tokens, &inp.train.mask)?;
+    let mut splits = Vec::new();
+    let mut pooled = Counts::default();
+    let (mut near_bits, mut t2_bits, mut uni_bits) = (Vec::new(), Vec::new(), Vec::new());
+    for pn in &inp.panels {
+        let (p, rf, name) = (&pn.split, &pn.rows, &pn.name);
+        let mut c = Counts::default();
+        for i in 0..rf.positions.len() {
             let (pos, target) = (rf.positions[i], rf.targets[i]);
-            let bad = |why: String| format!("split {name} row {i}: position {pos}: {why}");
-            if pos == 0 {
-                return Err(bad("position 0 is never scored".into()));
-            }
-            if pos >= p.tokens.len() {
-                return Err(bad(format!("beyond panel length {}", p.tokens.len())));
-            }
-            for (what, v) in [
-                ("target", target),
-                ("nearest", rf.nearest[i]),
-                ("writer", rf.writer[i]),
-            ] {
-                if v as usize >= VOCAB {
-                    return Err(bad(format!("{what} id {v} >= {VOCAB}")));
-                }
-            }
-            if u32::from(p.tokens[pos]) != target {
-                return Err(bad(format!(
-                    "panel token {} != target {target}",
-                    p.tokens[pos]
-                )));
-            }
-            if p.tokens[pos] == 0 {
-                return Err(bad("target is BOS".into()));
-            }
-            if p.mask[pos] != 1 {
-                return Err(bad("mask is 0".into()));
-            }
-            if std::mem::replace(&mut used[pos], true) {
-                return Err(bad("duplicate position".into()));
-            }
             let model = rf.nearest[i] == target;
             let uni = u32::from(tables.unigram_top1) == target;
             let t2 = u32::from(tables.t2(p.tokens[pos - 1])) == target;
             c.add_row(model, rf.writer[i] == target, uni, t2);
-            bits.push(model);
-            id.update((pos as u64).to_le_bytes());
-            id.update(target.to_le_bytes());
+            near_bits.push(model);
+            t2_bits.push(t2);
+            uni_bits.push(uni);
         }
-        let id: [u8; 32] = id.finalize().into();
-        pooled_id.update((name.len() as u64).to_le_bytes());
-        pooled_id.update(name.as_bytes());
-        pooled_id.update(id);
         pooled.add(&c);
         let mut v = json!({
             "name": name,
             "tokens_sha256": p.tokens_sha256,
             "mask_sha256": p.mask_sha256,
-            "rows_file_sha256": sha_bytes(&bytes),
+            "rows_file_sha256": pn.rows_file_sha256,
             "memory": rf.memory,
             "panel_scored_positions": count_scored(&p.tokens, &p.mask, p.tokens.len()),
-            "row_identity_sha256": hex::encode(id),
+            "row_identity_sha256": hex::encode(pn.id),
         });
         c.fill(&mut v);
         if let Some(mf) = &p.manifest {
@@ -620,17 +709,18 @@ fn run_grade(a: &Args) -> R<String> {
         }
         splits.push(v);
     }
-    let mut hits = vec![0u8; bits.len().div_ceil(8)];
-    for (i, &b) in bits.iter().enumerate() {
-        hits[i / 8] |= u8::from(b) << (i % 8);
-    }
-    let mut pv = json!({"row_identity_sha256": hex::encode(pooled_id.finalize())});
+    let (hits, t2h, unih) = (
+        pack_bits(&near_bits),
+        pack_bits(&t2_bits),
+        pack_bits(&uni_bits),
+    );
+    let mut pv = json!({"row_identity_sha256": pooled_identity(&inp.panels)});
     pooled.fill(&mut pv);
     let grade = json!({
         "schema": GRADE_SCHEMA,
         "train": {
-            "tokens_sha256": train.tokens_sha256,
-            "mask_sha256": train.mask_sha256,
+            "tokens_sha256": inp.train.tokens_sha256,
+            "mask_sha256": inp.train.mask_sha256,
             "scored_targets": tables.scored_targets,
             "bigram_keys_seen": tables.bigram_keys_seen,
         },
@@ -639,9 +729,16 @@ fn run_grade(a: &Args) -> R<String> {
         "pooled": pv,
         "hits_file": HITS_FILE,
         "hits_sha256": sha_bytes(&hits),
+        "t2_hits_file": T2_HITS_FILE,
+        "t2_hits_sha256": sha_bytes(&t2h),
+        "unigram_hits_file": UNIGRAM_HITS_FILE,
+        "unigram_hits_sha256": sha_bytes(&unih),
     });
-    create_out_dir(&out)?;
+    let out = &inp.out;
+    create_out_dir(out)?;
     write(&out.join(HITS_FILE), &hits)?;
+    write(&out.join(T2_HITS_FILE), &t2h)?;
+    write(&out.join(UNIGRAM_HITS_FILE), &unih)?;
     write(&out.join("grade.json"), &pretty(&grade))?;
     Ok(format!(
         "grade {}: rows={} model={} t2={} unigram={}\n",
@@ -651,6 +748,129 @@ fn run_grade(a: &Args) -> R<String> {
         pooled.t2,
         pooled.unigram
     ))
+}
+
+/// Packs `NGRAM` ids (each < 4096, 12 bits) into one key, the first id in the high bits.
+pub fn ngram_key(w: &[u16]) -> u128 {
+    w.iter().fold(0u128, |k, &t| (k << 12) | u128::from(t))
+}
+
+/// Sorted distinct keys of every run `tokens[i..i + NGRAM]` inside one document: no BOS at
+/// offsets `1..NGRAM` (a BOS at offset 0 opens the document). `tokens[0]` is BOS.
+pub fn train_ngrams(tokens: &[u16]) -> R<Vec<u128>> {
+    if let Some(p) = tokens.iter().position(|&t| t as usize >= VOCAB) {
+        return Err(format!("train position {p}: token id >= {VOCAB}"));
+    }
+    let mut keys = Vec::with_capacity(tokens.len().saturating_sub(NGRAM - 1));
+    let mut last_bos = 0usize;
+    for j in 0..tokens.len() {
+        if tokens[j] == 0 {
+            last_bos = j;
+        }
+        if j + 1 >= NGRAM {
+            let i = j + 1 - NGRAM;
+            if last_bos <= i {
+                keys.push(ngram_key(&tokens[i..=j]));
+            }
+        }
+    }
+    keys.sort_unstable();
+    keys.dedup();
+    Ok(keys)
+}
+
+fn seen_counts(mut v: Value, c: [u64; 3]) -> Value {
+    v["rows"] = json!(c[0] + c[1] + c[2]);
+    v["seen"] = json!(c[0]);
+    v["short"] = json!(c[1]);
+    v["unseen"] = json!(c[2]);
+    v
+}
+
+/// Per row at `pos` in the document opened by BOS `s`: `short` if `pos - s < NGRAM`, else
+/// `seen` iff `tokens[pos - NGRAM..pos]` is a TRAIN key, else `unseen`. Short or seen rows
+/// get excluded bit 1. `pos - s < NGRAM` iff a BOS lies in `tokens[pos - NGRAM + 1..pos]`
+/// (clipped at 0, where `tokens[0]` is BOS), so only `NGRAM - 1` tokens are read per row.
+fn run_seen(a: &Args) -> R<String> {
+    const SEEN: usize = 0;
+    const SHORT: usize = 1;
+    const UNSEEN: usize = 2;
+    let inp = load_inputs(a, true)?;
+    let keys = train_ngrams(&inp.train.tokens)?;
+    let mut bits = Vec::new();
+    let mut splits = Vec::new();
+    let mut pooled = [0u64; 3];
+    for pn in &inp.panels {
+        let t = &pn.split.tokens;
+        let mut c = [0u64; 3];
+        for (i, &pos) in pn.rows.positions.iter().enumerate() {
+            let class = if t[pos.saturating_sub(NGRAM - 1)..pos].contains(&0) {
+                SHORT
+            } else {
+                let w = &t[pos - NGRAM..pos];
+                if let Some(x) = w.iter().find(|&&x| x as usize >= VOCAB) {
+                    return Err(format!(
+                        "split {} row {i}: position {pos}: context id {x} >= {VOCAB}",
+                        pn.name
+                    ));
+                }
+                if keys.binary_search(&ngram_key(w)).is_ok() {
+                    SEEN
+                } else {
+                    UNSEEN
+                }
+            };
+            c[class] += 1;
+            bits.push(class != UNSEEN);
+        }
+        for (p, x) in pooled.iter_mut().zip(c) {
+            *p += x;
+        }
+        let v = json!({
+            "name": pn.name,
+            "rows_file_sha256": pn.rows_file_sha256,
+            "row_identity_sha256": hex::encode(pn.id),
+        });
+        splits.push(seen_counts(v, c));
+    }
+    let excluded = pack_bits(&bits);
+    let pv = json!({"row_identity_sha256": pooled_identity(&inp.panels)});
+    let doc = json!({
+        "schema": SEEN_SCHEMA,
+        "ngram": NGRAM,
+        "train": {
+            "tokens_sha256": inp.train.tokens_sha256,
+            "mask_sha256": inp.train.mask_sha256,
+        },
+        "train_ngrams_distinct": keys.len() as u64,
+        "splits": splits,
+        "pooled": seen_counts(pv, pooled),
+        "excluded_file": EXCLUDED_FILE,
+        "excluded_sha256": sha_bytes(&excluded),
+    });
+    create_out_dir(&inp.out)?;
+    write(&inp.out.join(EXCLUDED_FILE), &excluded)?;
+    write(&inp.out.join("seen.json"), &pretty(&doc))?;
+    let mut s = format!(
+        "seen {}: train_ngrams_distinct={} rows={} seen={} short={} unseen={}\n",
+        inp.out.display(),
+        keys.len(),
+        bits.len(),
+        pooled[SEEN],
+        pooled[SHORT],
+        pooled[UNSEEN]
+    );
+    for v in &splits {
+        s += &format!(
+            "  {}: rows {} seen {} short {} unseen {}\n",
+            v["name"].as_str().unwrap_or(""),
+            v["rows"],
+            v["seen"],
+            v["short"],
+            v["unseen"]
+        );
+    }
+    Ok(s)
 }
 
 /// `⌈2·√n⌉`: the smallest `k >= 0` with `k * k >= 4n`.
@@ -732,8 +952,22 @@ pub fn hit(bits: &[u8], i: usize) -> bool {
 
 /// `(b, c)` over rows `[start, start + len)`: X right & Y wrong, X wrong & Y right.
 pub fn discordant(x: &[u8], y: &[u8], start: usize, len: usize) -> (u64, u64) {
+    discordant_where(x, y, start, len, None)
+}
+
+/// [`discordant`] over only the rows whose `excluded` bit is 0 (every row if `None`).
+pub fn discordant_where(
+    x: &[u8],
+    y: &[u8],
+    start: usize,
+    len: usize,
+    excluded: Option<&[u8]>,
+) -> (u64, u64) {
     let (mut b, mut c) = (0u64, 0u64);
     for i in start..start + len {
+        if excluded.is_some_and(|e| hit(e, i)) {
+            continue;
+        }
         match (hit(x, i), hit(y, i)) {
             (true, false) => b += 1,
             (false, true) => c += 1,
@@ -748,8 +982,36 @@ struct Grade {
     sha256: String,
     v: Value,
     hits: Vec<u8>,
+    /// `t2-hits.bin` and `unigram-hits.bin`; None in a grade written before them.
+    t2: Option<Vec<u8>>,
+    unigram: Option<Vec<u8>>,
     /// `(name, row_identity_sha256, rows)` per split, in order.
     splits: Vec<(String, String, u64)>,
+}
+
+/// A side bitset recorded as `{key}_file` / `{key}_sha256`, or None if the grade lacks it.
+fn side_bits(dir: &Path, v: &Value, key: &str, file: &str, len: usize) -> R<Option<Vec<u8>>> {
+    let gp = dir.join("grade.json");
+    match v.get(format!("{key}_file")) {
+        None => Ok(None),
+        Some(f) if f == file => {
+            let p = dir.join(file);
+            let bits = read(&p)?;
+            let got = sha_bytes(&bits);
+            if v[format!("{key}_sha256")].as_str() != Some(got.as_str()) {
+                return Err(format!(
+                    "{}: sha256 {got} != {key}_sha256 {}",
+                    p.display(),
+                    v[format!("{key}_sha256")]
+                ));
+            }
+            if bits.len() != len {
+                return Err(format!("{}: {} bytes, not {len}", p.display(), bits.len()));
+            }
+            Ok(Some(bits))
+        }
+        Some(f) => Err(format!("{}: {key}_file {f} is not {file}", gp.display())),
+    }
 }
 
 fn load_grade(dir: &Path) -> R<Grade> {
@@ -794,18 +1056,56 @@ fn load_grade(dir: &Path) -> R<Grade> {
             hp.display()
         ));
     }
+    let len = total.div_ceil(8) as usize;
+    let t2 = side_bits(dir, &v, "t2_hits", T2_HITS_FILE, len)?;
+    let unigram = side_bits(dir, &v, "unigram_hits", UNIGRAM_HITS_FILE, len)?;
     let sha256 = sha_bytes(&bytes);
     Ok(Grade {
         dir: dir.to_path_buf(),
         sha256,
         v,
         hits,
+        t2,
+        unigram,
         splits,
     })
 }
 
+struct SeenDir {
+    dir: PathBuf,
+    sha256: String,
+    v: Value,
+    excluded: Vec<u8>,
+}
+
+fn load_seen(dir: &Path) -> R<SeenDir> {
+    let sp = dir.join("seen.json");
+    let bytes = read(&sp)?;
+    let v: Value = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("{}: unreadable json: {e}", sp.display()))?;
+    if v["schema"] != SEEN_SCHEMA || v["excluded_file"] != EXCLUDED_FILE {
+        return Err(format!("{}: not a scale-probe seen", sp.display()));
+    }
+    let ep = dir.join(EXCLUDED_FILE);
+    let excluded = read(&ep)?;
+    let got = sha_bytes(&excluded);
+    if v["excluded_sha256"].as_str() != Some(got.as_str()) {
+        return Err(format!(
+            "{}: sha256 {got} != excluded_sha256 {}",
+            ep.display(),
+            v["excluded_sha256"]
+        ));
+    }
+    Ok(SeenDir {
+        dir: dir.to_path_buf(),
+        sha256: sha_bytes(&bytes),
+        v,
+        excluded,
+    })
+}
+
 fn run_pair(a: &Args) -> R<String> {
-    a.known(&["out", "a1", "a2", "b1", "b2", "table"])?;
+    a.known(&["out", "a1", "a2", "b1", "b2", "table", "clean"])?;
     let out = PathBuf::from(a.one("out")?);
     refuse_existing(&out)?;
     let (b1, b2, table) = (a.opt("b1")?, a.opt("b2")?, a.opt("table")?);
@@ -855,41 +1155,103 @@ fn run_pair(a: &Args) -> R<String> {
             ));
         }
     }
-    let key = table.map(|t| if t == "t2" { "vs_t2" } else { "vs_unigram" });
-    let reading = |split: Option<usize>| -> Assessment {
+    let seen = a
+        .opt("clean")?
+        .map(|d| load_seen(Path::new(d)))
+        .transpose()?;
+    let total: u64 = g[0].splits.iter().map(|x| x.2).sum();
+    if let Some(sn) = &seen {
+        let bad = |what: &str| {
+            format!(
+                "{}: {what} differs from a1's grade",
+                sn.dir.join("seen.json").display()
+            )
+        };
+        if sn.v["pooled"]["row_identity_sha256"] != g[0].v["pooled"]["row_identity_sha256"] {
+            return Err(bad("pooled row_identity_sha256"));
+        }
+        let ids: Vec<(Option<&str>, Option<&str>)> = sn.v["splits"]
+            .as_array()
+            .map(|v| v.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .map(|s| (s["name"].as_str(), s["row_identity_sha256"].as_str()))
+            .collect();
+        let want: Vec<(Option<&str>, Option<&str>)> = g[0]
+            .splits
+            .iter()
+            .map(|s| (Some(s.0.as_str()), Some(s.1.as_str())))
+            .collect();
+        if ids != want {
+            return Err(bad("split names/order or row_identity_sha256"));
+        }
+        if sn.excluded.len() as u64 != total.div_ceil(8) {
+            return Err(bad("excluded.bin length"));
+        }
+    }
+    let mut y: Vec<&[u8]> = Vec::new();
+    for s in 0..2 {
+        y.push(match table {
+            None => &g[s + 2].hits,
+            Some(t) => {
+                let bits = if t == "t2" { &g[s].t2 } else { &g[s].unigram };
+                bits.as_deref().ok_or(format!(
+                    "{}: grade has no {t} hits bitset; an older grade cannot pair against \
+                     a table",
+                    g[s].dir.display()
+                ))?
+            }
+        });
+    }
+    let n = g[0].splits.len();
+    let range = |split: Option<usize>| -> (usize, usize) {
+        match split {
+            Some(i) => (
+                g[0].splits[..i].iter().map(|x| x.2).sum::<u64>() as usize,
+                g[0].splits[i].2 as usize,
+            ),
+            None => (0, total as usize),
+        }
+    };
+    if let Some(k) = table.map(|t| if t == "t2" { "vs_t2" } else { "vs_unigram" }) {
+        for (s, ys) in y.iter().enumerate() {
+            for split in (0..n).map(Some).chain([None]) {
+                let (start, len) = range(split);
+                let (b, c) = discordant(&g[s].hits, ys, start, len);
+                let (v, what) = match split {
+                    Some(i) => (&g[s].v["splits"][i][k], g[0].splits[i].0.as_str()),
+                    None => (&g[s].v["pooled"][k], "pooled"),
+                };
+                if (v["b"].as_u64(), v["c"].as_u64()) != (Some(b), Some(c)) {
+                    return Err(format!(
+                        "{}: {what} {k} {v} disagrees with b={b} c={c} from the hit bitsets",
+                        g[s].dir.join("grade.json").display()
+                    ));
+                }
+            }
+        }
+    }
+    let reading = |split: Option<usize>, excl: Option<&[u8]>| -> Assessment {
+        let (start, len) = range(split);
         let mut b = [0u64; 2];
         let mut c = [0u64; 2];
         for s in 0..2 {
-            (b[s], c[s]) = match key {
-                Some(k) => {
-                    let v = match split {
-                        Some(i) => &g[s].v["splits"][i][k],
-                        None => &g[s].v["pooled"][k],
-                    };
-                    (v["b"].as_u64().unwrap_or(0), v["c"].as_u64().unwrap_or(0))
-                }
-                None => {
-                    let (start, len) = match split {
-                        Some(i) => {
-                            let start: u64 = g[s].splits[..i].iter().map(|x| x.2).sum();
-                            (start as usize, g[s].splits[i].2 as usize)
-                        }
-                        None => (0, g[s].splits.iter().map(|x| x.2).sum::<u64>() as usize),
-                    };
-                    discordant(&g[s].hits, &g[s + 2].hits, start, len)
-                }
-            };
+            (b[s], c[s]) = discordant_where(&g[s].hits, y[s], start, len, excl);
         }
         assess(b, c)
     };
-    let pooled = reading(None);
-    let splits: Vec<Value> = (0..g[0].splits.len())
-        .map(|i| {
-            let mut v = assessment_json(&reading(Some(i)));
-            v["name"] = json!(g[0].splits[i].0);
-            v
-        })
-        .collect();
+    let section = |excl: Option<&[u8]>| -> (Assessment, Value) {
+        let pooled = reading(None, excl);
+        let splits: Vec<Value> = (0..n)
+            .map(|i| {
+                let mut v = assessment_json(&reading(Some(i), excl));
+                v["name"] = json!(g[0].splits[i].0);
+                v
+            })
+            .collect();
+        (pooled, json!(splits))
+    };
+    let (pooled, splits) = section(None);
     let mut inputs = json!({"a1": g[0].sha256, "a2": g[1].sha256});
     match table {
         Some(t) => inputs["table"] = json!(t),
@@ -898,12 +1260,23 @@ fn run_pair(a: &Args) -> R<String> {
             inputs["b2"] = json!(g[3].sha256);
         }
     }
-    let doc = json!({
+    let mut doc = json!({
         "schema": PAIR_SCHEMA,
-        "inputs_grade_sha256": inputs,
         "pooled": assessment_json(&pooled),
         "splits": splits,
     });
+    let mut summary = format!(
+        "pair {}: pooled verdict {}\n",
+        out.display(),
+        pooled.verdict
+    );
+    if let Some(sn) = &seen {
+        inputs["clean_seen_sha256"] = json!(sn.sha256);
+        let (up, us) = section(Some(&sn.excluded));
+        doc["unseen"] = json!({"pooled": assessment_json(&up), "splits": us});
+        summary += &format!("  unseen rows: pooled verdict {}\n", up.verdict);
+    }
+    doc["inputs_grade_sha256"] = inputs;
     if let Some(parent) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
@@ -914,9 +1287,5 @@ fn run_pair(a: &Args) -> R<String> {
         .map_err(|e| format!("{}: {e}", out.display()))?;
     std::io::Write::write_all(&mut f, &pretty(&doc))
         .map_err(|e| format!("{}: {e}", out.display()))?;
-    Ok(format!(
-        "pair {}: pooled verdict {}\n",
-        out.display(),
-        pooled.verdict
-    ))
+    Ok(summary)
 }

@@ -30,8 +30,40 @@ in argument order). A split's `row_identity_sha256` is SHA-256 over its `(positi
 target u32 LE)` pairs; the pooled one is SHA-256 over, per split in order, the name length
 (u64 LE), the name bytes and the split's 32-byte identity.
 
+It also writes `out/t2-hits.bin` and `out/unigram-hits.bin`: one bit per row for "the T2 top-1
+equals the target" and "the unigram top-1 equals the target", in the same layout as
+`nearest-hits.bin`. `grade.json` records their names and SHA-256s (`t2_hits_file`,
+`t2_hits_sha256`, `unigram_hits_file`, `unigram_hits_sha256`).
+
 ```
 scale-probe grade out=local/claude/g-w256-q1-s1 train=local/claude/mix-q1:<tok>:<mask> \
+  panel=oasst2:local/claude/rtc/oasst2/heldout:<tok>:<mask> rows=oasst2:rows-oasst2.json
+```
+
+## `seen`
+
+Marks which panel rows may quote TRAIN. It takes the same `out=`, `train=`, `panel=` and
+`rows=` arguments as `grade`, and writes `out/seen.json` (`uor-r4-scale-probe-seen/v1`) and
+`out/excluded.bin`.
+
+- TRAIN 8-grams are the runs `tokens[i..i+8]` inside one document: no BOS (token 0) at
+  offsets 1 to 7. Each id takes 12 bits of one key, the first id in the high bits.
+- A row at position `p`, in the document whose BOS is at `s`, is `short` if `p - s < 8`. Its
+  8-token context would reach into the previous document. Equivalently, a BOS lies in
+  `tokens[p-7..p]` (clipped at 0).
+- A row that is not short is `seen` if `tokens[p-8..p]` is a TRAIN 8-gram, else `unseen`.
+- `excluded.bin` has one bit per row, set iff the row is short or seen. Rows are in pooled row
+  order, LSB-first, zero-padded to whole bytes, as in `grade`.
+
+`seen.json` records the row identities (the same encoding as `grade`), the number of distinct
+TRAIN 8-grams, the counts of seen, short and unseen rows per split and pooled, and the SHA-256
+of `excluded.bin`.
+
+`rows=NAME:all` takes every scored position of panel `NAME`, in corpus order, with target
+`tokens[p]`. Only `seen` accepts it; `grade` reads `all` as a file name.
+
+```
+scale-probe seen out=local/claude/seen-q1 train=local/claude/mix-q1:<tok>:<mask> \
   panel=oasst2:local/claude/rtc/oasst2/heldout:<tok>:<mask> rows=oasst2:rows-oasst2.json
 ```
 
@@ -42,8 +74,17 @@ Compares cell A (seeds 1, 2) with cell B, or with a count table, row by row:
 `d(s) > band(s)`, `behind` if `d(s) < −band(s)`, else `inside`; the verdict is the seeds'
 common position, or `mixed`. Inputs must share every row identity; a cell's seeds share TRAIN.
 
+With `table=`, pair reads the grade's `t2-hits.bin` or `unigram-hits.bin`. It refuses an older
+grade that lacks them. It also recounts each split's and the pooled `vs_t2` or `vs_unigram`
+`(b, c)` from the bitsets and refuses a grade that disagrees.
+
+`clean=SEENDIR` adds an `unseen` object: the same readings over only the rows whose excluded
+bit is 0. The seen directory must match a1's grade: the same pooled identity, the same split
+names, order and identities, and an `excluded.bin` of the right length whose SHA-256 matches
+`seen.json`. Its `seen.json` SHA-256 is recorded as `clean_seen_sha256`.
+
 ```
 scale-probe pair out=local/claude/w512-vs-w256.json a1=g-w512-s1 a2=g-w512-s2 \
-  b1=g-w256-s1 b2=g-w256-s2
+  b1=g-w256-s1 b2=g-w256-s2 clean=local/claude/seen-q1
 scale-probe pair out=local/claude/w512-vs-t2.json a1=g-w512-s1 a2=g-w512-s2 table=t2
 ```

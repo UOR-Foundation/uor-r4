@@ -1,6 +1,8 @@
 //! Fixture splits under `CARGO_TARGET_TMPDIR`; every refusal and pin of the scale-probe order.
 
-use scale_probe_instrument::{assess, discordant, mcnemar_floor, prefix_len, top1, Tables};
+use scale_probe_instrument::{
+    assess, discordant, mcnemar_floor, ngram_key, prefix_len, top1, train_ngrams, Tables, NGRAM,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -142,7 +144,8 @@ fn rows_file(path: &Path, split: &str, pos: &[usize], tgt: &[u32], near: &[u32],
     fs::write(path, serde_json::to_vec(&v).unwrap()).unwrap();
 }
 
-fn grade(
+fn inputs_cmd(
+    cmd: &str,
     out: &Path,
     train: &Fx,
     panels: &[(&str, &Fx)],
@@ -154,7 +157,16 @@ fn grade(
         rows.iter()
             .map(|(n, p)| ("rows", format!("{n}:{}", p.display()))),
     );
-    run(&args("grade", &kv))
+    run(&args(cmd, &kv))
+}
+
+fn grade(
+    out: &Path,
+    train: &Fx,
+    panels: &[(&str, &Fx)],
+    rows: &[(&str, &Path)],
+) -> Result<String, String> {
+    inputs_cmd("grade", out, train, panels, rows)
 }
 
 /// Grades one `p` panel rows file against `train_fx`.
@@ -703,4 +715,339 @@ fn pair_refuses_both_or_neither_b_and_table() {
     refused(pair(&out, &all[..2], None), "exactly one of");
     refused(pair(&out, &all[..3], None), "exactly one of");
     assert!(!out.exists());
+}
+
+// ---- seen, the table bitsets and clean= pairing ----
+
+/// Each part opened by a BOS; mask 1 except at each BOS.
+fn docs(parts: &[&[u16]]) -> (Vec<u16>, Vec<u8>) {
+    let mut t = Vec::new();
+    for p in parts {
+        t.push(0);
+        t.extend_from_slice(p);
+    }
+    let m = t.iter().map(|&x| u8::from(x != 0)).collect();
+    (t, m)
+}
+
+/// Documents at 0, 10, 15 of lengths 10, 5, 8: in-document 8-grams start at 0, 1, 2 and 15.
+fn seen_train_tokens() -> (Vec<u16>, Vec<u8>) {
+    docs(&[
+        &[10, 11, 12, 13, 14, 15, 16, 17, 18],
+        &[30, 31, 32, 33],
+        &[34, 35, 36, 37, 38, 39, 40],
+    ])
+}
+
+/// Documents at 0, 10, 20; 27 scored positions. Not short: 8, 9, 18, 19, 28, 29; of those
+/// 8 and 9 have a TRAIN context (`[0, 10..=16]`, `[10..=17]`).
+fn seen_panel(dir: &Path) -> Fx {
+    let (t, m) = docs(&[
+        &[10, 11, 12, 13, 14, 15, 16, 17, 18],
+        &[1, 2, 3, 4, 5, 6, 7, 8, 9],
+        &[30, 31, 32, 33, 34, 35, 36, 37, 50],
+    ]);
+    split(dir, &t, &m, 4096, true)
+}
+
+/// Split p classes: short, seen, seen, unseen, unseen. Split q: seen, unseen.
+const SP_POS: [usize; 5] = [3, 8, 9, 19, 29];
+const SP_TGT: [u32; 5] = [12, 17, 18, 9, 50];
+const SQ_POS: [usize; 2] = [9, 19];
+const SQ_TGT: [u32; 2] = [18, 9];
+
+fn seen_cmd(
+    out: &Path,
+    train: &Fx,
+    panels: &[(&str, &Fx)],
+    rows: &[(&str, &Path)],
+) -> Result<String, String> {
+    inputs_cmd("seen", out, train, panels, rows)
+}
+
+fn edit_json(path: &Path, f: impl FnOnce(&mut Value)) {
+    let mut v = json_of(path);
+    f(&mut v);
+    fs::write(path, serde_json::to_vec(&v).unwrap()).unwrap();
+}
+
+/// A miss writes nearest 0, which never equals a target (targets are never BOS).
+fn near(tgt: &[u32], hits: &[u8]) -> Vec<u32> {
+    tgt.iter()
+        .zip(hits)
+        .map(|(&t, &h)| if h == 1 { t } else { 0 })
+        .collect()
+}
+
+struct Clean {
+    b: PathBuf,
+    tr: Fx,
+    pa: Fx,
+    rows: [PathBuf; 2],
+    cells: [PathBuf; 4],
+    seen: PathBuf,
+}
+
+/// Pooled row order p0..p4, q0, q1. Nearest hits a1 1011111, a2 0011001, b1 = b2 1110000;
+/// t2 1110010, unigram (top-1 10) 0000000, excluded 1110010.
+fn clean_setup(test: &str) -> Clean {
+    let b = base(test);
+    let (t, m) = seen_train_tokens();
+    let tr = split(&b.join("train"), &t, &m, 4096, true);
+    let pa = seen_panel(&b.join("panel"));
+    let rows = [b.join("p.rows.json"), b.join("q.rows.json")];
+    rows_file(&rows[0], "p", &SP_POS, &SP_TGT, &SP_TGT, &SP_TGT);
+    rows_file(&rows[1], "q", &SQ_POS, &SQ_TGT, &SQ_TGT, &SQ_TGT);
+    let seen = b.join("seen");
+    let panels = [("p", &pa), ("q", &pa)];
+    seen_cmd(&seen, &tr, &panels, &[("p", &rows[0]), ("q", &rows[1])]).unwrap();
+    let hits: [(&str, [u8; 5], [u8; 2]); 4] = [
+        ("a1", [1, 0, 1, 1, 1], [1, 1]),
+        ("a2", [0, 0, 1, 1, 0], [0, 1]),
+        ("b1", [1, 1, 1, 0, 0], [0, 0]),
+        ("b2", [1, 1, 1, 0, 0], [0, 0]),
+    ];
+    let cells = hits.map(|(name, hp, hq)| {
+        let (rp, rq) = (
+            b.join(format!("{name}.p.json")),
+            b.join(format!("{name}.q.json")),
+        );
+        rows_file(&rp, "p", &SP_POS, &SP_TGT, &near(&SP_TGT, &hp), &SP_TGT);
+        rows_file(&rq, "q", &SQ_POS, &SQ_TGT, &near(&SQ_TGT, &hq), &SQ_TGT);
+        let out = b.join(name);
+        grade(&out, &tr, &panels, &[("p", &rp), ("q", &rq)]).unwrap();
+        out
+    });
+    Clean {
+        b,
+        tr,
+        pa,
+        rows,
+        cells,
+        seen,
+    }
+}
+
+/// A seen count object as rows, seen, short, unseen.
+fn counts(v: &Value) -> [&Value; 4] {
+    [&v["rows"], &v["seen"], &v["short"], &v["unseen"]]
+}
+
+/// `(b, c)` of both seeds of one assessment.
+fn bc(v: &Value) -> [(u64, u64); 2] {
+    [0, 1].map(|s| {
+        let x = &v["seeds"][s];
+        (x["b"].as_u64().unwrap(), x["c"].as_u64().unwrap())
+    })
+}
+
+#[test]
+fn train_ngrams_stay_inside_one_document() {
+    let (t, _) = seen_train_tokens();
+    let keys = train_ngrams(&t).unwrap();
+    let mut want: Vec<u128> = [0usize, 1, 2, 15]
+        .iter()
+        .map(|&i| ngram_key(&t[i..i + NGRAM]))
+        .collect();
+    want.sort_unstable();
+    assert_eq!(keys, want, "4 in-document runs; 16 if runs crossed a BOS");
+    assert_eq!(ngram_key(&[1, 2, 4095]), (1 << 24) | (2 << 12) | 4095);
+}
+
+#[test]
+fn seen_classifies_short_seen_and_unseen_rows() {
+    let c = clean_setup("seen_classes");
+    let s = json_of(&c.seen.join("seen.json"));
+    assert_eq!(s["ngram"], 8);
+    assert_eq!(s["train_ngrams_distinct"], 4);
+    assert_eq!(counts(&s["splits"][0]), [5, 2, 1, 2]);
+    assert_eq!(counts(&s["splits"][1]), [2, 1, 0, 1]);
+    assert_eq!(counts(&s["pooled"]), [7, 3, 1, 3]);
+    assert_eq!(s["splits"][0]["rows_file_sha256"], sha(&c.rows[0]));
+    assert_eq!(fs::read(c.seen.join("excluded.bin")).unwrap(), [0x27]);
+    assert_eq!(s["excluded_sha256"], sha(&c.seen.join("excluded.bin")));
+    let g = json_of(&c.cells[0].join("grade.json"));
+    assert_eq!(
+        s["pooled"]["row_identity_sha256"],
+        g["pooled"]["row_identity_sha256"]
+    );
+}
+
+#[test]
+fn seen_rows_all_takes_every_scored_position() {
+    let c = clean_setup("seen_all");
+    let out = c.b.join("seen-all");
+    let all = Path::new("all");
+    seen_cmd(&out, &c.tr, &[("p", &c.pa)], &[("p", all)]).unwrap();
+    let s = json_of(&out.join("seen.json"));
+    assert_eq!(counts(&s["pooled"]), [27, 2, 21, 4]);
+    assert!(s["splits"][0]["rows_file_sha256"].is_null());
+    // Rows 16, 17, 25, 26 (positions 18, 19, 28, 29) are unseen.
+    assert_eq!(
+        fs::read(out.join("excluded.bin")).unwrap(),
+        [0xff, 0xff, 0xfc, 0x01]
+    );
+}
+
+#[test]
+fn grade_refuses_rows_all() {
+    let c = clean_setup("grade_all");
+    let out = c.b.join("g-all");
+    let all = Path::new("all");
+    refused(grade(&out, &c.tr, &[("p", &c.pa)], &[("p", all)]), "all: ");
+    assert!(!out.exists());
+}
+
+#[test]
+fn grade_writes_table_bitsets() {
+    let c = clean_setup("grade_bits");
+    let a1 = &c.cells[0];
+    let g = json_of(&a1.join("grade.json"));
+    assert_eq!(g["unigram_top1"], 10);
+    assert_eq!(fs::read(a1.join("nearest-hits.bin")).unwrap(), [0x7d]);
+    assert_eq!(fs::read(a1.join("t2-hits.bin")).unwrap(), [0x27]);
+    assert_eq!(fs::read(a1.join("unigram-hits.bin")).unwrap(), [0x00]);
+    assert_eq!(g["t2_hits_file"], "t2-hits.bin");
+    assert_eq!(g["t2_hits_sha256"], sha(&a1.join("t2-hits.bin")));
+    assert_eq!(g["unigram_hits_file"], "unigram-hits.bin");
+    assert_eq!(g["unigram_hits_sha256"], sha(&a1.join("unigram-hits.bin")));
+    assert_eq!(g["pooled"]["vs_t2"], json!({"b": 3, "c": 1}));
+}
+
+#[test]
+fn pair_clean_cell_mode_all_and_unseen() {
+    let c = clean_setup("clean_cells");
+    let [a1, a2, b1, b2] = &c.cells;
+    let kv = [("a1", a1), ("a2", a2), ("b1", b1), ("b2", b2)];
+    let plain = c.b.join("plain.json");
+    pair(&plain, &kv.map(|(k, p)| (k, p.as_path())), None).unwrap();
+    assert!(json_of(&plain).get("unseen").is_none());
+    let out = c.b.join("ab.json");
+    let mut kv: Vec<(&str, &Path)> = kv.iter().map(|(k, p)| (*k, p.as_path())).collect();
+    kv.push(("clean", &c.seen));
+    pair(&out, &kv, None).unwrap();
+    let p = json_of(&out);
+    assert_eq!(bc(&p["pooled"]), [(4, 1), (2, 2)]);
+    assert_eq!(bc(&p["unseen"]["pooled"]), [(3, 0), (2, 0)]);
+    assert_eq!(p["pooled"]["verdict"], "inside");
+    assert_eq!(p["unseen"]["pooled"]["verdict"], "inside");
+    let sp = |v: &Value| [bc(&v[0]), bc(&v[1])];
+    assert_eq!(sp(&p["splits"]), [[(2, 1), (1, 2)], [(2, 0), (1, 0)]]);
+    assert_eq!(
+        sp(&p["unseen"]["splits"]),
+        [[(2, 0), (1, 0)], [(1, 0), (1, 0)]]
+    );
+    assert_eq!(p["unseen"]["splits"][1]["name"], "q");
+    assert_eq!(
+        p["inputs_grade_sha256"]["clean_seen_sha256"],
+        sha(&c.seen.join("seen.json"))
+    );
+}
+
+#[test]
+fn pair_clean_table_mode_all_and_unseen() {
+    let c = clean_setup("clean_table");
+    let kv = [
+        ("a1", c.cells[0].as_path()),
+        ("a2", &c.cells[1]),
+        ("clean", &c.seen),
+    ];
+    for (t, all, unseen) in [
+        ("t2", [(3, 1), (2, 3)], [(3, 0), (2, 0)]),
+        ("unigram", [(6, 0), (3, 0)], [(3, 0), (2, 0)]),
+    ] {
+        let out = c.b.join(format!("{t}.json"));
+        pair(&out, &kv, Some(t)).unwrap();
+        let p = json_of(&out);
+        assert_eq!(bc(&p["pooled"]), all, "{t}");
+        assert_eq!(bc(&p["unseen"]["pooled"]), unseen, "{t}");
+    }
+}
+
+#[test]
+fn pair_clean_refuses_excluded_sha_mismatch() {
+    let c = clean_setup("clean_sha");
+    fs::write(c.seen.join("excluded.bin"), [0x26]).unwrap();
+    let kv = [
+        ("a1", c.cells[0].as_path()),
+        ("a2", &c.cells[1]),
+        ("clean", &c.seen),
+    ];
+    refused(
+        pair(&c.b.join("p.json"), &kv, Some("t2")),
+        "excluded_sha256",
+    );
+}
+
+#[test]
+fn pair_clean_refuses_identity_or_split_name() {
+    let c = clean_setup("clean_id");
+    let only_p = c.b.join("seen-p");
+    seen_cmd(&only_p, &c.tr, &[("p", &c.pa)], &[("p", &c.rows[0])]).unwrap();
+    let kv = |s: &Path| {
+        [
+            ("a1", c.cells[0].clone()),
+            ("a2", c.cells[1].clone()),
+            ("clean", s.into()),
+        ]
+    };
+    let go = |s: &Path| {
+        let kv = kv(s);
+        let kv: Vec<(&str, &Path)> = kv.iter().map(|(k, p)| (*k, p.as_path())).collect();
+        pair(&c.b.join("p.json"), &kv, Some("t2"))
+    };
+    refused(go(&only_p), "pooled row_identity_sha256");
+    edit_json(&c.seen.join("seen.json"), |v| {
+        v["splits"][1]["name"] = json!("r")
+    });
+    refused(go(&c.seen), "split names/order");
+}
+
+#[test]
+fn pair_clean_refuses_excluded_length() {
+    let c = clean_setup("clean_len");
+    let ep = c.seen.join("excluded.bin");
+    fs::write(&ep, [0x27, 0x00]).unwrap();
+    let s = sha(&ep);
+    edit_json(&c.seen.join("seen.json"), |v| {
+        v["excluded_sha256"] = json!(s)
+    });
+    let kv = [
+        ("a1", c.cells[0].as_path()),
+        ("a2", &c.cells[1]),
+        ("clean", &c.seen),
+    ];
+    refused(
+        pair(&c.b.join("p.json"), &kv, Some("t2")),
+        "excluded.bin length",
+    );
+}
+
+#[test]
+fn pair_table_refuses_older_grade() {
+    let c = clean_setup("table_old");
+    edit_json(&c.cells[0].join("grade.json"), |v| {
+        let o = v.as_object_mut().unwrap();
+        o.remove("t2_hits_file");
+        o.remove("t2_hits_sha256");
+    });
+    let kv = [("a1", c.cells[0].as_path()), ("a2", &c.cells[1])];
+    refused(pair(&c.b.join("p.json"), &kv, Some("t2")), "older grade");
+}
+
+#[test]
+fn pair_table_refuses_grade_whose_counts_disagree() {
+    let c = clean_setup("table_disagree");
+    let kv = [("a1", c.cells[0].as_path()), ("a2", &c.cells[1])];
+    edit_json(&c.cells[1].join("grade.json"), |v| {
+        v["splits"][1]["vs_unigram"]["b"] = json!(0)
+    });
+    refused(
+        pair(&c.b.join("u.json"), &kv, Some("unigram")),
+        "disagrees with",
+    );
+    edit_json(&c.cells[0].join("grade.json"), |v| {
+        v["pooled"]["vs_t2"]["c"] = json!(0)
+    });
+    refused(pair(&c.b.join("t.json"), &kv, Some("t2")), "disagrees with");
 }
