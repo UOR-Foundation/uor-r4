@@ -398,14 +398,17 @@ test('live model_loaded rejects mismatched identity explicitly', async () => {
     assert.match(context.toastMessage, /other\.lut/);
 });
 
-test('live model_loaded accepts a valid no-ID response', async () => {
+test('live model_loaded rejects a missing current load ID', async () => {
     const { source, vm } = await inlineStudioFunction('onWorkerMessage');
     const context = liveWorkerContext();
+    context.app.currentLoadId = 1;
+    context.app.workerState = 'loading';
     vm.runInNewContext(`${source};onWorkerMessage`, context)({
         data: { action: 'model_loaded', capabilities: { file_name: 'model.lut', artifact_sha256: 'a'.repeat(64) } },
     });
-    assert.equal(context.app.workerState, 'ready');
-    assert.equal(context.app.caps.file_name, 'model.lut');
+    assert.equal(context.app.workerState, 'error');
+    assert.equal(context.app.caps, null);
+    assert.match(context.toastMessage, /without the current load operation ID/);
 });
 
 

@@ -435,6 +435,23 @@ for (const [index, prompt] of [`${' '.repeat(200)}1 + 1`, `1 + 1${' '.repeat(200
     assert(padded.action === 'generate_error' && padded.error.includes('160-byte'), `whitespace-padded arithmetic must return the prompt limit: ${JSON.stringify(padded)}`);
 }
 
+for (const [index, expression] of ['-', '- 25', '- 2.5', '-?'].entries()) {
+    for (const [side, prompt] of [`${' '.repeat(200)}${expression}`, `${expression}${' '.repeat(200)}`].entries()) {
+        const id = `gen_exact_padded_minus_${index}_${side}`;
+        await sendToWorker({
+            action: 'generate',
+            id,
+            payload: {
+                conversationId: `conv_verify_exact_padded_minus_${index}_${side}`,
+                messages: [{ role: 'user', content: prompt }],
+                options: { max_new_tokens: 32 },
+            },
+        });
+        const padded = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+        assert(padded.action === 'generate_error' && padded.error.includes('leading minus'), `padded leading-minus arithmetic must fail explicitly: ${JSON.stringify(padded)}`);
+    }
+}
+
 for (const [index, prompt] of ['2026-11-05T17:25Z', '2026-11-05T17:25+01:00', '2026-11-05T17:25-01:00', '2026-11-05 17:25+01:00'].entries()) {
     const id = `gen_iso_${index}`;
     await sendToWorker({

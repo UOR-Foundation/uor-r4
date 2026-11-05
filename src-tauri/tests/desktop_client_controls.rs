@@ -810,6 +810,25 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
             .contains("160-byte"));
     }
 
+    for expression in ["-", "- 25", "- 2.5", "-?"] {
+        for prompt in [
+            format!("{}{}", " ".repeat(200), expression),
+            format!("{}{}", expression, " ".repeat(200)),
+        ] {
+            let padded = dispatch_rpc_command(
+                &mut backend,
+                "native_exact_arithmetic",
+                &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+            )
+            .expect("padded leading-minus RPC should succeed");
+            assert_eq!(padded["handled"], json!(true));
+            assert!(padded["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("leading minus"));
+        }
+    }
+
     for prompt in [
         "2026-11-05T17:25Z",
         "2026-11-05T17:25+01:00",
