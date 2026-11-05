@@ -21,10 +21,10 @@ No new measurement is run in this registration unit. The item preserves prior li
 
 ## Checks run at the head
 
-- `git diff --check origin/main...HEAD` and `git diff --name-status --stat d416181c1...e97b4256c`: exactly three added files and 118 insertions at that reviewed head.
+- `git diff --check origin/main...HEAD` and `git diff --name-status --stat d416181c1...e97b4256c`: exactly three added files and 118 insertions at the first reviewed head; the corrected diff has 122 insertions across the same three added files.
 - `cargo run -q --locked -p xtask -- roadmap check` and `roadmap render --check`: both exit 1 only for the two documented legacy `infra-desktop-client-tauri` errors; the new item's schema/section error was corrected.
-- `UOR_LAB=kimi uor-harness loop gates --full`: 11/11 GREEN at `e97b4256c`; rerun required after these record corrections.
-- `UOR_LAB=kimi uor-harness loop report --check --order docs/loop/tasks/m7-studio-live-model-sources/kimi-7/ORDER.md`: PASS at `e97b4256c`.
+- `UOR_LAB=kimi uor-harness loop gates --full`: 11/11 GREEN at the corrected registration head after these record corrections.
+- `UOR_LAB=kimi uor-harness loop report --check --order docs/loop/tasks/m7-studio-live-model-sources/kimi-7/ORDER.md`: PASS at the corrected registration head.
 - `UOR_LAB=kimi uor-harness loop pr-check --local --base d416181c16923748991a41e2206f5c9ed1de572e`: PASS with the D76 scope and commit-order advisories disclosed above.
 - Fresh exact-head review at `e97b4256c`: CHANGES_REQUIRED, not a pass.
 
