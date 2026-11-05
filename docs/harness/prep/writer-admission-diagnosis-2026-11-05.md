@@ -2,7 +2,9 @@
 
 Lab: claude. Item: [writer-admission](../../roadmap/items/writer-admission.md), done-when 1. Order: [claude-289](../../loop/tasks/writer-admission/claude-289/ORDER.md). Code: branch `claude/writer-admission`. The admission reading is commit `ca843995d820302739ad43f9f6d38a8825396b02`, and the pod builds the pushed head the job log names.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - research, #3394, two fresh-context rounds (claude-289)
+- **Round 1, at `33d3483d11d268151839a69f42fa9d9051c7da44`: NOT FIT.** It found no rule for when checkpoints disagree, plus five notes.
+- **Round 2, at `58090081d2e3f15cd4a8159b384029053689a18d`: FIT.** The rule closes the blocker. Its three wording notes and its negative gate (I-3b) are folded in at the head the job log names.
 
 ## The question
 
@@ -46,7 +48,8 @@ This is a diagnosis, so it has no pass bar. Each class below is decided at a che
 - **A seed's class** is the one that holds at at least 12 of its 15 checkpoints from step 4,096 to 32,768, step 32,768 among them. Step 4,096 is where seed 2's hinge first reads `1.0000`.
   - Otherwise the seed reads **mixed**, which counts as O, and the REPORT lists the class at each checkpoint.
   - Seed 2's class picks done-when 2's change. Seed 1's class, by the same rule, is the contrast.
-- **Steps 0 and 2,048** are reported for both seeds, with the first checkpoint at which each seed's class holds.
+  - If seed 2 reads the same class as seed 1, that class cannot be what made seed 2 fail, so seed 2 counts as O.
+- **Steps 0 and 2,048** are reported for both seeds. So is the first checkpoint at which the seed's class holds, for each seed that is not mixed.
 - If both seeds read alike at step 0 and seed 2 enters its class during training, the cause lies in training (the objective or admission), not the initialization.
 - **Two seeds, one failing run:** the class describes this run's failure. It is not a rate over seeds, and the REPORT says so.
 
@@ -63,7 +66,8 @@ This is a diagnosis, so it has no pass bar. Each class below is decided at a che
   - A mismatch is an instrument fault, and nothing is read from that build.
 - **I-3.** The crate's CUDA library tests pass on the pod's build. Two of them pin this reading:
   - `admission_counts_read_known_ports_on_cuda`: ports placed on roots 3 and 5, and the zero query, which ties all 256 cells;
-  - `admission_counts_read_a_near_tie_on_cuda`: a port at `5e-5` times root 0, whose cell scores span `2.5e-5` to `5e-5`, inside the F band.
+  - `admission_counts_read_a_near_tie_on_cuda`: a port at `e = 5e-5` times root 0. Its cell scores' span lies between `e / 2` and `e`, inside the F band.
+- **I-3b, negative.** With `ADMISSION_SPREAD_BOUNDS[1]` set to `1e-5` in the pod's source copy, the near-tie test fails. The bound is then restored. This runs after every reading, so it cannot touch them.
 - **I-4.** 14,287 rows at every checkpoint.
 
 ## Probe ladder
