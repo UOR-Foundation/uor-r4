@@ -250,7 +250,6 @@ for name in seed1 seed2; do
             end)
         else
           .lookahead_distance == null
-          and .selected_token == .writer_token
           and .selected_token == .longest_token
         end)
       and (if .used_copy then .selected_depth != null
