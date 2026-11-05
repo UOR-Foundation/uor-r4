@@ -30,7 +30,7 @@ F1 is 8.5% faster than the A/A pair's mean, which is more than claude-283's 7.5%
      - **The cause:** the twin modelled upstream candle, which fills a first gradient contribution with zeros, then adds. The patched candle stores it directly (`backprop.rs` `store_directly`, unless `UOR_CANDLE_GRAD_ZERO_THEN_ADD=1`).
      - **The class:** instrument, the twin's model of candle.
      - **The fix:** the twin stores directly, and the gradients are compared without an accumulation step.
-   - **G3 failed:** four plain `add.f32` without `.rn` in the PTX, beside 42 `.rn` ops. Lines 208 and 457 were `x + 0`; lines 241 and 543 were `x + 0.5`.
+   - **G3 failed** at the first plain `add.f32` without `.rn`: `add.f32 %f96, %f91, 0f00000000`. Reading the PTX on the pod found four, beside 42 `.rn` ops: lines 208 and 457 were `x + 0`, and lines 241 and 543 were `x + 0.5`. That PTX was not kept; run 2's G3 passed on the rebuilt one.
      - **The cause:** nvcc folds `__fmaf_rn(1, x, c)`, whose product is exact, into a plain add, which ptxas may contract. The value is the same today, but the module no longer rounded every op by name.
      - **The class:** form. The gate caught a real compiler behaviour.
      - **The fix:** the four affines with multiplier 1 are `__fadd_rn(x, c)`, one rounding of the same sum.
