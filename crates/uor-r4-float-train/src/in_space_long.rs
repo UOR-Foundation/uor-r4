@@ -3003,9 +3003,7 @@ fn forced_reading(
     seed: u8,
     greedy: &[IdSample],
     forced: &[IdSample],
-        /// its first id, with no 192-token block. Past 192 an opening's turn reads back to the id
-    /// after the last `<|eos|>` (1, 231, 441 here) and a reply row's length counts from the
-    /// reply's start.: u32,
+    eos: u32,
     keep: &std::collections::HashSet<u32>,
     digits: &std::collections::HashSet<u32>,
 ) -> Result<ForcedReading> {
