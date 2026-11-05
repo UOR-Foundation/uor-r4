@@ -581,11 +581,11 @@ artifact. Seed 1 accepted eight moves and seed 2 five, with exact 616-row
 CPU/serving parity and retained admission/top-1/top-8. Target-port distance
 improved over raw on both seeds (`29,882,444→29,613,365` and
 `23,870,298→23,786,304`). However, the shuffled-cell arm was behaviorally
-identical to trained on both seeds, and the independent random-gain arm had
-lower distance on both (`29,818,562` and `23,802,494`). The result is a
+identical to trained on both seeds. The trained arm beat random gain
+(`29,613,365 < 29,818,562` and `23,786,304 < 23,802,494`), but the result is a
 **CONTROL_FAULT** with no promotion: the one-step cell-rotation control is
-closed for this raw-conditioned configuration, and the query-port objective
-also failed against random. See
+closed for this raw-conditioned configuration, so the objective still needs a
+behaviorally distinct control. See
 [deepseek-188](../../loop/tasks/cpu-training-pilot/deepseek-188/REPORT.md).
 
 The next writer unit tested training on the model's own generated prefixes

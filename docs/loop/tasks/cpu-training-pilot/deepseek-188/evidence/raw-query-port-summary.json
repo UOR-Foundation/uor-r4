@@ -52,5 +52,5 @@
       }
     }
   ],
-  "finding": "Raw-conditioned query-port moves preserved input and parity and lowered distance versus raw on both seeds, but the shuffled-cell arm was behaviorally identical to trained on both seeds. The valid random-gain control was lower than trained on both seeds. No promotion; the control must be redesigned before this objective can produce a mechanism result."
+  "finding": "Raw-conditioned query-port moves preserved input and parity and lowered distance versus raw and random gain on both seeds, but the shuffled-cell arm was behaviorally identical to trained on both seeds. No promotion; the control must be redesigned before this objective can produce a mechanism result."
 }

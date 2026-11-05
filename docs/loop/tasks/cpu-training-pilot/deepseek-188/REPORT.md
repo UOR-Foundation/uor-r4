@@ -25,10 +25,9 @@ identity.
 Fresh verification at binary `7210266b…` reproduced the collision and correctly
 returned **CONTROL_FAULT** on both seeds.
 
-The independent random-gain arm beat the trained arm on target-port distance
-on both seeds. That is a separate failure signal for this eight-step
-configuration, but the invalid shuffled control means this run is not recorded
-as a mechanism REJECT.
+The trained arm beat the independent random-gain arm on target-port distance
+on both seeds. The invalid shuffled control means this run is not recorded as
+either a mechanism REJECT or KEEP.
 
 ## What changed
 
@@ -100,13 +99,14 @@ evidence and delivery procedures were used.
 A future query-port experiment needs a behaviorally distinct cell control. The
 one-step cell rotation is closed for this exact raw-conditioned configuration.
 The main design implication remains to preserve learned input identity while
-adding writer address structure, but random gain currently outperforms these
-query-port moves.
+adding writer address structure. This run does not yet supply a valid
+mechanism comparison for the query-port objective.
 
 ## Plain summary
 
 Training the query's two port blocks without touching the input table remained
 exportable and exact, but the cell-rotation control collapsed onto the same
 behavior as the trained arm on both seeds. The result is a control failure, not
-a valid mechanism result. The random-gain control independently performed
-better than the trained moves, so nothing is promoted.
+a valid mechanism result. The trained moves beat random gain but cannot be
+separated from the behaviorally identical shuffled control, so nothing is
+promoted.

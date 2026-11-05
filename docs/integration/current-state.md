@@ -8,8 +8,8 @@ codes. Both outputs remain exportable one-table `UORLUT01` artifacts with exact
 Trained port distance improved over raw frozen on seed 1
 (`29,882,444→29,613,365`) and seed 2 (`23,870,298→23,786,304`) while retaining
 admission, top-1 and top-8. But the moved-count-matched shuffled-cell arm was
-behaviorally identical to trained on both seeds. The independent random-gain
-arm had lower distance on both (`29,818,562` and `23,802,494`).
+behaviorally identical to trained on both seeds. The trained arm beat random
+gain (`29,613,365 < 29,818,562` and `23,786,304 < 23,802,494`).
 
 The result is **CONTROL_FAULT**, not a promoted model result. The one-step
 cell-rotation control needs redesign before this objective can yield a valid

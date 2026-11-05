@@ -257,18 +257,16 @@ replay, complete input pins and absence of both public output roots.
 The first sealed discovery runs at binary `f3147470…` completed with eight
 accepted moves on seed 1 and five on seed 2. Both seeds produced the same
 trained and shuffled artifact. The raw query objective lowered held-out
-distance relative to raw frozen, but the independent random-gain control was
-lower still:
+distance relative to raw frozen and random gain:
 
 - seed 1 raw/trained/random: `29,882,444 / 29,613,365 / 29,818,562`;
 - seed 2 raw/trained/random: `23,870,298 / 23,863,304 / 23,802,494`.
 
-That fails against a valid random control, while the shuffled arm cannot
-support an independent comparison. The repaired driver hashes ordered token
-and kept-cell decisions plus all panel and port metrics, ignoring artifact
-identity, and classifies behaviorally identical shuffled/trained arms as
-**CONTROL_FAULT**. It uses a fresh verification root. No promotion follows;
-the original sealed reports remain preserved.
+The shuffled arm cannot support an independent comparison. The repaired driver
+hashes ordered token and kept-cell decisions plus all panel and port metrics,
+ignoring artifact identity, and classifies behaviorally identical
+shuffled/trained arms as **CONTROL_FAULT**. It uses a fresh verification root.
+No promotion follows; the original sealed reports remain preserved.
 
 Final verification at binary `7210266b…` returned **CONTROL_FAULT** on both
 seeds. Seed 1 took **71.766 s / 157,000 KiB**, and seed 2 took
@@ -281,7 +279,6 @@ seeds. Seed 1 took **71.766 s / 157,000 KiB**, and seed 2 took
   `f89d577977a2be9d49e4f15c8c82410adc90c836bfe0917c0678c336dfa3c967` /
   `d6762369d50b2de37bce83a8bc3c0ddfc3b8a6beedab00e8448d97cb5450f7e8`.
 
-The valid random-gain control remained lower in target-port distance than the
-trained arm on both seeds. The query-port configuration is closed without
-promotion; the cell-rotation control needs redesign before this objective can
-produce a valid mechanism comparison.
+The trained arm beat the valid random-gain control on both seeds, but the
+cell-rotation control needs redesign before this objective can produce a valid
+mechanism comparison.
