@@ -17,7 +17,7 @@ reply, language or serving evidence.
 On the closed train panel 2711, the served eight-cell writer exposes all 128
 candidate tokens available from its cells:
 
-| Cells | Writer candidates | Seed-1 groups | Seed-1 baseline wrong | Seed-2 groups | Seed-2 baseline wrong |
+| Cells | Writer cap | Seed-1 groups | Seed-1 baseline wrong | Seed-2 groups | Seed-2 baseline wrong |
 |---:|---:|---:|---:|---:|---:|
 | 8 | 128 | 2,442 | 554 | 1,847 | 263 |
 | 12 | 192 | 2,666 | 778 | 2,043 | 459 |
@@ -27,7 +27,8 @@ candidate tokens available from its cells:
 
 Both artifacts have 345+ distinct target tokens at 12 cells. Twelve is the
 smallest setting that clears 2,048 target-present groups, 64 target tokens and
-256 baseline-wrong groups on both artifacts.
+256 baseline-wrong groups on both artifacts. The 192-candidate value is a
+non-BOS cap: observed writer-candidate counts are 191-192 per supervised group.
 
 ## Fixed construction
 
@@ -36,7 +37,8 @@ smallest setting that clears 2,048 target-present groups, 64 target tokens and
    existing lower-cell tie order. The CPU development path reads 12 cells; the
    served writer remains at 8.
 2. At each reference-prefix decision, form one unique-token union from:
-   - the highest-scoring 192 non-BOS candidates admitted by those 12 cells;
+   - up to 192 non-BOS candidates from those 12 cells, ranked by the existing
+     integer L1 token score; BOS is excluded before counting;
    - exact-copy candidates at depths one through 32;
    - the writer/point fallback;
    - the longest-32 token explicitly.
@@ -74,11 +76,11 @@ No serving, CUDA, float inference, termination or Claude-owned source changes.
 ## Calibration evidence
 
 - seed-1 calibration JSON SHA-256:
-  `8210189c4f65336ae629e2e653d35e62b090114f08fa5c55a412ecd68109d1b5`;
+  `05c5c621d238a0896022c39840ed0e91e5ec84e2faba2deb4d7917ef4c1f6607`;
 - seed-2 calibration JSON SHA-256:
-  `ebb06775812ed6edc2550b437004d03c14db39d30f0ac7aafa6fab4f2a84885f`;
-- calibration build wall: 20.79 s; seed 1/2 walls: 4.59/4.61 s;
-- seed 1/2 peak RSS: 234,220/219,608 KiB;
+  `5fccaab34c9b2175782a6e0c9b8f5599de7de32ae29bee895c445d9865d6533b`;
+- calibration build wall: 7.63 s; seed 1/2 walls: 4.69/4.57 s;
+- seed 1/2 peak RSS: 227,544/219,652 KiB;
 - fresh panel read during calibration: false.
 
 ## Data split and power
@@ -112,7 +114,7 @@ selected cell count, features, anchor, threshold or bar.
 
 ## Base artifacts and source
 
-- implementation commit: `e427409d9e5764595ba9feaf170069a8cd06e8fa`;
+- implementation commit: `47d28ea592d9a28231f45591b1b8a7358ef0a618`;
 - base: `d416181c1`;
 - seed-1 artifact SHA-256:
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
@@ -125,9 +127,9 @@ selected cell count, features, anchor, threshold or bar.
   `d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad`,
   `d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5`;
 - `geometric_candidate_anchor.rs` SHA-256:
-  `a243c46bb0e2214a46e66616fa170f865c3b3263f916b05d8b645a22137f2ea0`;
+  `1d122e3ceb1f23ce88fdf3e90daf2f5d6e2cfc5be00512dcfd4348322d1fd53c`;
 - `cpu-learned-copy-read.rs` SHA-256:
-  `f9b25ba65373430b35db20305bef6258e4acd4996e7395aa89403130aef336e4`;
+  `e956c73ae16a345685041dfb2cc80f4cf5fe7b618923bee52e0c29608cef6415`;
 - `fbs.rs` SHA-256:
   `a8bfc9a40a651688d0c0e625f31cd379a15fbaed37dd8a5a1df2d3050da1647d`;
 - `lib.rs` SHA-256:
@@ -154,7 +156,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/expanded-candidate-anchor
 GEN_TARGET=$SOURCE/target/deepseek/expanded-candidate-anchor-generator
-IMPL=e427409d9e5764595ba9feaf170069a8cd06e8fa
+IMPL=47d28ea592d9a28231f45591b1b8a7358ef0a618
 BASE=d416181c1
 
 test ! -e "$OUT"
@@ -168,9 +170,9 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" |
   sha256sum -c -
 printf '%s  %s\n' \
-  a243c46bb0e2214a46e66616fa170f865c3b3263f916b05d8b645a22137f2ea0 \
+  1d122e3ceb1f23ce88fdf3e90daf2f5d6e2cfc5be00512dcfd4348322d1fd53c \
   "$SOURCE/crates/uor-r4-cpu-train/src/geometric_candidate_anchor.rs" \
-  f9b25ba65373430b35db20305bef6258e4acd4996e7395aa89403130aef336e4 \
+  e956c73ae16a345685041dfb2cc80f4cf5fe7b618923bee52e0c29608cef6415 \
   "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-learned-copy-read.rs" \
   a8bfc9a40a651688d0c0e625f31cd379a15fbaed37dd8a5a1df2d3050da1647d \
   "$SOURCE/crates/uor-r4-cpu-train/src/fbs.rs" \
@@ -280,13 +282,16 @@ for name in seed1 seed2; do
     and .inputs.train_split == "train" and .inputs.test_split == "dev"
     and .settings.cap == 64 and .settings.seed == 163
     and .settings.candidate_set == "expanded_writer_cells_exact32_anchored"
-    and .settings.cells == 12 and .settings.writer_candidates == 192
+    and .settings.cells == 12 and .settings.writer_candidate_limit == 192
     and .settings.baseline == "longest_32"
     and .settings.override_rule == "strict_positive_score"
     and .settings.served_writer_cells == 8
     and .training.supervised_groups >= 2048
     and .training.target_values >= 64
     and .training.baseline_wrong_groups >= 256
+    and .training.writer_candidate_rows > 0
+    and .training.min_writer_candidates_per_group > 0
+    and .training.max_writer_candidates_per_group <= 192
     and .training.shuffled_target_changes > 0
     and .candidate_ranker.features == ["bias","exact_depth","sign_agreement","rotated_sign_agreement","recency","frequency","writer_match","writer_rank","is_longest_32","depth_gap","sign_agreement_gain","rotated_agreement_gain"]
     and .test.trained.premature_bos == 0
@@ -369,12 +374,12 @@ fi
 ## Cost
 
 - host: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads, 59 GiB RAM;
-- measured train-only calibration: 20.79 s build, 4.59 + 4.61 s sweeps,
-  234,220 KiB peak RSS;
+- measured train-only calibration: 7.63 s build, 4.69 + 4.57 s sweeps,
+  227,544 KiB peak RSS;
 - one release build, one generator build and one fresh panel;
 - four driver processes at up to 32 Rayon workers and 1,800 s each;
-- at most 192 writer candidates, 32 exact-copy candidates and one fallback per
-  state;
+- at most 192 non-BOS writer candidates, 32 exact-copy candidates and one
+  fallback per state;
 - local CPU cost $0, no GPU pod, paid API or remote upload;
 - fresh output capped at 64 MiB after gzip.
 
