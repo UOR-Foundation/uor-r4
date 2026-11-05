@@ -5,11 +5,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
 **Result: the scale probe's prep sheet is written, with its instrument, its mixes and its overlap census.**
 - **The sheet** [`scale-probe-2026-11-05.md`](../../../../harness/prep/scale-probe-2026-11-05.md) registers 18 grid runs: widths 256, 512 and 1,024 × D1, D2 and D3 (a quarter, a half and all of claude-293's 27,968,113 human-written TRAIN tokens) × 2 seeds. Every run takes the same 25,165,824 positions. Two templated contrast runs are reported only. On three 1 × RTX 5090 pods, the cost is about 17–20 GPU-hours, $16–19.
 - **The bars are set in advance:** R1 (width), R2 (data) and R3 (against its own TRAIN's T2 and unigram), each read on all rows and on the rows whose context D3 does not hold. An ordered six-row table says what each outcome unlocks.
-- **The instrument** `docs/labs/scale-probe/instrument` (bin `scale-probe`, laptop counting only) has four commands, `mix`, `seen`, `grade` and `pair`, and 54 tests.
+- **The instrument** `docs/labs/scale-probe/instrument` (bin `scale-probe`, laptop counting only) has four commands, `mix`, `seen`, `grade` and `pair`, and 58 tests.
 - **The mixes and the census** are stored under `results/claude/scale-probe-2026-11-05/` (`inputs/`, `census/`), each with a `SHA256SUMS` read back.
 - **The decision card** moves the item's Data and panel lines to real text (the ORDER's card, and the item file).
 
-**Claim check.** Casey's plan P5, "The bigger train = `scale-probe`. [sheet 1 unit; run 1–2 units]", step 6 of the order decided on #2028 (6634218223). This is the sheet unit. No code that trains or serves changes. The sheet fixes the run that says whether the one model gets better with width and with data, which decides whether the trunk is scaled next.
+**Claim check.** Casey's 4 November plan, P5 (the lab's list, which Casey adopted that day): the bigger train is `scale-probe`, bounded at one sheet unit and one or two run units. It is step 6 of the order decided on #2028 (6634218223). This is the sheet unit. No code that trains or serves changes. The sheet fixes the run that says whether the one model gets better with width and with data, which decides whether the trunk is scaled next.
 
 ## What did not work, first
 
@@ -33,6 +33,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
     - **The training data and the DEV leak:**
       - Sound: `--train-split` replaces TRAIN, and the in-run DEV evaluation leaves no state that training reads.
       - One MAJOR: the sheet called R8's `T` the nearest top-1. It is the writer's top-1 (`dev_top1_hits`, `in_space_long.rs:11586`), picked from the writer's admitted cells, not the whole table.
+  - **No round returned a plain FIT,** and the sheet first said `TEST FITNESS: FIT`. Round 3 read only the round-2 delta, and no reviewer re-read its one applied sentence. The claims review caught this; the sheet now reads FIT WITH CHANGES.
+- **The exact-head review found a silent fallback in `grade`.** A panel token at or above 4,096 keyed a row that T2 holds no counts for, and the grade fell back to the unigram without a word. No recorded number changes: no grade has run on real rows yet, and the census does not read T2. The four real panels and the three mixes all declare a vocabulary of 4,096 in their headers, and the corpus writer refuses an id past its header (`mmap_corpus.rs:53`), so the run's inputs cannot trip the new check. A wrong input would still have graded. `load_split` now refuses such a token by position, in TRAIN and the panels alike.
+- **A quotation that was not Casey's.** The sheet and this REPORT quoted P5's line as Casey's words. It is the lab's list, which Casey adopted on 4 November. It is now unquoted.
   - **L-007 wording.** Row 6 read "Flat at these sizes" and closed the configuration. R3 read inside and behind alike as "does not beat T2". Both are now "not distinguishable at this power", and only a mechanism classification closes anything.
 - **The new `clean=` refusal changed the readings' row sets.** A pair at D1 or D2 can no longer read D3's seen set. Every pair now reads the seen set of its cell X's TRAIN, X is always the larger mix, and step 8 runs `seen` against D1, D2 and D3. R1 to R3 still read D3's set. R6's adjacent data pairs are written larger-first.
 - **The turn memory is out of the recipe.** Recipe (b) is run without it: the probe asks how the trunk scales, Wikipedia has no prompts to key on, and its host cost on 28M real tokens is unmeasured (claude-293: 0.67–0.75 GB per million real TRAIN tokens for the census's reply rows). A recipe `one-model-end-to-end` picks later is a new configuration.
@@ -54,7 +57,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
   - `seen` marks each panel row short, seen or unseen against one TRAIN, and writes `excluded.bin`.
   - `grade` scores a checkpoint's rows against its own TRAIN's unigram and T2 tables, and writes the hit bitsets.
   - `pair` gives `b`, `c`, `d`, the band and the verdict at two or three seeds, against a cell or a table, on all rows and, with `clean=`, on the unseen rows.
-  - It refuses every inconsistency by name; 54 tests.
+  - It refuses each inconsistency it checks by name; 58 tests.
 - **`docs/roadmap/items/scale-probe.md`:** the Data and panel lines say real text (the card).
 - **`docs/loop/tasks/scale-probe/claude-294/`:** the ORDER, with the card and the cancel probe, and this REPORT.
 
@@ -89,17 +92,36 @@ Logged on #3472 as `[claude] owner log:`, on its own fresh decision review; Case
   Store `census/`, `SHA256SUMS` `88929e87931bef0fd91213ffbeb4701038354aa6cceca8be3c1621f478399f67`, read back. "Seen" is a screen, not a finding of copying: a row whose 8-token context occurs anywhere in TRAIN.
 ## Checks run at the head
 
-- **The instrument:** 54 tests pass (`cargo test --offline` in its own workspace), and clippy with `-D warnings` is clean.
+- **The instrument,** at `8041d8f0d70278cb70b3a93f2b0d36fe64eb5614`, the last commit that touches its code: 58 tests pass (`cargo test --offline` in its own workspace), and clippy with `-D warnings` is clean.
 - **Negative gates run in this unit.** Each one failed with its fix set aside and passed once the fix was restored:
   - **The three-seed verdict and the three-seed spread:** set seed 3 aside.
   - **`clean=`'s TRAIN check:** set the check aside, and `pair_clean_refuses_other_train` fails.
   - **Seed 3 sharing its cell's TRAIN:** narrow `same_train` to two seeds, and `pair_refuses_cells_with_mixed_train` fails.
-- **The harness:** `loop report --check`, `loop pr-check --local`, `uor-harness check` and `loop gates --full`. Their results are recorded below once the head is final.
-- **FIT:** `TEST FITNESS: FIT` at `2c3a96147c98791dfd01d3304c6b0554ae77a12e`. It is posted on #3472 (comment `6666302038`) and recorded in the sheet.
-  - Three rounds, all fresh and non-author. Round 3 returned one must-fix, applied verbatim.
+  - **The exact-head fixes:** set this round's `lib.rs` lines aside (diffed against `ec4704bbf1bb6cf12d9bf66bce87e2dd1b31e88a`). Exactly `grade_refuses_a_panel_token_beyond_vocab` and `pair_refuses_per_split_differences` fail; 56 pass.
+- **Mutation gates,** asked for by the second-half review. Each made 4 tests fail, and the restored head passes 58:
+  - `mcnemar_floor`'s `<` made `<=`: `floor_values` among them.
+  - The verdict's `d > band` made `>=`, so a d equal to the band would read ahead: `band_spread_sets_the_band` and `band_reads_a_third_seed` among them.
+- **Refusal coverage:** the data-integrity refusals have tests, and so do `pair`'s argument refusals. `mix`, `seen` and `grade` share the one parser behind them. Their own argument refusals (a repeated, unknown or missing `key=`) have no test of their own.
+- **The harness:** `loop report --check`, `loop pr-check --local`, `uor-harness check` and `loop gates --full`, at the head named in the next commit.
+- **FIT:** `TEST FITNESS: FIT WITH CHANGES`, from three rounds of fresh non-author review, with every change applied by `2c3a96147c98791dfd01d3304c6b0554ae77a12e`. It is posted on #3472 (comment `6666302038`, its label corrected in a later comment) and recorded in the sheet.
+  - No round returned a plain FIT. Round 3 read only the round-2 delta and returned one must-fix, applied verbatim; no reviewer re-read that sentence.
+  - The harness reads FIT WITH CHANGES as FIT (`prep.rs:97-119`), as it did for the decode-cache sheet of 4 November.
   - The reviewers ran no builds; the tests and gates above are the author's.
 - **Decision review:** STANDS WITH CHANGES (above). The card is logged on #3472 as `[claude] owner log:` (comment `6666457437`).
-- **The in-unit exact-head review:** recorded below.
+- **The in-unit exact-head review:** four fresh non-author reviewers on `ec4704bbf1bb6cf12d9bf66bce87e2dd1b31e88a`, who ran no cargo. Every finding below is applied unless named in Still open.
+  - **`lib.rs`, first half: CHANGES.**
+    - One MAJOR: a panel token at or above 4,096 fell back silently (above). `load_split` now refuses it.
+    - Its minors: a TRAIN past `u32::MAX` tokens could overflow a bigram count (now refused); the README's build line lacked `--locked`; `main.rs` did not name `seen`.
+  - **The tests: APPROVE.**
+    - Three needles matched loosely; they are tightened.
+    - A bad `table=` and `seen`'s existing out had no test; both do now.
+    - `pair_refuses_row_identity_or_split_difference` reached only the pooled check; `pair_refuses_per_split_differences` now reaches the three split-by-split checks.
+  - **`lib.rs`, second half: APPROVE.**
+    - `pair` took each split's row count from a1 alone; a seed whose counts differ is now refused.
+    - It asked for the two mutation checks above.
+  - **The claims: CHANGES.**
+    - Two MAJOR: the harness results were promised and not written, and the FIT was labelled FIT when every round returned FIT WITH CHANGES.
+    - Four MINOR: no test count at the head; the P5 quotation was the lab's list, not Casey's words; the refusal coverage was unscoped; and the plain summary said "is scored" and claimed recall could be told apart.
 
 ## What it unlocks
 
@@ -118,7 +140,10 @@ No skill applied. The loop's ORDER and REPORT procedure was used.
 - **The width-1,024 step time is unmeasured,** so the cost is a projection. I-2 measures it and cuts steps equally if the projection passes 20 GPU-hours.
 - **The D11 export's panel top-1** is owed before any width is served or any claim is made.
 - **The census reads 8-token contexts only.** A shorter shared phrase is not screened, which makes the unseen set an upper bound on unseen text, not a proof that the text is new.
+- **Two exact-head minors not taken:**
+  - `load_split` hashes a token file from one read and maps it with a second open, so a file changed between the two is not caught. The inputs are sealed and read back against their `SHA256SUMS` before any grade.
+  - `pair clean=` checks `seen.json`'s SHA-256 and reads `excluded.bin` itself, but does not recount `seen.json`'s counts from it.
 
 ## Plain summary
 
-This unit plans the project's first test of whether the model gets better as it gets bigger, and as it reads more. The model will be trained at three sizes on a quarter, a half and all of 28 million tokens of human-written text, twice each. Each copy is scored on every position of four held-out sets that no model has read. The rules for what counts as better, and what each result leads to, are written down before any run, and three rounds of independent review passed them. A new counting tool also marks the test rows whose wording the training text already holds, so a gain from recall can be told apart from a gain on new text.
+This unit plans the project's first test of whether the model gets better as it gets bigger, and as it reads more. The model will be trained at three sizes on a quarter, a half and all of 28 million tokens of human-written text, twice each. Each copy will be scored on every position of four held-out sets that no model has read. The rules for what counts as better, and what each result leads to, are written down before any run. Three rounds of independent review each asked for changes, and all were made. A new counting tool also marks the test rows whose preceding eight tokens the training text already holds, so a gain on those rows can be read apart from a gain on the rest.
