@@ -1,7 +1,7 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest|cell] [--steps N]
 //! [--train-split DIR --train-sha256 HEX --train-mask-sha256 HEX]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--samples N] [--reply-tokens N] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--served-forward 0|1] [--context N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--samples N] [--reply-tokens N] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--writer-anchor 0|1] [--served-forward 0|1] [--context N]`
 //!
 //! `--context N` trains at an N-token window, 2 to 4096 (claude-273): TRAIN is cut into N-token
 //! windows and the model is built to read N positions. DEV's evaluation keeps the sheet's
@@ -20,6 +20,14 @@
 //! DIR --train-sha256 HEX --train-mask-sha256 HEX`, and counts against that TRAIN. `--score-rows
 //! --context N` is refused from 193 to 1,536, where the row stride is untested.
 //!
+//! `--score-rows` also accepts `[--past-window slide|blocks|carry] [--past-window-stride S]`
+//! (claude-287): each `--panel` is cut past the checkpoint's own window W by that rule: `slide`
+//! scores every later target with at least W - S + 1 tokens before it, `blocks` with back-to-back
+//! windows of W, and `carry` with one window per conversation at C, 2,048 or 4,096, which the
+//! model then reads. DEV keeps 192. Each panel also writes `past-window-NAME-*.json`, its rows and
+//! queries by band, with the run's own loss. `--context`, when given, must be W; `--fresh-v2`
+//! and the key, trace and force flags are refused with it.
+//!
 //! `--score-rows` also accepts `[--sample-opening first|last]` (claude-274): `first`, the
 //! default, decodes each sampled window from its first scored target, a reply opening; `last`
 //! from its last reply opening with at least 16 tokens of prompt, so a long window gives a long
@@ -32,6 +40,11 @@
 //! i16 activations and the Q12 scored query are active; the gradient moves the float values the
 //! rounded forward came from; and every checkpoint is scored and saved through that same served
 //! forward. It refuses reads or training-only cuts that the export does not carry.
+//!
+//! `--writer-anchor 1` anchors the writer's ports (claude-290): the shared table's first and last
+//! 8D blocks hold exactly the SpiralCore roots of each token's own cell, re-set after every main
+//! step with their gradient masked, while the other columns stay learned. 0, the default,
+//! writes the same `config.json` as before.
 //!
 //! `--served-forward 0|1` overrides the saved run mode only for `--inspect`, `--decode-speed` and
 //! `--score-rows`, so different training modes can be scored through the same served graph.
@@ -242,7 +255,7 @@ use uor_r4_float_train::in_space_long::{
     cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, integer_grade, panel_prompts, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
     run_long, run_recall, score_rows, scopes_ok, set_decode_cache, take_decode_forwards,
-    DecodeRule, LongConfig, PointObjective, ReadScope, TrainSplit, DEFAULT_REGISTER_PICKS,
+    DecodeRule, LongConfig, PastWindowRule, PointObjective, ReadScope, TrainSplit, DEFAULT_REGISTER_PICKS,
     MEMORY_DROPOUT_MAX,
 };
 use uor_r4_float_train::{FloatTrainError, Result};
@@ -295,6 +308,9 @@ fn main() -> Result<()> {
     let mut batched_decode = None;
     let mut decode_cache = true;
     let mut last_opening = None;
+    let mut past_window: Option<String> = None;
+    let mut past_stride: Option<usize> = None;
+    let mut context_given = false;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
@@ -342,6 +358,7 @@ fn main() -> Result<()> {
         fbs_arm: uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive,
         reply_read_train: None,
         train_as_served: false,
+        writer_anchor: false,
         context: uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT,
     };
     let mut args = env::args().skip(1);
@@ -515,9 +532,12 @@ fn main() -> Result<()> {
                 })?
             }
             "--train-as-served" => config.train_as_served = switch(&value)?,
+            "--writer-anchor" => config.writer_anchor = switch(&value)?,
             "--served-forward" => served_forward = Some(switch(&value)?),
             "--batched-decode" => batched_decode = Some(switch(&value)?),
             "--decode-cache" => decode_cache = switch(&value)?,
+            "--past-window" => past_window = Some(value.clone()),
+            "--past-window-stride" => past_stride = Some(number(&value)?),
             "--sample-opening" => {
                 last_opening = Some(match value.as_str() {
                     "first" => false,
@@ -598,7 +618,8 @@ fn main() -> Result<()> {
             }
             "--width" => config.width = number(&value)?,
             "--context" => {
-                config.context = uor_r4_float_train::in_space_long::training_context(number(&value)?)?
+                config.context = uor_r4_float_train::in_space_long::training_context(number(&value)?)?;
+                context_given = true;
             }
             "--type-spin" => config.type_spin = switch(&value)?,
             "--train-split" => split_dir = Some(PathBuf::from(&value)),
@@ -701,6 +722,12 @@ fn main() -> Result<()> {
                 .to_owned(),
         ));
     }
+    // Anchored ports are a training switch, for either training loop.
+    if config.writer_anchor && !modes[7] {
+        return Err(FloatTrainError::Invalid(
+            "--writer-anchor applies to training with --out only".to_owned(),
+        ));
+    }
     // Training as served is a training switch; no other mode would read it.
     if config.train_as_served && (!modes[7] || recall > 0) {
         return Err(FloatTrainError::Invalid(
@@ -727,6 +754,20 @@ fn main() -> Result<()> {
         modes[7] && recall == 0,
         config.train_as_served,
     )?;
+    let past_window = match (past_window, past_stride) {
+        (Some(rule), stride) => Some(PastWindowRule::parse(&rule, stride)?),
+        (None, Some(_)) => {
+            return Err(FloatTrainError::Invalid(
+                "--past-window-stride needs --past-window slide".to_owned(),
+            ))
+        }
+        (None, None) => None,
+    };
+    if past_window.is_some() && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--past-window applies to --score-rows only".to_owned(),
+        ));
+    }
     if last_opening.is_some() && score.is_none() {
         return Err(FloatTrainError::Invalid(
             "--sample-opening applies to --score-rows only".to_owned(),
@@ -1050,6 +1091,8 @@ fn main() -> Result<()> {
             config.context,
             last_opening.unwrap_or(false),
             &panel_queries,
+            past_window,
+            context_given,
         )? {
             println!("{}", serde_json::to_string(&file)?);
         }

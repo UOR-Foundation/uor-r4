@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
 mod content_readout;
+mod copy_candidate_rank;
 mod copy_key_depth;
 mod copy_key_reply;
 mod corpus;
@@ -17,7 +18,10 @@ mod counterfactual;
 mod discrete_route;
 mod fbs;
 mod gain_train;
+mod geometric_candidate_anchor;
+mod geometric_candidate_rank;
 mod hamming;
+mod learned_copy_reply;
 mod memory;
 mod memory_train;
 mod panel;
@@ -50,6 +54,12 @@ pub use content_readout::{
     ContentStopDensityTraining, ContentStopGate, ContentStopPhaseAudit, ContentStopRow,
     ContentStopTraining, CONTENT_CODE_SIGNATURE_BITS, CONTENT_MIN_TARGET_VALUES,
     CONTENT_MIN_TRAINING_ROWS, CONTENT_SIGNATURE_BITS, CONTENT_TRAJECTORY_SIGNATURE_BITS,
+};
+pub use copy_candidate_rank::{
+    compare_ranked_copy_rows, derive_copy_candidate_rankers, evaluate_ranked_copy_replies,
+    CopyCandidateRankTraining, CopyCandidateRanker, CopyRankerTrajectory, RankedCopyReading,
+    RankedCopyStep, TimedRankedCopyReading, COPY_RANKER_EPOCHS, COPY_RANKER_FEATURES,
+    COPY_RANKER_FEATURE_NAMES, COPY_RANKER_MAX_DEPTH, COPY_RANKER_MIN_GROUPS,
 };
 pub use copy_key_depth::{
     evaluate_copy_key_depth, evaluate_copy_key_router, fit_copy_key_router, CopyKeyComparison,
@@ -90,6 +100,27 @@ pub use gain_train::{
     CpuTerminationGainTrainer, ServedGainConfig, ServedGainMove, ServedGainStep,
     TerminationGainConfig, TerminationGainEvaluation, TerminationGainReading, TerminationGainStep,
     CPU_SERVED_GAIN_TRAINER_SCHEMA, CPU_TERMINATION_GAIN_TRAINER_SCHEMA,
+};
+pub use geometric_candidate_anchor::{
+    calibrate_expanded_candidate_union, compare_anchored_candidate_rows,
+    derive_anchored_candidate_rankers, evaluate_anchored_candidate_replies, AnchoredCandidateArm,
+    AnchoredCandidateRanker, AnchoredCandidateReading, AnchoredCandidateTraining,
+    ExpandedCandidateCalibration, TimedAnchoredCandidateReading, ANCHORED_CANDIDATE_CELL_SWEEP,
+    ANCHORED_CANDIDATE_EPOCHS, ANCHORED_CANDIDATE_FEATURES, ANCHORED_CANDIDATE_FEATURE_NAMES,
+    ANCHORED_CANDIDATE_MIN_BASELINE_WRONG, ANCHORED_CANDIDATE_MIN_GROUPS,
+    ANCHORED_CANDIDATE_MIN_TARGETS,
+};
+pub use geometric_candidate_rank::{
+    compare_geometric_candidate_rows, derive_geometric_candidate_rankers,
+    evaluate_geometric_candidate_replies, GeometricCandidateArm, GeometricCandidateRanker,
+    GeometricCandidateReading, GeometricCandidateStep, GeometricCandidateTraining,
+    TimedGeometricCandidateReading, GEOMETRIC_CANDIDATE_EPOCHS, GEOMETRIC_CANDIDATE_FEATURES,
+    GEOMETRIC_CANDIDATE_FEATURE_NAMES, GEOMETRIC_CANDIDATE_MIN_GROUPS,
+    GEOMETRIC_CANDIDATE_MIN_TARGETS, GEOMETRIC_CANDIDATE_TOP_WRITER,
+};
+pub use learned_copy_reply::{
+    derive_learned_copy_readout, evaluate_learned_copy_replies, LearnedCopyArm, LearnedCopyReading,
+    LearnedCopyStep, LearnedCopyTraining, TimedLearnedCopyReading, LEARNED_COPY_MAX_TRAINING_ROWS,
 };
 pub use memory_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,

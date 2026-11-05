@@ -1,3 +1,139 @@
+## 2026-11-05 — Expanded-cell anchored correction rejects (deepseek)
+
+The CPU writer’s candidate source can be widened beyond its served eight cells
+without changing serving. A train-only sweep found that 12 cells missed the
+2,048-group floor on artifact seed 2 by five groups; that attempt is preserved
+as an instrument/selection fault. K16 cleared every floor on both artifacts.
+
+On fresh seed 2770, the K16 anchored correction updated only wherever
+longest-32 was wrong and required a strictly positive score to override it.
+It nevertheless displaced longest-32 on all 27,264 decisions and scored only
+**13 / 4** correct body positions, against **603 / 603** for longest-32,
+geometry-only **202 / 68**, unanchored **218 / 603** and writer **47 / 48**.
+
+Both artifact repeats matched, every control differed from longest-32, and no
+arm emitted premature BOS. The result is **REJECT** for this fitted linear
+candidate correction; it does not reject geometric candidate ranking itself.
+Seeds 2769 and 2770 are closed. Record:
+[deepseek-179](../loop/tasks/cpu-training-pilot/deepseek-179/REPORT.md).
+**Next:** change the candidate-conditioned representation/objective rather than
+widening cells or adding more similar features; retain longest-32 as the current
+body selector and prioritize independent completion/termination.
+
+## 2026-11-05 — Geometric candidate union doubles seed-1 supervision but misses seed-2 floor (deepseek)
+
+Adding the writer's top 128 non-BOS geometric candidates to exact-copy history
+raised artifact seed 1 from 85 exact-copy supervised groups to **2,442** groups
+with 332 target tokens, above the registered 2,048-group floor. Artifact seed 2
+stopped at **1,847** groups, so the registered two-seed run is
+**INSUFFICIENT_TRAINING_DATA** and seed 2768 is closed for this construction.
+
+The run used eight bounded integer features, reference-free generated
+inference, deepest exact-copy sources, writer-rank retention, all four controls
+and reply/decision replay hashes. Seed 1 is diagnostic only: its ranker scored
+265 body positions versus 601 for longest-32, 61 for writer and 46 for
+fixed geometry-only. The shell's mismatched regex printed `INSTRUMENT_FAULT`;
+the preserved 1,847-group error was reclassified under the registered stop
+rule without rerun or retune. Record:
+[deepseek-177](../loop/tasks/cpu-training-pilot/deepseek-177/REPORT.md).
+**Next:** broaden supervision or derive a denser objective that clears both
+artifacts under a new seed; keep longest-32 as the current body selector.
+
+## 2026-11-05 — Reference-prefix ranker confirms candidate supervision shortage (deepseek)
+
+Replacing longest-32-generated training trajectories with teacher-forced
+reference prefixes raised supervised pairwise decisions only from **74 to 85**,
+against the registered **640** floor. The run stopped before perceptron fitting,
+seed 2 or reply evaluation.
+
+Generated inference remained separate from reference supervision and unchanged.
+This rules out generated-trajectory drift as the main bottleneck: the exact-copy
+depth-1..8 candidate definition itself supplies too few groups containing the
+reference next token. Record:
+[deepseek-175](../loop/tasks/cpu-training-pilot/deepseek-175/REPORT.md).
+**Next:** broaden the candidate construction or use a denser objective under a
+new seed and registration; do not lower this floor or reuse seed 2767.
+
+## 2026-11-05 — Pairwise copy-candidate ranker stops on training supervision (deepseek)
+
+A new exact-copy ranker represented each candidate with depth, sign agreement,
+eight rotated-row agreements, recency, frequency and writer agreement and
+defined an eight-pass bounded integer pairwise perceptron. Shuffled-target and
+fixed depth-only arms were registered as controls.
+
+The fresh seed-2766 run did not reach evaluation. Longest-32-generated train
+panel 2711 supplied only **74** two-candidate groups where the reference token
+was present, below the pre-registered **640** floor. The command stopped before
+the perceptron fit, ranker selection, seed 2 or any reply reading. This is an
+insufficiency result
+for the longest-32 trajectory source, not a ranker-mechanism negative. Record:
+[deepseek-173](../loop/tasks/cpu-training-pilot/deepseek-173/REPORT.md).
+**Next:** generate materially more candidate-labelled states with a new seed
+and registration; do not lower the floor or retune on seed 2766.
+
+## 2026-11-05 — Continuation-sensitive copy lookahead rejects (deepseek)
+
+The copy selector made learned target identity part of candidate ranking by
+feeding each unique depth-1..4 candidate through a cloned exact forward and
+comparing the predicted next token with the historical continuation after the
+candidate's deepest source occurrence. The repaired target-shuffled control
+changed 167 and 278 decisions.
+
+On fresh seed 2765 with 481 reachable replies, continuation lookahead scored
+only **242 and 262/4,899** correct body positions against **511** for both
+no-lookahead learned and longest-32. It arbitrated 27,318 and 26,594 candidates
+but matched the historical continuation on only 231 and 209 of 30,784
+evaluated decisions. Every arm repeated deterministically and emitted zero
+exact, BOS-complete or premature-BOS replies. This closes the
+candidate-conditioned single-token learned lookahead configuration. Record:
+[deepseek-171](../loop/tasks/cpu-training-pilot/deepseek-171/REPORT.md).
+**Next:** retain longest-32 as the body selector and prioritize independent
+termination/completion; do not retune this scalar on seed 2765.
+
+## 2026-11-05 — Distance-only model lookahead invalid for copy (deepseek)
+
+The copy selector rolled each unique depth-1..4 candidate through a cloned
+exact `CpuFbsForward` and scored the resulting modulo-code state with the
+learned nearest-example read. On a fresh seed-2764 panel with 488 reachable
+replies, lookahead scored only **194 and 191/4,799** correct body positions
+versus **393** for longest-32. It arbitrated over 27,000 candidates and
+strongly preferred depth four, but lost body accuracy. Shuffling readout
+targets changed **zero** decisions because ranking used distance only, so the
+registered control failed closed as `INSTRUMENT_FAULT`. Record:
+[deepseek-169](../loop/tasks/cpu-training-pilot/deepseek-169/REPORT.md).
+**Next:** use predicted token identity or multi-token future content; do not
+retune this distance-only lookahead on seed 2764.
+
+## 2026-11-05 — Learned query-code copy read rejects (deepseek)
+
+A learned modulo-256 code read was fitted on longest-32 train trajectories and
+allowed to choose only from the exact-copy candidate set. On a fresh seed-2763
+panel with 453 reachable replies it scored **474 and 475/4,686** correct body
+positions against **474** for longest-32 on both artifact seeds. It arbitrated
+210 and 174 candidates and changed 52 and 245 decisions, but the paired
+longest and shuffled-read comparisons failed. Training leave-one-out top-1 was
+only **116 and 125/1,024**, with a 957/2,048 fitted radius. All learned and
+control arms remained deterministic with zero exact, BOS-complete or premature
+BOS replies. Record:
+[deepseek-167](../loop/tasks/cpu-training-pilot/deepseek-167/REPORT.md).
+**Next:** change the trained copy representation or target rather than adding
+rows or loosening this readout.
+
+## 2026-11-05 — Token-row sign distance rejects as copy arbitration (deepseek)
+
+The geometric copy arm ranked every available exact-copy candidate by
+sign-Hamming distance between the current 256-coordinate Q12 writer query and
+the token's shared vector-table row. On a fresh seed-2762 panel it changed
+thousands of decisions but scored only **270 and 286 / 4,822** correct body
+positions against **624** for longest-32 on both artifact seeds. Train also
+fell to **174 and 195 / 4,661** against **409**. The arm beat fixed depth 1
+and writer, but lost longest-32, longest-4, `k2>k1` and random-32. All runs
+were deterministic, every copied geometric decision carried a distance, and
+all arms remained at zero exact, BOS-complete and premature-BOS replies.
+Record: [deepseek-165](../loop/tasks/cpu-training-pilot/deepseek-165/REPORT.md).
+**Next:** derive the geometric copy ranking from learned context/query-read
+geometry; do not retune raw token-row sign distance on this panel.
+
 ## 2026-11-05 — Longer exact copy depth adds no token distinction (deepseek)
 
 The longest-32 exact-suffix arm selected deeper matches than longest-4 on a

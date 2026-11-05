@@ -1,6 +1,6 @@
 # REPORT: repair Studio loading and share exact arithmetic
 
-Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Fresh `origin/main` base: `7018b09cd`. Delivery is **pending**: this report is updated only after exact-head review, protected merge, fresh-main verification and Pages publication.
+Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Order: [ORDER.md](ORDER.md). Design: [DESIGN.md](DESIGN.md). Fresh `origin/main` base: `3f08ccfd1`, including registration PR #3730. Delivery is **pending**: this report is updated only after exact-head review, protected merge, fresh-main verification and Pages publication.
 
 ## What did not work
 

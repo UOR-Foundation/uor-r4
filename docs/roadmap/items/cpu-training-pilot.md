@@ -453,6 +453,100 @@ next content test to a non-exact geometric read rather than a longer exact
 suffix. See
 [deepseek-163](../../loop/tasks/cpu-training-pilot/deepseek-163/REPORT.md).
 
+Static token-row geometry did not repair that gap. A second fresh screen ranked
+the same exact-copy candidates by sign-Hamming distance between the current
+Q12 writer query and each token's shared vector-table row. It changed
+thousands of decisions and remained deterministic, but scored only **270 and
+286/4,822** fresh body positions against **624** for longest-32, and **174 and
+195/4,661** against **409** on train. It beat fixed depth 1 and writer but lost
+longest-32, `k2>k1` and random-32. This closes raw per-token writer-row sign
+proximity as an arbitration rule. The next geometric-copy read must learn or
+derive candidate agreement from context instead of treating a static row as a
+copy key. See
+[deepseek-165](../../loop/tasks/cpu-training-pilot/deepseek-165/REPORT.md).
+
+Learning from generated query codes did not escape that ceiling. A modulo-256
+readout fitted on 4,661 longest-copy train states was restricted to exact-copy
+candidates and evaluated on a fresh seed-2763 panel. It arbitrated 210 and 174
+decisions but scored with longest-32 on seed 1 and gained one body position on
+seed 2, below the paired threshold; the shuffled learned read also failed the
+comparison. Leave-one-out training top-1 was only 116 and 125 of 1,024. This
+closes the fixed row-level nearest-example copy read. The next candidate
+representation must model multi-token continuation or candidate-specific
+context rather than map one writer state to one token. See
+[deepseek-167](../../loop/tasks/cpu-training-pilot/deepseek-167/REPORT.md).
+
+One-step exact-state lookahead did not repair the copy signal. The selector
+rolled each depth-1..4 candidate through a cloned forward and used the next
+state's learned readout distance. On fresh seed 2764 it scored **194 and
+191/4,799** body positions versus **393** for longest-32 and strongly favored
+depth four. Shuffling the readout targets changed zero decisions because the
+score used distance only, so the registered control failed closed. This closes
+distance-only candidate lookahead; the next attempt must score predicted token
+identity or multi-token continuation content with a new panel. See
+[deepseek-169](../../loop/tasks/cpu-training-pilot/deepseek-169/REPORT.md).
+
+Making lookahead continuation-sensitive repaired the control but not the
+content signal. The new score compared each candidate-conditioned prediction
+with the token that historically followed the candidate's retained source
+occurrence. On fresh seed 2765, target shuffling changed 167 and 278 decisions,
+yet continuation lookahead scored only **242 and 262/4,899** body positions
+against **511** for both no-lookahead learned and longest-32. It found a
+continuation match on only 231 and 209 of 30,784 evaluated decisions. This
+closes this single-token learned lookahead configuration. Longest exact copy
+remains the stronger content selector; the next completion work should target
+an independent termination path rather than retune this scalar. See
+[deepseek-171](../../loop/tasks/cpu-training-pilot/deepseek-171/REPORT.md).
+
+The next candidate-ranking unit changed the learning target rather than another
+scalar. It represented every exact-copy candidate by depth, sign agreement,
+eight rotated-row agreements, recency, frequency and writer agreement and
+defined an eight-pass integer pairwise perceptron with shuffled-target and
+depth-only controls. The seed-2766 fit stopped before that perceptron was
+called: longest-32-generated train panel 2711 produced only **74**
+two-candidate groups with the reference next token present, against the
+registered **640** floor. No ranker selection or reply evaluation ran. This is
+an insufficiency result for the longest-32 trajectory source, not a negative
+for pairwise candidate ranking. The next attempt must create materially more
+candidate-labelled states, with a new seed and registration. See
+[deepseek-173](../../loop/tasks/cpu-training-pilot/deepseek-173/REPORT.md).
+
+Teacher-forced reference prefixes then tested whether generated-trajectory drift
+caused that supervision shortage. It raised the candidate-group count only from
+**74 to 85**, against the registered **640** floor, and stopped before
+perceptron fitting or reply evaluation. This identifies the exact-copy
+depth-1..8 candidate definition itself as the bottleneck, not longest-generated
+drift. Generated inference remained unchanged. A later ranker must broaden the
+candidate construction or use a denser objective, with a new seed and
+registration. See
+[deepseek-175](../../loop/tasks/cpu-training-pilot/deepseek-175/REPORT.md).
+
+The next ranker broadened the exact-copy candidate set with the writer's top
+128 non-BOS geometric candidates and a writer fallback, while retaining exact
+depths through 32. On artifact seed 1 this produced **2,442** supervised groups
+and 332 target tokens, a large increase over exact copy alone. Artifact seed 2
+stopped at **1,847** groups against the fixed 2,048 floor, so the registered
+two-seed comparison was not evaluated and the run is
+**INSUFFICIENT_TRAINING_DATA**. Seed 1's diagnostic ranker also lost to
+longest-32. The broader union is therefore promising for supervision but not
+yet robust or strong enough; the next unit must clear both artifacts under a
+new seed without lowering the floor. See
+[deepseek-177](../../loop/tasks/cpu-training-pilot/deepseek-177/REPORT.md).
+
+Widening the CPU-only geometric cell source supplied enough supervision but did
+not improve arbitration. K12 stopped before evaluation because seed 2 had only
+**2,043** target-present groups against 2,048; that selection attempt is
+preserved as an instrument fault. K16 cleared every floor on both public
+artifacts. On fresh seed 2770, its longest-32-anchored linear correction
+overrode the baseline on all 27,264 decisions and scored only **13 / 4** body
+positions, against **603 / 603** for longest-32, geometry-only **202 / 68**,
+unanchored **218 / 603** and writer **47 / 48**. Both repeats matched and every
+control differed from longest-32. This closes the fitted K16 linear correction,
+not geometric candidate ranking generally. Future copy/body work needs a
+different candidate-conditioned representation or objective; longest-32
+remains the current body selector. See
+[deepseek-179](../../loop/tasks/cpu-training-pilot/deepseek-179/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference
