@@ -126,7 +126,7 @@ Published evidence verifies with `PUBLISHED-SHA256SUMS`, SHA-256
   fail-closed checks passed.
 - The fresh-process repeat matched every arm, reading, comparison, reply hash
   and decision hash after timing fields were removed.
-- **283** CPU library tests passed with 4 expected ignores; **71** binary tests
+- **284** CPU library tests passed with 4 expected ignores; **71** binary tests
   and **9** focused copy-reply tests passed; strict scoped Clippy, rustfmt,
   recipe `bash -n`, `git diff --check` and evidence manifests passed.
 - No float-training, integer-serving, CUDA or Claude-owned source changed.

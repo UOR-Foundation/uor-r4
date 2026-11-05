@@ -59,7 +59,7 @@
     "free_space_after_run_bytes": 468150497280
   },
   "controls": {
-    "library_tests_passed": 283,
+    "library_tests_passed": 284,
     "library_tests_ignored": 4,
     "binary_tests_passed": 71,
     "focused_copy_reply_tests_passed": 9,
