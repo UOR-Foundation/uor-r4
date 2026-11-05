@@ -103,6 +103,18 @@ printf '%s  %s\n' \
   sha256sum -c -
 
 mkdir -p "$PANELS" "$OUT/reports" "$OUT/oracle" "$OUT/gate"
+seal() {
+  (
+    cd "$OUT"
+    find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
+      sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
+    mv SHA256SUMS.tmp SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
+
+cd "$SOURCE"
 /usr/bin/time -v -o "$OUT/build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
   cargo build --locked --release -p uor-r4-cpu-train \
@@ -196,13 +208,19 @@ for seed in seed1 seed2; do
     --min-dev-oracle 7 --min-distinct-terminal 8 \
     >"$OUT/gate/$seed-repeat.json"
   cmp "$OUT/gate/$seed.json" "$OUT/gate/$seed-repeat.json"
+  jq -r \
+    'if .train.bar.passes == true and .dev.bar.passes == true
+     then "KEEP" else "REJECT" end' \
+    "$OUT/gate/$seed.json" >"$OUT/gate/$seed.outcome.txt"
 done
+cat "$OUT"/gate/seed*.outcome.txt >"$OUT/outcomes.txt"
 ```
 
 The driver's `train.bar.passes` and `dev.bar.passes` contain every registered
-exact, power, control, premature-stop and determinism input except the final
-`cmp`, which the command above enforces. The final decision reads
-`dev.bar.passes` directly and does not recompute a hidden bar.
+exact, power, control and premature-stop input. The wrapper requires both for
+each artifact seed in `*.outcome.txt`; it also enforces the final fresh-process
+`cmp`. The exit trap seals all outputs in `SHA256SUMS`, including the
+power-limited or instrument record when one applies.
 
 ## Minimum test power
 
