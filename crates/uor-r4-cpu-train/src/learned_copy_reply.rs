@@ -840,6 +840,27 @@ mod tests {
     }
 
     #[test]
+    fn lookahead_with_no_candidates_preserves_writer_fallback() {
+        let artifact = artifact();
+        let (forward, _, _, _) =
+            start_reply(&artifact, &[3, 4, 5], 8, 16, "lookahead-test").unwrap();
+        let base = crate::CopyKeyReplyDecision {
+            token: 77,
+            depth: None,
+            matches: [None; COPY_KEY_REPLY_MAX_DEPTH],
+            sign_hamming: None,
+        };
+        let readout = make_readout(vec![ContentExample {
+            signature: signature(0),
+            target: 42,
+        }]);
+        let selected = lookahead_decision(&base, &forward, &readout).unwrap();
+        assert_eq!(selected.token, 77);
+        assert_eq!(selected.depth, None);
+        assert!(!selected.lookahead_evaluated);
+    }
+
+    #[test]
     fn training_rows_follow_longest_copy_and_align_reference_targets() {
         let artifact = artifact();
         let sample = MemoryWeightSample {
