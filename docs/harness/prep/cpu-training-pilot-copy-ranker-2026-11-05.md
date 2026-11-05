@@ -323,7 +323,14 @@ jq -s -r 'if .[0].passes then "KEEP" else "REJECT" end' \
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - awaiting an independent fresh-context review.
+TEST FITNESS: FIT - M1 #2029 pairwise exact-copy candidate ranker
+sheet: docs/harness/prep/cpu-training-pilot-copy-ranker-2026-11-05.md
+reviewer: fresh-context Codex subagent fit_copy_ranker
+note: Independent review at `fa74475e121082acff6297f68cbea70efcb23cc2` verified candidate-only semantics, deepest duplicate source, all seven bounded features, pairwise integer updates, shuffled and depth-only controls, train/fresh separation, fail-closed gates, determinism and source pins.
+date: 2026-11-05
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
 
 ## Independent GO
 
