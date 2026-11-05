@@ -7,8 +7,8 @@ Order: [ORDER.md](ORDER.md). Base: `e94afaae8`; implementation pin:
 
 ## Status
 
-Complete as a read-only, fail-closed audit for anchored writer artifacts.
-No writer-admission or model-quality result is claimed.
+Complete and merged as a read-only, fail-closed audit for anchored writer
+artifacts. No writer-admission or model-quality result is claimed.
 
 ## What did not work
 
@@ -60,6 +60,8 @@ changed.
 - CPU package suite: **340 passed**, 4 expected ignores, and **101** binary
   tests passed.
 - Focused writer-port tests: **5 passed**; CLI tests: **4 passed**.
+- PR #3732 reviewed head `1052f9255`, protected merge
+  `5bd24915e92f434d902c55b0db46063f5ab40851`.
 
 ## Checks run at the head
 
@@ -71,10 +73,12 @@ changed.
 - direct audit runs on both public unanchored artifacts;
 - artifact SHA-256 agreement with the public `SHA256SUMS`;
 - fresh-context review, with the output-alias and hash-branch findings fixed;
+- exact-head review, all required CI checks and the protected merge queue;
+- fresh-main CPU library **340 passed**, 4 expected ignores;
+- fresh-main CPU binaries **101 passed**;
+- fresh-main strict Clippy, report/evidence, rustfmt and `git diff --check`;
+- fresh-main `loop gates --full`: **11 / 11 green**;
 - `git diff --check`.
-
-Report, loop, review and fresh-main gates are recorded after the reviewed
-delivery.
 
 ## Size
 
