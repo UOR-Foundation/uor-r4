@@ -87,8 +87,9 @@ The integer files stay untouched until claude-288.
 ## Done when
 
 1. **`--score-rows --past-window slide|blocks|carry`.**
-   - It takes a panel and is refused on DEV and Fresh V2, which are 192-token windows.
-   - W is the checkpoint's own window. Without the option, every output and every refusal is byte for byte as at the base.
+   - It cuts panels only, and is refused with Fresh V2. DEV, which every `--score-rows` run scores, keeps its 192-token windows as the run's identity check: under slide and blocks its rows are the base's, and under carry they run on the model at C. (Decided at the wiring: a refusal on DEV would refuse every run.)
+   - It is also refused with the opening keys, the served and keyed arms, and the decision traces and forces, which this measurement does not read.
+   - W is the checkpoint's own window, read from its `config.json`; a `--context` other than W is refused. Without the option, every output and every refusal is byte for byte as at the base.
    - **blocks:** `build_document_windows` at W, as today.
    - **slide:** a new windower over each conversation:
      - the first window scores targets 1 to W;
@@ -110,7 +111,8 @@ The integer files stay untouched until claude-288.
    - the slide windower covers every target once, and each sees at least W − s + 1 tokens;
    - carry's windows are one per conversation;
    - the per-rule query prompts start where the rule says;
-   - the option is refused on DEV and Fresh V2, and on a non-panel split;
+   - the option is refused with Fresh V2 and without a panel, and W and the objective are read from the saved configs;
+   - the bands count rows, hits and losses by offset from each conversation's BOS, and queries by their note's distance;
    - without the option, `windows_of` and the scored files are unchanged.
 
    The float crate's tests pass, and the stub-nvcc check is clean.

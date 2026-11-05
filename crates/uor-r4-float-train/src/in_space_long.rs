@@ -5108,13 +5108,14 @@ impl PastWindowRule {
     }
 
     /// W, the checkpoint's own context, when the rule can score this run: at least one panel, no
-    /// DEV or Fresh V2 (fixed 192-token windows), no requested context other than the
-    /// checkpoint's (`None` is omitted), and a slide stride within `1..=W`.
+    /// Fresh V2, no requested context other than the checkpoint's (`None` is omitted), and a
+    /// slide stride within `1..=W`. The rule cuts panels only. DEV, which every `--score-rows`
+    /// run scores, keeps its fixed 192-token windows as the run's identity check, so under
+    /// `slide` and `blocks` its rows are the base's; under `carry` they run on the model at C.
     pub fn validate(
         &self,
         checkpoint_context: usize,
         requested_context: Option<usize>,
-        scores_dev: bool,
         scores_fresh_v2: bool,
         panels: usize,
     ) -> Result<usize> {
@@ -5124,10 +5125,9 @@ impl PastWindowRule {
                 "past-window rule {rule} wants at least one panel"
             )));
         }
-        if scores_dev || scores_fresh_v2 {
+        if scores_fresh_v2 {
             return Err(invalid(format!(
-                "past-window rule {rule} scores panels only: DEV and Fresh V2 are fixed \
-                 192-token windows"
+                "past-window rule {rule} cuts panels only: Fresh V2 is a fixed 192-token split"
             )));
         }
         if let Some(requested) = requested_context.filter(|&c| c != checkpoint_context) {
@@ -5363,6 +5363,179 @@ fn query_prompts_ruled(
         };
     }
     Ok((prompts, crossing))
+}
+
+/// The window `checkpoint` (a `step-N` directory) was built to read: its model `config.json`'s
+/// `context`, which [`StackModel::load`] reads (claude-287).
+fn checkpoint_window(checkpoint: &Path) -> Result<usize> {
+    let path = checkpoint.join("config.json");
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)
+        .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    value
+        .get("context")
+        .and_then(serde_json::Value::as_u64)
+        .map(|c| c as usize)
+        .ok_or_else(|| invalid(format!("{}: no context", path.display())))
+}
+
+/// The objective `checkpoint`'s run trained with, from the run's `config.json` where
+/// [`check_run_arm`] finds it; none when no run config is found (claude-287).
+fn run_objective(checkpoint: &Path) -> Result<Option<PointObjective>> {
+    let checkpoint = checkpoint
+        .canonicalize()
+        .unwrap_or_else(|_| checkpoint.to_path_buf());
+    let candidates = [
+        Some(checkpoint.join("config.json")),
+        checkpoint.parent().and_then(Path::parent).map(|run| run.join("config.json")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if !path.exists() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        if value.get("steps").is_none() {
+            continue;
+        }
+        return match value.get("objective").and_then(serde_json::Value::as_str) {
+            Some("sheet") => Ok(Some(PointObjective::Sheet)),
+            Some("voronoi") => Ok(Some(PointObjective::Voronoi)),
+            Some("nearest") => Ok(Some(PointObjective::Nearest)),
+            Some("cell") => Ok(Some(PointObjective::Cell)),
+            other => Err(invalid(format!("{}: objective {other:?}", path.display()))),
+        };
+    }
+    Ok(None)
+}
+
+/// A panel cut by a past-window rule (claude-287): the rule, W, the context the panel's windows
+/// run at (W, or C under `carry`), each document's BOS position, and the `blocks` queries whose
+/// inputs run past W.
+#[derive(Clone, Debug)]
+struct PastCut {
+    rule: PastWindowRule,
+    window: usize,
+    context: usize,
+    doc_starts: Vec<usize>,
+    crossing: usize,
+}
+
+impl PastCut {
+    /// The band of the row whose target sits at corpus `position`: its input's offset from its
+    /// document's BOS, `position - 1 - doc_start`, in widths of W. So band 0 holds a document's
+    /// first W targets, the ones a single window from the BOS scores under every rule.
+    fn band(&self, position: usize) -> usize {
+        let doc = self.doc_starts.partition_point(|&s| s < position) - 1;
+        (position - 1 - self.doc_starts[doc]) / self.window
+    }
+}
+
+/// One band of a past-window file's rows (claude-287): targets whose input's offset from their
+/// document's BOS is in `from..to`, their nearest and writer hits, and the checkpoint's own
+/// `query_loss` summed and averaged over them, none when its run's objective is not found.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct PastWindowBand {
+    pub from: usize,
+    pub to: usize,
+    pub targets: usize,
+    pub nearest_hits: usize,
+    pub writer_hits: usize,
+    pub loss_sum: Option<f64>,
+    pub loss_mean: Option<f64>,
+}
+
+/// One band of a past-window file's queries (claude-287): queries whose note lies `from..to`
+/// tokens back, the replies decoded among them, the reference tokens and how many of them the
+/// reply gives at the same place (both cut at the end marker), and the replies that state the
+/// note's value ([`recall_grade`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct PastWindowQueryBand {
+    pub from: usize,
+    pub to: usize,
+    pub queries: usize,
+    pub replies: usize,
+    pub reference_tokens: usize,
+    pub agreed_tokens: usize,
+    pub stated: usize,
+}
+
+/// `past-window-{panel}-{memory|no-memory}.json` (claude-287): one panel's rows and queries
+/// under one past-window rule, by band.
+#[derive(Clone, Debug, Serialize)]
+pub struct PastWindowReading {
+    pub split: String,
+    pub memory: bool,
+    pub rule: &'static str,
+    pub window: usize,
+    pub context: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stride: Option<usize>,
+    pub objective: Option<PointObjective>,
+    pub blocks_crossing: usize,
+    pub bands: Vec<PastWindowBand>,
+    pub query_bands: Vec<PastWindowQueryBand>,
+}
+
+/// `picks`' rows by [`PastCut::band`], with `losses[band]`'s summed loss where given.
+fn past_window_bands(cut: &PastCut, picks: &[RowPick], losses: Option<&[f64]>) -> Vec<PastWindowBand> {
+    let mut bands: Vec<PastWindowBand> = Vec::new();
+    for pick in picks {
+        let band = cut.band(pick.position);
+        if bands.len() <= band {
+            bands.resize(band + 1, PastWindowBand::default());
+        }
+        let row = &mut bands[band];
+        row.targets += 1;
+        row.nearest_hits += usize::from(pick.nearest == pick.target);
+        row.writer_hits += usize::from(pick.writer == pick.target);
+    }
+    for (band, row) in bands.iter_mut().enumerate() {
+        (row.from, row.to) = (band * cut.window, (band + 1) * cut.window);
+        if let Some(losses) = losses {
+            let sum = losses.get(band).copied().unwrap_or(0.0);
+            row.loss_sum = Some(sum);
+            row.loss_mean = (row.targets > 0).then(|| sum / row.targets as f64);
+        }
+    }
+    bands
+}
+
+/// The queries by their note's distance in widths of `window` (claude-287), from `replies`, the
+/// decoded queries' (reply, reference) tokens each cut at its end marker in `prompts.decoded`'s
+/// order, and the recall grade's `outcomes`.
+fn past_window_query_bands(
+    queries: &[ChainQuery],
+    prompts: &QueryPrompts,
+    replies: &[(&[u32], &[u32])],
+    outcomes: &[QueryOutcome],
+    window: usize,
+) -> Result<Vec<PastWindowQueryBand>> {
+    if replies.len() != prompts.decoded.len() || outcomes.len() != queries.len() {
+        return Err(invalid("past-window query bands: the replies are not the decoded queries"));
+    }
+    let mut bands: Vec<PastWindowQueryBand> = Vec::new();
+    let mut at = |distance: usize| {
+        let band = distance / window;
+        if bands.len() <= band {
+            bands.resize(band + 1, PastWindowQueryBand::default());
+        }
+        band
+    };
+    let banded: Vec<usize> = queries.iter().map(|q| at(q.chain.distance)).collect();
+    for (&band, outcome) in banded.iter().zip(outcomes) {
+        bands[band].queries += 1;
+        bands[band].stated += usize::from(outcome.stated);
+    }
+    for ((index, _), (reply, reference)) in prompts.decoded.iter().zip(replies) {
+        let row = &mut bands[banded[*index]];
+        row.replies += 1;
+        row.reference_tokens += reference.len();
+        row.agreed_tokens += reference.iter().zip(*reply).filter(|(a, b)| a == b).count();
+    }
+    for (band, row) in bands.iter_mut().enumerate() {
+        (row.from, row.to) = (band * window, (band + 1) * window);
+    }
+    Ok(bands)
 }
 
 /// Whether `text` states `answer`: as a whole word, not inside a longer word or number.
@@ -7086,6 +7259,9 @@ struct ScoreSplit {
     context: usize,
     /// A chained panel's `--panel-queries` and their prompts at `context` (claude-275).
     queries: Option<(Vec<ChainQuery>, QueryPrompts)>,
+    /// A panel's past-window cut (claude-287); none for DEV, Fresh V2 and every split without
+    /// `--past-window`.
+    past: Option<PastCut>,
 }
 
 /// Write `bytes` to a new file at `path`; an existing file is refused, never replaced.
@@ -7181,6 +7357,16 @@ fn reference_reply(window: &CausalWindow, tokens: usize) -> Vec<u32> {
 /// with the memory on and off, from the window ending at its reply ([`query_prompts`]):
 /// `samples-{name}-queries-{memory|no-memory}.json`. Each is graded by whether its reply states
 /// its note's value ([`recall_grade`]), binned by distance, in `recall-{name}-{label}.json`.
+///
+/// **Past the window (claude-287).** With `past_window`, every panel is cut by that rule at W,
+/// the checkpoint's own window ([`PastWindowRule::validate`]; `context_given` says whether
+/// `context` was asked for, and then it must be W): `blocks` as above, `slide` and `carry` by
+/// [`past_window_cut`], and each query's prompt starts where the rule says
+/// ([`query_prompts_ruled`]). Under `carry` the model reads C, the longest panel's
+/// [`hs::carry_context`], and every decode slides over C. DEV keeps its 192-token windows. Each
+/// panel also writes `past-window-{name}-{label}.json` ([`PastWindowReading`]): its rows and
+/// queries by band, with `query_loss` under the run's objective. The opening keys, the served
+/// and keyed arms, and the decision traces and forces are refused with it.
 #[allow(clippy::too_many_arguments)]
 pub fn score_rows(
     data_root: &Path,
@@ -7210,8 +7396,22 @@ pub fn score_rows(
     context: usize,
     last_opening: bool,
     panel_queries: &[(String, PathBuf)],
+    past_window: Option<PastWindowRule>,
+    context_given: bool,
 ) -> Result<Vec<ScoredFile>> {
     check_run_arm(checkpoint, arm)?;
+    let context = match past_window {
+        Some(rule) => {
+            if keys || served_arm || !keyed.is_empty() || !traces.is_empty() || !forces.is_empty() {
+                return Err(invalid(
+                    "--past-window reads rows and queries only: --opening-keys, --served-key, --keyed-decode, --decision-trace and --decision-force are refused with it",
+                ));
+            }
+            let requested = context_given.then_some(context);
+            rule.validate(checkpoint_window(checkpoint)?, requested, fresh_v2.is_some(), panels.len())?
+        }
+        None => context,
+    };
     training_context(context)?;
     window_bound_flags(
         context,
@@ -7267,6 +7467,7 @@ pub fn score_rows(
         samples: true,
         context: SHEET_CONTEXT,
         queries: None,
+        past: None,
     }];
     if let Some(dir) = fresh_v2 {
         let (tokens, mask) = load_fresh_v2(dir)?;
@@ -7278,6 +7479,7 @@ pub fn score_rows(
             samples: false,
             context: SHEET_CONTEXT,
             queries: None,
+            past: None,
         });
     }
     for (name, _) in panel_queries {
@@ -7292,12 +7494,26 @@ pub fn score_rows(
             )));
         }
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        // claude-287: the rule's cut, and the context its windows and decodes run at.
+        let (runs_at, windows) = match past_window {
+            Some(rule) => past_window_cut(rule, &tokens, &mask, context)?,
+            None => (context, windows_of(&tokens, &mask, context)?),
+        };
+        let mut crossing = 0;
         let queries = match panel_queries.iter().find(|(panel, _)| panel == name) {
             Some((_, file)) => {
                 let queries = load_panel_queries(file, &sha, &sha256_bytes(&mask))?;
-                let prompts = query_prompts(&tokens, &mask, context, &queries)?;
+                let prompts = match past_window {
+                    Some(rule) => {
+                        let (prompts, crossed) =
+                            query_prompts_ruled(&tokens, &mask, rule, context, runs_at, &queries)?;
+                        crossing = crossed;
+                        prompts
+                    }
+                    None => query_prompts(&tokens, &mask, context, &queries)?,
+                };
                 println!(
-                    "[queries] {name}: {} queries, {} decoded at {context}, {} past the window",
+                    "[queries] {name}: {} queries, {} decoded at {runs_at}, {} past the window",
                     queries.len(),
                     prompts.decoded.len(),
                     prompts.past_window.len()
@@ -7306,16 +7522,36 @@ pub fn score_rows(
             }
             None => None,
         };
+        let past = past_window.map(|rule| PastCut {
+            rule,
+            window: context,
+            context: runs_at,
+            doc_starts: (0..tokens.len()).filter(|&i| tokens[i] == hs::SHEET_BOS_ID).collect(),
+            crossing,
+        });
+        if let Some(cut) = &past {
+            let rule = match cut.rule {
+                PastWindowRule::Slide { stride } => format!("slide stride {stride}"),
+                other => other.label().to_owned(),
+            };
+            println!(
+                "[past-window] {name}: {rule} at W {context}, run at {runs_at}, {} windows, {crossing} blocks replies past W",
+                windows.len()
+            );
+        }
         splits.push(ScoreSplit {
             name: name.clone(),
-            windows: windows_of(&tokens, &mask, context)?,
+            windows,
             mask,
             sha256: Some(sha),
             samples: true,
-            context,
+            context: runs_at,
             queries,
+            past,
         });
     }
+    // Under `carry` the model reads the longest panel's C (claude-287).
+    let model_context = splits.iter().map(|s| s.context).max().unwrap_or(context).max(context);
     for (i, (name, _)) in traces.iter().enumerate() {
         if !splits.iter().any(|s| s.name == *name) || traces[..i].iter().any(|(n, _)| n == name) {
             return Err(invalid(format!(
@@ -7329,12 +7565,35 @@ pub fn score_rows(
     crate::geometric_stack::set_folded_scores(fold_scores);
     crate::geometric_stack::set_reflected_floor(reflect_floor);
     let _guard = ArmGuard;
-    let model = StackModel::load(checkpoint, device)?;
+    let mut model = StackModel::load(checkpoint, device)?;
     if context > model.config.context {
         return Err(invalid(format!(
             "--context {context} is past the checkpoint's own {}-token window",
             model.config.context
         )));
+    }
+    // claude-287: no weight is sized by the window, so the model reads C as it is.
+    if past_window == Some(PastWindowRule::Carry) {
+        model.set_context(model_context)?;
+    }
+    let model = model;
+    // The run's objective, for each past-window band's `query_loss`; none when no run config is
+    // found, and then the bands report hits only.
+    let objective = match past_window {
+        Some(_) => run_objective(checkpoint)?,
+        None => None,
+    };
+    if past_window.is_some() {
+        println!(
+            "[past-window] model reads {}; loss under {}",
+            model.config.context,
+            objective.map_or("no objective: the run config is not found", |o| match o {
+                PointObjective::Sheet => "sheet",
+                PointObjective::Voronoi => "voronoi",
+                PointObjective::Nearest => "nearest",
+                PointObjective::Cell => "cell",
+            })
+        );
     }
     load_reads(checkpoint, device)?;
     let unserved = unserved_reads();
@@ -7448,6 +7707,8 @@ pub fn score_rows(
     for on in [true, false] {
         crate::flock_read_memory::set_turn_memory(if on { memory.clone() } else { None });
         let label = if on { "memory" } else { "no-memory" };
+        // claude-287: each past-window panel's row bands in this pass, written with its queries.
+        let mut past_bands: BTreeMap<String, Vec<PastWindowBand>> = BTreeMap::new();
         for split in &splits {
             // Q5's decision trace (claude-251), in the memory pass only, as F′'s rows are read.
             let mut trace = match traces.iter().find(|(name, _)| on && *name == split.name) {
@@ -7460,6 +7721,17 @@ pub fn score_rows(
                 }
                 None => None,
             };
+            // claude-287: under a past-window rule, each batch's `query_loss` by band, from the
+            // same points: row_picks hands the batches over in the windows' row order.
+            let flat: Vec<(usize, u32)> = match (&split.past, objective) {
+                (Some(_), Some(_)) => split
+                    .windows
+                    .iter()
+                    .flat_map(|w| w.scored_corpus_positions.iter().copied().zip(w.scored_targets.iter().copied()))
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let (mut losses, mut cursor) = (Vec::<f64>::new(), 0usize);
             let picks = row_picks(
                 &model,
                 &split.windows,
@@ -7468,8 +7740,41 @@ pub fn score_rows(
                 step,
                 trained_as_served,
                 trace.as_mut(),
-                |_, _| Ok(()),
+                |query, _| {
+                    let (Some(cut), Some(objective)) = (&split.past, objective) else {
+                        return Ok(());
+                    };
+                    let rows = query.dim(0)?;
+                    let batch = flat
+                        .get(cursor..cursor + rows)
+                        .ok_or_else(|| invalid("a past-window batch runs past its split's rows"))?;
+                    cursor += rows;
+                    let mut by_band: BTreeMap<usize, (Vec<u32>, Vec<u32>)> = BTreeMap::new();
+                    for (row, &(position, target)) in batch.iter().enumerate() {
+                        let entry = by_band.entry(cut.band(position)).or_default();
+                        entry.0.push(row as u32);
+                        entry.1.push(target);
+                    }
+                    for (band, (at, targets)) in by_band {
+                        let at = Tensor::from_vec(at, targets.len(), query.device())?;
+                        let mean = query_loss(&model, objective, &query.index_select(&at, 0)?, &targets)?
+                            .mean_all()?
+                            .to_scalar::<f32>()?;
+                        if losses.len() <= band {
+                            losses.resize(band + 1, 0.0);
+                        }
+                        losses[band] += f64::from(mean) * targets.len() as f64;
+                    }
+                    Ok(())
+                },
             )?;
+            if let Some(cut) = &split.past {
+                if objective.is_some() && cursor != flat.len() {
+                    return Err(invalid("a past-window split's losses do not cover its rows"));
+                }
+                let losses = objective.map(|_| losses.as_slice());
+                past_bands.insert(split.name.clone(), past_window_bands(cut, &picks, losses));
+            }
             if let Some(trace) = trace {
                 let file = format!("decision-trace-{}.json", split.name);
                 let trace = trace.finish()?;
@@ -7631,6 +7936,7 @@ pub fn score_rows(
             // A chained panel's queries (claude-275), greedy at full scope with the memory on and
             // off: each from a prompt ending at its opening, graded by whether the reply states
             // its note's value.
+            let mut query_bands: Vec<PastWindowQueryBand> = Vec::new();
             if let Some((queries, query_windows)) = &split.queries {
                 let windows: Vec<&CausalWindow> = query_windows.decoded.iter().map(|(_, w)| w).collect();
                 let (replies, decoded, seconds) = decode(&windows, DecodeRule::Greedy, ReadScope::Full)?;
@@ -7644,6 +7950,14 @@ pub fn score_rows(
                     })
                     .collect();
                 let (total, bins, outcomes) = recall_grade(queries, query_windows, &texts)?;
+                if let Some(cut) = &split.past {
+                    let tokens: Vec<(&[u32], &[u32])> = replies
+                        .iter()
+                        .map(|r| (cut_at_eos(&r.reply, eos), cut_at_eos(&r.reference, eos)))
+                        .collect();
+                    query_bands =
+                        past_window_query_bands(queries, query_windows, &tokens, &outcomes, cut.window)?;
+                }
                 println!(
                     "[recall] {} {label}: {} of {} decoded state the answer; {} references do; {} from the document's start",
                     split.name, total.stated, total.decoded, total.reference_states, total.whole_document
@@ -7677,6 +7991,41 @@ pub fn score_rows(
                     rows: queries.len(),
                     nearest_hits: None,
                     writer_hits: None,
+                    panel_sha256: split.sha256.clone(),
+                    tables: None,
+                    decode: None,
+                    search: None,
+                    context: split.context,
+                });
+            }
+            // claude-287: the panel's rows and queries by band under its past-window rule.
+            if let Some(cut) = &split.past {
+                let bands = past_bands.remove(&split.name).unwrap_or_default();
+                let sum = |hits: fn(&PastWindowBand) -> usize| bands.iter().map(hits).sum::<usize>();
+                let (rows, nearest, writer) =
+                    (sum(|b| b.targets), sum(|b| b.nearest_hits), sum(|b| b.writer_hits));
+                let reading = PastWindowReading {
+                    split: split.name.clone(),
+                    memory: on,
+                    rule: cut.rule.label(),
+                    window: cut.window,
+                    context: cut.context,
+                    stride: match cut.rule {
+                        PastWindowRule::Slide { stride } => Some(stride),
+                        _ => None,
+                    },
+                    objective,
+                    blocks_crossing: cut.crossing,
+                    bands,
+                    query_bands,
+                };
+                let file = format!("past-window-{}-{label}.json", split.name);
+                write_new(&out.join(&file), &serde_json::to_vec(&reading)?)?;
+                written.push(ScoredFile {
+                    file,
+                    rows,
+                    nearest_hits: Some(nearest),
+                    writer_hits: Some(writer),
                     panel_sha256: split.sha256.clone(),
                     tables: None,
                     decode: None,
@@ -16935,19 +17284,108 @@ mod tests {
         let labels = [slide, Blocks, Carry].map(|r| r.label());
         assert_eq!(labels, ["slide", "blocks", "carry"]);
         for rule in [slide, Blocks, Carry] {
-            assert_eq!(rule.validate(192, None, false, false, 1).unwrap(), 192);
-            let long = rule.validate(2048, Some(2048), false, false, 3);
+            assert_eq!(rule.validate(192, None, false, 1).unwrap(), 192);
+            let long = rule.validate(2048, Some(2048), false, 3);
             assert_eq!(long.unwrap(), 2048);
-            assert!(rule.validate(192, None, false, false, 0).is_err());
-            assert!(rule.validate(192, None, true, false, 1).is_err());
-            assert!(rule.validate(192, None, false, true, 1).is_err());
-            assert!(rule.validate(2048, Some(192), false, false, 1).is_err());
+            assert!(rule.validate(192, None, false, 0).is_err());
+            assert!(rule.validate(192, None, true, 1).is_err());
+            assert!(rule.validate(2048, Some(192), false, 1).is_err());
         }
         for (stride, ok) in [(0, false), (1, true), (192, true), (193, false)] {
             let rule = PastWindowRule::Slide { stride };
-            let checked = rule.validate(192, None, false, false, 1);
+            let checked = rule.validate(192, None, false, 1);
             assert_eq!(checked.is_ok(), ok, "stride {stride}");
         }
+    }
+
+    /// claude-287: a row's band is its input's offset from its own document's BOS in widths of W,
+    /// so band 0 is each document's first W targets; hits and losses add up by band.
+    #[test]
+    fn past_window_bands_count_rows_and_losses_by_offset_from_bos() {
+        let cut = PastCut {
+            rule: PastWindowRule::Blocks,
+            window: 4,
+            context: 4,
+            doc_starts: vec![0, 20],
+            crossing: 0,
+        };
+        // Offsets 3 and 4 in the first document straddle the band edge; position 21 opens the
+        // second document, offset 0 there, not 20.
+        assert_eq!([4, 5, 9, 21, 25].map(|p| cut.band(p)), [0, 1, 2, 0, 1]);
+        let picks = [
+            pick(4, 7, 7, 1, false, false),
+            pick(5, 7, 2, 7, false, false),
+            pick(9, 7, 7, 7, false, false),
+            pick(21, 7, 7, 7, false, false),
+            pick(25, 7, 3, 3, false, false),
+        ];
+        let bands = past_window_bands(&cut, &picks, Some(&[2.0, 3.0, 0.5]));
+        let counts: Vec<_> = bands.iter().map(|b| (b.from, b.to, b.targets, b.nearest_hits, b.writer_hits)).collect();
+        assert_eq!(counts, [(0, 4, 2, 2, 1), (4, 8, 2, 0, 1), (8, 12, 1, 1, 1)]);
+        assert_eq!(bands.iter().map(|b| b.loss_sum).collect::<Vec<_>>(), [Some(2.0), Some(3.0), Some(0.5)]);
+        assert_eq!(bands[0].loss_mean, Some(1.0));
+        assert_eq!(bands[1].loss_mean, Some(1.5));
+        let hits_only = past_window_bands(&cut, &picks, None);
+        assert!(hits_only.iter().all(|b| b.loss_sum.is_none() && b.loss_mean.is_none()));
+        assert_eq!(hits_only.iter().map(|b| b.targets).sum::<usize>(), picks.len());
+    }
+
+    /// claude-287: the queries by their note's distance in widths of W: every query counts, a
+    /// decoded one adds its reference tokens and the ones its reply gives at the same place, and
+    /// a reply that states the answer counts as stated.
+    #[test]
+    fn past_window_query_bands_count_agreement_and_recall_by_distance() {
+        let queries = [
+            chain_query(0, 29, 3, "x", 3),
+            chain_query(0, 40, 3, "y", 9),
+            chain_query(0, 50, 3, "z", 5),
+        ];
+        let window = |doc_id| CausalWindow {
+            doc_id,
+            input_ids: vec![0],
+            scored_offsets: vec![0],
+            scored_targets: vec![1],
+            scored_corpus_positions: vec![1],
+        };
+        // Query 1's reply did not fit: it is counted, not decoded.
+        let prompts = QueryPrompts { decoded: vec![(0, window(0)), (2, window(2))], past_window: vec![1] };
+        let outcome = |query, stated| QueryOutcome {
+            query,
+            position: 0,
+            distance: 0,
+            decoded: query != 1,
+            whole_document: false,
+            reference_states: true,
+            stated,
+        };
+        let outcomes = [outcome(0, true), outcome(1, false), outcome(2, false)];
+        let replies: [(&[u32], &[u32]); 2] = [(&[5, 6, 9], &[5, 6, 7]), (&[1], &[2, 3])];
+        let bands = past_window_query_bands(&queries, &prompts, &replies, &outcomes, 4).unwrap();
+        let rows: Vec<_> = bands
+            .iter()
+            .map(|b| (b.from, b.to, b.queries, b.replies, b.reference_tokens, b.agreed_tokens, b.stated))
+            .collect();
+        assert_eq!(rows, [(0, 4, 1, 1, 3, 2, 1), (4, 8, 1, 1, 2, 0, 0), (8, 12, 1, 0, 0, 0, 0)]);
+        assert!(past_window_query_bands(&queries, &prompts, &replies[..1], &outcomes, 4).is_err());
+    }
+
+    /// claude-287: W is read from the step's model config, and the loss's objective from the run
+    /// config two levels up; a run config without one is refused, and no run config gives none.
+    #[test]
+    fn past_window_reads_w_and_the_objective_from_the_saved_configs() {
+        let dir = std::env::temp_dir().join(format!("claude-287-configs-{}", std::process::id()));
+        let step = dir.join("models").join("step-000008");
+        fs::create_dir_all(&step).unwrap();
+        fs::write(step.join("config.json"), br#"{"context":2048,"width":64}"#).unwrap();
+        assert_eq!(checkpoint_window(&step).unwrap(), 2048);
+        assert_eq!(run_objective(&step).unwrap(), None);
+        fs::write(dir.join("config.json"), br#"{"steps":8,"objective":"cell"}"#).unwrap();
+        assert_eq!(run_objective(&step).unwrap(), Some(PointObjective::Cell));
+        fs::write(dir.join("config.json"), br#"{"steps":8}"#).unwrap();
+        assert!(run_objective(&step).is_err());
+        fs::write(step.join("config.json"), br#"{"width":64}"#).unwrap();
+        assert!(checkpoint_window(&step).is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// claude-287: a query's first input under each rule, at W = 8 in a document opened at 10.
