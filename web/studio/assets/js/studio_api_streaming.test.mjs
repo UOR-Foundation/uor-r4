@@ -495,7 +495,7 @@ test('exact-tool local completion omits model rates, stop reasons, and allocatio
     assert.doesNotMatch(appended[0].meta, /tok\/s|length|stop|alloc/);
 });
 
-test('exact-tool API completion omits computed model metrics', async () => {
+test('exact-tool API completion omits computed model metrics in every render phase', async () => {
     const { source, vm } = await inlineStudioFunction('sendViaApi');
     const { createStreamMetrics } = await import('./stream_metrics.js');
     const conversation = { id: 'api-tool', messages: [] };
@@ -522,7 +522,7 @@ test('exact-tool API completion omits computed model metrics', async () => {
             app.apiFirstTokenNs = null;
         },
         streamChatCompletions(options) {
-            options.onDelta('42', { uor: {} });
+            options.onDelta('42', { uor: { tool: 'm6-exact-arithmetic' } });
             options.onDone({
                 usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
                 uor: { tool: 'm6-exact-arithmetic', stop: 'tool' },
@@ -539,7 +539,7 @@ test('exact-tool API completion omits computed model metrics', async () => {
         touchConversation() {},
         updatePrivacyStatus() {},
         updateComposerState() {},
-        setMetrics() {},
+        setMetrics(text) { (context.metricLabels ||= []).push(text); },
         renderConversationList() {},
         scrollChat() {},
         clearChatRequest() {},
@@ -549,4 +549,25 @@ test('exact-tool API completion omits computed model metrics', async () => {
     assert.equal(conversation.messages.length, 1);
     assert.equal(conversation.messages[0].meta, '0 model tokens · tool');
     assert.doesNotMatch(conversation.messages[0].meta, /tok\/s|length|stop|alloc/);
+    assert.deepEqual(context.metricLabels, ['0 model tokens · tool', '0 model tokens · tool']);
+});
+
+test('exact-tool local streaming uses the tool label', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    context.app.streamingBodyEl = null;
+    context.app.assistantBuffer = '';
+    context.scrollChat = () => {};
+    context.formatTps = () => 'n/a';
+    context.setMetrics = (text) => { context.footerMetrics = text; };
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: {
+            action: 'stream_token',
+            fullText: '42\n\nR4 geometric exact arithmetic — tool, not model generation',
+            tokenCount: 0,
+            tps: null,
+            tool: 'm6-exact-arithmetic',
+        },
+    });
+    assert.equal(context.footerMetrics, '0 model tokens · tool');
 });

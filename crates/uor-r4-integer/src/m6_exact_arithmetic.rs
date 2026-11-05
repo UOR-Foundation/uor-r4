@@ -874,18 +874,15 @@ enum ExactToolOperator {
 
 fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     let rest = rest.trim_start();
-    let parenthesized = rest.starts_with('(')
-        && rest[1..]
-            .trim_start()
-            .starts_with(|c: char| c.is_ascii_digit());
+    let grouped = rest.starts_with(|c| matches!(c, '(' | '{' | '['));
+    let after_grouping =
+        rest.trim_start_matches(|c: char| matches!(c, '(' | '{' | '[') || c.is_whitespace());
+    let parenthesized = grouped && after_grouping.starts_with(|c: char| c.is_ascii_digit());
     if !rest.starts_with(|c: char| c.is_ascii_digit()) && !parenthesized {
         return false;
     }
     for (index, c) in rest.char_indices() {
-        if index >= MAX_EXACT_TOOL_PROMPT_BYTES {
-            break;
-        }
-        if matches!(c, '+' | '*' | '/') || (parenthesized && c == '-') {
+        if matches!(c, '+' | '*' | '/' | '%' | '^' | '×' | '÷') || (parenthesized && c == '-') {
             return true;
         }
         if c == '-' {
@@ -971,11 +968,18 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     {
         return Ok(None);
     }
-    if !expression.contains('+')
-        && expression.contains('-')
-        && !expression.chars().any(char::is_whitespace)
-    {
-        return Ok(None);
+    if !expression.contains('+') && expression.contains('-') {
+        let has_spaced_subtraction = expression.char_indices().any(|(index, c)| {
+            if c != '-' {
+                return false;
+            }
+            let previous = expression[..index].chars().next_back();
+            let next = expression[index + 1..].chars().next();
+            previous.is_some_and(char::is_whitespace) && next.is_some_and(char::is_whitespace)
+        });
+        if !has_spaced_subtraction {
+            return Ok(None);
+        }
     }
     let mut normalized = String::with_capacity(expression.len() + 4);
     let mut operator_count = 0usize;
@@ -1476,6 +1480,10 @@ mod tests {
             "What is 17 * 25?",
             "What is 17.5 + 25?",
             "What is (17 + 25)?",
+            "What is 17 % 25?",
+            "What is 17 ^ 25?",
+            "What is ((17 + 25))?",
+            "What is {17 + 25}?",
         ] {
             assert!(
                 exact_arithmetic_tool(prompt)
@@ -1494,14 +1502,22 @@ mod tests {
                 .result,
             "2"
         );
-        let over_limit = format!("1{}+ 1", " ".repeat(157));
-        assert_eq!(over_limit.len(), 161);
-        assert!(
-            exact_arithmetic_tool(&over_limit)
-                .expect("overlong arithmetic should be recognized")
-                .is_err(),
-            "161-byte arithmetic fell through"
-        );
+        for spaces in [157, 159, 160] {
+            let over_limit = format!("1{}+ 1", " ".repeat(spaces));
+            assert!(
+                exact_arithmetic_tool(&over_limit)
+                    .expect("overlong arithmetic should be recognized")
+                    .is_err(),
+                "overlong arithmetic with operator after {spaces} spaces fell through"
+            );
+        }
+        let prefixed_over_limit = format!("What is 1{}+ 1?", " ".repeat(151));
+        assert_eq!(prefixed_over_limit.len(), 164);
+        assert!(exact_arithmetic_tool(&prefixed_over_limit)
+            .expect("prefixed overlong arithmetic should be recognized")
+            .is_err());
         assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
+        assert!(exact_arithmetic_tool("What is 50 -12?").is_none());
+        assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
     }
 }

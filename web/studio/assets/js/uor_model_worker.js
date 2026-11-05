@@ -733,9 +733,6 @@ self.onmessage = async ({ data }) => {
                     tps: null,
                     stoppedBy: 'tool',
                     tool: 'm6-exact-arithmetic',
-                    weightsPerToken: 0,
-                    allocDelta: 0,
-                    allocEvents: Number(wasmModule.allocEvents()),
                     statusLabel: 'exact arithmetic tool',
                     tokenizerLabel: 'R4 geometric decimal place-value tool',
                 });

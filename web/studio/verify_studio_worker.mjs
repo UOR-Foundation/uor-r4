@@ -339,31 +339,44 @@ assert(genExact.fullText.includes('tool, not model generation'), 'exact arithmet
 assert(genExact.fullText.includes('p0: 7 + 5 + 0 -> 2, carry 1'), `exact arithmetic must expose the actual carry trace, got ${JSON.stringify(genExact.fullText)}`);
 assert(genExact.tool === 'm6-exact-arithmetic', `exact arithmetic must carry a tool marker, got ${JSON.stringify(genExact)}`);
 assert(genExact.tokenCount === 0 && genExact.tokenIds.length === 0 && genExact.tps === null, `exact arithmetic must not invent model tokens or rates: ${JSON.stringify(genExact)}`);
+assert(!['weightsPerToken', 'allocDelta', 'allocEvents'].some((field) => field in genExact), `exact arithmetic must omit model accounting fields: ${JSON.stringify(genExact)}`);
 
-await sendToWorker({
-    action: 'generate',
-    id: 'gen_exact_unsupported',
-    payload: {
-        conversationId: 'conv_verify_exact_unsupported',
-        messages: [{ role: 'user', content: 'What is 17 * 25?' }],
-        options: { max_new_tokens: 32 },
-    },
-});
-const genExactUnsupported = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_unsupported');
-assert(genExactUnsupported.action === 'generate_error', `unsupported arithmetic must fail explicitly instead of generating: ${JSON.stringify(genExactUnsupported)}`);
+for (const [index, prompt] of [
+    'What is 17 * 25?',
+    'What is 17 % 25?',
+    'What is 17 ^ 25?',
+    'What is ((17 + 25))?',
+    'What is {17 + 25}?',
+].entries()) {
+    const id = `gen_exact_unsupported_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId: `conv_verify_exact_unsupported_${index}`,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const unsupported = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(unsupported.action === 'generate_error', `unsupported arithmetic must fail explicitly instead of generating (${prompt}): ${JSON.stringify(unsupported)}`);
+}
 
-const overlongArithmetic = `1${' '.repeat(157)}+ 1`;
-await sendToWorker({
-    action: 'generate',
-    id: 'gen_exact_overlong',
-    payload: {
-        conversationId: 'conv_verify_exact_overlong',
-        messages: [{ role: 'user', content: overlongArithmetic }],
-        options: { max_new_tokens: 32 },
-    },
-});
-const genExactOverlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_overlong');
-assert(genExactOverlong.action === 'generate_error' && genExactOverlong.error.includes('160-byte'), `overlong arithmetic must return the prompt limit: ${JSON.stringify(genExactOverlong)}`);
+for (const spaces of [157, 159, 160]) {
+    const id = `gen_exact_overlong_${spaces}`;
+    const overlongArithmetic = `1${' '.repeat(spaces)}+ 1`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId: `conv_verify_exact_overlong_${spaces}`,
+            messages: [{ role: 'user', content: overlongArithmetic }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const overlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(overlong.action === 'generate_error' && overlong.error.includes('160-byte'), `overlong arithmetic with ${spaces} spaces must return the prompt limit: ${JSON.stringify(overlong)}`);
+}
 
 const staleLoad = sendToWorker({
     action: 'load_model',

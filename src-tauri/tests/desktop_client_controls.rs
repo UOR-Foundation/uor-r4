@@ -742,6 +742,10 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "What is 17 * 25?",
         "What is 17.5 + 25?",
         "What is (17 + 25)?",
+        "What is 17 % 25?",
+        "What is 17 ^ 25?",
+        "What is ((17 + 25))?",
+        "What is {17 + 25}?",
     ] {
         let unsupported = dispatch_rpc_command(
             &mut backend,
@@ -759,18 +763,20 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
             .is_some_and(|error| !error.is_empty()));
     }
 
-    let over_limit = format!("1{}+ 1", " ".repeat(157));
-    let over_limit_response = dispatch_rpc_command(
-        &mut backend,
-        "native_exact_arithmetic",
-        &json!({"model":"uor-chat","messages":[{"role":"user","content":over_limit}]}),
-    )
-    .expect("overlong arithmetic RPC should succeed");
-    assert_eq!(over_limit_response["handled"], json!(true));
-    assert!(over_limit_response["error"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("160-byte"));
+    for spaces in [157, 159, 160] {
+        let over_limit = format!("1{}+ 1", " ".repeat(spaces));
+        let over_limit_response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":over_limit}]}),
+        )
+        .expect("overlong arithmetic RPC should succeed");
+        assert_eq!(over_limit_response["handled"], json!(true));
+        assert!(over_limit_response["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("160-byte"));
+    }
 }
 
 #[test]

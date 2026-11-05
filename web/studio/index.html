@@ -1377,8 +1377,12 @@
                     app.streamingBodyEl.textContent = app.assistantBuffer;
                     scrollChat(false);
                 }
-                var count = message.tokenCount || 0;
-                setMetrics(count + ' tokens · ' + formatTps(message.tps) + ' tok/s');
+                if (message.tool === 'm6-exact-arithmetic') {
+                    setMetrics('0 model tokens · tool');
+                } else {
+                    var count = message.tokenCount || 0;
+                    setMetrics(count + ' tokens · ' + formatTps(message.tps) + ' tok/s');
+                }
                 return;
             }
             if (message.action === 'generate_complete') {
@@ -1696,7 +1700,11 @@
                             firstTokenNs: app.apiFirstTokenNs,
                             chars: app.assistantBuffer.length,
                         });
-                        setMetrics(app.apiMetrics.text());
+                        if (meta.uor && meta.uor.tool === 'm6-exact-arithmetic') {
+                            setMetrics('0 model tokens · tool');
+                        } else {
+                            setMetrics(app.apiMetrics.text());
+                        }
                         scrollChat(false);
                     },
                     onDone: function (result) {
