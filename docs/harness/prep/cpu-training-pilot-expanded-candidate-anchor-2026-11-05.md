@@ -423,3 +423,19 @@ output root remained absent. The six matched arms, K=12 settings, fail-closed
 floors, control-vs-longest non-vacuity, BOS direct stop, deterministic replay,
 local resource plan and lane isolation were checked read-only. No seed-2769
 generation or evaluation occurred.
+
+## Outcome
+
+**INSTRUMENT_FAULT / K12_SELECTION_ERROR.** The registration selected 12
+cells although seed 2 had only 2,043 target-present groups, five below the
+2,048 selection floor. The driver correctly stopped before evaluation with:
+
+```text
+anchored candidate calibration has 2043 groups, 330 target tokens and 459 baseline-wrong groups; requires 2048, 64 and 256
+```
+
+The raw automation outcome is `INSUFFICIENT_TRAINING_DATA`. This is preserved
+unchanged in the local run. The registration's arithmetic selection was
+invalid, so no anchored-ranker comparison is claimed. Seed 2769 is closed and
+must not be reused. K=16 was already in the predeclared train-only sweep and is
+the smallest setting that clears all three floors on both artifacts.
