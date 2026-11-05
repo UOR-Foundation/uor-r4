@@ -87,6 +87,7 @@ struct CellReading {
     decoded_resident_table_bytes: u64,
     repeats: usize,
     parity: ParityReading,
+    repeat_decision_sha256s: Vec<String>,
     cpu_oracle_tokens_per_second: f64,
     serving_tokens_per_second: f64,
     audit_elapsed_ms: f64,
@@ -192,7 +193,7 @@ fn run_grid(
             for arm in Arm::ALL {
                 cells.push(run_cell(width, context, arm, seed, repeats)?);
                 let rss = peak_rss_kib()?;
-                if rss > 2 * 1_024 * 1_024 {
+                if rss >= 2 * 1_024 * 1_024 {
                     return Err(format!(
                         "peak RSS {rss} KiB exceeds the 2 GiB stop at width {width}, context {context}, arm {}",
                         arm.name()
@@ -203,7 +204,7 @@ fn run_grid(
     }
     let negative_controls = run_negative_controls(widths[0].max(64), base_seed ^ 0x5a17)?;
     let peak_rss_kib = peak_rss_kib()?;
-    if peak_rss_kib > 2 * 1_024 * 1_024 {
+    if peak_rss_kib >= 2 * 1_024 * 1_024 {
         return Err(format!(
             "final peak RSS {peak_rss_kib} KiB exceeds the 2 GiB stop"
         ));
@@ -252,6 +253,7 @@ fn run_cell(
     let tokens = token_sequence(context);
     let reply_start = (arm == Arm::Full).then_some(1usize);
     let mut retained_parity = None;
+    let mut repeat_decision_sha256s = Vec::with_capacity(repeats);
     let mut table_bytes = None;
     let mut timed = None::<(f64, f64)>;
     for repeat in 0..repeats {
@@ -288,15 +290,7 @@ fn run_cell(
                 arm.name()
             ));
         }
-        if report.manifest.shape.width != width
-            || report.manifest.shape.context != context
-            || report.manifest.shape.vocab != VOCAB
-        {
-            return Err(format!(
-                "artifact shape differs at width {width}, context {context}, arm {}",
-                arm.name()
-            ));
-        }
+        validate_manifest(&report, width, context, arm, repeat)?;
         let current_table_bytes = (
             report.manifest.serialized_table_payload_bytes,
             report.manifest.decoded_resident_table_bytes,
@@ -331,6 +325,7 @@ fn run_cell(
                 serving_decision_sha256: parity.serving_decision_sha256.clone(),
             });
         }
+        repeat_decision_sha256s.push(parity.cpu_decision_sha256.clone());
         if let Some(timing) = report.timing {
             timed = Some((
                 timing.cpu_oracle_tokens_per_second,
@@ -355,11 +350,72 @@ fn run_cell(
         decoded_resident_table_bytes,
         repeats,
         parity,
+        repeat_decision_sha256s,
         cpu_oracle_tokens_per_second,
         serving_tokens_per_second,
         audit_elapsed_ms: started.elapsed().as_secs_f64() * 1_000.0,
         peak_rss_kib: peak_rss_kib()?,
     })
+}
+
+fn validate_manifest(
+    report: &ServedForwardAuditReport,
+    width: usize,
+    context: usize,
+    arm: Arm,
+    repeat: usize,
+) -> Result<(), String> {
+    let shape = &report.manifest.shape;
+    if shape.width != width
+        || shape.context != context
+        || shape.vocab != VOCAB
+        || shape.mlp != MLP
+        || shape.layers != LAYERS
+        || shape.kept_cells != KEPT_CELLS
+    {
+        return Err(format!(
+            "artifact shape differs at width {width}, context {context}, arm {}, repeat {repeat}",
+            arm.name()
+        ));
+    }
+    match arm {
+        Arm::Projection => {
+            if report.manifest.hamming.is_some() || report.manifest.memory.is_some() {
+                return Err(format!(
+                    "projection artifact unexpectedly carries a side table at width {width}, context {context}, repeat {repeat}"
+                ));
+            }
+        }
+        Arm::Full => {
+            let hamming = report.manifest.hamming.as_ref().ok_or_else(|| {
+                format!(
+                    "full artifact lost its Hamming tables at width {width}, context {context}, repeat {repeat}"
+                )
+            })?;
+            let mut depths = hamming
+                .reads
+                .iter()
+                .map(|read| read.depth)
+                .collect::<Vec<_>>();
+            depths.sort_unstable();
+            if hamming.heads != hamming_heads(width) || depths != [1, LAYERS] {
+                return Err(format!(
+                    "full artifact Hamming shape differs at width {width}, context {context}, repeat {repeat}"
+                ));
+            }
+            let memory = report.manifest.memory.as_ref().ok_or_else(|| {
+                format!(
+                    "full artifact lost its memory tables at width {width}, context {context}, repeat {repeat}"
+                )
+            })?;
+            if memory.opening_rows == 0 || memory.reply_rows == 0 || memory.key_window != context {
+                return Err(format!(
+                    "full artifact memory shape differs at width {width}, context {context}, repeat {repeat}"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn build_artifact(width: usize, context: usize, arm: Arm, seed: u64) -> Result<Vec<u8>, String> {
@@ -529,6 +585,11 @@ mod tests {
             cell.parity.exact()
                 && cell.parity.query_coordinates_compared == 8 * 64
                 && cell.parity.kept_cells_compared == 8 * KEPT_CELLS as u64
+                && cell.repeat_decision_sha256s.len() == 2
+                && cell
+                    .repeat_decision_sha256s
+                    .windows(2)
+                    .all(|pair| pair[0] == pair[1])
         }));
         assert_eq!(summary.negative_controls.len(), 4);
         assert!(summary
