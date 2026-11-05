@@ -24,7 +24,7 @@ struct Trajectory {
     decisions: Vec<Decision>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize)]
 struct ReplyReading {
     replies: u64,
     exact: u64,
@@ -34,12 +34,23 @@ struct ReplyReading {
     generated_tokens: u64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 struct ReplyRow {
     row: usize,
+    fired_step: Option<usize>,
+    class: StopClass,
     exact: bool,
     premature: bool,
     at_reference: bool,
+    selected_sha256: String,
+}
+
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum StopClass {
+    NoFire,
+    Premature,
+    AtReference,
 }
 
 #[derive(Clone, Debug)]
@@ -409,9 +420,18 @@ fn evaluate_gate(
         reading.generated_tokens += fired.unwrap_or(trajectory.reference.len()) as u64;
         rows.push(ReplyRow {
             row: trajectory.row,
+            fired_step: fired,
+            class: if premature {
+                StopClass::Premature
+            } else if at_reference {
+                StopClass::AtReference
+            } else {
+                StopClass::NoFire
+            },
             exact,
             premature,
             at_reference,
+            selected_sha256: token_hash(&trajectory.selected),
         });
     }
     Ok((reading, rows))
@@ -496,15 +516,8 @@ fn summarize_rows(rows: &[ReplyRow]) -> ReplyReading {
     }
 }
 
-fn reply_summary((reading, _): &(ReplyReading, Vec<ReplyRow>)) -> Value {
-    serde_json::json!({
-        "replies": reading.replies,
-        "exact": reading.exact,
-        "premature": reading.premature,
-        "at_reference": reading.at_reference,
-        "no_fire": reading.no_fire,
-        "generated_tokens": reading.generated_tokens,
-    })
+fn reply_summary((reading, rows): &(ReplyReading, Vec<ReplyRow>)) -> Value {
+    serde_json::json!({ "reading": reading, "rows": rows })
 }
 
 fn gate_summary(training: &StopSignatureTraining) -> Value {
@@ -571,9 +584,18 @@ mod tests {
     fn decision(step: usize, exact: bool, premature: bool, at_reference: bool) -> ReplyRow {
         ReplyRow {
             row: step,
+            fired_step: (premature || at_reference).then_some(step),
+            class: if premature {
+                StopClass::Premature
+            } else if at_reference {
+                StopClass::AtReference
+            } else {
+                StopClass::NoFire
+            },
             exact,
             premature,
             at_reference,
+            selected_sha256: token_hash(&[step as u32]),
         }
     }
 
