@@ -301,3 +301,12 @@ The evidence-resource correction was re-reviewed at HEAD `b67d67ae8b1b`.
 Normalized reports are compared as streams and full decision reports are
 gzip-compressed before the size gate. This FIT covers the unchanged
 experiment plus that evidence-storage correction.
+
+## Pre-run GO
+
+GO - reviewer `codex fresh-context GO attempt-2`, 2026-11-05. HEAD was clean
+at `bff2bc7ca5a0`; implementation pin `cdcb63cafe27` and generator pin
+`4e42ffca5` matched. Attempt 1 is sealed with no result, seeds `2711`/`2712`
+and the attempt-2 root were unopened, the executable wrapper passed `bash -n`,
+and the random, reachable-power, artifact-identity and compressed-evidence
+controls were verified.
