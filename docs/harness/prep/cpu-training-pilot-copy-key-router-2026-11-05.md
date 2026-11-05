@@ -19,7 +19,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `632f4e601` |
+| implementation source | `ab2836f13` |
 | panel-generator source | `4e42ffca5` |
 | tokenizer | `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` |
 | public M1 DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -96,8 +96,11 @@ fitted table on its own rows.
 | total increment | **1,420 s** |
 
 - Build jobs: 16; build RSS cap 4 GiB.
+- Build wall-time cap: 600 s per build; fresh target storage cap: 16 GiB.
 - Screen runs: 600 s and 1 GiB RSS each.
 - Evidence cap: 33,554,432 bytes.
+- Post-build and post-run free-space floor: **30 GiB + 128 MiB**
+  (`32,346,472,448` bytes) on both source and shared volumes.
 - Previous admitted cumulative: `70,927.677487699 s`.
 - New admitted cumulative: **72,347.677487699 s**.
 
@@ -112,11 +115,12 @@ SHARED=/home/callard/projects/codex-playground/uor-r4
 OUT=$SHARED/local/deepseek/copy-key-router/2026-11-05
 PANELS=$OUT/panels
 BUILD=$SOURCE/target/deepseek/copy-key-router-run
-CONTROL=$SOURCE/target/deepseek/copy-key-router-controls
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-router-generator
 DEV=$SHARED/local/deepseek/public-m1-parity
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
-IMPL_PIN=632f4e601
+IMPL_PIN=ab2836f13
+FREE_FLOOR=32346472448
+TARGET_CAP=17179869184
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
@@ -130,6 +134,15 @@ sha256sum -c <(printf '%s\n' \
   'a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  '"$TOKENIZER") --quiet
 
 mkdir -p "$OUT"
+check_storage() {
+  phase=$1
+  source_free=$(df -PB1 "$SOURCE" | awk 'NR==2 {print $4}')
+  shared_free=$(df -PB1 "$SHARED" | awk 'NR==2 {print $4}')
+  printf '{"phase":"%s","source_free_bytes":%s,"shared_free_bytes":%s,"free_floor_bytes":%s}\n' \
+    "$phase" "$source_free" "$shared_free" "$FREE_FLOOR" >"$OUT/storage-$phase.json"
+  test "$source_free" -ge "$FREE_FLOOR"
+  test "$shared_free" -ge "$FREE_FLOOR"
+}
 seal() {
   (cd "$OUT"; find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
     sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
@@ -138,13 +151,17 @@ seal() {
 }
 trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
 
-/usr/bin/time -v -o "$OUT/build.time.txt" \
+check_storage before-build
+timeout 600s /usr/bin/time -v -o "$OUT/build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-copy-key-depth --bin cpu-copy-key-router
-/usr/bin/time -v -o "$OUT/generator-build.time.txt" \
+timeout 600s /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo build --locked \
   --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
   --features panel-writer --bin heldout-panel
+check_storage after-build
+test "$(du -sb "$BUILD" "$GENERATOR_TARGET" | awk '{total += $1} END {print total}')" \
+  -le "$TARGET_CAP"
 
 GEN=$GENERATOR_TARGET/debug/heldout-panel
 /usr/bin/time -v -o "$OUT/train-panel-gen.time.txt" \
@@ -192,6 +209,7 @@ test "$(jq -r '.training.eligible_positions' "$OUT/router.json")" -ge 200
 test "$(jq -r '.test.eligible_positions' "$OUT/router.json")" -ge 200
 test "$(jq -r '.test.random_changed_from_longest' "$OUT/router.json")" -gt 0
 cmp "$OUT/router.json" "$OUT/router-repeat.json"
+check_storage after-run
 test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/build.time.txt")" -le 4194304
 test "$(awk -F': ' '/Maximum resident set size/ {print $2}' "$OUT/generator-build.time.txt")" -le 4194304
 for t in "$OUT"/*.time.txt; do
