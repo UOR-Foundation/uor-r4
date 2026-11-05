@@ -592,6 +592,14 @@ mod tests {
     }
 
     #[test]
+    fn k2_backoff_uses_depth_one_when_depth_two_is_absent() {
+        let stream = [1, 2, 3, 5, 3];
+        let decision = copy_key_reply_decision(&stream, 77, CopyKeyReplyArm::K2BackoffK1, 1, 0, 0);
+        assert_eq!(decision.depth, Some(1));
+        assert_eq!(decision.token, 5);
+    }
+
+    #[test]
     fn candidates_do_not_cross_the_fixed_copy_window() {
         let mut stream = vec![1; COPY_KEY_REPLY_WINDOW + 2];
         stream[0] = 99;
@@ -648,6 +656,44 @@ mod tests {
             .iter()
             .all(|step| step.used_copy || step.selected_token == step.writer_token));
         assert_ne!(steps[0].selected_token, POINT_KEY_BOS);
+    }
+
+    #[test]
+    fn generated_reply_honors_bos_cap_and_context_stops() {
+        let artifact = artifact();
+        let context = CpuFbsForward::from_artifact(&artifact)
+            .unwrap()
+            .context_length();
+
+        let (bos, _) = generate_copy_key_reply(
+            &artifact,
+            &[0, 0, 0],
+            8,
+            CopyKeyReplyArm::Longest4To1,
+            153,
+            0,
+        )
+        .unwrap();
+        assert_eq!(bos.stop, "bos");
+        assert!(bos.tokens.is_empty());
+
+        let (cap, _) =
+            generate_copy_key_reply(&artifact, &[3, 4, 5], 1, CopyKeyReplyArm::Writer, 153, 0)
+                .unwrap();
+        assert_eq!(cap.stop, "cap");
+        assert_eq!(cap.tokens.len(), 1);
+
+        let (context_stop, _) = generate_copy_key_reply(
+            &artifact,
+            &vec![2; context - 1],
+            8,
+            CopyKeyReplyArm::Writer,
+            153,
+            0,
+        )
+        .unwrap();
+        assert_eq!(context_stop.stop, "context");
+        assert!(context_stop.tokens.len() <= 1, "{context_stop:?}");
     }
 
     #[test]

@@ -59,10 +59,10 @@
     "free_space_after_run_bytes": 468150497280
   },
   "controls": {
-    "library_tests_passed": 284,
+    "library_tests_passed": 286,
     "library_tests_ignored": 4,
     "binary_tests_passed": 71,
-    "focused_copy_reply_tests_passed": 9,
+    "focused_copy_reply_tests_passed": 11,
     "clippy": "pass",
     "rustfmt": "pass",
     "fresh_process_repeat": "byte-identical after timing fields",
@@ -108,7 +108,7 @@
     "attempt_2_sheet": "docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-64-2026-11-05.md",
     "implementation_pin": "cdcb63cafe27",
     "generator_pin": "4e42ffca5",
-    "attempt_1_raw_sums_sha256": "2973270b9bc57ad5a2e507c9ca8d1df582d07ad288450cb71dfa7baa3cf4e87d",
+    "attempt_1_raw_sums_sha256": "4d926efe870914e77655891c606ea372f8891a841aa7ae42daf1a27be75dc4a1",
     "attempt_2_raw_sums_sha256": "716d6f96900b71ebb67d14e1c5f15d10b40864543757e6183dcc2fdc952f4d58",
     "published_sums_sha256": "510582112b39fa0b383ddf64108c5240798b7724addc2c17b3dc1af598553755"
   },

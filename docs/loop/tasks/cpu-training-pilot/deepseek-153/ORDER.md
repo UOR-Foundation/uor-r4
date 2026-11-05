@@ -139,7 +139,7 @@ artifacts must parse and their pinned hashes must match before panel generation.
 - `crates/uor-r4-cpu-train/**`
 - `docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-2026-11-05.md`
 - `docs/harness/prep/cpu-training-pilot-copy-key-longest-reply-64-2026-11-05.md`
-- `docs/labs/cpu-training-pilot-copy-key-longest-reply-2026-11-05/**`
+- `docs/labs/cpu-training-pilot-copy-key-reply-2026-11-05/**`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-153/**`
 - `docs/research/notebook/cpu-training.md`
 - `docs/roadmap/items/cpu-training-pilot.md`

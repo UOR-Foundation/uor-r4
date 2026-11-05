@@ -109,7 +109,7 @@ Resources:
 - admitted cumulative projection: **77,327.677487699 s**.
 
 Attempt-1 raw `RAW-SHA256SUMS` SHA-256 is
-`2973270b9bc57ad5a2e507c9ca8d1df582d07ad288450cb71dfa7baa3cf4e87d`.
+`4d926efe870914e77655891c606ea372f8891a841aa7ae42daf1a27be75dc4a1`.
 Attempt-2 raw `RAW-SHA256SUMS` SHA-256 is
 `716d6f96900b71ebb67d14e1c5f15d10b40864543757e6183dcc2fdc952f4d58`.
 Published evidence verifies with `PUBLISHED-SHA256SUMS`, SHA-256
@@ -120,23 +120,23 @@ Published evidence verifies with `PUBLISHED-SHA256SUMS`, SHA-256
 - Attempt 1 is sealed and classified only as an instrument/config stop.
 - Fresh FIT and independent GO preceded attempt 2 on unopened seeds 2711 and
   2712.
-- All input, artifact and generator hashes matched; all 902 evaluated replies
+- All input, artifact and generator hashes matched; all 902 recovered examples
   across the two panels were reference-reachable.
 - Random non-vacuity, source pins, RSS caps, storage caps and executable
   fail-closed checks passed.
 - The fresh-process repeat matched every arm, reading, comparison, reply hash
   and decision hash after timing fields were removed.
-- **284** CPU library tests passed with 4 expected ignores; **71** binary tests
-  and **9** focused copy-reply tests passed; strict scoped Clippy, rustfmt,
+- **286** CPU library tests passed with 4 expected ignores; **71** binary tests
+  and **11** focused copy-reply tests passed; strict scoped Clippy, rustfmt,
   recipe `bash -n`, `git diff --check` and evidence manifests passed.
 - No float-training, integer-serving, CUDA or Claude-owned source changed.
 
 ## Size
 
 Against base `e06635e3a`, this unit changes **4** code/manifest files
-(**+948 / -0**), **11** ORDER, preregistration, report, ledger, notebook,
-roadmap, current-state and lab-record files (**+1,193 / -1**), and **29**
-published evidence files (**+1,901 / -0**): **44 files, +4,042 / -1**. No
+(**+1,036 / -0**), **11** ORDER, preregistration, report, ledger, notebook,
+roadmap, current-state and lab-record files (**+1,194 / -1**), and **29**
+published evidence files (**+1,859 / -0**): **44 files, +4,089 / -1**. No
 generated corpus or binary is tracked.
 
 ## Independent result audit
