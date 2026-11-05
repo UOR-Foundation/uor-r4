@@ -4,12 +4,12 @@ Run ID: `cpu-training-pilot-scale-serving-2026-11-05`
 
 ## Status
 
-REVISED BEFORE RUN 2. The exact-head result review found that attempt 1
-exercised the cell-writer readout while the current one-model recipe serves
-whole-table nearest. Attempt 1 is preserved as a configuration/instrument
-reference, but it is not the evidence claimed here. This revision changes the
-registered readout, so TEST FITNESS and D67 GO must be obtained again before
-run 2.
+COMPLETE - PASS. Run 2 exercised the whole-table-nearest recipe in all 18
+cells with zero parity mismatches, three identical decision hashes per cell,
+all four negative controls refused, 18.476 s wall time and 76,388 KiB peak
+RSS. The exact-head result review found that attempt 1 used the cell-writer
+readout; attempt 1 and its committed copy are preserved only as a
+configuration/instrument reference and are excluded from this result.
 
 ## Question
 
@@ -167,7 +167,7 @@ preflight configuration and identifies the output-path defect.
 
 - local CPU only, $0;
 - one run, at most 20 minutes;
-- stop above 2 GiB peak RSS;
+- stop at or above 2 GiB peak RSS;
 - stop on source, binary, shape, parity, determinism, control or output-root
   drift;
 - do not edit Claude-owned float-training, serving or exporter source.
@@ -183,7 +183,8 @@ GPU-memory feasibility, a scale slope or model qualification.
 The first run exercised the synthetic default cell-writer readout. It passed
 its mechanical checks, but exact-head review found that it did not cover the
 current recipe's whole-table nearest readout. Its output is preserved outside
-the repository as attempt-1 evidence and is not used for the current claim.
+the repository and as committed attempt-1 evidence; it is not used for the
+current claim.
 
 ## Verdict
 
