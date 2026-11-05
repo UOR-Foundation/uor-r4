@@ -90,7 +90,7 @@ Published evidence SHA-256:
 
 ## Checks run at the head
 
-- **286** CPU library tests passed with 4 expected ignores; **74** binary tests
+- **286** CPU library tests passed with 4 expected ignores; **77** binary tests
   and **3** focused generated-stop tests passed.
 - Strict scoped Clippy, rustfmt, D23/D25/D32, report/input hashes and evidence
   manifests passed.

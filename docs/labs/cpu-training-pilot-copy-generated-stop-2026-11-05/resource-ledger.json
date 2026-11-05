@@ -45,7 +45,7 @@
   "controls": {
     "library_tests_passed": 286,
     "library_tests_ignored": 4,
-    "binary_tests_passed": 74,
+    "binary_tests_passed": 77,
     "generated_stop_tests_passed": 3,
     "clippy": "pass",
     "rustfmt": "pass",
