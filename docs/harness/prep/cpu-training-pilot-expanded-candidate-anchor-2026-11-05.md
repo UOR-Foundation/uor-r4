@@ -396,3 +396,18 @@ fi
 - **POWER_LIMITED** if fewer than 200 replies are reachable.
 - **INSTRUMENT_FAULT** if fitting, features, sources, inputs, controls or
   report identity fails closed.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 expanded-cell longest-32-anchored candidate ranker
+sheet: `docs/harness/prep/cpu-training-pilot-expanded-candidate-anchor-2026-11-05.md`
+implementation pin: `57ef4cdc1d6122cfb84d506a000a82ef554dbe88`
+reviewed head: `db3e92142163f3c523bedbc83045924eddf6aed6`
+reviewer: deepseek fresh-context subagent `expanded_anchor_fit_review_3`
+note: K=12 is the smallest cell count clearing both artifacts' group, target and
+  baseline-wrong floors; observed writer counts are bounded; depth-32, deepest
+  source, fallback, explicit anchor, BOS stop, strict-positive override,
+  shuffled non-vacuity and all control-vs-longest checks were verified.
+date: 2026-11-05
+
+A FIT verdict clears compute for the configuration in this sheet only (D22).
