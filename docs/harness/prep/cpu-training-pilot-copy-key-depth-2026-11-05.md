@@ -26,7 +26,7 @@ upload or external model execution.
 
 | Input | Identity |
 |---|---|
-| implementation source | `c53b06b5f` |
+| implementation source | `1c34b6951` |
 | panel-generator source | `4e42ffca5` (`docs/labs/one-model-end-to-end/instrument`) |
 | tokenizer | `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` |
 | public M1 DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
@@ -133,7 +133,7 @@ BUILD=$SOURCE/target/deepseek/copy-key-depth-run
 GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
 DEV=$SHARED/local/deepseek/public-m1-parity
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
-IMPL_PIN=c53b06b5f
+IMPL_PIN=1c34b6951
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL_PIN" -- \
