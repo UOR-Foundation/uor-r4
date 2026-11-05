@@ -434,19 +434,20 @@ fn summarize(
 }
 
 fn exact_suffix_matches(stream: &[u32]) -> [Option<u32>; COPY_KEY_MAX_DEPTH] {
-    let Some(current) = stream.len().checked_sub(1) else {
+    let window_start = stream.len().saturating_sub(COPY_KEY_REPLY_WINDOW);
+    let window = &stream[window_start..];
+    let Some(current) = window.len().checked_sub(1) else {
         return [None; COPY_KEY_MAX_DEPTH];
     };
-    let window_start = stream.len().saturating_sub(COPY_KEY_REPLY_WINDOW);
     let mut matches = [None; COPY_KEY_MAX_DEPTH];
     for depth in 1..=COPY_KEY_MAX_DEPTH {
-        matches[depth - 1] = ((window_start + 1)..current).rev().find_map(|candidate| {
+        matches[depth - 1] = (1..current).rev().find_map(|candidate| {
             (0..depth)
                 .all(|back| {
-                    stream[candidate.saturating_sub(back + 1)]
-                        == stream[current.saturating_sub(back)]
+                    window[candidate.saturating_sub(back + 1)]
+                        == window[current.saturating_sub(back)]
                 })
-                .then_some(stream[candidate])
+                .then_some(window[candidate])
         });
     }
     matches
@@ -467,10 +468,10 @@ fn reference_reachable(
     cap: usize,
     context: usize,
 ) -> bool {
-    reference_len <= cap
+    reference_len < cap
         && prompt_len
             .checked_add(reference_len)
-            .is_some_and(|length| length <= context)
+            .is_some_and(|length| length < context)
 }
 
 fn reply_hash(rows: &[CopyKeyReplyRow]) -> String {
@@ -589,11 +590,24 @@ mod tests {
 
     #[test]
     fn candidates_do_not_cross_the_fixed_copy_window() {
-        let mut stream = vec![1; COPY_KEY_REPLY_WINDOW + 1];
-        stream[0] = 9;
-        stream.extend([2, 9]);
+        let mut stream = vec![1; COPY_KEY_REPLY_WINDOW + 2];
+        stream[0] = 99;
+        stream[1] = 88;
+        stream[2] = 5;
+        stream[3] = 7;
+        let last = stream.len() - 1;
+        stream[last - 1] = 5;
+        stream[last] = 5;
         let matches = exact_suffix_matches(&stream);
-        assert!(matches.iter().all(Option::is_none), "{matches:?}");
+        assert_eq!(matches[1], Some(7), "{matches:?}");
+    }
+
+    #[test]
+    fn bos_completion_requires_one_unit_of_cap_and_context_headroom() {
+        assert!(!reference_reachable(10, 8, 8, 20));
+        assert!(!reference_reachable(10, 8, 9, 18));
+        assert!(reference_reachable(10, 7, 8, 18));
+        assert!(reference_reachable(10, 8, 9, 19));
     }
 
     #[test]

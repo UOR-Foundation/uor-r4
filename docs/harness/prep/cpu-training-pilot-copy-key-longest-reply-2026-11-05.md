@@ -111,6 +111,26 @@ Every other outcome is negative for this fixed complete-reply writer override.
 It must not be generalized to exact copy, deeper suffix keys or the geometric
 path.
 
+## R12 authority
+
+1. **What is measured:** paired prompt/reply examples compare exact
+   BOS-terminated replies, non-premature BOS completions and correct reference
+   body positions under five fixed selectors.
+2. **Whether it is computable:** yes. The two public artifacts parse on the
+   existing exact CPU path, and the panels supply fixed token/mask streams and
+   recovered replies. No live model or external service is required.
+3. **Whether the instrument can beat the bar:** yes in principle. The
+   teacher-forced screen selected different next tokens on 8-42 paired
+   discordant decisions per panel, and a selected copy token is fed into the
+   same generated trajectory. The complete-reply result is not pre-judged; a
+   failure identifies whether fallback, divergence or termination consumes
+   that headroom.
+4. **Whether it should run now:** yes. It is the next unrun bridge between the
+   passed deepseek-149 token decision and Claude's trained-copy work. A
+   complete-reply gain selects depth preservation now; a termination-limited
+   result redirects the next unit to the existing termination blocker rather
+   than adding copy depth without transfer evidence.
+
 ## Minimum test power
 
 At least 200 complete replies per panel and two independently trained artifact
