@@ -380,10 +380,12 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         && top1_non_fall
         && (config.baseline_mode != BaselineMode::Raw || top8_non_fall);
     let control_moves_matched = accepted == shuffled_accepted;
+    let shuffled_arm_distinct = shuffled_artifact != trained_artifact;
     let status = run_status(
         parity_exact,
         accepted,
         shuffled_accepted,
+        shuffled_arm_distinct,
         trained_distance_pass,
         safety_pass,
     );
@@ -425,6 +427,10 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     bar.insert(
         "control_moves_matched".to_owned(),
         serde_json::json!(control_moves_matched),
+    );
+    bar.insert(
+        "shuffled_arm_distinct".to_owned(),
+        serde_json::json!(shuffled_arm_distinct),
     );
     bar.insert(
         "admission_non_fall".to_owned(),
@@ -620,6 +626,7 @@ fn run_status(
     parity_exact: bool,
     accepted: usize,
     shuffled_accepted: usize,
+    shuffled_arm_distinct: bool,
     distance_pass: bool,
     safety_pass: bool,
 ) -> &'static str {
@@ -627,7 +634,7 @@ fn run_status(
         "INSTRUMENT_FAULT"
     } else if accepted == 0 {
         "NO_MOVE"
-    } else if shuffled_accepted != accepted {
+    } else if shuffled_accepted != accepted || !shuffled_arm_distinct {
         "CONTROL_FAULT"
     } else if distance_pass && safety_pass {
         "KEEP"
@@ -774,10 +781,14 @@ mod tests {
 
     #[test]
     fn status_distinguishes_no_move_from_an_unmatched_control() {
-        assert_eq!(run_status(true, 0, 0, false, false), "NO_MOVE");
-        assert_eq!(run_status(true, 2, 1, true, true), "CONTROL_FAULT");
-        assert_eq!(run_status(true, 2, 2, true, true), "KEEP");
-        assert_eq!(run_status(true, 2, 2, false, true), "REJECT");
-        assert_eq!(run_status(false, 2, 2, true, true), "INSTRUMENT_FAULT");
+        assert_eq!(run_status(true, 0, 0, false, false, false), "NO_MOVE");
+        assert_eq!(run_status(true, 2, 1, true, true, true), "CONTROL_FAULT");
+        assert_eq!(run_status(true, 2, 2, false, true, true), "CONTROL_FAULT");
+        assert_eq!(run_status(true, 2, 2, true, true, true), "KEEP");
+        assert_eq!(run_status(true, 2, 2, true, false, true), "REJECT");
+        assert_eq!(
+            run_status(false, 2, 2, true, true, true),
+            "INSTRUMENT_FAULT"
+        );
     }
 }
