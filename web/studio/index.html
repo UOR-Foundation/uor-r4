@@ -603,6 +603,9 @@
             worker: null,
             workerState: 'starting',
             caps: null,
+            currentLoadId: null,
+            readyLoadId: null,
+            requestedFileName: 'stack.lut',
             conversations: [],
             activeConversationId: null,
             generating: false,
@@ -1212,6 +1215,8 @@
                 if (!app.apiConfig) return false;
                 try { return Boolean(normalizeBaseUrl(app.apiConfig.baseUrl)); } catch (_error) { return false; }
             }
+            if (app.workerState !== undefined && app.workerState !== 'ready') return false;
+            if (app.currentLoadId !== undefined && app.readyLoadId !== app.currentLoadId) return false;
             return Boolean(app.caps) && app.caps.synthetic === true && app.caps.engine_supported !== false && app.caps.can_generate !== false && !isDiscreteCapabilities(app.caps);
         }
 
@@ -1311,29 +1316,35 @@
         function onWorkerMessage(event) {
             var message = event && event.data ? event.data : {};
             if (message.action === 'runtime_loaded') {
-                app.workerState = 'ready';
+                if (app.workerState === 'starting') app.workerState = 'runtime-ready';
                 setEngineStatus('ready', 'ok', 'Engine: ' + (message.engine || 'serving-wasm') + ' · WebAssembly in a Web Worker');
                 updateComposerState();
                 return;
             }
             if (message.action === 'model_loaded') {
+                if (typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var capabilities = message.capabilities || {};
                 var artifactSha256 = capabilities.artifact_sha256;
+                var missingCurrentId = typeof message.id !== 'number' && app.currentLoadId != null && app.workerState !== 'ready';
                 var fileMismatch = capabilities.file_name !== app.requestedFileName;
                 var invalidHash = !artifactSha256 || !/^[0-9a-f]{64}$/.test(artifactSha256);
                 var hashMismatch = app.expectedSha256 && artifactSha256 !== app.expectedSha256;
-                if (fileMismatch || invalidHash || hashMismatch) {
+                if (missingCurrentId || fileMismatch || invalidHash || hashMismatch) {
                     app.workerState = 'error';
-                    var identityError = fileMismatch
-                        ? 'Worker returned ' + (capabilities.file_name || '<missing filename>') + ' instead of the requested ' + app.requestedFileName + '.'
-                        : invalidHash
-                            ? 'Worker returned missing or invalid artifact SHA-256 ' + (artifactSha256 || '<missing hash>') + '; expected a 64-character lowercase hex digest' + (app.expectedSha256 ? ' (' + app.expectedSha256 + ')' : '') + '.'
-                            : 'Worker returned artifact SHA-256 ' + artifactSha256 + ' instead of the expected ' + app.expectedSha256 + '.';
+                    var identityError = missingCurrentId
+                        ? 'Worker returned model_loaded without the current load operation ID.'
+                        : fileMismatch
+                            ? 'Worker returned ' + (capabilities.file_name || '<missing filename>') + ' instead of the requested ' + app.requestedFileName + '.'
+                            : invalidHash
+                                ? 'Worker returned missing or invalid artifact SHA-256 ' + (artifactSha256 || '<missing hash>') + '; expected a 64-character lowercase hex digest' + (app.expectedSha256 ? ' (' + app.expectedSha256 + ')' : '') + '.'
+                                : 'Worker returned artifact SHA-256 ' + artifactSha256 + ' instead of the expected ' + app.expectedSha256 + '.';
+                    clearWorkerModel();
                     setModelStatus(identityError, 'err');
                     toast(identityError, 'error');
                     return;
                 }
                 app.caps = capabilities;
+                app.readyLoadId = app.currentLoadId === undefined ? null : app.currentLoadId;
                 app.workerState = 'ready';
                 setEngineStatus('ready', 'ok', 'Engine: ' + (app.caps.engine || 'serving-wasm') + ' · ' + describeCapabilities());
                 setModelStatus((app.caps.status_label || 'loaded') + ' · ' + (app.caps.schema || 'schema?'), app.caps.synthetic ? 'warn' : 'ok', describeCapabilities());
@@ -1404,6 +1415,12 @@
                 var workerError = String(message.error || 'Operation failed.');
                 app.lastWorkerError = workerError;
                 document.documentElement.dataset.lastWorkerError = workerError;
+                if (message.operation === 'load_model') {
+                    if (typeof message.id === 'number' && message.id !== app.currentLoadId) return;
+                    app.workerState = 'error';
+                    clearWorkerModel();
+                    setModelStatus(workerError, 'err');
+                }
                 if (app.workerState !== 'ready') {
                     app.workerState = 'error';
                     var reason = /pkg|dynamically imported module|Failed to fetch/i.test(workerError)
@@ -1489,7 +1506,8 @@
                 return;
             }
             var text = typeof message.fullText === 'string' ? message.fullText : app.assistantBuffer;
-            var meta = [
+            var exactTool = message.tool === 'm6-exact-arithmetic' || message.stoppedBy === 'tool';
+            var meta = exactTool ? '0 model tokens · tool' : [
                 (message.tokenCount || 0) + ' tokens',
                 (message.tps ? formatTps(message.tps) + ' tok/s' : 'timing unavailable'),
                 message.stoppedBy === 'cancelled' ? 'stopped' : 'length',
@@ -1517,7 +1535,7 @@
             app.streamingBodyEl = null;
             app.assistantBuffer = '';
             updateComposerState();
-            setMetrics((message.tokenCount || 0) + ' tokens · ' + formatTps(message.tps) + ' tok/s · ' + (message.stoppedBy === 'cancelled' ? 'stopped' : 'complete'));
+            setMetrics(exactTool ? meta : (message.tokenCount || 0) + ' tokens · ' + formatTps(message.tps) + ' tok/s · ' + (message.stoppedBy === 'cancelled' ? 'stopped' : 'complete'));
             requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
@@ -1573,7 +1591,9 @@
         }
 
         function sendViaWorker(prompt, conversation) {
-            if (!app.worker || !app.caps) {
+            if (!app.worker || !app.caps
+                || (app.workerState !== undefined && app.workerState !== 'ready')
+                || (app.currentLoadId !== undefined && app.readyLoadId !== app.currentLoadId)) {
                 toast('Load a local model first under Connections.', 'warn');
                 setView('model');
                 return false;
@@ -1691,7 +1711,8 @@
                             finishReason: result && result.stopped ? 'stopped' : result && result.finishReason,
                             chars: text.length,
                         });
-                        var finalMetrics = app.apiMetrics.text();
+                        var exactTool = result && result.uor && result.uor.tool === 'm6-exact-arithmetic';
+                        var finalMetrics = exactTool ? '0 model tokens · tool' : app.apiMetrics.text();
                         var placeholder = document.querySelector('#chatMessages .msg[data-streaming="true"]');
                         if (placeholder) {
                             placeholder.dataset.streaming = 'false';
@@ -1902,12 +1923,32 @@
             if (app.generating && app.activeGenerationKind === 'api' && app.abortController) app.abortController.abort();
         }
 
+        function clearWorkerModel() {
+            app.caps = null;
+            app.modelMeta = null;
+            app.tokenizerArtifact = null;
+            app.readyLoadId = null;
+            app.loadMs = null;
+            [
+                'modelSchema', 'modelSha256', 'modelShaVerified', 'modelSize',
+                'modelTokenizer', 'modelSource', 'modelSourceLabel', 'modelDiscrete',
+                'modelLoadMs',
+            ].forEach(function (name) {
+                document.documentElement.dataset[name] = '';
+            });
+            if (typeof updateCapabilitiesFooter === 'function') updateCapabilitiesFooter();
+            updateComposerState();
+        }
+
         function onModelSourceChanged(event) {
             var detail = event && event.detail ? event.detail : {};
             if (detail.kind === 'wasm' && detail.bytes) {
                 abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
+                app.currentLoadId = (app.currentLoadId || 0) + 1;
+                app.workerState = 'loading';
+                clearWorkerModel();
                 app.tokenizerArtifact = detail.tokenizerArtifact || null;
                 app.expectedSha256 = detail.expectedSha256 || '';
                 app.requestedFileName = detail.fileName || 'stack.lut';
@@ -1928,7 +1969,7 @@
                     if (detail.expectedSha256) payload.expectedSha256 = detail.expectedSha256;
                     if (detail.tokenizerArtifact) payload.tokenizerArtifact = detail.tokenizerArtifact;
                     app.loadStartedAt = (window.performance && performance.now) ? performance.now() : Date.now();
-                    app.worker.postMessage({ action: 'load_model', payload: payload });
+                    app.worker.postMessage({ action: 'load_model', id: app.currentLoadId, payload: payload });
                 }
                 setView('chat');
                 return;

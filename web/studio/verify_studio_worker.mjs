@@ -342,6 +342,53 @@ assert(genExact.tokenCount === 0 && genExact.tokenIds.length === 0 && genExact.t
 
 await sendToWorker({
     action: 'generate',
+    id: 'gen_exact_unsupported',
+    payload: {
+        conversationId: 'conv_verify_exact_unsupported',
+        messages: [{ role: 'user', content: 'What is 17 * 25?' }],
+        options: { max_new_tokens: 32 },
+    },
+});
+const genExactUnsupported = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_unsupported');
+assert(genExactUnsupported.action === 'generate_error', `unsupported arithmetic must fail explicitly instead of generating: ${JSON.stringify(genExactUnsupported)}`);
+
+const overlongArithmetic = `1${' '.repeat(157)}+ 1`;
+await sendToWorker({
+    action: 'generate',
+    id: 'gen_exact_overlong',
+    payload: {
+        conversationId: 'conv_verify_exact_overlong',
+        messages: [{ role: 'user', content: overlongArithmetic }],
+        options: { max_new_tokens: 32 },
+    },
+});
+const genExactOverlong = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_exact_overlong');
+assert(genExactOverlong.action === 'generate_error' && genExactOverlong.error.includes('160-byte'), `overlong arithmetic must return the prompt limit: ${JSON.stringify(genExactOverlong)}`);
+
+const staleLoad = sendToWorker({
+    action: 'load_model',
+    id: 101,
+    payload: {
+        bytes: stackBytes.buffer.slice(stackBytes.byteOffset, stackBytes.byteOffset + stackBytes.byteLength),
+        fileName: 'stale.lut',
+    },
+});
+const currentLoad = sendToWorker({
+    action: 'load_model',
+    id: 102,
+    payload: {
+        bytes: stackBytes.buffer.slice(stackBytes.byteOffset, stackBytes.byteOffset + stackBytes.byteLength),
+        fileName: 'current.lut',
+    },
+});
+await Promise.all([staleLoad, currentLoad]);
+const concurrentLoadMessages = emittedMessages.filter((m) => m.action === 'model_loaded' || m.action === 'operation_error');
+emittedMessages.length = 0;
+assert(concurrentLoadMessages.length === 1 && concurrentLoadMessages[0].action === 'model_loaded' && concurrentLoadMessages[0].id === 102, `only the current load may commit or report: ${JSON.stringify(concurrentLoadMessages)}`);
+assert(concurrentLoadMessages[0].capabilities.file_name === 'current.lut', `stale load replaced current capabilities: ${JSON.stringify(concurrentLoadMessages)}`);
+
+await sendToWorker({
+    action: 'generate',
     id: 'gen_full_32',
     payload: {
         conversationId: 'conv_verify_full',

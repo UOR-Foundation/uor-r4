@@ -872,9 +872,36 @@ enum ExactToolOperator {
     Subtract,
 }
 
+fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
+    let rest = rest.trim_start();
+    let parenthesized = rest.starts_with('(')
+        && rest[1..]
+            .trim_start()
+            .starts_with(|c: char| c.is_ascii_digit());
+    if !rest.starts_with(|c: char| c.is_ascii_digit()) && !parenthesized {
+        return false;
+    }
+    for (index, c) in rest.char_indices() {
+        if index >= MAX_EXACT_TOOL_PROMPT_BYTES {
+            break;
+        }
+        if matches!(c, '+' | '*' | '/') || (parenthesized && c == '-') {
+            return true;
+        }
+        if c == '-' {
+            let previous = rest[..index].chars().next_back();
+            let next = rest[index + 1..].chars().next();
+            if previous.is_some_and(char::is_whitespace) && next.is_some_and(char::is_whitespace) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
-    if trimmed.is_empty() || trimmed.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
+    if trimmed.is_empty() {
         return Ok(None);
     }
     let lower = trimmed.to_ascii_lowercase();
@@ -888,6 +915,14 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         }
     }
     if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
+        return Ok(None);
+    }
+    if trimmed.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
+        if exact_tool_arithmetic_shaped(rest) {
+            return Err(invalid(
+                "exact arithmetic prompt exceeds the 160-byte tool bound",
+            ));
+        }
         return Ok(None);
     }
 
@@ -912,6 +947,11 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         ]
         .contains(&normalized_suffix.as_str())
     {
+        if exact_tool_arithmetic_shaped(rest) {
+            return Err(invalid(
+                "exact arithmetic supports only one unsigned decimal + or - expression",
+            ));
+        }
         return Ok(None);
     }
 
@@ -1428,5 +1468,40 @@ mod tests {
         assert!(exact_arithmetic_tool("What is 999999999999999999999 + 1?")
             .expect("oversized operand should be recognized")
             .is_err());
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_rejects_unsupported_and_overlong_arithmetic() {
+        for prompt in [
+            "What is 17 * 25?",
+            "What is 17.5 + 25?",
+            "What is (17 + 25)?",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("unsupported arithmetic should be recognized")
+                    .is_err(),
+                "unsupported arithmetic fell through: {prompt}"
+            );
+        }
+
+        let within_limit = format!("1{}+ 1", " ".repeat(156));
+        assert_eq!(within_limit.len(), 160);
+        assert_eq!(
+            exact_arithmetic_tool(&within_limit)
+                .expect("160-byte arithmetic should be recognized")
+                .expect("160-byte arithmetic should be exact")
+                .result,
+            "2"
+        );
+        let over_limit = format!("1{}+ 1", " ".repeat(157));
+        assert_eq!(over_limit.len(), 161);
+        assert!(
+            exact_arithmetic_tool(&over_limit)
+                .expect("overlong arithmetic should be recognized")
+                .is_err(),
+            "161-byte arithmetic fell through"
+        );
+        assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
     }
 }

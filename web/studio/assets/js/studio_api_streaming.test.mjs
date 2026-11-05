@@ -307,7 +307,14 @@ async function inlineStudioFunction(name) {
         if (html[index] === '{') depth += 1;
         if (html[index] === '}') {
             depth -= 1;
-            if (depth === 0) return { source: html.slice(start, index + 1), vm };
+            if (depth === 0) {
+                const source = html.slice(start, index + 1);
+                if (name === 'onWorkerMessage') {
+                    const clear = await inlineStudioFunction('clearWorkerModel');
+                    return { source: `${clear.source}\n${source}`, vm };
+                }
+                return { source, vm };
+            }
         }
     }
     throw new Error(`unterminated inline function ${name}`);
@@ -399,4 +406,147 @@ test('live model_loaded accepts a valid no-ID response', async () => {
     });
     assert.equal(context.app.workerState, 'ready');
     assert.equal(context.app.caps.file_name, 'model.lut');
+});
+
+
+test('live model_loaded clears previous capabilities on current identity failure', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    let composerUpdates = 0;
+    context.updateComposerState = () => { composerUpdates += 1; };
+    context.app.caps = { synthetic: true, engine_supported: true, can_generate: true };
+    context.app.modelMeta = { fileName: 'old.lut' };
+    context.app.currentLoadId = 3;
+    context.app.readyLoadId = null;
+    context.app.workerState = 'loading';
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', id: 3, capabilities: { file_name: 'other.lut', artifact_sha256: 'a'.repeat(64) } },
+    });
+    assert.equal(context.app.workerState, 'error');
+    assert.equal(context.app.caps, null);
+    assert.equal(context.app.modelMeta, null);
+    assert.equal(context.document.documentElement.dataset.modelSha256, '');
+    assert.ok(composerUpdates > 0);
+    const readiness = await inlineStudioFunction('chatReadiness');
+    assert.equal(vm.runInNewContext(`${readiness.source};chatReadiness`, {
+        app: context.app,
+        normalizeBaseUrl() { return 'http://127.0.0.1'; },
+        isDiscreteCapabilities() { return false; },
+    })(), false);
+});
+
+test('live model_loaded ignores a stale numeric load response', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    const context = liveWorkerContext();
+    context.app.currentLoadId = 3;
+    context.app.readyLoadId = null;
+    context.app.workerState = 'loading';
+    context.app.expectedSha256 = 'a'.repeat(64);
+    vm.runInNewContext(`${source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', id: 2, capabilities: { file_name: 'model.lut', artifact_sha256: 'a'.repeat(64) } },
+    });
+    assert.equal(context.app.workerState, 'loading');
+    assert.equal(context.app.caps, null);
+    assert.equal(context.toastMessage, undefined);
+});
+
+test('exact-tool local completion omits model rates, stop reasons, and allocation deltas', async () => {
+    const { source, vm } = await inlineStudioFunction('finishLocalGeneration');
+    const conversation = { id: 'chat-tool', messages: [] };
+    const app = {
+        chatRequests: { gen_tool: 7 },
+        activeChatRequestId: 'gen_tool',
+        activeGenerationId: 7,
+        chatGenerationId: 7,
+        generating: true,
+        assistantBuffer: '',
+        conversations: [conversation],
+        activeConversationId: conversation.id,
+    };
+    const appended = [];
+    const context = {
+        app,
+        chatRequestMatches(id, generationId) { return id === 'gen_tool' && generationId === 7; },
+        activeConversation() { return conversation; },
+        document: { querySelector() { return null; }, dispatchEvent() {} },
+        CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
+        appendMessageElement(role, text, meta) { appended.push({ role, text, meta }); },
+        touchConversation() {},
+        updateComposerState() {},
+        setMetrics(text) { context.footerMetrics = text; },
+        requestCheckpoint() {},
+        renderConversationList() {},
+        scrollChat() {},
+        clearChatRequest(id) { delete app.chatRequests[id]; },
+        formatTps(value) { return String(value); },
+    };
+    vm.runInNewContext(`${source};finishLocalGeneration`, context)({
+        id: 'gen_tool',
+        fullText: '42\n\nR4 geometric exact arithmetic — tool, not model generation',
+        tokenCount: 0,
+        tps: null,
+        stoppedBy: 'tool',
+        tool: 'm6-exact-arithmetic',
+        allocDelta: 0,
+    });
+    assert.equal(appended.length, 1);
+    assert.equal(appended[0].meta, '0 model tokens · tool');
+    assert.equal(context.footerMetrics, '0 model tokens · tool');
+    assert.doesNotMatch(appended[0].meta, /tok\/s|length|stop|alloc/);
+});
+
+test('exact-tool API completion omits computed model metrics', async () => {
+    const { source, vm } = await inlineStudioFunction('sendViaApi');
+    const { createStreamMetrics } = await import('./stream_metrics.js');
+    const conversation = { id: 'api-tool', messages: [] };
+    const app = {
+        apiConfig: config,
+        apiMetrics: null,
+        assistantBuffer: '',
+        apiCompletionIds: [],
+        apiStartedNs: null,
+        apiFirstTokenNs: null,
+        generating: false,
+    };
+    const context = {
+        app,
+        AbortController: globalThis.AbortController,
+        beginGeneration() {
+            app.activeChatRequestId = 11;
+            app.chatGenerationId = 12;
+            app.activeGenerationId = 12;
+            app.generating = true;
+            app.assistantBuffer = '';
+            app.apiMetrics = createStreamMetrics();
+            app.apiStartedNs = 0;
+            app.apiFirstTokenNs = null;
+        },
+        streamChatCompletions(options) {
+            options.onDelta('42', { uor: {} });
+            options.onDone({
+                usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                uor: { tool: 'm6-exact-arithmetic', stop: 'tool' },
+                finishReason: 'stop',
+                stopped: false,
+            });
+            return Promise.resolve({ ok: true });
+        },
+        configFromSources() { return config; },
+        chatRequestMatches() { return true; },
+        window: { performance: { now() { return 1; } } },
+        document: { querySelector() { return null; }, dispatchEvent() {} },
+        CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init.detail; } },
+        touchConversation() {},
+        updatePrivacyStatus() {},
+        updateComposerState() {},
+        setMetrics() {},
+        renderConversationList() {},
+        scrollChat() {},
+        clearChatRequest() {},
+        finishApiWithError(error) { throw error; },
+    };
+    await vm.runInNewContext(`async ${source};sendViaApi`, context)('17+25', conversation, [{ role: 'user', content: '17+25' }]);
+    assert.equal(conversation.messages.length, 1);
+    assert.equal(conversation.messages[0].meta, '0 model tokens · tool');
+    assert.doesNotMatch(conversation.messages[0].meta, /tok\/s|length|stop|alloc/);
 });
