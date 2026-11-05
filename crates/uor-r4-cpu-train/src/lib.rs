@@ -144,9 +144,9 @@ pub use quant_shadow::{
 pub use reply_boundary::{
     boundary_stop_changes, compare_boundary_rows, derive_reply_boundary_memory,
     evaluate_boundary_replies, generate_boundary_reply, shuffle_reply_boundary_memory,
-    ReplyBoundaryArm, ReplyBoundaryCensus, ReplyBoundaryCounts, ReplyBoundaryHit,
-    ReplyBoundaryMemory, ReplyBoundaryReading, ReplyBoundaryStep, TimedReplyBoundaryReading,
-    REPLY_BOUNDARY_MAX_DEPTH, REPLY_BOUNDARY_MIN_DEPTH,
+    ReplyBoundaryArm, ReplyBoundaryCensus, ReplyBoundaryComparison, ReplyBoundaryCounts,
+    ReplyBoundaryHit, ReplyBoundaryMemory, ReplyBoundaryReading, ReplyBoundaryStep,
+    TimedReplyBoundaryReading, REPLY_BOUNDARY_MAX_DEPTH, REPLY_BOUNDARY_MIN_DEPTH,
 };
 pub use reply_eval::{
     derive_termination_cell_gates, derive_termination_orbit_gates, derive_termination_point_gates,

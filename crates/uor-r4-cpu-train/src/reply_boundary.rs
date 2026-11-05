@@ -12,8 +12,7 @@ use serde::{Deserialize, Serialize};
 use uor_r4_integer::stack::{reply_stop, ReplyEnd};
 
 use crate::copy_key_reply::{
-    compare_copy_key_reply_rows, copy_key_reply_decision, CopyKeyReplyArm, CopyKeyReplyComparison,
-    CopyKeyReplyMetric, CopyKeyReplyRow,
+    copy_key_reply_decision, CopyKeyReplyArm, CopyKeyReplyMetric, CopyKeyReplyRow,
 };
 use crate::reply_eval::{normalized_reference, GeneratedReply};
 use crate::{invalid, CpuFbsForward, CpuFbsHead, CpuTrainError, MemoryWeightSample};
@@ -121,6 +120,17 @@ pub struct TimedReplyBoundaryReading {
     pub decision_sha256: String,
     pub wall_elapsed_us: u64,
     pub generated_tokens_per_second: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ReplyBoundaryComparison {
+    pub metric: CopyKeyReplyMetric,
+    pub candidate_only: u64,
+    pub control_only: u64,
+    pub candidate_sum: u64,
+    pub control_sum: u64,
+    pub threshold: u64,
+    pub passes: bool,
 }
 
 impl ReplyBoundaryMemory {
@@ -573,8 +583,43 @@ pub fn compare_boundary_rows(
     candidate: &[CopyKeyReplyRow],
     control: &[CopyKeyReplyRow],
     metric: CopyKeyReplyMetric,
-) -> Result<CopyKeyReplyComparison> {
-    compare_copy_key_reply_rows(candidate, control, metric)
+) -> Result<ReplyBoundaryComparison> {
+    if candidate.len() != control.len() {
+        return Err(invalid("reply-boundary comparison lengths differ"));
+    }
+    let mut candidate_only = 0u64;
+    let mut control_only = 0u64;
+    let mut candidate_sum = 0u64;
+    let mut control_sum = 0u64;
+    for (candidate, control) in candidate.iter().zip(control) {
+        if candidate.row != control.row {
+            return Err(invalid("reply-boundary comparison rows differ"));
+        }
+        if !candidate.reachable || !control.reachable {
+            continue;
+        }
+        let candidate = metric_value(candidate, metric);
+        let control = metric_value(control, metric);
+        candidate_sum = checked_add(candidate_sum, candidate)?;
+        control_sum = checked_add(control_sum, control)?;
+        candidate_only = checked_add(candidate_only, u64::from(candidate > control))?;
+        control_only = checked_add(control_only, u64::from(control > candidate))?;
+    }
+    let threshold = ceil_two_sqrt(
+        candidate_only
+            .checked_add(control_only)
+            .ok_or_else(|| invalid("reply-boundary discordant count overflows"))?,
+    )
+    .max(2);
+    Ok(ReplyBoundaryComparison {
+        metric,
+        candidate_only,
+        control_only,
+        candidate_sum,
+        control_sum,
+        threshold,
+        passes: candidate_sum > control_sum && candidate_only >= threshold,
+    })
 }
 
 pub fn boundary_stop_changes(
@@ -600,6 +645,24 @@ pub fn boundary_stop_changes(
 fn checked_add(left: u64, right: u64) -> Result<u64> {
     left.checked_add(right)
         .ok_or_else(|| invalid("reply-boundary count overflows"))
+}
+
+fn ceil_two_sqrt(value: u64) -> u64 {
+    let value = u128::from(value);
+    let mut root = 0u128;
+    while root * root < 4 * value {
+        root += 1;
+    }
+    root.try_into().unwrap_or(u64::MAX)
+}
+
+fn metric_value(row: &CopyKeyReplyRow, metric: CopyKeyReplyMetric) -> u64 {
+    match metric {
+        CopyKeyReplyMetric::ExactReference => u64::from(row.exact_reference),
+        CopyKeyReplyMetric::NonPrematureBos => u64::from(row.non_premature_bos),
+        CopyKeyReplyMetric::OpeningCorrect => u64::from(row.opening_correct),
+        CopyKeyReplyMetric::CorrectBodyPositions => row.correct_body_positions,
+    }
 }
 
 fn token_hash(tokens: &[u32]) -> String {
