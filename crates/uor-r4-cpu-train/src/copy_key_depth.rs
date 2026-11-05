@@ -35,6 +35,7 @@ pub struct CopyKeyDepthReading {
     pub k2_backoff_k1: CopyKeyDepthArm,
     pub random_depth: CopyKeyDepthArm,
     pub random_changed_predictions: u64,
+    pub random_changed_predictions_all: u64,
     pub longest_vs_k2_backoff: CopyKeyComparison,
     pub longest_vs_random: CopyKeyComparison,
 }
@@ -173,9 +174,13 @@ pub fn evaluate_copy_key_depth(
         outcomes.iter().map(|outcome| outcome.copyable),
         outcomes.iter().map(|outcome| outcome.random),
     );
-    let random_changed_predictions = outcomes
+    let random_changed_predictions_all = outcomes
         .iter()
         .filter(|outcome| outcome.random != outcome.fixed[0])
+        .count() as u64;
+    let random_changed_predictions = outcomes
+        .iter()
+        .filter(|outcome| outcome.copyable && outcome.random != outcome.fixed[0])
         .count() as u64;
 
     let longest_predictions = outcomes
@@ -200,6 +205,7 @@ pub fn evaluate_copy_key_depth(
         k2_backoff_k1,
         random_depth,
         random_changed_predictions,
+        random_changed_predictions_all,
         longest_vs_k2_backoff: compare(
             tokens,
             mask,
@@ -338,6 +344,29 @@ mod tests {
             .fixed
             .iter()
             .all(|arm| arm.positions_with_match == 0));
+    }
+
+    #[test]
+    fn the_current_query_position_is_not_a_candidate() {
+        let tokens = [0, 1, 2, 3, 3, 3];
+        let mut mask = [0u8; 6];
+        mask[5] = 1;
+        let reading = evaluate_copy_key_depth(&tokens, &mask, 6, 0, 149).unwrap();
+        assert_eq!(reading.copyable_positions, 1);
+        assert_eq!(reading.fixed[0].positions_with_match, 0);
+    }
+
+    #[test]
+    fn random_novelty_is_gated_on_copyable_positions() {
+        let tokens = [0, 1, 2, 3, 4, 5, 3, 6, 2, 3, 9];
+        let mut mask = [0u8; 11];
+        mask[10] = 1;
+        let changed = (0..100)
+            .map(|seed| evaluate_copy_key_depth(&tokens, &mask, 12, 0, seed).unwrap())
+            .find(|reading| reading.random_changed_predictions_all > 0)
+            .expect("some seed changes a random depth on a noncopyable position");
+        assert_eq!(changed.copyable_positions, 0);
+        assert_eq!(changed.random_changed_predictions, 0);
     }
 
     #[test]

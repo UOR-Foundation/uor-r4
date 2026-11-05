@@ -27,36 +27,38 @@ upload or external model execution.
 | Input | Identity |
 |---|---|
 | implementation source | `c53b06b5f` |
+| panel-generator source | `4e42ffca5` (`docs/labs/one-model-end-to-end/instrument`) |
+| tokenizer | `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` |
 | public M1 DEV tokens | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | public M1 DEV mask | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
 | public M1 DEV manifest | `ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab` |
-| train-control-v3 tokens | `a7511c32fdf1532ef903e0f04e34a48664e4ba68cefde1414ab2e057198cdaf5` |
-| train-control-v3 mask | `89144e366a9b9856a10376e983b4dc98c673fb6aa1bd6315f970f4bdfe57234f` |
-| train-control-v3 manifest | `980b91b33946457350151c1044b33eaeabb2034bb8137dcbc49b324f29c26672` |
-| dev-panel-v3 tokens | `add1f3954fc67e12822bdac395d7167bf6d6a0f074856efe2beec2c4ac81e442` |
-| dev-panel-v3 mask | `da1ae9ee3bdc4fe1bf4a84a12ee9c1ac02ee51a419e3806cb77df430a44a3c01` |
-| dev-panel-v3 manifest | `ce489b38e91b2514f302560e65ac8bf7c337ca8a15b2aedba428e312bb003949` |
 
 Hardware: AMD Ryzen 9 9950X, 16 physical cores / 32 hardware threads.
+
+The public DEV parity inputs and the Claude-267 reference counts were already
+opened during implementation debugging. They are instrument controls, not
+decision panels for this run.
 
 ## Fixed construction
 
 Use 192-token BOS-delimited scoring windows, the same boundaries as
-`build_document_windows`. For eligible target position `p`:
+`build_document_windows`. Copy the window into `x` from `win_start` through
+the last eligible target. For eligible target position `p`, set
+`t = p - 1 - win_start`:
 
 ```text
-query_d(p) = tokens[p-d..p]
-key_d(s)   = tokens[s-d..s]
+query_d(t) = x[t], x[t-1], ..., x[t-d+1]
+key_d(s)   = x[s-1], x[s-2], ..., x[s-d]
 ```
 
-A candidate `1 <= s < p-1-win_start` predicts `tokens[s]`; the latest exact
-slice match wins. Missing key history at the start of the window repeats its
-first token, matching Claude-267's depth-two reference.
+A candidate `1 <= s < t` predicts `x[s]`; the latest exact slice match wins.
+The current query position is not a candidate. Missing key history at the start
+of `x` repeats `x[0]`, matching Claude-267's depth-two reference.
 
 The candidate is `longest_4_to_1`: use depth four if it has an exact match,
 then three, two, one. Controls are fixed depths one through four,
 `k2>k1`, and a deterministic random choice over available depths. The seed is
-149.
+149. `fixed_depth_1` is the `shortest` control.
 
 ## Instrument gate
 
@@ -67,13 +69,26 @@ Public DEV must reproduce Claude-267 exactly before the bar is read:
 - depth 2: 4,383 exact matches and 3,506 right;
 - `k2>k1`: 4,388 right.
 
-Any mismatch stops the run as an instrument fault.
+Any mismatch stops the run as an instrument fault. Public DEV is not a decision
+panel.
+
+## Decision panels
+
+Draw two new m-world-v2 panels after FIT and GO, with the pinned tokenizer and
+generator:
+
+- `copy-key-depth-tt-2501`: `cell=train,train`, 64 conversations, seed `2501`;
+- `copy-key-depth-dd-2502`: `cell=dev,dev`, 64 conversations, seed `2502`.
+
+Both are new to this decision. The earlier exploratory readings on
+`train-control-v3`, `dev-panel-v3` and `panel-dev-dev` are disclosed in the
+REPORT but do not enter the bar.
 
 ## Bar
 
 The candidate passes only if it beats `k2>k1` by the paired two-sigma rule on
-both public DEV and `dev-panel-v3`, and beats the random-depth control by the
-same rule on both. The paired threshold is
+both new decision panels, and beats the random-depth control by the same rule
+on both. Random-control novelty is counted only on copyable positions. The paired threshold is
 `max(2, ceil(2*sqrt(control-only)))`.
 
 A pass makes depths three and four a supported CPU read candidate for the next
@@ -113,11 +128,11 @@ set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-copy-key-depth
 SHARED=/home/callard/projects/codex-playground/uor-r4
 OUT=$SHARED/local/deepseek/copy-key-depth/2026-11-05
+PANELS=$OUT/panels
 BUILD=$SOURCE/target/deepseek/copy-key-depth-run
-CONTROL=$SOURCE/target/deepseek/copy-key-depth-controls
+GENERATOR_TARGET=$SOURCE/target/deepseek/copy-key-panel-generator
 DEV=$SHARED/local/deepseek/public-m1-parity
-TRAIN=$SHARED/local/deepseek/m2-evidence/train-control-v3
-PANEL=$SHARED/local/deepseek/m2-evidence/dev-panel-v3
+TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 IMPL_PIN=c53b06b5f
 
 test ! -e "$OUT"
@@ -127,12 +142,7 @@ sha256sum -c <(printf '%s\n' \
   '0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b  '"$DEV"'/dev-tokens.u16' \
   'a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078  '"$DEV"'/dev-response-mask.u8' \
   'ab269c9818a713ef41f9aff0fdd8995386d5eb0ebaf8a98636f7766e99f83eab  '"$DEV"'/dev-manifest.json' \
-  'a7511c32fdf1532ef903e0f04e34a48664e4ba68cefde1414ab2e057198cdaf5  '"$TRAIN"'/tokens.u16' \
-  '89144e366a9b9856a10376e983b4dc98c673fb6aa1bd6315f970f4bdfe57234f  '"$TRAIN"'/response_mask.u8' \
-  '980b91b33946457350151c1044b33eaeabb2034bb8137dcbc49b324f29c26672  '"$TRAIN"'/manifest.json' \
-  'add1f3954fc67e12822bdac395d7167bf6d6a0f074856efe2beec2c4ac81e442  '"$PANEL"'/tokens.u16' \
-  'da1ae9ee3bdc4fe1bf4a84a12ee9c1ac02ee51a419e3806cb77df430a44a3c01  '"$PANEL"'/response_mask.u8' \
-  'ce489b38e91b2514f302560e65ac8bf7c337ca8a15b2aedba428e312bb003949  '"$PANEL"'/manifest.json') --quiet
+  'a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  '"$TOKENIZER") --quiet
 
 mkdir -p "$OUT"
 seal() {
@@ -147,6 +157,15 @@ trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" cargo build --locked --release \
   -p uor-r4-cpu-train --bin cpu-copy-key-depth
 
+env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo run --locked \
+  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" -- \
+  out="$PANELS/train-train-2501" tokenizer="$TOKENIZER" cell=train,train \
+  conversations=64 seed=2501 protocol=2
+env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GENERATOR_TARGET" cargo run --locked \
+  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" -- \
+  out="$PANELS/dev-dev-2502" tokenizer="$TOKENIZER" cell=dev,dev \
+  conversations=64 seed=2502 protocol=2
+
 BIN=$BUILD/release/cpu-copy-key-depth
 run() {
   name=$1
@@ -156,9 +175,9 @@ run() {
       --context 192 --seed 149 >"$OUT/$name.json"
 }
 run dev "$DEV"
-run train-control "$TRAIN"
-run dev-panel "$PANEL"
-run dev-repeat "$DEV"
+run train-train "$PANELS/train-train-2501"
+run dev-dev "$PANELS/dev-dev-2502"
+run dev-dev-repeat "$PANELS/dev-dev-2502"
 
 test "$(jq -r '.reading.copyable_positions' "$OUT/dev.json")" -eq 8243
 test "$(jq -r '.reading.fixed[0].positions_with_match' "$OUT/dev.json")" -eq 6306
@@ -167,17 +186,13 @@ test "$(jq -r '.reading.fixed[1].positions_with_match' "$OUT/dev.json")" -eq 438
 test "$(jq -r '.reading.fixed[1].right' "$OUT/dev.json")" -eq 3506
 test "$(jq -r '.reading.k2_backoff_k1.right' "$OUT/dev.json")" -eq 4388
 test "$(jq -r '.reading.random_changed_predictions' "$OUT/dev.json")" -gt 0
-cmp "$OUT/dev.json" "$OUT/dev-repeat.json"
-
-jq 'del(.reading.random_changed_predictions)' "$OUT/dev.json" >"$OUT/dev.normalized.json"
-jq 'del(.reading.random_changed_predictions)' "$OUT/dev-repeat.json" >"$OUT/dev-repeat.normalized.json"
-cmp "$OUT/dev.normalized.json" "$OUT/dev-repeat.normalized.json"
+cmp "$OUT/dev-dev.json" "$OUT/dev-dev-repeat.json"
 test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 ```
 
 Read `longest_vs_k2_backoff.passes` and `longest_vs_random.passes` in both
-`dev.json` and `dev-panel.json`. Both must be true for a candidate pass.
-`train-control.json` is supporting evidence only and does not move the bar.
+`train-train.json` and `dev-dev.json`. Both must be true for a candidate pass.
+`dev.json` is the Claude-267 instrument-parity control only.
 
 ## Rollback boundary
 
