@@ -58,9 +58,9 @@ Per public artifact seed:
 - `longest32_shuffled_boundary`;
 - reference-length oracle for ceiling reporting only.
 
-The shuffled control deterministically permutes terminal/nonterminal count
-pairs across suffix keys separately at each depth. It preserves the number of
-keys and terminal observations at each depth.
+The shuffled control deterministically moves terminal counts across suffix
+keys separately at each depth and leaves every nonterminal count fixed. It
+preserves the number of keys and terminal observations at each depth.
 
 ## Data and power
 

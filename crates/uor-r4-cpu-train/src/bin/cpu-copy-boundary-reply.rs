@@ -12,6 +12,7 @@ struct Panel {
     tokens: PathBuf,
     mask: PathBuf,
     manifest: PathBuf,
+    manifest_sha256: String,
     identity: CpuCorpusIdentity,
     samples: Vec<MemoryWeightSample>,
 }
@@ -209,6 +210,7 @@ fn panel_input(panel: &Panel) -> serde_json::Value {
         "mask": panel.mask,
         "mask_sha256": panel.identity.mask_sha256,
         "manifest": panel.manifest,
+        "manifest_sha256": panel.manifest_sha256,
         "manifest_split": panel.identity.split,
     })
 }
@@ -217,6 +219,7 @@ fn load_panel(paths: &PanelPaths) -> Result<Panel, String> {
     let token_bytes = read(&paths.tokens)?;
     let mask_bytes = read(&paths.mask)?;
     let manifest_bytes = read(&paths.manifest)?;
+    let manifest_sha256 = uor_r4_discrete::corpus::sha256(&manifest_bytes);
     let identity = validate_corpus_manifest(&manifest_bytes, &token_bytes, &mask_bytes)
         .map_err(|error| error.to_string())?;
     if identity.tokens_sha256 != paths.expected_tokens_sha256 {
@@ -235,7 +238,7 @@ fn load_panel(paths: &PanelPaths) -> Result<Panel, String> {
             paths.expected_mask_sha256
         ));
     }
-    if uor_r4_discrete::corpus::sha256(&manifest_bytes) != paths.expected_manifest_sha256 {
+    if manifest_sha256 != paths.expected_manifest_sha256 {
         return Err(format!(
             "{}: manifest sha256 differs",
             paths.manifest.display()
@@ -262,6 +265,7 @@ fn load_panel(paths: &PanelPaths) -> Result<Panel, String> {
         tokens: paths.tokens.clone(),
         mask: paths.mask.clone(),
         manifest: paths.manifest.clone(),
+        manifest_sha256,
         identity,
         samples,
     })

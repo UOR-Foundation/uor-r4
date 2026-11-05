@@ -463,12 +463,7 @@ pub fn evaluate_boundary_replies(
                 seed,
                 row,
             )?;
-            let reachable = reference.len() <= cap
-                && sample
-                    .prompt
-                    .len()
-                    .checked_add(reference.len())
-                    .is_some_and(|total| total <= context);
+            let reachable = reference_reachable(sample.prompt.len(), reference.len(), cap, context);
             let opening_correct = matches!(
                 (generated.tokens.first(), reference.first()),
                 (Some(generated), Some(reference)) if generated == reference
@@ -666,6 +661,18 @@ fn metric_value(row: &CopyKeyReplyRow, metric: CopyKeyReplyMetric) -> u64 {
     }
 }
 
+fn reference_reachable(
+    prompt_len: usize,
+    reference_len: usize,
+    cap: usize,
+    context: usize,
+) -> bool {
+    reference_len < cap
+        && prompt_len
+            .checked_add(reference_len)
+            .is_some_and(|total| total < context)
+}
+
 fn token_hash(tokens: &[u32]) -> String {
     let mut bytes = Vec::with_capacity(tokens.len() * 4);
     for token in tokens {
@@ -679,6 +686,8 @@ fn reply_hash(rows: &[CopyKeyReplyRow]) -> String {
     for row in rows {
         hasher.update(&(row.row as u64).to_le_bytes());
         hasher.update(row.reply_sha256.as_bytes());
+        hasher.update(&row.generated_tokens.to_le_bytes());
+        hasher.update(row.stop.as_bytes());
     }
     hasher.finalize().to_hex().to_string()
 }
@@ -688,9 +697,12 @@ fn decision_hash(steps: &[ReplyBoundaryStep]) -> String {
     for step in steps {
         hasher.update(&(step.row as u64).to_le_bytes());
         hasher.update(&(step.generated_step as u64).to_le_bytes());
+        hasher.update(&step.writer_token.to_le_bytes());
         hasher.update(&step.selected_token.to_le_bytes());
         hasher.update(&(step.copy_depth.unwrap_or(0) as u16).to_le_bytes());
         hasher.update(&(step.boundary_depth.unwrap_or(0) as u16).to_le_bytes());
+        hasher.update(&step.boundary_terminal.to_le_bytes());
+        hasher.update(&step.boundary_nonterminal.to_le_bytes());
     }
     hasher.finalize().to_hex().to_string()
 }
@@ -705,6 +717,8 @@ fn splitmix64(mut value: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     fn sample(prompt: &[u32], reply: &[u32]) -> MemoryWeightSample {
         MemoryWeightSample {
@@ -760,5 +774,165 @@ mod tests {
         let control = shuffled.census();
         assert_eq!(original.terminal_by_depth, control.terminal_by_depth);
         assert_eq!(original.nonterminal_by_depth, control.nonterminal_by_depth);
+    }
+
+    #[test]
+    fn reachability_matches_the_strict_existing_boundaries() {
+        assert!(!reference_reachable(100, 4, 4, 200));
+        assert!(!reference_reachable(100, 3, 64, 103));
+        assert!(reference_reachable(100, 3, 64, 104));
+        assert!(reference_reachable(100, 4, 5, 105));
+    }
+
+    #[test]
+    fn terminal_boundary_stops_and_controls_do_not() {
+        let artifact = export_fbs_trunk_uorlut01(&synthetic_fbs_trunk_with(
+            191,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 3,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        ))
+        .unwrap();
+        let memory = derive_reply_boundary_memory(&[sample(&[9], &[40, 10, 20, 30, 1])]).unwrap();
+        let prompt = [10, 20, 30, 40, 10, 20, 30];
+        let true_reply = generate_boundary_reply(
+            &artifact,
+            &prompt,
+            64,
+            4,
+            ReplyBoundaryArm::Longest32TrueBoundary,
+            Some(&memory),
+            191,
+            0,
+        )
+        .unwrap();
+        assert_eq!(true_reply.0.tokens, [40, 10, 20, 30]);
+        assert_eq!(true_reply.0.stop, "bos");
+        assert_eq!(true_reply.1.last().unwrap().boundary_depth, Some(4));
+
+        let no_boundary = generate_boundary_reply(
+            &artifact,
+            &prompt,
+            64,
+            4,
+            ReplyBoundaryArm::Longest32NoBoundary,
+            None,
+            191,
+            0,
+        )
+        .unwrap();
+        assert!(no_boundary.0.stop != "bos" || no_boundary.0.tokens.len() > 4);
+
+        let oracle = generate_boundary_reply(
+            &artifact,
+            &prompt,
+            64,
+            4,
+            ReplyBoundaryArm::ReferenceLengthOracle,
+            None,
+            191,
+            0,
+        )
+        .unwrap();
+        assert_eq!(oracle.0.tokens, true_reply.0.tokens);
+        assert_eq!(oracle.0.stop, "bos");
+    }
+
+    #[test]
+    fn stop_change_digest_ignores_identical_and_detects_position_or_depth() {
+        let left = timed_with_stops(&[(0, 4, 4), (1, 8, 5)]);
+        assert_eq!(boundary_stop_changes(&left, &left), 0);
+        assert_eq!(
+            boundary_stop_changes(&left, &timed_with_stops(&[(0, 5, 4), (1, 8, 5)])),
+            2
+        );
+        assert_eq!(
+            boundary_stop_changes(&left, &timed_with_stops(&[(0, 4, 5), (1, 8, 5)])),
+            2
+        );
+    }
+
+    #[test]
+    fn paired_threshold_uses_both_discordant_arms() {
+        let candidate = (0..4).map(|row| row_fixture(row, true)).collect::<Vec<_>>();
+        let control = (0..4)
+            .map(|row| row_fixture(row, false))
+            .collect::<Vec<_>>();
+        let comparison =
+            compare_boundary_rows(&candidate, &control, CopyKeyReplyMetric::ExactReference)
+                .unwrap();
+        assert_eq!(comparison.candidate_only, 4);
+        assert_eq!(comparison.control_only, 0);
+        assert_eq!(comparison.threshold, 4);
+        assert!(comparison.passes);
+    }
+
+    fn row_fixture(row: usize, exact: bool) -> CopyKeyReplyRow {
+        CopyKeyReplyRow {
+            row,
+            reachable: true,
+            exact_reference: exact,
+            bos_complete: exact,
+            opening_correct: exact,
+            premature_bos: false,
+            non_premature_bos: exact,
+            generated_tokens: 4,
+            reference_tokens: 4,
+            correct_body_positions: 4,
+            copy_decisions: 4,
+            fallback_decisions: 0,
+            stop: if exact { "bos" } else { "cap" }.to_owned(),
+            reply_sha256: String::new(),
+        }
+    }
+
+    fn timed_with_stops(stops: &[(usize, usize, usize)]) -> TimedReplyBoundaryReading {
+        TimedReplyBoundaryReading {
+            reading: ReplyBoundaryReading {
+                arm: ReplyBoundaryArm::Longest32TrueBoundary,
+                replies: 2,
+                reference_reachable: 2,
+                exact_reference: 0,
+                bos_complete: stops.len() as u64,
+                opening_correct: 0,
+                premature_bos: 0,
+                non_premature_bos: stops.len() as u64,
+                generated_tokens: 0,
+                reference_tokens: 0,
+                correct_body_positions: 0,
+                decisions: 0,
+                copy_decisions: 0,
+                fallback_decisions: 0,
+                boundary_stops: stops.len() as u64,
+                boundary_stop_depths: [0; REPLY_BOUNDARY_MAX_DEPTH],
+            },
+            rows: Vec::new(),
+            steps: stops
+                .iter()
+                .map(|&(row, generated_step, depth)| ReplyBoundaryStep {
+                    row,
+                    generated_step,
+                    writer_token: 0,
+                    selected_token: 0,
+                    copy_depth: None,
+                    boundary_depth: Some(depth),
+                    boundary_terminal: 1,
+                    boundary_nonterminal: 0,
+                })
+                .collect(),
+            reply_sha256: String::new(),
+            decision_sha256: String::new(),
+            wall_elapsed_us: 0,
+            generated_tokens_per_second: 0.0,
+        }
     }
 }
