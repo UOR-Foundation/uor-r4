@@ -109,6 +109,20 @@ with `PUBLISHED-SHA256SUMS`.
 - No float-training, integer-serving, CUDA or other Claude-owned source
   changed.
 
+## Size
+
+Against base `1b501c2f1`, the branch changes **3** code files (**+833 / -24**),
+**7** documentation files (**+516 / -0**), and **22** evidence/resource files
+(**+1,202 / -0**): **32 files, +2,551 / -24**. No standalone test file changed
+because the focused tests remain in `copy_key_depth.rs`. The ORDER gave no line
+estimate, so a ratio to estimate is not defined. No generated corpus or binary
+is tracked.
+
+## Skills used
+
+No system-provided Codex skill applies. Project-specific FIT, independent GO
+and exact-head review procedures were followed.
+
 ## Still open
 
 - Keep longest-first as deepseek-149's selected exact-copy construction.
