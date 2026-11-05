@@ -399,27 +399,19 @@ fn summarize(
     let mut reading = CopyKeyReplyReading {
         arm,
         replies: rows.len() as u64,
+        reference_reachable: 0,
+        exact_reference: 0,
+        bos_complete: 0,
+        opening_correct: 0,
+        premature_bos: 0,
+        non_premature_bos: 0,
+        generated_tokens: 0,
+        reference_tokens: 0,
+        correct_body_positions: 0,
         decisions: counts.decisions,
         copy_decisions: counts.copy_decisions,
         fallback_decisions: counts.fallback_decisions,
         selected_depth_counts: counts.selected_depth_counts,
-        ..CopyKeyReplyReading {
-            arm,
-            replies: 0,
-            reference_reachable: 0,
-            exact_reference: 0,
-            bos_complete: 0,
-            opening_correct: 0,
-            premature_bos: 0,
-            non_premature_bos: 0,
-            generated_tokens: 0,
-            reference_tokens: 0,
-            correct_body_positions: 0,
-            decisions: 0,
-            copy_decisions: 0,
-            fallback_decisions: 0,
-            selected_depth_counts: [0; COPY_KEY_MAX_DEPTH],
-        }
     };
     for row in rows {
         reading.reference_reachable =
