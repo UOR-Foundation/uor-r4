@@ -35,7 +35,7 @@ This unit registers one roadmap item, `real-text-corpus`, so that `loop claim` c
 3. **A fresh exact-head review passes.** It checks every line number, path and count the item cites against `origin/main`, and its scope against the work its done-when needs.
 4. **`loop report --check` and `loop pr-check --local`** pass.
 
-**Owed, not in this unit:** the render (`README.md`, `issues.json`) and the item's issue (`roadmap sync --apply`), once `roadmap check` is green on main. The item can be claimed without them: only `loopclose.rs` reads `issues.json`, and a missing entry there means no `References` line (`loopclose.rs:446`). Kimi registered `m7-lexlean-studio-tools.md` the same way in #3730.
+**Owed, not in this unit:** the render (`README.md`, `issues.json`) and the item's issue (`roadmap sync --apply`), once `roadmap check` is green on main. The item can be claimed without them: in the loop harness, only `loopclose.rs` reads `issues.json` (xtask's `roadmap` and `roadmap_sync` read it too), and a missing entry there means no `References` line (`loopclose.rs:446-457`). Kimi registered `m7-lexlean-studio-tools.md` the same way in #3730.
 
 ## Stop and decide (never wait) if
 
