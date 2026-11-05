@@ -57,9 +57,10 @@ Training diagnostic was also identical: **409** correct body positions for
 both longest-32 and longest-4 on each seed.
 
 Longest-32 selected depth 32 on 15,114/29,312 fresh-dev decisions and selected
-each depth one through four 458 times; the arm therefore exercised deep
-matches rather than falling back to longest-4. It still chose the same token
-as longest-4 at every fresh-dev decision.
+each depth one through four 458 times. The remaining 12,366 decisions selected
+depths five through 31. The arm therefore exercised deep matches rather than
+falling back to longest-4. It still chose the same token as longest-4 at every
+fresh-dev decision.
 
 Longest-32 beat `k2>k1`, depth 1, random-32 and writer by the paired two-sigma
 rule. The required gain over nested longest-4 was absent.
@@ -106,8 +107,8 @@ Published evidence manifest SHA-256:
 
 Against base `7fe55fdbf`, this unit changes four CPU-train files
 (**+115 / -23**), nine task, preregistration, notebook, roadmap, state and
-lab-record files (**+642 / -0**), and 30 published evidence files
-(**+380 / -0**): **43 files, +1,137 / -23**. No corpus or binary is tracked.
+lab-record files (**+643 / -0**), and 30 published evidence files
+(**+380 / -0**): **43 files, +1,138 / -23**. No corpus or binary is tracked.
 
 ## Skills used
 
