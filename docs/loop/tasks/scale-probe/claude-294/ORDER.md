@@ -39,7 +39,16 @@ The unit is cancelled if any of these holds:
 4. The kill switch is on.
 5. `depends_on: [one-model-end-to-end]` means the recipe is still undecided.
 
-Result: to fill in.
+**Result: PASS, go** (run at `823f012a4`, 5 Nov ~18:10Z).
+1. No `docs/harness/prep/scale-probe*` and no `docs/labs/scale-probe/` exist on `main` (`9577aebc9`).
+2. Of the open PRs, only this unit's #3744 touches `pipeline-map.md`, `float-training.md` or a `scale-probe` path; `loop claim` found no overlapping order.
+3. `results/claude/real-text-corpus-2026-11-05/` is in the store (`uor-store ls`). Its 61-line `SHA256SUMS` was read back in claude-293, and the local copy in `local/claude/rtc/` checks 61 of 61 OK.
+4. `loop next`: "kill-switch: off".
+5. **Classed instrument** (a dependency label, not a result). `one-model-end-to-end` is `ready`, not `done`, because its 21-run training and verdict have not run. But the recipe the line trains and serves today is fixed:
+   - claude-266's (b), which P2b trained (claude-275) and claude-281 classified;
+   - served as claude-243's a7r and P4's carry exports (claude-288).
+
+   Casey's plan puts P5 after P4 and waits on no verdict. So this probe measures recipe (b) without its turn memory (the sheet's Arms say why). A recipe that item picks later is a new configuration of this probe, not a fault in it.
 
 ## Files in scope
 
@@ -52,11 +61,21 @@ Result: to fill in.
 
 ## Done when
 
-1. `docs/harness/prep/scale-probe-2026-11-05.md` exists in the project's sheet shape (`uor-harness check` passes its shape rule), with the Data line on real text and the templated contrast cell.
-2. A fresh non-author FIT reads `TEST FITNESS: FIT`, posted on #3472 and recorded in the sheet.
-3. A fresh D67 pre-run review reads GO (or GO WITH FIXES, fixed), posted on #3472 and recorded in the sheet.
-4. The decision card is logged on #3472 as `[claude] owner log:`, and the item file's Data and panel lines say real text.
-5. A REPORT, negatives first, and the in-unit exact-head review.
+1. **The instrument** `docs/labs/scale-probe/instrument/` exists: a standalone crate (its own `[workspace]`, like `docs/labs/one-model-end-to-end/instrument`), bin `scale-probe`, laptop counting only. It has three commands:
+   - `mix` writes the nested TRAIN fractions;
+   - `grade` scores one checkpoint's `rows-*.json` against unigram and T2 tables built from that cell's own TRAIN;
+   - `pair` gives b, c, d, the band and the verdict for two cells at two seeds.
+
+   Its tests pass, with a negative gate for each refusal.
+2. **The mixes** D1, D2 and D3 (¼, ½ and all of claude-293's four TRAIN roots) are built on the laptop. They are stored under `results/claude/scale-probe-2026-11-05/inputs/` with a `SHA256SUMS`, read back.
+3. **The sheet** `docs/harness/prep/scale-probe-2026-11-05.md`:
+   - it is in the project's shape (`uor-harness check` passes `prep.sheet_shape`);
+   - it pins the mixes' and the panels' SHA-256s;
+   - a fresh non-author FIT reads `TEST FITNESS: FIT`, posted on #3472 and recorded in the sheet.
+4. **The decision card** is logged on #3472 as `[claude] owner log:`, on its own fresh decision review, and the item file's Data and panel lines say real text.
+5. **A REPORT,** negatives first, and the in-unit exact-head review.
+
+**The D67 pre-run review is the run unit's,** right before launch. It checks the lease and the caps as they stand then, as P2b's sheet did (claude-276). Done-when 1 is met there.
 
 ## Stop and ask if
 
