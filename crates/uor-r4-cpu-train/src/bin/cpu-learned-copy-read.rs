@@ -447,6 +447,8 @@ fn run_geometric_candidate_union(inputs: GeometricCandidateInputs<'_>) -> Result
             "trained_weights_sha256": training.trained.weights_sha256(),
             "shuffled_weights": training.shuffled.weights,
             "shuffled_weights_sha256": training.shuffled.weights_sha256(),
+            "depth_only_weights": training.depth_only.weights,
+            "depth_only_weights_sha256": training.depth_only.weights_sha256(),
             "geometry_only_weights": training.geometry_only.weights,
         },
         "test": {
@@ -457,6 +459,28 @@ fn run_geometric_candidate_union(inputs: GeometricCandidateInputs<'_>) -> Result
             "writer": writer.reading,
             "comparisons": comparisons,
             "changes": changes,
+            "signatures": {
+                "trained": {
+                    "reply_sha256": trained.reply_sha256,
+                    "decision_sha256": trained.decision_sha256,
+                },
+                "shuffled": {
+                    "reply_sha256": shuffled.reply_sha256,
+                    "decision_sha256": shuffled.decision_sha256,
+                },
+                "geometry_only": {
+                    "reply_sha256": geometry_only.reply_sha256,
+                    "decision_sha256": geometry_only.decision_sha256,
+                },
+                "longest_32": {
+                    "reply_sha256": longest.reply_sha256,
+                    "decision_sha256": longest.decision_sha256,
+                },
+                "writer": {
+                    "reply_sha256": writer.reply_sha256,
+                    "decision_sha256": writer.decision_sha256,
+                },
+            },
             "elapsed_us": test_elapsed_us,
         },
     });

@@ -218,24 +218,7 @@ pub fn derive_geometric_candidate_rankers(
         .flatten()
         .collect::<Vec<_>>();
     groups.sort_by_key(|group| (group.row, group.generated_step));
-    if groups.len() < GEOMETRIC_CANDIDATE_MIN_GROUPS {
-        return Err(invalid(format!(
-            "geometric candidate ranker has {} supervised groups, fewer than {}",
-            groups.len(),
-            GEOMETRIC_CANDIDATE_MIN_GROUPS
-        )));
-    }
-    let target_values = groups
-        .iter()
-        .map(|group| group.target)
-        .collect::<BTreeSet<_>>()
-        .len();
-    if target_values < GEOMETRIC_CANDIDATE_MIN_TARGETS {
-        return Err(invalid(format!(
-            "geometric candidate ranker has {target_values} target tokens, fewer than {}",
-            GEOMETRIC_CANDIDATE_MIN_TARGETS
-        )));
-    }
+    let target_values = validate_training_power(&groups)?;
     let generated_rows = groups
         .iter()
         .map(|group| group.row)
@@ -256,7 +239,7 @@ pub fn derive_geometric_candidate_rankers(
     }
     Ok(GeometricCandidateTraining {
         trajectory: "reference_prefix".to_owned(),
-        candidate_set: "writer_top128_exact32_fallback".to_owned(),
+        candidate_set: "writer_top128_nonbos_exact32_fallback".to_owned(),
         writer_candidates: GEOMETRIC_CANDIDATE_TOP_WRITER,
         exact_depth: COPY_KEY_REPLY_MAX_DEPTH,
         trained,
@@ -270,6 +253,28 @@ pub fn derive_geometric_candidate_rankers(
         target_values: target_values as u64,
         shuffled_target_changes,
     })
+}
+
+fn validate_training_power(groups: &[CandidateGroup]) -> Result<usize> {
+    if groups.len() < GEOMETRIC_CANDIDATE_MIN_GROUPS {
+        return Err(invalid(format!(
+            "geometric candidate ranker has {} supervised groups, fewer than {}",
+            groups.len(),
+            GEOMETRIC_CANDIDATE_MIN_GROUPS
+        )));
+    }
+    let target_values = groups
+        .iter()
+        .map(|group| group.target)
+        .collect::<BTreeSet<_>>()
+        .len();
+    if target_values < GEOMETRIC_CANDIDATE_MIN_TARGETS {
+        return Err(invalid(format!(
+            "geometric candidate ranker has {target_values} target tokens, fewer than {}",
+            GEOMETRIC_CANDIDATE_MIN_TARGETS
+        )));
+    }
+    Ok(target_values)
 }
 
 pub fn evaluate_geometric_candidate_replies(
@@ -504,16 +509,36 @@ fn candidate_union(
     stream: &[u32],
     writer: u32,
 ) -> Result<Vec<GeometricCandidate>> {
+    let seeds = candidate_seeds(forward, query, stream, writer)?;
+    seeds
+        .into_values()
+        .map(|candidate| {
+            Ok(GeometricCandidate {
+                token: candidate.token,
+                exact_depth: candidate.exact_depth,
+                writer_rank: candidate.writer_rank,
+                features: candidate_features(forward, query, stream, &candidate, writer)?,
+            })
+        })
+        .collect()
+}
+
+fn candidate_seeds(
+    forward: &CpuFbsForward,
+    query: &[i32],
+    stream: &[u32],
+    writer: u32,
+) -> Result<BTreeMap<u32, CandidateSeed>> {
     let mut seeds = BTreeMap::new();
-    for (index, (token, _)) in forward
-        .writer_candidate_order(query, GEOMETRIC_CANDIDATE_TOP_WRITER)
-        .map_err(|error| invalid(format!("geometric writer candidates: {error}")))?
-        .into_iter()
+    let writer_order = forward
+        .writer_candidate_order(query, GEOMETRIC_CANDIDATE_TOP_WRITER + 1)
+        .map_err(|error| invalid(format!("geometric writer candidates: {error}")))?;
+    for (index, &(token, _)) in writer_order
+        .iter()
+        .filter(|(token, _)| *token != 0)
+        .take(GEOMETRIC_CANDIDATE_TOP_WRITER)
         .enumerate()
     {
-        if token == 0 {
-            continue;
-        }
         seeds.entry(token).or_insert(CandidateSeed {
             token,
             exact_depth: None,
@@ -546,17 +571,7 @@ fn candidate_union(
             writer_rank: None,
         });
     }
-    seeds
-        .into_values()
-        .map(|candidate| {
-            Ok(GeometricCandidate {
-                token: candidate.token,
-                exact_depth: candidate.exact_depth,
-                writer_rank: candidate.writer_rank,
-                features: candidate_features(forward, query, stream, &candidate, writer)?,
-            })
-        })
-        .collect()
+    Ok(seeds)
 }
 
 fn candidate_features(
@@ -830,6 +845,62 @@ mod tests {
         assert!(first.iter().all(|candidate| candidate.token != 0));
         assert!(first.windows(2).all(|pair| pair[0].token < pair[1].token));
         assert!(first.len() <= GEOMETRIC_CANDIDATE_TOP_WRITER + COPY_KEY_REPLY_MAX_DEPTH + 1);
+
+        let expected_writer = forward
+            .writer_candidate_order(&step.query_q12, GEOMETRIC_CANDIDATE_TOP_WRITER + 1)
+            .unwrap()
+            .into_iter()
+            .filter(|(token, _)| *token != 0)
+            .take(GEOMETRIC_CANDIDATE_TOP_WRITER)
+            .collect::<Vec<_>>();
+        assert_eq!(expected_writer.len(), GEOMETRIC_CANDIDATE_TOP_WRITER);
+        let seeds = candidate_seeds(&forward, &step.query_q12, &[3], step.token).unwrap();
+        for (rank, &(token, _)) in expected_writer.iter().enumerate() {
+            assert_eq!(seeds[&token].writer_rank, Some(rank + 1));
+        }
+        assert_eq!(seeds[&step.token].token, step.token);
+
+        let admitted = expected_writer
+            .iter()
+            .map(|(token, _)| *token)
+            .collect::<BTreeSet<_>>();
+        let fallback_token = (1..forward.vocabulary() as u32)
+            .find(|token| !admitted.contains(token))
+            .unwrap();
+        let fallback = candidate_seeds(&forward, &step.query_q12, &[3], fallback_token).unwrap();
+        assert_eq!(fallback[&fallback_token].token, fallback_token);
+        assert_eq!(fallback[&fallback_token].exact_depth, None);
+        assert_eq!(fallback[&fallback_token].writer_rank, None);
+    }
+
+    #[test]
+    fn exact_copy_retains_depth_32_and_its_deepest_source() {
+        let artifact = artifact();
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        forward.mark_reply_start();
+        let step = forward.step(3, CpuFbsHead::Writer).unwrap();
+        let first_block = (1..=28).chain([1, 1, 1, 1]).collect::<Vec<_>>();
+        let second_block = [1]
+            .into_iter()
+            .chain(first_block[..30].iter().copied())
+            .chain([1])
+            .collect::<Vec<_>>();
+        assert_eq!(first_block.len(), COPY_KEY_REPLY_MAX_DEPTH);
+        assert_eq!(second_block.len(), COPY_KEY_REPLY_MAX_DEPTH);
+        let stream = [99]
+            .into_iter()
+            .chain(first_block)
+            .chain(second_block)
+            .chain([1])
+            .collect::<Vec<_>>();
+        let exact = exact_suffix_candidates(&stream);
+        assert_eq!(exact[0], Some((1, 64)));
+        assert_eq!(exact[COPY_KEY_REPLY_MAX_DEPTH - 1], Some((1, 33)));
+
+        let seeds = candidate_seeds(&forward, &step.query_q12, &stream, step.token).unwrap();
+        let candidate = &seeds[&1];
+        assert_eq!(candidate.exact_depth, Some(COPY_KEY_REPLY_MAX_DEPTH));
+        assert_eq!(candidate.source, Some(33));
     }
 
     #[test]
@@ -879,6 +950,52 @@ mod tests {
         ];
         let chosen = choose_candidate(&candidates, &ranker).unwrap();
         assert_eq!(chosen.token, 9);
+    }
+
+    #[test]
+    fn geometry_only_and_ties_are_deterministic() {
+        let geometry_only = GeometricCandidateRanker::geometry_only();
+        let candidates = [candidate(9, 0, 31), candidate(7, 32, 10)];
+        assert_eq!(
+            choose_candidate(&candidates, &geometry_only).unwrap().token,
+            9
+        );
+
+        let tied = [candidate(9, 4, 20), candidate(7, 4, 20)];
+        assert_eq!(
+            choose_candidate(&tied, &GeometricCandidateRanker::zero())
+                .unwrap()
+                .token,
+            7
+        );
+    }
+
+    #[test]
+    fn shuffled_targets_are_deterministic_and_non_vacuous() {
+        let group = CandidateGroup {
+            row: 0,
+            generated_step: 0,
+            target: 3,
+            candidates: vec![
+                candidate(3, 3, 30),
+                candidate(5, 1, 10),
+                candidate(7, 0, 20),
+            ],
+        };
+        let first_target = shuffled_target(&group, 29).unwrap();
+        let repeat_target = shuffled_target(&group, 29).unwrap();
+        assert_eq!(first_target, repeat_target);
+        assert_ne!(first_target, group.target);
+
+        let first_ranker = fit_ranker(std::slice::from_ref(&group), 29, true).unwrap();
+        let repeat_ranker = fit_ranker(std::slice::from_ref(&group), 29, true).unwrap();
+        assert_eq!(first_ranker, repeat_ranker);
+
+        let singleton = CandidateGroup {
+            candidates: vec![candidate(3, 3, 30)],
+            ..group
+        };
+        assert!(shuffled_target(&singleton, 29).is_err());
     }
 
     #[test]
@@ -933,6 +1050,64 @@ mod tests {
         )
         .unwrap();
         assert!(generated.steps.iter().all(|step| step.selected_token != 0));
+
+        let mut changed_reference = sample.clone();
+        changed_reference.reply = vec![6, 7, 8, 9, 10, 11];
+        let changed = evaluate_geometric_candidate_replies(
+            &artifact,
+            std::slice::from_ref(&changed_reference),
+            8,
+            GeometricCandidateArm::GeometryOnly,
+            &ranker,
+        )
+        .unwrap();
+        assert_eq!(generated.steps, changed.steps);
+        assert_eq!(generated.reply_sha256, changed.reply_sha256);
+        assert_eq!(generated.decision_sha256, changed.decision_sha256);
+    }
+
+    #[test]
+    fn registered_power_floors_are_exact() {
+        let groups = |count: usize, targets: u32| {
+            (0..count)
+                .map(|index| CandidateGroup {
+                    row: index,
+                    generated_step: 0,
+                    target: index as u32 % targets,
+                    candidates: Vec::new(),
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let below_groups = groups(GEOMETRIC_CANDIDATE_MIN_GROUPS - 1, 64);
+        let groups_error = validate_training_power(&below_groups).unwrap_err();
+        assert!(
+            groups_error.to_string().contains("fewer than 2048"),
+            "{groups_error}"
+        );
+        assert_eq!(
+            validate_training_power(&groups(GEOMETRIC_CANDIDATE_MIN_GROUPS, 64)).unwrap(),
+            64
+        );
+
+        let below_targets = groups(GEOMETRIC_CANDIDATE_MIN_GROUPS, 63);
+        let targets_error = validate_training_power(&below_targets).unwrap_err();
+        assert!(
+            targets_error.to_string().contains("fewer than 64"),
+            "{targets_error}"
+        );
+        assert_eq!(
+            validate_training_power(&groups(GEOMETRIC_CANDIDATE_MIN_GROUPS, 64)).unwrap(),
+            64
+        );
+    }
+
+    #[test]
+    fn reachable_reply_floor_excludes_cap_and_context_boundaries() {
+        assert!(reference_reachable(1, 62, 64, 64));
+        assert!(!reference_reachable(1, 63, 64, 64));
+        assert!(!reference_reachable(1, 64, 64, 65));
+        assert!(reference_reachable(1, 63, 65, 65));
     }
 
     #[test]
