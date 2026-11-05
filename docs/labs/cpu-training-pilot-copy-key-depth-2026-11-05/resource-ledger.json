@@ -56,7 +56,7 @@
     "driver_binary_sha256": "7e83410218a111f4f741bf86946209eb3efb8da1d393f7e22246cb04964f26ce",
     "driver_build_target_bytes": 268208707,
     "generator_target_bytes": 1228936700,
-    "retained_evidence_bytes": 54588
+    "retained_evidence_bytes": 54584
   },
   "controls": {
     "library_tests_passed": 267,
@@ -79,7 +79,7 @@
   },
   "storage": {
     "retained_evidence_limit_bytes": 33554432,
-    "retained_evidence_bytes": 54588
+    "retained_evidence_bytes": 54584
   },
   "host": {
     "cpu": "AMD Ryzen 9 9950X",
