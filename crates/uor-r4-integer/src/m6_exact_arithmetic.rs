@@ -925,6 +925,16 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if is_iso_date {
         return Ok(None);
     }
+    if expression.starts_with('-') && expression[1..].chars().all(|c| c.is_ascii_digit()) {
+        return Ok(None);
+    }
+    if !has_prefix
+        && !expression.contains('+')
+        && expression.contains('-')
+        && !expression.chars().any(char::is_whitespace)
+    {
+        return Ok(None);
+    }
     let mut normalized = String::with_capacity(expression.len() + 4);
     let mut operator_count = 0usize;
     for c in expression.chars() {
@@ -1389,7 +1399,16 @@ mod tests {
         assert_eq!(no_space.expression, "17 + 25");
         assert_eq!(no_space.result, "42");
         assert!(exact_arithmetic_tool("42").is_none());
+        assert!(exact_arithmetic_tool("-42").is_none());
+        assert!(exact_arithmetic_tool("11-05").is_none());
+        assert!(exact_arithmetic_tool("2026-11").is_none());
         assert!(exact_arithmetic_tool("2026-11-05").is_none());
+        assert!(exact_arithmetic_tool("2026-11-05 17:25").is_none());
+        assert!(exact_arithmetic_tool("50-12").is_none());
+        let no_space_subtraction = exact_arithmetic_tool("What is 50-12?")
+            .expect("prefixed no-space subtraction should be recognized")
+            .expect("prefixed no-space subtraction should be exact");
+        assert_eq!(no_space_subtraction.result, "38");
         assert!(exact_arithmetic_tool("Explain in two sentences what you are.").is_none());
         assert!(exact_arithmetic_tool("What is the capital of Japan?").is_none());
         assert!(exact_arithmetic_tool("What is 17 plus 25?").is_none());

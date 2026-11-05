@@ -195,12 +195,16 @@ export function createModelSourceAdapter(
                 const capabilities = message.capabilities;
                 if (typeof message.id === 'number' && message.id !== operation.operationId) return;
                 const fileMismatch = capabilities?.file_name !== current.result.fileName;
-                const hashMismatch = current.result.expectedSha256 && capabilities?.artifact_sha256 !== current.result.expectedSha256;
-                if (fileMismatch || hashMismatch) {
+                const artifactSha256 = capabilities?.artifact_sha256;
+                const invalidHash = !artifactSha256 || !/^[0-9a-f]{64}$/.test(artifactSha256);
+                const hashMismatch = current.result.expectedSha256 && artifactSha256 !== current.result.expectedSha256;
+                if (fileMismatch || invalidHash || hashMismatch) {
                     complete();
                     const detail = fileMismatch
                         ? `Worker returned ${capabilities?.file_name || '<missing filename>'} instead of the requested ${current.result.fileName}.`
-                        : `Worker returned artifact SHA-256 ${capabilities?.artifact_sha256 || '<missing hash>'} instead of the expected ${current.result.expectedSha256}.`;
+                        : invalidHash
+                            ? `Worker returned missing or invalid artifact SHA-256 ${artifactSha256 || '<missing hash>'}; expected a 64-character lowercase hex digest${current.result.expectedSha256 ? ` (${current.result.expectedSha256})` : ''}.`
+                            : `Worker returned artifact SHA-256 ${artifactSha256} instead of the expected ${current.result.expectedSha256}.`;
                     failCurrent(operation, detail);
                     return;
                 }

@@ -12,10 +12,11 @@ Inspect LexLean-R4, use it as the default if possible, and port what works to th
 - `src-tauri/src/lib.rs` and focused tests under `src-tauri/tests/`.
 - `web/studio/index.html`, `web/studio/assets/js/uor_model_worker.js`, `desktop_openai.js`, `studio_api.js`, `studio_api_streaming.test.mjs`, `model_sources.test.mjs`, and `desktop_openai.test.mjs`.
 - `web/studio/src/adapters/modelSourceAdapter.ts` and `modelSourceAdapter.test.ts`.
+- `web/studio/src/adapters/workflow.ts` (type-only exact-tool marker).
 - `web/studio/verify_studio_worker.mjs`, `scripts/studio/verify-tauri-app.sh`, and, only if a command contract changes, existing focused runtime/package tests.
 - `docs/products/web-client.md`, `docs/products/desktop-client.md`, `docs/research/notebook/m4-serving.md`, the owning roadmap item, this task folder, and `docs/superpowers/plans/2026-11-05-lexlean-studio-tools.md`.
 
-Scope correction: a fresh D68 decision review approved exactly `web/studio/index.html`, `web/studio/assets/js/studio_api.js`, `web/studio/assets/js/studio_api_streaming.test.mjs`, and `scripts/studio/verify-tauri-app.sh` as the minimal authorization for the measured exact-tool history and package repair. This is scope authorization only: the item remains `ready` and the PR uses `References #3704`; no M7, bar, cap, owner-file or broader-path decision is made.
+Scope correction: fresh D68 reviews approved exactly `web/studio/index.html`, `web/studio/assets/js/studio_api.js`, `web/studio/assets/js/studio_api_streaming.test.mjs`, `scripts/studio/verify-tauri-app.sh`, and `web/studio/src/adapters/workflow.ts` as minimal history/package authorization, with the workflow change type-only. The item remains `ready` and the PR uses `References #3704`; no M7, bar, cap, owner-file or broader-path decision is made.
 
 No other paths are authorized. In particular, do not touch `.github/**`, model weights/catalogs, `openai.rs`, `loopback.rs`, sidecar binaries, `Cargo.lock`, or other labs' current training files.
 
