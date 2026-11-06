@@ -14,7 +14,9 @@ Attempt 1 completed at implementation `6a48ad613` and is preserved at
 `local/deepseek/prompt-reply-serving/2026-11-05`. Exact-head review found that
 the parser did not bind the sidecar's ignored protocol ids to the loaded
 dialogue protocol. Attempt 2 adds that validation without changing selection,
-data or bar, and decides at a fresh output root.
+data or bar and is preserved at `2026-11-05-attempt-2`. The exact API build
+then found a CLI-only protocol scope fault. Attempt 3 fixes that binding and
+decides at a fresh output root.
 
 ## Question
 
@@ -97,13 +99,13 @@ sidecar checks have a 30-minute bound.
 ## Base, source and inputs
 
 - base: `c0e6b6757`;
-- implementation: `c6204928b`;
+- implementation: `689ce8a3f`;
 - prompt-reply module:
   `344b599f2ae521656741666d907c63eb432331e11837f6d591a6341de3aedf22`;
 - OpenAI integration:
   `376183d14cf25b3bfc0362c46e4d2544235ab09f2e5f29ce8a91b7b77df31155`;
 - CLI:
-  `1550679d46e15860a985338886ba22d8b130242908c89a2c770aa424e8e98a9a`;
+  `fb60135b74a27181404983b726d7d3ab69d696fbbbbea1fa0d91aeaaeff328ae`;
 - builder:
   `dc061cea85383c7acd067893356acd345743e399d3c04bdf8ef804bcf2bd0080`;
 - serving check:
@@ -125,7 +127,7 @@ sidecar checks have a 30-minute bound.
 
 ## Output
 
-`local/deepseek/prompt-reply-serving/2026-11-05-attempt-2`
+`local/deepseek/prompt-reply-serving/2026-11-05-attempt-3`
 
 ## Steps
 
@@ -135,14 +137,14 @@ Run only after FIT and GO. Use a fresh output root and fail closed.
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-prompt-retrieval-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-2
+OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-3
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
 PANEL=$SHARED/local/deepseek/prompt-retrieval/2026-11-05/panels/dd-2777
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/prompt-reply-serving
-IMPL=c6204928b
+IMPL=689ce8a3f
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL" -- crates/uor-r4-integer crates/uor-r4-cpu-train
@@ -231,22 +233,22 @@ test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 TEST FITNESS: FIT - M2 #2030 prompt-reply serving sidecar
 sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-serving-2026-11-05.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
-note: Implementation c6204928b binds ignored control ids to the loaded
-  protocol; 473 serving library tests and 19 OpenAI loopback tests pass;
-  strict CPU Clippy and targeted formatting pass; attempt-1 output is
-  preserved and the attempt-2 root is absent.
+note: Implementation 689ce8a3f binds ignored control ids to the loaded
+  protocol and compiles the CLI path; 473 serving library tests and 19 OpenAI
+  loopback tests pass; strict CPU Clippy and targeted formatting pass; earlier
+  output roots are preserved and the attempt-3 root is absent.
 date: 2026-11-05
 A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone
 before compute.
 
-Attempt 1's prior FIT remains recorded in the harness ledger. Attempt 2's
+Earlier attempts' FIT records remain in the harness ledger. Attempt 3's
 reviewer identifies the same limitation: this was a local self-review.
 
 ## Pre-run GO
 
 GO - exact-head self-review under the current disabled-delegation policy,
-2026-11-05. Implementation `c6204928b` is clean; source, tokenizer, artifacts,
-TRAIN panel, evaluation panel and generator inputs match. Attempt-1 output is
-preserved, and the attempt-2 root was absent at GO.
+2026-11-05. Implementation `689ce8a3f` is clean; source, tokenizer, artifacts,
+TRAIN panel, evaluation panel and generator inputs match. Earlier outputs are
+preserved, and the attempt-3 root was absent at GO.
