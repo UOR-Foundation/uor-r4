@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-301. The one track is Casey's, 6 Nov: "Yes, one track" (#2028 6675163438). Every claude unit goes to making the trunk's no-memory top-1 beat its TRAIN's unigram and T2 on the human held-out panel, beyond the paired band, at every seed.
 
-TEST FITNESS: round 2 PENDING (an amendment to I-e after run 1; see I-e). Round 1: FIT WITH CHANGES (a fresh non-author review, 6 Nov: no blockers; its three majors and eight minors are applied below).
+TEST FITNESS: FIT WITH CHANGES, round 2 (a fresh non-author review of the amendment to I-e after run 1, 6 Nov: no blockers; its two majors and four minors are applied in I-e). Round 1: FIT WITH CHANGES (a fresh non-author review, 6 Nov: no blockers; its three majors and eight minors are applied below).
 
 **Why.** This is claude-298's sheet, [`one-model-end-to-end-d3-batch-2026-11-06`](one-model-end-to-end-d3-batch-2026-11-06.md) (FIT WITH CHANGES, round 1), run again with batch 64 built by gradient accumulation.
 - **claude-298 (#3796) could not answer its question.** Every cell at batch 64 ran out of the RTX 5090's 32 GB.
@@ -59,9 +59,10 @@ claude-298's sheet's sections of these names apply word for word, with its numbe
 claude-298's I-0, I-1, I-t, I-3, I-4, I-5, I-s and I-r, unchanged except as noted, plus three new gates. They are registered here, before any pod goes up.
 - **I-0** includes claude-300's three tests by name, as passed: `micro_batches_weighted_by_their_scored_rows_give_the_whole_batchs_step` (CUDA), `a_micro_batch_is_refused_unless_it_divides_the_batch_and_is_written_only_when_set` and `each_micro_batch_names_the_whole_batchs_rows_at_its_own_place`.
 - **I-3** also requires `"micro_batch": 16` in each run's `config.json` (the field is left out when it is 0).
-- **I-e, equivalence on the real recipe.** Three 4-step runs at TRAIN D3 and `--seed 1` on both pods (so seed 2's pod repeats seed 1's as a cross-host check), `--batch 16 --eval-every 1`, on the same card, one after the other. Batch 16 is the batch that fits whole.
+- **I-e, equivalence on the real recipe.** Three 4-step runs at TRAIN D3, at the pod's own seed (round 2), `--batch 16 --eval-every 1`, on the same card, one after the other. Batch 16 is the batch that fits whole. Seed 1's pod replays run 1's rows on a new host; seed 2's pod tests rows the gate was not set on, and is the run that tests the amended gate.
   - **The runs:** (whole) with no `--micro-batch`, (micro4) with `--micro-batch 4`, and the sensitivity control (read0), whole with `--hamming-read 0`.
   - **What each row tests:** the row at step 1 is the loss before any update. It tests the forward and the loss weighting across micro-batches. The rows at steps 2 to 4 test the gradients of the first three steps, but only through AdamW's update, which ignores the gradient's scale; the scale is pinned only by claude-300's CUDA test.
+  - **Why the read is silent early.** The read's output weight starts at zero (`Var::zeros((2, width))`, `flock_read_hamming.rs` ~993), so at step 1 the read adds exactly 0 to the output, and its rotations and margins get no gradient through it. Their first effect on the loss is at step 3. At step 2 the read's whole effect in run 1 was 7.0 × 10⁻⁷, under the 10⁻⁶ tolerance. So steps 1 and 2 test the rest of the forward and the loss weighting, and the gate's power over a read that crosses windows rests on steps 3 and 4: in run 1 the read's effect was 10× the tolerance at step 3 and 68× at step 4. The REPORT gives (read0)'s gap over the tolerance at every step.
   - **Pass:** (micro4)'s `train_loss_mean` is within 10⁻⁶ relative of (whole)'s at every step, 1 to 4. The measured gaps are recorded.
   - **The control:** (read0)'s step-4 loss must differ from (whole)'s by at least 10⁻⁵ relative, 10× the tolerance. If it does not, the read barely moves the loss within four steps, and I-e is too weak to see a read that crosses windows. I-e then fails as underpowered.
   - **Fail:** the micro-batched forward of the real recipe is not window-independent, or I-e is underpowered. Either way the pod trains nothing and the unit becomes a diagnosis.
@@ -69,7 +70,8 @@ claude-298's I-0, I-1, I-t, I-3, I-4, I-5, I-s and I-r, unchanged except as note
     - (micro4) against (whole): 1.3 × 10⁻⁸, 8.4 × 10⁻⁹, 8.9 × 10⁻⁸ and 4.8 × 10⁻⁹ relative at steps 1 to 4.
     - (read0) against (whole): 0 at step 1, then 7.0 × 10⁻⁷, 1.0 × 10⁻⁵ and 6.8 × 10⁻⁵ at steps 2 to 4.
     - The read leaves the loss before the first update unchanged to the last bit, so a step-1 control could never pass. That was a fault in the control's design (instrument), not a reading of the mechanism.
-    - The amendment sets the control at step 4, where the read has moved the loss, and tightens the tolerance to 10⁻⁶ at every step, which both hosts' identical rows support. It is calibrated on run 1's I-e rows, which are an instrument's rows, not the unit's outcome: no arm trained and nothing was graded. The margins on run 1's rows are 11× (tolerance over the largest gap) and 6.8× (the control over its bound); the REPORT gives both.
+    - The amendment sets the control at step 4, the last step and the one where the read has moved the loss most; at step 3 run 1's control would read 9.97 × 10⁻⁶, just under 10⁻⁵. It tightens the tolerance to 10⁻⁶ at every step, 11× above run 1's largest gap. Both hosts agreeing to every digit shows the run is deterministic, so the gap is not host noise.
+    - It is calibrated on run 1's I-e rows, which are an instrument's rows, not the unit's outcome: no arm trained and nothing was graded, and the tolerance moved tighter, not looser. Seed 1's pod in run 2 re-reads those rows, so its pass is run 1's reading read again; seed 2's pod is the new test. The REPORT says which is which, and gives the margins on each pod's rows.
 - **I-m, the memory gate.** It is read from each arm's smoke: the largest memory used in `mem.log` within that smoke's start and end times, against the card's total, both recorded in each sample. `mem.log` samples the card every 2 s, with the line count of the running smoke's progress file.
   - **Pass:** the peak is below 90% of the card.
   - **Fail:** that arm is NOT_RUN at that seed, before its full run.
@@ -85,7 +87,7 @@ claude-298's I-0, I-1, I-t, I-3, I-4, I-5, I-s and I-r, unchanged except as note
 
 1. The ORDER at the pin; this sheet's FIT; the D67 pre-run review of the job and watch scripts.
 2. `uor-pod status`. Then two Vast pods with one RTX 5090 each, one per seed, at most $1.15/h each, leased, each with a watcher. There is no two-card fallback.
-3. On each pod: setup, I-0, I-3, I-e (at `--seed 1` on both pods), the smokes with I-m and I-f, then I-t.
+3. On each pod: setup, I-0, I-3, I-e (at the pod's own seed), the smokes with I-m and I-f, then I-t.
 4. The arms, (b64L) then (b64S), then the scoring: claude-298's `--score-rows`, one panel per process.
 5. Seal each pod to `results/claude/one-model-end-to-end-d3-accum-2026-11-06/runs-2/s{1,2}/` (run 1 holds `runs/s{1,2}/`, never written over), read the seal back, then take the pod down.
 6. On the laptop: I-r, then `grade` and `pair` as in claude-298's Readings.
@@ -118,4 +120,4 @@ claude-298's, with these changes:
 5. The outcome map's notes: reading the spread when I-t cuts (b64L) to 16,384 steps, and reading "narrows" on (b64L) alone when (b64S) did not run at both seeds.
 6. The Cost section's model, and the out-of-memory line in the Stop rule.
 7. The seal path is `results/claude/one-model-end-to-end-d3-accum-2026-11-06/`: run 1 at `runs/`, the run after the round-2 amendment at `runs-2/`.
-8. Round 2: the control of I-e at step 4, and its tolerance 10⁻⁶ at every step (see I-e).
+8. Round 2: the control of I-e at step 4, its tolerance 10⁻⁶ at every step, and I-e at the pod's own seed (see I-e).
