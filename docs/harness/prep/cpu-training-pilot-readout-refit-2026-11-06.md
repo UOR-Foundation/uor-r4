@@ -220,7 +220,7 @@ df -B1 "$REPO" >"$OUT/storage-before.txt"
 git merge-base --is-ancestor 9f12624e2 HEAD
 sha256sum -c <<'EOF'
 21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae  crates/uor-r4-cpu-train/src/readout_refit.rs
-6e23138d313682d77cec433a5b8c973b36419680b6f340f2a90600ac6ccfbc59  crates/uor-r4-cpu-train/src/bin/cpu-readout-refit.rs
+6991dd97ea6026e0a166e3c0e29bf88bdd49dd91ac6dd64170bae6290d998a15  crates/uor-r4-cpu-train/src/bin/cpu-readout-refit.rs
 ac1423f5d48e73a3425737395b5772326e990b857818c6a268f00ed9f716ddd2  crates/uor-r4-cpu-train/src/lib.rs
 396bfc76c6548c3298779f208af539615eea5643f172458d8da074e3a71116db  crates/uor-r4-cpu-train/src/corpus.rs
 85840169921e2611b1482ca2c2a47fb41c54f8513b37ce57d9224e1fe2c63b2d  crates/uor-r4-cpu-train/src/train.rs
@@ -386,7 +386,7 @@ df -B1 "$REPO" >"$OUT/storage-after.txt"
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:
-  `6e23138d313682d77cec433a5b8c973b36419680b6f340f2a90600ac6ccfbc59`;
+  `6991dd97ea6026e0a166e3c0e29bf88bdd49dd91ac6dd64170bae6290d998a15`;
 - library:
   `ac1423f5d48e73a3425737395b5772326e990b857818c6a268f00ed9f716ddd2`;
 - corpus:

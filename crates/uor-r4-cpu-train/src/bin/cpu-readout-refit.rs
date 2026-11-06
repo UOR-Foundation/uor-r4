@@ -1384,4 +1384,91 @@ mod tests {
         assert_eq!(aggregate["input_identity_exact"], false);
         assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
     }
+
+    #[test]
+    fn runtime_fault_report_is_aggregatable_as_a_control_fault() {
+        let train_paths = TrainPaths::new("train-tokens", "train-mask", "train-manifest");
+        let panel_paths = PanelPaths::new("panel-tokens", "panel-mask", "panel-manifest");
+        let train_hashes = CorpusHashes {
+            tokens: TRAIN_TOKENS_SHA256.to_owned(),
+            mask: TRAIN_MASK_SHA256.to_owned(),
+            manifest: TRAIN_MANIFEST_SHA256.to_owned(),
+            tokenizer: EXPECTED_TOKENIZER_SHA256.to_owned(),
+        };
+        let mut seed1_report = run_fault_report(
+            Path::new("artifact"),
+            SEED1_ARTIFACT_SHA256,
+            &train_paths,
+            &train_hashes,
+            &panel_paths,
+            &train_hashes,
+            "input drift",
+            Instant::now(),
+        );
+        finish_report(&mut seed1_report);
+        let mut seed2_report = run_fault_report(
+            Path::new("artifact"),
+            SEED2_ARTIFACT_SHA256,
+            &train_paths,
+            &train_hashes,
+            &panel_paths,
+            &train_hashes,
+            "input drift",
+            Instant::now(),
+        );
+        finish_report(&mut seed2_report);
+        let aggregate = aggregate_values(&[
+            seed1_report.clone(),
+            seed1_report,
+            seed2_report.clone(),
+            seed2_report,
+        ])
+        .unwrap();
+        assert_eq!(aggregate["repeat_exact"], true);
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
+
+    #[test]
+    fn expected_inputs_reject_unregistered_pins() {
+        let mut flags = BTreeMap::from([
+            (
+                "expected-tokenizer".to_owned(),
+                EXPECTED_TOKENIZER_SHA256.to_owned(),
+            ),
+            (
+                "expected-train-tokens".to_owned(),
+                TRAIN_TOKENS_SHA256.to_owned(),
+            ),
+            (
+                "expected-train-mask".to_owned(),
+                TRAIN_MASK_SHA256.to_owned(),
+            ),
+            (
+                "expected-train-manifest".to_owned(),
+                TRAIN_MANIFEST_SHA256.to_owned(),
+            ),
+            (
+                "expected-panel-tokens".to_owned(),
+                "panel-tokens".to_owned(),
+            ),
+            ("expected-panel-mask".to_owned(), "panel-mask".to_owned()),
+            (
+                "expected-panel-manifest".to_owned(),
+                "panel-manifest".to_owned(),
+            ),
+            (
+                "expected-artifact".to_owned(),
+                SEED1_ARTIFACT_SHA256.to_owned(),
+            ),
+        ]);
+        assert!(Expected::from_flags(&flags, true).is_ok());
+        flags.insert("expected-train-tokens".to_owned(), "wrong".to_owned());
+        assert!(Expected::from_flags(&flags, true).is_err());
+        flags.insert(
+            "expected-train-tokens".to_owned(),
+            TRAIN_TOKENS_SHA256.to_owned(),
+        );
+        flags.insert("expected-artifact".to_owned(), "wrong".to_owned());
+        assert!(Expected::from_flags(&flags, true).is_err());
+    }
 }

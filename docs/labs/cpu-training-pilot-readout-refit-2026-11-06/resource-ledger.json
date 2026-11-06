@@ -35,7 +35,7 @@
   },
   "controls": {
     "focused_library_tests_passed": 8,
-    "driver_aggregation_tests_passed": 5,
+    "driver_aggregation_tests_passed": 7,
     "full_cpu_library_tests_passed": 425,
     "expected_ignores": 4,
     "scoped_clippy": "pass",
@@ -49,7 +49,7 @@
   },
   "ram_kib": {
     "limit": 2097152,
-    "preflight_peak": 66680,
+    "preflight_peak": 67600,
     "fresh_evaluation_projection": 524288
   },
   "storage": {
