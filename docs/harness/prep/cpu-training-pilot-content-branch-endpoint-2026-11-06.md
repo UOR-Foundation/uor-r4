@@ -1,0 +1,88 @@
+# Pre-registration: top-K retrieved branch endpoint
+
+Run ID: `cpu-training-pilot-content-branch-endpoint-2026-11-06`
+
+## Status
+
+TEST FITNESS: PENDING. Implementation and seed 2785 have not started.
+
+## Question
+
+Does retaining the top eight retrieved TRAIN reply branches avoid the
+single-branch endpoint brittleness of deepseek-225 while preserving
+deepseek-198's content trajectory?
+
+## Fixed construction
+
+Rank TRAIN replies by raw unigram-prompt Jaccard with lower-ordinal ties. Use
+the top eight non-empty complete replies, capped at 64 tokens, as endpoint
+branches. At each step suppress the boundary while any branch extends the
+complete generated reply; stop when it exactly equals any branch; otherwise
+restore the unchanged boundary path. Retrieved content is never injected.
+
+Arms: top-8, top-1, original boundary, shuffled top-8, local top-8,
+unconditional length, full retrieval and reference-branch oracle.
+
+## Data split
+
+TRAIN `tt-2711`: tokens
+`140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91`,
+mask `d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad`,
+manifest `d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5`.
+
+Fresh panel: `cell=dev,dev`, seed 2785, protocol 2, 128 conversations.
+
+## Instrument gate
+
+Pins match; panel/output roots absent at registration; suffix table has zero
+BOS targets; suffix and retrieval-reply shuffles are non-vacuous; all branches
+are non-empty and at most 64; every arm shares the panel and artifact; repeats
+match after timing removal.
+
+## Bar
+
+Top-8 must, on both artifacts: make zero premature BOS stops; complete all
+reachable replies; retain top-1 and boundary exact/body counts; beat shuffled
+top-8 exact replies by two sigma; change a complete reply; stop at least 20
+retrieved endpoints; and repeat byte-identically.
+
+## Outcomes
+
+**KEEP** if all pass; **REJECT** if active and a quality/termination bar fails;
+**INSUFFICIENT_POWER** below 200 reachable, 100 deeper-global decisions or 20
+endpoint completions; **CONTROL_FAULT** on drift, vacuous control or
+nondeterminism.
+
+## Stop rule
+
+Do not retune K, suffix confidence, retrieval or comparisons after seed 2785
+opens.
+
+## Cost
+
+Local CPU only; 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
+
+## Base and inputs
+
+- base: `7b1e888ef`;
+- tokenizer:
+  `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
+- artifact seed 1:
+  `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
+- artifact seed 2:
+  `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`;
+
+## Output
+
+`local/deepseek/content-branch-endpoint/2026-11-06`; absent at registration.
+
+## Steps
+
+Add top-K retrieval and branch endpoint evaluation, extend the driver, run
+focused/full tests, freeze FIT/GO, generate seed 2785, evaluate both artifacts
+and repeats, seal evidence and deliver through review.
+
+## Minimum test power
+
+Two artifacts, 200 reachable rows, 100 deeper-global decisions, 20 endpoint
+completions, top-1/boundary/shuffled/local/length/full/oracle controls.
