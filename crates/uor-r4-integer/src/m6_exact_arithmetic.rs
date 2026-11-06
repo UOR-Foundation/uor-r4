@@ -2336,4 +2336,19 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_time_and_telephone_punctuation() {
+        for prompt in [
+            "5 pm - 6 pm?",
+            "9am - 5pm?",
+            "5:00 PM - 6:00 PM?",
+            "+1-800-555-0100?",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "punctuated time/telephone prose was intercepted: {prompt}"
+            );
+        }
+    }
 }

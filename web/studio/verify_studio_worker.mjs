@@ -690,6 +690,21 @@ await sendToWorker({
 const validSubtraction = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_review23_valid_subtraction');
 assert(validSubtraction.action === 'generate_complete' && validSubtraction.fullText.startsWith('38\n') && validSubtraction.tokenCount === 0, `valid subtraction with punctuation must remain exact: ${JSON.stringify(validSubtraction)}`);
 
+for (const [index, prompt] of ['5 pm - 6 pm?', '9am - 5pm?', '5:00 PM - 6:00 PM?', '+1-800-555-0100?'].entries()) {
+    const id = `gen_final_review_punctuation_${index}`;
+    const conversationId = `conv_final_review_punctuation_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `punctuated time/telephone prose must use the ordinary model path (${prompt}): ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `punctuated prose conversation did not close: ${JSON.stringify(closed)}`);
+}
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;
@@ -759,7 +774,7 @@ for (const [index, prompt] of ['What is 17 - 25?', 'What is 17 - 25,', 'What is 
     assert(closed.action === 'session_reset', `final-review boundary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes', '5 pm - 6 pm?', '9am - 5pm?', '5:00 PM - 6:00 PM?', '+1-800-555-0100?'].entries()) {
+for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes'].entries()) {
     const id = `gen_final_review_ordinary_${index}`;
     const conversationId = `conv_final_review_ordinary_${index}`;
     await sendToWorker({
