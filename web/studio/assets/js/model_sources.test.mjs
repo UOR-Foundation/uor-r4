@@ -22,7 +22,7 @@ function deferred() {
 }
 
 let moduleCounter = 0;
-async function fresh(fetchImpl, seed) {
+async function fresh(fetchImpl, seed, storageMode = 'working') {
     const listeners = new Map();
     const events = [];
     const values = new Map();
@@ -33,7 +33,13 @@ async function fresh(fetchImpl, seed) {
         setItem(key, value) { if (this.fail) throw new Error('storage full'); values.set(key, value); },
         removeItem(key) { values.delete(key); },
     };
-    globalThis.localStorage = storage;
+    if (storageMode === 'missing') {
+        delete globalThis.localStorage;
+    } else if (storageMode === 'throwing') {
+        Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('storage denied'); } });
+    } else {
+        Object.defineProperty(globalThis, 'localStorage', { configurable: true, writable: true, value: storage });
+    }
     globalThis.document = {
         baseURI: 'https://example.test/',
         addEventListener(type, listener) {
@@ -198,4 +204,70 @@ test('the synthetic default is stable and a catalog primary flag does not auto-s
     await api.loadModelCatalog();
     assert.equal(api.catalog().models[0].id, 'published-lexlean-r4');
     assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' });
+});
+
+test('missing or throwing storage keeps the synthetic default and permits bundled loading', async () => {
+    for (const storageMode of ['missing', 'throwing']) {
+        const bytes = artifactBytes();
+        const { api } = await fresh(async () => response(bytes), null, storageMode);
+        assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' }, storageMode);
+        const result = await api.loadBundled({ operationId: 1, sourceId: 'bundled-demo' });
+        assert.equal(result.stale, undefined, storageMode);
+        assert.deepEqual(api.active(), { kind: 'wasm', id: 'bundled-demo' }, storageMode);
+    }
+});
+
+async function applyPageOperationGuard(api) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    const start = html.indexOf('function guardModelSourceOperations(');
+    if (start === -1) return false;
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                const source = html.slice(start, index + 1);
+                vm.runInNewContext(`${source};guardModelSourceOperations`, {})(api);
+                return true;
+            }
+        }
+    }
+    throw new Error('unterminated page source-operation guard');
+}
+
+test('page source loads preserve start-time order when legacy calls omit metadata', async () => {
+    const bytes = artifactBytes();
+    const first = deferred();
+    const second = deferred();
+    const responses = [first.promise, second.promise];
+    const { api, events } = await fresh(async () => responses.shift());
+    await applyPageOperationGuard(api);
+    const firstLoad = api.loadFromUrl('https://example.com/a.lut');
+    const secondLoad = api.loadFromUrl('https://example.com/b.lut');
+    second.resolve(response(bytes));
+    const secondResult = await secondLoad;
+    first.resolve(response(bytes));
+    const firstResult = await firstLoad;
+    assert.equal(secondResult.stale, undefined);
+    assert.equal(firstResult.stale, true);
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 1);
+});
+
+test('an API selection supersedes a page source load without operation metadata', async () => {
+    const bytes = artifactBytes();
+    const gate = deferred();
+    const { api, events } = await fresh(() => gate.promise);
+    await applyPageOperationGuard(api);
+    const active = api.list().api[0];
+    const load = api.loadFromUrl('https://example.com/a.lut');
+    api.setActive({ kind: 'api', id: active.id });
+    gate.resolve(response(bytes));
+    const result = await load;
+    assert.equal(result.stale, true);
+    assert.deepEqual(api.active(), { kind: 'api', id: active.id });
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 0);
 });

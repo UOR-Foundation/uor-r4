@@ -841,6 +841,15 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "What is 2026-11-05T17:25Z?",
         "- this is ordinary prose",
         "- this is ordinary prose with a longer padded bullet",
+        "-42 is the answer",
+        "+42 is the answer",
+        "- 1. Introduction",
+        "What is +42, really?",
+        "-42,",
+        "2026-11-05T17:25+01:00,",
+        "2026-11-05T17:25-01:00,",
+        "2026-11-05T17:25+01:00, what day is it?",
+        "2026-11-05T17:25-01:00, what day is it?",
     ] {
         let iso = dispatch_rpc_command(
             &mut backend,

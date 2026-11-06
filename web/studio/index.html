@@ -1540,7 +1540,7 @@
             app.assistantBuffer = '';
             updateComposerState();
             setMetrics(exactTool ? meta : (message.tokenCount || 0) + ' tokens · ' + formatTps(message.tps) + ' tok/s · ' + (message.stoppedBy === 'cancelled' ? 'stopped' : 'complete'));
-            requestCheckpoint(conversation);
+            if (!exactTool) requestCheckpoint(conversation);
             renderConversationList();
             scrollChat(false);
             clearChatRequest(message.id);
@@ -1929,6 +1929,26 @@
 
         function abortApiForLocalSource() {
             if (app.generating && app.activeGenerationKind === 'api' && app.abortController) app.abortController.abort();
+        }
+
+        function guardModelSourceOperations(sources) {
+            var latestOperationId = 0;
+            ['loadBundled', 'loadPublished', 'loadFromUrl', 'loadLocalFile'].forEach(function (name) {
+                var original = sources[name];
+                if (typeof original !== 'function') return;
+                sources[name] = function (input, operation) {
+                    var current = operation;
+                    if (name === 'loadBundled' && current === undefined && input && typeof input === 'object') current = input;
+                    if (current && Number.isInteger(current.operationId) && typeof current.sourceId === 'string') {
+                        latestOperationId = Math.max(latestOperationId, current.operationId);
+                    } else {
+                        latestOperationId += 1;
+                        current = { operationId: latestOperationId, sourceId: 'studio-' + name };
+                    }
+                    if (name === 'loadBundled') return original.call(this, current);
+                    return original.call(this, input, current);
+                };
+            });
         }
 
         function clearWorkerModel() {
@@ -2320,6 +2340,7 @@
             bindHeader();
             bindComposer();
             bindEditor();
+            guardModelSourceOperations(ModelSources);
             if (window.__UOR_NATIVE_BOOTSTRAP__) ModelSources.registerNativeBootstrap(window.__UOR_NATIVE_BOOTSTRAP__);
             mountModelSources($('#modelSourceMount'));
             var modelList = ModelSources.list();

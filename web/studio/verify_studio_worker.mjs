@@ -465,19 +465,29 @@ for (const [index, prompt] of [
     '- this is ordinary prose',
     `${' '.repeat(200)}- this is ordinary prose`,
     `- this is ordinary prose${' '.repeat(200)}`,
+    '-42 is the answer',
+    '+42 is the answer',
+    '- 1. Introduction',
+    'What is +42, really?',
+    '-42,',
+    '2026-11-05T17:25+01:00,',
+    '2026-11-05T17:25-01:00,',
+    '2026-11-05T17:25+01:00, what day is it?',
+    '2026-11-05T17:25-01:00, what day is it?',
 ].entries()) {
     const id = `gen_iso_${index}`;
+    const expectedTokens = prompt.includes(', what day is it?') ? 8 : 32;
     await sendToWorker({
         action: 'generate',
         id,
         payload: {
             conversationId: `conv_verify_iso_${index}`,
             messages: [{ role: 'user', content: prompt }],
-            options: { max_new_tokens: 32 },
+            options: { max_new_tokens: expectedTokens },
         },
     });
     const iso = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
-    assert(iso.action === 'generate_complete' && iso.tokenCount === 32, `ISO date/time must use the ordinary model path: ${JSON.stringify(iso)}`);
+    assert(iso.action === 'generate_complete' && iso.tokenCount === expectedTokens, `ordinary signed/date prose must use the ordinary model path: ${JSON.stringify(iso)}`);
 }
 
 const staleLoad = sendToWorker({

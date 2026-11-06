@@ -890,6 +890,15 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         return false;
     }
     for (index, c) in rest.char_indices() {
+        if index == 0
+            && matches!(c, '+' | '-')
+            && rest[1..]
+                .chars()
+                .next()
+                .is_some_and(|next| next.is_ascii_digit())
+        {
+            continue;
+        }
         if matches!(c, '+' | '*' | '/' | '%' | '^' | '×' | '÷') {
             return true;
         }
@@ -914,7 +923,19 @@ fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
 }
 
 fn exact_tool_is_iso_date_time(rest: &str) -> bool {
-    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
+    let rest = rest.split_once(',').map_or(rest, |(head, tail)| {
+        if tail
+            .trim_start()
+            .chars()
+            .next()
+            .map_or(true, char::is_alphabetic)
+        {
+            head
+        } else {
+            rest
+        }
+    });
     let bytes = rest.as_bytes();
     if bytes.len() < 10
         || !bytes[..4].iter().all(u8::is_ascii_digit)
@@ -1005,7 +1026,7 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
 
 fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     let expression = expression.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
-    if !expression.starts_with('-') {
+    if !expression.starts_with('-') || expression.chars().any(char::is_alphabetic) {
         return false;
     }
     let after_sign = &expression[1..];
@@ -1014,7 +1035,7 @@ fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     if remainder.is_empty() {
         return true;
     }
-    if !separated && remainder.chars().all(|c| c.is_ascii_digit()) {
+    if !separated && remainder.chars().next().is_some_and(|c| c.is_ascii_digit()) {
         return false;
     }
     remainder.starts_with(|c: char| {
@@ -1705,6 +1726,22 @@ mod tests {
         assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
         assert!(exact_arithmetic_tool("What is +42?").is_none());
         assert!(exact_arithmetic_tool("What is -42?").is_none());
+        for prompt in [
+            "-42 is the answer",
+            "+42 is the answer",
+            "- 1. Introduction",
+            "What is +42, really?",
+            "-42,",
+            "2026-11-05T17:25+01:00,",
+            "2026-11-05T17:25-01:00,",
+            "2026-11-05T17:25+01:00, what day is it?",
+            "2026-11-05T17:25-01:00, what day is it?",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary signed/date prose was intercepted: {prompt}"
+            );
+        }
         for prompt in [
             "2026-11-05T17:25Z",
             "2026-11-05T17:25+01:00",

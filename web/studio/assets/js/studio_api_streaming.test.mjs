@@ -455,7 +455,7 @@ test('live model_loaded ignores a stale numeric load response', async () => {
     assert.equal(context.toastMessage, undefined);
 });
 
-test('exact-tool local completion omits model rates, stop reasons, and allocation deltas', async () => {
+test('exact-tool local completion omits model rates, stop reasons, allocation deltas, and checkpoints', async () => {
     const { source, vm } = await inlineStudioFunction('finishLocalGeneration');
     const conversation = { id: 'chat-tool', messages: [] };
     const app = {
@@ -467,8 +467,10 @@ test('exact-tool local completion omits model rates, stop reasons, and allocatio
         assistantBuffer: '',
         conversations: [conversation],
         activeConversationId: conversation.id,
+        caps: { turn_memory: { present: true } },
     };
     const appended = [];
+    let checkpointCalls = 0;
     const context = {
         app,
         chatRequestMatches(id, generationId) { return id === 'gen_tool' && generationId === 7; },
@@ -479,7 +481,7 @@ test('exact-tool local completion omits model rates, stop reasons, and allocatio
         touchConversation() {},
         updateComposerState() {},
         setMetrics(text) { context.footerMetrics = text; },
-        requestCheckpoint() {},
+        requestCheckpoint() { checkpointCalls += 1; },
         renderConversationList() {},
         scrollChat() {},
         clearChatRequest(id) { delete app.chatRequests[id]; },
@@ -498,6 +500,7 @@ test('exact-tool local completion omits model rates, stop reasons, and allocatio
     assert.equal(appended[0].meta, '0 model tokens · tool');
     assert.equal(context.footerMetrics, '0 model tokens · tool');
     assert.doesNotMatch(appended[0].meta, /tok\/s|length|stop|alloc/);
+    assert.equal(checkpointCalls, 0, 'an exact answer must not request an unsupported turn-memory checkpoint');
 });
 
 test('exact-tool API completion omits computed model metrics in every render phase', async () => {
