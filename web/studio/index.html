@@ -630,6 +630,7 @@
             apiStartedNs: null,
             apiFirstTokenNs: null,
             apiMetrics: null,
+            pendingModelSourceChange: null,
         };
 
         function $(selector, root) {
@@ -1978,6 +1979,12 @@
                     var detail = event && event.detail ? event.detail : {};
                     if (detail.kind === 'api') latestOperationId += 1;
                 });
+                doc.addEventListener('uor-generation-finished', function () {
+                    if (app.generating) return;
+                    var pending = app.pendingModelSourceChange;
+                    app.pendingModelSourceChange = null;
+                    if (pending) onModelSourceChanged({ detail: pending });
+                });
                 doc.addEventListener('click', function (event) {
                     var closest = event.target && event.target.closest;
                     if (!closest) return;
@@ -1987,8 +1994,9 @@
                         event.stopImmediatePropagation();
                         return sources.loadBundled();
                     }
-                    var apiUse = event.target.closest('[data-action="api-use"]');
-                    if (apiUse && app.generating) {
+                    var blocked = event.target.closest('[data-action="api-use"]')
+                        || event.target.closest('[data-action="api-remove"]');
+                    if (blocked && app.generating) {
                         event.preventDefault();
                         event.stopImmediatePropagation();
                         toast('Stop the current reply before changing models.', 'warn');
@@ -2017,9 +2025,14 @@
         function onModelSourceChanged(event) {
             var detail = event && event.detail ? event.detail : {};
             var switchesSource = detail.kind === 'wasm'
-                || (detail.kind === 'api' && detail.apiConfig)
-                || (detail.kind === 'state' && detail.removedActive);
-            if (app.generating && switchesSource) return;
+                || (detail.kind === 'api' && detail.apiConfig);
+            if (switchesSource) {
+                if (app.generating) {
+                    app.pendingModelSourceChange = detail;
+                    return;
+                }
+                app.pendingModelSourceChange = null;
+            }
             if (detail.kind === 'wasm' && detail.bytes) {
                 abortApiForLocalSource();
                 app.mode = 'wasm';
@@ -2083,6 +2096,7 @@
                 return;
             }
             if (detail.kind === 'state' && detail.removedActive) {
+                app.pendingModelSourceChange = null;
                 abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;

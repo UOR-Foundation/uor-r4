@@ -706,7 +706,7 @@ for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 
     assert(closed.action === 'session_reset', `review27 boundary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['24/7 support', '1/2 cup', '50-12'].entries()) {
+for (const [index, prompt] of ['24/7 support', '1/2 cup', '50-12', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {
     const id = `gen_review27_ordinary_${index}`;
     const conversationId = `conv_review27_ordinary_${index}`;
     await sendToWorker({

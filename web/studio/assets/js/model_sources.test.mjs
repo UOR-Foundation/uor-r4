@@ -356,14 +356,15 @@ async function pageFunction(marker, name, context, file = new URL('../../index.h
 
 async function installPageSourceHandlers(api, app, harness, notices = []) {
     const cleared = [];
+    let aborts = 0;
     const toast = (text, tone) => notices.push({ text, tone });
-    const guard = await pageFunction('function guardModelSourceOperations(', 'guardModelSourceOperations', { toast, app });
-    guard(api, globalThis.document);
     const handler = await pageFunction('function onModelSourceChanged(', 'onModelSourceChanged', {
         app,
         ModelSources: api,
         toast,
-        abortApiForLocalSource() {},
+        window: { performance: { now: () => 0 } },
+        performance: { now: () => 0 },
+        abortApiForLocalSource() { aborts += 1; },
         clearWorkerModel() { cleared.push(true); app.caps = null; app.readyLoadId = null; },
         setModelStatus() {},
         updatePrivacyStatus() {},
@@ -372,6 +373,8 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
         renderMessages() {},
         isNativeLoopback() { return false; },
     });
+    const guard = await pageFunction('function guardModelSourceOperations(', 'guardModelSourceOperations', { toast, app, onModelSourceChanged: handler });
+    guard(api, globalThis.document);
     globalThis.document.addEventListener('uor-model-source-changed', handler);
     const dispatch = globalThis.document.dispatchEvent;
     globalThis.document.dispatchEvent = function (event) {
@@ -379,7 +382,7 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
         harness.fire(event.type, event);
         return true;
     };
-    return { cleared, toast };
+    return { cleared, toast, get aborts() { return aborts; } };
 }
 
 test('a load started before generation cannot replace the healthy model when it commits during generation', async () => {
@@ -477,6 +480,152 @@ test('a stale load-url rejection is not shown as the current source error', asyn
             closest(selector) { return selector === '[data-action]' ? target : {}; },
         };
         await onClick({ target });
+        assert.deepEqual(messages, expected);
+    }
+});
+
+test('programmatic API selection during generation is applied after the reply finishes', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const notices = [];
+    const app = { generating: true, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, apiConfig: null, worker: null };
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    const entry = harness.api.list().api[0];
+    harness.api.setActive({ kind: 'api', id: entry.id });
+    assert.equal(app.mode, 'wasm');
+    assert.deepEqual(app.caps, { schema: 'healthy' });
+    assert.equal(app.readyLoadId, 7);
+    assert.deepEqual(page.cleared, []);
+    app.generating = false;
+    harness.fire('uor-generation-finished', { type: 'uor-generation-finished', detail: { outcome: 'complete' } });
+    assert.equal(app.mode, 'api');
+    assert.equal(app.apiConfig.id, entry.id);
+    assert.deepEqual(page.cleared, [true]);
+    assert.equal(harness.api.active().kind, 'api');
+});
+
+test('a source load started before generation is applied after the reply finishes', async () => {
+    const bytes = artifactBytes();
+    const gate = deferred();
+    const harness = await fresh(() => gate.promise);
+    const app = { generating: false, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, worker: null, workerState: 'ready' };
+    const page = await installPageSourceHandlers(harness.api, app, harness);
+    const load = harness.api.loadFromUrl('https://example.com/late.lut', { operationId: 1, sourceId: 'url' });
+    app.generating = true;
+    gate.resolve(response(bytes));
+    await load;
+    assert.deepEqual(page.cleared, []);
+    assert.equal(app.currentLoadId, 7);
+    assert.equal(app.mode, 'wasm');
+    const posts = [];
+    app.worker = { postMessage(message) { posts.push(message); } };
+    app.generating = false;
+    harness.fire('uor-generation-finished', { type: 'uor-generation-finished', detail: { outcome: 'complete' } });
+    assert.equal(app.currentLoadId, 8);
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].action, 'load_model');
+    assert.equal(app.workerState, 'loading');
+    assert.deepEqual(page.cleared, [true]);
+});
+
+test('the latest deferred source selection wins after the reply finishes', async () => {
+    const bytes = artifactBytes();
+    const gate = deferred();
+    const harness = await fresh(() => gate.promise);
+    const app = { generating: false, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, worker: null, workerState: 'ready' };
+    const page = await installPageSourceHandlers(harness.api, app, harness);
+    const load = harness.api.loadFromUrl('https://example.com/late.lut', { operationId: 1, sourceId: 'url' });
+    app.generating = true;
+    gate.resolve(response(bytes));
+    await load;
+    const entry = harness.api.list().api[0];
+    harness.api.setActive({ kind: 'api', id: entry.id });
+    const posts = [];
+    app.worker = { postMessage(message) { posts.push(message); } };
+    app.generating = false;
+    harness.fire('uor-generation-finished', { type: 'uor-generation-finished', detail: { outcome: 'complete' } });
+    assert.equal(app.mode, 'api');
+    assert.equal(app.apiConfig.id, entry.id);
+    assert.equal(posts.length, 0);
+    assert.equal(app.currentLoadId, 8);
+    assert.deepEqual(page.cleared, [true]);
+});
+
+test('removing the active API during generation fails closed', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const notices = [];
+    const app = { generating: false, mode: 'wasm', caps: null, readyLoadId: 9, currentLoadId: 9, apiConfig: null, worker: null, workerState: 'ready' };
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    const entry = harness.api.list().api[0];
+    harness.api.setActive({ kind: 'api', id: entry.id });
+    assert.equal(app.mode, 'api');
+    app.generating = true;
+    harness.api.removeApi(entry.id);
+    assert.equal(page.aborts, 1);
+    assert.equal(app.mode, 'wasm');
+    assert.equal(app.apiConfig, null);
+    assert.equal(app.caps, null);
+    assert.equal(harness.api.active().kind, 'wasm');
+});
+
+test('API removal during generation is blocked before the endpoint is deleted', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const notices = [];
+    const app = { generating: true, mode: 'api', apiConfig: { id: 'api-1' }, caps: null, readyLoadId: 9, currentLoadId: 9 };
+    await installPageSourceHandlers(harness.api, app, harness, notices);
+    const before = harness.api.list();
+    const card = { dataset: { apiId: 'api-1' } };
+    const target = {
+        closest(selector) {
+            if (selector === '[data-action="api-remove"]') return target;
+            if (selector === '[data-api-id]') return card;
+            return null;
+        },
+    };
+    let prevented = false;
+    let stopped = false;
+    harness.fire('click', {
+        target,
+        preventDefault() { prevented = true; },
+        stopImmediatePropagation() { stopped = true; },
+    });
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.deepEqual(notices, [{ text: 'Stop the current reply before changing models.', tone: 'warn' }]);
+    assert.deepEqual(harness.api.list(), before);
+
+    app.generating = false;
+    let preventedAfter = false;
+    harness.fire('click', {
+        target,
+        preventDefault() { preventedAfter = true; },
+        stopImmediatePropagation() {},
+    });
+    assert.equal(preventedAfter, false);
+    assert.equal(notices.length, 1);
+    assert.deepEqual(harness.api.list(), before);
+});
+
+test('local-file change errors suppress stale rejections and surface current ones', async () => {
+    const staleError = new Error('late local source failed');
+    staleError.uorStale = true;
+    const currentError = new Error('current local source failed');
+    for (const [error, expected] of [[staleError, []], [currentError, [{ tone: 'error', text: 'current local source failed' }]]]) {
+        const messages = [];
+        const context = {
+            MODEL_SCOPE_SELECTOR: '[data-scope="models"]',
+            api: { loadLocalFile() { return Promise.reject(error); } },
+            setMessage(tone, text) { messages.push({ tone, text }); },
+        };
+        const onChange = await pageFunction('async function onChange(', 'onChange', context, new URL('./model_sources.js', import.meta.url));
+        const input = { files: [{}] };
+        const target = {
+            closest(selector) {
+                if (selector === '[data-scope="models"]') return {};
+                if (selector === '[data-role="model-file"]') return input;
+                return null;
+            },
+        };
+        await onChange({ target });
         assert.deepEqual(messages, expected);
     }
 });

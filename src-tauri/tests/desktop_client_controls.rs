@@ -1052,13 +1052,21 @@ fn native_exact_arithmetic_review27_boundary_regressions() {
             .as_str()
             .is_some_and(|error| !error.is_empty()));
     }
-    for prompt in ["24/7 support", "1/2 cup", "50-12"] {
+    for prompt in [
+        "24/7 support",
+        "1/2 cup",
+        "50-12",
+        "11-05-2026",
+        "05-11-2026",
+        "1-800-555-0100",
+        "123-45-6789",
+    ] {
         let response = dispatch_rpc_command(
             &mut backend,
             "native_exact_arithmetic",
             &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
         )
-        .expect("ordinary ratio/no-space prose RPC should succeed");
+        .expect("ordinary ratio/date/telephone prose RPC should succeed");
         assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
     }
 }

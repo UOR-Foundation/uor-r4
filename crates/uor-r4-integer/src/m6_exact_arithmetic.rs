@@ -1435,10 +1435,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             if !digits_and_hyphens {
                 return Ok(None);
             }
-            let interior_single_hyphen = expression.matches('-').count() == 1
-                && !expression.starts_with('-')
-                && !expression.ends_with('-');
-            if !interior_single_hyphen {
+            if expression.ends_with('-') || expression.contains("--") {
                 return Err(invalid(
                     "exact arithmetic expects one decimal addition or subtraction",
                 ));
@@ -2261,10 +2258,18 @@ mod tests {
                 "review27 arithmetic boundary fell through: {prompt}"
             );
         }
-        for prompt in ["24/7 support", "1/2 cup", "50-12"] {
+        for prompt in [
+            "24/7 support",
+            "1/2 cup",
+            "50-12",
+            "11-05-2026",
+            "05-11-2026",
+            "1-800-555-0100",
+            "123-45-6789",
+        ] {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
-                "ordinary ratio/no-space prose was intercepted: {prompt}"
+                "ordinary ratio/date/telephone prose was intercepted: {prompt}"
             );
         }
     }
