@@ -259,7 +259,11 @@ after opening seed 2775.
 - attempt-1 output root
   `local/deepseek/full-sequence-boundary/2026-11-05` is sealed by
   `SHA256SUMS` SHA-256
-  `80acdd4ed0b4b74b9ca708345cfb169763d2f1bbc31faa4d39ba2c2e4ddf8280`;
+  `9a01e2e30db0c4f21b47ef6f6e06e7bd9725925bff7898112be494b074710292`;
+- raw preflight report SHA-256 before compaction:
+  `3a6af893939ea43240f733fc99a742e61f9b24db5907466f469db5f4e0f29dc6`;
+- gzip-compressed preflight report SHA-256:
+  `29f8df161bcc21475d7f7a3e15312a118c0f441549d99381bf4252ccf9920469`;
 - seed 2775 and `panels/dd-2775` were not created.
 
 ## R12 authority
@@ -479,6 +483,8 @@ cmp <(normalize "$OUT/reports/seed1.json") \
   <(normalize "$OUT/reports/seed1-repeat.json")
 cmp <(normalize "$OUT/reports/seed2.json") \
   <(normalize "$OUT/reports/seed2-repeat.json")
+find "$OUT/reports" -type f -name '*.json' -print0 |
+  xargs -0 -r gzip -9
 test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 ```
 
