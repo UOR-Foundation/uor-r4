@@ -302,7 +302,7 @@ run seed2-repeat "$SEED2" "$SEED2_SHA"
 
 ## Source pins before FIT
 
-- implementation commit: `PENDING-CODE-COMMIT`
+- implementation commit: `7a12427b2`;
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:

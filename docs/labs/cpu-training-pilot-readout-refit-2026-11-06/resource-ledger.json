@@ -73,7 +73,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-237/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-readout-refit-2026-11-06.md",
-    "implementation_pin": "PENDING-CODE-COMMIT",
+    "implementation_pin": "7a12427b2",
     "driver_binary_sha256": "5bb7b5701e24939f81c7771288ce33f744db51162594f728c133a2d8d2b9c5c9",
     "driver_binary_bytes": 2475776,
     "generator_pin": "e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde",
