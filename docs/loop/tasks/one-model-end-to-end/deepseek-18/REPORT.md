@@ -14,8 +14,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   verified pin.
 - **The first resource checks could not guarantee completion.** They checked 80 GiB
   before and after capture but then made compressed and readback copies. The package now
-  starts with 128 GiB, requires 80 GiB after capture and gates readback on the actual
-  compressed size plus a 31 GiB reserve.
+  starts with 128 GiB, checks 118 GiB immediately before capture, requires 80 GiB after
+  capture and gates readback on the actual compressed size plus a 31 GiB reserve.
 - **The first timeout covered only the scorer.** Downloads, CUDA tests/build, sealing,
   compression and uploads could outlive it, while a self-set wall budget must not cancel
   a healthy run. The self-cancelling timeout is removed; the watcher renews each healthy
@@ -25,7 +25,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   only after the other readbacks finish.
 - **A failure could advertise `EXIT` before its diagnostics reached the store.** Failure
   evidence is uploaded and read back first. A complete set is marked by `failure/EXIT`;
-  an incomplete set creates `FAILURE_EVIDENCE_INCOMPLETE` and the pod is retained.
+  an incomplete set creates `FAILURE_EVIDENCE_INCOMPLETE`. A pod whose cache exists but
+  was not transfer-verified is also retained instead of deleting its only copy.
 - **The first remote output was not immutable.** A second-resolution id could collide
   with an existing prefix, and `uor-store` updates files rather than replacing a folder.
   The id now has a random suffix and an existing remote prefix is refused.
@@ -40,7 +41,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   `EXIT` and the `uor-pod` wrapper's terminal record. It leaves either existing busy pod
   untouched.
 - The capture command uses `--query-cache-memory 0 --query-cache-dev 0`; its cache is
-  exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`.
+  exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`. The job
+  checks that inventory, its pinned identities and its row totals before sealing.
 - The job checks the visible RTX 5090, source and tracked tree, all data/archive/selected
   checkpoint hashes, disk phases, `zstd` and CUDA tests. It has no self-set wall-clock
   cancellation.
@@ -62,7 +64,7 @@ lease until the job finishes; at a $1.15/h ceiling, a four-hour pair projects $9
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`e999d28146855be3a68722d427c928e84d4588ba345e98301d88aa494c002682`.
+`2ed70cd8d27207e50f91929c51bc4d3f511dbbb336d43818fd19e0eb5c6febb5`.
 
 ## Checks run at the head
 

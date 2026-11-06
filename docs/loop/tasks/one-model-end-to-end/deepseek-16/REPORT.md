@@ -44,6 +44,9 @@ Base: `3a9c2f11d`.
 - Failure diagnostics are uploaded and read back before `EXIT`; if that handoff is
   incomplete, the pod is retained for inspection instead of being deleted.
 - The job checks a visible RTX 5090 and preserves all normal completion evidence.
+- Before sealing, the cache manifest must name exactly the registered five no-memory
+  splits, their pinned input identities, the 27,416,554 TRAIN rows and 1,460,697 panel
+  rows.
 - The job records selected checkpoint hashes, CUDA tests, the scorer binary, the whole
   cache and its manifest, and reads every completed evidence set back.
 - The CPU evaluation commands now name the merged D84 evaluator, the required seed and
@@ -91,7 +94,7 @@ task-report and compute rules were used directly.
 
 1. Obtain a fresh non-author `TEST FITNESS: FIT` for the sheet.
 2. Obtain the D67 pre-run review for the exact job.
-3. Lease a Codex-owned pod without touching either busy existing pod.
+3. Lease two DeepSeek-owned pods without touching either busy existing pod.
 4. Capture n3S at seeds 1 and 2, seal and upload both caches.
 5. Run the CPU evaluator, pool the four panels and report the registered verdict.
 

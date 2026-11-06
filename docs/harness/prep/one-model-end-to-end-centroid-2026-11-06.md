@@ -91,7 +91,7 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=e999d28146855be3a68722d427c928e84d4588ba345e98301d88aa494c002682
+JOB_SHA256=2ed70cd8d27207e50f91929c51bc4d3f511dbbb336d43818fd19e0eb5c6febb5
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
@@ -103,6 +103,7 @@ SESSIONS=()
 RUN_DIRS=()
 STARTED=()
 FINISHED=()
+RESOLVED=()
 
 teardown_pod() {
   local pod=$1 session=$2
@@ -110,37 +111,58 @@ teardown_pod() {
   scripts/pod/uor-pod down "$pod" --lab deepseek --session "$session" --confirm-archived
 }
 
+resolve_pod() {
+  local i=$1 pod=${PODS[$1]} probe status incomplete cache_present cache_verified
+  [ "${RESOLVED[$i]}" != 1 ] || return 0
+  POD_STATUS=UNAVAILABLE
+  if [ "${STARTED[$i]}" != 1 ]; then
+    teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
+    RESOLVED[i]=1
+    return 0
+  fi
+  if [ "${FINISHED[$i]}" != 1 ]; then
+    echo "retaining $pod: job did not reach a verified terminal state" >&2
+    RESOLVED[i]=1
+    return 0
+  fi
+  if ! probe=$(scripts/pod/uor-pod ssh "$pod" \
+    "s=\$(cat '${RUN_DIRS[$i]}/EXIT' 2>/dev/null || printf missing); \
+     e=0; test -e '${RUN_DIRS[$i]}/FAILURE_EVIDENCE_INCOMPLETE' && e=1; \
+     c=0; { test -e '${RUN_DIRS[$i]}/results/cache' || \
+       test -e '${RUN_DIRS[$i]}/results/cache.tar.zst'; } && c=1; \
+     v=0; test -e '${RUN_DIRS[$i]}/CACHE_TRANSFER_VERIFIED' && v=1; \
+     printf '%s %s %s %s\n' \"\$s\" \"\$e\" \"\$c\" \"\$v\""); then
+    echo "retaining $pod: terminal evidence could not be read" >&2
+    RESOLVED[i]=1
+    return 0
+  fi
+  read -r status incomplete cache_present cache_verified <<<"$probe"
+  POD_STATUS=$status
+  case $status in
+    0)
+      teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
+      ;;
+    ''|*[!0-9]*)
+      echo "retaining $pod: EXIT is missing or malformed" >&2
+      ;;
+    *)
+      if [ "$incomplete" = 1 ]; then
+        echo "retaining $pod: failure evidence is incomplete" >&2
+      elif [ "$cache_present" = 1 ] && [ "$cache_verified" != 1 ]; then
+        echo "retaining $pod: cache transfer was not verified" >&2
+      else
+        teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
+      fi
+      ;;
+  esac
+  RESOLVED[i]=1
+}
+
 cleanup() {
-  local rc=$? i pod status
+  local rc=$? i
   trap - EXIT
   for i in "${!PODS[@]}"; do
-    pod=${PODS[$i]}
-    if [ "${STARTED[$i]}" = 1 ]; then
-      if [ "${FINISHED[$i]}" != 1 ]; then
-        echo "retaining $pod: job did not reach a verified terminal state" >&2
-        rc=1
-        continue
-      fi
-      status=$(scripts/pod/uor-pod ssh "$pod" \
-        "cat '${RUN_DIRS[$i]}/EXIT' 2>/dev/null || true") || status=
-      case $status in
-        0) ;;
-        ''|*[!0-9]*)
-          echo "retaining $pod: EXIT is missing or malformed" >&2
-          rc=1
-          continue
-          ;;
-        *)
-          if ! scripts/pod/uor-pod ssh "$pod" \
-            "test ! -e '${RUN_DIRS[$i]}/FAILURE_EVIDENCE_INCOMPLETE'"; then
-            echo "retaining $pod: failure evidence is incomplete" >&2
-            rc=1
-            continue
-          fi
-          ;;
-      esac
-    fi
-    teardown_pod "$pod" "${SESSIONS[$i]}" || rc=1
+    resolve_pod "$i" || rc=1
   done
   exit "$rc"
 }
@@ -163,9 +185,10 @@ create_capture_pod() {
 register_pod() {
   PODS+=("$1")
   SESSIONS+=("$2")
-  RUN_DIRS+=("/workspace/deepseek-centroid-cache-s$3")
+  RUN_DIRS+=("/workspace/uor-r4/runs/deepseek-centroid-cache-s$3")
   STARTED+=(0)
   FINISHED+=(0)
+  RESOLVED+=(0)
 }
 
 start_capture() {
@@ -181,23 +204,28 @@ start_capture() {
     return 1
   }
   CAPTURE_RUN_LOG=$log
+  CAPTURE_RUN_SCRIPT=${log%.log}.sh
 }
 
 watch_capture() {
-  local pod=$1 seed=$2 session=$3 log=$4 now last=0 failures=0 probe
-  local exit_seen run_seen
+  local pod=$1 seed=$2 session=$3 log=$4 script=$5 now last=0 failures=0 probe
+  local exit_seen run_seen live_seen
   while true; do
     if probe=$(scripts/pod/uor-pod ssh "$pod" \
-      "e=0; g=0; test -f '/workspace/deepseek-centroid-cache-s$seed/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; printf '%s %s\n' \"\$e\" \"\$g\""); then
-      read -r exit_seen run_seen <<<"$probe"
+      "e=0; g=0; p=0; test -f '/workspace/uor-r4/runs/deepseek-centroid-cache-s$seed/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; pgrep -f \"^bash $script\" >/dev/null && p=1; printf '%s %s %s\n' \"\$e\" \"\$g\" \"\$p\""); then
+      read -r exit_seen run_seen live_seen <<<"$probe"
       failures=0
-      case "$exit_seen:$run_seen" in
-        1:1) return 0 ;;
-        0:1)
+      case "$exit_seen:$run_seen:$live_seen" in
+        1:1:*) return 0 ;;
+        0:1:*)
           echo "$pod ended without writing EXIT" >&2
           return 1
           ;;
-        0:0|1:0) ;;
+        0:0:1|1:0:1) ;;
+        0:0:0|1:0:0)
+          echo "$pod has no live wrapper and no terminal record" >&2
+          return 1
+          ;;
         *)
           echo "$pod returned an invalid watch state: $probe" >&2
           return 1
@@ -237,25 +265,54 @@ scripts/pod/uor-pod ssh "$POD2" 'cat > /workspace/centroid-cache-job.sh' \
   < docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh
 scripts/pod/uor-pod ssh "$POD1" "printf '%s  /workspace/centroid-cache-job.sh\n' '$JOB_SHA256' | sha256sum -c -"
 scripts/pod/uor-pod ssh "$POD2" "printf '%s  /workspace/centroid-cache-job.sh\n' '$JOB_SHA256' | sha256sum -c -"
+scripts/pod/uor-pod ssh "$POD1" 'command -v pgrep >/dev/null'
+scripts/pod/uor-pod ssh "$POD2" 'command -v pgrep >/dev/null'
 
 start_capture 0 "$POD1" centroid-s1 1
 RUN_LOG1=$CAPTURE_RUN_LOG
+RUN_SCRIPT1=$CAPTURE_RUN_SCRIPT
 start_capture 1 "$POD2" centroid-s2 2
 RUN_LOG2=$CAPTURE_RUN_LOG
+RUN_SCRIPT2=$CAPTURE_RUN_SCRIPT
 
 # Watch both jobs and renew each healthy lease every 25 minutes. Returning
 # requires both the job's EXIT and the uor-pod wrapper's terminal record.
-watch_capture "$POD1" 1 centroid-s1 "$RUN_LOG1" &
+watch_capture "$POD1" 1 centroid-s1 "$RUN_LOG1" "$RUN_SCRIPT1" &
 WATCH1=$!
-watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" &
+watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" "$RUN_SCRIPT2" &
 WATCH2=$!
-wait "$WATCH1"
-FINISHED[0]=1
-wait "$WATCH2"
-FINISHED[1]=1
-
-CAPTURE_STATUS1=$(scripts/pod/uor-pod ssh "$POD1" 'cat /workspace/deepseek-centroid-cache-s1/EXIT')
-CAPTURE_STATUS2=$(scripts/pod/uor-pod ssh "$POD2" 'cat /workspace/deepseek-centroid-cache-s2/EXIT')
+ACTIVE_WATCHES=("$WATCH1" "$WATCH2")
+WATCH_FAILED=0
+while [ "${#ACTIVE_WATCHES[@]}" -gt 0 ]; do
+  FINISHED_WATCH=
+  if wait -n -p FINISHED_WATCH "${ACTIVE_WATCHES[@]}"; then
+    WATCH_RC=0
+  else
+    WATCH_RC=$?
+  fi
+  case $FINISHED_WATCH in
+    "$WATCH1")
+      if [ "$WATCH_RC" = 0 ]; then FINISHED[0]=1; else WATCH_FAILED=1; fi
+      resolve_pod 0
+      CAPTURE_STATUS1=$POD_STATUS
+      ;;
+    "$WATCH2")
+      if [ "$WATCH_RC" = 0 ]; then FINISHED[1]=1; else WATCH_FAILED=1; fi
+      resolve_pod 1
+      CAPTURE_STATUS2=$POD_STATUS
+      ;;
+    *)
+      echo "could not identify the completed capture watcher" >&2
+      exit 1
+      ;;
+  esac
+  remaining_watches=()
+  for watch_pid in "${ACTIVE_WATCHES[@]}"; do
+    [ "$watch_pid" = "$FINISHED_WATCH" ] || remaining_watches+=("$watch_pid")
+  done
+  ACTIVE_WATCHES=("${remaining_watches[@]}")
+done
+test "$WATCH_FAILED" = 0
 test "$CAPTURE_STATUS1" = 0
 test "$CAPTURE_STATUS2" = 0
 ```
@@ -265,8 +322,10 @@ pod ids into the run record and owns teardown from the first successful `up`. A 
 returns only after both the job's `EXIT` and the `uor-pod` wrapper's terminal record exist;
 it treats a wrapper end without `EXIT` as a failure and stops renewing. On any failure,
 the EXIT trap takes down pods with no started job. It also takes down a finished pod only
-when its failure diagnostics were fully uploaded and read back; otherwise it retains the
-pod and prints its id for inspection. No self-set wall clock cancels either capture.
+when its failure diagnostics were fully uploaded and read back and any cache was either
+absent or transfer-verified; otherwise it retains the pod and prints its id for inspection.
+Each pod is resolved as soon as its own watcher finishes, so a completed seed does not
+remain billed while its sibling runs. No self-set wall clock cancels either capture.
 
 The script invokes `train-in-space` with `--query-cache-memory 0` and
 `--query-cache-dev 0`. That yields exactly TRAIN plus the four registered panels; DEV is
@@ -357,7 +416,7 @@ jq -e '
 ' "$STATUS"
 TAR_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/cache.tar.zst.sha256")
 jq -e --arg sha "$TAR_SHA" '.cache_tar_sha256 == $sha' "$STATUS"
-MANIFEST=$(jq -r .cache_manifest_sha256 "$STATUS")
+MANIFEST_S1=$(jq -r .cache_manifest_sha256 "$STATUS")
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
 [ "$available_gib" -ge 31 ]
 ```
@@ -386,24 +445,29 @@ RAYON_NUM_THREADS=32 /usr/bin/time -v \
 Run the same command for seed 2 with `$CACHE_S2`, `$CHECKPOINT_S2`, `--seed 2` and
 `--out "$ROOT/centroid-s2.json"` on the D84 host: AMD Ryzen 9 9950X, 16 physical cores / 32
 hardware threads and 59 GiB RAM. `CHECKPOINT_S1` and `CHECKPOINT_S2` are the extracted
-`step-008192` directories. The TRAIN query stream is not materialized in memory.
+`step-008192` directories. Repeat the seed-1 restore and status block with seed 2 and save
+its manifest hash as `MANIFEST_S2`. The TRAIN query stream is not materialized in memory.
 
-After each report, check that it names the captured manifest and the pre-registered
-checkpoint files, then aggregate:
+After both reports exist, check that each names its captured manifest and pre-registered
+checkpoint files:
 
 ```sh
-jq -e --arg manifest "$MANIFEST" '.cache.manifest_sha256 == $manifest' "$ROOT/centroid-s1.json"
+jq -e --arg manifest "$MANIFEST_S1" '.cache.manifest_sha256 == $manifest' "$ROOT/centroid-s1.json"
 jq -e '
   .cache.checkpoint_files["config.json"] == "1045acb61d92d390f0f61617ffa4c1847437473c9694c09787b48bf46e761ed2" and
   .cache.checkpoint_files["model.safetensors"] == "c64894f3648e2663bfe1f323836c9fc22c6989c9a6f2917e8ce1f25c6a686fb2" and
   .cache.checkpoint_files["hamming_read.safetensors"] == "e2347c4ef266c2166e870926a44e740edbd5c27065ed6a0ccda5ab11da5998b5"
 ' "$ROOT/centroid-s1.json"
+jq -e --arg manifest "$MANIFEST_S2" '.cache.manifest_sha256 == $manifest' "$ROOT/centroid-s2.json"
+jq -e '
+  .cache.checkpoint_files["config.json"] == "778145167a18ff3b1006d4f609b7f608cc528b0dd753279b3ff38c8c63a88b95" and
+  .cache.checkpoint_files["model.safetensors"] == "30bf5db7db6600211ee14a17557bbf54f24c86de8b7c16f93b795085f0bfc9e8" and
+  .cache.checkpoint_files["hamming_read.safetensors"] == "25805079be3bcfe5917cf0b80a362e7a774aac931c5f4cdaf5351c272684a5bd"
+' "$ROOT/centroid-s2.json"
 /usr/bin/time -v \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate" \
   "$ROOT/centroid-s1.json" "$ROOT/centroid-s2.json" --out "$ROOT/final.json"
 ```
-
-Repeat the same manifest and seed-2 checkpoint assertions before aggregating.
 
 ## Instrument checks
 
@@ -454,10 +518,11 @@ panel; it cannot alone put the mechanism on the serving path.
 - Estimate: 2-4 hours on each pod. The watcher renews each healthy lease; estimates are
   not cancellation rules. At a $1.15/h ceiling a four-hour run on each of two leases costs
   about $9.20, and the system cap remains four pods and $8/h globally.
-- The raw cache is 28.02 GiB. The job requires 128 GiB free initially, 80 GiB after
-  capture and the compressed archive size plus a 31 GiB reserve before readback (with a
-  40 GiB minimum). This keeps the project's 30 GiB floor plus margin through the second
-  copy. `zstd` has a functional round-trip preflight.
+- The raw cache is 28.02 GiB. The job requires 128 GiB at admission and again requires
+  118 GiB after downloads and build but before capture; that second gate covers three
+  raw-size-equivalent copies plus the 31 GiB reserve. It retains the actual post-capture,
+  compressed-size and readback checks, including a 40 GiB minimum. `zstd` has a functional
+  round-trip preflight.
 - CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and an estimated 2
   hours. Estimates are not cancellation rules. The point estimator streams TRAIN; only
   one panel's queries are resident.

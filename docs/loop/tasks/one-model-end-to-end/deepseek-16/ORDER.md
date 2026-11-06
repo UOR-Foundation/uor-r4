@@ -33,7 +33,7 @@ existing pod.
 4. The sheet pins D3, its four held-out panels, both archive hashes and the exact
    n3S checkpoint paths/hashes required by the run.
 5. A non-author FIT and a fresh D67 pre-run review are recorded before capture.
-6. Two seed caches are captured on one leased RTX 5090, sealed and uploaded.
+6. Two seed caches are captured, one on each of two leased RTX 5090s, sealed and uploaded.
 7. The CPU evaluator reproduces every frozen panel decision and reports original,
    centroid and shuffled control by panel and pooled across all four panels.
 8. The result lands in a REPORT and notebook row, with zeros exact and a mechanism

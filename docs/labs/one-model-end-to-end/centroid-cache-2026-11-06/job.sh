@@ -16,7 +16,7 @@ esac
 
 PIN=3a9c2f11d26991a70a22f88758cfb4589a1cf14d
 REPO=${UOR_REPO:-/root/build/src-$PIN}
-RUN=${UOR_CENTROID_RUN:-/workspace/deepseek-centroid-cache-s$SEED}
+RUN=${UOR_CENTROID_RUN:-/workspace/uor-r4/runs/deepseek-centroid-cache-s$SEED}
 RUN_ID=${UOR_CENTROID_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')}
 STORE=/root/uor-store
 RUN_STORE=results/claude/one-model-end-to-end-steps-data-2026-11-06/runs/s$SEED
@@ -80,7 +80,8 @@ on_exit() {
     if [ "$OUTPUT_CLAIMED" = 1 ] && [ -x "$STORE" ]; then
       for file in job.log transfer.log store-list.err capture.stderr capture.stdout.jsonl \
         binaries.sha256 gpu.txt selected-checkpoint.sha256 status.json \
-        results/cache.tar.zst.sha256 results/cache.SHA256SUMS exit.code; do
+        CACHE_TRANSFER_VERIFIED results/cache.tar.zst.sha256 \
+        results/cache.SHA256SUMS exit.code; do
         [ -f "$RUN/$file" ] || continue
         destination=$file
         [ "$file" = exit.code ] && destination=EXIT
@@ -114,6 +115,7 @@ fi
 
 [ -d "$REPO/.git" ] || die "missing repository at $REPO"
 command -v zstd >/dev/null || die "zstd is not installed"
+command -v jq >/dev/null || die "jq is not installed"
 command -v /usr/bin/time >/dev/null || die "/usr/bin/time is not installed"
 command -v nvidia-smi >/dev/null || die "nvidia-smi is not installed"
 printf '' | zstd -q | zstd -dq >/dev/null || die "zstd round-trip preflight failed"
@@ -195,6 +197,7 @@ export CARGO_TARGET_DIR="$RUN/target"
 (cd "$REPO" && cargo build --release --locked --offline -p uor-r4-float-train --features cuda \
   --bin train-in-space) 2>&1 | tee -a "$RUN/job.log"
 sha256sum "$CARGO_TARGET_DIR/release/train-in-space" > "$RUN/binaries.sha256"
+need_free_gib 118
 
 log "[4/6] capture TRAIN and panel queries"
 VISIBLE_GPU=${CUDA_VISIBLE_DEVICES:-0}
@@ -238,6 +241,39 @@ need_free_gib 80
 
 log "[5/6] seal cache"
 [ -f "$RUN/results/cache/manifest.json" ] || die "capture wrote no sealed cache manifest"
+jq -e '
+  .schema == "uor-r4.fbs-query-cache/1" and
+  .width == 256 and
+  .query_space == "q12-f32" and
+  .tokenizer_sha256 == "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89" and
+  (.checkpoint_files | keys | sort) == ["config.json", "hamming_read.safetensors", "model.safetensors"] and
+  (.splits | length) == 5 and
+  all(.splits[]; .memory == false and .label == "no-memory" and .context == 192) and
+  ([.splits[].split] | sort) == ["oasst2", "train", "wiki-00000", "wiki-00020", "wiki-00040"] and
+  any(.splits[]; .split == "train" and .rows == 27416554) and
+  ([.splits[] | select(.split != "train") | .rows] | add) == 1460697 and
+  any(.splits[];
+    .split == "train" and
+    .tokens_sha256 == "ed8f25374e99bd65cd509b5cfcdffb6a8476401a973ea02aaaaa0ea76e35ee52" and
+    .mask_sha256 == "ec6e520c7a67aaf6efc7aaf42bf7513b3e697239fb18b73a1e89f130eacd4875") and
+  any(.splits[];
+    .split == "oasst2" and
+    .tokens_sha256 == "02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e" and
+    .mask_sha256 == "9c5bb6567c6a4cded2dfb2280ae4acdc798e283a3beae8aaebc695656e1b4833") and
+  any(.splits[];
+    .split == "wiki-00000" and
+    .tokens_sha256 == "82b3a40c3ffe2cabd9164f636d9c2710fb054e171913eca944ebf819b70209f7" and
+    .mask_sha256 == "34fe6b68e0d039b914bb1cde789223ef463b37ea77af7f3d77ab90eb0977386f") and
+  any(.splits[];
+    .split == "wiki-00020" and
+    .tokens_sha256 == "9b7f1432b105f161ed8b54b01900d8fa791efc6dbfd5ad1d62a8d4d94a86d640" and
+    .mask_sha256 == "a6803ab3de3fae60c382416639ffa583c26ac822db78a37afd2c2d718767e00d") and
+  any(.splits[];
+    .split == "wiki-00040" and
+    .tokens_sha256 == "c927243b540bccdda8af8fb5a11aafa8b9041d4af30dd614f23d2ebb9aa5962d" and
+    .mask_sha256 == "9d95ea6de0eba07d4cdbc258b5fa6ae88def952f062d166ba417d783724fa625")
+' "$RUN/results/cache/manifest.json" >/dev/null ||
+  die "cache manifest does not contain the registered five-split inventory"
 (cd "$RUN/results" && find cache -type f -print0 | sort -z | xargs -0 sha256sum) \
   > "$RUN/results/cache.SHA256SUMS"
 tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache \
@@ -261,6 +297,7 @@ done
 readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/cache.tar.zst" | cut -d' ' -f1)
 [ "$readback_sha" = "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" ] ||
   die "uploaded cache archive did not read back"
+touch "$RUN/CACHE_TRANSFER_VERIFIED"
 
 printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","started":"%s","finished":"%s","cache_manifest_sha256":"%s","cache_tar_sha256":"%s","capture_binary_sha256":"%s"}\n' \
   "$SEED" "$RUN_ID" "$PIN" "$started" "$finished" \
