@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-content-length-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS: FIT. Pre-run GO recorded below. Implementation
+`74793da76`; the seed-2783 panel and output root remain absent.
 
 ## Question
 
@@ -120,8 +121,35 @@ both artifacts and repeats; seal source, panel, reports and artifacts.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - implementation pending.
+TEST FITNESS: FIT - M2 #2030 full-sequence content with stored-length completion
+sheet: docs/harness/prep/cpu-training-pilot-content-length-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 74793da76 adds an exact length endpoint while retaining
+  the existing boundary mode and content arbitration unchanged. The driver
+  derives reference-independent lengths from the raw-Jaccard selected TRAIN
+  reply, evaluates full and shuffled suffix content, shallow global, local,
+  writer, full-retrieval and reference-length controls, and checks arm
+  reachability before grading. Two focused tests prove length completion is
+  accepted as exact and zero/over-cap budgets are refused. The full CPU library
+  passes 404 tests with four expected ignores; scoped Clippy passes with the
+  pre-existing type-complexity lint exempted; formatting and diff checks pass.
+  Inputs and output-root absence were verified.
+source:
+  `b404b33856e21f4599d30434acd9ef71ba00ac339cc93aded3676aed2d1fad49`;
+driver:
+  `4a4da3804e32b6faec78a24357146ed6e61b43a804fc576d688e8397512273a5`;
+release_binary:
+  `609343405c1f8ae38f699cb971755ff51fe6144be26743858478bcf423725977`;
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `74793da76`, source
+`b404b33856e21f4599d30434acd9ef71ba00ac339cc93aded3676aed2d1fad49`,
+driver
+`4a4da3804e32b6faec78a24357146ed6e61b43a804fc576d688e8397512273a5`
+and release binary
+`609343405c1f8ae38f699cb971755ff51fe6144be26743858478bcf423725977`
+match. This was not an independent review. Seed 2783 may now be generated under
+the fixed construction and stop rule.
