@@ -4,8 +4,8 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2 HAS `TEST FITNESS: FIT`
-at `5fb6700fa` and is pending D67 GO.
+ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2 IS RELEASED TO RUN with
+`TEST FITNESS: FIT` at `5fb6700fa` and D67 GO.
 
 Attempt 1 built the pinned source and generator, then stopped at TRAIN
 preflight before generating seed 2775. Full and reply-only boundaries made the
@@ -520,5 +520,12 @@ seed were verified.
 
 ## D67 pre-run review
 
-D67 PRE-RUN: PENDING
+D67 PRE-RUN: GO - registration head
+`1e1ce657502622d47c021d770e7a65af64de114e`.
+
+reviewer: `full_boundary_attempt2_final_go`
+date: 2026-11-05
+note: Source remained at FIT head `5fb6700fa`; pins, compact failure evidence,
+global deadline, fallback report compression, evaluation gates and isolation
+were verified. Attempt-2 root and seed 2775 were absent.
 
