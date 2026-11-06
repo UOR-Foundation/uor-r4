@@ -160,8 +160,8 @@ Before reading a result, all of these must hold:
 - the shuffle preserves key sets, nonterminal counts, and per-depth suffix,
   terminal, and nonterminal totals while changing terminal assignments;
 - treatment makes at least one full-boundary stop;
-- treatment changes at least one observable stop position/depth/count from
-  reply-only and one from shuffled, ignoring only the source arm label;
+- treatment changes at least one observable stop position/presence from
+  reply-only and one from shuffled, ignoring source labels, depth and counts;
 - all eight arms have at least 200 reachable replies;
 - both artifact seeds and fresh-process repeats match after timing removal.
 

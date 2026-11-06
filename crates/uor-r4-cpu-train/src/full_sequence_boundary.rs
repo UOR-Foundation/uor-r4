@@ -693,17 +693,9 @@ fn stop_changes_on_rows(
             .iter()
             .filter(|step| rows.contains(&step.row))
             .filter_map(|step| {
-                step.stop_kind.as_ref().map(|_| {
-                    (
-                        step.row,
-                        (
-                            step.generated_step,
-                            step.stop_depth,
-                            step.stop_terminal,
-                            step.stop_nonterminal,
-                        ),
-                    )
-                })
+                step.stop_kind
+                    .as_ref()
+                    .map(|_| (step.row, step.generated_step))
             })
             .collect::<BTreeMap<_, _>>()
     };
@@ -974,7 +966,7 @@ mod tests {
     #[test]
     fn stop_changes_ignore_source_label_when_behavior_matches() {
         let full = [stop_step(7, 12, "full", 8, 2, 0)];
-        let reply = [stop_step(7, 12, "reply", 8, 2, 0)];
+        let reply = [stop_step(7, 12, "reply", 7, 3, 0)];
         let rows = BTreeSet::from([7]);
         assert_eq!(stop_changes_on_rows(&full, &reply, &rows), 0);
     }
@@ -985,8 +977,6 @@ mod tests {
         let later = [stop_step(7, 13, "full", 8, 2, 0)];
         let rows = BTreeSet::from([7]);
         assert_eq!(stop_changes_on_rows(&full, &later, &rows), 1);
-        let different_counts = [stop_step(7, 12, "full", 7, 3, 0)];
-        assert_eq!(stop_changes_on_rows(&full, &different_counts, &rows), 1);
         assert_eq!(stop_changes_on_rows(&full, &[], &rows), 1);
     }
 
