@@ -12,7 +12,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **(b64S) is not distinguishable from D3's T2.** Its pair is `inside` at d −19,092 / +26,078, with a band of 45,170. Its sub-panels are inside, except wiki-00000, which is mixed. It does not meet the bar. This closes nothing (L-007).
 - **The spread is not decided at two seeds.** "Batch narrows the spread" needs both batch-64 arms' spreads under 18,988 and (b64L)'s parting step later than (n3L)'s.
   - (b64L)'s spread is **10,552**, but (b64S)'s is **45,170**.
-  - (b64L) parts at step **3,072**, earlier in steps than (n3L)'s **4,096**.
+  - (b64L) parts at step **3,072**, earlier in steps than (n3L)'s **4,096**. It is a thin call: the gap there is 0.00539 against the 0.005 line ((b64S) 0.00735), one progress row from not parting. In windows seen, 3,072 steps at batch 64 is 196,608, against (n3L)'s 65,536 at 4,096. The rule compares steps.
   - It is not "does not narrow" either: that needs (b64L)'s spread at least 37,975.
   - (b64S) ran at both seeds, so the rule reads both arms (sheet, Readings). The question "is the seed spread gradient noise" stays open.
 - **I-t cut (b64L) to 16,384 steps, so the equal-steps reading is lost** (sheet, outcome map). (b64L) makes half (n3L)'s updates at four times its batch, so it sees 201.3M positions to (n3L)'s 100.7M.
@@ -22,7 +22,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **I-e's control passed on seed 2 with a thin margin.** The read moved step 4 by 1.85e-5 against the 1e-5 bar, 1.85× the bar. On seed 1 the margin was 6.8×, a replay of run 1's rows to the last digit. Accumulation stayed within 1.3e-7 on both seeds.
 - **Seed 2's rate sat at the edge of the drop line.** I-t measured 0.698 s a step, against the 0.70 s at which (b64S) would have been dropped.
 - **Two slips on the laptop, both repaired before any reading:**
-  - Extracting both seals into one folder overwrote seed 1's shared `gpu.csv`, `mem.log` and `job.log` with seed 2's. The per-cell files have distinct names and were not touched. Seed 1's shared files were extracted again into their own folder, and memory is read from those.
+  - Extracting both seals into one folder overwrote seed 1's shared `gpu.csv`, `mem.log` and `job.log` with seed 2's. The per-cell files have distinct names and were not touched. Seed 1's shared files were extracted again into their own folder. Peak memory is read from `mem.log` (the job's 2 s sampler) inside each cell's `.window`, not from `gpu.csv` as claude-298's Readings name. `mem.log` is the file I-m and I-f gate on.
   - The `scale-probe` binary had been removed with its target directory under the disk rule. It was rebuilt from `docs/labs/scale-probe/instrument` at this branch, whose instrument is unchanged from the pin. I-r below reproduces claude-297's pair exactly with it.
 
 ## The readings
