@@ -349,7 +349,8 @@ GPT-4's own size and training data are not published (GPT-4 Technical Report, ex
 8. **The two model paths do not join.** The M1 bar rests on the discrete path, the replies on the FBS trunk, and they use different tables, trunks and formats (Two model paths).
 9. **How ability grows with scale is unread, because the trunk does not yet learn human text** (scale-probe, claude-295, #3472).
    - **The first run on human-written text.** The one model, trained as served, ran at widths 256 and 512 on a quarter, a half and all of 28M tokens of Wikipedia and OASST2. Its training loss stays at about 1.0035 for 8,192 steps.
-   - **Against simple tables.** On the 1,460,697-row held-out panel, every width-256 cell is behind its TRAIN's unigram (by 12,460–25,917 rows) and far behind its T2.
+   - **Against simple tables.** On the 1,460,697-row held-out panel, every cell at both widths is behind its TRAIN's unigram (by 12,460–25,917 rows at 256 and 17,194–24,363 at 512) and far behind its T2.
+   - **Width 512 adds nothing yet.** Against width 256 at D3 it reads `inside` (band 9,574 rows), its data slope is `mixed`, and it serves at about half of 256's laptop rate (decode 673 against 1,329 tok/s).
    - **What it predicts.** The trunk predicts the text's token mix, spread across contexts, not the likeliest token.
    - **The slope is not measured.** The deciding slope per doubling (R1, R2) needs width 1,024, which does not fit a 32 GB card. It moved to scale-probe's second run unit, after the classification.
    - **The next step** is one-model-end-to-end's human-text classification: the objective against fixed targets.

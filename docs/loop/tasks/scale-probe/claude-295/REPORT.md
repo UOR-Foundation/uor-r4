@@ -2,7 +2,7 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadmap/items/scale-probe.md) (#3472). Pin: `e052abf4104fc33ba28a489cf0dfdc4e94ab70b1`. PR #3750.
 
-**DRAFT.** Width 256 is graded. Width 512's last two cells are training on pod C, and its grades follow. Every number below names its source file or comment.
+Widths 256 and 512 are trained, sealed and graded; width 1,024 did not run (the decision card below). Every number below names its source file or comment.
 
 **Claim check.** This unit is P5 of Casey's 4 November plan, "the bigger train = `scale-probe`", bounded at one sheet unit and one or two run units. It is the first run unit. It trains the one model, recipe (b) trained as served, at widths 256, 512 and 1,024. The data is a quarter, a half and all of 28M tokens of human-written text, at two seeds. It reads whether the model gets measurably better with width and with data.
 
@@ -10,7 +10,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
 
 - **On human-written text, the training loss does not fall.** This is the unit's main result. It is not yet classified as instrument or mechanism (§4.2).
   - Width 256, all 6 grid cells: `train_loss_mean` is 1.00381–1.00390 at step 1,024 and 1.00296–1.00362 at step 8,192 (`progress.jsonl` in each cell's run folder, sealed in `runs/A`).
-  - Width 512, the 4 cells trained so far: 1.00322–1.00326 at step 1,024, rising to about 1.0037–1.0040 by step 4,096, and 1.00343–1.00372 at step 8,192 (each cell's `train.out`). D1 at 512 makes 3.41 passes over its TRAIN.
+  - Width 512, all 6 grid cells: 1.00322–1.00331 at step 1,024, rising to about 1.0037–1.0040 by step 4,096, and 1.00343–1.00381 at step 8,192 (`progress.jsonl` in each cell's run folder, sealed in `runs/C`). So every 512 cell ends higher than it starts. D1 at 512 makes 3.41 passes over its TRAIN.
+  - Width 512 does no better on the panel: R6 (512 against 256 at D3) reads `inside`, and every 512 cell is behind its TRAIN's unigram (Width 512, below).
   - The same recipe on templated text (the contrast cell, 256, mw-balp TRAIN) falls from 1.00280 to 0.82460 over the same 8,192 steps.
   - On the held-out panel every width-256 cell is `behind` its own TRAIN's unigram table, by 12,460–25,917 rows (`pair/w256-dX-vs-unigram.json`). So the trunk has not learned even its TRAIN's token frequencies.
   - The templated cell, which never saw human text, scores 14,282 on the same panel, inside the real-text cells' range of 11,504–24,961.
@@ -43,7 +44,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
     - single tokens: 130 of 4,096 agree, and 2,752 positions are over the gap bar;
     - sequences: 181 of 5,795 agree, with 4,868 positions over the bar;
     - the largest query gap is 15.9998 (`r9/w256-d3-s1/compare.json`, store `results/claude/scale-probe-2026-11-05/r9/w256-d3-s1`).
-  - That measures snapping, not the served form. So R9 is NOT_RUN in the served form at width 256, as the stop rule says, failing at the step "no parity tool reads the raw-gate export". This is an instrument item and does not move the Bar.
+  - At (512, D3, seed 1) it exits 0 on the snapped artifact `b22468ba…`:
+    - single tokens: 152 of 4,096 agree, with 2,962 positions over the bar;
+    - sequences: 160 of 5,795 agree, with 5,786 over;
+    - the largest query gap is 15.9998 (`r9/w512-d3-s1/compare.json`, store `results/claude/scale-probe-2026-11-05/r9/w512-d3-s1`).
+  - That measures snapping, not the served form. So R9 is NOT_RUN in the served form at widths 256 and 512, as the stop rule says, failing at the step "no parity tool reads the raw-gate export". This is an instrument item and does not move the Bar.
   - A raw-export mode for `fbs-compare` is tooling for its own unit, not this one.
 - **`uor-pod`'s exact-driver option can never match on Vast.**
   - Vast's API returns nothing for a `driver_version=` predicate, though the same offers report that driver when unfiltered.
@@ -52,9 +57,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
 - **My D30 slip.** Three read-only offer searches used the Python `vastai` CLI on PATH, not `uor-pod`'s Rust adapter. Nothing was created or changed. Every later query used the adapter.
 - **Width 512's whole-process scoring ran out of memory on the 5090.**
   - The scorer's GPU memory grows with each split it scores in one process: w512-d1-s1 went 12.3 → 16.4 → 27.2 → 30.0 GB and failed on its sixth split (22:58Z).
-  - w512-d1-s1 and w512-d2-s1 failed this way. w512-d3-s1 and w512-d1-s2 scored whole.
+  - w512-d1-s1, w512-d2-s1 and w512-d2-s2 failed this way. w512-d1-s2, w512-d3-s1 and w512-d3-s2 scored whole.
   - Classification: instrument (scoring memory), not the trained model. The checkpoints are untouched.
   - The repair, `rescore-295.sh`, scores the same checkpoint with the same binary, flags and seed, one panel per process. It passed two fresh review rounds.
+  - All three rescored with EXIT 0, at 14.8–18.8 GB peak and about 7 minutes a cell. Each process's DEV rows agreed, and I-5 reads `same` on every panel (`sp2/rescore/NAME/`, sealed in `runs/C`).
 - **I-2 rests on a projected 1,024 term.** The sheet projects I-2 from each smoke, and the 1,024 smoke has not run. At the measured 5090 ratios (×1.97 per width doubling in step time, ×1.87 in scoring), the 20 runs come to 19.83 GPU-h, under 20, so there is no cut.
 - **The laptop's disk fell twice.**
   - At 23:21Z on 5 November it was 2.6 GiB free. The largest folder is another lab's build folder (17 GiB), noted for that lab on #2028 (6672142338).
@@ -83,6 +89,18 @@ My decision card is on #3472 (6674681832), after two fresh decision reviews, log
   - width 512 is on pod C (a 5090: 6 grid cells);
   - width 1,024 moves to the second run unit.
 - The cells are unchanged, and each is covered once.
+
+## What changed
+
+Docs only; no code changes. The instrument and the trainer are the pin's, `e052abf41`.
+
+- **The ORDER** and this REPORT, under `docs/loop/tasks/scale-probe/claude-295/`.
+- **One notebook row** in `docs/research/notebook/float-training.md`.
+- **Gap 9 in `docs/model/pipeline-map.md`** now says the slope is unread because the trunk does not yet learn human text, with the 256 and 512 numbers.
+- **The item stays `ready`.** This REPORT says `References #3472`, because the deciding slopes need width 1,024.
+- **Off the repository:**
+  - the sealed runs, `results/claude/scale-probe-2026-11-05/runs/A` and `runs/C`, and R9's `r9/w256-d3-s1` and `r9/w512-d3-s1`, all in the store;
+  - the job, watch, rescore, seal, pick and grading scripts in `local/claude/claude-295/`, uncommitted.
 
 ## Measurements
 
@@ -145,12 +163,75 @@ Training took 1,474–1,508 s per grid cell and 1,015 s for the contrast cell. S
 
 ### Width 512 (pod C)
 
-- w512-d1-s1, d2-s1, d3-s1 and d1-s2 have trained (train exit 0). w512-d3-s1 and w512-d1-s2 scored whole; d1-s1 and d2-s1 are rescored per panel after C's main ends.
-- w512-d2-s2 and w512-d3-s2 are training (to about 03:20Z, 6 November).
-- R9 at (512, D3, seed 1) runs on pod C before the seal. It is the snapped form, as at 256.
+Pod C's main ended at 03:25:36Z with EXIT 6, as expected with three cells unscored. Its finish rescored them (all EXIT 0), ran R9, and sealed `runs/C` at 03:51:38Z, read back from the store and checked. Pod C was down at 03:56:33Z.
+
+Training took 2,875–2,932 s per cell. Whole-process scoring took 335–337 s, and the per-panel rescore about 7 minutes a cell.
+
+- **What was graded.** The laptop graded each cell's sealed no-memory rows:
+  - All 100 picked files match the seal's `SHA256SUMS.files`, and each rescored cell's 28 files match its own.
+  - Every grade's recorded `rows_file_sha256` matches a sealed file: 12 of 12 whole-scored, and 4 of 4 for each rescored cell.
+  - Every checkpoint scores the panel's 1,460,697 rows (row identity `5f88a5b3…`, I-4), and I-5 reads `same` on every panel of every cell.
+
+**The panel's whole-table nearest top-1** (`grade/w512-*/grade.json`):
+
+| cell | seed 1 | seed 2 | at width 256 (seeds 1 / 2) | its TRAIN's T2 | unigram |
+|---|---|---|---|---|---|
+| D1 (a quarter) | 18,295 | 15,284 | 18,402 / 23,139 | 253,018 | 37,421 |
+| D2 (a half) | 13,058 | 13,078 | 20,247 / 11,504 | 255,504 | 37,421 |
+| D3 (all) | 20,227 | 15,553 | 20,061 / 24,961 | 256,660 | 37,421 |
+
+**The paired readings at 512** (`pair/w512-*.json`):
+
+| pair | all rows | rows unseen in the cleaner mix |
+|---|---|---|
+| each cell vs its T2 | behind (d −234,723 to −242,446) | behind |
+| each cell vs the unigram | behind (d −17,194 to −24,363) | behind |
+| D3 vs D1 | mixed: d +1,932 / +269, band 1,663 | inside |
+| D3 vs D2 | mixed: d +7,169 / +2,475, band 4,694 | mixed |
+| D2 vs D1 | mixed: d −5,237 / −2,206, band 3,031 | mixed |
+
+- **R5's data slope at 512** is read from its end pair, D3 against D1: mixed, so it is not distinguishable from flat at this width and these seeds.
+- **R6, width 512 against width 256 at D3** (`pair/w512-d3-vs-w256-d3.json`, clean = D3's seen set): **inside** on all rows (d +166 / −9,408, band 9,574) and on unseen rows (d +261 / −6,942, band 7,203). Doubling the width is not distinguishable from no change at these seeds.
+- **R7, by source,** (512, D3, seed 1), each as model / T2 / unigram:
+  - oasst2: 2,116 / 30,868 / 4,601;
+  - wiki-00000: 5,083 / 71,600 / 6,851;
+  - wiki-00020: 6,495 / 77,379 / 14,538;
+  - wiki-00040: 6,533 / 76,813 / 11,431.
+
+  The model is under the unigram on every source, as at 256 (1,699 / 5,335 / 6,525 / 6,502).
+- **R4, tok/s at 512** (laptop, Apple M1, on AC power this time, `r4/w512-d3-s1.toks.json`):
+  - The export of (512, D3, seed 1) is `w512-d3-s1.uorlut`: 4,302,016 bytes, sha256 `6e83e676…`. It was made by the same command as 256's, whose export this command reproduces byte for byte (`30326134…`).
+  - At its context of 192: prefill 691 tok/s and decode 673 tok/s with the read; 745 and 750 without it.
+  - Width 256, timed again in the same AC session (`r4/w256-d3-s1.ac.toks.json`): prefill 1,344 and decode 1,329 with the read; 1,419 and 1,417 without. So width 512 serves at about half of 256's rate, from twice the bytes. The 256 battery figures above are within 2% of these.
+  - The prefills of 512 and longer are skipped, as at 256.
+- **R9 at 512:** the snapped form, NOT_RUN in the served form (the negatives above).
+
+## Checks run at the head
+
+- **The head** adds this REPORT's width-512 sections, the notebook row and gap 9's 512 lines to `69c14edaa`. No code changed after the pin.
+- **The laptop gates:** `loop report --check --order docs/loop/tasks/scale-probe/claude-295/ORDER.md` and `loop pr-check --local`, run at the head before the review record.
+- **The pods:** A down at 01:29Z, D's three starts deleted, and C down at 03:56:33Z, each after its seal was read back from the store. `uor-pod status` then showed 0 running pods.
+- **GPU spend:** about $6.93 on pods A and C (the watcher's $6.65 at 03:26Z, plus pod C's last 30 minutes at $0.563/h), and about $3 on pod D's three starts.
+- **Reviews, each in a fresh context:**
+  - the decision review of the width-1,024 card, two rounds, posted at #3472 6674681832;
+  - the exact-head review and a claims check of this REPORT, the notebook row and gap 9, recorded by `loop review` at the final head.
+
+## Skills used
+
+None applied.
 
 ## Still open
 
-- Width 512: the last two cells, the rescore, the seal, the grades and pairs, R6 (512 against 256 at D3), R7, R4 at 512, and I-5.
-- The notebook row in `docs/research/notebook/float-training.md`, and gap 9 in the pipeline map.
-- Width 1,024 and R1–R3: the second run unit.
+- Width 1,024 and R1–R3: the second run unit, after the classification (the decision card above). Under Casey's one-track direction of 6 November (#2028 6675163438), the classification comes first, and width 1,024 waits until the trunk learns human text.
+
+## Plain summary
+
+This unit trained the project's one model on real, human-written text for the first time: Wikipedia and OASST2 replies, 28M tokens. It ran two sizes (256 and 512 numbers per position), three amounts of data and two seeds each, on two rented GPUs, and graded every model on 1.46M held-out positions.
+
+The model did not learn the text. Its training loss stayed flat at about 1.0035 for all 8,192 steps, while the same recipe on the project's templated text falls to 0.82. On held-out text, every model guesses the next token right less often than simply always naming TRAIN's single commonest token, and far less often than a table of "which token usually follows this one". The bigger model is no better than the smaller one, and serves at half the speed.
+
+What the model predicts is telling: the right mix of tokens, scattered across contexts, rather than the likeliest token for each context. The likely cause, still a hypothesis, is the training objective. It pushes each guess away from whichever token is nearest whenever that token is not the right answer. In ambiguous text that happens on most rows, even for the best guess.
+
+The planned question, how much better the model gets per doubling in size, needs the largest size, 1,024, which did not fit the 32 GB card. A 96 GB card never started. That size waits. By Casey's direction, the next unit tests the objective with fixed targets, and every later unit works on getting the model to learn human text. GPU time cost about $10.
+
+References #3472.
