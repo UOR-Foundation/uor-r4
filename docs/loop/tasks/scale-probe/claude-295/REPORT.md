@@ -56,14 +56,19 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
 
 ## The decision on width 1,024
 
-My decision card, after its own fresh decision review, is logged on #3472 for Casey to reverse.
-- **The decision.** Width 1,024's 7 cells move to the second run unit, which first classifies the flat real-text loss.
-- **What the second unit runs, in order:**
-  1. The loader and mask (laptop, no GPU): what the trainer reads from D1's TRAIN against mw-balp's.
-  2. The learning rate, with one longer-positions arm for under-training.
-  3. The objective's margin and rivals on human text.
-- **The 1,024 cells** run only if the classification leaves the width question open.
-- **The ORDER's last paragraph** (row 1's seed-3 runs) is extended to these cells. The item stays `ready`, and this REPORT says `References #3472`: done-when 3's fitted slope needs three widths.
+My decision card is on #3472 (6674681832), after two fresh decision reviews, logged for Casey to reverse. The 96 GB ask on #2028 is withdrawn for now (6674683811).
+- **The decision.** Width 1,024's 7 cells move to the second run unit, which first classifies the real-text training loss.
+- **Why defer.** Read now, R1 and R2 would rest on an unclassified instrument: its real-text loss does not fall, and its cells are behind the unigram (§4.2).
+  - At 256, D3 against D1 reads `ahead` on all rows and `mixed` on the unseen rows. So Bar row 5 is possible at 1,024, but its meaning would depend on that fault.
+- **What the second unit runs, in order:** at most 6 GPU runs at (256, D1, seed 1) on one 5090.
+  1. The loader and mask, on the laptop with no GPU: what the trainer reads from D1's TRAIN against mw-balp's.
+  2. The learning rate: at most two other rates, plus one longer-positions arm.
+  3. The objective's margin and rivals: at most two settings.
+- **What the outcome does to width 1,024:**
+  - a loader or mask defect taints every reading here, and the grid reruns with 1,024;
+  - an arm that makes the loss fall reruns the grid with that recipe and 1,024;
+  - if every arm stays flat, it is a mechanism result for 256 and 512 only, and 1,024 stays NOT RUN.
+- **The ORDER's last paragraph**, which covers row 1's seed-3 runs, is extended to these cells. The item stays `ready`, and this REPORT says `References #3472`, because the deciding slopes need width 1,024.
 
 ## Departures from the sheet's pod plan
 
