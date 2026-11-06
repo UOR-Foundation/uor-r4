@@ -64,7 +64,7 @@ The winner is frozen before the fresh panel is opened.
 2. `exact`: exact 4,096-bit vocabulary signature;
 3. `cpu_oracle`: in-memory CPU `unigram_jaccard_ordinal_tie`.
 
-## Data and power
+## Data split
 
 - TRAIN `tt-2711`;
 - fresh `cell=dev,dev`, seed 2778, protocol 2, 128 conversations, generated
@@ -117,6 +117,14 @@ For both artifacts:
 - **CONTROL_FAULT** if the exact arm, inputs, sidecars or deterministic mapping
   drift.
 
+## Stop rule
+
+Stop before panel generation or publication on source, input, generator,
+artifact, sidecar or output-root drift; a panel below 200 reachable rows; an
+exact-arm CPU mismatch; compressed premature BOS; any compressed quality
+regression; throughput below either floor; or nondeterministic calibration,
+decisions or repeats.
+
 ## Cost
 
 Local CPU only on the Ryzen 9 9950X. The fresh-panel run is capped at 30
@@ -132,6 +140,10 @@ tests are capped at five minutes.
   `d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad`;
 - TRAIN manifest:
   `d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5`;
+- generator tree:
+  `869e65db6d0bb997a5f1094ab0de4efa1ac10c25`;
+- generator source hash:
+  `df24dd629b3606ef43f452173622cac634404ad1acaa33137ef768812be296c3`;
 - tokenizer:
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
 - artifact seed 1:
@@ -151,10 +163,164 @@ Fresh panel: `.../panels/dd-2778`
 
 Both roots are absent at registration.
 
+## Steps
+
+Run only after FIT and GO. Fill the implementation pin from the reviewed source
+head before starting.
+
+```sh
+set -euo pipefail
+SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-prompt-vsa-compression
+SHARED=/home/callard/projects/codex-playground/uor-r4
+OUT=$SHARED/local/deepseek/prompt-vsa-compression/2026-11-06
+PANEL=$OUT/panels/dd-2778
+TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
+TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
+SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
+SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
+SIDECAR1=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed1.sidecar.json
+SIDECAR2=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed2.sidecar.json
+BUILD=$SOURCE/target/deepseek/prompt-vsa-compression
+GEN_TARGET=$SOURCE/target/deepseek/prompt-vsa-compression-generator
+IMPL=<reviewed-source-head>
+
+test ! -e "$OUT"
+test ! -e "$PANEL"
+git -C "$SOURCE" diff --quiet "$IMPL" -- \
+  crates/uor-r4-integer/src/stack/prompt_reply.rs \
+  crates/uor-r4-integer/src/stack/mod.rs \
+  crates/uor-r4-cpu-train/src/bin/cpu-prompt-reply-serving-check.rs
+sha256sum -c <<EOF
+a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  $TOKENIZER
+a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd  $SEED1
+da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1  $SEED2
+140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91  $TRAIN/tokens.u16
+d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad  $TRAIN/response_mask.u8
+d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5  $TRAIN/manifest.json
+2a298b44ea34d1a8e2d40191951d3da9b3300e2ac7de65e6c2ec13950a0b6424  $SIDECAR1
+6504dcb047ce7157dd5e968c29441505cf48d993f01ec63222125634c61963b7  $SIDECAR2
+EOF
+
+mkdir -p "$OUT/panels" "$OUT/reports"
+seal() {
+  (
+    cd "$OUT"
+    find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 |
+      sort -z | xargs -0 -r sha256sum >SHA256SUMS.tmp
+    mv SHA256SUMS.tmp SHA256SUMS
+    sha256sum -c SHA256SUMS --quiet
+  )
+}
+trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
+
+cd "$SOURCE"
+/usr/bin/time -v -o "$OUT/generator-build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
+  cargo build --locked \
+  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
+  --features panel-writer --bin heldout-panel
+GEN=$GEN_TARGET/debug/heldout-panel
+
+/usr/bin/time -v -o "$OUT/panel.time.txt" \
+  timeout 900s "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
+  cell=dev,dev conversations=128 seed=2778 protocol=2 \
+  >"$OUT/panel.stdout.json"
+jq -e --arg tokenizer_sha a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 '
+  .schema == "uor-r4-chat-corpus/v1"
+  and .seed == 2778 and .dialogue_protocol_version == 2
+  and .cell.value == "dev" and .cell.phrasing == "dev"
+  and .conversations == 128 and .world == "m-world-v2"
+  and .tokenizer.sha256 == $tokenizer_sha
+' "$PANEL/manifest.json" >/dev/null
+
+/usr/bin/time -v -o "$OUT/build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+  cargo build --locked --release -p uor-r4-cpu-train \
+  --bin cpu-prompt-reply-serving-check
+BIN=$BUILD/release/cpu-prompt-reply-serving-check
+
+run() {
+  name=$1 artifact=$2 expected=$3 sidecar=$4
+  shift 4
+  /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
+    timeout 1800s "$BIN" "$sidecar" "$TRAIN" "$PANEL" "$artifact" "$TOKENIZER" \
+    --protocol 2 --expected-artifact "$expected" \
+    --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
+    "$@" >"$OUT/reports/$name.json"
+}
+
+for repeat in 1 2 3; do
+  run "seed1-exact-$repeat" "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$SIDECAR1"
+  run "seed1-compressed-$repeat" "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd "$SIDECAR1" --choose-compressed
+  run "seed2-exact-$repeat" "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$SIDECAR2"
+  run "seed2-compressed-$repeat" "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 "$SIDECAR2" --choose-compressed
+done
+
+for seed in seed1 seed2; do
+  for arm in exact compressed; do
+    jq -s -e '
+      map(del(.prompts_per_second,.selection_elapsed_us)) | unique | length == 1
+    ' "$OUT"/reports/$seed-$arm-*.json >/dev/null
+  done
+  jq -e '
+    .signature_bits == 4096 and .signature_mapping == "vocabulary"
+    and .reading.premature_bos == 0
+  ' "$OUT/reports/$seed-exact-1.json" >/dev/null
+  jq -e '
+    .reading.premature_bos == 0
+    and .reading.emitted == .reading.reference_reachable
+    and .signature_bits < 4096
+    and .calibration.selected_bits == .signature_bits
+    and .calibration.selected_mapping == .signature_mapping
+  ' "$OUT/reports/$seed-compressed-1.json" >/dev/null
+  exact_median=$(jq -s 'map(.prompts_per_second)|sort|.[length/2]' "$OUT"/reports/$seed-exact-*.json)
+  compressed_median=$(jq -s 'map(.prompts_per_second)|sort|.[length/2]' "$OUT"/reports/$seed-compressed-*.json)
+  jq -n -e \
+    --argjson exact "$(jq -c .reading "$OUT/reports/$seed-exact-1.json")" \
+    --argjson compressed "$(jq -c .reading "$OUT/reports/$seed-compressed-1.json")" \
+    --argjson exact_rate "$exact_median" \
+    --argjson compressed_rate "$compressed_median" '
+      $compressed.exact_reference >= $exact.exact_reference
+      and $compressed.opening_correct >= $exact.opening_correct
+      and $compressed.correct_body_positions >= $exact.correct_body_positions
+      and $compressed_rate >= 1.25 * $exact_rate
+      and $compressed_rate >= 25000
+    ' >/dev/null
+done
+
+jq -s -e '
+  (map(.calibration.selected_bits) | unique | length == 1)
+  and (map(.calibration.selected_mapping) | unique | length == 1)
+' "$OUT"/reports/seed*-compressed-*.json >/dev/null
+
+env CARGO_TARGET_DIR="$BUILD" cargo test --locked \
+  -p uor-r4-integer --features serving-wasm --lib \
+  >"$OUT/reports/integer-lib-tests.log" 2>&1
+env CARGO_TARGET_DIR="$BUILD" cargo test --locked \
+  -p uor-r4-integer --features serving-wasm --test openai_loopback \
+  >"$OUT/reports/openai-loopback-tests.log" 2>&1
+env CARGO_TARGET_DIR="$BUILD" cargo test --locked -p uor-r4-cpu-train --lib \
+  >"$OUT/reports/cpu-tests.log" 2>&1
+
+printf 'KEEP\n' >"$OUT/outcome.txt"
+test "$(du -sb "$OUT" | cut -f1)" -le 33554432
+```
+
+## Minimum test power
+
+- both public artifacts;
+- at least 200 reference-reachable seed-2778 rows per artifact;
+- exact 471/471 row-level CPU ordinal/reply identity;
+- three alternating fresh-process runs per artifact and arm;
+- candidate selection on at least 40 held-out TRAIN prompts;
+- equal-or-better compressed exact, opening and body aggregates;
+- at least 1.25x exact and 25,000 prompts/s selection throughput;
+- byte-identical sidecars, deterministic calibration and zero premature BOS.
+
 ## TEST FITNESS
 
-Pending implementation pins, focused tests, source review and a check that the
-fresh panel and output roots remain absent.
+TEST FITNESS: PENDING - implementation pins, focused tests and exact-head
+source review are not yet complete.
 
 ## Pre-run GO
 
