@@ -1,3 +1,46 @@
+## 2026-11-06 — Continuation guard suppresses stops but breaks exact content (deepseek)
+
+A confident full-sequence continuation suppressed **23** boundary decisions on
+fresh seed 2786 and both artifacts, but exact replies fell from **17 to 14**
+while body positions stayed at **661/660**. Premature BOS moved only from
+**70/81** to **65/80**, and only **202/223** of 467 reachable replies completed.
+The shuffled guard made zero exact replies, confirming activity rather than a
+vacuous control.
+
+This is a **REJECT** for the fixed continuation-backed boundary guard.
+Confident continuation is relevant branch evidence, but extending past a
+boundary can alter correct trailing content. Record:
+[deepseek-229](../loop/tasks/cpu-training-pilot/deepseek-229/REPORT.md).
+
+## 2026-11-06 — Top-eight branch coverage doubles endpoint stops but still fails (deepseek)
+
+Top-8 retrieved branches made **48** endpoint stops per artifact, up from 23
+for top-1, and reduced premature BOS from **55/80** to **43/68**. However only
+**175/208** of 437 reachable replies completed, and exact/body stayed exactly at
+the boundary arm's **14** and **936/933**. The shuffled branch guard also made
+14 exact replies. This is a **REJECT** for fixed K=8 branch coverage.
+Record: [deepseek-227](../loop/tasks/cpu-training-pilot/deepseek-227/REPORT.md).
+
+## 2026-11-06 — Retrieved-prefix endpoint guard preserves content but still fails termination (deepseek)
+
+A generated-reply-prefix guard deferred the boundary only while the complete
+generated reply remained a prefix of the nearest retrieved TRAIN reply. On
+fresh seed 2784 and both artifacts it preserved the boundary arm's **17** exact
+replies and **644/642** body positions, changed **23** complete outcomes, and
+reduced premature BOS from **73/91** to **67/85**.
+
+That was insufficient. The candidate completed only **206/229** of 471
+reachable replies, and the true-retrieval guard did not beat the shuffled guard
+on exact replies. Unconditional stored length still lost content at
+**497/495** body positions, while full retrieval remained stronger at **50**
+exact and **955** body.
+
+This is a **REJECT** for the fixed full-prefix endpoint guard. It confirms that
+a prompt-level retrieved reply becomes brittle after generated-content
+divergence; the next stop signal must use generated-state branch evidence.
+Record:
+[deepseek-225](../loop/tasks/cpu-training-pilot/deepseek-225/REPORT.md).
+
 ## 2026-11-06 — Stored-length completion removes bad stops but loses content quality (deepseek)
 
 The full-sequence suffix content selector from deepseek-198 was paired with the

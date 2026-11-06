@@ -5,7 +5,9 @@ use uor_r4_cpu_train::{
     compare_suffix_arbitration_rows, derive_full_sequence_suffix_content_memory,
     derive_prompt_retrieval_memory, derive_reply_boundary_memory, evaluate_prompt_retrieval,
     evaluate_suffix_arbitration_replies, evaluate_suffix_arbitration_replies_to_length,
-    normalized_reference, shuffle_suffix_memory, suffix_arbitration_changes,
+    evaluate_suffix_arbitration_replies_with_aligned_endpoint,
+    evaluate_suffix_arbitration_replies_with_branch_endpoint, normalized_reference,
+    shuffle_prompt_retrieval_replies, shuffle_suffix_memory, suffix_arbitration_changes,
     validate_corpus_manifest, CopyKeyReplyMetric, CpuCorpusIdentity, CpuMaskedCorpus,
     MemoryWeightSample, PromptRetrievalArm, SuffixArbitrationArm, TimedSuffixArbitrationReading,
 };
@@ -61,19 +63,74 @@ fn run() -> Result<(), String> {
         PromptRetrievalArm::UnigramJaccardOrdinalTie,
     )
     .map_err(|error| error.to_string())?;
-    let lengths = full_retrieval
+    let retrieved_replies = full_retrieval
         .steps
         .iter()
-        .map(|step| normalized_reference(&train.samples[step.selected_ordinal].reply).len())
-        .collect::<Vec<_>>();
+        .map(|step| {
+            retrieval
+                .reply_at(step.selected_ordinal)
+                .map(<[u32]>::to_vec)
+                .ok_or_else(|| "retrieved reply ordinal is missing".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let lengths = retrieved_replies.iter().map(Vec::len).collect::<Vec<_>>();
     if lengths
         .iter()
         .any(|&length| length == 0 || length > config.cap)
     {
         return Err("retrieved reply length is outside 1..=cap".to_owned());
     }
+    let (shuffled_retrieval, changed_retrieval_replies) =
+        shuffle_prompt_retrieval_replies(&retrieval, config.seed)
+            .map_err(|error| error.to_string())?;
+    let shuffled_retrieval_reading = evaluate_prompt_retrieval(
+        &artifact,
+        &shuffled_retrieval,
+        &shuffled_retrieval,
+        &panel.samples,
+        config.cap,
+        PromptRetrievalArm::UnigramJaccardOrdinalTie,
+    )
+    .map_err(|error| error.to_string())?;
+    let shuffled_replies = shuffled_retrieval_reading
+        .steps
+        .iter()
+        .map(|step| {
+            shuffled_retrieval
+                .reply_at(step.selected_ordinal)
+                .map(<[u32]>::to_vec)
+                .ok_or_else(|| "shuffled retrieved reply ordinal is missing".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let reference_replies = panel
+        .samples
+        .iter()
+        .map(|sample| normalized_reference(&sample.reply).to_vec())
+        .collect::<Vec<_>>();
+    let retrieved_branches = panel
+        .samples
+        .iter()
+        .map(|sample| {
+            retrieval
+                .top_replies(&sample.prompt, config.top_k)
+                .map_err(|error| error.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let shuffled_branches = panel
+        .samples
+        .iter()
+        .map(|sample| {
+            shuffled_retrieval
+                .top_replies(&sample.prompt, config.top_k)
+                .map_err(|error| error.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let reference_branches = reference_replies
+        .iter()
+        .map(|reply| vec![reply.clone()])
+        .collect::<Vec<_>>();
 
-    let candidate = evaluate_suffix_arbitration_replies_to_length(
+    let length_candidate = evaluate_suffix_arbitration_replies_to_length(
         &artifact,
         &panel.samples,
         &lengths,
@@ -83,6 +140,44 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
+    let aligned_candidate = evaluate_suffix_arbitration_replies_with_aligned_endpoint(
+        &artifact,
+        &panel.samples,
+        &retrieved_replies,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let branch_candidate = evaluate_suffix_arbitration_replies_with_branch_endpoint(
+        &artifact,
+        &panel.samples,
+        &retrieved_branches,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let guarded_candidate = evaluate_suffix_arbitration_replies(
+        &artifact,
+        &panel.samples,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequenceContinuationGuarded,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let candidate = match config.endpoint {
+        EndpointMode::Length => &length_candidate,
+        EndpointMode::AlignedRetrieved => &aligned_candidate,
+        EndpointMode::TopKBranches => &branch_candidate,
+        EndpointMode::ContinuationGuard => &guarded_candidate,
+    };
     let boundary_arm = evaluate_suffix_arbitration_replies(
         &artifact,
         &panel.samples,
@@ -93,7 +188,7 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
-    let shuffled_arm = evaluate_suffix_arbitration_replies_to_length(
+    let shuffled_suffix_length = evaluate_suffix_arbitration_replies_to_length(
         &artifact,
         &panel.samples,
         &lengths,
@@ -103,7 +198,39 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
-    let shallow = evaluate_suffix_arbitration_replies_to_length(
+    let shuffled_endpoint_guard = evaluate_suffix_arbitration_replies_with_aligned_endpoint(
+        &artifact,
+        &panel.samples,
+        &shuffled_replies,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let shuffled_branch_guard = evaluate_suffix_arbitration_replies_with_branch_endpoint(
+        &artifact,
+        &panel.samples,
+        &shuffled_branches,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let shuffled_continuation_guard = evaluate_suffix_arbitration_replies(
+        &artifact,
+        &panel.samples,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequenceShuffledContinuationGuarded,
+        Some(&shuffled),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let shallow_length = evaluate_suffix_arbitration_replies_to_length(
         &artifact,
         &panel.samples,
         &lengths,
@@ -113,7 +240,7 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
-    let local = evaluate_suffix_arbitration_replies_to_length(
+    let local_length = evaluate_suffix_arbitration_replies_to_length(
         &artifact,
         &panel.samples,
         &lengths,
@@ -123,17 +250,39 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
-    let writer = evaluate_suffix_arbitration_replies_to_length(
+    let local_aligned = evaluate_suffix_arbitration_replies_with_aligned_endpoint(
         &artifact,
         &panel.samples,
-        &lengths,
+        &retrieved_replies,
         config.cap,
-        SuffixArbitrationArm::WriterBoundary,
+        SuffixArbitrationArm::LocalLongest32Boundary,
         None,
+        &boundary,
         config.seed,
     )
     .map_err(|error| error.to_string())?;
-    let oracle = evaluate_suffix_arbitration_replies(
+    let local_branch = evaluate_suffix_arbitration_replies_with_branch_endpoint(
+        &artifact,
+        &panel.samples,
+        &retrieved_branches,
+        config.cap,
+        SuffixArbitrationArm::LocalLongest32Boundary,
+        None,
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let writer = evaluate_suffix_arbitration_replies(
+        &artifact,
+        &panel.samples,
+        config.cap,
+        SuffixArbitrationArm::WriterBoundary,
+        None,
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let reference_length_oracle = evaluate_suffix_arbitration_replies(
         &artifact,
         &panel.samples,
         config.cap,
@@ -143,22 +292,73 @@ fn run() -> Result<(), String> {
         config.seed,
     )
     .map_err(|error| error.to_string())?;
+    let reference_endpoint_oracle = evaluate_suffix_arbitration_replies_with_aligned_endpoint(
+        &artifact,
+        &panel.samples,
+        &reference_replies,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let reference_branch_oracle = evaluate_suffix_arbitration_replies_with_branch_endpoint(
+        &artifact,
+        &panel.samples,
+        &reference_branches,
+        config.cap,
+        SuffixArbitrationArm::DeeperFullSequence32,
+        Some(&suffix),
+        &boundary,
+        config.seed,
+    )
+    .map_err(|error| error.to_string())?;
+    let (shuffled_arm, local, oracle, active_changed) = match config.endpoint {
+        EndpointMode::Length => (
+            &shuffled_suffix_length,
+            &local_length,
+            &reference_length_oracle,
+            changed_targets,
+        ),
+        EndpointMode::AlignedRetrieved => (
+            &shuffled_endpoint_guard,
+            &local_aligned,
+            &reference_endpoint_oracle,
+            changed_retrieval_replies,
+        ),
+        EndpointMode::TopKBranches => (
+            &shuffled_branch_guard,
+            &local_branch,
+            &reference_branch_oracle,
+            changed_retrieval_replies,
+        ),
+        EndpointMode::ContinuationGuard => (
+            &shuffled_continuation_guard,
+            &local_aligned,
+            &reference_endpoint_oracle,
+            changed_targets,
+        ),
+    };
 
     let comparisons = compare_arms(
-        &candidate,
+        candidate,
         &boundary_arm,
-        &shuffled_arm,
-        &shallow,
-        &local,
+        shuffled_arm,
+        &shallow_length,
+        local,
         &writer,
     )?;
-    let changes_from_local = suffix_arbitration_changes(&candidate, &local);
-    let changes_from_shuffled = suffix_arbitration_changes(&candidate, &shuffled_arm);
+    let changes_from_local = suffix_arbitration_changes(candidate, local);
+    let changes_from_shuffled = suffix_arbitration_changes(candidate, shuffled_arm);
+    let changes_from_boundary = suffix_arbitration_changes(candidate, &boundary_arm);
+    let complete_rows_changed_from_boundary = complete_outcome_changes(candidate, &boundary_arm);
+    let complete_rows_changed_from_shuffled = complete_outcome_changes(candidate, shuffled_arm);
     let reachable = candidate.reading.reference_reachable;
     let reachability_consistent = [
         boundary_arm.reading.reference_reachable,
         shuffled_arm.reading.reference_reachable,
-        shallow.reading.reference_reachable,
+        shallow_length.reading.reference_reachable,
         local.reading.reference_reachable,
         writer.reading.reference_reachable,
         full_retrieval.reading.reference_reachable,
@@ -166,52 +366,82 @@ fn run() -> Result<(), String> {
     ]
     .into_iter()
     .all(|arm_reachable| arm_reachable == reachable);
-    let emitted = candidate.reading.bos_complete + candidate.reading.length_complete;
+    let emitted = candidate.reading.bos_complete
+        + candidate.reading.length_complete
+        + candidate.reading.retrieved_endpoint_complete;
     let all_emitted = emitted == reachable;
-    let exact_local = comparisons["local_longest_32_length"]["exact_reference"]["passes"]
+    let comparison_control = match config.endpoint {
+        EndpointMode::Length => "shuffled_endpoint_control",
+        EndpointMode::AlignedRetrieved
+        | EndpointMode::TopKBranches
+        | EndpointMode::ContinuationGuard => "shuffled_endpoint_control",
+    };
+    let exact_shuffled = comparisons[comparison_control]["exact_reference"]["passes"]
         .as_bool()
         .unwrap_or(false);
-    let exact_shuffled = comparisons["shuffled_suffix_length"]["exact_reference"]["passes"]
-        .as_bool()
-        .unwrap_or(false);
-    let best_body_control = boundary_arm
-        .reading
-        .correct_body_positions
-        .max(local.reading.correct_body_positions);
-    let body_pass = candidate.reading.correct_body_positions >= best_body_control;
-    let active = candidate.reading.global_decisions >= 100
-        && changes_from_local.changed_steps > 0
-        && changes_from_shuffled.changed_steps > 0
-        && changed_targets > 0;
-    let output = if reachable < 200 || candidate.reading.global_decisions < 100 {
+    let exact_retained = candidate.reading.exact_reference >= boundary_arm.reading.exact_reference;
+    let body_retained =
+        candidate.reading.correct_body_positions >= boundary_arm.reading.correct_body_positions;
+    let changed = match config.endpoint {
+        EndpointMode::Length => {
+            changes_from_local.changed_steps > 0 && changes_from_shuffled.changed_steps > 0
+        }
+        EndpointMode::AlignedRetrieved
+        | EndpointMode::TopKBranches
+        | EndpointMode::ContinuationGuard => {
+            complete_rows_changed_from_boundary > 0 && complete_rows_changed_from_shuffled > 0
+        }
+    };
+    let active = candidate.reading.global_decisions >= 100 && changed && active_changed > 0;
+    let endpoint_power = match config.endpoint {
+        EndpointMode::Length => true,
+        EndpointMode::AlignedRetrieved | EndpointMode::TopKBranches => {
+            candidate.reading.retrieved_endpoint_complete >= 20
+        }
+        EndpointMode::ContinuationGuard => candidate.reading.guarded_bos_complete >= 20,
+    };
+    let output = if reachable < 200 || candidate.reading.global_decisions < 100 || !endpoint_power {
         "INSUFFICIENT_POWER"
-    } else if !reachability_consistent
-        || !active
-        || !all_emitted
-        || candidate.reading.premature_bos != 0
-    {
+    } else if !reachability_consistent || !active {
         "CONTROL_FAULT"
-    } else if exact_local && exact_shuffled && body_pass {
-        "KEEP"
     } else {
-        "REJECT"
+        if all_emitted
+            && candidate.reading.premature_bos == 0
+            && exact_retained
+            && body_retained
+            && exact_shuffled
+        {
+            "KEEP"
+        } else {
+            "REJECT"
+        }
     };
 
     let readings = serde_json::json!({
-        "full_sequence_stored_length": candidate.reading,
+        "candidate": candidate.reading,
+        "full_sequence_stored_length": length_candidate.reading,
+        "aligned_retrieved_endpoint": aligned_candidate.reading,
         "full_sequence_boundary": boundary_arm.reading,
-        "shuffled_suffix_stored_length": shuffled_arm.reading,
-        "shallow_global_stored_length": shallow.reading,
-        "local_longest_stored_length": local.reading,
-        "writer_stored_length": writer.reading,
+        "shuffled_suffix_stored_length": shuffled_suffix_length.reading,
+        "shuffled_retrieval_guard": shuffled_endpoint_guard.reading,
+        "shuffled_branch_guard": shuffled_branch_guard.reading,
+        "shallow_global_stored_length": shallow_length.reading,
+        "local_longest_stored_length": local_length.reading,
+        "local_longest_aligned_endpoint": local_aligned.reading,
+        "local_longest_branch_endpoint": local_branch.reading,
+        "writer_boundary": writer.reading,
         "full_retrieval": full_retrieval.reading,
-        "reference_length_oracle": oracle.reading,
+        "reference_length_oracle": reference_length_oracle.reading,
+        "reference_endpoint_oracle": reference_endpoint_oracle.reading,
+        "reference_branch_oracle": reference_branch_oracle.reading,
+        "continuation_guarded": guarded_candidate.reading,
+        "shuffled_continuation_guarded": shuffled_continuation_guard.reading,
     });
     let report = serde_json::json!({
-        "schema": "uor-r4.cpu-content-length/1",
+        "schema": "uor-r4.cpu-content-endpoint/2",
         "substrate": "cpu-development-research",
         "qualification": "development-only",
-        "claim": "full-sequence suffix content with reference-independent stored-length completion on a public CPU development panel",
+        "claim": "full-sequence suffix content with a reference-independent aligned retrieved endpoint and boundary fallback on a public CPU development panel",
         "inputs": {
             "train": panel_input(&train),
             "panel": panel_input(&panel),
@@ -221,11 +451,18 @@ fn run() -> Result<(), String> {
         "settings": {
             "cap": config.cap,
             "seed": config.seed,
-            "length_source": "nearest TRAIN prompt's stored reply",
+            "endpoint": match config.endpoint {
+                EndpointMode::Length => "stored_length",
+                EndpointMode::AlignedRetrieved => "aligned_retrieved_with_boundary_fallback",
+                EndpointMode::TopKBranches => "top_k_branches_with_boundary_fallback",
+                EndpointMode::ContinuationGuard => "content_continuation_guarded_boundary",
+            },
+            "top_k": config.top_k,
             "retrieval": "raw unigram Jaccard, lower ordinal on ties",
             "suffix_depth": uor_r4_cpu_train::SUFFIX_MEMORY_MAX_DEPTH,
             "minimum_observations": uor_r4_cpu_train::SUFFIX_ARBITRATION_MIN_OBSERVATIONS,
             "shuffle_changed_targets": changed_targets,
+            "retrieval_shuffle_changed_replies": changed_retrieval_replies,
         },
         "table": {
             "content": suffix_census,
@@ -239,11 +476,14 @@ fn run() -> Result<(), String> {
         "changes": {
             "from_local": changes_from_local,
             "from_shuffled": changes_from_shuffled,
+            "from_boundary": changes_from_boundary,
+            "complete_rows_from_shuffled": complete_rows_changed_from_shuffled,
+            "complete_rows_from_boundary": complete_rows_changed_from_boundary,
         },
         "comparisons": comparisons,
         "readings": readings,
         "arm_hashes": {
-            "full_sequence_stored_length": {
+            "candidate": {
                 "reply": candidate.reply_sha256,
                 "decision": candidate.decision_sha256,
             },
@@ -251,7 +491,7 @@ fn run() -> Result<(), String> {
                 "reply": boundary_arm.reply_sha256,
                 "decision": boundary_arm.decision_sha256,
             },
-            "shuffled_suffix_stored_length": {
+            "endpoint_control": {
                 "reply": shuffled_arm.reply_sha256,
                 "decision": shuffled_arm.decision_sha256,
             },
@@ -261,12 +501,14 @@ fn run() -> Result<(), String> {
             "emitted": emitted,
             "premature_bos": candidate.reading.premature_bos,
             "global_decisions": candidate.reading.global_decisions,
+            "endpoint_completions": candidate.reading.retrieved_endpoint_complete,
+            "guarded_bos_completions": candidate.reading.guarded_bos_complete,
             "reachability_consistent": reachability_consistent,
-            "exact_vs_local": exact_local,
             "exact_vs_shuffled": exact_shuffled,
             "body_candidate": candidate.reading.correct_body_positions,
-            "body_best_boundary_or_local": best_body_control,
-            "body_retained": body_pass,
+            "boundary_body": boundary_arm.reading.correct_body_positions,
+            "body_retained": body_retained,
+            "exact_retained": exact_retained,
             "control_active": active,
             "outcome": output,
         },
@@ -276,6 +518,20 @@ fn run() -> Result<(), String> {
         serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
     );
     Ok(())
+}
+
+fn complete_outcome_changes(
+    candidate: &TimedSuffixArbitrationReading,
+    control: &TimedSuffixArbitrationReading,
+) -> u64 {
+    candidate
+        .rows
+        .iter()
+        .zip(&control.rows)
+        .filter(|(candidate, control)| {
+            candidate.reply_sha256 != control.reply_sha256 || candidate.stop != control.stop
+        })
+        .count() as u64
 }
 
 fn compare_arms(
@@ -289,7 +545,7 @@ fn compare_arms(
     let mut comparisons = serde_json::Map::new();
     for (name, control) in [
         ("full_sequence_boundary", boundary),
-        ("shuffled_suffix_length", shuffled),
+        ("shuffled_endpoint_control", shuffled),
         ("shallow_global_length", shallow),
         ("local_longest_32_length", local),
         ("writer_length", writer),
@@ -380,6 +636,14 @@ struct PanelPaths {
     expected_manifest_sha256: String,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EndpointMode {
+    Length,
+    AlignedRetrieved,
+    TopKBranches,
+    ContinuationGuard,
+}
+
 struct Config {
     train: PanelPaths,
     panel: PanelPaths,
@@ -387,6 +651,8 @@ struct Config {
     expected_artifact_sha256: String,
     cap: usize,
     seed: u64,
+    top_k: usize,
+    endpoint: EndpointMode,
 }
 
 fn parse_args() -> Result<Config, String> {
@@ -394,6 +660,8 @@ fn parse_args() -> Result<Config, String> {
     let mut positional = Vec::new();
     let mut cap = 64usize;
     let mut seed = 223u64;
+    let mut top_k = 8usize;
+    let mut endpoint = EndpointMode::Length;
     let mut expected = BTreeMap::<String, String>::new();
     while let Some(flag) = args.next() {
         if !flag.starts_with("--") {
@@ -414,6 +682,20 @@ fn parse_args() -> Result<Config, String> {
                     .parse()
                     .map_err(|_| format!("not a number: {value}"))?
             }
+            "--endpoint" => {
+                endpoint = match value.as_str() {
+                    "length" => EndpointMode::Length,
+                    "aligned-retrieved" => EndpointMode::AlignedRetrieved,
+                    "top-k-branches" => EndpointMode::TopKBranches,
+                    "continuation-guard" => EndpointMode::ContinuationGuard,
+                    _ => return Err(format!("unknown endpoint {value}\n{}", usage())),
+                }
+            }
+            "--top-k" => {
+                top_k = value
+                    .parse()
+                    .map_err(|_| format!("not a number: {value}"))?
+            }
             "--expected-train-tokens" => set_expected(&mut expected, "train_tokens", value, &flag)?,
             "--expected-train-mask" => set_expected(&mut expected, "train_mask", value, &flag)?,
             "--expected-train-manifest" => {
@@ -428,7 +710,7 @@ fn parse_args() -> Result<Config, String> {
             _ => return Err(format!("unknown argument {flag}\n{}", usage())),
         }
     }
-    if positional.len() != 7 || !(1..=64).contains(&cap) {
+    if positional.len() != 7 || !(1..=64).contains(&cap) || !(1..=64).contains(&top_k) {
         return Err(usage());
     }
     for key in [
@@ -462,6 +744,8 @@ fn parse_args() -> Result<Config, String> {
         expected_artifact_sha256: expected["artifact"].to_ascii_lowercase(),
         cap,
         seed,
+        top_k,
+        endpoint,
     })
 }
 
@@ -487,7 +771,8 @@ fn usage() -> String {
      --expected-train-tokens HEX --expected-train-mask HEX \
      --expected-train-manifest HEX --expected-panel-tokens HEX \
      --expected-panel-mask HEX --expected-panel-manifest HEX \
-     --expected-artifact HEX [--cap N] [--seed N]"
+     --expected-artifact HEX [--cap N] [--seed N] \
+     [--endpoint length|aligned-retrieved|top-k-branches|continuation-guard] [--top-k N]"
         .to_owned()
 }
 
@@ -507,6 +792,8 @@ mod tests {
             "PANEL_MANIFEST",
             "ARTIFACT",
             "--expected-artifact",
+            "--endpoint",
+            "--top-k",
         ] {
             assert!(usage.contains(word), "{usage}");
         }

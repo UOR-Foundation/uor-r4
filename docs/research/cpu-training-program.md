@@ -274,6 +274,37 @@ for the fixed stored-length substitution, not full-sequence content or
 geometric termination. See
 [deepseek-223](../loop/tasks/cpu-training-pilot/deepseek-223/REPORT.md).
 
+The next termination unit conditioned the stored endpoint on the generated
+trajectory itself. It deferred the boundary only while the complete generated
+reply remained an exact prefix of the nearest retrieved TRAIN reply, stopped
+at a full aligned reply, and restored boundary stopping after divergence. On
+fresh seed 2784 and both artifacts this changed **23** complete outcomes and
+reduced premature BOS from **73/91** to **67/85**, but exact and body counts
+stayed at **17** and **644/642**, only **206/229** of 471 reachable replies
+completed, and the true guard did not beat the shuffled guard on exact replies.
+Unconditional length still lost content at **497/495** body positions, while
+full retrieval remained stronger at **50/955**. This is a **REJECT** for the
+fixed full-prefix alignment guard. A retrieved prompt-level reply is too
+brittle after generated-content divergence; the next stop must use
+generated-branch evidence. See
+[deepseek-225](../loop/tasks/cpu-training-pilot/deepseek-225/REPORT.md).
+
+Top-eight retrieved branches were then tested as a generalized endpoint set.
+They doubled endpoint stops from 23 to **48** and reduced premature BOS to
+**43/68**, but only **175/208** of 437 replies completed and exact/body stayed
+at boundary **14** and **936/933**. The shuffled branch guard also made 14
+exact replies. This is a **REJECT** for fixed K=8 coverage; the next signal
+must come from the generated branch itself. See
+[deepseek-227](../loop/tasks/cpu-training-pilot/deepseek-227/REPORT.md).
+
+A boundary-time confidence guard then used the content model's own
+continuation as permission to defer BOS. It suppressed **23** decisions per
+artifact, but exact replies fell from **17 to 14**, body positions stayed flat
+at **661/660**, and only **202/223** of 467 replies completed. This is a
+**REJECT** for the fixed continuation-backed boundary. Stopping must be trained
+jointly with content or over complete branches. See
+[deepseek-229](../loop/tasks/cpu-training-pilot/deepseek-229/REPORT.md).
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.
