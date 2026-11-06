@@ -387,12 +387,13 @@ or bars.
 
 TEST FITNESS: FIT - M2 #2030 continuation closure
 
-reviewer: `continuation_closure_fitness_3`
+reviewer: `continuation_closure_fit_414_final`
 date: 2026-11-05
-head: `ec3ad30ef218fd8f0b33671ea35233e002ba2b90`
+head: `414ec5f0aa81c51a522143486665d6af1f07e65c`
 note: Whole-continuation confidence, source-depth and first-token binding,
 local/content isolation, matched displacement thresholds, cap/context
-fallback, repeats and resource gates verified.
+fallback, stop-marker evidence, failure-path compression/sealing, repeats and
+resource gates verified.
 
 ## D67 pre-run review
 
