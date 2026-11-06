@@ -118,7 +118,9 @@ own branch evidence; a retrieved full reply is too brittle after divergence.
 - full harness check: 287 rules, zero errors, 252 repository-wide warnings;
 - `xtask roadmap check` remains blocked by the pre-existing
   `infra-desktop-client-tauri` status/issue mismatch, which this diff does not
-  touch.
+  touch;
+- implementation review was a local exact-head self-review because independent
+  delegation was unavailable in this session.
 
 ## Skills used
 
