@@ -1110,6 +1110,7 @@ async function onClick(event) {
     const target = event.target.closest('[data-action]');
     if (!mounted || !target || !target.closest(MODEL_SCOPE_SELECTOR)) return;
     const action = target.dataset.action;
+    let sourceOperationId = null;
     try {
         if (action === 'native-model-folder') {
             const desktop = globalThis.UORDesktopActions;
@@ -1120,11 +1121,13 @@ async function onClick(event) {
             const names = models.map((model) => model.name).filter(Boolean);
             setMessage('info', `${names.length} pinned model${names.length === 1 ? '' : 's'}: ${names.join(', ') || 'none found'}. This list does not switch the running sidecar weights.`);
         } else if (action === 'load-bundled') {
+            sourceOperationId = latestOperationId;
             await loadBundled();
         } else if (action === 'load-published') {
             target.disabled = true;
             target.setAttribute('aria-busy', 'true');
             try {
+                sourceOperationId = latestOperationId;
                 await api.loadPublished(target.dataset.modelId);
             } finally {
                 target.disabled = false;
@@ -1132,6 +1135,7 @@ async function onClick(event) {
             }
         } else if (action === 'load-url') {
             const input = document.querySelector('#modelUrlInput');
+            sourceOperationId = latestOperationId;
             await api.loadFromUrl(input.value);
         } else if (action === 'add-api') {
             editing = { id: null, values: { preset: 'local-uor', label: API_PRESETS[0].label, baseUrl: API_PRESETS[0].baseUrl, model: API_PRESETS[0].model, apiKey: '' } };
@@ -1160,6 +1164,7 @@ async function onClick(event) {
             api.removeApi(card.dataset.apiId);
         }
     } catch (error) {
+        if (sourceOperationId !== null && sourceOperationId < latestOperationId) return;
         setMessage('error', String(error && error.message ? error.message : error));
     }
 }

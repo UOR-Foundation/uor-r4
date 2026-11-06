@@ -633,6 +633,63 @@ for (const [index, prompt] of [
     assert(closed.action === 'session_reset', `review20 ordinary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
+for (const [index, prompt] of ['17 ≤ 25', '17 ≥ 25', '17 ≠ 25', '17 · 25', '+', '+?', '+1-800-555-0100 + 2'].entries()) {
+    const id = `gen_review23_boundary_${index}`;
+    const conversationId = `conv_review23_boundary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const boundary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(boundary.action === 'generate_error' && boundary.error.includes('exact arithmetic'), `review23 arithmetic boundary must fail explicitly instead of generating (${prompt}): ${JSON.stringify(boundary)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `review23 arithmetic boundary emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review23 boundary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of [
+    '5 pm - 6 pm',
+    '5:00 PM - 6:00 PM',
+    '5:00:00 - 6:00:00',
+    '2026-11-05T17:25+01:00, 5 pm - 6 pm',
+    '2026-11-05T17:25+01:00, 5:00:00 - 6:00:00',
+    '10 - 20?',
+    '10 - 20.',
+    '10 - 20°',
+    '10 - 20$',
+    '10 - 20€',
+    '+1-800-555-0100',
+    '+1 (800) 555-0100',
+].entries()) {
+    const id = `gen_review23_ordinary_${index}`;
+    const conversationId = `conv_review23_ordinary_${index}`;
+    const expectedTokens = prompt.includes('T17:25') ? 8 : 32;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: expectedTokens } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === expectedTokens, `ordinary review23 prose must use the ordinary model path: ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review23 ordinary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+await sendToWorker({
+    action: 'generate',
+    id: 'gen_review23_valid_subtraction',
+    payload: {
+        conversationId: 'conv_review23_valid_subtraction',
+        messages: [{ role: 'user', content: '50 - 12?' }],
+        options: { max_new_tokens: 32 },
+    },
+});
+const validSubtraction = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_review23_valid_subtraction');
+assert(validSubtraction.action === 'generate_complete' && validSubtraction.fullText.startsWith('38\n') && validSubtraction.tokenCount === 0, `valid subtraction with punctuation must remain exact: ${JSON.stringify(validSubtraction)}`);
+
 const staleLoad = sendToWorker({
     action: 'load_model',
     id: 101,

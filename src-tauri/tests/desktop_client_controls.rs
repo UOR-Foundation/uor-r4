@@ -983,6 +983,61 @@ fn native_exact_arithmetic_review20_boundary_regressions() {
 }
 
 #[test]
+fn native_exact_arithmetic_review23_boundary_regressions() {
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    for prompt in [
+        "17 ≤ 25",
+        "17 ≥ 25",
+        "17 ≠ 25",
+        "17 · 25",
+        "+",
+        "+?",
+        "+1-800-555-0100 + 2",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("review23 arithmetic boundary RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert!(response["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
+    }
+    for prompt in [
+        "5 pm - 6 pm",
+        "5:00 PM - 6:00 PM",
+        "5:00:00 - 6:00:00",
+        "2026-11-05T17:25+01:00, 5 pm - 6 pm",
+        "2026-11-05T17:25+01:00, 5:00:00 - 6:00:00",
+        "10 - 20?",
+        "10 - 20.",
+        "10 - 20°",
+        "10 - 20$",
+        "10 - 20€",
+        "+1-800-555-0100",
+        "+1 (800) 555-0100",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary review23 prose RPC should succeed");
+        assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
+    }
+    let subtraction = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":"50 - 12?"}]}),
+    )
+    .expect("valid subtraction with sentence punctuation should succeed");
+    assert_eq!(subtraction["handled"], json!(true));
+    assert_eq!(subtraction["result"], json!("38"));
+}
+
+#[test]
 fn native_write_file_enforces_its_size_cap() {
     let root = unique_temp_dir("write-cap");
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());

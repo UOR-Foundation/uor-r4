@@ -17,8 +17,12 @@ function response(bytes, total = bytes.byteLength) {
 
 function deferred() {
     let resolve;
-    const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
-    return { promise, resolve };
+    let reject;
+    const promise = new Promise((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
 }
 
 let moduleCounter = 0;
@@ -218,7 +222,7 @@ test('missing or throwing storage keeps the synthetic default and permits bundle
     }
 });
 
-async function applyPageOperationGuard(api, toast = () => {}) {
+async function applyPageOperationGuard(api, toast = () => {}, app = { generating: false }) {
     const { readFileSync } = await import('node:fs');
     const { default: vm } = await import('node:vm');
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -232,7 +236,7 @@ async function applyPageOperationGuard(api, toast = () => {}) {
             depth -= 1;
             if (depth === 0) {
                 const source = html.slice(start, index + 1);
-                vm.runInNewContext(`${source};guardModelSourceOperations`, { toast })(api, globalThis.document);
+                vm.runInNewContext(`${source};guardModelSourceOperations`, { toast, app })(api, globalThis.document);
                 return true;
             }
         }
@@ -310,4 +314,38 @@ test('a rejected panel bundled load surfaces the existing page error toast', asy
     assert.equal(clicks.length, 1);
     await assert.rejects(clicks[0], /bundled artifact missing/);
     assert.deepEqual(notices, [{ text: 'bundled artifact missing', tone: 'error' }]);
+});
+
+test('source changes are blocked during local generation without discarding the active source', async () => {
+    const bytes = artifactBytes();
+    const { api } = await fresh(async () => response(bytes));
+    const before = api.active();
+    const notices = [];
+    await applyPageOperationGuard(api, (text, tone) => notices.push({ text, tone }), { generating: true });
+    const result = await api.loadBundled();
+    assert.equal(result.blocked, true);
+    assert.deepEqual(api.active(), before);
+    assert.deepEqual(notices, [{ text: 'Stop the current reply before changing models.', tone: 'warn' }]);
+});
+
+test('a stale bundled rejection after a newer source does not toast', async () => {
+    const bytes = artifactBytes();
+    const bundled = deferred();
+    const url = deferred();
+    const responses = [bundled.promise, url.promise];
+    const { api, fire } = await fresh(async () => responses.shift());
+    const notices = [];
+    await applyPageOperationGuard(api, (text, tone) => notices.push({ text, tone }));
+    const clicks = fire('click', {
+        target: { closest() { return {}; } },
+        preventDefault() {},
+        stopImmediatePropagation() {},
+    });
+    const bundledLoad = clicks[0];
+    const urlLoad = api.loadFromUrl('https://example.com/newer.lut');
+    url.resolve(response(bytes));
+    await urlLoad;
+    bundled.reject(new Error('older source failed'));
+    await assert.rejects(bundledLoad, /older source failed/);
+    assert.deepEqual(notices, []);
 });

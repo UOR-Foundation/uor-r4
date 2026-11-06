@@ -937,7 +937,9 @@
                     ? sources.loadBundled()
                     : (typeof ModelSources !== 'undefined' ? ModelSources.loadBundled() : null);
                 if (loading && typeof loading.catch === 'function') {
-                    loading.catch(function (error) { toast(String(error && error.message || error), 'error'); });
+                    loading.catch(function (error) {
+                        if (!error || error.uorStale !== true) toast(String(error && error.message || error), 'error');
+                    });
                 }
             }, true);
             quickButton('Choose a model', function () { go('models', 'model'); });
@@ -1418,6 +1420,12 @@
             if (message.action === 'operation_error') {
                 if (message.operation === 'load_model' && typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var workerError = String(message.error || 'Operation failed.');
+                if (message.operation === 'load_model' && /Stop generation before loading/.test(workerError)) {
+                    app.workerState = app.caps ? 'ready' : 'error';
+                    toast(workerError, 'warn');
+                    updateComposerState();
+                    return;
+                }
                 app.lastWorkerError = workerError;
                 document.documentElement.dataset.lastWorkerError = workerError;
                 if (message.operation === 'load_model') {
@@ -1937,6 +1945,10 @@
                 var original = sources[name];
                 if (typeof original !== 'function') return;
                 sources[name] = function (input, operation) {
+                    if (app.generating) {
+                        toast('Stop the current reply before changing models.', 'warn');
+                        return Promise.resolve({ blocked: true, stale: true });
+                    }
                     var current = operation;
                     if (name === 'loadBundled' && current === undefined && input && typeof input === 'object') current = input;
                     if (current && Number.isInteger(current.operationId) && typeof current.sourceId === 'string') {
@@ -1945,8 +1957,20 @@
                         latestOperationId += 1;
                         current = { operationId: latestOperationId, sourceId: 'studio-' + name };
                     }
-                    if (name === 'loadBundled') return original.call(this, current);
-                    return original.call(this, input, current);
+                    var result = name === 'loadBundled'
+                        ? original.call(this, current)
+                        : original.call(this, input, current);
+                    if (result && typeof result.catch === 'function') {
+                        return result.catch(function (error) {
+                            if (current.operationId < latestOperationId) {
+                                if (error && typeof error === 'object') error.uorStale = true;
+                            } else {
+                                toast(String(error && error.message || error), 'error');
+                            }
+                            throw error;
+                        });
+                    }
+                    return result;
                 };
             });
             if (doc && typeof doc.addEventListener === 'function') {
@@ -1955,11 +1979,7 @@
                     if (!target) return;
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    var loading = sources.loadBundled();
-                    if (loading && typeof loading.catch === 'function') {
-                        loading.catch(function (error) { toast(String(error && error.message || error), 'error'); });
-                    }
-                    return loading;
+                    return sources.loadBundled();
                 }, true);
             }
         }
@@ -2372,7 +2392,7 @@
             startWorker();
             if (active.kind === 'wasm' && active.id === 'bundled-demo' && !app.caps) {
                 ModelSources.loadBundled({ operationId: 1, sourceId: 'bundled-demo' }).catch(function (error) {
-                    toast('The offline demo could not load: ' + String(error && error.message || error), 'error');
+                    if (!error || error.uorStale !== true) toast('The offline demo could not load: ' + String(error && error.message || error), 'error');
                 });
             }
             updateComposerState();

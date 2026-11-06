@@ -896,6 +896,10 @@ fn exact_tool_operand_start(rest: &str) -> bool {
                 | '>'
                 | '~'
                 | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
         )
     })
 }
@@ -931,6 +935,10 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
                 | '>'
                 | '~'
                 | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
         )
     }) || !rest.chars().any(|c| c.is_ascii_digit())
     {
@@ -961,6 +969,10 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
                 | '>'
                 | '~'
                 | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
                 | '('
                 | '{'
                 | '['
@@ -983,7 +995,11 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
 }
 
 fn exact_tool_time_atom(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
+    let lower = text
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
     let (clock, meridiem) = if let Some(clock) = lower.strip_suffix("am") {
         (clock, true)
     } else if let Some(clock) = lower.strip_suffix("pm") {
@@ -992,7 +1008,7 @@ fn exact_tool_time_atom(text: &str) -> bool {
         (lower.as_str(), false)
     };
     let fields: Vec<&str> = clock.split(':').collect();
-    if fields.len() > 2 || (fields.len() == 1 && !meridiem) {
+    if fields.len() > 3 || (fields.len() == 1 && !meridiem) {
         return false;
     }
     if fields[0].is_empty() || fields[0].len() > 2 || !fields[0].chars().all(|c| c.is_ascii_digit())
@@ -1012,14 +1028,33 @@ fn exact_tool_time_atom(text: &str) -> bool {
             || (fields[1].len() == 2
                 && fields[1].chars().all(|c| c.is_ascii_digit())
                 && fields[1].parse::<u8>().is_ok_and(|minute| minute <= 59)))
+        && (fields.len() <= 2
+            || (fields[2].len() == 2
+                && fields[2].chars().all(|c| c.is_ascii_digit())
+                && fields[2].parse::<u8>().is_ok_and(|second| second <= 59)))
 }
 
 fn exact_tool_is_time_range(rest: &str) -> bool {
-    let fields: Vec<&str> = rest.split_whitespace().collect();
-    fields.len() == 3
-        && fields[1] == "-"
-        && exact_tool_time_atom(fields[0])
-        && exact_tool_time_atom(fields[2])
+    let fields: Vec<&str> = rest.split(" - ").collect();
+    fields.len() == 2
+        && exact_tool_time_atom(fields[0].trim())
+        && exact_tool_time_atom(fields[1].trim())
+}
+
+fn exact_tool_is_signed_telephone(rest: &str) -> bool {
+    let Some(tail) = rest.strip_prefix('+') else {
+        return false;
+    };
+    if tail.contains('+') {
+        return false;
+    }
+    let digit_count = rest.chars().filter(|c| c.is_ascii_digit()).count();
+    let has_separator = rest.chars().any(|c| matches!(c, '-' | '(' | ')'));
+    (7..=15).contains(&digit_count)
+        && has_separator
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '(' | ')' | ' ' | '.'))
 }
 
 fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
@@ -1200,11 +1235,19 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return Ok(None);
     }
+    if exact_tool_is_signed_telephone(rest) {
+        return Ok(None);
+    }
     if exact_tool_is_time_range(rest) {
         return Ok(None);
     }
     if exact_tool_is_iso_date_time(rest) {
         return Ok(None);
+    }
+    if rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t')) == "+" {
+        return Err(invalid(
+            "exact arithmetic expects one decimal addition or subtraction",
+        ));
     }
     if exact_tool_leading_operator_minus(rest) {
         return Err(invalid(
@@ -1216,7 +1259,23 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         .find(|(_, c)| !matches!(c, '0'..='9' | '+' | '-' | ' ' | '\t'))
         .map_or(rest.len(), |(index, _)| index);
     let expression = rest[..expression_end].trim();
-    let mut suffix = rest[expression_end..].trim();
+    let raw_suffix = rest[expression_end..].trim();
+    if !raw_suffix.is_empty()
+        && raw_suffix
+            .chars()
+            .all(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'))
+    {
+        let fields: Vec<&str> = expression.split_whitespace().collect();
+        if fields.len() == 3
+            && fields[0].chars().all(|c| c.is_ascii_digit())
+            && fields[1] == "-"
+            && fields[2].chars().all(|c| c.is_ascii_digit())
+            && fields[0] < fields[2]
+        {
+            return Ok(None);
+        }
+    }
+    let mut suffix = raw_suffix;
     if suffix.starts_with(|c| matches!(c, '?' | '.' | '!')) {
         suffix = suffix[1..].trim_start();
     }
@@ -1233,7 +1292,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         .contains(&normalized_suffix.as_str());
     if unsupported_suffix {
         let fields: Vec<&str> = expression.split_whitespace().collect();
-        let unit_text = suffix.chars().any(char::is_alphabetic) || suffix == "%";
+        let unit_text = !suffix.is_empty();
         let continued_arithmetic = suffix.chars().any(|c| {
             c.is_ascii_digit()
                 || matches!(
@@ -2070,5 +2129,48 @@ mod tests {
                 "continued review20 arithmetic fell through: {prompt}"
             );
         }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_review23_boundary_regressions() {
+        for prompt in [
+            "17 ≤ 25",
+            "17 ≥ 25",
+            "17 ≠ 25",
+            "17 · 25",
+            "+",
+            "+?",
+            "+1-800-555-0100 + 2",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("review23 arithmetic boundary should be recognized")
+                    .is_err(),
+                "review23 arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for prompt in [
+            "5 pm - 6 pm",
+            "5:00 PM - 6:00 PM",
+            "5:00:00 - 6:00:00",
+            "2026-11-05T17:25+01:00, 5 pm - 6 pm",
+            "2026-11-05T17:25+01:00, 5:00:00 - 6:00:00",
+            "10 - 20?",
+            "10 - 20.",
+            "10 - 20°",
+            "10 - 20$",
+            "10 - 20€",
+            "+1-800-555-0100",
+            "+1 (800) 555-0100",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary review23 prose was intercepted: {prompt}"
+            );
+        }
+        let subtraction = exact_arithmetic_tool("50 - 12?")
+            .expect("valid subtraction with sentence punctuation should be recognized")
+            .expect("valid subtraction should be exact");
+        assert_eq!(subtraction.result, "38");
     }
 }
