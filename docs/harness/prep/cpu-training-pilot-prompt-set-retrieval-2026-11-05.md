@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-prompt-set-retrieval-2026-11-05`
 
 ## Status
 
-READY FOR TEST FITNESS. This sheet registers the fixed deepseek-204
-construction before fresh panel generation or artifact evaluation.
+COMPLETE - **KEEP**. The fresh seed-2777 confirmation returned 39/471 exact
+replies on both artifacts with zero premature stops and 948 body positions.
+Record: [deepseek-204](../../loop/tasks/cpu-training-pilot/deepseek-204/REPORT.md).
 
 This is D84 CPU development research. It is exact-memory evidence, not general
 fresh-wording understanding, serving integration, useful chat or GPU
