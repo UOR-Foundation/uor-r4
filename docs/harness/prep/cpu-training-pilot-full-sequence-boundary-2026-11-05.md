@@ -290,7 +290,9 @@ after opening seed 2775.
 - sealing, evidence and delivery: 10 minutes;
 - total bounded increment: 21 minutes;
 - build jobs: 16; build RSS cap: 4 GiB;
-- each evaluator run: 32 Rayon workers, 1800 s wall cap and 2 GiB peak RSS;
+- whole run: one 1800 s global deadline, with every external stage limited to
+  the remaining time;
+- each evaluator run: 32 Rayon workers and 2 GiB peak RSS;
 - retained evidence cap: 32 MiB; fresh target cap: 8 GiB;
 - placement: local Ryzen 9 9950X under D84; no pod or GPU.
 
@@ -312,6 +314,7 @@ BUILD=$SOURCE/target/deepseek/full-sequence-boundary-attempt-2
 GEN_TARGET=$SOURCE/target/deepseek/full-sequence-boundary-generator-attempt-2
 IMPL=89ed3d2138143f520ddc22e80c871e5d7f522484
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
+RUN_DEADLINE=$((SECONDS + 1800))
 
 test ! -e "$OUT"
 test ! -e "$PANEL"
@@ -344,7 +347,12 @@ seal() {
     sha256sum -c SHA256SUMS --quiet
   )
 }
-trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
+trap 'status=$?; trap - EXIT; if test -d "$OUT/reports"; then find "$OUT/reports" -type f -name "*.json" -print0 | xargs -0 -r gzip -9 || status=$?; fi; seal || status=$?; exit "$status"' EXIT
+run_limited() {
+  local remaining=$((RUN_DEADLINE - SECONDS))
+  test "$remaining" -gt 0
+  timeout "${remaining}s" "$@"
+}
 check_rss() {
   local log=$1
   local limit_kib=$2
@@ -356,11 +364,11 @@ check_rss() {
 
 cd "$SOURCE"
 /usr/bin/time -v -o "$OUT/build.time.txt" \
-  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+  run_limited env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
   cargo build --locked --release -p uor-r4-cpu-train --bin cpu-copy-full-boundary
 check_rss "$OUT/build.time.txt" 4194304
 /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
-  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
+  run_limited env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
   cargo build --locked \
   --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
   --features panel-writer --bin heldout-panel
@@ -373,7 +381,7 @@ TRAIN_MASK_SHA=$(sha256sum "$TRAIN/response_mask.u8" | cut -d ' ' -f1)
 TRAIN_MANIFEST_SHA=$(sha256sum "$TRAIN/manifest.json" | cut -d ' ' -f1)
 
 /usr/bin/time -v -o "$OUT/reports/train-preflight.time.txt" \
-  timeout 600s env RAYON_NUM_THREADS=32 "$BIN" \
+  run_limited env RAYON_NUM_THREADS=32 "$BIN" \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$SEED1" \
@@ -410,7 +418,7 @@ jq -e '
 ' "$OUT/reports/train-preflight.json" >/dev/null
 
 /usr/bin/time -v -o "$OUT/panel.time.txt" \
-  timeout 900s "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
+  run_limited "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2775 protocol=2 \
   >"$OUT/panel.stdout.json"
 check_rss "$OUT/panel.time.txt" 2097152
@@ -428,7 +436,7 @@ PANEL_MANIFEST_SHA=$(sha256sum "$PANEL/manifest.json" | cut -d ' ' -f1)
 run() {
   name=$1 artifact=$2 expected=$3
   /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
-    timeout 1800s env RAYON_NUM_THREADS=32 "$BIN" \
+    run_limited env RAYON_NUM_THREADS=32 "$BIN" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
     "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
     "$artifact" \
