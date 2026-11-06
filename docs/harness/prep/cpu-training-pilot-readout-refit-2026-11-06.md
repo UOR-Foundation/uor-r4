@@ -217,7 +217,7 @@ mkdir -p "$OUT"
 AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
 test "$AVAILABLE" -ge 32346472448
 df -B1 "$REPO" >"$OUT/storage-before.txt"
-git merge-base --is-ancestor 9f12624e2 HEAD
+git merge-base --is-ancestor 3ce113852 HEAD
 sha256sum -c <<'EOF'
 21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae  crates/uor-r4-cpu-train/src/readout_refit.rs
 6991dd97ea6026e0a166e3c0e29bf88bdd49dd91ac6dd64170bae6290d998a15  crates/uor-r4-cpu-train/src/bin/cpu-readout-refit.rs
@@ -382,7 +382,7 @@ df -B1 "$REPO" >"$OUT/storage-after.txt"
 
 ## Source pins before FIT
 
-- implementation commit: `9f12624e2`;
+- implementation commit: `3ce113852`;
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:
