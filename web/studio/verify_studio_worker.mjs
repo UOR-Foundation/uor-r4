@@ -443,6 +443,7 @@ for (const [index, prompt] of [
     `${' '.repeat(200)}1 - ?`,
     `${' '.repeat(200)}1 - Show your work`,
     `${' '.repeat(200)}2026-11-05 - ?`,
+    `${'1'.repeat(200)} - ?`,
 ].entries()) {
     const id = `gen_exact_incomplete_subtraction_${index}`;
     await sendToWorker({
@@ -503,9 +504,15 @@ for (const [index, prompt] of [
     '2026-11-05T17:25-01:00,',
     '2026-11-05T17:25+01:00, what day is it?',
     '2026-11-05T17:25-01:00, what day is it?',
+    'What is 2026-11-05T17:25+01:00 in UTC?',
+    'What is 2026-11-05T17:25-01:00 in UTC?',
+    'What is 2026-11-05T17:25Z in UTC?',
+    '2026-11-05T17:25+01:00, 5pm',
+    '2026-11-05T17:25-01:00, 5pm',
+    '2026-11-05T17:25Z, 5pm',
 ].entries()) {
     const id = `gen_iso_${index}`;
-    const expectedTokens = prompt.includes(', what day is it?') ? 8 : 32;
+    const expectedTokens = prompt.includes(', what day is it?') || prompt.includes('in UTC') || prompt.includes(', 5pm') ? 8 : 32;
     await sendToWorker({
         action: 'generate',
         id,

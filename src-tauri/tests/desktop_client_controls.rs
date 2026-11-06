@@ -803,6 +803,7 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         format!("{}1 - ?", " ".repeat(200)),
         format!("{}1 - Show your work", " ".repeat(200)),
         format!("{}2026-11-05 - ?", " ".repeat(200)),
+        format!("{} - ?", "1".repeat(200)),
     ] {
         let padded = dispatch_rpc_command(
             &mut backend,
@@ -863,6 +864,12 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "2026-11-05T17:25-01:00,",
         "2026-11-05T17:25+01:00, what day is it?",
         "2026-11-05T17:25-01:00, what day is it?",
+        "What is 2026-11-05T17:25+01:00 in UTC?",
+        "What is 2026-11-05T17:25-01:00 in UTC?",
+        "What is 2026-11-05T17:25Z in UTC?",
+        "2026-11-05T17:25+01:00, 5pm",
+        "2026-11-05T17:25-01:00, 5pm",
+        "2026-11-05T17:25Z, 5pm",
     ] {
         let iso = dispatch_rpc_command(
             &mut backend,

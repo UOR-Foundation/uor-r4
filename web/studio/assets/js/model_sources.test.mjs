@@ -54,7 +54,8 @@ async function fresh(fetchImpl, seed, storageMode = 'working') {
     };
     moduleCounter += 1;
     const module = await import(`./model_sources.js?test=${moduleCounter}`);
-    return { api: module.ModelSources, events, storage, LOAD_PROGRESS_EVENT: module.LOAD_PROGRESS_EVENT };
+    const fire = (type, event) => (listeners.get(type) || []).map((listener) => listener(event));
+    return { api: module.ModelSources, events, storage, fire, LOAD_PROGRESS_EVENT: module.LOAD_PROGRESS_EVENT };
 }
 
 test('loadFromUrl emits real byte progress and one finalization', async () => {
@@ -231,7 +232,7 @@ async function applyPageOperationGuard(api) {
             depth -= 1;
             if (depth === 0) {
                 const source = html.slice(start, index + 1);
-                vm.runInNewContext(`${source};guardModelSourceOperations`, {})(api);
+                vm.runInNewContext(`${source};guardModelSourceOperations`, {})(api, globalThis.document);
                 return true;
             }
         }
@@ -270,4 +271,29 @@ test('an API selection supersedes a page source load without operation metadata'
     assert.equal(result.stale, true);
     assert.deepEqual(api.active(), { kind: 'api', id: active.id });
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 0);
+});
+
+test('a panel bundled load cannot replace a newer URL source', async () => {
+    const bytes = artifactBytes();
+    const bundled = deferred();
+    const url = deferred();
+    const responses = [bundled.promise, url.promise];
+    const { api, events, fire } = await fresh(async () => responses.shift());
+    const directBundled = api.loadBundled;
+    await applyPageOperationGuard(api);
+    const clicks = fire('click', {
+        target: { closest() { return {}; } },
+        preventDefault() {},
+        stopImmediatePropagation() {},
+    });
+    const bundledLoad = clicks.length ? clicks[0] : directBundled();
+    const urlLoad = api.loadFromUrl('https://example.com/newer.lut');
+    url.resolve(response(bytes));
+    const urlResult = await urlLoad;
+    bundled.resolve(response(bytes));
+    const bundledResult = await bundledLoad;
+    assert.equal(urlResult.stale, undefined);
+    assert.equal(bundledResult.stale, true);
+    assert.equal(api.active().id, 'url');
+    assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 1);
 });

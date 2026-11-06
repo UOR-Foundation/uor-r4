@@ -1931,7 +1931,7 @@
             if (app.generating && app.activeGenerationKind === 'api' && app.abortController) app.abortController.abort();
         }
 
-        function guardModelSourceOperations(sources) {
+        function guardModelSourceOperations(sources, doc) {
             var latestOperationId = 0;
             ['loadBundled', 'loadPublished', 'loadFromUrl', 'loadLocalFile'].forEach(function (name) {
                 var original = sources[name];
@@ -1949,6 +1949,15 @@
                     return original.call(this, input, current);
                 };
             });
+            if (doc && typeof doc.addEventListener === 'function') {
+                doc.addEventListener('click', function (event) {
+                    var target = event.target && event.target.closest ? event.target.closest('[data-action="load-bundled"]') : null;
+                    if (!target) return;
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    return sources.loadBundled();
+                }, true);
+            }
         }
 
         function clearWorkerModel() {
@@ -2003,6 +2012,9 @@
                 return;
             }
             if (detail.kind === 'api' && detail.apiConfig) {
+                app.currentLoadId = (app.currentLoadId || 0) + 1;
+                app.workerState = 'loading';
+                clearWorkerModel();
                 app.mode = 'api';
                 app.apiConfig = detail.apiConfig;
                 setModelStatus('API · ' + (detail.apiConfig.model || detail.apiConfig.label || 'endpoint'), 'accent', detail.apiConfig.baseUrl || '');
@@ -2340,7 +2352,7 @@
             bindHeader();
             bindComposer();
             bindEditor();
-            guardModelSourceOperations(ModelSources);
+            guardModelSourceOperations(ModelSources, document);
             if (window.__UOR_NATIVE_BOOTSTRAP__) ModelSources.registerNativeBootstrap(window.__UOR_NATIVE_BOOTSTRAP__);
             mountModelSources($('#modelSourceMount'));
             var modelList = ModelSources.list();

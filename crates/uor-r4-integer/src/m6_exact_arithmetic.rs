@@ -935,20 +935,7 @@ fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
     Some((tens - b'0') * 10 + ones - b'0')
 }
 
-fn exact_tool_is_iso_date_time(rest: &str) -> bool {
-    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
-    let rest = rest.split_once(',').map_or(rest, |(head, tail)| {
-        if tail
-            .trim_start()
-            .chars()
-            .next()
-            .map_or(true, char::is_alphabetic)
-        {
-            head
-        } else {
-            rest
-        }
-    });
+fn exact_tool_is_iso_date_time_core(rest: &str) -> bool {
     let bytes = rest.as_bytes();
     if bytes.len() < 10
         || !bytes[..4].iter().all(u8::is_ascii_digit)
@@ -1035,6 +1022,27 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
         }
         _ => false,
     }
+}
+
+fn exact_tool_is_iso_date_time(rest: &str) -> bool {
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
+    if exact_tool_is_iso_date_time_core(rest) {
+        return true;
+    }
+    for (index, c) in rest.char_indices() {
+        if !matches!(c, ',' | ' ' | '\t') {
+            continue;
+        }
+        let head = &rest[..index];
+        let tail = &rest[index + 1..];
+        if exact_tool_is_iso_date_time_core(head)
+            && !exact_tool_leading_operator_minus(tail)
+            && !exact_tool_arithmetic_shaped(tail)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn exact_tool_leading_operator_minus(expression: &str) -> bool {
@@ -1760,6 +1768,12 @@ mod tests {
             .err()
             .expect("overlong date-prefixed incomplete subtraction should be an error");
         assert!(date_error.to_string().contains("160-byte"));
+        let digit_over_limit = format!("{} - ?", "1".repeat(200));
+        let digit_error = exact_arithmetic_tool(&digit_over_limit)
+            .expect("overlong digits with subtraction suffix should be recognized")
+            .err()
+            .expect("overlong digits with subtraction suffix should be an error");
+        assert!(digit_error.to_string().contains("160-byte"));
         for prompt in ["1 - ?", "1 - Show your work"] {
             assert!(
                 exact_arithmetic_tool(prompt)
@@ -1788,6 +1802,12 @@ mod tests {
             "2026-11-05T17:25-01:00,",
             "2026-11-05T17:25+01:00, what day is it?",
             "2026-11-05T17:25-01:00, what day is it?",
+            "What is 2026-11-05T17:25+01:00 in UTC?",
+            "What is 2026-11-05T17:25-01:00 in UTC?",
+            "What is 2026-11-05T17:25Z in UTC?",
+            "2026-11-05T17:25+01:00, 5pm",
+            "2026-11-05T17:25-01:00, 5pm",
+            "2026-11-05T17:25Z, 5pm",
         ] {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),

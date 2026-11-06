@@ -420,6 +420,43 @@ test('live model_loaded rejects missing filenames and missing or invalid hashes'
     }
 });
 
+test('API selection invalidates a posted worker load before its completion arrives', async () => {
+    const changed = await inlineStudioFunction('onModelSourceChanged');
+    const worker = await inlineStudioFunction('onWorkerMessage');
+    const vm = changed.vm;
+    const context = {
+        app: { currentLoadId: 1, readyLoadId: null, workerState: 'loading', mode: 'wasm', apiConfig: null, caps: null, generating: false },
+        document: { documentElement: { dataset: {} } },
+        setModelStatus(detail) { context.modelStatus = detail; },
+        updatePrivacyStatus() {},
+        updateComposerState() {},
+        updateCapabilitiesFooter() {},
+        renderMessages() {},
+        setView() {},
+        isNativeLoopback() { return false; },
+        toast(detail) { context.toastMessage = detail; },
+        setEngineStatus() {},
+        describeCapabilities() { return 'synthetic'; },
+        setPredictorMode() {},
+        fillPredictorSha() {},
+        fillPredictorModelInfo() {},
+        ModelSources: {},
+    };
+    vm.runInNewContext(`${worker.source}\n${changed.source};onModelSourceChanged`, context)({
+        detail: { kind: 'api', apiConfig: { baseUrl: 'https://api.example.test/v1', model: 'api-model' } },
+    });
+    const apiStatus = context.modelStatus;
+    context.toastMessage = undefined;
+    vm.runInNewContext(`${worker.source};onWorkerMessage`, context)({
+        data: { action: 'model_loaded', id: 1, capabilities: { file_name: 'model.lut', artifact_sha256: 'a'.repeat(64), synthetic: true, engine_supported: true, can_generate: true } },
+    });
+    assert.equal(context.app.currentLoadId, 2);
+    assert.equal(context.app.readyLoadId, null);
+    assert.equal(context.app.caps, null);
+    assert.equal(context.modelStatus, apiStatus);
+    assert.equal(context.toastMessage, undefined);
+});
+
 test('live model_loaded rejects a missing current load ID', async () => {
     const { source, vm } = await inlineStudioFunction('onWorkerMessage');
     const context = liveWorkerContext();
