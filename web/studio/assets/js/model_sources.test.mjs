@@ -218,7 +218,7 @@ test('missing or throwing storage keeps the synthetic default and permits bundle
     }
 });
 
-async function applyPageOperationGuard(api) {
+async function applyPageOperationGuard(api, toast = () => {}) {
     const { readFileSync } = await import('node:fs');
     const { default: vm } = await import('node:vm');
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
@@ -232,7 +232,7 @@ async function applyPageOperationGuard(api) {
             depth -= 1;
             if (depth === 0) {
                 const source = html.slice(start, index + 1);
-                vm.runInNewContext(`${source};guardModelSourceOperations`, {})(api, globalThis.document);
+                vm.runInNewContext(`${source};guardModelSourceOperations`, { toast })(api, globalThis.document);
                 return true;
             }
         }
@@ -296,4 +296,18 @@ test('a panel bundled load cannot replace a newer URL source', async () => {
     assert.equal(bundledResult.stale, true);
     assert.equal(api.active().id, 'url');
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 1);
+});
+
+test('a rejected panel bundled load surfaces the existing page error toast', async () => {
+    const { api, fire } = await fresh(async () => { throw new Error('bundled artifact missing'); });
+    const notices = [];
+    await applyPageOperationGuard(api, (text, tone) => notices.push({ text, tone }));
+    const clicks = fire('click', {
+        target: { closest() { return {}; } },
+        preventDefault() {},
+        stopImmediatePropagation() {},
+    });
+    assert.equal(clicks.length, 1);
+    await assert.rejects(clicks[0], /bundled artifact missing/);
+    assert.deepEqual(notices, [{ text: 'bundled artifact missing', tone: 'error' }]);
 });

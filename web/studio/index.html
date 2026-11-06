@@ -1955,7 +1955,11 @@
                     if (!target) return;
                     event.preventDefault();
                     event.stopImmediatePropagation();
-                    return sources.loadBundled();
+                    var loading = sources.loadBundled();
+                    if (loading && typeof loading.catch === 'function') {
+                        loading.catch(function (error) { toast(String(error && error.message || error), 'error'); });
+                    }
+                    return loading;
                 }, true);
             }
         }

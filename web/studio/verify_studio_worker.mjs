@@ -592,6 +592,47 @@ for (const [index, prompt] of ['+1 800 555 0100', '+1 2 3', '10 - 20 minutes'].e
     assert(closed.action === 'session_reset', `ordinary review conversation did not close: ${JSON.stringify(closed)}`);
 }
 
+for (const [index, prompt] of ['~17', '17 ~ 25', '~17 + 25', '17 − 25', '10 - 20 minutes + 3', '10 - 20 (25)'].entries()) {
+    const id = `gen_review20_boundary_${index}`;
+    const conversationId = `conv_review20_boundary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const boundary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(boundary.action === 'generate_error' && boundary.error.includes('exact arithmetic'), `review20 arithmetic boundary must fail explicitly instead of generating (${prompt}): ${JSON.stringify(boundary)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `review20 arithmetic boundary emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review20 boundary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of [
+    '10 - 20 °C',
+    '10 - 20 km/h',
+    '10 - 20%',
+    '10 - 20 (approx)',
+    '10 - 20 min, then rest',
+    '5pm - 6pm',
+    '9am - 5pm',
+    '5:00 - 6:00',
+    '2026-11-05T17:25+01:00, 5pm - 6pm',
+].entries()) {
+    const id = `gen_review20_ordinary_${index}`;
+    const conversationId = `conv_review20_ordinary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `ordinary range/time prose must use the ordinary model path: ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review20 ordinary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
 const staleLoad = sendToWorker({
     action: 'load_model',
     id: 101,

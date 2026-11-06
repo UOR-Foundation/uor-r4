@@ -894,6 +894,8 @@ fn exact_tool_operand_start(rest: &str) -> bool {
                 | '='
                 | '<'
                 | '>'
+                | '~'
+                | '−'
         )
     })
 }
@@ -927,6 +929,8 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
                 | '='
                 | '<'
                 | '>'
+                | '~'
+                | '−'
         )
     }) || !rest.chars().any(|c| c.is_ascii_digit())
     {
@@ -944,7 +948,22 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         }
         if matches!(
             c,
-            '+' | '*' | '/' | '%' | '^' | '×' | '÷' | '&' | '|' | '=' | '<' | '>' | '(' | '{' | '['
+            '+' | '*'
+                | '/'
+                | '%'
+                | '^'
+                | '×'
+                | '÷'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
+                | '~'
+                | '−'
+                | '('
+                | '{'
+                | '['
         ) {
             return true;
         }
@@ -961,6 +980,46 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         }
     }
     false
+}
+
+fn exact_tool_time_atom(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let (clock, meridiem) = if let Some(clock) = lower.strip_suffix("am") {
+        (clock, true)
+    } else if let Some(clock) = lower.strip_suffix("pm") {
+        (clock, true)
+    } else {
+        (lower.as_str(), false)
+    };
+    let fields: Vec<&str> = clock.split(':').collect();
+    if fields.len() > 2 || (fields.len() == 1 && !meridiem) {
+        return false;
+    }
+    if fields[0].is_empty() || fields[0].len() > 2 || !fields[0].chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    let Ok(hour) = fields[0].parse::<u8>() else {
+        return false;
+    };
+    let valid_hour = if meridiem {
+        (1..=12).contains(&hour)
+    } else {
+        hour <= 23
+    };
+    valid_hour
+        && (fields.len() == 1
+            || (fields[1].len() == 2
+                && fields[1].chars().all(|c| c.is_ascii_digit())
+                && fields[1].parse::<u8>().is_ok_and(|minute| minute <= 59)))
+}
+
+fn exact_tool_is_time_range(rest: &str) -> bool {
+    let fields: Vec<&str> = rest.split_whitespace().collect();
+    fields.len() == 3
+        && fields[1] == "-"
+        && exact_tool_time_atom(fields[0])
+        && exact_tool_time_atom(fields[2])
 }
 
 fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
@@ -1072,12 +1131,16 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
         }
         let head = &rest[..index];
         let tail = rest[index + 1..].trim_start();
-        if exact_tool_is_iso_date_time_core(head)
-            && !tail.starts_with('+')
-            && !exact_tool_leading_operator_minus(tail)
-            && !exact_tool_arithmetic_shaped(tail)
-        {
-            return true;
+        if exact_tool_is_iso_date_time_core(head) {
+            if exact_tool_is_time_range(tail) {
+                return true;
+            }
+            if !tail.starts_with('+')
+                && !exact_tool_leading_operator_minus(tail)
+                && !exact_tool_arithmetic_shaped(tail)
+            {
+                return true;
+            }
         }
     }
     false
@@ -1137,6 +1200,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return Ok(None);
     }
+    if exact_tool_is_time_range(rest) {
+        return Ok(None);
+    }
     if exact_tool_is_iso_date_time(rest) {
         return Ok(None);
     }
@@ -1167,13 +1233,20 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         .contains(&normalized_suffix.as_str());
     if unsupported_suffix {
         let fields: Vec<&str> = expression.split_whitespace().collect();
+        let unit_text = suffix.chars().any(char::is_alphabetic) || suffix == "%";
+        let continued_arithmetic = suffix.chars().any(|c| {
+            c.is_ascii_digit()
+                || matches!(
+                    c,
+                    '+' | '-' | '*' | '^' | '&' | '|' | '=' | '<' | '>' | '~' | '−'
+                )
+        });
         let numeric_range_prose = fields.len() == 3
             && fields[0].chars().all(|c| c.is_ascii_digit())
             && fields[1] == "-"
             && fields[2].chars().all(|c| c.is_ascii_digit())
-            && suffix
-                .chars()
-                .all(|c| c.is_alphabetic() || c.is_whitespace());
+            && unit_text
+            && !continued_arithmetic;
         if numeric_range_prose {
             return Ok(None);
         }
@@ -1959,6 +2032,42 @@ mod tests {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
                 "ordinary signed/range prose was intercepted: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_review20_boundary_regressions() {
+        for prompt in ["~17", "17 ~ 25", "~17 + 25", "17 − 25"] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("unsupported review20 arithmetic should be recognized")
+                    .is_err(),
+                "unsupported review20 arithmetic fell through: {prompt}"
+            );
+        }
+        for prompt in [
+            "10 - 20 °C",
+            "10 - 20 km/h",
+            "10 - 20%",
+            "10 - 20 (approx)",
+            "10 - 20 min, then rest",
+            "5pm - 6pm",
+            "9am - 5pm",
+            "5:00 - 6:00",
+            "2026-11-05T17:25+01:00, 5pm - 6pm",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary range/time prose was intercepted: {prompt}"
+            );
+        }
+        for prompt in ["10 - 20 minutes + 3", "10 - 20 (25)"] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("continued review20 arithmetic should be recognized")
+                    .is_err(),
+                "continued review20 arithmetic fell through: {prompt}"
             );
         }
     }

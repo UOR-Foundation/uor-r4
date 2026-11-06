@@ -940,6 +940,49 @@ fn native_exact_arithmetic_review18_boundary_regressions() {
 }
 
 #[test]
+fn native_exact_arithmetic_review20_boundary_regressions() {
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    for prompt in [
+        "~17",
+        "17 ~ 25",
+        "~17 + 25",
+        "17 − 25",
+        "10 - 20 minutes + 3",
+        "10 - 20 (25)",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("review20 arithmetic boundary RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert!(response["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
+    }
+    for prompt in [
+        "10 - 20 °C",
+        "10 - 20 km/h",
+        "10 - 20%",
+        "10 - 20 (approx)",
+        "10 - 20 min, then rest",
+        "5pm - 6pm",
+        "9am - 5pm",
+        "5:00 - 6:00",
+        "2026-11-05T17:25+01:00, 5pm - 6pm",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary range/time prose RPC should succeed");
+        assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
+    }
+}
+
+#[test]
 fn native_write_file_enforces_its_size_cap() {
     let root = unique_temp_dir("write-cap");
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
