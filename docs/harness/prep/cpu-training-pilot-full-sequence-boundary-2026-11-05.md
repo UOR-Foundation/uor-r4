@@ -270,6 +270,7 @@ GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 test ! -e "$OUT"
 test ! -e "$PANEL"
 git -C "$SOURCE" diff --quiet "$IMPL" -- crates/uor-r4-cpu-train
+git -C "$SOURCE" diff --quiet "$IMPL" -- docs/labs/one-model-end-to-end/instrument
 test "$(git -C "$SOURCE" rev-parse "$IMPL:docs/labs/one-model-end-to-end/instrument")" = "$GEN_TREE"
 printf '%s  %s\n' \
   a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 "$TOKENIZER" \
