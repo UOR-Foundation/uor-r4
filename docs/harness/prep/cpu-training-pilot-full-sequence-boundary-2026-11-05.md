@@ -4,8 +4,8 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-REGISTERED - `TEST FITNESS: FIT`; D67 pre-run review pending. No seed-2775
-panel, output directory or result exists.
+RELEASED TO RUN - `TEST FITNESS: FIT` and D67 pre-run `GO` recorded. No
+seed-2775 panel, output directory or result existed when GO was issued.
 
 This is D84 CPU development research in `uor-r4-cpu-train`. It is exact-memory
 recall evidence, not fresh-phrasing generalization, useful chat, serving
@@ -464,5 +464,12 @@ paired bars, controls and pins verified; source reviewer
 
 ## D67 pre-run review
 
-D67 PRE-RUN: PENDING
+D67 PRE-RUN: GO - registration head
+`92220d7d1a2930d76431d95e4a6cf34b12a9bf8a`.
+
+reviewer: `full_boundary_d67_go`
+date: 2026-11-05
+note: Source stayed at FIT head `ce180de32`; input/source/generator pins,
+preflight activation, both seeded repeats, resource caps and isolation were
+verified. Seed 2775 and the output root were absent.
 
