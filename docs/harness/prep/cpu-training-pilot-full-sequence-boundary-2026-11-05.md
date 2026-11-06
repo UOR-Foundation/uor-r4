@@ -4,9 +4,11 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2'S FIRST INVOCATION HAD A
-SHELL-WRAPPER FAULT AND NO PANEL WAS CREATED. The corrected runner is released
-with renewed `TEST FITNESS: FIT` and D67 GO.
+COMPLETE - `CONTROL_FAULT`. Attempt 2 ran the fresh seed-2775 panel on both
+artifacts. The full-history and reply-only boundaries made the same observable
+stop decisions on both, so the registered per-artifact non-vacuity gate
+stopped the sequence before repeats. Record:
+[deepseek-200](../../loop/tasks/cpu-training-pilot/deepseek-200/REPORT.md).
 
 Attempt 1 built the pinned source and generator, then stopped at TRAIN
 preflight before generating seed 2775. Full and reply-only boundaries made the
@@ -541,4 +543,26 @@ date: 2026-11-05
 note: FIT at `71d9d2d9d`, executable measured-stage timeout wrapper, all-exit
 compression, source/input pins, compact fault evidence and absent seed were
 verified.
+
+## Attempt 2 result
+
+- fresh panel seed 2775: 128 `dev,dev` protocol-2 conversations;
+- 461 reference-reachable replies on each artifact;
+- tokens SHA-256:
+  `63b6163e84d5f10a1d87e2c2c38c9038c42548b61e5a55ea36d687c583272501`;
+- mask SHA-256:
+  `bdd2ae86fc1e7279c29145e4d5d8b83925f83265cd55308dc8b3ae1993082f08`;
+- manifest SHA-256:
+  `39762c8fe2fa09581a239a0e0d497c02674e3b168107db281ea7f7d361ba0d9c`;
+- seed 1 treatment/reply: 15/15 exact, 66/66 premature, 662/662 body;
+- seed 2 treatment/reply: 15/15 exact, 94/94 premature, 656/656 body;
+- observable stop changes versus reply-only: **0** and **0**;
+- observable stop changes versus shuffled-full: **179** and **225**;
+- shuffled-full exact: **0** and **0**;
+- content no-boundary exact: **0** and **0**;
+- content oracle exact: **25** and **25**;
+- the control gate stopped before repeats;
+- retained attempt-2 evidence is **5,268,949** bytes and sealed by
+  `SHA256SUMS` SHA-256
+  `310dca229a6889c4a4e228a7fd0dad60ce919589a25c89ff9b995685ba6fafe5`.
 
