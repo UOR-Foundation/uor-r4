@@ -1440,6 +1440,57 @@ fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     })
 }
 
+fn exact_tool_ratio_unit_prefix(text: &str, unit: &str) -> bool {
+    let Some(rest) = text.strip_prefix(unit) else {
+        return false;
+    };
+    rest.is_empty() || !rest.chars().next().is_some_and(|c| c.is_alphanumeric())
+}
+
+fn exact_tool_ratio_suffix_allowed(text: &str) -> bool {
+    [
+        "support",
+        "cup",
+        "cups",
+        "ml",
+        "l",
+        "g",
+        "kg",
+        "mg",
+        "oz",
+        "lb",
+        "lbs",
+        "tablespoon",
+        "tablespoons",
+        "teaspoon",
+        "teaspoons",
+        "hour",
+        "hours",
+        "minute",
+        "minutes",
+        "second",
+        "seconds",
+        "day",
+        "days",
+        "week",
+        "weeks",
+        "year",
+        "years",
+        "people",
+        "person",
+        "item",
+        "items",
+        "part",
+        "parts",
+        "piece",
+        "pieces",
+        "time",
+        "times",
+    ]
+    .iter()
+    .any(|unit| exact_tool_ratio_unit_prefix(text, unit))
+}
+
 fn exact_tool_is_ratio_prose(rest: &str) -> bool {
     let rest = rest.trim();
     let Some((numerator, tail)) = rest.split_once('/') else {
@@ -1464,20 +1515,7 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
         return false;
     }
     let lower_after = after.to_ascii_lowercase();
-    if [
-        "answer with the number first",
-        "answer with number first",
-        "show your work",
-        "show the carry trace",
-        "please show your work",
-        "please",
-        "in binary",
-        "in hex",
-        "binary",
-    ]
-    .iter()
-    .any(|suffix| lower_after.starts_with(suffix))
-    {
+    if !exact_tool_ratio_suffix_allowed(&lower_after) {
         return false;
     }
     !after.chars().any(|c| {
@@ -2740,7 +2778,7 @@ mod tests {
 
     #[test]
     fn exact_arithmetic_tool_final_review_ratio_instruction_regressions() {
-        for prompt in ["24/7 support", "1/2 cup"] {
+        for prompt in ["24/7 support", "1/2 cup", "1/2 cup sugar"] {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
                 "ordinary ratio prose was intercepted: {prompt}"
@@ -2753,6 +2791,13 @@ mod tests {
             "17/25 answer with the number first",
             "17/25 in binary",
             "17/25 in hex",
+            "17/25 in decimal",
+            "17/25 as a decimal",
+            "17/25 to decimal",
+            "17/25 percent",
+            "17/25 as a percentage",
+            "17/25 simplified",
+            "1/2 cup + 3",
         ] {
             match exact_arithmetic_tool(prompt) {
                 Some(Err(error)) if !error.to_string().is_empty() => {}
@@ -2763,6 +2808,11 @@ mod tests {
         match exact_arithmetic_tool(&padded) {
             Some(Err(error)) if error.to_string().contains("160-byte") => {}
             _ => failures.push("over-160-byte instruction-suffixed division".to_string()),
+        }
+        let padded_in_decimal = format!("{}17/25 in decimal", " ".repeat(200));
+        match exact_arithmetic_tool(&padded_in_decimal) {
+            Some(Err(error)) if error.to_string().contains("160-byte") => {}
+            _ => failures.push("over-160-byte in-decimal division".to_string()),
         }
         assert!(
             failures.is_empty(),

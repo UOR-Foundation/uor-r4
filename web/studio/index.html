@@ -2007,7 +2007,13 @@
                     if (bundled) {
                         event.preventDefault();
                         event.stopImmediatePropagation();
-                        return sources.loadBundled();
+                        var loading = sources.loadBundled();
+                        if (loading && typeof loading.catch === 'function') {
+                            loading.catch(function () {
+                                /* the page wrapper already toasted current errors */
+                            });
+                        }
+                        return loading;
                     }
                     var blocked = event.target.closest('[data-action="api-use"]')
                         || event.target.closest('[data-action="api-remove"]');

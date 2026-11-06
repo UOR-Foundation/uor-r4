@@ -791,7 +791,7 @@ const badGroupedArithmetic = groupedArithmetic.filter(({ message }) => message.a
 assert(badGroupedArithmetic.length === 0, `grouped/continued arithmetic must be explicit errors: ${JSON.stringify(badGroupedArithmetic)}`);
 
 const ratioInstruction = [];
-for (const [index, prompt] of ['17/25 show your work', '17/25 please', '17/25 answer with the number first', '17/25 in binary', '17/25 in hex'].entries()) {
+for (const [index, prompt] of ['17/25 show your work', '17/25 please', '17/25 answer with the number first', '17/25 in binary', '17/25 in hex', '17/25 in decimal', '17/25 as a decimal', '17/25 to decimal', '17/25 percent', '17/25 as a percentage', '17/25 simplified', '1/2 cup + 3'].entries()) {
     const id = `gen_final_review_ratio_${index}`;
     const conversationId = `conv_final_review_ratio_${index}`;
     await sendToWorker({
@@ -816,10 +816,23 @@ const paddedRatio = await waitForMessage((m) => (m.action === 'generate_complete
 if (!(paddedRatio.action === 'generate_error' && paddedRatio.error.includes('160-byte'))) {
     ratioFailures.push({ prompt: 'over-160-byte instruction-suffixed division', message: paddedRatio });
 }
+const paddedInDecimalPrompt = `${' '.repeat(200)}17/25 in decimal`;
+await sendToWorker({
+    action: 'generate',
+    id: 'gen_final_review_ratio_padded_decimal',
+    payload: { conversationId: 'conv_final_review_ratio_padded_decimal', messages: [{ role: 'user', content: paddedInDecimalPrompt }], options: { max_new_tokens: 32 } },
+});
+const paddedInDecimal = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_final_review_ratio_padded_decimal');
+if (!(paddedInDecimal.action === 'generate_error' && paddedInDecimal.error.includes('160-byte'))) {
+    ratioFailures.push({ prompt: 'over-160-byte in-decimal division', message: paddedInDecimal });
+}
 assert(ratioFailures.length === 0, `instruction-suffixed division must be an explicit error: ${JSON.stringify(ratioFailures)}`);
 await sendToWorker({ action: 'close_session', id: 'close_gen_final_review_ratio_padded', payload: { conversationId: 'conv_final_review_ratio_padded' } });
 const closedPaddedRatio = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_gen_final_review_ratio_padded');
 assert(closedPaddedRatio.action === 'session_reset', `padded ratio conversation did not close: ${JSON.stringify(closedPaddedRatio)}`);
+await sendToWorker({ action: 'close_session', id: 'close_gen_final_review_ratio_padded_decimal', payload: { conversationId: 'conv_final_review_ratio_padded_decimal' } });
+const closedPaddedInDecimal = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_gen_final_review_ratio_padded_decimal');
+assert(closedPaddedInDecimal.action === 'session_reset', `padded in-decimal conversation did not close: ${JSON.stringify(closedPaddedInDecimal)}`);
 
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
@@ -837,7 +850,7 @@ for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 
     assert(closed.action === 'session_reset', `review27 boundary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['24/7 support', '1/2 cup', '50-12', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {
+for (const [index, prompt] of ['24/7 support', '1/2 cup', '1/2 cup sugar', '50-12', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {
     const id = `gen_review27_ordinary_${index}`;
     const conversationId = `conv_review27_ordinary_${index}`;
     await sendToWorker({

@@ -1201,6 +1201,19 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         missing_errors.is_empty(),
         "grouped or continued arithmetic must be explicit non-empty errors: {missing_errors:?}"
     );
+    for prompt in ["24/7 support", "1/2 cup", "1/2 cup sugar"] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary ratio prose RPC should succeed");
+        assert_eq!(
+            response["handled"],
+            json!(false),
+            "ordinary ratio prose was intercepted: {prompt}"
+        );
+    }
     let mut ratio_failures: Vec<String> = Vec::new();
     for prompt in [
         "17/25 show your work",
@@ -1208,6 +1221,13 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         "17/25 answer with the number first",
         "17/25 in binary",
         "17/25 in hex",
+        "17/25 in decimal",
+        "17/25 as a decimal",
+        "17/25 to decimal",
+        "17/25 percent",
+        "17/25 as a percentage",
+        "17/25 simplified",
+        "1/2 cup + 3",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,
@@ -1236,6 +1256,20 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
             .is_some_and(|error| error.contains("160-byte"));
     if !padded_ok {
         ratio_failures.push("over-160-byte instruction-suffixed division".to_string());
+    }
+    let padded_decimal = format!("{}17/25 in decimal", " ".repeat(200));
+    let padded_decimal_response = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":padded_decimal}]}),
+    )
+    .expect("padded in-decimal division RPC should succeed");
+    let padded_decimal_ok = padded_decimal_response["handled"] == json!(true)
+        && padded_decimal_response["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("160-byte"));
+    if !padded_decimal_ok {
+        ratio_failures.push("over-160-byte in-decimal division".to_string());
     }
     assert!(
         ratio_failures.is_empty(),

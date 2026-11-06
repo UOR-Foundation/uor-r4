@@ -755,18 +755,26 @@ test('a panel bundled load cannot replace a newer URL source', async () => {
     assert.equal(events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 1);
 });
 
-test('a rejected panel bundled load surfaces the existing page error toast', async () => {
+test('a rejected panel bundled load toasts without an unhandled rejection', async () => {
     const { api, fire } = await fresh(async () => { throw new Error('bundled artifact missing'); });
     const notices = [];
     await applyPageOperationGuard(api, (text, tone) => notices.push({ text, tone }));
-    const clicks = fire('click', {
-        target: { closest() { return {}; } },
-        preventDefault() {},
-        stopImmediatePropagation() {},
-    });
-    assert.equal(clicks.length, 1);
-    await assert.rejects(clicks[0], /bundled artifact missing/);
-    assert.deepEqual(notices, [{ text: 'bundled artifact missing', tone: 'error' }]);
+    const unhandled = [];
+    const onUnhandled = (reason) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+        const clicks = fire('click', {
+            target: { closest() { return {}; } },
+            preventDefault() {},
+            stopImmediatePropagation() {},
+        });
+        assert.equal(clicks.length, 1);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(unhandled, []);
+        assert.deepEqual(notices, [{ text: 'bundled artifact missing', tone: 'error' }]);
+    } finally {
+        process.off('unhandledRejection', onUnhandled);
+    }
 });
 
 test('source changes are blocked during local generation without discarding the active source', async () => {
