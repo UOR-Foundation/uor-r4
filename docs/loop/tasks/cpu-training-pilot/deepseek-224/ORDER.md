@@ -1,8 +1,7 @@
 # ORDER: cpu-training-pilot, deepseek-224 (release content-length claim)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
-Base: `ed0295ba1`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md)
+(#3506). Base: `ed0295ba1`.
 
 ## Goal
 
