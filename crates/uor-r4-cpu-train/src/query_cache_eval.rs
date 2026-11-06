@@ -555,6 +555,13 @@ fn evaluate_query_cache_inner(
 }
 
 pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<serde_json::Value> {
+    aggregate_query_cache_reports_with_identity(reports, REGISTERED_POOLED_ROW_IDENTITY)
+}
+
+fn aggregate_query_cache_reports_with_identity(
+    reports: &[serde_json::Value],
+    expected_pooled_identity: &str,
+) -> Result<serde_json::Value> {
     if reports.len() != 2 {
         return Err(invalid(
             "query cache aggregate needs exactly two seed reports",
@@ -657,7 +664,7 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
             .as_u64()
             .ok_or_else(|| invalid("query cache aggregate minimum fit observations are absent"))?;
         if rows != REGISTERED_EXPECTED_ROWS as u64
-            || identity != REGISTERED_POOLED_ROW_IDENTITY
+            || identity != expected_pooled_identity
             || train_tokens != REGISTERED_TRAIN_TOKENS_SHA256
             || train_mask != REGISTERED_TRAIN_MASK_SHA256
             || train_split != REGISTERED_TRAIN_SPLIT
@@ -763,6 +770,11 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
         let mut original_top8 = 0u64;
         let mut centroid_top8 = 0u64;
         let mut shuffled_top8 = 0u64;
+        let mut original_candidate_only = 0u64;
+        let mut original_control_only = 0u64;
+        let mut shuffled_candidate_only = 0u64;
+        let mut shuffled_control_only = 0u64;
+        let mut panel_identities = Vec::with_capacity(REGISTERED_PANEL_SPLITS.len());
         for (panel, (name, tokens, mask)) in panels.iter().zip(REGISTERED_PANEL_INPUTS) {
             let split = registered_cache_split(cache_splits, name)?;
             if panel["tokens_sha256"] != tokens
@@ -789,14 +801,20 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
             if rows == 0 {
                 return Err(invalid("query cache aggregate panel is empty"));
             }
-            if panel["row_identity_sha256"]
+            let identity = panel["row_identity_sha256"]
                 .as_str()
-                .is_none_or(|hash| !is_sha256(hash))
-                || panel["identity"]["decision_sha256"]
-                    .as_str()
-                    .is_none_or(|hash| !is_sha256(hash))
-            {
+                .and_then(parse_sha256)
+                .ok_or_else(|| invalid("query cache aggregate panel identity differs"))?;
+            if panel["identity"]["decision_sha256"] != panel["original"]["decision_sha256"] {
                 return Err(invalid("query cache aggregate panel pins differ"));
+            }
+            let changed = panel["original"]["changed_from_frozen"]
+                .as_u64()
+                .filter(|changed| *changed <= rows)
+                .ok_or_else(|| invalid("query cache aggregate panel changed count differs"))?;
+            let identity_exact = panel["identity"]["exact"].as_bool() == Some(true);
+            if identity_exact != (changed == 0) {
+                return Err(invalid("query cache aggregate panel exact flag differs"));
             }
             panel_rows = panel_rows
                 .checked_add(rows)
@@ -808,7 +826,13 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
                         .ok_or_else(|| invalid("query cache aggregate cache rows are absent"))?,
                 )
                 .ok_or_else(|| invalid("query cache aggregate cache rows overflow"))?;
-            panel_identity_exact &= panel["identity"]["exact"].as_bool() == Some(true);
+            panel_identity_exact &= identity_exact;
+            panel_identities.push((name.to_owned(), identity));
+            let mut panel_original_top1 = 0u64;
+            let mut panel_centroid_top1 = 0u64;
+            let mut panel_shuffled_top1 = 0u64;
+            let mut panel_original_top8 = 0u64;
+            let mut panel_centroid_top8 = 0u64;
             for (arm, value) in [
                 ("original", &panel["original"]),
                 ("centroid", &panel["centroid"]),
@@ -833,23 +857,62 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
                         "query cache aggregate {name} {arm} counts differ"
                     )));
                 }
+                if value["changed_from_frozen"]
+                    .as_u64()
+                    .is_none_or(|changed| changed > rows)
+                {
+                    return Err(invalid(format!(
+                        "query cache aggregate {name} {arm} changed count differs"
+                    )));
+                }
                 match arm {
                     "original" => {
                         original_top1 += top1;
                         original_top8 += top8;
+                        panel_original_top1 = top1;
+                        panel_original_top8 = top8;
                     }
                     "centroid" => {
                         centroid_top1 += top1;
                         centroid_top8 += top8;
+                        panel_centroid_top1 = top1;
+                        panel_centroid_top8 = top8;
                     }
                     _ => {
                         shuffled_top1 += top1;
                         shuffled_top8 += top8;
+                        panel_shuffled_top1 = top1;
                     }
                 }
             }
+            let original_pair = reported_pair(&panel["centroid_vs_original"], rows)?;
+            let shuffled_pair = reported_pair(&panel["centroid_vs_exact_count_shuffled"], rows)?;
+            if original_pair.candidate_sum != panel_centroid_top1
+                || original_pair.control_sum != panel_original_top1
+                || shuffled_pair.candidate_sum != panel_centroid_top1
+                || shuffled_pair.control_sum != panel_shuffled_top1
+                || panel["centroid_top8_not_below_original"].as_bool()
+                    != Some(panel_centroid_top8 >= panel_original_top8)
+            {
+                return Err(invalid(format!(
+                    "query cache aggregate {name} paired evidence differs"
+                )));
+            }
+            original_candidate_only = original_candidate_only
+                .checked_add(original_pair.candidate_only)
+                .ok_or_else(|| invalid("query cache aggregate candidate-only count overflows"))?;
+            original_control_only = original_control_only
+                .checked_add(original_pair.control_only)
+                .ok_or_else(|| invalid("query cache aggregate control-only count overflows"))?;
+            shuffled_candidate_only = shuffled_candidate_only
+                .checked_add(shuffled_pair.candidate_only)
+                .ok_or_else(|| invalid("query cache aggregate candidate-only count overflows"))?;
+            shuffled_control_only = shuffled_control_only
+                .checked_add(shuffled_pair.control_only)
+                .ok_or_else(|| invalid("query cache aggregate control-only count overflows"))?;
         }
         let panel_rows_match = panel_rows == rows && cache_panel_rows == rows;
+        let computed_pooled_identity = pooled_identity(&panel_identities);
         let pooled = &report["pooled"];
         let fit = &report["fit"];
         if pooled["decision_sha256"]
@@ -876,9 +939,13 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
         let pooled_rows_match = panel_rows_match
             && pooled["rows"].as_u64() == Some(rows)
             && pooled["row_identity_sha256"].as_str() == Some(identity.as_str());
-        let pooled_identity_matches = pooled["row_identity_sha256"].as_str()
-            == Some(REGISTERED_POOLED_ROW_IDENTITY)
-            && identity == REGISTERED_POOLED_ROW_IDENTITY;
+        if pooled["row_identity_sha256"].as_str() != Some(computed_pooled_identity.as_str()) {
+            return Err(invalid(
+                "query cache aggregate pooled identity rollup differs",
+            ));
+        }
+        let pooled_identity_matches = computed_pooled_identity == expected_pooled_identity
+            && identity == expected_pooled_identity;
         if pooled["rows_match"].as_bool() != Some(pooled_rows_match)
             || pooled["identity_matches"].as_bool() != Some(pooled_identity_matches)
         {
@@ -905,12 +972,16 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
         if pooled["top8_holds"].as_bool() != Some(top8_holds) {
             return Err(invalid("query cache aggregate top-8 flag differs"));
         }
-        let original_pair = reported_pair(&pooled["centroid_vs_original"])?;
-        let shuffled_pair = reported_pair(&pooled["centroid_vs_exact_count_shuffled"])?;
+        let original_pair = reported_pair(&pooled["centroid_vs_original"], rows)?;
+        let shuffled_pair = reported_pair(&pooled["centroid_vs_exact_count_shuffled"], rows)?;
         if original_pair.candidate_sum != centroid_top1
             || original_pair.control_sum != original_top1
             || shuffled_pair.candidate_sum != centroid_top1
             || shuffled_pair.control_sum != shuffled_top1
+            || original_pair.candidate_only != original_candidate_only
+            || original_pair.control_only != original_control_only
+            || shuffled_pair.candidate_only != shuffled_candidate_only
+            || shuffled_pair.control_only != shuffled_control_only
         {
             return Err(invalid("query cache aggregate paired totals differ"));
         }
@@ -1020,12 +1091,14 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
 }
 
 struct ReportedPair {
+    candidate_only: u64,
+    control_only: u64,
     candidate_sum: u64,
     control_sum: u64,
     passes: bool,
 }
 
-fn reported_pair(value: &serde_json::Value) -> Result<ReportedPair> {
+fn reported_pair(value: &serde_json::Value, rows: u64) -> Result<ReportedPair> {
     let field = |name: &str| {
         value[name]
             .as_u64()
@@ -1044,6 +1117,9 @@ fn reported_pair(value: &serde_json::Value) -> Result<ReportedPair> {
     let passes = candidate_sum > control_sum && candidate_only >= expected_threshold;
     if candidate_only > candidate_sum
         || control_only > control_sum
+        || candidate_sum > rows
+        || control_sum > rows
+        || candidate_sum.checked_add(control_only) != control_sum.checked_add(candidate_only)
         || discordant != expected_discordant
         || threshold != expected_threshold
         || value["passes"].as_bool() != Some(passes)
@@ -1051,6 +1127,8 @@ fn reported_pair(value: &serde_json::Value) -> Result<ReportedPair> {
         return Err(invalid("query cache aggregate paired metrics differ"));
     }
     Ok(ReportedPair {
+        candidate_only,
+        control_only,
         candidate_sum,
         control_sum,
         passes,
@@ -1075,6 +1153,19 @@ fn registered_cache_split<'a>(
 
 fn is_sha256(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn parse_sha256(value: &str) -> Option<[u8; 32]> {
+    if !is_sha256(value) {
+        return None;
+    }
+    let mut bytes = [0u8; 32];
+    for (byte, pair) in bytes.iter_mut().zip(value.as_bytes().chunks_exact(2)) {
+        let high = (pair[0] as char).to_digit(16)?;
+        let low = (pair[1] as char).to_digit(16)?;
+        *byte = ((high << 4) | low) as u8;
+    }
+    Some(bytes)
 }
 
 fn validate_request(request: &CentroidEvaluationRequest) -> Result<()> {
@@ -2131,6 +2222,27 @@ mod tests {
 
     #[test]
     fn two_seed_aggregate_has_fixed_precedence() {
+        let panel_hashes = [
+            "01".repeat(32),
+            "02".repeat(32),
+            "03".repeat(32),
+            "04".repeat(32),
+        ];
+        let expected_identity = pooled_identity(
+            &REGISTERED_PANEL_SPLITS
+                .into_iter()
+                .zip(&panel_hashes)
+                .map(|(name, hash)| {
+                    (
+                        name.to_owned(),
+                        parse_sha256(hash).expect("test panel identity"),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+        let aggregate = |reports: &[serde_json::Value]| {
+            aggregate_query_cache_reports_with_identity(reports, &expected_identity)
+        };
         let report = |status: &str, seed: u8, manifest: &str, bar: bool| {
             let control_fault = status == "CONTROL_FAULT";
             let insufficient_power = status == "INSUFFICIENT_POWER";
@@ -2161,11 +2273,28 @@ mod tests {
                 "rows_file": "no-memory/train.rows.bin",
                 "rows_sha256": split_hash,
             })];
+            let pair = |candidate_sum: u64, control_sum: u64| {
+                let candidate_only = candidate_sum.saturating_sub(control_sum);
+                let control_only = control_sum.saturating_sub(candidate_sum);
+                let discordant = candidate_only + control_only;
+                let threshold = ceil_sqrt(discordant.saturating_mul(4)).max(2);
+                let passes = candidate_sum > control_sum && candidate_only >= threshold;
+                serde_json::json!({
+                    "candidate_only": candidate_only,
+                    "control_only": control_only,
+                    "candidate_sum": candidate_sum,
+                    "control_sum": control_sum,
+                    "discordant": discordant,
+                    "threshold": threshold,
+                    "passes": passes,
+                })
+            };
             let panels = REGISTERED_PANEL_SPLITS
                 .into_iter()
                 .zip(REGISTERED_PANEL_INPUTS)
                 .zip(panel_rows)
-                .map(|((split, (_, tokens, mask)), rows)| {
+                .zip(&panel_hashes)
+                .map(|(((split, (_, tokens, mask)), rows), identity)| {
                     cache_splits.push(serde_json::json!({
                         "split": split,
                         "label": "no-memory",
@@ -2192,7 +2321,7 @@ mod tests {
                         "rows": rows,
                         "tokens_sha256": tokens,
                         "mask_sha256": mask,
-                        "row_identity_sha256": split_hash,
+                        "row_identity_sha256": identity,
                         "identity": {
                             "exact": true,
                             "decision_sha256": split_hash,
@@ -2218,6 +2347,9 @@ mod tests {
                             "changed_from_frozen": 0,
                             "decision_sha256": split_hash,
                         },
+                        "centroid_vs_original": pair(centroid_top1, original_top1),
+                        "centroid_vs_exact_count_shuffled": pair(centroid_top1, shuffled_top1),
+                        "centroid_top8_not_below_original": centroid_top8 >= original_top8,
                     })
                 })
                 .collect::<Vec<_>>();
@@ -2227,18 +2359,6 @@ mod tests {
             let original_top8 = 120;
             let centroid_top8 = if mechanism_pass { 120 } else { 100 };
             let shuffled_top8 = 120;
-            let pair = |candidate_sum: u64, control_sum: u64, passes: bool| {
-                let (candidate_only, control_only) = if passes { (4, 0) } else { (0, 4) };
-                serde_json::json!({
-                    "candidate_only": candidate_only,
-                    "control_only": control_only,
-                    "candidate_sum": candidate_sum,
-                    "control_sum": control_sum,
-                    "discordant": 4,
-                    "threshold": 4,
-                    "passes": passes,
-                })
-            };
             serde_json::json!({
                 "schema": EVALUATION_SCHEMA,
                 "evaluation_profile": "n3s-registered-v1",
@@ -2262,7 +2382,7 @@ mod tests {
                     "train_split": REGISTERED_TRAIN_SPLIT,
                     "panel_splits": REGISTERED_PANEL_SPLITS,
                     "expected_rows": REGISTERED_EXPECTED_ROWS,
-                    "expected_row_identity": REGISTERED_POOLED_ROW_IDENTITY,
+                    "expected_row_identity": expected_identity,
                     "expected_train_tokens_sha256": REGISTERED_TRAIN_TOKENS_SHA256,
                     "expected_train_mask_sha256": REGISTERED_TRAIN_MASK_SHA256,
                     "memory": false,
@@ -2296,7 +2416,7 @@ mod tests {
                     "rows": REGISTERED_EXPECTED_ROWS,
                     "rows_match": true,
                     "identity_matches": true,
-                    "row_identity_sha256": REGISTERED_POOLED_ROW_IDENTITY,
+                    "row_identity_sha256": expected_identity,
                     "decision_sha256": split_hash,
                     "original_top1": original_top1,
                     "centroid_top1": centroid_top1,
@@ -2305,13 +2425,13 @@ mod tests {
                     "centroid_top8": centroid_top8,
                     "exact_count_shuffled_top8": shuffled_top8,
                     "top8_holds": mechanism_pass,
-                    "centroid_vs_original": pair(centroid_top1, original_top1, mechanism_pass),
-                    "centroid_vs_exact_count_shuffled": pair(centroid_top1, shuffled_top1, mechanism_pass),
+                    "centroid_vs_original": pair(centroid_top1, original_top1),
+                    "centroid_vs_exact_count_shuffled": pair(centroid_top1, shuffled_top1),
                 },
                 "panels": panels,
             })
         };
-        let keep = aggregate_query_cache_reports(&[
+        let keep = aggregate(&[
             report("KEEP", 2, &"22".repeat(32), true),
             report("KEEP", 1, &"11".repeat(32), true),
         ])
@@ -2319,13 +2439,13 @@ mod tests {
         assert_eq!(keep["status"], "KEEP_ON_DEVELOPMENT_PANEL");
         assert_eq!(keep["seeds"][0]["seed"], 1);
         assert_eq!(keep["seeds"][1]["seed"], 2);
-        let reject = aggregate_query_cache_reports(&[
+        let reject = aggregate(&[
             report("KEEP", 1, &"11".repeat(32), true),
             report("REJECT", 2, &"22".repeat(32), false),
         ])
         .unwrap();
         assert_eq!(reject["status"], "REJECT");
-        let fault = aggregate_query_cache_reports(&[
+        let fault = aggregate(&[
             report("INSUFFICIENT_POWER", 1, &"11".repeat(32), false),
             report("CONTROL_FAULT", 2, &"22".repeat(32), false),
         ])
@@ -2334,21 +2454,19 @@ mod tests {
 
         let mut lowered = report("KEEP", 1, &"11".repeat(32), true);
         lowered["request"]["minimum_observations"] = 7.into();
-        let error =
-            aggregate_query_cache_reports(&[lowered, report("KEEP", 2, &"22".repeat(32), true)])
-                .unwrap_err()
-                .to_string();
+        let error = aggregate(&[lowered, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("registered evaluation"), "{error}");
 
         let mut diagnostic = report("KEEP", 1, &"11".repeat(32), true);
         diagnostic["evaluation_profile"] = "diagnostic".into();
-        let error =
-            aggregate_query_cache_reports(&[diagnostic, report("KEEP", 2, &"22".repeat(32), true)])
-                .unwrap_err()
-                .to_string();
+        let error = aggregate(&[diagnostic, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("not registered"), "{error}");
 
-        let duplicate_seed = aggregate_query_cache_reports(&[
+        let duplicate_seed = aggregate(&[
             report("KEEP", 1, &"11".repeat(32), true),
             report("KEEP", 1, &"22".repeat(32), true),
         ])
@@ -2362,23 +2480,34 @@ mod tests {
         let mut panel_fault = report("CONTROL_FAULT", 1, &"11".repeat(32), false);
         panel_fault["fit"]["shuffled_changed_targets"] = 1.into();
         panel_fault["fit"]["shuffled_changed_coordinates"] = 1.into();
+        panel_fault["panels"][0]["original"]["changed_from_frozen"] = 1.into();
         panel_fault["panels"][0]["identity"]["exact"] = false.into();
-        let fault = aggregate_query_cache_reports(&[
-            panel_fault,
-            report("KEEP", 2, &"22".repeat(32), true),
-        ])
-        .unwrap();
+        let fault = aggregate(&[panel_fault, report("KEEP", 2, &"22".repeat(32), true)]).unwrap();
         assert_eq!(fault["status"], "CONTROL_FAULT");
+
+        let mut bad_identity = report("KEEP", 1, &"11".repeat(32), true);
+        bad_identity["panels"][0]["row_identity_sha256"] = "ff".repeat(32).into();
+        let error = aggregate(&[bad_identity, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("identity rollup"), "{error}");
+
+        let mut bad_exact = report("KEEP", 1, &"11".repeat(32), true);
+        bad_exact["panels"][0]["original"]["changed_from_frozen"] = 1.into();
+        let error = aggregate(&[bad_exact, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("exact flag"), "{error}");
 
         let mut bad_top8 = report("KEEP", 1, &"11".repeat(32), true);
         for panel in bad_top8["panels"].as_array_mut().unwrap() {
             panel["centroid"]["top8_correct"] = 29.into();
+            panel["centroid_top8_not_below_original"] = false.into();
         }
         bad_top8["pooled"]["centroid_top8"] = 116.into();
-        let error =
-            aggregate_query_cache_reports(&[bad_top8, report("KEEP", 2, &"22".repeat(32), true)])
-                .unwrap_err()
-                .to_string();
+        let error = aggregate(&[bad_top8, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("top-8 flag"), "{error}");
 
         let mut bad_pair = report("KEEP", 1, &"11".repeat(32), true);
@@ -2391,18 +2520,24 @@ mod tests {
             "threshold": 2,
             "passes": true,
         });
-        let error =
-            aggregate_query_cache_reports(&[bad_pair, report("KEEP", 2, &"22".repeat(32), true)])
-                .unwrap_err()
-                .to_string();
+        let error = aggregate(&[bad_pair, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("paired metrics"), "{error}");
 
         let mut bad_train = report("KEEP", 1, &"11".repeat(32), true);
         bad_train["train"]["tokens_sha256"] = "f".repeat(64).into();
-        let error =
-            aggregate_query_cache_reports(&[bad_train, report("KEEP", 2, &"22".repeat(32), true)])
-                .unwrap_err()
-                .to_string();
+        let error = aggregate(&[bad_train, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
         assert!(error.contains("TRAIN identity"), "{error}");
+
+        let error = aggregate_query_cache_reports(&[
+            report("KEEP", 1, &"11".repeat(32), true),
+            report("KEEP", 2, &"22".repeat(32), true),
+        ])
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("registered evaluation"), "{error}");
     }
 }

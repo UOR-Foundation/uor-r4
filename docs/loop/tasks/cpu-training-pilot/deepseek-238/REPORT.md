@@ -28,6 +28,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   paired tests from their raw fields, verifies actual TRAIN/panel/cache pins, and requires
   one explicit seed-1 and one seed-2 report. Worker and top-8 tests now span multiple
   blocks.
+- A third exact-head review found that the aggregate still checked only the shape of each
+  panel row identity and trusted the derived exact-identity flag. It now rolls the four
+  panel identities into the registered pooled identity, checks `exact` against
+  `changed_from_frozen`, sums per-panel paired evidence, and enforces the paired-count
+  algebra.
 - The current main CPU crate failed to compile its arbitration binary because two enum
   arms were absent from one match. That baseline repair is isolated in its own commit.
 
@@ -50,13 +55,14 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   registered TRAIN token and mask hashes and reports split contexts.
 - The two-seed aggregate accepts only `n3s-registered-v1` reports, pins their shared
   evaluation definition, requires one seed-1 and one seed-2 report, and recomputes power,
-  panel/pooled totals, top-8, both paired tests, bar and status from the raw counts instead
-  of trusting derived booleans.
+  panel/pooled totals, pooled identity, top-8, both paired tests, bar and status from the
+  raw fields instead of trusting derived booleans.
 - Added focused tests for exact Q12 conversion/rounding and top-8 ties, an exact-count
   non-vacuous shuffle with a self-mapped singleton stratum, ineligible-row Q12 rejection,
   registered gates, every clean and tampered manifest/checkpoint/run-config hash, split
   and pooled identity, power, multi-block top-8 membership, one-versus-two worker
-  determinism across multiple blocks, and false raw-count aggregate reports.
+  determinism across multiple blocks, and false pooled-identity, exact-flag, top-8 and
+  paired-count aggregate reports.
 
 No GPU scorer, trainer, serving path or model artifact changed.
 
