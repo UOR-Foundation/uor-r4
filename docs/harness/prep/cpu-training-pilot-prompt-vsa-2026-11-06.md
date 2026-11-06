@@ -4,7 +4,10 @@ Run ID: `cpu-training-pilot-prompt-vsa-2026-11-06`
 
 ## Status
 
-READY FOR TEST FITNESS.
+COMPLETE - **KEEP**. Binary VSA preserved all 471 decisions on both artifacts
+and raised aggregate median selection throughput from **9,820.55** to
+**46,362.99 prompts/s** (**4.72x**). Record:
+[deepseek-209](../../loop/tasks/cpu-training-pilot/deepseek-209/REPORT.md).
 
 This is D84 CPU serving research. It tests an exact binary-vector representation
 of the existing deepseek-207 selector. It is not a new training-capability
