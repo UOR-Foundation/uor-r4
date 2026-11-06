@@ -1099,15 +1099,6 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "exact arithmetic does not accept an operator-only leading minus",
         ));
     }
-    if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
-        if exact_tool_arithmetic_shaped(rest) {
-            return Err(invalid(
-                "exact arithmetic prompt exceeds the 160-byte tool bound",
-            ));
-        }
-        return Ok(None);
-    }
-
     let expression_end = rest
         .char_indices()
         .find(|(_, c)| !matches!(c, '0'..='9' | '+' | '-' | ' ' | '\t'))
@@ -1119,7 +1110,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     }
     suffix = suffix.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' '));
     let normalized_suffix = suffix.to_ascii_lowercase();
-    if !normalized_suffix.is_empty()
+    let unsupported_suffix = !normalized_suffix.is_empty()
         && ![
             "answer with the number first",
             "answer with number first",
@@ -1127,8 +1118,17 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "show the carry trace",
             "please show your work",
         ]
-        .contains(&normalized_suffix.as_str())
-    {
+        .contains(&normalized_suffix.as_str());
+    if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
+        let trailing_operator = expression.trim_end().ends_with(|c| matches!(c, '+' | '-'));
+        if exact_tool_arithmetic_shaped(rest) || (!unsupported_suffix && trailing_operator) {
+            return Err(invalid(
+                "exact arithmetic prompt exceeds the 160-byte tool bound",
+            ));
+        }
+        return Ok(None);
+    }
+    if unsupported_suffix {
         if exact_tool_arithmetic_shaped(rest) {
             return Err(invalid(
                 "exact arithmetic supports only one unsigned decimal + or - expression",
@@ -1746,6 +1746,28 @@ mod tests {
             .err()
             .expect("overlong incomplete subtraction should be an error");
         assert!(trailing_error.to_string().contains("160-byte"));
+        for suffix in ["?", "Show your work"] {
+            let prompt = format!("{}1 - {}", " ".repeat(200), suffix);
+            let error = exact_arithmetic_tool(&prompt)
+                .expect("overlong incomplete subtraction with suffix should be recognized")
+                .err()
+                .expect("overlong incomplete subtraction with suffix should be an error");
+            assert!(error.to_string().contains("160-byte"), "{prompt}");
+        }
+        let date_over_limit = format!("{}2026-11-05 - ?", " ".repeat(200));
+        let date_error = exact_arithmetic_tool(&date_over_limit)
+            .expect("overlong date-prefixed incomplete subtraction should be recognized")
+            .err()
+            .expect("overlong date-prefixed incomplete subtraction should be an error");
+        assert!(date_error.to_string().contains("160-byte"));
+        for prompt in ["1 - ?", "1 - Show your work"] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("incomplete subtraction with suffix should be recognized")
+                    .is_err(),
+                "incomplete subtraction with suffix fell through: {prompt}"
+            );
+        }
         assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
         assert!(exact_arithmetic_tool("What is 50 -12?").is_none());
         assert!(exact_arithmetic_tool("What is 50- 12?").is_none());

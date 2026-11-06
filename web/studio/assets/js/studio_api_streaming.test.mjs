@@ -400,6 +400,26 @@ test('live model_loaded rejects mismatched identity explicitly', async () => {
     assert.match(context.toastMessage, /other\.lut/);
 });
 
+test('live model_loaded rejects missing filenames and missing or invalid hashes', async () => {
+    const { source, vm } = await inlineStudioFunction('onWorkerMessage');
+    for (const [capabilities, expected] of [
+        [{ artifact_sha256: 'a'.repeat(64) }, /<missing filename>/],
+        [{ file_name: 'model.lut' }, /<missing hash>/],
+        [{ file_name: 'model.lut', artifact_sha256: 'not-a-sha256' }, /not-a-sha256/],
+    ]) {
+        const context = liveWorkerContext();
+        context.app.currentLoadId = 1;
+        context.app.workerState = 'loading';
+        context.app.expectedSha256 = 'a'.repeat(64);
+        vm.runInNewContext(`${source};onWorkerMessage`, context)({
+            data: { action: 'model_loaded', id: 1, capabilities },
+        });
+        assert.equal(context.app.workerState, 'error');
+        assert.equal(context.app.caps, null);
+        assert.match(context.toastMessage, expected);
+    }
+});
+
 test('live model_loaded rejects a missing current load ID', async () => {
     const { source, vm } = await inlineStudioFunction('onWorkerMessage');
     const context = liveWorkerContext();

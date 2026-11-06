@@ -435,7 +435,15 @@ for (const [index, prompt] of [`${' '.repeat(200)}1 + 1`, `1 + 1${' '.repeat(200
     assert(padded.action === 'generate_error' && padded.error.includes('160-byte'), `whitespace-padded arithmetic must return the prompt limit: ${JSON.stringify(padded)}`);
 }
 
-for (const [index, prompt] of ['1 -', 'What is 1 -?', '2026-11-05 -', `${' '.repeat(200)}1 -`].entries()) {
+for (const [index, prompt] of [
+    '1 -',
+    'What is 1 -?',
+    '2026-11-05 -',
+    `${' '.repeat(200)}1 -`,
+    `${' '.repeat(200)}1 - ?`,
+    `${' '.repeat(200)}1 - Show your work`,
+    `${' '.repeat(200)}2026-11-05 - ?`,
+].entries()) {
     const id = `gen_exact_incomplete_subtraction_${index}`;
     await sendToWorker({
         action: 'generate',
@@ -447,7 +455,7 @@ for (const [index, prompt] of ['1 -', 'What is 1 -?', '2026-11-05 -', `${' '.rep
         },
     });
     const incomplete = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
-    const expectedError = index === 3 ? '160-byte' : 'decimal';
+    const expectedError = index >= 3 ? '160-byte' : 'decimal';
     assert(incomplete.action === 'generate_error' && incomplete.error.includes(expectedError), `incomplete subtraction must fail explicitly: ${JSON.stringify(incomplete)}`);
 }
 
