@@ -805,7 +805,17 @@ fn aggregate_query_cache_reports_with_identity(
                 .as_str()
                 .and_then(parse_sha256)
                 .ok_or_else(|| invalid("query cache aggregate panel identity differs"))?;
-            if panel["identity"]["decision_sha256"] != panel["original"]["decision_sha256"] {
+            let decision_hashes = [
+                &panel["identity"]["decision_sha256"],
+                &panel["original"]["decision_sha256"],
+                &panel["centroid"]["decision_sha256"],
+                &panel["exact_count_shuffled_target"]["decision_sha256"],
+            ];
+            if decision_hashes
+                .into_iter()
+                .any(|hash| hash.as_str().is_none_or(|hash| !is_sha256(hash)))
+                || panel["identity"]["decision_sha256"] != panel["original"]["decision_sha256"]
+            {
                 return Err(invalid("query cache aggregate panel pins differ"));
             }
             let changed = panel["original"]["changed_from_frozen"]
@@ -1120,6 +1130,7 @@ fn reported_pair(value: &serde_json::Value, rows: u64) -> Result<ReportedPair> {
         || candidate_sum > rows
         || control_sum > rows
         || candidate_sum.checked_add(control_only) != control_sum.checked_add(candidate_only)
+        || expected_discordant > rows
         || discordant != expected_discordant
         || threshold != expected_threshold
         || value["passes"].as_bool() != Some(passes)
@@ -2524,6 +2535,29 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("paired metrics"), "{error}");
+
+        let impossible_pair = serde_json::json!({
+            "candidate_only": 10,
+            "control_only": 10,
+            "candidate_sum": 10,
+            "control_sum": 10,
+            "discordant": 20,
+            "threshold": 9,
+            "passes": false,
+        });
+        assert!(reported_pair(&impossible_pair, 10).is_err());
+
+        let mut missing_hashes = report("KEEP", 1, &"11".repeat(32), true);
+        for panel in missing_hashes["panels"].as_array_mut().unwrap() {
+            panel["identity"]["decision_sha256"] = serde_json::Value::Null;
+            panel["original"]["decision_sha256"] = serde_json::Value::Null;
+            panel["centroid"]["decision_sha256"] = serde_json::Value::Null;
+            panel["exact_count_shuffled_target"]["decision_sha256"] = serde_json::Value::Null;
+        }
+        let error = aggregate(&[missing_hashes, report("KEEP", 2, &"22".repeat(32), true)])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("panel pins"), "{error}");
 
         let mut bad_train = report("KEEP", 1, &"11".repeat(32), true);
         bad_train["train"]["tokens_sha256"] = "f".repeat(64).into();

@@ -33,6 +33,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   panel identities into the registered pooled identity, checks `exact` against
   `changed_from_frozen`, sums per-panel paired evidence, and enforces the paired-count
   algebra.
+- A fourth exact-head review found two fail-open aggregate cases: absent panel decision
+  hashes compared equal as JSON nulls, and paired discordant counts were not bounded by
+  the panel row count. Every identity and arm decision hash must now be valid SHA-256,
+  and paired disagreements must fit within the scored rows. Negative tests reproduce both
+  malformed reports.
 - The current main CPU crate failed to compile its arbitration binary because two enum
   arms were absent from one match. That baseline repair is isolated in its own commit.
 
@@ -61,8 +66,8 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   non-vacuous shuffle with a self-mapped singleton stratum, ineligible-row Q12 rejection,
   registered gates, every clean and tampered manifest/checkpoint/run-config hash, split
   and pooled identity, power, multi-block top-8 membership, one-versus-two worker
-  determinism across multiple blocks, and false pooled-identity, exact-flag, top-8 and
-  paired-count aggregate reports.
+  determinism across multiple blocks, malformed decision hashes, impossible paired counts,
+  and false pooled-identity, exact-flag, top-8 and paired-count aggregate reports.
 
 No GPU scorer, trainer, serving path or model artifact changed.
 
