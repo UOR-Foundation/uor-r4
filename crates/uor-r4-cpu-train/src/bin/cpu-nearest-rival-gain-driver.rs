@@ -340,12 +340,19 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     }
 
     let activity = accepted_moves > 0 && shuffled_changes > 0;
+    let shuffle_behavioral = trained_artifact != shuffled_artifact;
     let hinge_better = trained_reading.rival_hinge_sum < frozen_reading.rival_hinge_sum
         && trained_reading.rival_hinge_sum < random_reading.rival_hinge_sum
         && trained_reading.rival_hinge_sum < shuffled_reading.rival_hinge_sum;
     let top1_nonfall = trained_top1 >= shuffled_top1 && trained_top1 >= random_top1;
     let ranking = paired_delta as f64 > three_sigma;
-    let pass = activity && hinge_better && top1_nonfall && ranking;
+    let verdict = trial_verdict(
+        activity,
+        shuffle_behavioral,
+        hinge_better,
+        top1_nonfall,
+        ranking,
+    );
 
     let report = serde_json::json!({
         "schema": "uor-r4.cpu-nearest-rival-gain-run/1",
@@ -413,10 +420,11 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
         "parity": parity,
         "bar": {
             "activity": if activity { "pass" } else { "fail" },
+            "shuffle_behavioral": if shuffle_behavioral { "pass" } else { "fail" },
             "hinge_below_frozen_random_shuffled": if hinge_better { "pass" } else { "fail" },
             "top1_nonfall": if top1_nonfall { "pass" } else { "fail" },
             "paired_top1_ranking": if ranking { "pass" } else { "fail" },
-            "verdict": if pass { "KEEP" } else { "REJECT" },
+            "verdict": verdict,
         },
         "wall_elapsed_ms": started.elapsed().as_secs_f64() * 1_000.0,
         "peak_rss_kib": peak_rss_kib(),
@@ -424,6 +432,22 @@ fn run_claimed(config: &Config, started: Instant) -> Result<serde_json::Value, S
     let bytes = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
     write_new(&config.out.join("report.json"), &bytes)?;
     Ok(report)
+}
+
+fn trial_verdict(
+    activity: bool,
+    shuffle_behavioral: bool,
+    hinge_better: bool,
+    top1_nonfall: bool,
+    ranking: bool,
+) -> &'static str {
+    if !shuffle_behavioral {
+        "CONTROL_FAULT"
+    } else if activity && hinge_better && top1_nonfall && ranking {
+        "KEEP"
+    } else {
+        "REJECT"
+    }
 }
 
 fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
@@ -542,4 +566,23 @@ fn peak_rss_kib() -> u64 {
         .and_then(|value| value.split_whitespace().next())
         .and_then(|value| value.parse().ok())
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trial_verdict;
+
+    #[test]
+    fn a_behaviorally_vacuous_shuffle_is_a_control_fault_before_a_verdict() {
+        assert_eq!(
+            trial_verdict(true, false, true, true, true),
+            "CONTROL_FAULT"
+        );
+    }
+
+    #[test]
+    fn a_complete_pass_requires_every_bar() {
+        assert_eq!(trial_verdict(true, true, true, true, true), "KEEP");
+        assert_eq!(trial_verdict(true, true, true, true, false), "REJECT");
+    }
 }

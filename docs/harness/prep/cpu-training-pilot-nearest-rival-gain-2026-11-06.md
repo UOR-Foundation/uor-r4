@@ -4,8 +4,10 @@ Run ID: `cpu-training-pilot-nearest-rival-gain-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT. Pre-run GO recorded below. Implementation
-`2ba8b56b6`; the output root remains absent.
+COMPLETE - **CONTROL_FAULT**. A cyclic shuffle changed 2,529/2,538 targets but
+the true and shuffled trainers selected identical moves and artifacts. The
+registered stop rule ended the run before seed 2 or the repeat. Record:
+[deepseek-221](../../loop/tasks/cpu-training-pilot/deepseek-221/REPORT.md).
 
 ## Question
 
