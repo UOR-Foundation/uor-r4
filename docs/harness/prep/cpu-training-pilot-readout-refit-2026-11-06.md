@@ -211,7 +211,7 @@ MAIN=/home/callard/projects/codex-playground/uor-r4
 OUT="$REPO/local/deepseek/readout-refit/2026-11-06"
 BIN="$REPO/target/deepseek/readout-refit/release/cpu-readout-refit"
 cd "$REPO"
-git merge-base --is-ancestor 7a12427b2 HEAD
+git merge-base --is-ancestor 9f12624e2 HEAD
 sha256sum -c <<'EOF'
 21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae  crates/uor-r4-cpu-train/src/readout_refit.rs
 6e23138d313682d77cec433a5b8c973b36419680b6f340f2a90600ac6ccfbc59  crates/uor-r4-cpu-train/src/bin/cpu-readout-refit.rs
@@ -370,7 +370,7 @@ jq -e '
 
 ## Source pins before FIT
 
-- implementation commit: `7a12427b2`;
+- implementation commit: `9f12624e2`;
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:

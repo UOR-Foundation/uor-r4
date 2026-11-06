@@ -80,7 +80,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-237/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-readout-refit-2026-11-06.md",
-    "implementation_pin": "7a12427b2",
+    "implementation_pin": "9f12624e2",
     "driver_binary_sha256": "e67ee09cf21f095f7c96410acd113ab5e00813f82edc12b5f7421a6df86a67f5",
     "driver_binary_bytes": 2493520,
     "generator_pin": "e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde",
