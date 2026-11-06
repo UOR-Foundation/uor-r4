@@ -197,7 +197,24 @@ So (m1) is close to T2 itself.
 
 ## Checks run at the head
 
-CHECKS
+- **The head** is this PR's final commit: the REPORT, the notebook row, a merge of `origin/main` (none of whose changes touch this PR's files), and the review's fixes. No code changed after the pin.
+- **The laptop gates** at the head:
+  - `loop report --check --order docs/loop/tasks/one-model-end-to-end/claude-296/ORDER.md`: PASS;
+  - `loop pr-check --local`: PASS (order, scope, banned-presence, commit-order, report, owner-paths, rendered-lock). Its three D76 advisories:
+    - the prep sheet's `## Stop rule` heading, outside `rule-sources.json`;
+    - the ORDER's size, 5,259 B against a 4,096 B budget;
+    - `docs/start/FILEMAP.md`'s stale rows, which this PR does not touch.
+- **At the pin** (`48c4bf384e4fa463fa869fef9a8a6e8d7396f067`):
+  - the crate's 281 lib and 19 bin tests passed on the laptop;
+  - a stub-CUDA `cargo check` passed;
+  - the negative gate for the tie rule failed two tests, as it should;
+  - CI read 10 SUCCESS, 13 SKIPPED and 0 FAILURE;
+  - I-0 on the pod passed 382 tests with CUDA.
+- **The pod** is down (06:45:57Z), after its seal was read back. GPU spend was $3.20.
+- **Reviews, each in a fresh context:**
+  - the sheet's FIT, round 2, on #3407;
+  - the D67 pre-run review, #3407 6677290978;
+  - the exact-head review of the code and a claims check of this REPORT and the notebook row against the sealed evidence, recorded by `loop review` against the seal's sha256.
 
 ## Skills used
 
