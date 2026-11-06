@@ -4,7 +4,10 @@ Run ID: `cpu-training-pilot-prompt-reply-serving-2026-11-05`
 
 ## Status
 
-READY FOR TEST FITNESS.
+COMPLETE - **KEEP**. Attempt 4 reproduced all 471 CPU selections on both
+artifacts with 39 exact, 131 openings, 948 body positions and zero premature
+BOS. Record:
+[deepseek-207](../../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
 
 This is D84 CPU development and serving-contract evidence. It does not claim
 general response generation, fresh language understanding, GPU qualification
