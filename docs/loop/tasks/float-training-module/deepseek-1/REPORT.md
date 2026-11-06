@@ -4,7 +4,7 @@ Lab: deepseek. Item:
 [float-training-module](../../../../roadmap/items/float-training-module.md) (#3801).
 Order: [ORDER.md](ORDER.md). Base: `ff5156bcc`.
 
-## Result
+## What did not work, first
 
 **Instrument ready for a sealed-checkpoint capture; no model result yet.**
 
@@ -23,6 +23,13 @@ scorer calculations.
 The 9950X evaluator parallelizes independent 64-query blocks across Rayon
 workers and reuses each table row across the block. The cache's row order is
 unchanged, and top-8 ties go to the lower token id.
+
+## What changed
+
+The float-training module gains an opt-in scorer cache, a sealed cache reader,
+and a separate CPU centroid evaluator. `--score-rows` captures data from its
+existing `row_picks` callback without changing the forward. The new binary
+verifies the cache and evaluates original, centroid and matched-control tables.
 
 ## Why this is the next step
 
@@ -103,7 +110,14 @@ strict because GPU and CPU reduction order can differ.
 The centroid table is an offline F32 development instrument. It is not an
 export, does not alter input queries and is not a serving implementation.
 
-## Verification
+## Measurements
+
+No model result or timing claim is made. No checkpoint was available locally,
+and `nvidia-smi` is absent, so this workstation cannot run the capture forward
+or open a real panel. The source-level cache size scales as
+`rows * width * 4 + rows * 18` bytes plus the table and manifest.
+
+## Checks run at the head
 
 Passed:
 
@@ -133,7 +147,12 @@ Not run:
 - No cache was generated, no centroid panel was opened, and no capability or
   quality claim is made.
 
-## Next unit
+## Skills used
+
+No system-provided Codex skill applied. Repository geometry, harness,
+pre-registration and task-report rules were used directly.
+
+## Still open
 
 After this instrument lands, capture one FIT/GO-approved sealed current-FBS
 checkpoint on the selected TRAIN and panels. Pre-register memory mode, context,
@@ -143,3 +162,11 @@ the threshold after opening the panel.
 Only after the cached original reproduces should the centroid result be treated
 as evidence. Rank-aware or margin candidates come later and require capturing
 each row's native kept-cell IDs into a schema revision.
+
+## Plain summary
+
+This change saves the model's internal query points during one ordinary scoring
+run. A later CPU program can then test a different output table without running
+the model again. The saved data is sealed and checked so experiments cannot
+silently mix checkpoints or edit results. The capture and evaluation code are
+built and tested, but no real model experiment has run yet.
