@@ -778,14 +778,14 @@ pub fn continuation_closure_changes(
             .rows
             .iter()
             .filter(|row| reachable_rows.contains(&row.row))
-            .map(|row| (row.row, row.reply_sha256.clone()))
+            .map(|row| (row.row, (row.reply_sha256.clone(), row.stop.clone())))
             .collect::<BTreeMap<_, _>>()
     };
     let candidate = hashes(candidate);
     let control = hashes(control);
     candidate
         .iter()
-        .filter(|(row, hash)| control.get(row).is_some_and(|other| other != *hash))
+        .filter(|(row, value)| control.get(row).is_some_and(|other| other != *value))
         .count() as u64
 }
 
@@ -803,7 +803,7 @@ pub fn changed_closure_rows(
         .rows
         .iter()
         .filter(|row| row.reachable)
-        .map(|row| (row.row, row.reply_sha256.as_str()))
+        .map(|row| (row.row, row))
         .collect::<BTreeMap<_, _>>();
     let control_rows = controls
         .iter()
@@ -812,7 +812,7 @@ pub fn changed_closure_rows(
                 .rows
                 .iter()
                 .filter(|row| row.reachable)
-                .map(|row| (row.row, row.reply_sha256.as_str()))
+                .map(|row| (row.row, row))
                 .collect::<BTreeMap<_, _>>()
         })
         .collect::<Vec<_>>();
@@ -820,12 +820,18 @@ pub fn changed_closure_rows(
         .into_iter()
         .filter(|row| {
             candidate_rows.get(row).is_some_and(|candidate| {
-                control_rows
-                    .iter()
-                    .any(|control| control.get(row).is_none_or(|control| candidate != control))
+                control_rows.iter().any(|control| {
+                    control
+                        .get(row)
+                        .is_none_or(|control| !reply_matches(candidate, control))
+                })
             })
         })
         .count() as u64
+}
+
+fn reply_matches(left: &CopyKeyReplyRow, right: &CopyKeyReplyRow) -> bool {
+    left.reply_sha256 == right.reply_sha256 && left.stop == right.stop
 }
 
 fn summarize(
@@ -1284,5 +1290,28 @@ mod tests {
         let reading = summarize(ContinuationClosureArm::SourceClosure, &[row], &[step]).unwrap();
         assert_eq!(reading.closure_decisions, 1);
         assert_eq!(reading.closure_changes, 1);
+    }
+
+    #[test]
+    fn reply_identity_includes_the_stop_marker() {
+        let base = CopyKeyReplyRow {
+            row: 0,
+            reachable: true,
+            exact_reference: false,
+            bos_complete: true,
+            opening_correct: false,
+            premature_bos: false,
+            non_premature_bos: true,
+            generated_tokens: 1,
+            reference_tokens: 2,
+            correct_body_positions: 1,
+            copy_decisions: 0,
+            fallback_decisions: 1,
+            stop: "bos".to_owned(),
+            reply_sha256: "same".to_owned(),
+        };
+        let mut capped = base.clone();
+        capped.stop = "cap".to_owned();
+        assert!(!reply_matches(&base, &capped));
     }
 }
