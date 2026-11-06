@@ -113,7 +113,7 @@ geometry-tie arm are controls, not causes of the pass.
 
 ## Checks run at the head
 
-- TEST FITNESS: FIT at implementation `da5b1c8a1`, with the limitation that
+- TEST FITNESS: FIT at implementation `135a40b6c`, with the limitation that
   independent delegation was unavailable and the exact-head review was a local
   self-review;
 - pre-run GO self-review: pass;
@@ -129,6 +129,8 @@ geometry-tie arm are controls, not causes of the pass.
 - 450 shuffled reply associations changed;
 - both artifacts and both fresh-process repeats: matched;
 - sealed output manifest read-back: passed.
+- final D23 wording correction left the release binary byte-identical:
+  `6f9eda0b9ad014407780635ce2ae24dff409d58936d82420ce0f7228e4ae5368`.
 
 ## Still open
 

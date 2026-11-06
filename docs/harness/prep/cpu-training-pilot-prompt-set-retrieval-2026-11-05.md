@@ -116,9 +116,9 @@ external model. Serving remains integer-only and unchanged.
 
 - base: `77f189f58`;
 - implementation:
-  `da5b1c8a1`;
+  `135a40b6c`;
 - `prompt_retrieval.rs` SHA-256:
-  `39491133d1efbd86c4fc79be5d336e479473bb2f626780a5ac58f991ffd90103`;
+  `4d37ba343daf64ac7935dd273c736e8c430192a443a6371dffaab362bc5f87b9`;
 - `cpu-prompt-retrieval.rs` SHA-256:
   `1746a3b92ec111255585c9165e5946eb4065c66ead62d0c92483b27a8b0f584b`;
 - `lib.rs` SHA-256:
@@ -172,7 +172,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/prompt-retrieval
 GEN_TARGET=$SOURCE/target/deepseek/prompt-retrieval-generator
-IMPL=da5b1c8a1
+IMPL=135a40b6c
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 RUN_DEADLINE=$((SECONDS + 1800))
 
@@ -187,7 +187,7 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  39491133d1efbd86c4fc79be5d336e479473bb2f626780a5ac58f991ffd90103 "$SOURCE/crates/uor-r4-cpu-train/src/prompt_retrieval.rs" \
+  4d37ba343daf64ac7935dd273c736e8c430192a443a6371dffaab362bc5f87b9 "$SOURCE/crates/uor-r4-cpu-train/src/prompt_retrieval.rs" \
   1746a3b92ec111255585c9165e5946eb4065c66ead62d0c92483b27a8b0f584b "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-prompt-retrieval.rs" \
   c8e23400ec4b67ba2d4b449569e757895f44e5f4e6bc60d2b0175d8e0f56b0db "$SOURCE/crates/uor-r4-cpu-train/src/lib.rs" |
   sha256sum -c -
@@ -317,7 +317,8 @@ sheet: docs/harness/prep/cpu-training-pilot-prompt-set-retrieval-2026-11-05.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
 note: Exact-head source and input pins match; five focused tests, CPU release
   suite and strict scoped Clippy pass; fresh seed-2777 panel and output root are
-  absent; all bar, stop and control gates are fixed.
+  absent; all bar, stop and control gates are fixed. A later D23 wording-only
+  correction leaves the release binary byte-identical.
 date: 2026-11-05
 A FIT verdict clears compute for the configuration in that sheet only (D22).
 
@@ -327,7 +328,7 @@ before compute.
 ## Pre-run GO
 
 GO - exact-head self-review under the current disabled-delegation policy,
-2026-11-05. Implementation `da5b1c8a1` is clean; source, tokenizer, artifact,
+2026-11-05. Implementation `135a40b6c` is clean; source, tokenizer, artifact,
 TRAIN panel and generator pins match; focused and full CPU tests pass; strict
 scoped Clippy and formatting pass; output root and seed-2777 panel are absent.
 The review limitation is explicit: this was not an independent reviewer.

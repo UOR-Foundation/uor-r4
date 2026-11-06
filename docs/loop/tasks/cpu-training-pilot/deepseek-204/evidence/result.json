@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-prompt-retrieval-result/1",
   "substrate": "cpu-development-research",
   "qualification": "development-only",
-  "implementation": "da5b1c8a19324fb30c154cd2980334f6f12fbe5b",
+    "implementation": "135a40b6cdb016ec816f4f8efc191e94e6eb5aa4",
   "seed1": {
     "inputs": {
       "artifact": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut",
