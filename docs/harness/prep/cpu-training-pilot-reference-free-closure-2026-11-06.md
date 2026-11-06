@@ -126,4 +126,21 @@ cpu-joint-branch-driver \
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - no fresh compute before FIT and GO.
+TEST FITNESS: FIT - M2 #2030 reference-free closure sheet.
+reviewer: deepseek_235_fit2 fresh-context subagent
+note: The closure rule is deterministic and label-free; the matched control
+  preserves every endpoint-advantage/tail-support tuple and candidate length
+  while changing associations. The driver emits a primary-specific claim and
+  requires `--primary reference-free-closure --seed 2788`. Focused tests pass
+  9, the driver test passes 1, the CPU library passes 417 with four expected
+  ignores, scoped Clippy and Rustfmt pass, and seed 2788/output are absent.
+source: `a2d93b3999e548f804115c076675c773c5deabdc8eb79debc14bd3f21b815597`;
+driver: `92c1a0183c93e1a6e707006712a086e6a0f177ed45b204553071786f35dff084`;
+release_binary: `e7f958e8f609515f565c62c9e71f6a2191e4d651c52334b8a18a058d9b7bb02b`;
+date: 2026-11-06
+
+## Pre-run GO
+
+GO at `4166a6f1b6d48da1f48e7405ebb79b3a2fed335b`. Source, driver and
+release binary hashes match the FIT record. Seed 2788 may now be generated
+under the fixed construction and stop rule.
