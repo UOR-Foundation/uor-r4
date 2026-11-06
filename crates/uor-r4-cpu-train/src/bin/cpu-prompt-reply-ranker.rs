@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -58,22 +58,23 @@ fn run() -> Result<(), String> {
         ));
     }
     let (_, train_samples) = load_panel(&config.train)?;
-    let expected_train = train_samples
+    if train_samples.len() != sidecar.entries.len()
+        || train_samples
+            .iter()
+            .zip(&sidecar.entries)
+            .any(|(sample, entry)| {
+                sample.prompt.iter().copied().collect::<BTreeSet<_>>()
+                    != entry.prompt.iter().copied().collect::<BTreeSet<_>>()
+                    || normalized_reference(&sample.reply) != entry.reply
+            })
+    {
+        return Err("sidecar prompt-set/reply identity differs from TRAIN panel".to_owned());
+    }
+    let train_examples = train_samples
         .iter()
-        .map(|sample| PromptReplyExample {
+        .map(|sample| MemoryWeightSample {
             prompt: sample.prompt.clone(),
             reply: normalized_reference(&sample.reply).to_vec(),
-        })
-        .collect::<Vec<_>>();
-    if sidecar.entries != expected_train {
-        return Err("sidecar entries differ from TRAIN panel examples".to_owned());
-    }
-    let train_examples = sidecar
-        .entries
-        .iter()
-        .map(|entry| MemoryWeightSample {
-            prompt: entry.prompt.clone(),
-            reply: entry.reply.clone(),
         })
         .collect::<Vec<_>>();
     let memory = derive_prompt_reply_rank_memory(&artifact, &train_examples, 64)
