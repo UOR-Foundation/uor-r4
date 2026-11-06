@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use rayon::prelude::*;
+use serde::Deserialize;
 use uor_r4_cpu_train::{
     evaluate_output_table, observe_refit_thresholds, paired_two_sigma, patch_writer_table,
     refit_output_table, shuffle_refit_targets, validate_corpus_manifest, CpuCorpusIdentity,
@@ -32,12 +34,34 @@ const SEED1_ARTIFACT_SHA256: &str =
     "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd";
 const SEED2_ARTIFACT_SHA256: &str =
     "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1";
+const PENDING_AGGREGATE: &str = "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE";
+static EXECUTOR_SHA256: OnceLock<String> = OnceLock::new();
 
 fn main() {
-    if let Err(error) = run() {
+    if let Err(error) = initialize_executor_identity().and_then(|()| run()) {
         eprintln!("cpu-readout-refit: {error}");
         std::process::exit(1);
     }
+}
+
+fn initialize_executor_identity() -> Result<()> {
+    resolve_executor_sha256().map(|hash| {
+        let _ = EXECUTOR_SHA256.set(hash);
+    })
+}
+
+fn resolve_executor_sha256() -> Result<String> {
+    let executable =
+        std::env::current_exe().map_err(|error| format!("resolve current executable: {error}"))?;
+    let bytes = std::fs::read(&executable)
+        .map_err(|error| format!("read current executable {}: {error}", executable.display()))?;
+    Ok(uor_r4_discrete::corpus::sha256(&bytes))
+}
+
+fn executor_sha256() -> String {
+    EXECUTOR_SHA256
+        .get_or_init(|| resolve_executor_sha256().unwrap_or_else(|_| "unavailable".to_owned()))
+        .clone()
 }
 
 fn run() -> Result<()> {
@@ -66,6 +90,15 @@ fn usage() -> String {
     .to_owned()
 }
 
+fn validate_read_scope(forward: &CpuFbsForward) -> Result<()> {
+    if forward.has_hamming_reads() || forward.has_turn_memory() {
+        return Err(
+            "readout-refit scope requires a read-free, memory-free raw FBS artifact".to_owned(),
+        );
+    }
+    Ok(())
+}
+
 fn preflight(args: &[String]) -> Result<()> {
     if args.len() < 4 {
         return Err(usage());
@@ -77,6 +110,7 @@ fn preflight(args: &[String]) -> Result<()> {
     let started = Instant::now();
     let artifact = read_checked(artifact_path, &expected.artifact)?;
     let forward = CpuFbsForward::from_artifact(&artifact).map_err(|error| error.to_string())?;
+    validate_read_scope(&forward)?;
     let (train, identity, train_read) =
         read_corpus(&paths, &expected.train, forward.context_length())?;
     if identity.vocab != forward.vocabulary() {
@@ -132,6 +166,7 @@ fn preflight(args: &[String]) -> Result<()> {
         "status": if identity_exact { "COMPLETE" } else { "CONTROL_FAULT" },
         "substrate": SUBSTRATE,
         "qualification": QUALIFICATION,
+        "executor": executor_json(),
         "inputs": inputs_json(
             artifact_path,
             &expected.artifact,
@@ -144,6 +179,9 @@ fn preflight(args: &[String]) -> Result<()> {
             "vocab": forward.vocabulary(),
             "width": forward.width(),
             "context": forward.context_length(),
+            "hamming_reads": forward.has_hamming_reads(),
+            "turn_memory": forward.has_turn_memory(),
+            "input_table_distinct": false,
             "kept_cells": observations
                 .first()
                 .map(|observation| observation.kept_cells.len())
@@ -216,6 +254,11 @@ fn run_experiment(args: &[String]) -> Result<()> {
                 .panel
                 .as_ref()
                 .ok_or_else(|| "panel pins are absent".to_owned())?;
+            let observed = observe_input_hashes(
+                Path::new(&args[6]),
+                &TrainPaths::new(&args[0], &args[1], &args[2]),
+                &PanelPaths::new(&args[3], &args[4], &args[5]),
+            );
             let mut report = run_fault_report(
                 Path::new(&args[6]),
                 &expected.artifact,
@@ -223,6 +266,7 @@ fn run_experiment(args: &[String]) -> Result<()> {
                 &expected.train,
                 &PanelPaths::new(&args[3], &args[4], &args[5]),
                 panel_hashes,
+                &observed,
                 &format!("run stopped on an instrument or input fault: {error}"),
                 started,
             );
@@ -249,6 +293,7 @@ fn run_experiment_inner(args: &[String], started: Instant) -> Result<()> {
 
     let artifact = read_checked(artifact_path, &expected.artifact)?;
     let forward = CpuFbsForward::from_artifact(&artifact).map_err(|error| error.to_string())?;
+    validate_read_scope(&forward)?;
     let (train, train_identity, train_read) =
         read_corpus(&train_paths, &expected.train, forward.context_length())?;
     let expected_panel = expected
@@ -475,6 +520,7 @@ fn run_experiment_inner(args: &[String], started: Instant) -> Result<()> {
             "status": if identity_exact { "COMPLETE" } else { "CONTROL_FAULT" },
         "substrate": SUBSTRATE,
         "qualification": QUALIFICATION,
+        "executor": executor_json(),
         "claim": "fixed-input, output-only nearest-token readout refit on exact CPU Q12 queries",
         "seed": EXPERIMENT_SEED,
         "inputs": inputs_json(
@@ -496,6 +542,9 @@ fn run_experiment_inner(args: &[String], started: Instant) -> Result<()> {
             "vocab": forward.vocabulary(),
             "width": forward.width(),
             "context": forward.context_length(),
+            "hamming_reads": forward.has_hamming_reads(),
+            "turn_memory": forward.has_turn_memory(),
+            "input_table_distinct": false,
             "original_table_sha256": table_sha256(&original_table),
         },
         "capture": {
@@ -553,7 +602,7 @@ fn run_experiment_inner(args: &[String], started: Instant) -> Result<()> {
             "top8_not_below_original": median_eval.top8_correct >= original.top8_correct,
             "eligible": power,
             "artifact_outcome": artifact_outcome,
-            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+            "overall_decision": PENDING_AGGREGATE,
         },
         "execution": {
             "threads": rayon::current_num_threads(),
@@ -606,11 +655,12 @@ fn token_sha256(tokens: &[u32]) -> String {
 #[allow(clippy::too_many_arguments)]
 fn run_fault_report(
     artifact_path: &Path,
-    artifact_sha256: &str,
+    expected_artifact_sha256: &str,
     train_paths: &TrainPaths,
-    train_hashes: &CorpusHashes,
+    expected_train_hashes: &CorpusHashes,
     panel_paths: &PanelPaths,
-    panel_hashes: &CorpusHashes,
+    expected_panel_hashes: &CorpusHashes,
+    observed: &ObservedHashes,
     reason: &str,
     started: Instant,
 ) -> serde_json::Value {
@@ -620,34 +670,22 @@ fn run_fault_report(
         "status": "CONTROL_FAULT",
         "substrate": SUBSTRATE,
         "qualification": QUALIFICATION,
+        "executor": executor_json(),
         "seed": EXPERIMENT_SEED,
         "artifact_outcome": "CONTROL_FAULT",
         "reason": reason,
-        "inputs": {
-            "artifact": artifact_path,
-            "artifact_sha256": artifact_sha256,
-            "train": {
-                "tokens": train_paths.tokens,
-                "tokens_sha256": train_hashes.tokens,
-                "mask": train_paths.mask,
-                "mask_sha256": train_hashes.mask,
-                "manifest": train_paths.manifest,
-                "manifest_sha256": train_hashes.manifest,
-                "tokenizer_sha256": train_hashes.tokenizer,
-            },
-            "panel": {
-                "tokens": panel_paths.tokens,
-                "tokens_sha256": panel_hashes.tokens,
-                "mask": panel_paths.mask,
-                "mask_sha256": panel_hashes.mask,
-                "manifest": panel_paths.manifest,
-                "manifest_sha256": panel_hashes.manifest,
-                "tokenizer_sha256": panel_hashes.tokenizer,
-            },
-        },
+        "inputs": fault_inputs_json(
+            artifact_path,
+            expected_artifact_sha256,
+            train_paths,
+            expected_train_hashes,
+            panel_paths,
+            expected_panel_hashes,
+            observed,
+        ),
         "bar": {
             "artifact_outcome": "CONTROL_FAULT",
-            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+            "overall_decision": PENDING_AGGREGATE,
         },
         "execution": {
             "threads": rayon::current_num_threads(),
@@ -677,6 +715,7 @@ fn early_artifact_report(
         "status": status,
         "substrate": SUBSTRATE,
         "qualification": QUALIFICATION,
+        "executor": executor_json(),
         "seed": EXPERIMENT_SEED,
         "artifact_outcome": artifact_outcome,
         "reason": reason,
@@ -691,7 +730,7 @@ fn early_artifact_report(
         ),
         "bar": {
             "artifact_outcome": artifact_outcome,
-            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+            "overall_decision": PENDING_AGGREGATE,
         },
         "execution": {
             "threads": rayon::current_num_threads(),
@@ -742,15 +781,22 @@ fn aggregate_reports(args: &[String]) -> Result<()> {
     if args.len() != 4 {
         return Err("aggregate requires four artifact reports".to_owned());
     }
-    let reports = args
-        .iter()
-        .map(|path| {
-            let bytes =
-                std::fs::read(path).map_err(|error| format!("read report {path}: {error}"))?;
-            serde_json::from_slice(&bytes).map_err(|error| format!("parse report {path}: {error}"))
-        })
-        .collect::<Result<Vec<serde_json::Value>>>()?;
-    let mut aggregate = aggregate_values(&reports)?;
+    let mut reports = Vec::new();
+    let mut input_faults = Vec::new();
+    for path in args {
+        match std::fs::read(path) {
+            Ok(bytes) => match serde_json::from_slice(&bytes) {
+                Ok(report) => reports.push(report),
+                Err(error) => input_faults.push(format!("parse report {path}: {error}")),
+            },
+            Err(error) => input_faults.push(format!("read report {path}: {error}")),
+        }
+    }
+    let mut aggregate = if input_faults.is_empty() {
+        aggregate_values(&reports)?
+    } else {
+        aggregate_input_fault(&input_faults)
+    };
     aggregate["report_kind"] = serde_json::Value::String("aggregate".to_owned());
     aggregate["reports"] = serde_json::Value::Array(
         args.iter()
@@ -765,43 +811,231 @@ fn aggregate_reports(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+#[derive(Deserialize)]
+struct ExecutorReport {
+    binary_sha256: String,
+}
+
+#[derive(Deserialize)]
+struct InputsReport {
+    artifact_sha256: Option<String>,
+    expected_artifact_sha256: String,
+    train: serde_json::Value,
+    panel: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct PowerReport {
+    eligible: bool,
+}
+
+#[derive(Deserialize)]
+struct BarReport {
+    #[serde(default)]
+    identity_exact: Option<bool>,
+    #[serde(default)]
+    median_beats_original: Option<bool>,
+    #[serde(default)]
+    median_beats_shuffled: Option<bool>,
+    #[serde(default)]
+    top8_not_below_original: Option<bool>,
+    #[serde(default)]
+    eligible: Option<bool>,
+    artifact_outcome: String,
+    overall_decision: String,
+}
+
+#[derive(Deserialize)]
+struct ArtifactReport {
+    schema: String,
+    report_kind: String,
+    status: String,
+    substrate: String,
+    qualification: String,
+    seed: u64,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    claim: Option<String>,
+    executor: ExecutorReport,
+    inputs: InputsReport,
+    #[serde(default)]
+    settings: Option<serde_json::Value>,
+    #[serde(default)]
+    artifact: Option<serde_json::Value>,
+    #[serde(default)]
+    capture: Option<serde_json::Value>,
+    #[serde(default)]
+    thresholds: Option<serde_json::Value>,
+    #[serde(default)]
+    fit: Option<serde_json::Value>,
+    #[serde(default)]
+    arms: Option<serde_json::Value>,
+    #[serde(default)]
+    comparisons: Option<serde_json::Value>,
+    #[serde(default)]
+    baselines: Option<serde_json::Value>,
+    #[serde(default)]
+    power: Option<PowerReport>,
+    bar: BarReport,
+    #[serde(default)]
+    artifact_outcome: Option<String>,
+    deterministic_core_sha256: String,
+}
+
+impl ArtifactReport {
+    fn validate(&self, normalized_hash: &str) -> Result<()> {
+        if self.schema != "uor-r4.cpu-readout-refit/1"
+            || self.report_kind != "artifact"
+            || self.substrate != SUBSTRATE
+            || self.qualification != QUALIFICATION
+            || self.seed != EXPERIMENT_SEED
+        {
+            return Err("artifact report identity differs".to_owned());
+        }
+        if self.executor.binary_sha256 != executor_sha256() {
+            return Err("artifact report executor differs".to_owned());
+        }
+        if self.status == "COMPLETE"
+            && self.inputs.artifact_sha256.as_deref()
+                != Some(self.inputs.expected_artifact_sha256.as_str())
+        {
+            return Err("complete artifact report input hash differs".to_owned());
+        }
+        if self.deterministic_core_sha256 != normalized_hash {
+            return Err("artifact report deterministic hash differs".to_owned());
+        }
+        if self.bar.overall_decision != PENDING_AGGREGATE {
+            return Err("artifact report is not pending aggregation".to_owned());
+        }
+        if self
+            .artifact_outcome
+            .as_deref()
+            .is_some_and(|outcome| outcome != self.bar.artifact_outcome)
+        {
+            return Err("artifact report outcomes differ".to_owned());
+        }
+        match (self.status.as_str(), self.bar.artifact_outcome.as_str()) {
+            ("CONTROL_FAULT", "CONTROL_FAULT") => {
+                if self.reason.as_deref().is_none_or(str::is_empty) {
+                    return Err("control-fault report has no reason".to_owned());
+                }
+            }
+            ("COMPLETE", "INSUFFICIENT_POWER") => {
+                if self.power.is_some() {
+                    return self.validate_complete_power();
+                }
+                if self.reason.as_deref().is_none_or(str::is_empty) {
+                    return Err("insufficient-power report has no explanation".to_owned());
+                }
+            }
+            ("COMPLETE", "ARTIFACT_KEEP" | "ARTIFACT_REJECT") => self.validate_complete_power()?,
+            _ => return Err("artifact report status/outcome is contradictory".to_owned()),
+        }
+        Ok(())
+    }
+
+    fn validate_complete_power(&self) -> Result<()> {
+        let evidence_complete = self.claim.is_some()
+            && self.settings.is_some()
+            && self.artifact.is_some()
+            && self.capture.is_some()
+            && self.thresholds.is_some()
+            && self.fit.is_some()
+            && self.arms.is_some()
+            && self.comparisons.is_some()
+            && self.baselines.is_some();
+        if !evidence_complete {
+            return Err("complete artifact report is missing required evidence".to_owned());
+        }
+        let power = self
+            .power
+            .as_ref()
+            .ok_or_else(|| "complete artifact report has no power block".to_owned())?;
+        let identity = self
+            .bar
+            .identity_exact
+            .ok_or_else(|| "complete artifact report has no identity result".to_owned())?;
+        let median_original = self
+            .bar
+            .median_beats_original
+            .ok_or_else(|| "complete artifact report has no original comparison".to_owned())?;
+        let median_shuffled = self
+            .bar
+            .median_beats_shuffled
+            .ok_or_else(|| "complete artifact report has no shuffled comparison".to_owned())?;
+        let top8 = self
+            .bar
+            .top8_not_below_original
+            .ok_or_else(|| "complete artifact report has no top-8 result".to_owned())?;
+        let eligible = self
+            .bar
+            .eligible
+            .ok_or_else(|| "complete artifact report has no eligibility result".to_owned())?;
+        if !identity {
+            return Err("identity failure was not classified as a control fault".to_owned());
+        }
+        if eligible != power.eligible {
+            return Err("artifact power results differ".to_owned());
+        }
+        let expected_outcome = if !eligible {
+            "INSUFFICIENT_POWER"
+        } else if median_original && median_shuffled && top8 {
+            "ARTIFACT_KEEP"
+        } else {
+            "ARTIFACT_REJECT"
+        };
+        if self.bar.artifact_outcome != expected_outcome {
+            return Err("artifact outcome differs from its comparisons".to_owned());
+        }
+        Ok(())
+    }
+}
+
 fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> {
     if reports.len() != 4 {
         return Err("aggregate requires four artifact reports".to_owned());
     }
+    let mut integrity_faults = Vec::new();
+    let mut parsed_reports = Vec::new();
     let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
-    for report in reports {
-        if report["schema"].as_str() != Some("uor-r4.cpu-readout-refit/1")
-            || report["report_kind"].as_str() != Some("artifact")
-            || report["seed"].as_u64() != Some(EXPERIMENT_SEED)
-        {
-            return Err("aggregate report identity differs".to_owned());
+    for (index, report) in reports.iter().enumerate() {
+        let normalized = normalized_report_sha256(report);
+        let parsed = serde_json::from_value::<ArtifactReport>(report.clone());
+        let parsed = match parsed {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                integrity_faults.push(format!("report {index} is malformed: {error}"));
+                parsed_reports.push(None);
+                continue;
+            }
+        };
+        if let Err(error) = parsed.validate(&normalized) {
+            integrity_faults.push(format!("report {index}: {error}"));
         }
-        let artifact = report["inputs"]["artifact_sha256"]
-            .as_str()
-            .ok_or_else(|| "aggregate report has no artifact hash".to_owned())?
-            .to_owned();
-        let outcome = report["bar"]["artifact_outcome"]
-            .as_str()
-            .ok_or_else(|| "aggregate report has no artifact outcome".to_owned())?
-            .to_owned();
         groups
-            .entry(artifact)
+            .entry(parsed.inputs.expected_artifact_sha256.clone())
             .or_default()
-            .push((normalized_report_sha256(report), outcome));
+            .push((normalized, parsed.bar.artifact_outcome.clone()));
+        parsed_reports.push(Some(parsed));
     }
-    if groups.len() != 2 || groups.values().any(|reports| reports.len() != 2) {
-        return Err("aggregate requires two artifacts with two reports each".to_owned());
-    }
-    let artifact_set_exact =
-        groups.contains_key(SEED1_ARTIFACT_SHA256) && groups.contains_key(SEED2_ARTIFACT_SHA256);
-    let input_identity_exact = reports.windows(2).all(|pair| {
-        pair[0]["inputs"]["train"] == pair[1]["inputs"]["train"]
-            && pair[0]["inputs"]["panel"] == pair[1]["inputs"]["panel"]
+    let artifact_set_exact = groups.len() == 2
+        && groups.values().all(|reports| reports.len() == 2)
+        && groups.contains_key(SEED1_ARTIFACT_SHA256)
+        && groups.contains_key(SEED2_ARTIFACT_SHA256);
+    let input_identity_exact = parsed_reports.iter().all(Option::is_some)
+        && parsed_reports
+            .windows(2)
+            .all(|pair| match (&pair[0], &pair[1]) {
+                (Some(left), Some(right)) => {
+                    left.inputs.train == right.inputs.train
+                        && left.inputs.panel == right.inputs.panel
+                }
+                _ => false,
+            });
+    let repeat_exact = groups.values().all(|reports| {
+        reports.len() == 2 && reports[0].0 == reports[1].0 && reports[0].1 == reports[1].1
     });
-    let repeat_exact = groups
-        .values()
-        .all(|reports| reports[0].0 == reports[1].0 && reports[0].1 == reports[1].1);
     let outcomes = groups
         .iter()
         .map(|(artifact, reports)| {
@@ -815,7 +1049,8 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
             )
         })
         .collect::<Vec<_>>();
-    let decision = if !artifact_set_exact
+    let decision = if !integrity_faults.is_empty()
+        || !artifact_set_exact
         || !input_identity_exact
         || !repeat_exact
         || outcomes
@@ -838,9 +1073,14 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
     };
     Ok(serde_json::json!({
         "schema": "uor-r4.cpu-readout-refit-aggregate/1",
-        "status": "COMPLETE",
+        "status": if decision == "FINAL_CONTROL_FAULT" {
+            "CONTROL_FAULT"
+        } else {
+            "COMPLETE"
+        },
         "substrate": SUBSTRATE,
         "qualification": QUALIFICATION,
+        "executor": executor_json(),
         "seed": EXPERIMENT_SEED,
         "artifacts": outcomes
             .into_iter()
@@ -855,8 +1095,26 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
         "repeat_exact": repeat_exact,
         "artifact_set_exact": artifact_set_exact,
         "input_identity_exact": input_identity_exact,
+        "integrity_faults": integrity_faults,
         "overall_decision": decision,
     }))
+}
+
+fn aggregate_input_fault(faults: &[String]) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit-aggregate/1",
+        "status": "CONTROL_FAULT",
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "executor": executor_json(),
+        "seed": EXPERIMENT_SEED,
+        "artifacts": [],
+        "repeat_exact": false,
+        "artifact_set_exact": false,
+        "input_identity_exact": false,
+        "integrity_faults": faults,
+        "overall_decision": "FINAL_CONTROL_FAULT",
+    })
 }
 
 fn capture_observations(
@@ -1188,15 +1446,20 @@ fn inputs_json(
     let mut value = serde_json::json!({
         "artifact": artifact_path,
         "artifact_sha256": artifact_sha,
+        "expected_artifact_sha256": artifact_sha,
         "train": {
             "tokens": train_paths.tokens,
             "tokens_sha256": train_hashes.tokens,
+            "expected_tokens_sha256": train_hashes.tokens,
             "mask": train_paths.mask,
             "mask_sha256": train_hashes.mask,
+            "expected_mask_sha256": train_hashes.mask,
             "manifest": train_paths.manifest,
             "manifest_sha256": train_hashes.manifest,
+            "expected_manifest_sha256": train_hashes.manifest,
             "manifest_split": train_identity.split,
             "tokenizer_sha256": train_identity.tokenizer_sha256,
+            "expected_tokenizer_sha256": train_identity.tokenizer_sha256,
             "bos": train_identity.bos,
             "response_targets": train_identity.response_targets,
             "max_tokens": train_identity.max_tokens,
@@ -1206,18 +1469,99 @@ fn inputs_json(
         value["panel"] = serde_json::json!({
             "tokens": paths.tokens,
             "tokens_sha256": hashes.tokens,
+            "expected_tokens_sha256": hashes.tokens,
             "mask": paths.mask,
             "mask_sha256": hashes.mask,
+            "expected_mask_sha256": hashes.mask,
             "manifest": paths.manifest,
             "manifest_sha256": hashes.manifest,
+            "expected_manifest_sha256": hashes.manifest,
             "manifest_split": identity.split,
             "tokenizer_sha256": identity.tokenizer_sha256,
+            "expected_tokenizer_sha256": identity.tokenizer_sha256,
             "bos": identity.bos,
             "response_targets": identity.response_targets,
             "max_tokens": identity.max_tokens,
         });
     }
     value
+}
+
+struct ObservedCorpusHashes {
+    tokens: Option<String>,
+    mask: Option<String>,
+    manifest: Option<String>,
+}
+
+struct ObservedHashes {
+    artifact: Option<String>,
+    train: ObservedCorpusHashes,
+    panel: ObservedCorpusHashes,
+}
+
+fn observe_input_hashes(artifact: &Path, train: &TrainPaths, panel: &PanelPaths) -> ObservedHashes {
+    ObservedHashes {
+        artifact: observed_sha256(artifact),
+        train: observe_corpus_hashes(train),
+        panel: observe_corpus_hashes(panel),
+    }
+}
+
+fn observe_corpus_hashes(paths: &impl CorpusPaths) -> ObservedCorpusHashes {
+    ObservedCorpusHashes {
+        tokens: observed_sha256(paths.tokens()),
+        mask: observed_sha256(paths.mask()),
+        manifest: observed_sha256(paths.manifest()),
+    }
+}
+
+fn observed_sha256(path: &Path) -> Option<String> {
+    std::fs::read(path)
+        .ok()
+        .map(|bytes| uor_r4_discrete::corpus::sha256(&bytes))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fault_inputs_json(
+    artifact_path: &Path,
+    expected_artifact_sha256: &str,
+    train_paths: &TrainPaths,
+    expected_train_hashes: &CorpusHashes,
+    panel_paths: &PanelPaths,
+    expected_panel_hashes: &CorpusHashes,
+    observed: &ObservedHashes,
+) -> serde_json::Value {
+    serde_json::json!({
+        "artifact": artifact_path,
+        "artifact_sha256": observed.artifact.as_deref(),
+        "expected_artifact_sha256": expected_artifact_sha256,
+        "train": {
+            "tokens": train_paths.tokens,
+            "tokens_sha256": observed.train.tokens.as_deref(),
+            "expected_tokens_sha256": expected_train_hashes.tokens,
+            "mask": train_paths.mask,
+            "mask_sha256": observed.train.mask.as_deref(),
+            "expected_mask_sha256": expected_train_hashes.mask,
+            "manifest": train_paths.manifest,
+            "manifest_sha256": observed.train.manifest.as_deref(),
+            "expected_manifest_sha256": expected_train_hashes.manifest,
+            "tokenizer_sha256": expected_train_hashes.tokenizer,
+            "expected_tokenizer_sha256": expected_train_hashes.tokenizer,
+        },
+        "panel": {
+            "tokens": panel_paths.tokens,
+            "tokens_sha256": observed.panel.tokens.as_deref(),
+            "expected_tokens_sha256": expected_panel_hashes.tokens,
+            "mask": panel_paths.mask,
+            "mask_sha256": observed.panel.mask.as_deref(),
+            "expected_mask_sha256": expected_panel_hashes.mask,
+            "manifest": panel_paths.manifest,
+            "manifest_sha256": observed.panel.manifest.as_deref(),
+            "expected_manifest_sha256": expected_panel_hashes.manifest,
+            "tokenizer_sha256": expected_panel_hashes.tokenizer,
+            "expected_tokenizer_sha256": expected_panel_hashes.tokenizer,
+        },
+    })
 }
 
 fn validate_panel(manifest: &[u8], identity: &CpuCorpusIdentity) -> Result<()> {
@@ -1278,6 +1622,13 @@ fn parse_flags(args: &[String]) -> Result<BTreeMap<String, String>> {
     Ok(flags)
 }
 
+fn executor_json() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "cpu-readout-refit-release",
+        "binary_sha256": executor_sha256(),
+    })
+}
+
 fn elapsed_ms(started: Instant) -> f64 {
     started.elapsed().as_secs_f64() * 1_000.0
 }
@@ -1297,29 +1648,70 @@ mod tests {
     use super::*;
 
     fn artifact_report(artifact: &str, outcome: &str, elapsed: f64) -> serde_json::Value {
-        serde_json::json!({
+        let status = if outcome == "CONTROL_FAULT" {
+            "CONTROL_FAULT"
+        } else {
+            "COMPLETE"
+        };
+        let eligible = matches!(outcome, "ARTIFACT_KEEP" | "ARTIFACT_REJECT");
+        let keep = outcome == "ARTIFACT_KEEP";
+        let mut report = serde_json::json!({
             "schema": "uor-r4.cpu-readout-refit/1",
             "report_kind": "artifact",
+            "status": status,
+            "substrate": SUBSTRATE,
+            "qualification": QUALIFICATION,
             "seed": EXPERIMENT_SEED,
+            "reason": "test control fault",
+            "claim": "test report",
+            "executor": executor_json(),
             "inputs": {
                 "artifact_sha256": artifact,
+                "expected_artifact_sha256": artifact,
                 "train": {
                     "tokens_sha256": TRAIN_TOKENS_SHA256,
+                    "expected_tokens_sha256": TRAIN_TOKENS_SHA256,
                     "mask_sha256": TRAIN_MASK_SHA256,
+                    "expected_mask_sha256": TRAIN_MASK_SHA256,
                     "manifest_sha256": TRAIN_MANIFEST_SHA256,
+                    "expected_manifest_sha256": TRAIN_MANIFEST_SHA256,
                     "tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
+                    "expected_tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
                 },
                 "panel": {
                     "tokens_sha256": "panel-tokens",
+                    "expected_tokens_sha256": "panel-tokens",
                     "mask_sha256": "panel-mask",
+                    "expected_mask_sha256": "panel-mask",
                     "manifest_sha256": "panel-manifest",
+                    "expected_manifest_sha256": "panel-manifest",
                     "tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
+                    "expected_tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
                 },
             },
+            "settings": {},
+            "artifact": {},
             "capture": {"train_elapsed_ms": elapsed},
-            "bar": {"artifact_outcome": outcome},
+            "thresholds": {},
+            "fit": {},
+            "arms": {},
+            "comparisons": {},
+            "baselines": {},
+            "power": {"eligible": eligible},
+            "bar": {
+                "identity_exact": true,
+                "median_beats_original": keep,
+                "median_beats_shuffled": keep,
+                "top8_not_below_original": keep,
+                "eligible": eligible,
+                "artifact_outcome": outcome,
+                "overall_decision": PENDING_AGGREGATE,
+            },
             "execution": {"wall_elapsed_ms": elapsed, "peak_rss_kib": elapsed as u64},
-        })
+        });
+        report["artifact_outcome"] = serde_json::Value::String(outcome.to_owned());
+        finish_report(&mut report);
+        report
     }
 
     #[test]
@@ -1395,6 +1787,19 @@ mod tests {
             manifest: TRAIN_MANIFEST_SHA256.to_owned(),
             tokenizer: EXPECTED_TOKENIZER_SHA256.to_owned(),
         };
+        let observed = ObservedHashes {
+            artifact: None,
+            train: ObservedCorpusHashes {
+                tokens: None,
+                mask: None,
+                manifest: None,
+            },
+            panel: ObservedCorpusHashes {
+                tokens: None,
+                mask: None,
+                manifest: None,
+            },
+        };
         let mut seed1_report = run_fault_report(
             Path::new("artifact"),
             SEED1_ARTIFACT_SHA256,
@@ -1402,6 +1807,7 @@ mod tests {
             &train_hashes,
             &panel_paths,
             &train_hashes,
+            &observed,
             "input drift",
             Instant::now(),
         );
@@ -1413,6 +1819,7 @@ mod tests {
             &train_hashes,
             &panel_paths,
             &train_hashes,
+            &observed,
             "input drift",
             Instant::now(),
         );
@@ -1425,6 +1832,46 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(aggregate["repeat_exact"], true);
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
+
+    #[test]
+    fn control_fault_status_cannot_produce_final_keep() {
+        let mut reports = vec![
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 4.0),
+        ];
+        for report in &mut reports {
+            report["status"] = serde_json::Value::String("CONTROL_FAULT".to_owned());
+            finish_report(report);
+        }
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+        assert_ne!(aggregate["integrity_faults"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn unknown_artifact_outcome_is_a_control_fault() {
+        let mut reports = vec![
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 4.0),
+        ];
+        for report in &mut reports {
+            report["bar"]["artifact_outcome"] = serde_json::Value::String("GARBAGE".to_owned());
+            finish_report(report);
+        }
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
+
+    #[test]
+    fn aggregate_input_faults_are_structured_control_faults() {
+        let aggregate = aggregate_input_fault(&["read report missing: No such file".to_owned()]);
+        assert_eq!(aggregate["status"], "CONTROL_FAULT");
         assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
     }
 

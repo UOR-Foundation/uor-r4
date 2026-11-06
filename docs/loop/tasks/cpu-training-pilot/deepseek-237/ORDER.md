@@ -5,16 +5,18 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 ## Goal
 
-Test whether the nearest-token output table can be refit from exact TRAIN
-queries while the input embedding and Hamming-read path remain fixed to the
-public artifact.
+On the public read-free raw FBS artifacts, test whether the nearest-token
+output table can be refit from exact TRAIN queries while the input embedding,
+SpiralCore/FBS trunk and geometric writer-cell admission path remain fixed.
+These artifacts declare `read=dot` and contain no Hamming, turn-memory or point
+tables; this item does not test a Hamming path.
 
 ## Fixed construction
 
 Teacher-force each public FBS artifact over TRAIN `tt-2711` and capture the Q12
-query immediately before every masked reply target. Leave the input table and
-reader path unchanged. Refit only output-table rows with at least eight
-observations:
+query immediately before every masked reply target. Leave the input table, FBS
+trunk and writer-cell admission path unchanged. Refit only output-table rows
+with at least eight observations:
 
 - coordinate-wise integer median (primary L1 candidate);
 - integer mean centroid;
