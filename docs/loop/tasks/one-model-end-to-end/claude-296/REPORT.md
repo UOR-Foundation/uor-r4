@@ -11,8 +11,9 @@ Six runs at (256, D1) were trained, scored, sealed and graded: (m1), (lr3) and (
 - **The one-track bar is not met.** No arm beats T2 on the whole human panel.
   - (m1) against T2 reads `mixed` (d −3,530 / −8,764, band 5,234). That was expected: (m1) learns T2's own pick, so T2 bounds it (the sheet's "Not read here").
   - (near) against T2 reads `behind` (d −36,343 / −29,329, band 7,014). It reaches 85.6% / 88.4% of T2's 253,018 hits.
+  - (near)'s lead over T2 on oasst2 is not on unseen rows. There it is `behind` (d −1,981 / −1,576, band 405), so the lead comes from the rows the unseen filter drops: an 8-token context found in TRAIN, or fewer than 8 tokens into a document.
 - **(lr3) does not move.** Against the control it reads `inside` (d −3,209 / +24,987, band 28,196), and against the unigram `inside` too.
-  - Its seeds land 32,933 rows apart (15,193 / 48,126). So a learning rate of 0.003 is noisy here, not better.
+  - Its seeds land 32,933 rows apart (15,193 / 48,126). So a learning rate of 0.003 is noisy here: it is not shown better at these seeds.
   - This closes the configuration (cell objective, lr 0.003, (256, D1), 8,192 steps), not a mechanism (§4.1).
 - **What (m1) does not show.**
   - It does not show that the trunk uses more than the last input token.
@@ -31,7 +32,7 @@ Six runs at (256, D1) were trained, scored, sealed and graded: (m1), (lr3) and (
 - it is `ahead` of TRAIN's unigram;
 - it is above the panel's best constant guess at both seeds.
 
-Under fixed targets, the same trunk, recipe, loader, mask and inputs predict human text's real next tokens 11 to 14 times as often as the control does. So the loader, the mask, the inputs and the trunk are not where claude-295's flat loss comes from. It comes from the cell objective, `relu(1 + max_r s(r) − s(target))`, under the real, ambiguous targets.
+Under fixed targets, the same trunk, recipe, loader, mask and inputs predict human text's real next tokens about 11 to 14 times as often as the control does. So the loader, the mask, the inputs and the trunk are not where claude-295's flat loss comes from. It comes from the cell objective, `relu(1 + max_r s(r) − s(target))`, under the real targets. That it fails there because many tokens can follow one context is a hypothesis (Q2), not tested here.
 
 **The panel** (1,460,697 no-memory rows, row identity `5f88a5b3…`; `grade/*/grade.json`):
 
@@ -95,15 +96,15 @@ So (m1) is close to T2 itself.
 **(near)** is `--objective nearest`: the target's hinge against each of the 8 nearest wrong tokens, averaged (`in_space_long.rs`, `rival_hinge` and `nearest_loss_on`). The control's (cell) objective keeps only the hinge of the single best-scoring rival. (near) trains on the **observed** targets, so this is the trunk learning human text as it is written.
 - **On every sub-panel it is ahead of the control and the unigram at both seeds.** Against T2 (`pair/near-vs-t2.json`):
 
-  | sub-panel | (near) s1 / s2 | T2 | d at s1 / s2, band | verdict |
+  | sub-panel | (near) s1 / s2 | T2 | all rows: d at s1 / s2, band, verdict | unseen rows: d at s1 / s2, band, verdict |
   |---|---|---|---|---|
-  | oasst2 | 32,200 / 32,648 | 30,972 | +1,228 / +1,676, band 448 | **ahead** |
-  | wiki-00000 | 50,138 / 51,563 | 70,676 | −20,538 / −19,113, band 1,425 | behind |
-  | wiki-00020 | 71,392 / 73,915 | 75,584 | −4,192 / −1,669, band 2,523 | mixed |
-  | wiki-00040 | 62,945 / 65,563 | 75,786 | −12,841 / −10,223, band 2,618 | behind |
-  | whole panel | 216,675 / 223,689 | 253,018 | −36,343 / −29,329, band 7,014 | behind |
+  | oasst2 | 32,200 / 32,648 | 30,972 | +1,228 / +1,676, band 448, **ahead** | −1,981 / −1,576, band 405, behind |
+  | wiki-00000 | 50,138 / 51,563 | 70,676 | −20,538 / −19,113, band 1,425, behind | −19,206 / −17,926, band 1,280, behind |
+  | wiki-00020 | 71,392 / 73,915 | 75,584 | −4,192 / −1,669, band 2,523, mixed | −2,950 / −1,056, band 1,894, mixed |
+  | wiki-00040 | 62,945 / 65,563 | 75,786 | −12,841 / −10,223, band 2,618, behind | −10,977 / −8,902, band 2,075, behind |
+  | whole panel | 216,675 / 223,689 | 253,018 | −36,343 / −29,329, band 7,014, behind | −35,114 / −29,460, band 5,654, behind |
 
-  oasst2, the conversational replies, is the first sub-panel where a trunk is ahead of T2 at both seeds.
+  On oasst2, the conversational replies, (near) is ahead of T2 on all rows at both seeds, but behind it on the unseen rows. A row is unseen when its 8-token context is not in TRAIN (the instrument's `seen`). So the oasst2 lead is on contexts TRAIN holds, or on rows fewer than 8 tokens into a document.
 - **It is not T2.** Of T2's 253,018 hits, (near) shares 71,268 (28.2%) / 81,945 (32.4%). It is right on 145,407 / 141,744 rows where T2 is wrong, and wrong on 181,750 / 171,073 where T2 is right.
 - **Its prediction mix** on wiki-00000 keeps 2,567 / 2,560 distinct tokens, with a context lift of 13.7× / 15.7×. Its five commonest predictions at seed 1, as predicted / target counts:
   - token 223: 38,588 / 8,979;
@@ -140,7 +141,7 @@ So (m1) is close to T2 itself.
   - the usable windows' total;
   - the replaced count;
   - the distinct targets before and after;
-  - and, for K of 2 or more, the context hidden by k.
+  - and, for K of 2 or more, the context hidden by k. A target is counted only under the k it was taken at, not under every smaller k whose context it also hides.
 - **Five unit tests.** The negative gate: loosening the tie rule to "at least" fails two of them.
 - **The prep sheet**, at `docs/harness/prep/` (`48c4bf384e4fa463fa869fef9a8a6e8d7396f067`, the pin).
 - **This REPORT and one notebook row** in `docs/research/notebook/float-training.md`.
@@ -223,21 +224,27 @@ None applied.
 ## Still open
 
 - **The one-track bar**, beating TRAIN's unigram and T2 on the whole human panel, is not met. The next unit is on it, by Casey's direction ("whatever it finds, until the bar is met").
-- **The lead is (near).** It learns human text from the real targets, is at 86–88% of T2, and is ahead of T2 on oasst2. Its loss was still falling at step 8,192. The next unit's sheet weighs:
+- **The lead is (near).** It learns human text from the real targets and is at 86–88% of T2. It is ahead of T2 on oasst2's rows as a whole, though behind on oasst2's unseen rows. Its loss was still falling at step 8,192. The next unit's sheet weighs:
   - (near) with more steps and data (D3), the cheapest knobs;
   - more rivals in its average;
   - (near) on longer-context targets (`mode:2` or `mode:3`). This first measures each mode table's own panel top-1 on the laptop as its ceiling.
 - **§3.1.** (m1) is a diagnostic. Adopting count-table targets as the training recipe needs its own decision card, which argues §3.1 (the sheet). (near) needs no card: it is an existing objective on the real targets.
+- **The code review's findings** (APPROVE WITH NITS, exact head, fresh context). None changes a number above. The code stays at the pin, because the runs were trained there. The next unit takes them before any `mode:K` rerun:
+  - **I-m is read, not enforced** (minor). The sheet's stop rule ("the run stops before training" if the split's scored count is not 6,865,470) held here only because the line was read: the trainer prints the count but does not refuse a wrong one. The fix is a refusal such as `--expect-split-scored N`, or a check in the job script.
+  - **The self-count test** (minor). `fixed_targets_count_scored_positions_with_the_self_count_and_ties` would also pass an implementation that left the position out of its own count. The brute-force T2 test (at k = 1) and the backoff test's `[1, 2]` case (at k of 2 or more) pin the rule instead. The fix is a case where leaving the position out changes the winner.
+  - **Nits:**
+    - the binary's refusals (`--score-rows`, no `--out`, `--recall`) have no test;
+    - `mode:+1` and `mode:01` parse (`config.json` writes `mode:1`).
 
 ## Plain summary
 
 The project's model had never learned real human writing: on Wikipedia and OASST2 text its training stalled at the very start. This unit found out why.
 
-Given one fixed answer per context (the word that most often follows the previous one), the same model, data and training code learned well. It got the next word right 11 to 14 times as often as before, about as often as that "commonest follower" table itself. So nothing was broken in the data path. The problem was the training rule.
+Given one fixed answer per context (the word that most often follows the previous one), the same model, data and training code learned well. It got the next word right about 11 to 14 times as often as before, about as often as that "commonest follower" table itself. So nothing was broken in the data path. The problem was the training rule.
 
 That rule pushes each guess away from its single closest wrong answer. In real text many words can follow, so even the best guess is "wrong" most of the time, and gets pushed off.
 
-A different rule the trainer already had, which spreads that push over the eight closest wrong answers, made the model learn real text as written. It got the next word right on about 220,000 of 1.46 million held-out positions, against about 20,000 before. That is 86–88% of the commonest-follower table, and on the conversational replies (OASST2) it beats that table. A faster learning rate did not help.
+A different rule the trainer already had, which spreads that push over the eight closest wrong answers, made the model learn real text as written. It got the next word right on about 220,000 of 1.46 million held-out positions, against about 20,000 before. That is 86–88% of the commonest-follower table. On the conversational replies (OASST2) it beats that table, but only where the reply's recent words also appear in the training text; on new contexts it is still behind. A faster learning rate did not help.
 
 The project's bar, beating that table on all held-out text, is not met yet. The next unit builds on the second rule. GPU time cost $3.20.
 
