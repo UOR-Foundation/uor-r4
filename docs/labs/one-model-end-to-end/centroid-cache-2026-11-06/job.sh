@@ -313,8 +313,8 @@ for file in results/cache.tar.zst.sha256 results/cache.SHA256SUMS capture.stderr
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
 done
-"$STORE" get "$OUT_STORE/cache.tar.zst" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
-readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/cache.tar.zst" | cut -d' ' -f1)
+"$STORE" get "$OUT_STORE/results/cache.tar.zst" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
+readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/results/cache.tar.zst" | cut -d' ' -f1)
 [ "$readback_sha" = "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" ] ||
   die "uploaded cache archive did not read back"
 touch "$RUN/CACHE_TRANSFER_VERIFIED"

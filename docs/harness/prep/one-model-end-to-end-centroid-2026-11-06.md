@@ -92,16 +92,32 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b
+JOB_SHA256=77501c4feebf79835fa0769c54022cc01e0d0595ea33c654726714875aee551a
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
   exit 1
 }
 
-DISCOVERY_DIR=$(mktemp -d "${TMPDIR:-/tmp}/uor-centroid.XXXXXX")
-DISCOVERY_INDEX="$DISCOVERY_DIR/index"
+CONTROLLER_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+CONTROLLER_RUN_DIR="local/deepseek/centroid-cache/2026-11-06/$CONTROLLER_RUN_ID"
+mkdir -p "$(dirname "$CONTROLLER_RUN_DIR")"
+mkdir "$CONTROLLER_RUN_DIR"
+DISCOVERY_INDEX="$CONTROLLER_RUN_DIR/pods.tsv"
 : > "$DISCOVERY_INDEX"
+RUN_ID1="$CONTROLLER_RUN_ID-s1"
+RUN_ID2="$CONTROLLER_RUN_ID-s2"
+RUN_DIR1="/workspace/uor-r4/runs/$CONTROLLER_RUN_ID-s1"
+RUN_DIR2="/workspace/uor-r4/runs/$CONTROLLER_RUN_ID-s2"
+OUT_STORE_S1="results/deepseek/one-model-end-to-end-centroid-2026-11-06/s1-$RUN_ID1"
+OUT_STORE_S2="results/deepseek/one-model-end-to-end-centroid-2026-11-06/s2-$RUN_ID2"
+{
+  printf 'export CONTROLLER_RUN_DIR=%q\n' "$CONTROLLER_RUN_DIR"
+  printf 'export OUT_STORE_S1=%q\n' "$OUT_STORE_S1"
+  printf 'export OUT_STORE_S2=%q\n' "$OUT_STORE_S2"
+  printf 'export RUN_DIR1=%q\nexport RUN_DIR2=%q\n' "$RUN_DIR1" "$RUN_DIR2"
+} > "$CONTROLLER_RUN_DIR/outputs.env"
+printf 'controller_run_dir=%s\n' "$CONTROLLER_RUN_DIR"
 PODS=()
 SESSIONS=()
 RUN_DIRS=()
@@ -120,7 +136,8 @@ retain_pod() {
   echo "retaining $pod: $reason" >&2
   echo "inspect it, preserve unique evidence, then unkeep and down it explicitly" >&2
   scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7 || true
-  scripts/pod/uor-pod keep "$pod" --purpose "centroid failure retained: $reason" || true
+  scripts/pod/uor-pod keep "$pod" --lab deepseek \
+    --purpose "centroid failure retained: $reason" || true
 }
 
 resolve_pod() {
@@ -192,7 +209,7 @@ cleanup() {
 trap cleanup EXIT
 
 create_capture_pod() {
-  local session=$1 seed=$2 purpose=$3 discovery="$DISCOVERY_DIR/$1.pod" pod
+  local session=$1 seed=$2 purpose=$3 discovery="$CONTROLLER_RUN_DIR/$1.pod" pod
   printf '%s\t%s\t%s\n' "$discovery" "$session" "$seed" >> "$DISCOVERY_INDEX"
   if ! scripts/pod/uor-pod up --lab deepseek --session "$session" --gpu 5090 \
     --count 1 --hours 7 --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
@@ -222,7 +239,10 @@ register_pod() {
   done
   PODS+=("$1")
   SESSIONS+=("$2")
-  RUN_DIRS+=("/workspace/uor-r4/runs/deepseek-centroid-cache-s$3")
+  case $3 in
+    1) RUN_DIRS+=("$RUN_DIR1") ;;
+    2) RUN_DIRS+=("$RUN_DIR2") ;;
+  esac
   STARTED+=(0)
   FINISHED+=(0)
   RESOLVED+=(0)
@@ -239,10 +259,15 @@ discover_up_pods() {
 }
 
 start_capture() {
-  local index=$1 pod=$2 session=$3 seed=$4 output log
+  local index=$1 pod=$2 session=$3 seed=$4 output log run_id run_dir
+  case $seed in
+    1) run_id=$RUN_ID1; run_dir=$RUN_DIR1 ;;
+    2) run_id=$RUN_ID2; run_dir=$RUN_DIR2 ;;
+  esac
   STARTED[index]=1
   output=$(scripts/pod/uor-pod run "$pod" --lab deepseek --session "$session" \
-    --gpu 0 -- bash /workspace/centroid-cache-job.sh "$seed" 2>&1 |
+    --gpu 0 -- env UOR_CENTROID_RUN="$run_dir" UOR_CENTROID_RUN_ID="$run_id" \
+    bash /workspace/centroid-cache-job.sh "$seed" 2>&1 |
     tee /dev/stderr) || return 1
   log=$(printf '%s\n' "$output" |
     sed -n 's/^Started on .* Log: //p' | tail -1)
@@ -255,11 +280,11 @@ start_capture() {
 }
 
 watch_capture() {
-  local pod=$1 seed=$2 session=$3 log=$4 script=$5 now last=0 failures=0 probe
+  local pod=$1 run_dir=$2 session=$3 log=$4 script=$5 now last=0 failures=0 probe
   local exit_seen run_seen live_seen status_output
   while true; do
     if probe=$(scripts/pod/uor-pod ssh "$pod" \
-      "e=0; g=0; p=0; test -f '/workspace/uor-r4/runs/deepseek-centroid-cache-s$seed/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; pgrep -f \"^bash $script\" >/dev/null && p=1; printf '%s %s %s\n' \"\$e\" \"\$g\" \"\$p\""); then
+      "e=0; g=0; p=0; test -f '$run_dir/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; pgrep -f \"^bash $script\" >/dev/null && p=1; printf '%s %s %s\n' \"\$e\" \"\$g\" \"\$p\""); then
       read -r exit_seen run_seen live_seen <<<"$probe"
       failures=0
       case "$exit_seen:$run_seen:$live_seen" in
@@ -329,7 +354,7 @@ RUN_SCRIPT1=$CAPTURE_RUN_SCRIPT
 
 # Watch both jobs and renew each healthy lease every 25 minutes. Returning
 # requires both the job's EXIT and the uor-pod wrapper's terminal record.
-watch_capture "$POD1" 1 centroid-s1 "$RUN_LOG1" "$RUN_SCRIPT1" &
+watch_capture "$POD1" "$RUN_DIR1" centroid-s1 "$RUN_LOG1" "$RUN_SCRIPT1" &
 WATCH1=$!
 ACTIVE_WATCHES=("$WATCH1")
 WATCH2=
@@ -339,7 +364,7 @@ SECOND_START_FAILED=0
 if start_capture 1 "$POD2" centroid-s2 2; then
   RUN_LOG2=$CAPTURE_RUN_LOG
   RUN_SCRIPT2=$CAPTURE_RUN_SCRIPT
-  watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" "$RUN_SCRIPT2" &
+  watch_capture "$POD2" "$RUN_DIR2" centroid-s2 "$RUN_LOG2" "$RUN_SCRIPT2" &
   WATCH2=$!
   ACTIVE_WATCHES+=("$WATCH2")
 else
@@ -422,14 +447,21 @@ Build and admit the run on the D84 host with the first part of the following blo
 seed-specific restore section is then run once for seed 1 and once for seed 2,
 substituting `s2`/`2` and its pin. The build and global disk floors are not repeated.
 
-Set `OUT_STORE_S1` and `OUT_STORE_S2` from the two jobs' `[0/6] output=` log lines. The
-timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
+Set `CONTROLLER_RUN_DIR` from the `controller_run_dir=` line printed by the capture block,
+then load the immutable output identities it recorded before either pod started:
+
+```sh
+CONTROLLER_RUN_DIR=local/deepseek/centroid-cache/2026-11-06/<printed-id>
+source "$CONTROLLER_RUN_DIR/outputs.env"
+```
+
+Do not reconstruct or reuse a timestamp-plus-random run id.
 
 ```sh
 set -euo pipefail
 CPU_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 ROOT=local/deepseek/centroid-cache/2026-11-06/$CPU_RUN_ID
-CAPTURE_JOB_SHA256=2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b
+CAPTURE_JOB_SHA256=77501c4feebf79835fa0769c54022cc01e0d0595ea33c654726714875aee551a
 mkdir -p "$(dirname "$ROOT")"
 mkdir "$ROOT"
 printf 'cpu_run_root=%s\n' "$ROOT"
@@ -477,17 +509,18 @@ grep -E '  \./(n3S-s1/(config\.json|models/step-008192/(config\.json|model\.safe
 CHECKPOINT_S1="$ROOT/s1/checkpoint/oh/run/n3S-s1/models/step-008192"
 
 CACHE_DOWN="$ROOT/s1/cache-download"
-scripts/pod/uor-store get "$OUT_STORE_S1/cache.tar.zst" "$CACHE_DOWN"
-scripts/pod/uor-store get "$OUT_STORE_S1/cache.tar.zst.sha256" "$CACHE_DOWN"
-scripts/pod/uor-store get "$OUT_STORE_S1/cache.SHA256SUMS" "$CACHE_DOWN"
+scripts/pod/uor-store get "$OUT_STORE_S1/results/cache.tar.zst" "$CACHE_DOWN"
+scripts/pod/uor-store get "$OUT_STORE_S1/results/cache.tar.zst.sha256" "$CACHE_DOWN"
+scripts/pod/uor-store get "$OUT_STORE_S1/results/cache.SHA256SUMS" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/status.json" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/binaries.sha256" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/job.log" "$CACHE_DOWN"
 ARCHIVE_ROOT="$CACHE_DOWN/$OUT_STORE_S1"
-(cd "$ARCHIVE_ROOT" && sha256sum -c cache.tar.zst.sha256)
+CACHE_ARCHIVE_ROOT="$ARCHIVE_ROOT/results"
+(cd "$CACHE_ARCHIVE_ROOT" && sha256sum -c cache.tar.zst.sha256)
 mkdir -p "$ROOT/s1/cache-extracted"
-tar --zstd -xf "$ARCHIVE_ROOT/cache.tar.zst" -C "$ROOT/s1/cache-extracted"
-(cd "$ROOT/s1/cache-extracted" && sha256sum -c "$ARCHIVE_ROOT/cache.SHA256SUMS")
+tar --zstd -xf "$CACHE_ARCHIVE_ROOT/cache.tar.zst" -C "$ROOT/s1/cache-extracted"
+(cd "$ROOT/s1/cache-extracted" && sha256sum -c "$CACHE_ARCHIVE_ROOT/cache.SHA256SUMS")
 CACHE_S1="$ROOT/s1/cache-extracted/cache"
 STATUS="$ARCHIVE_ROOT/status.json"
 BINARY_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/binaries.sha256")
@@ -497,7 +530,7 @@ jq -e --arg binary "$BINARY_SHA" '
   .source_pin == "3a9c2f11d26991a70a22f88758cfb4589a1cf14d" and
   .capture_binary_sha256 == $binary
 ' "$STATUS"
-TAR_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/cache.tar.zst.sha256")
+TAR_SHA=$(cut -d' ' -f1 "$CACHE_ARCHIVE_ROOT/cache.tar.zst.sha256")
 jq -e --arg sha "$TAR_SHA" '.cache_tar_sha256 == $sha' "$STATUS"
 MANIFEST_S1=$(jq -r .cache_manifest_sha256 "$STATUS")
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
@@ -590,11 +623,12 @@ For each seed, pool the four panels:
   `candidate_only >= max(2, ceil(2 * sqrt(candidate_only + control_only)))`;
 - the same paired rule must hold against the matched shuffle.
 
-All conditions must hold at both seeds for a positive development result. If every seed
-returns `REJECT`, that closes mean-centroid refit for the tested n3S configuration.
-`CONTROL_FAULT` and `INSUFFICIENT_POWER` are instrument outcomes, not closures. Because
-this panel selected the n3S checkpoint, even a positive can only nominate the candidate
-for a fresh transfer panel; it cannot alone put the mechanism on the serving path.
+All conditions must hold at both seeds for a positive development result. An aggregate
+`REJECT`, including a mixed `KEEP`/`REJECT`, closes mean-centroid refit for the tested
+n3S configuration. `CONTROL_FAULT` and `INSUFFICIENT_POWER` are instrument outcomes, not
+closures. Because this panel selected the n3S checkpoint, even a positive can only
+nominate the candidate for a fresh transfer panel; it cannot alone put the mechanism on
+the serving path.
 
 ## Cost and stop
 

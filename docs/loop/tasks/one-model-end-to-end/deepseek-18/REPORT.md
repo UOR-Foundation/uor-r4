@@ -44,14 +44,17 @@ has no registered size-line estimate, so a size ratio is undefined.
   `EXIT` and the `uor-pod` wrapper's terminal record. The job uses a clean bootstrap
   checkout or fetches its own exact pinned clone. It leaves either existing busy pod
   untouched.
+- A controller-owned run directory records the two immutable output-store identities
+  before either pod starts, so CPU restore does not depend on scraping a deleted pod log.
 - The capture command uses `--query-cache-memory 0 --query-cache-dev 0`; its cache is
   exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`. The job
   checks that inventory, its pinned identities and its row totals before sealing.
 - The job checks the visible RTX 5090, source and tracked tree, all data/archive/selected
   checkpoint hashes, disk phases, `zstd` and CUDA tests. It has no self-set wall-clock
   cancellation.
-- It records the source, run id, manifest, cache archive and capture binary hashes, then
-  uploads and reads back the cache, checksums, logs, GPU record and status.
+- It records the source, run id, manifest, cache archive, normal-output archive and
+  capture binary hashes, then uploads and reads back the cache, checksums, logs, GPU
+  record and status.
 - The CPU section builds the registered evaluator, restores and verifies both the n3S
   checkpoint and captured cache, checks each status against its seed, source pin,
   capture binary, script hash and archive hash, records the evaluator source/binary
@@ -72,7 +75,7 @@ historical balance is claimed; actual lease usage will be recorded at execution.
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b`.
+`77501c4feebf79835fa0769c54022cc01e0d0595ea33c654726714875aee551a`.
 
 ## Checks run at the head
 
