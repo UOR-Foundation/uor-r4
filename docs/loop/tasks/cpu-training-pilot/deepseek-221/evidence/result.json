@@ -13,6 +13,7 @@
   },
   "post_run_repair": {
     "driver": "1df4ffbba613e274ae353ead9b2d72f77f53fd769b0293deb35ac2631e20dee1",
+    "release_binary": "fc27c7497bb063a471409857a075f5980a3f65eae6d477e726df076c20cf15f2",
     "scope": "classify a behaviorally vacuous shuffled-target artifact as CONTROL_FAULT"
   },
   "seed_1": {
@@ -41,7 +42,7 @@
     "wall_seconds": 23.72,
     "cpu_percent": 1916,
     "peak_rss_kib": 266704,
-    "retained_bytes": 6638424
+    "retained_bytes": 6638505
   },
   "tests": {
     "nearest_rival_library": 3,
@@ -51,7 +52,7 @@
   },
   "raw_evidence": {
     "output_root": "local/deepseek/nearest-rival-gain/2026-11-06",
-    "sha256sums_sha256": "b34cba4d713a57364f75271d0bb7434385155788de975c54dc1917abb6046c1e",
+    "sha256sums_sha256": "fabfea413d03a7bdf22963c54c53fa4b8b0f81632583f6c244039c53f0e9a686",
     "seed1_report_sha256": "b479cd622b67809b79032e2166c55a81938c3551b645dade6aa5d3768e19aa54"
   },
   "outcome_reason": "A cyclic shuffle changed 2,529 of 2,538 target labels, yet the shuffled trainer selected the same eight gain moves and produced the same artifact as the true-target trainer. The shuffled control was therefore behaviorally non-discriminating, and no mechanism or quality conclusion is reported."

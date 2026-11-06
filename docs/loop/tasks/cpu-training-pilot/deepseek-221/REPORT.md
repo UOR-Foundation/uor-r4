@@ -66,9 +66,9 @@ Resources:
 - 24 Rayon workers;
 - wall **23.72 s** at **1,916%** CPU;
 - peak RSS **266,704 KiB**;
-- retained evidence **6,638,424 bytes**;
+- retained evidence **6,638,505 bytes**;
 - local `SHA256SUMS`:
-  `b34cba4d713a57364f75271d0bb7434385155788de975c54dc1917abb6046c1e`.
+  `fabfea413d03a7bdf22963c54c53fa4b8b0f81632583f6c244039c53f0e9a686`.
 
 Compact evidence: [result.json](evidence/result.json).
 
@@ -98,6 +98,17 @@ process was run after the repair.
 - seed-1 true and shuffled accepted-move lists compare equal;
 - seed-1 true and shuffled artifacts have the same SHA-256;
 - sealed 11-file local evidence checksum verified;
+- D23, D25 and D32 ratchets unchanged, claim wording passed, prep-check reports
+  FIT with compute allowed, and local PR policy passed;
+- `loop gates --full`: 11/11 green;
+- full harness check: 283 rules, 0 errors and 249 repository-wide advisory
+  warnings;
+- `xtask docs-catalog --check`: 1,175 records, 20 lines, zero missing paths;
+- `xtask links`: 1,277 pre-existing repository-wide broken links and none among
+  the newly added deepseek-221 evidence links;
+- `xtask roadmap check` remains blocked by the pre-existing
+  `infra-desktop-client-tauri` status/issue mismatch, which this diff does not
+  touch;
 - implementation review: local exact-head self-review at `2ba8b56b6`.
 
 ## Skills used
