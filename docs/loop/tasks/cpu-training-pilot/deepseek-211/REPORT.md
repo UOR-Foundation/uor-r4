@@ -55,7 +55,7 @@ structured compressed signature.
 - Preserved the `uor-r4.stack-prompt-reply-readout/1` schema and bytes.
 
 No `UORLUT01`, serving kernel, CUDA, float-training or Claude-owned source
-changed. The source implementation is 687 additions and 54 deletions across
+changed. The source implementation is 518 additions and 51 deletions across
 three code files; documentation and evidence add the rest.
 
 ## Measurements
@@ -124,6 +124,9 @@ resolution path, rather than only reducing bit width.
 - CPU library: **394 passed, 4 expected ignores**;
 - formatting, claim wording, policy and D23/D25/D32 ratchets passed with no new
   error;
+- policy retained advisories for the existing item-scope omission of
+  `prompt_reply.rs`, the initial claim/ORDER commit grouping, and the standard
+  prep-sheet `Stop rule` heading; none is a hard policy failure;
 - source, binary, generator, tokenizer, artifacts, TRAIN and sidecar pins
   matched;
 - exact arm matched the CPU row oracle on every attempt-2 row;
