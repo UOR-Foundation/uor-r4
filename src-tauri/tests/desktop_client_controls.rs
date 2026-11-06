@@ -761,6 +761,9 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "What is [17 + 25]?",
         "2026-11-05 + 1",
         "2026-11-05 - 1",
+        "1 -",
+        "What is 1 -?",
+        "2026-11-05 -",
     ] {
         let unsupported = dispatch_rpc_command(
             &mut backend,
@@ -796,6 +799,7 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
     for prompt in [
         format!("{}1 + 1", " ".repeat(200)),
         format!("1 + 1{}", " ".repeat(200)),
+        format!("{}1 -", " ".repeat(200)),
     ] {
         let padded = dispatch_rpc_command(
             &mut backend,
@@ -844,6 +848,11 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
         "-42 is the answer",
         "+42 is the answer",
         "- 1. Introduction",
+        "1. Introduction",
+        "1) Introduction",
+        "1 - Introduction",
+        "2026 - Year in review",
+        "2026-11-05 - Year in review",
         "What is +42, really?",
         "-42,",
         "2026-11-05T17:25+01:00,",

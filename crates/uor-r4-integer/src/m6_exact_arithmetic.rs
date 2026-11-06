@@ -872,6 +872,15 @@ enum ExactToolOperator {
     Subtract,
 }
 
+fn exact_tool_operand_start(rest: &str) -> bool {
+    rest.trim_start().starts_with(|c: char| {
+        matches!(
+            c,
+            '0'..='9' | '+' | '-' | '.' | '(' | '{' | '[' | '%' | '^' | '*' | '/' | '×' | '÷'
+        )
+    })
+}
+
 fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     let rest = rest.trim_start();
     let signed_literal = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
@@ -905,7 +914,11 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         if c == '-' {
             let previous = rest[..index].chars().next_back();
             let next = rest[index + 1..].chars().next();
-            if previous.is_some_and(char::is_whitespace) && next.is_some_and(char::is_whitespace) {
+            if previous.is_some_and(char::is_whitespace)
+                && (next.is_none()
+                    || (next.is_some_and(char::is_whitespace)
+                        && exact_tool_operand_start(&rest[index + 1..])))
+            {
                 return true;
             }
         }
@@ -1156,7 +1169,10 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             }
             let previous = expression[..index].chars().next_back();
             let next = expression[index + 1..].chars().next();
-            previous.is_some_and(char::is_whitespace) && next.is_some_and(char::is_whitespace)
+            previous.is_some_and(char::is_whitespace)
+                && (next.is_none()
+                    || (next.is_some_and(char::is_whitespace)
+                        && exact_tool_operand_start(&expression[index + 1..])))
         });
         if !has_spaced_subtraction {
             return Ok(None);
@@ -1685,6 +1701,9 @@ mod tests {
             "What is [17 + 25]?",
             "2026-11-05 + 1",
             "2026-11-05 - 1",
+            "1 -",
+            "What is 1 -?",
+            "2026-11-05 -",
         ] {
             assert!(
                 exact_arithmetic_tool(prompt)
@@ -1721,6 +1740,12 @@ mod tests {
         assert!(exact_arithmetic_tool(&signed_over_limit)
             .expect("signed overlong arithmetic should be recognized")
             .is_err());
+        let trailing_over_limit = format!("{}1 -", " ".repeat(200));
+        let trailing_error = exact_arithmetic_tool(&trailing_over_limit)
+            .expect("overlong incomplete subtraction should be recognized")
+            .err()
+            .expect("overlong incomplete subtraction should be an error");
+        assert!(trailing_error.to_string().contains("160-byte"));
         assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
         assert!(exact_arithmetic_tool("What is 50 -12?").is_none());
         assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
@@ -1730,6 +1755,11 @@ mod tests {
             "-42 is the answer",
             "+42 is the answer",
             "- 1. Introduction",
+            "1. Introduction",
+            "1) Introduction",
+            "1 - Introduction",
+            "2026 - Year in review",
+            "2026-11-05 - Year in review",
             "What is +42, really?",
             "-42,",
             "2026-11-05T17:25+01:00,",

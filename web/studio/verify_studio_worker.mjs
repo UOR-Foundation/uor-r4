@@ -435,6 +435,22 @@ for (const [index, prompt] of [`${' '.repeat(200)}1 + 1`, `1 + 1${' '.repeat(200
     assert(padded.action === 'generate_error' && padded.error.includes('160-byte'), `whitespace-padded arithmetic must return the prompt limit: ${JSON.stringify(padded)}`);
 }
 
+for (const [index, prompt] of ['1 -', 'What is 1 -?', '2026-11-05 -', `${' '.repeat(200)}1 -`].entries()) {
+    const id = `gen_exact_incomplete_subtraction_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId: `conv_verify_exact_incomplete_subtraction_${index}`,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const incomplete = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    const expectedError = index === 3 ? '160-byte' : 'decimal';
+    assert(incomplete.action === 'generate_error' && incomplete.error.includes(expectedError), `incomplete subtraction must fail explicitly: ${JSON.stringify(incomplete)}`);
+}
+
 for (const [index, expression] of ['-', '- 25', '- 2.5', '-?'].entries()) {
     for (const [side, prompt] of [`${' '.repeat(200)}${expression}`, `${expression}${' '.repeat(200)}`].entries()) {
         const id = `gen_exact_padded_minus_${index}_${side}`;
@@ -468,6 +484,11 @@ for (const [index, prompt] of [
     '-42 is the answer',
     '+42 is the answer',
     '- 1. Introduction',
+    '1. Introduction',
+    '1) Introduction',
+    '1 - Introduction',
+    '2026 - Year in review',
+    '2026-11-05 - Year in review',
     'What is +42, really?',
     '-42,',
     '2026-11-05T17:25+01:00,',
