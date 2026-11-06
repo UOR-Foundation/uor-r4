@@ -2698,7 +2698,7 @@ mod tests {
                 "prose-boundary arithmetic control fell through: {prompt}"
             );
         }
-        let wrongly_fell_through: Vec<&str> = [
+        let missing_errors: Vec<&str> = [
             "What is (1234567-8)?",
             "(1234567-8)",
             "1 (800) 555-0100 -2",
@@ -2706,11 +2706,14 @@ mod tests {
             "5 people attended - 3 left + 2",
         ]
         .into_iter()
-        .filter(|prompt| exact_arithmetic_tool(prompt).is_none())
+        .filter(|prompt| match exact_arithmetic_tool(prompt) {
+            Some(Err(error)) => error.to_string().is_empty(),
+            _ => true,
+        })
         .collect();
         assert!(
-            wrongly_fell_through.is_empty(),
-            "grouped or continued arithmetic fell through: {wrongly_fell_through:?}"
+            missing_errors.is_empty(),
+            "grouped or continued arithmetic must be explicit non-empty errors: {missing_errors:?}"
         );
         assert!(
             exact_arithmetic_tool("5 - 3 left").is_some(),

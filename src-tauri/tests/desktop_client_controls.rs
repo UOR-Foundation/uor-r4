@@ -1175,7 +1175,7 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         json!(true),
         "5 - 3 left must remain tool-handled"
     );
-    let mut wrongly_fell_through = Vec::new();
+    let mut missing_errors = Vec::new();
     for prompt in [
         "What is (1234567-8)?",
         "(1234567-8)",
@@ -1189,13 +1189,17 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
             &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
         )
         .expect("grouped arithmetic boundary RPC should succeed");
-        if response["handled"] == json!(false) {
-            wrongly_fell_through.push(prompt);
+        let explicit_error = response["handled"] == json!(true)
+            && response["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty());
+        if !explicit_error {
+            missing_errors.push(prompt);
         }
     }
     assert!(
-        wrongly_fell_through.is_empty(),
-        "grouped or continued arithmetic fell through: {wrongly_fell_through:?}"
+        missing_errors.is_empty(),
+        "grouped or continued arithmetic must be explicit non-empty errors: {missing_errors:?}"
     );
 }
 
