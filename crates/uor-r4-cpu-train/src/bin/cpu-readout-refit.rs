@@ -15,6 +15,14 @@ type Result<T> = std::result::Result<T, String>;
 const SUBSTRATE: &str = "cpu-development-research";
 const QUALIFICATION: &str = "gpu-required";
 const THRESHOLDS: [usize; 10] = [1, 2, 3, 4, 6, 8, 12, 16, 32, 64];
+const EXPERIMENT_SEED: u64 = 2789;
+const MINIMUM_OBSERVATIONS: usize = 8;
+const MINIMUM_REFITTED_ROWS: usize = 100;
+const MINIMUM_REFITTED_OBSERVATIONS: u64 = 1_000;
+const MINIMUM_PANEL_TARGETS: usize = 1_000;
+const EXPECTED_TOKENIZER_SHA256: &str =
+    "a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377";
+const EXPECTED_BOS: u32 = 0;
 
 fn main() {
     if let Err(error) = run() {
@@ -28,6 +36,7 @@ fn run() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("preflight") => preflight(&args[1..]),
         Some("run") => run_experiment(&args[1..]),
+        Some("aggregate") => aggregate_reports(&args[1..]),
         _ => Err(usage()),
     }
 }
@@ -36,13 +45,14 @@ fn usage() -> String {
     concat!(
         "usage:\n",
         "  cpu-readout-refit preflight TRAIN_TOKENS TRAIN_MASK TRAIN_MANIFEST ARTIFACT ",
-        "--min-observations N --expected-train-tokens SHA --expected-train-mask SHA ",
+        "--expected-tokenizer SHA --expected-train-tokens SHA --expected-train-mask SHA ",
         "--expected-train-manifest SHA --expected-artifact SHA\n",
         "  cpu-readout-refit run TRAIN_TOKENS TRAIN_MASK TRAIN_MANIFEST PANEL_TOKENS ",
-        "PANEL_MASK PANEL_MANIFEST ARTIFACT --seed 2789 --min-observations N ",
+        "PANEL_MASK PANEL_MANIFEST ARTIFACT --expected-tokenizer SHA ",
         "--expected-train-tokens SHA --expected-train-mask SHA --expected-train-manifest SHA ",
         "--expected-panel-tokens SHA --expected-panel-mask SHA ",
-        "--expected-panel-manifest SHA --expected-artifact SHA"
+        "--expected-panel-manifest SHA --expected-artifact SHA\n",
+        "  cpu-readout-refit aggregate REPORT REPORT REPORT REPORT"
     )
     .to_owned()
 }
@@ -54,7 +64,6 @@ fn preflight(args: &[String]) -> Result<()> {
     let paths = TrainPaths::new(&args[0], &args[1], &args[2]);
     let artifact_path = Path::new(&args[3]);
     let flags = parse_flags(&args[4..])?;
-    let minimum = parse_minimum(&flags)?;
     let expected = Expected::from_flags(&flags, false)?;
     let started = Instant::now();
     let artifact = read_checked(artifact_path, &expected.artifact)?;
@@ -65,9 +74,23 @@ fn preflight(args: &[String]) -> Result<()> {
         return Err("TRAIN vocabulary differs from artifact".to_owned());
     }
     let samples = train.causal_samples().map_err(|error| error.to_string())?;
+    validate_target_inventory(&identity, samples.len(), "TRAIN")?;
     let capture_started = Instant::now();
     let observations = capture_observations(&artifact, &samples)?;
     let capture_elapsed_ms = elapsed_ms(capture_started);
+    let original_tokens = observations
+        .iter()
+        .map(|observation| observation.original_token)
+        .collect::<Vec<_>>();
+    let identity_evaluation = evaluate_output_table(
+        forward.shared_table(),
+        forward.vocabulary(),
+        forward.width(),
+        &observations,
+        &original_tokens,
+    )
+    .map_err(|error| error.to_string())?;
+    let identity_exact = decision_matches_capture(&identity_evaluation, &original_tokens);
     let census =
         observe_refit_thresholds(&observations, &THRESHOLDS).map_err(|error| error.to_string())?;
     let median = refit_output_table(
@@ -76,7 +99,7 @@ fn preflight(args: &[String]) -> Result<()> {
         forward.width(),
         &observations,
         ReadoutRefitMethod::Median,
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
     let mean = refit_output_table(
@@ -85,82 +108,90 @@ fn preflight(args: &[String]) -> Result<()> {
         forward.width(),
         &observations,
         ReadoutRefitMethod::MeanCentroid,
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
     let shuffled = shuffle_refit_targets(
         &observations,
         forward.vocabulary(),
         forward.width(),
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
+    let mut report = serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit-preflight/1",
+        "status": if identity_exact { "COMPLETE" } else { "CONTROL_FAULT" },
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "inputs": inputs_json(
+            artifact_path,
+            &expected.artifact,
+            &paths,
+            &train_read.hashes,
+            &identity,
+            None,
+        ),
+        "artifact": {
+            "vocab": forward.vocabulary(),
+            "width": forward.width(),
+            "context": forward.context_length(),
+            "kept_cells": observations
+                .first()
+                .map(|observation| observation.kept_cells.len())
+                .unwrap_or(0),
+            "table_sha256": table_sha256(forward.shared_table()),
+        },
+        "capture": {
+            "samples": samples.len(),
+            "elapsed_ms": capture_elapsed_ms,
+            "query_and_decision_sha256": capture_sha256(&observations),
+        },
+        "identity": {
+            "exact": identity_exact,
+            "changed_decisions": identity_evaluation.changed_decisions,
+            "decision_sha256": identity_evaluation.decision_sha256,
+            "captured_decision_sha256": token_sha256(&original_tokens),
+        },
+        "selected_minimum_observations": MINIMUM_OBSERVATIONS,
+        "thresholds": census,
+        "fit": {
+            "median_rows": median.fitted_tokens.len(),
+            "median_observations": median.observations,
+            "median_changed_coordinates": median.changed_coordinates,
+            "median_displacement_l1": median.displacement_l1,
+            "median_maximum_row_displacement_l1": median.maximum_row_displacement_l1,
+            "median_table_sha256": table_sha256(&median.table),
+            "mean_rows": mean.fitted_tokens.len(),
+            "mean_changed_coordinates": mean.changed_coordinates,
+            "mean_displacement_l1": mean.displacement_l1,
+            "mean_table_sha256": table_sha256(&mean.table),
+            "shuffle_changed_targets": shuffled.changed_targets,
+            "shuffle_table_sha256": table_sha256(
+                &shuffled_table(
+                    forward.shared_table(),
+                    forward.vocabulary(),
+                    forward.width(),
+                    &shuffled.observations,
+                    MINIMUM_OBSERVATIONS,
+                )?.table
+            ),
+        },
+        "power": {
+            "minimum_refitted_rows": MINIMUM_REFITTED_ROWS,
+            "minimum_refitted_observations": MINIMUM_REFITTED_OBSERVATIONS,
+            "eligible": median.fitted_tokens.len() >= MINIMUM_REFITTED_ROWS
+                && median.observations >= MINIMUM_REFITTED_OBSERVATIONS,
+        },
+        "execution": {
+            "threads": rayon::current_num_threads(),
+            "wall_elapsed_ms": elapsed_ms(started),
+            "peak_rss_kib": peak_rss_kib(),
+        },
+    });
+    finish_report(&mut report);
     println!(
         "{}",
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema": "uor-r4.cpu-readout-refit-preflight/1",
-            "status": "COMPLETE",
-            "substrate": SUBSTRATE,
-            "qualification": QUALIFICATION,
-            "inputs": inputs_json(
-                artifact_path,
-                &expected.artifact,
-                &paths,
-                &train_read.hashes,
-                &identity,
-                None,
-            ),
-            "artifact": {
-                "vocab": forward.vocabulary(),
-                "width": forward.width(),
-                "context": forward.context_length(),
-                "kept_cells": observations
-                    .first()
-                    .map(|observation| observation.kept_cells.len())
-                    .unwrap_or(0),
-                "table_sha256": table_sha256(forward.shared_table()),
-            },
-            "capture": {
-                "samples": samples.len(),
-                "elapsed_ms": capture_elapsed_ms,
-                "query_and_decision_sha256": capture_sha256(&observations),
-            },
-            "selected_minimum_observations": minimum,
-            "thresholds": census,
-            "fit": {
-                "median_rows": median.fitted_tokens.len(),
-                "median_observations": median.observations,
-                "median_changed_coordinates": median.changed_coordinates,
-                "median_displacement_l1": median.displacement_l1,
-                "median_maximum_row_displacement_l1": median.maximum_row_displacement_l1,
-                "median_table_sha256": table_sha256(&median.table),
-                "mean_rows": mean.fitted_tokens.len(),
-                "mean_changed_coordinates": mean.changed_coordinates,
-                "mean_displacement_l1": mean.displacement_l1,
-                "mean_table_sha256": table_sha256(&mean.table),
-                "shuffle_changed_targets": shuffled.changed_targets,
-                "shuffle_table_sha256": table_sha256(
-                    &shuffled_table(
-                        forward.shared_table(),
-                        forward.vocabulary(),
-                        forward.width(),
-                        &shuffled.observations,
-                        minimum,
-                    )?.table
-                ),
-            },
-            "power": {
-                "minimum_refitted_rows": 100,
-                "minimum_refitted_observations": 1_000,
-                "eligible": median.fitted_tokens.len() >= 100 && median.observations >= 1_000,
-            },
-            "execution": {
-                "threads": rayon::current_num_threads(),
-                "wall_elapsed_ms": elapsed_ms(started),
-                "peak_rss_kib": peak_rss_kib(),
-            },
-        }))
-        .map_err(|error| error.to_string())?
+        serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
     );
     Ok(())
 }
@@ -173,8 +204,6 @@ fn run_experiment(args: &[String]) -> Result<()> {
     let panel_paths = PanelPaths::new(&args[3], &args[4], &args[5]);
     let artifact_path = Path::new(&args[6]);
     let flags = parse_flags(&args[7..])?;
-    let minimum = parse_minimum(&flags)?;
-    let seed = parse_seed(&flags)?;
     let expected = Expected::from_flags(&flags, true)?;
     let started = Instant::now();
 
@@ -192,18 +221,84 @@ fn run_experiment(args: &[String]) -> Result<()> {
     {
         return Err("corpus vocabulary differs from artifact".to_owned());
     }
-    validate_panel(&panel_read.manifest_bytes, seed, &panel_identity)?;
+    validate_panel(&panel_read.manifest_bytes, &panel_identity)?;
 
     let train_samples = train.causal_samples().map_err(|error| error.to_string())?;
     let panel_samples = panel.causal_samples().map_err(|error| error.to_string())?;
-    if panel_samples.len() < 1_000 {
-        return Err("fresh panel has fewer than 1,000 targets".to_owned());
-    }
+    validate_target_inventory(&train_identity, train_samples.len(), "TRAIN")?;
+    validate_target_inventory(&panel_identity, panel_samples.len(), "fresh panel")?;
     let train_capture_started = Instant::now();
     let train_observations = capture_observations(&artifact, &train_samples)?;
     let train_capture_elapsed_ms = elapsed_ms(train_capture_started);
+    let train_original_tokens = train_observations
+        .iter()
+        .map(|observation| observation.original_token)
+        .collect::<Vec<_>>();
+    let train_identity_evaluation = evaluate_output_table(
+        forward.shared_table(),
+        forward.vocabulary(),
+        forward.width(),
+        &train_observations,
+        &train_original_tokens,
+    )
+    .map_err(|error| error.to_string())?;
+    if !decision_matches_capture(&train_identity_evaluation, &train_original_tokens) {
+        let mut report = early_artifact_report(
+            artifact_path,
+            &expected.artifact,
+            &train_paths,
+            &train_read.hashes,
+            &train_identity,
+            Some((&panel_paths, &panel_read.hashes, &panel_identity)),
+            "CONTROL_FAULT",
+            "CONTROL_FAULT",
+            "TRAIN scorer does not reproduce the artifact's captured decisions",
+            serde_json::json!({
+                "changed_decisions": train_identity_evaluation.changed_decisions,
+                "decision_sha256": train_identity_evaluation.decision_sha256,
+                "captured_decision_sha256": token_sha256(&train_original_tokens),
+            }),
+            started,
+        );
+        finish_report(&mut report);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
+        );
+        return Ok(());
+    }
     let census = observe_refit_thresholds(&train_observations, &THRESHOLDS)
         .map_err(|error| error.to_string())?;
+    let train_power = census
+        .get(&MINIMUM_OBSERVATIONS)
+        .ok_or_else(|| "minimum-observation census is absent".to_owned())?;
+    if train_power.eligible_tokens < MINIMUM_REFITTED_ROWS as u64
+        || train_power.eligible_observations < MINIMUM_REFITTED_OBSERVATIONS
+    {
+        let mut report = early_artifact_report(
+            artifact_path,
+            &expected.artifact,
+            &train_paths,
+            &train_read.hashes,
+            &train_identity,
+            Some((&panel_paths, &panel_read.hashes, &panel_identity)),
+            "INSUFFICIENT_POWER",
+            "COMPLETE",
+            "TRAIN refit inventory is below the registered power floor",
+            serde_json::json!({
+                "minimum_observations": MINIMUM_OBSERVATIONS,
+                "eligible_tokens": train_power.eligible_tokens,
+                "eligible_observations": train_power.eligible_observations,
+            }),
+            started,
+        );
+        finish_report(&mut report);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
+        );
+        return Ok(());
+    }
     let original_table = forward.shared_table().to_vec();
     let median = refit_output_table(
         &original_table,
@@ -211,7 +306,7 @@ fn run_experiment(args: &[String]) -> Result<()> {
         forward.width(),
         &train_observations,
         ReadoutRefitMethod::Median,
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
     let mean = refit_output_table(
@@ -220,14 +315,14 @@ fn run_experiment(args: &[String]) -> Result<()> {
         forward.width(),
         &train_observations,
         ReadoutRefitMethod::MeanCentroid,
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
     let shuffled = shuffle_refit_targets(
         &train_observations,
         forward.vocabulary(),
         forward.width(),
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )
     .map_err(|error| error.to_string())?;
     let shuffled_fit = shuffled_table(
@@ -235,7 +330,7 @@ fn run_experiment(args: &[String]) -> Result<()> {
         forward.vocabulary(),
         forward.width(),
         &shuffled.observations,
-        minimum,
+        MINIMUM_OBSERVATIONS,
     )?;
 
     let panel_capture_started = Instant::now();
@@ -313,113 +408,123 @@ fn run_experiment(args: &[String]) -> Result<()> {
     let median_vs_shuffled =
         paired_two_sigma(&median_correct, &shuffled_correct).map_err(|error| error.to_string())?;
 
-    let identity_exact =
-        identical.decision_sha256 == original.decision_sha256 && identical.changed_decisions == 0;
-    let power = median.fitted_tokens.len() >= 100
-        && median.observations >= 1_000
-        && panel_samples.len() >= 1_000;
+    let original_decision_sha256 = token_sha256(&original_tokens);
+    let identity_exact = decision_matches_capture(&original, &original_tokens)
+        && decision_matches_capture(&identical, &original_tokens);
+    let power = median.fitted_tokens.len() >= MINIMUM_REFITTED_ROWS
+        && median.observations >= MINIMUM_REFITTED_OBSERVATIONS
+        && panel_samples.len() >= MINIMUM_PANEL_TARGETS;
     let primary_pass = identity_exact
         && power
         && median_vs_original["passes"] == true
         && median_vs_shuffled["passes"] == true
         && median_eval.top8_correct >= original.top8_correct;
+    let artifact_outcome = if !identity_exact {
+        "CONTROL_FAULT"
+    } else if !power {
+        "INSUFFICIENT_POWER"
+    } else if primary_pass {
+        "ARTIFACT_KEEP"
+    } else {
+        "ARTIFACT_REJECT"
+    };
 
+    let mut report = serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit/1",
+        "report_kind": "artifact",
+            "status": if identity_exact { "COMPLETE" } else { "CONTROL_FAULT" },
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "claim": "fixed-input, output-only nearest-token readout refit on exact CPU Q12 queries",
+        "seed": EXPERIMENT_SEED,
+        "inputs": inputs_json(
+            artifact_path,
+            &expected.artifact,
+            &train_paths,
+            &train_read.hashes,
+            &train_identity,
+            Some((&panel_paths, &panel_read.hashes, &panel_identity)),
+        ),
+        "settings": {
+            "minimum_observations": MINIMUM_OBSERVATIONS,
+            "median_rounding": "lower-midpoint integer median in the L1 minimizing interval",
+            "mean_rounding": "nearest integer, ties away from zero",
+            "shuffle": "maximum-change cyclic label permutation among eligible observations",
+            "paired_rule": "candidate_sum > control_sum and candidate_only >= max(2, ceil(2*sqrt(b+c)))",
+        },
+        "artifact": {
+            "vocab": forward.vocabulary(),
+            "width": forward.width(),
+            "context": forward.context_length(),
+            "original_table_sha256": table_sha256(&original_table),
+        },
+        "capture": {
+            "train_samples": train_samples.len(),
+            "train_response_targets": train_identity.response_targets,
+            "train_elapsed_ms": train_capture_elapsed_ms,
+            "train_sha256": capture_sha256(&train_observations),
+            "panel_samples": panel_samples.len(),
+            "panel_response_targets": panel_identity.response_targets,
+            "panel_elapsed_ms": panel_capture_elapsed_ms,
+            "panel_sha256": capture_sha256(&panel_observations),
+            "shared_panel_elapsed_ms": shared_capture_elapsed_ms,
+            "shared_panel_sha256": capture_sha256(&shared_observations),
+        },
+        "thresholds": census,
+        "fit": {
+            "median": fit_json(&median, &median.table),
+            "mean_centroid": fit_json(&mean, &mean.table),
+            "shuffled_target": {
+                "fitted_tokens": shuffled.fitted_tokens.len(),
+                "observations": shuffled_fit.observations,
+                "changed_targets": shuffled.changed_targets,
+                "table_sha256": table_sha256(&shuffled_fit.table),
+                "changed_coordinates": shuffled_fit.changed_coordinates,
+                "displacement_l1": shuffled_fit.displacement_l1,
+            },
+            "shared_refit_artifact_sha256": uor_r4_discrete::corpus::sha256(&shared_artifact),
+        },
+        "arms": {
+            "original": original,
+            "decoupled_identical": identical,
+            "output_median": median_eval,
+            "output_mean_centroid": mean_eval,
+            "shuffled_target": shuffled_eval,
+            "shared_median_diagnostic": shared_eval,
+        },
+        "comparisons": {
+            "median_top1_vs_original": median_vs_original,
+            "median_top1_vs_shuffled": median_vs_shuffled,
+            "identity_decision_sha_match": identity_exact,
+            "captured_original_decision_sha256": original_decision_sha256,
+            "shared_vs_decoupled_changed_decisions": decisions_changed(&shared_eval, &median_eval),
+        },
+        "baselines": baseline,
+        "power": {
+            "minimum_refitted_rows": MINIMUM_REFITTED_ROWS,
+            "minimum_refitted_observations": MINIMUM_REFITTED_OBSERVATIONS,
+            "minimum_panel_targets": MINIMUM_PANEL_TARGETS,
+            "eligible": power,
+        },
+        "bar": {
+            "identity_exact": identity_exact,
+            "median_beats_original": median_vs_original["passes"],
+            "median_beats_shuffled": median_vs_shuffled["passes"],
+            "top8_not_below_original": median_eval.top8_correct >= original.top8_correct,
+            "eligible": power,
+            "artifact_outcome": artifact_outcome,
+            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+        },
+        "execution": {
+            "threads": rayon::current_num_threads(),
+            "wall_elapsed_ms": elapsed_ms(started),
+            "peak_rss_kib": peak_rss_kib(),
+        },
+    });
+    finish_report(&mut report);
     println!(
         "{}",
-        serde_json::to_string_pretty(&serde_json::json!({
-            "schema": "uor-r4.cpu-readout-refit/1",
-            "status": "COMPLETE",
-            "substrate": SUBSTRATE,
-            "qualification": QUALIFICATION,
-            "claim": "fixed-input, output-only nearest-token readout refit on exact CPU Q12 queries",
-            "seed": seed,
-            "inputs": inputs_json(
-                artifact_path,
-                &expected.artifact,
-                &train_paths,
-                &train_read.hashes,
-                &train_identity,
-                Some((&panel_paths, &panel_read.hashes, &panel_identity)),
-            ),
-            "settings": {
-                "minimum_observations": minimum,
-                "median_rounding": "lower-midpoint integer median in the L1 minimizing interval",
-                "mean_rounding": "nearest integer, ties away from zero",
-                "shuffle": "maximum-change cyclic label permutation among eligible observations",
-                "paired_rule": "candidate_sum > control_sum and candidate_only >= max(2, ceil(2*sqrt(b+c)))",
-            },
-            "artifact": {
-                "vocab": forward.vocabulary(),
-                "width": forward.width(),
-                "context": forward.context_length(),
-                "original_table_sha256": table_sha256(&original_table),
-            },
-            "capture": {
-                "train_samples": train_samples.len(),
-                "train_elapsed_ms": train_capture_elapsed_ms,
-                "train_sha256": capture_sha256(&train_observations),
-                "panel_samples": panel_samples.len(),
-                "panel_elapsed_ms": panel_capture_elapsed_ms,
-                "panel_sha256": capture_sha256(&panel_observations),
-                "shared_panel_elapsed_ms": shared_capture_elapsed_ms,
-                "shared_panel_sha256": capture_sha256(&shared_observations),
-            },
-            "thresholds": census,
-            "fit": {
-                "median": fit_json(&median, &median.table),
-                "mean_centroid": fit_json(&mean, &mean.table),
-                "shuffled_target": {
-                    "fitted_tokens": shuffled.fitted_tokens.len(),
-                    "observations": train_observations.len(),
-                    "changed_targets": shuffled.changed_targets,
-                    "table_sha256": table_sha256(&shuffled_fit.table),
-                    "changed_coordinates": shuffled_fit.changed_coordinates,
-                    "displacement_l1": shuffled_fit.displacement_l1,
-                },
-                "shared_refit_artifact_sha256": uor_r4_discrete::corpus::sha256(&shared_artifact),
-            },
-            "arms": {
-                "original": original,
-                "decoupled_identical": identical,
-                "output_median": median_eval,
-                "output_mean_centroid": mean_eval,
-                "shuffled_target": shuffled_eval,
-                "shared_median_diagnostic": shared_eval,
-            },
-            "comparisons": {
-                "median_top1_vs_original": median_vs_original,
-                "median_top1_vs_shuffled": median_vs_shuffled,
-                "identity_decision_sha_match": identity_exact,
-                "shared_vs_decoupled_changed_decisions": decisions_changed(&shared_eval, &median_eval),
-            },
-            "baselines": baseline,
-            "power": {
-                "minimum_refitted_rows": 100,
-                "minimum_refitted_observations": 1_000,
-                "minimum_panel_targets": 1_000,
-                "eligible": power,
-            },
-            "bar": {
-                "identity_exact": identity_exact,
-                "median_beats_original": median_vs_original["passes"],
-                "median_beats_shuffled": median_vs_shuffled["passes"],
-                "top8_not_below_original": median_eval.top8_correct >= original.top8_correct,
-                "eligible": power,
-                "outcome": if !power {
-                    "INSUFFICIENT_POWER"
-                } else if primary_pass {
-                    "KEEP"
-                } else {
-                    "REJECT"
-                },
-            },
-            "execution": {
-                "threads": rayon::current_num_threads(),
-                "wall_elapsed_ms": elapsed_ms(started),
-                "peak_rss_kib": peak_rss_kib(),
-            },
-        }))
-        .map_err(|error| error.to_string())?
+        serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
     );
     Ok(())
 }
@@ -430,6 +535,224 @@ fn decisions_changed(left: &ReadoutEvaluation, right: &ReadoutEvaluation) -> u64
         .zip(&right.decision_tokens)
         .filter(|(left, right)| left != right)
         .count() as u64
+}
+
+fn validate_target_inventory(
+    identity: &CpuCorpusIdentity,
+    samples: usize,
+    label: &str,
+) -> Result<()> {
+    if samples != identity.response_targets {
+        return Err(format!(
+            "{label} causal samples {samples}, response targets {}",
+            identity.response_targets
+        ));
+    }
+    Ok(())
+}
+
+fn decision_matches_capture(evaluation: &ReadoutEvaluation, captured_tokens: &[u32]) -> bool {
+    evaluation.changed_decisions == 0 && evaluation.decision_sha256 == token_sha256(captured_tokens)
+}
+
+fn token_sha256(tokens: &[u32]) -> String {
+    let bytes = tokens
+        .iter()
+        .flat_map(|token| token.to_le_bytes())
+        .collect::<Vec<_>>();
+    uor_r4_discrete::corpus::sha256(&bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn early_artifact_report(
+    artifact_path: &Path,
+    artifact_sha256: &str,
+    train_paths: &TrainPaths,
+    train_hashes: &CorpusHashes,
+    train_identity: &CpuCorpusIdentity,
+    panel: Option<(&PanelPaths, &CorpusHashes, &CpuCorpusIdentity)>,
+    artifact_outcome: &str,
+    status: &str,
+    reason: &str,
+    details: serde_json::Value,
+    started: Instant,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit/1",
+        "report_kind": "artifact",
+        "status": status,
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "seed": EXPERIMENT_SEED,
+        "artifact_outcome": artifact_outcome,
+        "reason": reason,
+        "details": details,
+        "inputs": inputs_json(
+            artifact_path,
+            artifact_sha256,
+            train_paths,
+            train_hashes,
+            train_identity,
+            panel,
+        ),
+        "bar": {
+            "artifact_outcome": artifact_outcome,
+            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+        },
+        "execution": {
+            "threads": rayon::current_num_threads(),
+            "wall_elapsed_ms": elapsed_ms(started),
+            "peak_rss_kib": peak_rss_kib(),
+        },
+    })
+}
+
+fn finish_report(report: &mut serde_json::Value) {
+    report["deterministic_core_sha256"] =
+        serde_json::Value::String(normalized_report_sha256(report));
+}
+
+fn normalized_report_sha256(report: &serde_json::Value) -> String {
+    uor_r4_discrete::corpus::sha256(normalize_report(report).to_string().as_bytes())
+}
+
+fn normalize_report(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(object) => serde_json::Value::Object(
+            object
+                .iter()
+                .filter(|(key, _)| {
+                    !matches!(
+                        key.as_str(),
+                        "execution"
+                            | "elapsed_ms"
+                            | "train_elapsed_ms"
+                            | "panel_elapsed_ms"
+                            | "shared_panel_elapsed_ms"
+                            | "wall_elapsed_ms"
+                            | "peak_rss_kib"
+                            | "deterministic_core_sha256"
+                    )
+                })
+                .map(|(key, value)| (key.clone(), normalize_report(value)))
+                .collect(),
+        ),
+        serde_json::Value::Array(values) => {
+            serde_json::Value::Array(values.iter().map(normalize_report).collect())
+        }
+        value => value.clone(),
+    }
+}
+
+fn aggregate_reports(args: &[String]) -> Result<()> {
+    if args.len() != 4 {
+        return Err("aggregate requires four artifact reports".to_owned());
+    }
+    let reports = args
+        .iter()
+        .map(|path| {
+            let bytes =
+                std::fs::read(path).map_err(|error| format!("read report {path}: {error}"))?;
+            serde_json::from_slice(&bytes).map_err(|error| format!("parse report {path}: {error}"))
+        })
+        .collect::<Result<Vec<serde_json::Value>>>()?;
+    let mut aggregate = aggregate_values(&reports)?;
+    aggregate["report_kind"] = serde_json::Value::String("aggregate".to_owned());
+    aggregate["reports"] = serde_json::Value::Array(
+        args.iter()
+            .map(|path| serde_json::Value::String(path.clone()))
+            .collect(),
+    );
+    finish_report(&mut aggregate);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&aggregate).map_err(|error| error.to_string())?
+    );
+    Ok(())
+}
+
+fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> {
+    if reports.len() != 4 {
+        return Err("aggregate requires four artifact reports".to_owned());
+    }
+    let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
+    for report in reports {
+        if report["schema"].as_str() != Some("uor-r4.cpu-readout-refit/1")
+            || report["report_kind"].as_str() != Some("artifact")
+            || report["seed"].as_u64() != Some(EXPERIMENT_SEED)
+        {
+            return Err("aggregate report identity differs".to_owned());
+        }
+        let artifact = report["inputs"]["artifact_sha256"]
+            .as_str()
+            .ok_or_else(|| "aggregate report has no artifact hash".to_owned())?
+            .to_owned();
+        let outcome = report["bar"]["artifact_outcome"]
+            .as_str()
+            .ok_or_else(|| "aggregate report has no artifact outcome".to_owned())?
+            .to_owned();
+        groups
+            .entry(artifact)
+            .or_default()
+            .push((normalized_report_sha256(report), outcome));
+    }
+    if groups.len() != 2 || groups.values().any(|reports| reports.len() != 2) {
+        return Err("aggregate requires two artifacts with two reports each".to_owned());
+    }
+    let repeat_exact = groups
+        .values()
+        .all(|reports| reports[0].0 == reports[1].0 && reports[0].1 == reports[1].1);
+    let outcomes = groups
+        .iter()
+        .map(|(artifact, reports)| {
+            (
+                artifact.clone(),
+                reports[0].1.clone(),
+                reports
+                    .iter()
+                    .map(|report| report.0.clone())
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let decision = if !repeat_exact
+        || outcomes
+            .iter()
+            .any(|(_, outcome, _)| outcome == "CONTROL_FAULT")
+    {
+        "FINAL_CONTROL_FAULT"
+    } else if outcomes
+        .iter()
+        .any(|(_, outcome, _)| outcome == "INSUFFICIENT_POWER")
+    {
+        "FINAL_INSUFFICIENT_POWER"
+    } else if outcomes
+        .iter()
+        .all(|(_, outcome, _)| outcome == "ARTIFACT_KEEP")
+    {
+        "FINAL_KEEP"
+    } else {
+        "FINAL_REJECT"
+    };
+    Ok(serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit-aggregate/1",
+        "status": "COMPLETE",
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "seed": EXPERIMENT_SEED,
+        "artifacts": outcomes
+            .into_iter()
+            .map(|(artifact, outcome, hashes)| {
+                serde_json::json!({
+                    "artifact_sha256": artifact,
+                    "artifact_outcome": outcome,
+                    "deterministic_core_sha256": hashes,
+                })
+            })
+            .collect::<Vec<_>>(),
+        "repeat_exact": repeat_exact,
+        "overall_decision": decision,
+    }))
 }
 
 fn capture_observations(
@@ -580,6 +903,7 @@ struct CorpusHashes {
     tokens: String,
     mask: String,
     manifest: String,
+    tokenizer: String,
 }
 
 struct Expected {
@@ -596,10 +920,17 @@ impl Expected {
                 .cloned()
                 .ok_or_else(|| format!("missing required --{name}"))
         };
+        let tokenizer = required("expected-tokenizer")?;
+        if tokenizer != EXPECTED_TOKENIZER_SHA256 {
+            return Err(format!(
+                "expected tokenizer {tokenizer}, registered {EXPECTED_TOKENIZER_SHA256}"
+            ));
+        }
         let train = CorpusHashes {
             tokens: required("expected-train-tokens")?,
             mask: required("expected-train-mask")?,
             manifest: required("expected-train-manifest")?,
+            tokenizer: tokenizer.clone(),
         };
         let panel = include_panel
             .then(|| {
@@ -607,6 +938,7 @@ impl Expected {
                     tokens: required("expected-panel-tokens")?,
                     mask: required("expected-panel-mask")?,
                     manifest: required("expected-panel-manifest")?,
+                    tokenizer,
                 })
             })
             .transpose()?;
@@ -665,6 +997,22 @@ fn read_corpus(
     let manifest = read_checked(paths.manifest(), &expected.manifest)?;
     let identity =
         validate_corpus_manifest(&manifest, &tokens, &mask).map_err(|error| error.to_string())?;
+    if identity.tokenizer_sha256 != expected.tokenizer {
+        return Err(format!(
+            "{} tokenizer sha256 {}, expected {}",
+            paths.manifest().display(),
+            identity.tokenizer_sha256,
+            expected.tokenizer
+        ));
+    }
+    if identity.bos != EXPECTED_BOS {
+        return Err(format!(
+            "{} BOS {}, expected {}",
+            paths.manifest().display(),
+            identity.bos,
+            EXPECTED_BOS
+        ));
+    }
     identity
         .validate_context(context)
         .map_err(|error| error.to_string())?;
@@ -678,6 +1026,7 @@ fn read_corpus(
                 tokens: expected.tokens.clone(),
                 mask: expected.mask.clone(),
                 manifest: expected.manifest.clone(),
+                tokenizer: expected.tokenizer.clone(),
             },
             manifest_bytes: manifest,
         },
@@ -733,6 +1082,10 @@ fn inputs_json(
             "manifest": train_paths.manifest,
             "manifest_sha256": train_hashes.manifest,
             "manifest_split": train_identity.split,
+            "tokenizer_sha256": train_identity.tokenizer_sha256,
+            "bos": train_identity.bos,
+            "response_targets": train_identity.response_targets,
+            "max_tokens": train_identity.max_tokens,
         },
     });
     if let Some((paths, hashes, identity)) = panel {
@@ -744,24 +1097,28 @@ fn inputs_json(
             "manifest": paths.manifest,
             "manifest_sha256": hashes.manifest,
             "manifest_split": identity.split,
+            "tokenizer_sha256": identity.tokenizer_sha256,
+            "bos": identity.bos,
+            "response_targets": identity.response_targets,
+            "max_tokens": identity.max_tokens,
         });
     }
     value
 }
 
-fn validate_panel(manifest: &[u8], seed: u64, identity: &CpuCorpusIdentity) -> Result<()> {
+fn validate_panel(manifest: &[u8], identity: &CpuCorpusIdentity) -> Result<()> {
     let value: serde_json::Value =
         serde_json::from_slice(manifest).map_err(|error| error.to_string())?;
-    if value["seed"].as_u64() != Some(seed)
+    if value["seed"].as_u64() != Some(EXPERIMENT_SEED)
         || value["dialogue_protocol_version"].as_u64() != Some(2)
         || value["conversations"].as_u64() != Some(128)
         || value["cell"]["value"].as_str() != Some("dev")
         || value["cell"]["phrasing"].as_str() != Some("dev")
         || identity.split != "dev"
     {
-        return Err(
-            "fresh panel identity differs from seed 2789, dev,dev, protocol 2, 128".to_owned(),
-        );
+        return Err(format!(
+            "fresh panel identity differs from seed {EXPERIMENT_SEED}, dev,dev, protocol 2, 128"
+        ));
     }
     Ok(())
 }
@@ -789,8 +1146,7 @@ fn parse_flags(args: &[String]) -> Result<BTreeMap<String, String>> {
             .ok_or_else(|| format!("unknown argument {}", pair[0]))?;
         if !matches!(
             name,
-            "min-observations"
-                | "seed"
+            "expected-tokenizer"
                 | "expected-train-tokens"
                 | "expected-train-mask"
                 | "expected-train-manifest"
@@ -808,22 +1164,6 @@ fn parse_flags(args: &[String]) -> Result<BTreeMap<String, String>> {
     Ok(flags)
 }
 
-fn parse_minimum(flags: &BTreeMap<String, String>) -> Result<usize> {
-    flags
-        .get("min-observations")
-        .ok_or_else(|| "missing required --min-observations".to_owned())?
-        .parse::<usize>()
-        .map_err(|error| format!("invalid --min-observations: {error}"))
-}
-
-fn parse_seed(flags: &BTreeMap<String, String>) -> Result<u64> {
-    flags
-        .get("seed")
-        .ok_or_else(|| "missing required --seed".to_owned())?
-        .parse::<u64>()
-        .map_err(|error| format!("invalid --seed: {error}"))
-}
-
 fn elapsed_ms(started: Instant) -> f64 {
     started.elapsed().as_secs_f64() * 1_000.0
 }
@@ -836,4 +1176,69 @@ fn peak_rss_kib() -> Option<u64> {
         .split_whitespace()
         .nth(1)?;
     line.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn artifact_report(artifact: &str, outcome: &str, elapsed: f64) -> serde_json::Value {
+        serde_json::json!({
+            "schema": "uor-r4.cpu-readout-refit/1",
+            "report_kind": "artifact",
+            "seed": EXPERIMENT_SEED,
+            "inputs": {"artifact_sha256": artifact},
+            "capture": {"train_elapsed_ms": elapsed},
+            "bar": {"artifact_outcome": outcome},
+            "execution": {"wall_elapsed_ms": elapsed, "peak_rss_kib": elapsed as u64},
+        })
+    }
+
+    #[test]
+    fn repeat_hash_ignores_timing_and_resource_fields() {
+        let first = artifact_report("artifact-a", "ARTIFACT_KEEP", 1.0);
+        let second = artifact_report("artifact-a", "ARTIFACT_KEEP", 99.0);
+        assert_eq!(
+            normalized_report_sha256(&first),
+            normalized_report_sha256(&second)
+        );
+    }
+
+    #[test]
+    fn aggregate_requires_two_artifacts_and_two_matching_repeats() {
+        let reports = vec![
+            artifact_report("artifact-a", "ARTIFACT_KEEP", 1.0),
+            artifact_report("artifact-a", "ARTIFACT_KEEP", 2.0),
+            artifact_report("artifact-b", "ARTIFACT_KEEP", 3.0),
+            artifact_report("artifact-b", "ARTIFACT_KEEP", 4.0),
+        ];
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["repeat_exact"], true);
+        assert_eq!(aggregate["overall_decision"], "FINAL_KEEP");
+    }
+
+    #[test]
+    fn aggregate_control_fault_takes_precedence_over_configuration_rejection() {
+        let reports = vec![
+            artifact_report("artifact-a", "CONTROL_FAULT", 1.0),
+            artifact_report("artifact-a", "CONTROL_FAULT", 2.0),
+            artifact_report("artifact-b", "ARTIFACT_REJECT", 3.0),
+            artifact_report("artifact-b", "ARTIFACT_REJECT", 4.0),
+        ];
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
+
+    #[test]
+    fn aggregate_repeat_drift_is_a_control_fault() {
+        let reports = vec![
+            artifact_report("artifact-a", "ARTIFACT_KEEP", 1.0),
+            artifact_report("artifact-a", "ARTIFACT_REJECT", 2.0),
+            artifact_report("artifact-b", "ARTIFACT_KEEP", 3.0),
+            artifact_report("artifact-b", "ARTIFACT_KEEP", 4.0),
+        ];
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["repeat_exact"], false);
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
 }

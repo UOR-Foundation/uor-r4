@@ -23,6 +23,8 @@ observations:
 - shared-table refit diagnostic, which changes the input path as well.
 
 Keep every under-observed row unchanged.
+The driver enforces seed 2789, the eight-observation floor, tokenizer
+`a9fb13f7…`, BOS 0 and exactly one causal observation per masked target.
 
 ## Arms
 
@@ -46,6 +48,8 @@ artifacts, median output refit must strictly improve top-1 over original and
 shuffled control by the paired rule
 `candidate_only >= max(2, ceil(2*sqrt(candidate_only + control_only)))`, and
 top-8 must not fall. Evidence and repeated decisions must be deterministic.
+Only the four-report aggregator may issue the final KEEP, REJECT,
+INSUFFICIENT_POWER or CONTROL_FAULT result.
 
 ## Stop rule
 
@@ -57,3 +61,5 @@ after seed 2789 opens.
 ## Cost
 
 Local CPU only; 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
+The source, hardware and prospective resource record are in
+[`resource-ledger.json`](../../../../labs/cpu-training-pilot-readout-refit-2026-11-06/resource-ledger.json).
