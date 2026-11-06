@@ -24,16 +24,16 @@
     "eligible_rows_each": 146,
     "eligible_observations_each": 4142,
     "shuffle_changed_assignments_each": 4127,
-    "seed1_wall_seconds": 5.46,
-    "seed2_wall_seconds": 5.44,
-    "seed1_peak_rss_kib": 66680,
-    "seed2_peak_rss_kib": 66368,
+    "seed1_wall_seconds": 7.02,
+    "seed2_wall_seconds": 6.9,
+    "seed1_peak_rss_kib": 67096,
+    "seed2_peak_rss_kib": 67600,
     "rayon_threads": 16,
-    "evidence_bytes": 30638
+    "evidence_bytes": 43618
   },
   "controls": {
     "focused_library_tests_passed": 8,
-    "driver_aggregation_tests_passed": 4,
+    "driver_aggregation_tests_passed": 5,
     "full_cpu_library_tests_passed": 425,
     "expected_ignores": 4,
     "scoped_clippy": "pass",
@@ -51,11 +51,18 @@
     "fresh_evaluation_projection": 524288
   },
   "storage": {
-    "free_bytes_at_preparation": 287986065408,
-    "build_target_bytes_at_preparation": 8724300914,
+    "free_bytes_at_preparation": 288013680640,
+    "build_target_bytes_at_preparation": 8728509563,
+    "new_build_storage_projection_bytes": 134217728,
+    "temporary_evaluation_storage_projection_bytes": 16777216,
     "retained_evidence_limit_bytes": 33554432,
-    "preflight_evidence_bytes": 30638,
-    "retained_evidence_projection_bytes": 1048576
+    "preflight_evidence_bytes": 43618,
+    "retained_evidence_projection_bytes": 1048576,
+    "projected_post_run_free_bytes": 287861637120,
+    "stop_margin_bytes": 134217728,
+    "absolute_floor_bytes": 32346472448,
+    "post_run_floor_kib": 31588352,
+    "absolute_floor": "30 GiB plus 128 MiB"
   },
   "host": {
     "cpu": "AMD Ryzen 9 9950X",
@@ -74,8 +81,8 @@
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-237/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-readout-refit-2026-11-06.md",
     "implementation_pin": "7a12427b2",
-    "driver_binary_sha256": "5bb7b5701e24939f81c7771288ce33f744db51162594f728c133a2d8d2b9c5c9",
-    "driver_binary_bytes": 2475776,
+    "driver_binary_sha256": "e67ee09cf21f095f7c96410acd113ab5e00813f82edc12b5f7421a6df86a67f5",
+    "driver_binary_bytes": 2493520,
     "generator_pin": "e1ad88afc5a7f43f5e7714d9ab70b8937aa6bdde",
     "generator_binary_sha256": "1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5"
   },

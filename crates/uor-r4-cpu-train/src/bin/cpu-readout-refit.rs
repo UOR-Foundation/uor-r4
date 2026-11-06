@@ -23,6 +23,15 @@ const MINIMUM_PANEL_TARGETS: usize = 1_000;
 const EXPECTED_TOKENIZER_SHA256: &str =
     "a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377";
 const EXPECTED_BOS: u32 = 0;
+const TRAIN_TOKENS_SHA256: &str =
+    "140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91";
+const TRAIN_MASK_SHA256: &str = "d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad";
+const TRAIN_MANIFEST_SHA256: &str =
+    "d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5";
+const SEED1_ARTIFACT_SHA256: &str =
+    "a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd";
+const SEED2_ARTIFACT_SHA256: &str =
+    "da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1";
 
 fn main() {
     if let Err(error) = run() {
@@ -197,6 +206,38 @@ fn preflight(args: &[String]) -> Result<()> {
 }
 
 fn run_experiment(args: &[String]) -> Result<()> {
+    let started = Instant::now();
+    match run_experiment_inner(args, started) {
+        Ok(()) => Ok(()),
+        Err(error) if args.len() >= 7 => {
+            let flags = parse_flags(&args[7..])?;
+            let expected = Expected::from_flags(&flags, true)?;
+            let panel_hashes = expected
+                .panel
+                .as_ref()
+                .ok_or_else(|| "panel pins are absent".to_owned())?;
+            let mut report = run_fault_report(
+                Path::new(&args[6]),
+                &expected.artifact,
+                &TrainPaths::new(&args[0], &args[1], &args[2]),
+                &expected.train,
+                &PanelPaths::new(&args[3], &args[4], &args[5]),
+                panel_hashes,
+                &format!("run stopped on an instrument or input fault: {error}"),
+                started,
+            );
+            finish_report(&mut report);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
+            );
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn run_experiment_inner(args: &[String], started: Instant) -> Result<()> {
     if args.len() < 7 {
         return Err(usage());
     }
@@ -205,7 +246,6 @@ fn run_experiment(args: &[String]) -> Result<()> {
     let artifact_path = Path::new(&args[6]);
     let flags = parse_flags(&args[7..])?;
     let expected = Expected::from_flags(&flags, true)?;
-    let started = Instant::now();
 
     let artifact = read_checked(artifact_path, &expected.artifact)?;
     let forward = CpuFbsForward::from_artifact(&artifact).map_err(|error| error.to_string())?;
@@ -564,6 +604,60 @@ fn token_sha256(tokens: &[u32]) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn run_fault_report(
+    artifact_path: &Path,
+    artifact_sha256: &str,
+    train_paths: &TrainPaths,
+    train_hashes: &CorpusHashes,
+    panel_paths: &PanelPaths,
+    panel_hashes: &CorpusHashes,
+    reason: &str,
+    started: Instant,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "uor-r4.cpu-readout-refit/1",
+        "report_kind": "artifact",
+        "status": "CONTROL_FAULT",
+        "substrate": SUBSTRATE,
+        "qualification": QUALIFICATION,
+        "seed": EXPERIMENT_SEED,
+        "artifact_outcome": "CONTROL_FAULT",
+        "reason": reason,
+        "inputs": {
+            "artifact": artifact_path,
+            "artifact_sha256": artifact_sha256,
+            "train": {
+                "tokens": train_paths.tokens,
+                "tokens_sha256": train_hashes.tokens,
+                "mask": train_paths.mask,
+                "mask_sha256": train_hashes.mask,
+                "manifest": train_paths.manifest,
+                "manifest_sha256": train_hashes.manifest,
+                "tokenizer_sha256": train_hashes.tokenizer,
+            },
+            "panel": {
+                "tokens": panel_paths.tokens,
+                "tokens_sha256": panel_hashes.tokens,
+                "mask": panel_paths.mask,
+                "mask_sha256": panel_hashes.mask,
+                "manifest": panel_paths.manifest,
+                "manifest_sha256": panel_hashes.manifest,
+                "tokenizer_sha256": panel_hashes.tokenizer,
+            },
+        },
+        "bar": {
+            "artifact_outcome": "CONTROL_FAULT",
+            "overall_decision": "PENDING_TWO_ARTIFACT_REPEAT_AGGREGATE",
+        },
+        "execution": {
+            "threads": rayon::current_num_threads(),
+            "wall_elapsed_ms": elapsed_ms(started),
+            "peak_rss_kib": peak_rss_kib(),
+        },
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 fn early_artifact_report(
     artifact_path: &Path,
     artifact_sha256: &str,
@@ -699,6 +793,12 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
     if groups.len() != 2 || groups.values().any(|reports| reports.len() != 2) {
         return Err("aggregate requires two artifacts with two reports each".to_owned());
     }
+    let artifact_set_exact =
+        groups.contains_key(SEED1_ARTIFACT_SHA256) && groups.contains_key(SEED2_ARTIFACT_SHA256);
+    let input_identity_exact = reports.windows(2).all(|pair| {
+        pair[0]["inputs"]["train"] == pair[1]["inputs"]["train"]
+            && pair[0]["inputs"]["panel"] == pair[1]["inputs"]["panel"]
+    });
     let repeat_exact = groups
         .values()
         .all(|reports| reports[0].0 == reports[1].0 && reports[0].1 == reports[1].1);
@@ -715,7 +815,9 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
             )
         })
         .collect::<Vec<_>>();
-    let decision = if !repeat_exact
+    let decision = if !artifact_set_exact
+        || !input_identity_exact
+        || !repeat_exact
         || outcomes
             .iter()
             .any(|(_, outcome, _)| outcome == "CONTROL_FAULT")
@@ -751,6 +853,8 @@ fn aggregate_values(reports: &[serde_json::Value]) -> Result<serde_json::Value> 
             })
             .collect::<Vec<_>>(),
         "repeat_exact": repeat_exact,
+        "artifact_set_exact": artifact_set_exact,
+        "input_identity_exact": input_identity_exact,
         "overall_decision": decision,
     }))
 }
@@ -932,6 +1036,12 @@ impl Expected {
             manifest: required("expected-train-manifest")?,
             tokenizer: tokenizer.clone(),
         };
+        if train.tokens != TRAIN_TOKENS_SHA256
+            || train.mask != TRAIN_MASK_SHA256
+            || train.manifest != TRAIN_MANIFEST_SHA256
+        {
+            return Err("TRAIN pins differ from the registered tt-2711 inputs".to_owned());
+        }
         let panel = include_panel
             .then(|| {
                 Ok::<_, String>(CorpusHashes {
@@ -942,10 +1052,14 @@ impl Expected {
                 })
             })
             .transpose()?;
+        let artifact = required("expected-artifact")?;
+        if artifact != SEED1_ARTIFACT_SHA256 && artifact != SEED2_ARTIFACT_SHA256 {
+            return Err("artifact hash is not a registered public FBS seed".to_owned());
+        }
         Ok(Self {
             train,
             panel,
-            artifact: required("expected-artifact")?,
+            artifact,
         })
     }
 }
@@ -1187,7 +1301,21 @@ mod tests {
             "schema": "uor-r4.cpu-readout-refit/1",
             "report_kind": "artifact",
             "seed": EXPERIMENT_SEED,
-            "inputs": {"artifact_sha256": artifact},
+            "inputs": {
+                "artifact_sha256": artifact,
+                "train": {
+                    "tokens_sha256": TRAIN_TOKENS_SHA256,
+                    "mask_sha256": TRAIN_MASK_SHA256,
+                    "manifest_sha256": TRAIN_MANIFEST_SHA256,
+                    "tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
+                },
+                "panel": {
+                    "tokens_sha256": "panel-tokens",
+                    "mask_sha256": "panel-mask",
+                    "manifest_sha256": "panel-manifest",
+                    "tokenizer_sha256": EXPECTED_TOKENIZER_SHA256,
+                },
+            },
             "capture": {"train_elapsed_ms": elapsed},
             "bar": {"artifact_outcome": outcome},
             "execution": {"wall_elapsed_ms": elapsed, "peak_rss_kib": elapsed as u64},
@@ -1207,10 +1335,10 @@ mod tests {
     #[test]
     fn aggregate_requires_two_artifacts_and_two_matching_repeats() {
         let reports = vec![
-            artifact_report("artifact-a", "ARTIFACT_KEEP", 1.0),
-            artifact_report("artifact-a", "ARTIFACT_KEEP", 2.0),
-            artifact_report("artifact-b", "ARTIFACT_KEEP", 3.0),
-            artifact_report("artifact-b", "ARTIFACT_KEEP", 4.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 4.0),
         ];
         let aggregate = aggregate_values(&reports).unwrap();
         assert_eq!(aggregate["repeat_exact"], true);
@@ -1220,10 +1348,10 @@ mod tests {
     #[test]
     fn aggregate_control_fault_takes_precedence_over_configuration_rejection() {
         let reports = vec![
-            artifact_report("artifact-a", "CONTROL_FAULT", 1.0),
-            artifact_report("artifact-a", "CONTROL_FAULT", 2.0),
-            artifact_report("artifact-b", "ARTIFACT_REJECT", 3.0),
-            artifact_report("artifact-b", "ARTIFACT_REJECT", 4.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "CONTROL_FAULT", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "CONTROL_FAULT", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_REJECT", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_REJECT", 4.0),
         ];
         let aggregate = aggregate_values(&reports).unwrap();
         assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
@@ -1232,13 +1360,28 @@ mod tests {
     #[test]
     fn aggregate_repeat_drift_is_a_control_fault() {
         let reports = vec![
-            artifact_report("artifact-a", "ARTIFACT_KEEP", 1.0),
-            artifact_report("artifact-a", "ARTIFACT_REJECT", 2.0),
-            artifact_report("artifact-b", "ARTIFACT_KEEP", 3.0),
-            artifact_report("artifact-b", "ARTIFACT_KEEP", 4.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_REJECT", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 4.0),
         ];
         let aggregate = aggregate_values(&reports).unwrap();
         assert_eq!(aggregate["repeat_exact"], false);
+        assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
+    }
+
+    #[test]
+    fn aggregate_panel_drift_is_a_control_fault() {
+        let mut reports = vec![
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 1.0),
+            artifact_report(SEED1_ARTIFACT_SHA256, "ARTIFACT_KEEP", 2.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 3.0),
+            artifact_report(SEED2_ARTIFACT_SHA256, "ARTIFACT_KEEP", 4.0),
+        ];
+        reports[3]["inputs"]["panel"]["mask_sha256"] =
+            serde_json::Value::String("different-panel-mask".to_owned());
+        let aggregate = aggregate_values(&reports).unwrap();
+        assert_eq!(aggregate["input_identity_exact"], false);
         assert_eq!(aggregate["overall_decision"], "FINAL_CONTROL_FAULT");
     }
 }

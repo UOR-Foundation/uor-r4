@@ -102,7 +102,7 @@ Both are the public 4,096-token, width-256, context-192, raw FBS artifacts.
 - Linux `7.0.0-42-generic` x86_64;
 - Rust `1.97.1`;
 - 59 GiB installed memory;
-- 269 GiB free storage at preparation.
+- 268.2 GiB (`288,013,680,640` bytes) free storage at preparation.
 
 The local resource record is
 [`resource-ledger.json`](../../labs/cpu-training-pilot-readout-refit-2026-11-06/resource-ledger.json).
@@ -115,8 +115,8 @@ reproduced every captured artifact decision with zero changed decisions.
 
 The fixed eight-observation floor retains 146 token rows and 4,142
 observations per artifact. The matched shuffle changes 4,127 TRAIN
-assignments. The two captures complete in 5.37 seconds and 5.35 seconds with
-16 Rayon threads; peak RSS is 66,680 KiB and 66,564 KiB.
+assignments. The two final captures complete in 7.02 seconds and 6.90 seconds
+with 16 Rayon threads; peak RSS is 67,096 KiB and 67,600 KiB.
 
 Thresholds 12, 16, 32 and 64 retain fewer than 100 rows. The eight-observation
 floor is therefore the strongest tested floor that clears the row-power bar.
@@ -192,42 +192,108 @@ nondeterminism.
 Local CPU only. Maximum one 30-minute wall envelope, 2 GiB peak RSS and 32 MiB
 retained evidence. The prospective ledger charges 1,140 seconds: 180 build,
 120 preparation, 30 measured preflight, 360 for four fresh evaluations, 120
-controls, 150 evidence/delivery and 180 retry allowance. No GPU or paid API is
-used.
+controls, 150 evidence/delivery and 180 retry allowance. Actual free storage
+must remain above the hard `30 GiB + 128 MiB` floor before the build, before
+opening the panel and after sealing; the ledger projects the new/temporary
+storage and post-run free bytes. No GPU or paid API is used.
 
 ## Steps
 
-1. Verify source and preflight pins, then release-build:
+Run these blocks in one shell, in order. The first block enables fail-fast mode
+and all later blocks reuse its variables.
+
+1. Verify the implementation ancestry and source pins, then release-build:
 
 ```sh
-BIN="$PWD/target/deepseek/readout-refit/release/cpu-readout-refit"
+set -euo pipefail
+REPO=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-readout-refit
+MAIN=/home/callard/projects/codex-playground/uor-r4
+OUT="$REPO/local/deepseek/readout-refit/2026-11-06"
+BIN="$REPO/target/deepseek/readout-refit/release/cpu-readout-refit"
+cd "$REPO"
+git merge-base --is-ancestor 7a12427b2 HEAD
+sha256sum -c <<'EOF'
+21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae  crates/uor-r4-cpu-train/src/readout_refit.rs
+6e23138d313682d77cec433a5b8c973b36419680b6f340f2a90600ac6ccfbc59  crates/uor-r4-cpu-train/src/bin/cpu-readout-refit.rs
+ac1423f5d48e73a3425737395b5772326e990b857818c6a268f00ed9f716ddd2  crates/uor-r4-cpu-train/src/lib.rs
+396bfc76c6548c3298779f208af539615eea5643f172458d8da074e3a71116db  crates/uor-r4-cpu-train/src/corpus.rs
+85840169921e2611b1482ca2c2a47fb41c54f8513b37ce57d9224e1fe2c63b2d  crates/uor-r4-cpu-train/src/train.rs
+EOF
+/usr/bin/time -v -o "$OUT/build-go.time.txt" \
 CARGO_BUILD_JOBS=32 CARGO_TARGET_DIR=target/deepseek/readout-refit \
   cargo build --locked --release -p uor-r4-cpu-train \
   --bin cpu-readout-refit
-sha256sum "$BIN"
+test "$(sha256sum "$BIN" | cut -d' ' -f1)" = \
+  e67ee09cf21f095f7c96410acd113ab5e00813f82edc12b5f7421a6df86a67f5
 ```
 
-2. Verify the empty fresh paths and pinned generator:
+2. Verify every immutable input, the generator, and the empty fresh paths:
 
 ```sh
-MAIN=/home/callard/projects/codex-playground/uor-r4
-OUT="$MAIN/.worktrees/deepseek-readout-refit/local/deepseek/readout-refit/2026-11-06"
 PANEL="$OUT/panels/dd-2789"
 REPORTS="$OUT/reports/dd-2789"
 GEN="$MAIN/local/deepseek/copy-boundary/generator-target/debug/heldout-panel"
 TOKENIZER="$MAIN/local/deepseek/m2-evidence/tokenizer.json"
+TRAIN="$MAIN/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711"
+SEED1="$MAIN/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut"
+SEED2="$MAIN/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut"
+SEED1_SHA=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+SEED2_SHA=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 test ! -e "$PANEL"
 test ! -e "$REPORTS"
-sha256sum "$GEN" "$TOKENIZER"
-test "$(sha256sum "$GEN" | cut -d' ' -f1)" = \
-  1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5
-test "$(sha256sum "$TOKENIZER" | cut -d' ' -f1)" = \
-  a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
+sha256sum -c <<EOF
+1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5  $GEN
+a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  $TOKENIZER
+140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91  $TRAIN/tokens.u16
+d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad  $TRAIN/response_mask.u8
+d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5  $TRAIN/manifest.json
+$SEED1_SHA  $SEED1
+$SEED2_SHA  $SEED2
+EOF
 ```
 
-3. Generate the fresh panel after FIT and GO:
+3. Re-run both TRAIN-only preflights immediately before opening the panel:
 
 ```sh
+/usr/bin/time -v -o "$OUT/preflight-go-seed1.time.txt" \
+RAYON_NUM_THREADS=16 "$BIN" preflight \
+  "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
+  "$SEED1" \
+  --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
+  --expected-train-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
+  --expected-train-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
+  --expected-train-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
+  --expected-artifact "$SEED1_SHA" \
+  >"$OUT/preflight-go-seed1.json"
+jq -e '
+  .status == "COMPLETE" and .identity.exact and .power.eligible
+  and .capture.samples == .inputs.train.response_targets
+  and .deterministic_core_sha256 == "002ec818d123bbec51a006a9a12ca8865bb76ff25f64a40860b20c08bfadeb9a"
+' "$OUT/preflight-go-seed1.json" >/dev/null
+
+/usr/bin/time -v -o "$OUT/preflight-go-seed2.time.txt" \
+RAYON_NUM_THREADS=16 "$BIN" preflight \
+  "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
+  "$SEED2" \
+  --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
+  --expected-train-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
+  --expected-train-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
+  --expected-train-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
+  --expected-artifact "$SEED2_SHA" \
+  >"$OUT/preflight-go-seed2.json"
+jq -e '
+  .status == "COMPLETE" and .identity.exact and .power.eligible
+  and .capture.samples == .inputs.train.response_targets
+  and .deterministic_core_sha256 == "4c9bf745d85221fba79427bb1fce6013963647d7b6b366a024f713c1ffd4ba93"
+' "$OUT/preflight-go-seed2.json" >/dev/null
+test ! -e "$PANEL"
+test ! -e "$REPORTS"
+```
+
+4. Generate the fresh panel:
+
+```sh
+/usr/bin/time -v -o "$OUT/panel-2789.time.txt" \
 "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2789 protocol=2 \
   >"$OUT/panel-2789.stdout.json"
@@ -240,7 +306,7 @@ jq -e '
 ' "$PANEL/manifest.json" >/dev/null
 ```
 
-4. Pin the generated panel and create the report root:
+5. Pin the generated panel and create the report root:
 
 ```sh
 PANEL_TOKENS_SHA=$(sha256sum "$PANEL/tokens.u16" | cut -d' ' -f1)
@@ -249,29 +315,25 @@ PANEL_MANIFEST_SHA=$(sha256sum "$PANEL/manifest.json" | cut -d' ' -f1)
 mkdir "$REPORTS"
 ```
 
-5. Run both artifacts and both fresh-process repeats:
+6. Run both artifacts and both fresh-process repeats:
 
 ```sh
-TRAIN="$MAIN/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711"
-SEED1="$MAIN/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut"
-SEED2="$MAIN/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut"
-SEED1_SHA=a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
-SEED2_SHA=da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
 run() {
   name=$1 artifact=$2 artifact_sha=$3
-  RAYON_NUM_THREADS=16 "$BIN" run \
-    "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
-    "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
-    "$artifact" \
-    --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
-    --expected-train-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
-    --expected-train-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
-    --expected-train-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
-    --expected-panel-tokens "$PANEL_TOKENS_SHA" \
-    --expected-panel-mask "$PANEL_MASK_SHA" \
-    --expected-panel-manifest "$PANEL_MANIFEST_SHA" \
-    --expected-artifact "$artifact_sha" \
-    >"$REPORTS/$name.json"
+  /usr/bin/time -v -o "$REPORTS/$name.time.txt" \
+    env RAYON_NUM_THREADS=16 "$BIN" run \
+      "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
+      "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
+      "$artifact" \
+      --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
+      --expected-train-tokens 140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 \
+      --expected-train-mask d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad \
+      --expected-train-manifest d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 \
+      --expected-panel-tokens "$PANEL_TOKENS_SHA" \
+      --expected-panel-mask "$PANEL_MASK_SHA" \
+      --expected-panel-manifest "$PANEL_MANIFEST_SHA" \
+      --expected-artifact "$artifact_sha" \
+      >"$REPORTS/$name.json"
 }
 run seed1 "$SEED1" "$SEED1_SHA"
 run seed1-repeat "$SEED1" "$SEED1_SHA"
@@ -279,16 +341,22 @@ run seed2 "$SEED2" "$SEED2_SHA"
 run seed2-repeat "$SEED2" "$SEED2_SHA"
 ```
 
-6. Aggregate only after all four processes finish:
+7. Aggregate only after all four processes finish:
 
 ```sh
 "$BIN" aggregate \
   "$REPORTS/seed1.json" "$REPORTS/seed1-repeat.json" \
   "$REPORTS/seed2.json" "$REPORTS/seed2-repeat.json" \
   >"$REPORTS/result.json"
+jq -e '
+  .overall_decision == "FINAL_KEEP"
+  or .overall_decision == "FINAL_REJECT"
+  or .overall_decision == "FINAL_INSUFFICIENT_POWER"
+  or .overall_decision == "FINAL_CONTROL_FAULT"
+' "$REPORTS/result.json" >/dev/null
 ```
 
-7. Seal panel, reports, source and binary pins:
+8. Seal panel, reports, source and binary pins:
 
 ```sh
 (
@@ -306,7 +374,7 @@ run seed2-repeat "$SEED2" "$SEED2_SHA"
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:
-  `0d6903edf98617a7ec799a85391c4328dfddcd1fe521d2ecf8593ef62a49ec37`;
+  `6e23138d313682d77cec433a5b8c973b36419680b6f340f2a90600ac6ccfbc59`;
 - library:
   `ac1423f5d48e73a3425737395b5772326e990b857818c6a268f00ed9f716ddd2`;
 - corpus:
@@ -314,7 +382,7 @@ run seed2-repeat "$SEED2" "$SEED2_SHA"
 - train patch:
   `85840169921e2611b1482ca2c2a47fb41c54f8513b37ce57d9224e1fe2c63b2d`;
 - release binary:
-  `5bb7b5701e24939f81c7771288ce33f744db51162594f728c133a2d8d2b9c5c9`;
+  `e67ee09cf21f095f7c96410acd113ab5e00813f82edc12b5f7421a6df86a67f5`;
 - generator source commit: `e1ad88afc`;
 - generator binary:
   `1e5e9675191f226db8c487d55299d60806a8dfe45bf39334957aae928f22f8d5`.

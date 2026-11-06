@@ -25,6 +25,8 @@ observations:
 Keep every under-observed row unchanged.
 The driver enforces seed 2789, the eight-observation floor, tokenizer
 `a9fb13f7…`, BOS 0 and exactly one causal observation per masked target.
+The pre-run command verifies every source and input hash and reruns both
+TRAIN-only preflights before the fresh panel is created.
 
 ## Arms
 
