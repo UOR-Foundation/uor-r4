@@ -5,8 +5,8 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 ## Status
 
 ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2'S FIRST INVOCATION HAD A
-SHELL-WRAPPER FAULT AND NO PANEL WAS CREATED. The corrected runner has renewed
-`TEST FITNESS: FIT` and is pending D67 GO.
+SHELL-WRAPPER FAULT AND NO PANEL WAS CREATED. The corrected runner is released
+with renewed `TEST FITNESS: FIT` and D67 GO.
 
 Attempt 1 built the pinned source and generator, then stopped at TRAIN
 preflight before generating seed 2775. Full and reply-only boundaries made the
@@ -533,5 +533,12 @@ science and source, preserved invocation fault, and absent seed were verified.
 
 ## D67 pre-run review
 
-D67 PRE-RUN: PENDING
+D67 PRE-RUN: GO - registration head
+`945f677f554f87865dcb0aa37d448f9b91a5368d`.
+
+reviewer: `full_boundary_attempt2_shell_go`
+date: 2026-11-05
+note: FIT at `71d9d2d9d`, executable measured-stage timeout wrapper, all-exit
+compression, source/input pins, compact fault evidence and absent seed were
+verified.
 
