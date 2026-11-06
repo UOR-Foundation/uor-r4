@@ -18,8 +18,8 @@ majority rule as content selection. If a confident prediction exists and its
 depth is greater than local copy depth, suppress BOS and continue with the
 normal content choice. Otherwise accept BOS.
 
-Arms: guarded boundary, boundary, suffix-shuffled guard, local-depth-only
-guard, local longest, full retrieval, reference-length oracle.
+Arms: guarded boundary, boundary, suffix-shuffled guard, local longest, full
+retrieval, reference-length oracle.
 
 ## Data split
 

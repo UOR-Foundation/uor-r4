@@ -18,7 +18,7 @@ the local copy depth, suppress BOS and select that continuation. Otherwise
 accept BOS.
 
 Arms: guarded boundary, original boundary, suffix-shuffled guarded boundary,
-local-depth-only guard, local longest, full retrieval, reference-length oracle.
+local longest, full retrieval, reference-length oracle.
 
 ## Data and power
 
