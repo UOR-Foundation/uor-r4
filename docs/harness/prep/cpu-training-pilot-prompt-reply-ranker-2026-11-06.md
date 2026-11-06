@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-prompt-reply-ranker-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS passed. The seed-2779 panel may be generated after GO.
 
 This is D84 CPU research. It learns a small integer ranking function over
 existing TRAIN prompts and complete replies. It does not synthesize new text,
@@ -136,6 +136,15 @@ Local CPU only. Cap: 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
   `2a298b44ea34d1a8e2d40191951d3da9b3300e2ac7de65e6c2ec13950a0b6424`;
 - sidecar seed 2:
   `6504dcb047ce7157dd5e968c29441505cf48d993f01ec63222125634c61963b7`.
+- implementation: `25158d658`;
+- ranker module:
+  `714ecd92f79d7c4aa145f3e00211df793160d1a15a502b9fdbb8187ea9e37409`;
+- ranker binary source:
+  `a91d92d497711697460f5706fd46712c26fa88c6433501f8865099db0b6bfc7a`;
+- CPU crate export source:
+  `0ac072c3aed799fc62f795c02dd35ce23077f986cc2f5a74cf3191e5c17446cf`;
+- ranker release binary:
+  `22a4d472d69c914229537919feb9790b4fa61b48ec62ef349385c4277d75615e`.
 
 ## Panel and output
 
@@ -164,6 +173,52 @@ mkdir -p "$OUT/panels" "$OUT/reports"
 The implementation binary is `cpu-prompt-reply-ranker`; its exact command and
 source/binary pins are added after implementation review and before GO.
 
+```sh
+BUILD=$SOURCE/target/deepseek/prompt-reply-ranker
+GEN_TARGET=$SOURCE/target/deepseek/prompt-reply-ranker-generator
+GEN_SOURCE=$SOURCE/local/deepseek/prompt-reply-ranker-generator
+TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
+TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
+SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
+SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
+SIDECAR1=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed1.sidecar.json
+SIDECAR2=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed2.sidecar.json
+IMPL=25158d658
+
+git -C "$SOURCE" diff --quiet "$IMPL" -- \
+  crates/uor-r4-cpu-train/src/lib.rs \
+  crates/uor-r4-cpu-train/src/prompt_reply_rank.rs \
+  crates/uor-r4-cpu-train/src/bin/cpu-prompt-reply-ranker.rs
+cp -a "$SOURCE/docs/labs/one-model-end-to-end/instrument" "$GEN_SOURCE"
+```
+
+Rewrite the five copied dependency paths to the reviewed worktree and build
+with `--offline`, as recorded by the attempt-1 generator repair in
+deepseek-211. The copied generator is evidence only and is not committed.
+
+```sh
+env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
+  cargo build --offline --manifest-path "$GEN_SOURCE/Cargo.toml" \
+  --features panel-writer --bin heldout-panel
+"$GEN_TARGET/debug/heldout-panel" out="$PANEL" tokenizer="$TOKENIZER" \
+  cell=dev,dev conversations=128 seed=2779 protocol=2 >"$OUT/panel.stdout.json"
+env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+  cargo build --locked --release -p uor-r4-cpu-train \
+  --bin cpu-prompt-reply-ranker
+BIN=$BUILD/release/cpu-prompt-reply-ranker
+```
+
+Run the following command three times per artifact, alternating artifact order:
+
+```sh
+"$BIN" "$SIDECAR" "$TRAIN" "$PANEL" "$ARTIFACT" "$TOKENIZER" \
+  --protocol 2 --expected-artifact "$ARTIFACT_SHA256" \
+  --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
+```
+
+Seal every process report, panel bytes, timing file, test log, source/binary
+hash and generator manifest/lock under `$OUT`; fail closed on any drift.
+
 ## Minimum test power
 
 - both public artifacts;
@@ -177,8 +232,19 @@ source/binary pins are added after implementation review and before GO.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - implementation and exact-head test review pending.
+TEST FITNESS: FIT - M2 #2030 integer whole-reply neighbor ranker
+sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-ranker-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 25158d658 is clean. Four focused ranker tests and the full
+  398-test CPU library suite pass with four expected ignores. The exact one-hot
+  selector and sidecars are unchanged; all inputs and source pins match; the
+  seed-2779 panel and output root remain absent.
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `25158d658`, source pins and release binary
+`22a4d472d69c914229537919feb9790b4fa61b48ec62ef349385c4277d75615e`
+match. This was not an independent review. Seed 2779 may now be generated under
+the fixed construction and stop rule above.
