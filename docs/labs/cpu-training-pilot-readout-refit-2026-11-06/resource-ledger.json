@@ -86,7 +86,7 @@
   "sources": {
     "order": "docs/loop/tasks/cpu-training-pilot/deepseek-237/ORDER.md",
     "sheet": "docs/harness/prep/cpu-training-pilot-readout-refit-2026-11-06.md",
-    "implementation_pin": "REPAIR_COMMIT_HASH_PLACEHOLDER",
+    "implementation_pin": "4bc9ca67c",
     "source_sha256": {
       "readout_refit": "21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae",
       "driver": "ee166483ef64452b4e7846506b3caf1ec385d216289e86c18daf3ad60c2c0e54",

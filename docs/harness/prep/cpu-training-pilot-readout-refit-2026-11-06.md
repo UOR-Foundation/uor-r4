@@ -235,7 +235,7 @@ AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
 test "$AVAILABLE" -ge 32346472448
 mkdir "$OUT"
 df -B1 "$REPO" >"$OUT/storage-before.txt"
-git merge-base --is-ancestor 3ce113852 HEAD
+git merge-base --is-ancestor 4bc9ca67c HEAD
 test "$(lscpu | sed -n 's/^Model name:[[:space:]]*//p')" = \
   "AMD Ryzen 9 9950X 16-Core Processor"
 test "$(lscpu -p=CORE,SOCKET | rg -v '^#' | sort -u | wc -l)" -eq 16
@@ -501,7 +501,7 @@ test "$AVAILABLE" -ge 32346472448
 
 ## Source pins before FIT
 
-- implementation commit: `REPAIR_COMMIT_HASH_PLACEHOLDER`;
+- implementation commit: `4bc9ca67c`;
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:
