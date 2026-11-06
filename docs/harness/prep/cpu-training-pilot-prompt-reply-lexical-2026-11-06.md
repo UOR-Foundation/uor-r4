@@ -4,7 +4,12 @@ Run ID: `cpu-training-pilot-prompt-reply-lexical-2026-11-06`
 
 ## Status
 
-TEST FITNESS passed. The seed-2780 panel may be generated after GO.
+COMPLETE - **REJECT**. The lexical-only ranker was artifact-identical but fell
+from raw **34 to 23** exact replies and **766 to 422** body positions on both
+artifacts. The combined ranker remained artifact-stable only in its failure:
+19/301 on seed 1 and 48/880 on seed 2. All 455 reachable rows were emitted with
+zero premature BOS. Record:
+[deepseek-215](../../loop/tasks/cpu-training-pilot/deepseek-215/REPORT.md).
 
 This is D84 CPU research. It isolates the artifact-independent features in the
 whole-reply ranker rejected by deepseek-213. It does not change serving.
