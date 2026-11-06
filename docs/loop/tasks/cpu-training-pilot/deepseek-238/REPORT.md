@@ -30,7 +30,8 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 - Streams TRAIN into target and rotated-label centroid sums, then evaluates original,
   centroid and control tables on held-out rows.
 - Reports per-panel and pooled counts, pooled identities, power, candidate/control paired
-  tests, top-8 preservation and deterministic decision hashes.
+  tests, top-8 preservation and deterministic decision hashes. It also checks the
+  registered TRAIN token and mask hashes and reports split contexts.
 - Added focused tests for Q12 conversion/ties, matched non-vacuous shuffle, power,
   registered identity, tampering and worker-count determinism.
 
@@ -52,8 +53,10 @@ available at this head.
 - Focused `query_cache_eval` tests: **3 passed**.
 - `cargo check -p uor-r4-cpu-train --bin cpu-query-cache-evaluate --locked --offline`:
   passed.
+- Scoped Clippy, with only the four pre-existing crate lint categories allowed: passed.
+- D23/D25/D32 ratchets: passed.
 - New-file Rustfmt and `git diff --check`: passed.
-- Scoped Clippy and harness checks are run before delivery.
+- Full harness checks are run before delivery.
 
 ## Skills used
 

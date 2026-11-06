@@ -125,6 +125,8 @@ pub struct CentroidEvaluationRequest {
     pub minimum_observations: usize,
     pub minimum_fitted_rows: usize,
     pub minimum_fit_observations: usize,
+    pub expected_train_tokens_sha256: Option<String>,
+    pub expected_train_mask_sha256: Option<String>,
     pub expected_rows: Option<usize>,
     pub expected_row_identity: Option<String>,
 }
@@ -201,6 +203,14 @@ pub fn evaluate_query_cache(
     validate_request(request)?;
     let cache = QueryCache::open(root)?;
     let (train_metadata, train_rows) = cache.split(&request.train_split, request.memory)?;
+    let train_identity_matches = request
+        .expected_train_tokens_sha256
+        .as_ref()
+        .is_none_or(|expected| expected == &train_metadata.tokens_sha256)
+        && request
+            .expected_train_mask_sha256
+            .as_ref()
+            .is_none_or(|expected| expected == &train_metadata.mask_sha256);
 
     let started = std::time::Instant::now();
     let fitted = fit_streamed_tables(&cache, train_metadata, &train_rows, request)?;
@@ -314,7 +324,12 @@ pub fn evaluate_query_cache(
         && centroid_top1_correct > shuffled_top1_correct
         && paired_original["passes"].as_bool() == Some(true)
         && paired_shuffled["passes"].as_bool() == Some(true);
-    let status = if !identity_exact || !identity_registered || !rows_registered || !shuffle_ok {
+    let status = if !identity_exact
+        || !train_identity_matches
+        || !identity_registered
+        || !rows_registered
+        || !shuffle_ok
+    {
         "CONTROL_FAULT"
     } else if !power_ok {
         "INSUFFICIENT_POWER"
@@ -337,6 +352,17 @@ pub fn evaluate_query_cache(
             "query_space": cache.manifest.query_space,
         },
         "request": request,
+        "train": {
+            "split": &request.train_split,
+            "memory": request.memory,
+            "rows": train_rows.targets.len(),
+            "context": train_metadata.context,
+            "tokens_sha256": &train_metadata.tokens_sha256,
+            "mask_sha256": &train_metadata.mask_sha256,
+            "expected_tokens_sha256": request.expected_train_tokens_sha256,
+            "expected_mask_sha256": request.expected_train_mask_sha256,
+            "identity_matches": train_identity_matches,
+        },
         "workers": rayon::current_num_threads(),
         "wall_ms": started.elapsed().as_millis(),
         "fit": {
@@ -978,6 +1004,8 @@ mod tests {
             minimum_observations: 1,
             minimum_fitted_rows: 3,
             minimum_fit_observations: 6,
+            expected_train_tokens_sha256: Some("train-tokens".to_owned()),
+            expected_train_mask_sha256: Some("train-mask".to_owned()),
             expected_rows: Some(3),
             expected_row_identity: None,
         }
@@ -1054,6 +1082,12 @@ mod tests {
         wrong_identity.expected_row_identity = Some("00".repeat(32));
         let report = evaluate_query_cache(&cache_root, &wrong_identity).unwrap();
         assert_eq!(report["status"], "CONTROL_FAULT");
+
+        let mut wrong_train = request();
+        wrong_train.expected_train_tokens_sha256 = Some("not-the-train".to_owned());
+        let report = evaluate_query_cache(&cache_root, &wrong_train).unwrap();
+        assert_eq!(report["status"], "CONTROL_FAULT");
+        assert_eq!(report["train"]["identity_matches"], false);
 
         let query = cache_root.join("no-memory/p.queries.f32");
         let mut bytes = fs::read(&query).unwrap();

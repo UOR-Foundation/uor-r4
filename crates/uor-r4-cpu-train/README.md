@@ -99,7 +99,7 @@ cargo run --release -p uor-r4-cpu-train --bin cpu-public-fbs-parity -- <public-f
 cargo run --release -p uor-r4-cpu-train --bin cpu-served-forward-audit -- --artifact <fbs-artifact> --tokens 0,7,11 --no-timing
 cargo run --release -p uor-r4-cpu-train --bin cpu-corpus-driver -- <artifact> <tokens.u16> <mask.u8> <manifest.json> <seed> <steps> <evaluation-stride> <max-evaluation> <checkpoint-every> <checkpoint-dir> [resume-checkpoint]
 cargo run --release -p uor-r4-cpu-train --bin cpu-discrete-corpus-driver -- <four-table-artifact> <tokens.u16> <mask.u8> <manifest.json> <seed> <steps> <evaluation-stride> <max-evaluation> <checkpoint-every> <checkpoint-dir> [resume-checkpoint]
-cargo run --release -p uor-r4-cpu-train --bin cpu-query-cache-evaluate -- CACHE --train train --panel oasst2 --panel wiki-00000 --panel wiki-00020 --panel wiki-00040 --memory 0 --expect-rows 1460697 --expect-identity 5f88a5b3295ba5d684a8c75206787642fd65a2377d2dbb268992ec5c71a621eb --out centroid.json
+cargo run --release -p uor-r4-cpu-train --bin cpu-query-cache-evaluate -- CACHE --train train --panel oasst2 --panel wiki-00000 --panel wiki-00020 --panel wiki-00040 --memory 0 --expect-train-tokens ed8f25374e99bd65cd509b5cfcdffb6a8476401a973ea02aaaaa0ea76e35ee52 --expect-train-mask ec6e520c7a67aaf6efc7aaf42bf7513b3e697239fb18b73a1e89f130eacd4875 --expect-rows 1460697 --expect-identity 5f88a5b3295ba5d684a8c75206787642fd65a2377d2dbb268992ec5c71a621eb --out centroid.json
 ```
 
 The forward benchmark prints read-free, copy-only, copy-plus-type and full Hamming-plus-memory cases with hashes and process peak RSS. Its readings are component throughput, not training or language evidence.

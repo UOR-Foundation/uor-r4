@@ -21,6 +21,8 @@ fn main() -> Result<(), CpuTrainError> {
         minimum_observations: REGISTERED_MINIMUM_OBSERVATIONS,
         minimum_fitted_rows: REGISTERED_MIN_FITTED_ROWS,
         minimum_fit_observations: REGISTERED_MIN_FIT_OBSERVATIONS,
+        expected_train_tokens_sha256: None,
+        expected_train_mask_sha256: None,
         expected_rows: None,
         expected_row_identity: None,
     };
@@ -42,6 +44,8 @@ fn main() -> Result<(), CpuTrainError> {
             "--minimum" => request.minimum_observations = number(&flag, &value)?,
             "--min-fitted-rows" => request.minimum_fitted_rows = number(&flag, &value)?,
             "--min-fit-observations" => request.minimum_fit_observations = number(&flag, &value)?,
+            "--expect-train-tokens" => request.expected_train_tokens_sha256 = Some(value),
+            "--expect-train-mask" => request.expected_train_mask_sha256 = Some(value),
             "--expect-rows" => request.expected_rows = Some(number(&flag, &value)?),
             "--expect-identity" => request.expected_row_identity = Some(value),
             "--out" => out = Some(PathBuf::from(value)),
@@ -98,7 +102,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), CpuTrainError> {
 
 fn usage() -> CpuTrainError {
     CpuTrainError::Invalid(
-        "usage: cpu-query-cache-evaluate CACHE --train SPLIT --panel SPLIT ... [--memory 0|1] [--minimum N] [--min-fitted-rows N] [--min-fit-observations N] [--expect-rows N] [--expect-identity SHA256] [--out FILE]"
+        "usage: cpu-query-cache-evaluate CACHE --train SPLIT --panel SPLIT ... [--memory 0|1] [--minimum N] [--min-fitted-rows N] [--min-fit-observations N] [--expect-train-tokens SHA256] [--expect-train-mask SHA256] [--expect-rows N] [--expect-identity SHA256] [--out FILE]"
             .to_owned(),
     )
 }
