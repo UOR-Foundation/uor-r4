@@ -29,6 +29,7 @@ const STACK_DECODING: &str =
     "greedy serve_step with optional complete prompt/reply retrieval and artifact-bound content-readout sidecars";
 use uor_r4_integer::{IntegerError, Result};
 use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
+use uor_r4_tokenizer::ByteBpeTokenizer;
 
 const VERSION: &str = "0.1.0";
 
@@ -1709,6 +1710,10 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                 .to_str()
                 .ok_or_else(|| StackCliError::Usage("--prompt-reply path must be UTF-8".into()))?;
             let tokenizer_sha256 = hex::encode(Sha256::digest(&tokenizer_bytes));
+            let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
+                .ok_or_else(|| StackCliError::Usage("prompt-reply tokenizer is invalid".into()))?;
+            let protocol = DialogueProtocol::literal_roles_version(&tokenizer, cli.protocol)
+                .map_err(|error| StackCliError::Usage(error.to_string()))?;
             let (bytes, readout) = PromptReplyReadout::read_sidecar(
                 path,
                 model.artifact_sha256(),
