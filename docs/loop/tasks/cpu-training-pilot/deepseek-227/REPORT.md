@@ -50,7 +50,7 @@ retrieved neighborhood a sufficient termination signal. This closes fixed
 K=8 full-prefix branch coverage. The next stop mechanism must use generated
 branch evidence itself, not membership in a prompt-level candidate set.
 
-## Checks
+## Checks run at the head
 
 - focused branch test: 1 passed; driver test: 1 passed;
 - full CPU library: 407 passed, 4 expected ignores;
@@ -58,3 +58,18 @@ branch evidence itself, not membership in a prompt-level candidate set.
 - independent delegation was unavailable; review is local exact-head.
 
 Compact evidence: [result.json](evidence/result.json).
+
+## Skills used
+
+No system-provided Codex skill applied.
+
+## Still open
+
+- a generated-state branch signal that survives arbitrary content divergence;
+- native termination without a retrieved candidate set;
+- Claude's independent end-to-end serving track.
+
+## Plain summary
+
+Top-eight branch coverage doubled endpoint stops but still failed completion,
+premature-stop and shuffled-control bars. The fixed K=8 endpoint set is rejected.
