@@ -4,9 +4,8 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-REGISTERED, NOT RUN. No seed-2775 panel, output directory or result exists.
-Execution is held pending a fresh non-author `TEST FITNESS: FIT` and a separate
-D67 pre-run `GO` at the exact registration head.
+REGISTERED - `TEST FITNESS: FIT`; D67 pre-run review pending. No seed-2775
+panel, output directory or result exists.
 
 This is D84 CPU development research in `uor-r4-cpu-train`. It is exact-memory
 recall evidence, not fresh-phrasing generalization, useful chat, serving
@@ -454,7 +453,14 @@ selectors or bars.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 full-sequence reply boundary
+
+reviewer: `full_boundary_ce180_fitness`
+date: 2026-11-05
+head: `ce180de32b45c561a70814bdaead47aeefb227c5`
+note: Observable stop comparison, original content under shuffled boundary,
+paired bars, controls and pins verified; source reviewer
+`full_boundary_ce180_source` also returned APPROVE at the same head.
 
 ## D67 pre-run review
 
