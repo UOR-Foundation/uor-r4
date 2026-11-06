@@ -143,6 +143,8 @@ external model. Serving remains integer-only and unchanged.
 - artifact seed 2:
   `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`.
 
+## Data split
+
 TRAIN panel:
 
 `/home/callard/projects/codex-playground/uor-r4/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711`
