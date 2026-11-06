@@ -22,6 +22,12 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   manifest/checkpoint/run-config hash. The decision binary now uses a separately pinned
   registered profile; the aggregate rejects diagnostic reports and recomputes the power
   and bar fields from their counts.
+- A second exact-head review found that the aggregate still trusted derived `top8_holds`
+  and paired `passes` booleans, and that its worker test never crossed the 64-row Rayon
+  block boundary. The aggregate now reconciles panel and pooled counts, recomputes both
+  paired tests from their raw fields, verifies actual TRAIN/panel/cache pins, and requires
+  one explicit seed-1 and one seed-2 report. Worker and top-8 tests now span multiple
+  blocks.
 - The current main CPU crate failed to compile its arbitration binary because two enum
   arms were absent from one match. That baseline repair is isolated in its own commit.
 
@@ -43,19 +49,22 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   tests, top-8 preservation and deterministic decision hashes. It also checks the
   registered TRAIN token and mask hashes and reports split contexts.
 - The two-seed aggregate accepts only `n3s-registered-v1` reports, pins their shared
-  evaluation definition, and recomputes power, bar and status consistency from the raw
-  counts instead of trusting status alone.
+  evaluation definition, requires one seed-1 and one seed-2 report, and recomputes power,
+  panel/pooled totals, top-8, both paired tests, bar and status from the raw counts instead
+  of trusting derived booleans.
 - Added focused tests for exact Q12 conversion/rounding and top-8 ties, an exact-count
   non-vacuous shuffle with a self-mapped singleton stratum, ineligible-row Q12 rejection,
   registered gates, every clean and tampered manifest/checkpoint/run-config hash, split
-  and pooled identity, power, and one-versus-two worker determinism.
+  and pooled identity, power, multi-block top-8 membership, one-versus-two worker
+  determinism across multiple blocks, and false raw-count aggregate reports.
 
 No GPU scorer, trainer, serving path or model artifact changed.
 
 ## Measurements
 
 Nothing model-level was measured. The worker-count test compares one and two Rayon
-threads after removing wall time and worker count; every semantic field is equal.
+threads over three query blocks after removing wall time and worker count; every semantic
+field is equal.
 
 The new binary is the D84 evaluator for the separate n3S query-cache experiment. Its
 hardware and full run resource ledger belong to that experiment sheet; no real cache was
@@ -66,15 +75,15 @@ not available.
 ## Checks run at the head
 
 - `cargo test -p uor-r4-cpu-train --locked --offline --no-fail-fast`:
-  **435 library tests passed, 4 ignored; all binary tests passed**.
-- Focused `query_cache_eval` tests: **10 passed**.
+  **437 library tests passed, 4 ignored; all binary tests passed**.
+- Focused `query_cache_eval` tests: **12 passed**.
 - `cargo check -p uor-r4-cpu-train --bin cpu-query-cache-evaluate --locked --offline`:
   passed.
 - Scoped strict Clippy, with only the four pre-existing crate lint categories allowed
   (`type_complexity`, `needless_borrow`, `cloned_ref_to_slice_refs`,
   `unnecessary_min_or_max`): passed.
 - D23/D25/D32 ratchets: passed.
-- Rustfmt on the changed Rust files and `git diff --check`: passed.
+- Rustfmt on the evaluator and both query-cache binaries, plus `git diff --check`: passed.
 - Full harness checks are run before delivery.
 
 ## Skills used
@@ -94,5 +103,6 @@ TRAIN has 27.4 million rows, so loading all captured queries into memory was too
 the old matcher treated some labels differently from their control. This CPU module now
 streams and validates TRAIN, moves every eligible label in an exact-count-preserving
 control while leaving singleton strata on their own centroid, enforces the registered
-power and row-identity gates, and recomputes the final two-seed comparison in Rust. The
-GPU capture still has to run before any model result exists.
+power and row-identity gates, and recomputes both raw-count pair tests before combining
+one explicit seed-1 and seed-2 report in Rust. The GPU capture still has to run before any
+model result exists.

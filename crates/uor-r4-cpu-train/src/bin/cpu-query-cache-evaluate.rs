@@ -17,6 +17,7 @@ fn main() -> Result<(), CpuTrainError> {
     let mut args = std::env::args().skip(1);
     let cache = PathBuf::from(args.next().ok_or_else(usage)?);
     let mut request = CentroidEvaluationRequest {
+        seed: None,
         train_split: REGISTERED_TRAIN_SPLIT.to_owned(),
         panel_splits: Vec::new(),
         memory: false,
@@ -35,6 +36,13 @@ fn main() -> Result<(), CpuTrainError> {
             .next()
             .ok_or_else(|| CpuTrainError::Invalid(format!("missing value for {flag}")))?;
         match flag.as_str() {
+            "--seed" => {
+                request.seed = Some(
+                    value
+                        .parse::<u8>()
+                        .map_err(|_| CpuTrainError::Invalid("--seed wants 1 or 2".to_owned()))?,
+                )
+            }
             "--train" => request.train_split = value,
             "--panel" => request.panel_splits.push(value),
             "--memory" => {
@@ -107,7 +115,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), CpuTrainError> {
 
 fn usage() -> CpuTrainError {
     CpuTrainError::Invalid(
-        "usage: cpu-query-cache-evaluate CACHE --train SPLIT --panel SPLIT ... [--memory 0|1] [--minimum N] [--min-fitted-rows N] [--min-fit-observations N] [--expect-train-tokens SHA256] [--expect-train-mask SHA256] [--expect-rows N] [--expect-identity SHA256] [--out FILE]"
+        "usage: cpu-query-cache-evaluate CACHE --seed 1|2 [--checkpoint-root DIR] [--out FILE]"
             .to_owned(),
     )
 }
