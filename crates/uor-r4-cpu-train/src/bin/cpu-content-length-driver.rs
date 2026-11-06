@@ -251,6 +251,8 @@ fn run() -> Result<(), String> {
     let changes_from_local = suffix_arbitration_changes(candidate, local);
     let changes_from_shuffled = suffix_arbitration_changes(candidate, shuffled_arm);
     let changes_from_boundary = suffix_arbitration_changes(candidate, &boundary_arm);
+    let complete_rows_changed_from_boundary = complete_outcome_changes(candidate, &boundary_arm);
+    let complete_rows_changed_from_shuffled = complete_outcome_changes(candidate, shuffled_arm);
     let reachable = candidate.reading.reference_reachable;
     let reachability_consistent = [
         boundary_arm.reading.reference_reachable,
@@ -282,7 +284,7 @@ fn run() -> Result<(), String> {
             changes_from_local.changed_steps > 0 && changes_from_shuffled.changed_steps > 0
         }
         EndpointMode::AlignedRetrieved => {
-            changes_from_boundary.changed_steps > 0 && changes_from_shuffled.changed_steps > 0
+            complete_rows_changed_from_boundary > 0 && complete_rows_changed_from_shuffled > 0
         }
     };
     let active = candidate.reading.global_decisions >= 100 && changed && active_changed > 0;
@@ -292,16 +294,19 @@ fn run() -> Result<(), String> {
     };
     let output = if reachable < 200 || candidate.reading.global_decisions < 100 || !endpoint_power {
         "INSUFFICIENT_POWER"
-    } else if !reachability_consistent
-        || !active
-        || !all_emitted
-        || candidate.reading.premature_bos != 0
-    {
+    } else if !reachability_consistent || !active {
         "CONTROL_FAULT"
-    } else if exact_retained && body_retained && exact_shuffled {
-        "KEEP"
     } else {
-        "REJECT"
+        if all_emitted
+            && candidate.reading.premature_bos == 0
+            && exact_retained
+            && body_retained
+            && exact_shuffled
+        {
+            "KEEP"
+        } else {
+            "REJECT"
+        }
     };
 
     let readings = serde_json::json!({
@@ -356,6 +361,8 @@ fn run() -> Result<(), String> {
             "from_local": changes_from_local,
             "from_shuffled": changes_from_shuffled,
             "from_boundary": changes_from_boundary,
+            "complete_rows_from_shuffled": complete_rows_changed_from_shuffled,
+            "complete_rows_from_boundary": complete_rows_changed_from_boundary,
         },
         "comparisons": comparisons,
         "readings": readings,
@@ -394,6 +401,20 @@ fn run() -> Result<(), String> {
         serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?
     );
     Ok(())
+}
+
+fn complete_outcome_changes(
+    candidate: &TimedSuffixArbitrationReading,
+    control: &TimedSuffixArbitrationReading,
+) -> u64 {
+    candidate
+        .rows
+        .iter()
+        .zip(&control.rows)
+        .filter(|(candidate, control)| {
+            candidate.reply_sha256 != control.reply_sha256 || candidate.stop != control.stop
+        })
+        .count() as u64
 }
 
 fn compare_arms(
