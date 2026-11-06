@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-continuation-guard-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT at implementation `e3f09dd41`; seed 2786 and output root
-remain absent.
+Complete as **REJECT**. FIT/GO were recorded at `e3f09dd41`. The guard
+suppressed 23 boundary decisions but reduced exact replies from 17 to 14 and
+completed only 202/223 of 467 reachable replies. Repeats matched.
 
 ## Question
 
