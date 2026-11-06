@@ -1,11 +1,25 @@
-# Pre-registration: full-sequence reply boundary
+# Pre-registration: full-sequence reply boundary, attempt 2
 
 Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-RELEASED TO RUN - `TEST FITNESS: FIT` and D67 pre-run `GO` recorded. No
-seed-2775 panel, output directory or result existed when GO was issued.
+ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2 IS PENDING FIT AND GO.
+
+Attempt 1 built the pinned source and generator, then stopped at TRAIN
+preflight before generating seed 2775. Full and reply-only boundaries made the
+same 241 stops on exact TRAIN replay, so the preflight observed zero
+full-versus-reply stop changes. The full boundary was active, differed from
+the shuffled boundary at 226 reachable rows, and had identical per-depth
+terminal and nonterminal censuses with shuffled. Exact replay equality between
+the two learned boundaries is expected because both replay a known reference
+endpoint; requiring a difference there made the preflight vacuous.
+
+Attempt 2 changes only the preflight gate: it retains full activity,
+full-versus-shuffled change, reachability and table invariants, but leaves
+full-versus-reply non-vacuity as a per-artifact evaluation gate. The seed,
+panel shape, source, selectors, arms, artifact seeds and scientific bar are
+unchanged. No seed-2775 panel or result exists.
 
 This is D84 CPU development research in `uor-r4-cpu-train`. It is exact-memory
 recall evidence, not fresh-phrasing generalization, useful chat, serving
@@ -36,6 +50,10 @@ is learned.
 - A matched shuffle moves terminal events among suffixes of the same depth
   while preserving every suffix key, every nonterminal count, and every
   per-depth terminal and nonterminal total.
+- Attempt 1 showed that exact TRAIN replay can make full-history and
+  reply-only stopping behavior identical. Attempt 2 records instead of
+  rejects that expected identity; the treatment still must differ from both
+  reply-only and shuffled on each fresh evaluation artifact.
 
 No dense matmul, softmax, squashing activation or float serving path is used.
 
@@ -93,11 +111,11 @@ Training and all table derivations:
 
 Fresh evaluation panel:
 
-`/home/callard/projects/codex-playground/uor-r4/local/deepseek/full-sequence-boundary/2026-11-05/panels/dd-2775`
+`/home/callard/projects/codex-playground/uor-r4/local/deepseek/full-sequence-boundary/2026-11-05-attempt-2/panels/dd-2775`
 
 - `cell=dev,dev`, seed 2775, protocol 2, 128 conversations;
-- output root and panel directory confirmed absent at registration;
-- seed 2775 is unused in the local data tree at registration;
+- attempt-2 output root and panel directory are absent at registration;
+- seed 2775 remained unused across: attempt 1 did not open the panel;
 - generated only after FIT and GO;
 - no evaluation row enters the content, boundary or shuffled tables.
 
@@ -159,8 +177,9 @@ Before reading a result, all of these must hold:
 - the shuffle preserves key sets, nonterminal counts, and per-depth suffix,
   terminal, and nonterminal totals while changing terminal assignments;
 - treatment makes at least one full-boundary stop;
-- treatment changes at least one observable stop position/presence from
-  reply-only and one from shuffled, ignoring source labels, depth and counts;
+- TRAIN preflight changes at least one observable stop from shuffled;
+- each fresh evaluation artifact changes at least one observable stop from
+  reply-only and one from shuffled;
 - all eight arms have at least 200 reachable replies;
 - both artifact seeds and fresh-process repeats match after timing removal.
 
@@ -172,7 +191,7 @@ Any failure is an instrument, power or drift fault, not a mechanism negative.
 - one fresh DEV panel with 128 conversations;
 - at least 200 reference-reachable replies per artifact seed;
 - at least one full stop and nonzero full-vs-reply and full-vs-shuffled change
-  per artifact seed;
+  per fresh artifact seed;
 - at least ten content-oracle exact bodies for the paired exact comparison;
 - fresh-process repeats of both artifact seeds;
 - 64-token cap, 32 Rayon workers, 30-minute wall cap and 2 GiB peak RSS.
@@ -220,6 +239,29 @@ after opening seed 2775.
 - **CONTROL_FAULT:** stop before interpreting behavior; repair table, arm
   isolation or gates.
 
+## Attempt 1 record
+
+- `TEST FITNESS: FIT` at implementation head `ce180de32`, reviewer
+  `full_boundary_ce180_fitness`; source `APPROVE` from
+  `full_boundary_ce180_source`.
+- `D67 PRE-RUN: GO` at registration head `92220d7d1`, reviewer
+  `full_boundary_d67_go`.
+- execution stopped at TRAIN preflight with outcome `CONTROL_FAULT`;
+- 453 reachable TRAIN replies;
+- treatment: 241 full-boundary stops, 56 premature BOS, 95 exact replies,
+  1,454 correct body positions;
+- reply-only: the same 241 stops, 56 premature BOS, 95 exact replies and 1,454
+  body positions;
+- full-versus-reply observable stop changes: 0;
+- full-versus-shuffled observable stop changes: 226;
+- shuffled terminal assignments: 16,470;
+- full and shuffled per-depth suffix, terminal and nonterminal censuses match;
+- attempt-1 output root
+  `local/deepseek/full-sequence-boundary/2026-11-05` is sealed by
+  `SHA256SUMS` SHA-256
+  `80acdd4ed0b4b74b9ca708345cfb169763d2f1bbc31faa4d39ba2c2e4ddf8280`;
+- seed 2775 and `panels/dd-2775` were not created.
+
 ## R12 authority
 
 1. **What is measured:** paired complete replies under fixed selectors.
@@ -255,14 +297,14 @@ Run only after FIT and D67 GO. Use a fresh output root and fail closed.
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-full-sequence-boundary
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/full-sequence-boundary/2026-11-05
+OUT=$SHARED/local/deepseek/full-sequence-boundary/2026-11-05-attempt-2
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
 PANEL=$OUT/panels/dd-2775
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
-BUILD=$SOURCE/target/deepseek/full-sequence-boundary
-GEN_TARGET=$SOURCE/target/deepseek/full-sequence-boundary-generator
+BUILD=$SOURCE/target/deepseek/full-sequence-boundary-attempt-2
+GEN_TARGET=$SOURCE/target/deepseek/full-sequence-boundary-generator-attempt-2
 IMPL=89ed3d2138143f520ddc22e80c871e5d7f522484
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
@@ -358,7 +400,6 @@ jq -e '
   and .tables.full_boundary.nonterminal_by_depth
     == .tables.shuffled_boundary.nonterminal_by_depth
   and .tables.changed_boundary_terminals > 0
-  and .changes.stop_vs_reply > 0
   and .changes.stop_vs_shuffled > 0
   and .arms.content_full_boundary.reading.full_boundary_stops > 0
 ' "$OUT/reports/train-preflight.json" >/dev/null
@@ -453,23 +494,9 @@ selectors or bars.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 full-sequence reply boundary
-
-reviewer: `full_boundary_ce180_fitness`
-date: 2026-11-05
-head: `ce180de32b45c561a70814bdaead47aeefb227c5`
-note: Observable stop comparison, original content under shuffled boundary,
-paired bars, controls and pins verified; source reviewer
-`full_boundary_ce180_source` also returned APPROVE at the same head.
+TEST FITNESS: PENDING
 
 ## D67 pre-run review
 
-D67 PRE-RUN: GO - registration head
-`92220d7d1a2930d76431d95e4a6cf34b12a9bf8a`.
-
-reviewer: `full_boundary_d67_go`
-date: 2026-11-05
-note: Source stayed at FIT head `ce180de32`; input/source/generator pins,
-preflight activation, both seeded repeats, resource caps and isolation were
-verified. Seed 2775 and the output root were absent.
+D67 PRE-RUN: PENDING
 
