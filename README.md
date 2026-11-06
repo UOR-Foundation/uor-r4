@@ -20,7 +20,8 @@ Chat assistants run on **transformers**: programs that spend much of their effor
 large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job more
 cheaply: geometric rotations, whole-number addresses built from primes, small lookup tables and an
 exact memory. The goal is a fast language model that trains quickly and runs on your own laptop or
-in your browser, computing locally by default.
+in your browser, computing locally by default. The web Studio alone has an optional mode that sends
+prompts to an OpenAI-compatible endpoint the user configures; the desktop shell has none.
 
 The project is open research and **pre-alpha**. One of eight milestones is complete, but **no model
 built under its rules holds a useful conversation yet.** [What UOR-R4 is](docs/start/what-is-uor-r4.md)
@@ -55,17 +56,17 @@ conversation. The evidence: [M1 issue](https://github.com/UOR-Foundation/uor-r4/
 
 **Does the model learn human-written text?** M1's panels are templated. On real human text, a
 held-out panel of 1,460,697 rows from public conversation and encyclopedia text, the model does not
-yet beat the same kind of baselines:
+yet beat the T2 baseline:
 
-- **First runs (5 Nov):** training loss stays flat over 8,192 steps at two model widths, and every
+- **First runs (6 Nov):** training loss stays flat over 8,192 steps at two model widths, and every
   run trails the unigram table
   ([report](docs/loop/tasks/scale-probe/claude-295/REPORT.md)).
 - **More data and more steps (6 Nov):** the best run (more training text, 32,768 steps) gets
   272,867 and 234,892 rows right at its two seeds against T2's 256,660. One seed is ahead and one
-  behind, so the result is **inside the noise band, not a win**. More training text is the one
-  change that helped at both seeds
-  ([report](docs/loop/tasks/one-model-end-to-end/claude-297/REPORT.md)).
-- **Now running:** the same recipe at a four-times-larger batch, to test whether the two seeds'
+  behind, so the result is **inside the noise band, not a win**. Every run now beats the unigram
+  table, and more training text is the one change that helped beyond the noise band at both seeds,
+  at 8,192 steps ([report](docs/loop/tasks/one-model-end-to-end/claude-297/REPORT.md)).
+- **Next:** the same recipe at a four-times-larger batch, to test whether the two seeds'
   disagreement is training noise ([#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407)).
 
 Every result, negative ones included, is one row in the
