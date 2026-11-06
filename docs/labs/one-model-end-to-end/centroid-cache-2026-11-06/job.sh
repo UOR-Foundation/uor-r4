@@ -25,7 +25,14 @@ OUT_STORE=results/deepseek/one-model-end-to-end-centroid-2026-11-06/s$SEED-$RUN_
 LIMIT_SECONDS=${UOR_CENTROID_LIMIT_SECONDS:-21600}
 MIN_FREE_GIB=${UOR_CENTROID_MIN_FREE_GIB:-128}
 
-die() { echo "centroid-cache: $*" >&2; exit 1; }
+die() {
+  if [ -d "$RUN" ]; then
+    printf 'centroid-cache: %s\n' "$*" | tee -a "$RUN/job.log" >&2
+  else
+    echo "centroid-cache: $*" >&2
+  fi
+  exit 1
+}
 check_file() {
   local want=$1 path=$2
   local got
@@ -60,7 +67,6 @@ if [ "${UOR_CENTROID_TIMED:-0}" != 1 ]; then
   exec timeout --signal=TERM --kill-after=60s "$LIMIT_SECONDS" bash "$0" "$@"
 fi
 [ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
-[ -d "$REPO/.git" ] || die "missing repository at $REPO"
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
 OUTPUT_CLAIMED=0
@@ -68,7 +74,7 @@ on_exit() {
   local rc=$?
   printf '%s\n' "$rc" > "$RUN/EXIT"
   if [ "$OUTPUT_CLAIMED" = 1 ] && [ "$rc" -ne 0 ] && [ -x "$STORE" ]; then
-    for file in job.log capture.stderr capture.stdout.jsonl; do
+    for file in job.log store.log store-list.err capture.stderr capture.stdout.jsonl; do
       [ -f "$RUN/$file" ] || continue
       timeout 20s "$STORE" put "$RUN/$file" "$OUT_STORE/failure/$file" >/dev/null 2>&1 || true
     done
@@ -77,6 +83,14 @@ on_exit() {
 trap on_exit EXIT
 
 [ -x "$STORE" ] || die "uor-store is not installed"
+store_listing=$("$STORE" ls results/deepseek/ 2>"$RUN/store-list.err") ||
+  die "could not list the DeepSeek store namespace"
+if grep -F "  $OUT_STORE/" <<<"$store_listing" >/dev/null; then
+  die "refusing an existing store output: $OUT_STORE"
+fi
+OUTPUT_CLAIMED=1
+
+[ -d "$REPO/.git" ] || die "missing repository at $REPO"
 command -v zstd >/dev/null || die "zstd is not installed"
 command -v /usr/bin/time >/dev/null || die "/usr/bin/time is not installed"
 command -v nvidia-smi >/dev/null || die "nvidia-smi is not installed"
@@ -87,10 +101,6 @@ actual=$(git -C "$REPO" rev-parse HEAD)
 [ "$actual" = "$PIN" ] || die "repository is $actual, expected $PIN"
 [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] ||
   die "repository has tracked modifications"
-
-existing=$("$STORE" ls "$OUT_STORE/" 2>/dev/null || true)
-[ -z "$existing" ] || die "refusing an existing store output: $OUT_STORE"
-OUTPUT_CLAIMED=1
 
 log "[0/6] run=$RUN output=$OUT_STORE source=$PIN limit=${LIMIT_SECONDS}s"
 log "script_sha256=$(sha256sum "$0" | cut -d' ' -f1)"
@@ -134,7 +144,7 @@ tar -xzf "$ARCHIVE_PATH" -C "$RUN/seed" \
   "oh/run/$runcase/models/step-008192/model.safetensors" \
   "oh/run/$runcase/models/step-008192/config.json" \
   "oh/run/$runcase/models/step-008192/hamming_read.safetensors" \
-  "oh/run/SHA256SUMS.files"
+  "oh/run/SHA256SUMS.files" 2>&1 | tee -a "$RUN/job.log"
 
 case $SEED in
   1)
@@ -154,13 +164,14 @@ selected="$RUN/selected-checkpoint.sha256"
 grep -E "  \\./($runcase/(config\\.json|models/step-008192/(config\\.json|model\\.safetensors|hamming_read\\.safetensors)))$" \
   "$RUN/seed/oh/run/SHA256SUMS.files" > "$selected"
 [ "$(wc -l < "$selected")" -eq 4 ] || die "checkpoint SHA manifest did not select four files"
-(cd "$RUN/seed/oh/run" && sha256sum -c "$selected")
+(cd "$RUN/seed/oh/run" && sha256sum -c "$selected") 2>&1 | tee -a "$RUN/job.log"
 
 log "[3/6] build and test pinned CUDA scorer"
 export CARGO_TARGET_DIR="$RUN/target"
-(cd "$REPO" && cargo test --locked --offline -p uor-r4-float-train --features cuda --lib)
+(cd "$REPO" && cargo test --locked --offline -p uor-r4-float-train --features cuda --lib) \
+  2>&1 | tee -a "$RUN/job.log"
 (cd "$REPO" && cargo build --release --locked --offline -p uor-r4-float-train --features cuda \
-  --bin train-in-space)
+  --bin train-in-space) 2>&1 | tee -a "$RUN/job.log"
 sha256sum "$CARGO_TARGET_DIR/release/train-in-space" > "$RUN/binaries.sha256"
 
 log "[4/6] capture TRAIN and panel queries"
@@ -207,22 +218,24 @@ log "[5/6] seal cache"
 [ -f "$RUN/results/cache/manifest.json" ] || die "capture wrote no sealed cache manifest"
 (cd "$RUN/results" && find cache -type f -print0 | sort -z | xargs -0 sha256sum) \
   > "$RUN/results/cache.SHA256SUMS"
-tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache
-(cd "$RUN/results" && sha256sum cache.tar.zst) > "$RUN/results/cache.tar.zst.sha256"
+tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache \
+  2>&1 | tee -a "$RUN/job.log"
+(cd "$RUN/results" && sha256sum cache.tar.zst | tee -a "$RUN/job.log") \
+  > "$RUN/results/cache.tar.zst.sha256"
 need_free_gib 40
 
 log "[6/6] upload and read back sealed evidence"
 for file in results/cache.tar.zst results/cache.tar.zst.sha256 results/cache.SHA256SUMS \
   capture.stderr capture.stdout.jsonl binaries.sha256 gpu.txt; do
-  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/store.log"
+  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/store.log" 2>&1
 done
 for file in results/cache.tar.zst.sha256 results/cache.SHA256SUMS capture.stderr \
   capture.stdout.jsonl binaries.sha256 gpu.txt; do
-  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >/dev/null
+  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/store.log" 2>&1
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
 done
-"$STORE" get "$OUT_STORE/cache.tar.zst" "$RUN/readback" >/dev/null
+"$STORE" get "$OUT_STORE/cache.tar.zst" "$RUN/readback" >> "$RUN/store.log" 2>&1
 readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/cache.tar.zst" | cut -d' ' -f1)
 [ "$readback_sha" = "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" ] ||
   die "uploaded cache archive did not read back"
@@ -234,14 +247,9 @@ printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","started"
   "$(cut -d' ' -f1 "$RUN/binaries.sha256")" \
   > "$RUN/status.json"
 for file in status.json store.log job.log; do
-  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >/dev/null
-  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >/dev/null
+  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/store.log" 2>&1
+  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/store.log" 2>&1
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
-done
-cat "$RUN/status.json"
-  "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" > "$RUN/status.json"
-for file in status.json store.log job.log; do
-  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >/dev/null
 done
 cat "$RUN/status.json"

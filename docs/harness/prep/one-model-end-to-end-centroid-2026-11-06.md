@@ -90,10 +90,10 @@ Two fresh one-card pods keep the run parallel and at most four total:
 
 ```sh
 scripts/pod/uor-pod status --du
-scripts/pod/uor-pod up --lab deepseek --session centroid-s1 --gpu 5090 --hours 7 \
+scripts/pod/uor-pod up --lab deepseek --session centroid-s1 --gpu 5090 --count 1 --hours 7 \
   --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
   --purpose "n3S centroid cache seed 1"
-scripts/pod/uor-pod up --lab deepseek --session centroid-s2 --gpu 5090 --hours 7 \
+scripts/pod/uor-pod up --lab deepseek --session centroid-s2 --gpu 5090 --count 1 --hours 7 \
   --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
   --purpose "n3S centroid cache seed 2"
 
@@ -109,6 +109,25 @@ scripts/pod/uor-pod run "$POD1" --lab deepseek --session centroid-s1 --gpu 0 -- 
   bash /workspace/centroid-cache-job.sh 1
 scripts/pod/uor-pod run "$POD2" --lab deepseek --session centroid-s2 --gpu 0 -- \
   bash /workspace/centroid-cache-job.sh 2
+
+# Each watcher exits within the seven-hour lease. The job itself stops at six hours.
+timeout 25200s bash -c '
+  until scripts/pod/uor-pod ssh "$1" \
+    "test -f /workspace/deepseek-centroid-cache-s$2/EXIT"; do sleep 30; done
+' _ "$POD1" 1
+timeout 25200s bash -c '
+  until scripts/pod/uor-pod ssh "$1" \
+    "test -f /workspace/deepseek-centroid-cache-s$2/EXIT"; do sleep 30; done
+' _ "$POD2" 2
+
+CAPTURE_STATUS1=$(scripts/pod/uor-pod ssh "$POD1" 'cat /workspace/deepseek-centroid-cache-s1/EXIT')
+CAPTURE_STATUS2=$(scripts/pod/uor-pod ssh "$POD2" 'cat /workspace/deepseek-centroid-cache-s2/EXIT')
+scripts/pod/uor-pod release "$POD1" --lab deepseek --session centroid-s1
+scripts/pod/uor-pod release "$POD2" --lab deepseek --session centroid-s2
+scripts/pod/uor-pod down "$POD1" --lab deepseek --session centroid-s1 --confirm-archived
+scripts/pod/uor-pod down "$POD2" --lab deepseek --session centroid-s2 --confirm-archived
+test "$CAPTURE_STATUS1" = 0
+test "$CAPTURE_STATUS2" = 0
 ```
 
 `JOB_SHA256` is the value recorded by the D67 review. `POD1` and `POD2` are the two new
@@ -189,6 +208,13 @@ tar --zstd -xf "$ARCHIVE_ROOT/cache.tar.zst" -C "$ROOT/s1/cache-extracted"
 (cd "$ROOT/s1/cache-extracted" && sha256sum -c "$ARCHIVE_ROOT/cache.SHA256SUMS")
 CACHE_S1="$ROOT/s1/cache-extracted/cache"
 STATUS="$ARCHIVE_ROOT/status.json"
+jq -e '
+  .seed == 1 and .status == "CAPTURED" and
+  .source_pin == "3a9c2f11d26991a70a22f88758cfb4589a1cf14d" and
+  (.capture_binary_sha256 | test("^[0-9a-f]{64}$"))
+' "$STATUS"
+TAR_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/cache.tar.zst.sha256")
+jq -e --arg sha "$TAR_SHA" '.cache_tar_sha256 == $sha' "$STATUS"
 MANIFEST=$(jq -r .cache_manifest_sha256 "$STATUS")
 ```
 

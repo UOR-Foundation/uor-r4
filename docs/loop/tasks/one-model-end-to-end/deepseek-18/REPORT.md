@@ -27,7 +27,9 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 ## What changed
 
 - The sheet pins source `3a9c2f11d`, gives the two-pod lease/run sequence, requires a
-  reviewed script hash, and explicitly leaves either existing busy pod untouched.
+  reviewed script hash, watches both `EXIT` files, releases and takes both pods down
+  before testing their saved status, and explicitly leaves either existing busy pod
+  untouched.
 - The capture command uses `--query-cache-memory 0 --query-cache-dev 0`; its cache is
   exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`.
 - The job checks the visible RTX 5090, source and tracked tree, all data/archive/selected
@@ -35,7 +37,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - It records the source, run id, manifest, cache archive and capture binary hashes, then
   uploads and reads back the cache, checksums, logs, GPU record and status.
 - The CPU section builds the registered evaluator, restores and verifies both the n3S
-  checkpoint and captured cache, binds each report to the captured manifest and
+  checkpoint and captured cache, checks each status against its seed, source pin,
+  capture binary and archive hash, binds each report to the captured manifest and
   checkpoint files, then runs the bounded evaluator and aggregate.
 
 ## Measurements
@@ -51,8 +54,8 @@ $16.10 two-lease ceiling at $1.15/h.
 
 - `bash -n` on the capture job: passed.
 - `git diff --check`: passed.
-- `uor-harness loop report --check --order
-  docs/loop/tasks/one-model-end-to-end/deepseek-16/ORDER.md`: passed.
+- `uor-harness loop report --check --order` for both deepseek-16 and deepseek-18:
+  passed.
 - The two source archives and all eight selected checkpoint files were verified against
   their published and inner SHA-256 pins while preparing the package.
 
