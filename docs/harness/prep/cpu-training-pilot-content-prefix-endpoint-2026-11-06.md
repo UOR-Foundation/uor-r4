@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-content-prefix-endpoint-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT. Pre-run GO recorded below at implementation `32a2aa26b`.
+TEST FITNESS: FIT. Pre-run GO recorded below at repaired implementation
+`7afcac83c`.
 The fresh seed-2784 panel and output root remain absent.
 
 ## Question
@@ -139,34 +140,37 @@ artifacts.
 TEST FITNESS: FIT - M2 #2030 aligned retrieved endpoint sheet:
 docs/harness/prep/cpu-training-pilot-content-prefix-endpoint-2026-11-06.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
-note: Implementation 32a2aa26b keeps the deepseek-198 content and boundary
+note: Implementation 7afcac83c keeps the deepseek-198 content and boundary
   arbitration unchanged until the generated reply diverges from the retrieved
   TRAIN reply. The endpoint evaluator receives only the retrieved reply; the
   evaluation reference is used for scoring and the separately labelled oracle.
   Two focused tests prove exact retrieved-endpoint completion, empty endpoint
   refusal and non-stopping after divergence. The full CPU library passes 406
   tests with four expected ignores; the driver test passes; scoped Clippy and
-  formatting pass. The fresh panel and output root remain absent.
+  formatting pass. The first TRAIN-only preflight exposed that token-decision
+  comparison cannot detect a stop-only endpoint change; a driver repair now
+  compares complete outcomes including stop reason. The fresh panel remains
+  absent.
 source:
   `90fb52752b3a09315a43da775e0521a7d78524f8830a4613e4cad69ebed2c54b`;
 retrieval:
   `68f19750e8c14370a41a07b4897eec238e1d48313683250667e02052a58970c4`;
 driver:
-  `b46d15da02c37d4e194de3957f441647c948cb718474cbe2bff9d79453f55970`;
+  `6be78357935a900aba8e36611066c99e78218f85bffbe4dae4a637214ca0b3e5`;
 release_binary:
-  `8782a29bd975e6ea36b26c2d84ca0f869692100d770047a7e15acd205cf1a6be`;
+  `4671b279340132fc1d9fa078de533d7f2ecf118d229deafe0118f02f78b4191e`;
 date: 2026-11-06
 
 ## Pre-run GO
 
-GO - exact-head self-review under the current disabled-delegation policy.
-Implementation `32a2aa26b`, source
+GO - repaired exact-head self-review under the current disabled-delegation
+policy. Implementation `7afcac83c`, source
 `90fb52752b3a09315a43da775e0521a7d78524f8830a4613e4cad69ebed2c54b`,
 retrieval
 `68f19750e8c14370a41a07b4897eec238e1d48313683250667e02052a58970c4`,
 driver
-`b46d15da02c37d4e194de3957f441647c948cb718474cbe2bff9d79453f55970`
+`6be78357935a900aba8e36611066c99e78218f85bffbe4dae4a637214ca0b3e5`
 and release binary
-`8782a29bd975e6ea36b26c2d84ca0f869692100d770047a7e15acd205cf1a6be`
+`4671b279340132fc1d9fa078de533d7f2ecf118d229deafe0118f02f78b4191e`
 match. This was not an independent review. Seed 2784 may now be generated under
 the fixed construction and stop rule.
