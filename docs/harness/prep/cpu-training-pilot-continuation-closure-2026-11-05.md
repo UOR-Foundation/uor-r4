@@ -4,9 +4,8 @@ Run ID: `cpu-training-pilot-continuation-closure-2026-11-05`
 
 ## Status
 
-REGISTERED, NOT RUN. Seed 2776, the panel and the output root are absent.
-Execution is held pending an exact-head `TEST FITNESS: FIT` and separate D67
-pre-run `GO`.
+REGISTERED - `TEST FITNESS: FIT`; D67 pre-run review pending. Seed 2776, the
+panel and the output root are absent.
 
 This is D84 CPU development research. It is exact-memory evidence, not
 fresh-wording generalization, serving integration, useful chat or GPU
@@ -371,7 +370,14 @@ or bars.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT - M2 #2030 continuation closure
+
+reviewer: `continuation_closure_fitness_2`
+date: 2026-11-05
+head: `35931fdb447eef6dde0b272f2d836e172d40d02d`
+note: Whole-continuation confidence, source-depth binding, local/content
+isolation, matched displacement thresholds, cap/context fallback, repeats and
+resource gates verified.
 
 ## D67 pre-run review
 
