@@ -822,6 +822,25 @@ only to 65/80, and 202/223 of 467 replies completed. This is a **REJECT** for
 the fixed continuation-backed boundary. See
 [deepseek-229](../../loop/tasks/cpu-training-pilot/deepseek-229/REPORT.md).
 
+The next unit implemented joint selection over complete boundary branches cut
+from one geometric content spine, with 15 integer content/termination features
+and matched learned, shuffled-label, first-boundary, longest-spine,
+terminal-volume and reference-endpoint arms. The TRAIN preflight stopped before
+fresh seed 2787: full memory exposed 77 groups but no wrong first boundary, and
+document-grouped four-fold reference prefixes exposed zero candidates across
+453 rows. This is **INSUFFICIENT_POWER**, not a negative for the selector:
+TRAIN reference trajectories do not expose the false stops that occur on fresh
+generated trajectories. See
+[deepseek-231](../../loop/tasks/cpu-training-pilot/deepseek-231/REPORT.md).
+
+Distribution-matched calibration then used consumed dev panels 2783-2786.
+Across **1,832** rows it produced only **58** exact-endpoint groups and **0**
+where the exact endpoint followed a wrong first boundary, so it stopped before
+new seed 2788. This closes exact-endpoint calibration for the current branch
+pool as **INSUFFICIENT_POWER** and moves the next unit to reference-free
+completion scoring. See
+[deepseek-233](../../loop/tasks/cpu-training-pilot/deepseek-233/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference
