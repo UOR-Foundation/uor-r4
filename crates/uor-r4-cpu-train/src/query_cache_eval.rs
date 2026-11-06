@@ -420,6 +420,7 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
     let mut manifests = BTreeSet::new();
     let mut seeds = Vec::new();
     let mut statuses = Vec::new();
+    let mut binding = None;
     for report in reports {
         if report["schema"] != EVALUATION_SCHEMA {
             return Err(invalid("query cache aggregate report schema differs"));
@@ -442,14 +443,64 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
         if report["pooled"]["bar_passes"].as_bool() != Some(status == "KEEP") {
             return Err(invalid("query cache aggregate status and bar differ"));
         }
-        let panel_identity_exact = report["panels"]
+        if report["pooled"]["rows_match"].as_bool() != Some(true)
+            || report["pooled"]["identity_matches"].as_bool() != Some(true)
+        {
+            return Err(invalid("query cache aggregate pooled identity differs"));
+        }
+        let panels = report["panels"]
             .as_array()
-            .ok_or_else(|| invalid("query cache aggregate panels are absent"))?
+            .ok_or_else(|| invalid("query cache aggregate panels are absent"))?;
+        if !panels
             .iter()
-            .all(|panel| panel["identity"]["exact"].as_bool() == Some(true));
-        if !panel_identity_exact {
+            .all(|panel| panel["identity"]["exact"].as_bool() == Some(true))
+        {
             return Err(invalid("query cache aggregate panel identity differs"));
         }
+        let panel_names = panels
+            .iter()
+            .map(|panel| {
+                panel["split"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| invalid("query cache aggregate panel name is absent"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let request = &report["request"];
+        let rows = request["expected_rows"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate expected rows are absent"))?;
+        let identity = request["expected_row_identity"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate expected identity is absent"))?
+            .to_owned();
+        let train_tokens = request["expected_train_tokens_sha256"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate TRAIN token pin is absent"))?
+            .to_owned();
+        let train_mask = request["expected_train_mask_sha256"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate TRAIN mask pin is absent"))?
+            .to_owned();
+        if report["pooled"]["rows"].as_u64() != Some(rows)
+            || report["pooled"]["row_identity_sha256"].as_str() != Some(identity.as_str())
+        {
+            return Err(invalid(
+                "query cache aggregate pooled request binding differs",
+            ));
+        }
+        let current = (
+            rows,
+            identity,
+            train_tokens,
+            train_mask,
+            request["memory"].as_bool(),
+            panel_names,
+        );
+        if binding.as_ref().is_some_and(|binding| binding != &current) {
+            return Err(invalid("query cache aggregate seed bindings differ"));
+        }
+        binding = Some(current);
         seeds.push(serde_json::json!({
             "cache_manifest_sha256": manifest,
             "checkpoint": report["cache"]["checkpoint"],
@@ -1181,9 +1232,22 @@ mod tests {
                 "schema": EVALUATION_SCHEMA,
                 "status": status,
                 "cache": {"manifest_sha256": manifest, "checkpoint": manifest},
+                "request": {
+                    "expected_rows": 1_460_697,
+                    "expected_row_identity": "identity",
+                    "expected_train_tokens_sha256": "tokens",
+                    "expected_train_mask_sha256": "mask",
+                    "memory": false,
+                },
                 "fit": {"fitted_rows": 100, "observations": 10_000},
-                "pooled": {"bar_passes": bar, "rows": 1_460_697},
-                "panels": [{"identity": {"exact": true}}],
+                "pooled": {
+                    "bar_passes": bar,
+                    "rows": 1_460_697,
+                    "rows_match": true,
+                    "identity_matches": true,
+                    "row_identity_sha256": "identity",
+                },
+                "panels": [{"split": "p", "identity": {"exact": true}}],
             })
         };
         let keep = aggregate_query_cache_reports(&[
