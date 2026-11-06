@@ -60,20 +60,8 @@ if [ "${UOR_CENTROID_TIMED:-0}" != 1 ]; then
   exec timeout --signal=TERM --kill-after=60s "$LIMIT_SECONDS" bash "$0" "$@"
 fi
 [ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
-[ -x "$STORE" ] || die "uor-store is not installed"
 [ -d "$REPO/.git" ] || die "missing repository at $REPO"
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
-command -v zstd >/dev/null || die "zstd is not installed"
-command -v /usr/bin/time >/dev/null || die "/usr/bin/time is not installed"
-command -v nvidia-smi >/dev/null || die "nvidia-smi is not installed"
-printf '' | zstd -q | zstd -dq >/dev/null || die "zstd round-trip preflight failed"
-need_free_gib "$MIN_FREE_GIB"
-
-actual=$(git -C "$REPO" rev-parse HEAD)
-[ "$actual" = "$PIN" ] || die "repository is $actual, expected $PIN"
-[ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] ||
-  die "repository has tracked modifications"
-
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
 OUTPUT_CLAIMED=0
 on_exit() {
@@ -87,6 +75,18 @@ on_exit() {
   fi
 }
 trap on_exit EXIT
+
+[ -x "$STORE" ] || die "uor-store is not installed"
+command -v zstd >/dev/null || die "zstd is not installed"
+command -v /usr/bin/time >/dev/null || die "/usr/bin/time is not installed"
+command -v nvidia-smi >/dev/null || die "nvidia-smi is not installed"
+printf '' | zstd -q | zstd -dq >/dev/null || die "zstd round-trip preflight failed"
+need_free_gib "$MIN_FREE_GIB"
+
+actual=$(git -C "$REPO" rev-parse HEAD)
+[ "$actual" = "$PIN" ] || die "repository is $actual, expected $PIN"
+[ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] ||
+  die "repository has tracked modifications"
 
 existing=$("$STORE" ls "$OUT_STORE/" 2>/dev/null || true)
 [ -z "$existing" ] || die "refusing an existing store output: $OUT_STORE"
@@ -208,7 +208,7 @@ log "[5/6] seal cache"
 (cd "$RUN/results" && find cache -type f -print0 | sort -z | xargs -0 sha256sum) \
   > "$RUN/results/cache.SHA256SUMS"
 tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache
-sha256sum "$RUN/results/cache.tar.zst" > "$RUN/results/cache.tar.zst.sha256"
+(cd "$RUN/results" && sha256sum cache.tar.zst) > "$RUN/results/cache.tar.zst.sha256"
 need_free_gib 40
 
 log "[6/6] upload and read back sealed evidence"
