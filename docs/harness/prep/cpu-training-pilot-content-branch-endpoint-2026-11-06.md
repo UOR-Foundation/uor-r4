@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-content-branch-endpoint-2026-11-06`
 
 ## Status
 
-TEST FITNESS: PENDING. Implementation and seed 2785 have not started.
+TEST FITNESS: FIT. Pre-run GO recorded at implementation `75a126c97`; seed 2785
+and the output root remain absent.
 
 ## Question
 
@@ -86,3 +87,30 @@ and repeats, seal evidence and deliver through review.
 
 Two artifacts, 200 reachable rows, 100 deeper-global decisions, 20 endpoint
 completions, top-1/boundary/shuffled/local/length/full/oracle controls.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 top-K branch endpoint sheet:
+docs/harness/prep/cpu-training-pilot-content-branch-endpoint-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable)
+note: Implementation 75a126c97 adds exact top-K unigram-Jaccard retrieval and
+  a branch endpoint that suppresses boundary only while any retrieved TRAIN
+  reply extends the complete generated prefix. One focused branch test, the
+  driver test and the full CPU library pass (407 passed, four expected
+  ignores). Top-K branches are used only for stopping and never inject content.
+  The fresh panel and output root remain absent.
+source:
+  `bffcaa6c6f857960da89f83a9c289e1550bf5a3242ecd1a957d553dcc860edf6`;
+retrieval:
+  `b365f2fd1b59313291380c1c50f92c8af8fe2cd20e1cf81f764b044826349750`;
+driver:
+  `dccd006f6de5eb1a1520502f676692d31edbf61575b7c7d8b7e061aec9283e76`;
+release_binary:
+  `fa4d9218d31161938eb797f9a6be31abb4a3269f5ab610cc6658061aa9e7445c`;
+date: 2026-11-06
+
+## Pre-run GO
+
+GO - exact-head self-review under current delegation policy at implementation
+`75a126c97`. Source, retrieval, driver and release binary hashes match. This is
+not an independent review. Seed 2785 may now be generated.
