@@ -1207,6 +1207,7 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         "17/25 please",
         "17/25 answer with the number first",
         "17/25 in binary",
+        "17/25 in hex",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,

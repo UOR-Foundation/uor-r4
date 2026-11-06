@@ -1472,6 +1472,7 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
         "please show your work",
         "please",
         "in binary",
+        "in hex",
         "binary",
     ]
     .iter()
@@ -2751,6 +2752,7 @@ mod tests {
             "17/25 please",
             "17/25 answer with the number first",
             "17/25 in binary",
+            "17/25 in hex",
         ] {
             match exact_arithmetic_tool(prompt) {
                 Some(Err(error)) if !error.to_string().is_empty() => {}

@@ -791,7 +791,7 @@ const badGroupedArithmetic = groupedArithmetic.filter(({ message }) => message.a
 assert(badGroupedArithmetic.length === 0, `grouped/continued arithmetic must be explicit errors: ${JSON.stringify(badGroupedArithmetic)}`);
 
 const ratioInstruction = [];
-for (const [index, prompt] of ['17/25 show your work', '17/25 please', '17/25 answer with the number first', '17/25 in binary'].entries()) {
+for (const [index, prompt] of ['17/25 show your work', '17/25 please', '17/25 answer with the number first', '17/25 in binary', '17/25 in hex'].entries()) {
     const id = `gen_final_review_ratio_${index}`;
     const conversationId = `conv_final_review_ratio_${index}`;
     await sendToWorker({
