@@ -4,8 +4,8 @@ Run ID: `cpu-training-pilot-content-length-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT. Pre-run GO recorded below. Implementation
-`74793da76`; the seed-2783 panel and output root remain absent.
+Complete as **REJECT**. TEST FITNESS: FIT and pre-run GO were recorded before
+seed 2783 opened. Both artifacts and repeats ran under the fixed construction.
 
 ## Question
 
@@ -153,3 +153,17 @@ and release binary
 `609343405c1f8ae38f699cb971755ff51fe6144be26743858478bcf423725977`
 match. This was not an independent review. Seed 2783 may now be generated under
 the fixed construction and stop rule.
+
+## Outcome
+
+**REJECT.** Full-sequence content with stored-length completion made **6**
+exact replies and **560** correct body positions on both artifacts. It beat
+local and shuffled length controls and emitted all 457 reachable replies with
+zero premature BOS, but failed the registered retention comparison against the
+boundary control at **14** exact and **760** body positions. The seed-1 and
+seed-2 repeats matched byte-for-byte after timing removal.
+
+Full retrieval remained stronger at **42** exact and **879** body positions.
+The reference-length oracle reached **16** exact and **599** body positions.
+This closes the fixed stored-length substitution for the deepseek-198 content
+selector, not full-sequence content or geometric termination generally.
