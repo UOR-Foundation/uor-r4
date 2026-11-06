@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-readout-refit-2026-11-06`
 
 ## Status
 
-DRAFT pending exact-head FIT and pre-run GO. No fresh DEV panel has been
+**TEST FITNESS: FIT** and **D67 PRE-RUN: GO** at implementation
+`4bc9ca67c`, reviewed exact docs head `aecd5f323`. No fresh DEV panel has been
 generated or read.
 
 ## Question
@@ -526,8 +527,17 @@ test "$AVAILABLE" -ge 32346472448
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING exact-head non-author review.
+TEST FITNESS: FIT - read-free FBS output-table refit at `aecd5f323`.
+
+The reviewed source and binary hashes are recorded above. Live TRAIN-only
+preflights at the same head reproduced 5,114 observations, zero changed
+decisions, 146 eligible rows, 4,142 eligible observations and the registered
+deterministic hashes on both artifacts. The focused 10-test driver suite,
+425-test CPU library suite with four expected ignores, scoped Clippy and
+new-file Rustfmt checks pass. The fresh final output root is absent.
 
 ## Pre-run GO
 
-PENDING exact-head non-author review after FIT.
+D67 PRE-RUN: GO - execute the pinned commands above with
+`REVIEWED_HEAD=aecd5f323ba8a3ae36271e165d128eb75a70cbdd` or a later
+documentation-only head that contains this FIT record unchanged.
