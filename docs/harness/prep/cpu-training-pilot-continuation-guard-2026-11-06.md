@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-continuation-guard-2026-11-06`
 
 ## Status
 
-TEST FITNESS: PENDING.
+TEST FITNESS: FIT at implementation `e3f09dd41`; seed 2786 and output root
+remain absent.
 
 ## Question
 
@@ -80,3 +81,19 @@ evidence and deliver.
 
 Two artifacts, 200 reachable rows, 100 suppressed/accepted boundary decisions,
 boundary/shuffled/local/full/oracle controls and deterministic replay.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 continuation-guard sheet.
+reviewer: deepseek exact-head self-review (independent delegation unavailable)
+note: The guarded endpoint suppresses BOS only when a confident full-history
+  successor is deeper than local copy and otherwise accepts BOS. A focused
+  test covers guarded completion; full CPU library passes 408 tests with four
+  expected ignores, and driver tests pass.
+source: `79351f9d9e2708ad8849ab3c4c03b2fb722fd34af88eca62912b3b2579553a75`;
+driver: `c1bda7c14751626600e39f0460126e914e805a9c3b0da8732599b4df8c8c30b7`;
+release_binary: `381ffa820993d7b8b7d52a3ce2db7dbeeee835a119a30d5926fdb4fa223e0f6a`;
+
+## Pre-run GO
+
+GO at `e3f09dd41`; source, driver and binary hashes match. Seed 2786 may run.
