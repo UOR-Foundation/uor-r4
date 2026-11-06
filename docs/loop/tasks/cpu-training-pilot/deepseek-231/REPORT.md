@@ -61,10 +61,10 @@ changed.
 
 Final preflight timing:
 
-- processes: one, 16 requested Rayon workers, 251% observed CPU;
+- processes: one, 16 requested Rayon workers, 249% observed CPU;
 - wall: **0.35 s**;
-- user/system: **0.85 / 0.03 s**;
-- peak RSS: **112,388 KiB**;
+- user/system: **0.83 / 0.04 s**;
+- peak RSS: **112,152 KiB**;
 - retained evidence: under 8 KiB.
 
 Inputs:
