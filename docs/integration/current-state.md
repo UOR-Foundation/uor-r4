@@ -1,3 +1,34 @@
+## 2026-11-06 — Prompt-set retrieval reaches loopback serving (deepseek)
+
+The deepseek-204 prompt-set completion result is now a strict
+`uor-r4.stack-prompt-reply-readout/1` sidecar. It binds the artifact,
+tokenizer, dialogue protocol and ignored control ids, then returns one complete
+training reply through `uor-chat --serve --prompt-reply`.
+
+On both artifacts, all **471/471** panel selections matched the CPU arm by
+source ordinal and reply SHA. The served result retained **39** exact replies,
+**131** correct openings, **948** body positions and zero premature BOS.
+Selection throughput was about **9.8k-10.1k prompts/s**. Oversized responses
+fall back to ordinary greedy model generation. The result remains exact-memory
+serving, not fresh response generation. Record:
+[deepseek-207](../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
+
+## 2026-11-05 — Prompt-set retrieval clears the CPU completion bar (deepseek)
+
+The completion object changed from a generated token trajectory to one complete
+TRAIN reply selected by exact unigram-set Jaccard overlap between prompts.
+On fresh seed 2777 and both public artifacts, treatment produced **39/471**
+exact replies and **948** correct body positions with **zero premature BOS**.
+Every one of the 471 reference-reachable rows received a complete reply. No
+panel prompt exactly matched a TRAIN prompt.
+
+Treatment beat bigram Jaccard (**29/27** exact), shuffled replies (**1/6**),
+Q12 query-geometry nearest (**12/12**) and fixed ordinal (**0/0**) on exact
+replies. The complete-reply membership oracle was **191**, so this remains
+exact-memory retrieval rather than general fresh-phrasing understanding. Q12
+writer geometry did not improve token-set retrieval. Record:
+[deepseek-204](../loop/tasks/cpu-training-pilot/deepseek-204/REPORT.md).
+
 ## 2026-11-05 — Full-sequence suffix arbitration improves content but stopping regresses (deepseek)
 
 Reply-target suffix memory was trained over full prompt-plus-reply histories,
@@ -34,6 +65,22 @@ content result remains, while this full-history suffix table is closed as a
 stopping repair. The next endpoint design must change the continuation
 objective or bind termination to the selected content source. Record:
 [deepseek-200](../loop/tasks/cpu-training-pilot/deepseek-200/REPORT.md).
+
+## 2026-11-05 — Whole continuation preserves content but still over-stops (deepseek)
+
+Predicting the complete remaining reply from the selected full-history suffix
+reduced premature stopping from **74/98** to **71/64**, but both source
+closure and tokenwise content produced **17/17** exact replies. Body positions
+stayed at **682/678**, while the four-stop ceiling still failed. Closure made
+**187** whole-reply decisions and changed **8/39** complete replies relative
+to tokenwise content. A shuffled closure produced **0/0** exact replies.
+
+This is a **REJECT** for the fixed strict-majority continuation mode. The
+completion mechanism is active and preserves the positive body result, but it
+does not add an exact-reply gain or solve termination. The next endpoint
+experiment needs a new state signal rather than another representation of the
+same suffix history. Record:
+[deepseek-202](../loop/tasks/cpu-training-pilot/deepseek-202/REPORT.md).
 
 ## 2026-11-05 — Strict local priority makes content-suffix fallback unreachable (deepseek)
 

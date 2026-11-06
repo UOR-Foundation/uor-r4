@@ -150,6 +150,46 @@ next endpoint must change the continuation objective or bind stopping to the
 selected content source. See
 [deepseek-200](../loop/tasks/cpu-training-pilot/deepseek-200/REPORT.md).
 
+The next unit made content and termination one completion-level decision:
+a full-history suffix could emit a strict-majority complete remaining reply
+when its depth and first token matched the selected global content source.
+On fresh seed 2776, treatment and tokenwise content both produced **17/17**
+exact replies. Treatment reduced premature stops from **74/98** to **71/64**
+and retained **682/678** body positions, but still failed the four-stop
+ceiling. It emitted **187** whole closures and changed **8/39** complete
+replies relative to tokenwise content; the shuffled closure produced **0/0**
+exact. The result is **REJECT**. This closes the fixed strict-majority
+whole-continuation mode; another endpoint needs new state or supervision, not
+another arrangement of the same suffix history. See
+[deepseek-202](../loop/tasks/cpu-training-pilot/deepseek-202/REPORT.md).
+
+The next unit changed the completion object instead of the stop table. It
+retained a complete TRAIN response when its prompt had the greatest exact
+unigram-set Jaccard overlap, then emitted that response with BOS. On fresh
+seed 2777 and both artifacts, retrieval produced **39/471** exact replies,
+**948** correct body positions and **0** premature stops, with all 471
+reference-reachable rows receiving a complete response. None of the 471 panel
+prompts exactly matched a TRAIN prompt. Bigram Jaccard reached **29/27** exact
+replies, shuffled replies **1/6**, Q12 query geometry **12/12**, fixed ordinal
+**0/0**, and the complete-reply membership oracle **191**. This is a **KEEP**
+for exact prompt-set retrieval, not general response generation; the next step
+is to turn the token-set index into an artifact-bound discrete sidecar and test
+whether geometric or VSA signatures can preserve the gain. See
+[deepseek-204](../loop/tasks/cpu-training-pilot/deepseek-204/REPORT.md).
+
+The positive result is now available at the local serving boundary as a strict
+discrete sidecar. `uor-r4.stack-prompt-reply-readout/1` binds the exact
+artifact, tokenizer, dialogue protocol and control ids. On both public
+artifacts it matched all **471/471** CPU selections by source ordinal and reply
+SHA, preserving **39** exact replies, **131** openings and **948** body
+positions with no `UORLUT01` change. The loopback path emits the full stored
+reply with EOS and falls back to ordinary greedy generation when the response
+does not fit. Selection throughput was approximately **9.8k-10.1k prompts/s**.
+This is serving-contract evidence, not generation beyond the learned TRAIN
+reply set. The next representation should test whether an artifact-bound VSA or
+vector signature can preserve the same row-level result. See
+[deepseek-207](../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.
