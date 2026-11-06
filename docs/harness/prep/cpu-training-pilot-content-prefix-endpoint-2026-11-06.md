@@ -4,8 +4,8 @@ Run ID: `cpu-training-pilot-content-prefix-endpoint-2026-11-06`
 
 ## Status
 
-TEST FITNESS: PENDING. Implementation and the fresh seed-2784 panel have not
-started.
+TEST FITNESS: FIT. Pre-run GO recorded below at implementation `32a2aa26b`.
+The fresh seed-2784 panel and output root remain absent.
 
 ## Question
 
@@ -133,3 +133,40 @@ artifacts.
 - boundary, unconditional-length, shuffled guard, local, writer, full and
   oracle controls;
 - paired exact/body comparisons and deterministic replay.
+
+## TEST FITNESS
+
+TEST FITNESS: FIT - M2 #2030 aligned retrieved endpoint sheet:
+docs/harness/prep/cpu-training-pilot-content-prefix-endpoint-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 32a2aa26b keeps the deepseek-198 content and boundary
+  arbitration unchanged until the generated reply diverges from the retrieved
+  TRAIN reply. The endpoint evaluator receives only the retrieved reply; the
+  evaluation reference is used for scoring and the separately labelled oracle.
+  Two focused tests prove exact retrieved-endpoint completion, empty endpoint
+  refusal and non-stopping after divergence. The full CPU library passes 406
+  tests with four expected ignores; the driver test passes; scoped Clippy and
+  formatting pass. The fresh panel and output root remain absent.
+source:
+  `90fb52752b3a09315a43da775e0521a7d78524f8830a4613e4cad69ebed2c54b`;
+retrieval:
+  `68f19750e8c14370a41a07b4897eec238e1d48313683250667e02052a58970c4`;
+driver:
+  `b46d15da02c37d4e194de3957f441647c948cb718474cbe2bff9d79453f55970`;
+release_binary:
+  `8782a29bd975e6ea36b26c2d84ca0f869692100d770047a7e15acd205cf1a6be`;
+date: 2026-11-06
+
+## Pre-run GO
+
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `32a2aa26b`, source
+`90fb52752b3a09315a43da775e0521a7d78524f8830a4613e4cad69ebed2c54b`,
+retrieval
+`68f19750e8c14370a41a07b4897eec238e1d48313683250667e02052a58970c4`,
+driver
+`b46d15da02c37d4e194de3957f441647c948cb718474cbe2bff9d79453f55970`
+and release binary
+`8782a29bd975e6ea36b26c2d84ca0f869692100d770047a7e15acd205cf1a6be`
+match. This was not an independent review. Seed 2784 may now be generated under
+the fixed construction and stop rule.
