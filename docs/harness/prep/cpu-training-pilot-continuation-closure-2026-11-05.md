@@ -70,8 +70,9 @@ and the per-depth complete-continuation token multiset.
 - both public dual-c131 raw artifact seeds;
 - 64-token cap and at least 200 reachable replies per artifact;
 - at least 100 closure rows whose complete reply differs from tokenwise
-  content;
-- at least one changed complete reply versus tokenwise, shuffled and local;
+  content or local reply output;
+- at least one changed complete reply versus tokenwise, closure-only,
+  no-boundary, shuffled and local;
 - fresh-process repeats for both artifacts.
 
 ## Instrument gate
@@ -83,9 +84,9 @@ and the per-depth complete-continuation token multiset.
 - shuffle preserves key counts, observation counts and continuation-token
   totals at every depth;
 - treatment makes at least 100 behaviorally displaced closure rows versus
-  tokenwise content;
-- treatment changes at least one complete reply versus tokenwise, shuffled and
-  local;
+  tokenwise content or local output;
+- treatment changes at least one complete reply versus tokenwise,
+  closure-only, no-boundary, shuffled and local;
 - every arm has at least 200 reachable replies;
 - both artifact seeds and fresh-process repeats match after timing removal.
 
@@ -97,12 +98,14 @@ For both artifacts, `source_closure` must:
 
 - keep premature BOS at or below four;
 - produce at least `max(5, ceil(content_oracle_exact / 2))` exact replies;
-- beat `tokenwise_content` and `source_closure_shuffled` on exact replies by
-  the paired two-sigma rule;
+- beat `tokenwise_content`, `closure_only` and
+  `source_closure_shuffled` on exact replies by the paired two-sigma rule;
 - keep correct body positions at or above `content_no_boundary` and
-  `local_reply_boundary`;
-- make at least 100 behaviorally displaced closure rows;
-- change at least one complete reply versus tokenwise, shuffled and local;
+  `local_reply_boundary`, and at or above `closure_only`;
+- make at least 100 behaviorally displaced closure rows versus tokenwise or
+  local output;
+- change at least one complete reply versus tokenwise, closure-only,
+  no-boundary, shuffled and local;
 - repeat exactly after timing fields are removed.
 
 If the oracle has fewer than ten exact bodies, exact comparison is
@@ -119,11 +122,11 @@ external model. Serving remains integer-only and unchanged.
 
 - base: `d56427955`;
 - implementation:
-  `9eaf0dfc791f22eb866f94d61dee9ba20afa6aeb`;
+  `f0890eefc23d2752b45a4b75dfb81acdc98ac0e3`;
 - `continuation_closure.rs` SHA-256:
-  `c7756760bad41f9c9be2b04a00e48ac1b9995e95f15436605b886d0fa07eb94e`;
+  `865a35f4c4f0390f15c0aeafe5c5cc7149602f90e9e6be20dbf3fb23beba8a53`;
 - `cpu-copy-continuation-closure.rs` SHA-256:
-  `299940343d369e9d61c547512a5002870ff2eeb352063cda3a1874788be5accb`;
+  `fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c`;
 - `suffix_memory.rs` SHA-256:
   `7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37`;
 - `reply_boundary.rs` SHA-256:
@@ -182,7 +185,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/continuation-closure
 GEN_TARGET=$SOURCE/target/deepseek/continuation-closure-generator
-IMPL=9eaf0dfc791f22eb866f94d61dee9ba20afa6aeb
+IMPL=f0890eefc23d2752b45a4b75dfb81acdc98ac0e3
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 RUN_DEADLINE=$((SECONDS + 1800))
 
@@ -198,8 +201,8 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  c7756760bad41f9c9be2b04a00e48ac1b9995e95f15436605b886d0fa07eb94e "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
-  299940343d369e9d61c547512a5002870ff2eeb352063cda3a1874788be5accb "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-continuation-closure.rs" \
+  865a35f4c4f0390f15c0aeafe5c5cc7149602f90e9e6be20dbf3fb23beba8a53 "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
+  fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-continuation-closure.rs" \
   7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   2138e1b05d833beb9f8b2ff3bb93024df1cb7cf1aa5663aad665a0384a8f119b "$SOURCE/crates/uor-r4-cpu-train/src/reply_boundary.rs" \
   b754a4435a68d6d8f315815c05d88f3b4552edd8a1b659b0ab91dc53f4bf12ef "$SOURCE/crates/uor-r4-cpu-train/src/copy_key_reply.rs" |
@@ -273,9 +276,11 @@ jq -e '
     == .tables.shuffled_closure.continuation_tokens_by_depth
   and .tables.changed_continuations > 0
   and .changes.vs_tokenwise > 0
+  and .changes.vs_closure_only > 0
+  and .changes.vs_no_boundary > 0
   and .changes.vs_shuffled > 0
   and .changes.vs_local > 0
-  and .changes.closure_rows_vs_tokenwise >= 100
+  and .changes.closure_rows_vs_tokenwise_or_local >= 100
   and .arms.source_closure.reading.closure_decisions > 0
   and .bar.control_non_vacuous
 ' "$OUT/reports/train-preflight.json" >/dev/null
@@ -328,9 +333,11 @@ for report in "$OUT/reports/seed1.json" "$OUT/reports/seed2.json"; do
       == .tables.shuffled_closure.continuation_tokens_by_depth
     and .tables.changed_continuations > 0
     and .changes.vs_tokenwise > 0
+    and .changes.vs_closure_only > 0
+    and .changes.vs_no_boundary > 0
     and .changes.vs_shuffled > 0
     and .changes.vs_local > 0
-    and .changes.closure_rows_vs_tokenwise >= 100
+    and .changes.closure_rows_vs_tokenwise_or_local >= 100
     and .bar.control_non_vacuous
     and (.arms | length) == 8
     and all(.arms[]; .reading.reference_reachable >= 200)
