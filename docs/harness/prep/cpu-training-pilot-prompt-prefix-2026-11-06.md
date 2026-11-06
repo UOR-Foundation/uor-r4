@@ -4,7 +4,11 @@ Run ID: `cpu-training-pilot-prompt-prefix-2026-11-06`
 
 ## Status
 
-TEST FITNESS passed. The seed-2781 panel may be generated after GO.
+COMPLETE - **REJECT**. The selected four-token retrieved prefix improved body
+positions over model-only (**513/499 vs 46/61**) and shuffled prefixes
+(**112/116**), but no prefix arm produced an exact reply or a BOS completion;
+all 450 rows consumed the 64-token cap. Record:
+[deepseek-217](../../loop/tasks/cpu-training-pilot/deepseek-217/REPORT.md).
 
 ## Question
 
