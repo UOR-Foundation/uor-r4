@@ -4,8 +4,8 @@ Run ID: `cpu-training-pilot-content-prefix-endpoint-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT. Pre-run GO recorded below at repaired implementation
-`7afcac83c`.
+Complete as **REJECT**. TEST FITNESS: FIT and pre-run GO were recorded at
+repaired implementation `7afcac83c` before seed 2784 opened.
 The fresh seed-2784 panel and output root remain absent.
 
 ## Question
@@ -174,3 +174,18 @@ and release binary
 `4671b279340132fc1d9fa078de533d7f2ecf118d229deafe0118f02f78b4191e`
 match. This was not an independent review. Seed 2784 may now be generated under
 the fixed construction and stop rule.
+
+## Outcome
+
+**REJECT.** On both artifacts the aligned true-retrieval endpoint made 17 exact
+replies and 644/642 correct body positions, identical to the original
+boundary arm. It converted 23 boundary stops into retrieved endpoints and
+reduced premature BOS from 73/91 to 67/85, but only 206/229 of 471 reachable
+replies reached BOS or the retrieved endpoint. It did not beat the shuffled
+guard on exact replies.
+
+The unconditional stored length still made only 497/495 body positions, while
+full retrieval made 50 exact and 955 body positions. Both fresh-process repeats
+matched byte-for-byte. This closes the fixed full-prefix alignment strategy;
+the next termination mechanism must use generated-state branch evidence rather
+than a prompt-level retrieved reply.
