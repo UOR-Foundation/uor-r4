@@ -1,7 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-201 (release full-sequence boundary claim)
 
-Lab: deepseek. Item:
-[cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Base: `9f40967f1`.
 
 ## Goal
