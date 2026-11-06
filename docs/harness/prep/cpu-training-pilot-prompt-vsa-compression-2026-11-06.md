@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-prompt-vsa-compression-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS passed. Fresh seed-2778 evaluation may proceed after GO.
 
 This is D84 CPU serving research. It tests a deterministic lossy compressed
 representation of the exact deepseek-209 prompt selector. It is not a new
@@ -134,6 +134,15 @@ tests are capped at five minutes.
 ## Base and inputs
 
 - base: `4d1e705aa`;
+- implementation: `16f35277a`;
+- prompt-reply source:
+  `bb472b9bc27ce22b607be7073e5ba31c33d4dab489a2a44eeb3374e9b302b7a3`;
+- stack export source:
+  `d40d3683ce4ab681aaefe3ee990203071bb541da33c37faf6eb7ba3bdb59c28c`;
+- serving-check source:
+  `b454260ad0789902d9c76698c30a3b92be20cc4b2bd7d7126a8ba450353be6c2`;
+- serving-check binary:
+  `95b75f18a4d13201b8d8db9df6708b40400e2de8d49f12892850c2d18579ab1d`;
 - TRAIN tokens:
   `140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91`;
 - TRAIN mask:
@@ -182,7 +191,7 @@ SIDECAR1=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/report
 SIDECAR2=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed2.sidecar.json
 BUILD=$SOURCE/target/deepseek/prompt-vsa-compression
 GEN_TARGET=$SOURCE/target/deepseek/prompt-vsa-compression-generator
-IMPL=<reviewed-source-head>
+IMPL=16f35277a
 
 test ! -e "$OUT"
 test ! -e "$PANEL"
@@ -319,9 +328,20 @@ test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - implementation pins, focused tests and exact-head
-source review are not yet complete.
+TEST FITNESS: FIT - M2 #2030 compressed prompt VSA
+sheet: docs/harness/prep/cpu-training-pilot-prompt-vsa-compression-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 16f35277a is clean. The opt-in compressed constructor leaves
+  the exact 4,096-bit defaults and sidecar schema unchanged. Eight prompt-reply
+  tests, two calibration tests, 477 serving tests (one expected ignore), 17
+  OpenAI loopback tests and 394 CPU tests (four expected ignores) pass. Inputs
+  and source pins match; the fresh panel and output roots remain absent.
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `16f35277a`, source pins and release binary
+`95b75f18a4d13201b8d8db9df6708b40400e2de8d49f12892850c2d18579ab1d`
+match. This was not an independent review. Seed 2778 may now be generated under
+the fixed steps and stop rule above.
