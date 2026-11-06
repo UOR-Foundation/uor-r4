@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-prefix-length-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS: FIT. Pre-run GO recorded below. Implementation `f5cb4f7a9`;
+seed 2782 and its output root remain absent.
 
 ## Question
 
@@ -96,8 +97,30 @@ source pins; fill implementation pins before GO.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - implementation pending.
+TEST FITNESS: FIT - M2 #2030 retrieved-prefix length termination
+sheet: docs/harness/prep/cpu-training-pilot-prefix-length-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation f5cb4f7a9 keeps the existing 64-token experiment as the
+  default and adds an explicit length-completion mode with all six registered
+  arms. Retrieved length is derived only from the prompt-selected TRAIN reply
+  and capped at 64; the evaluation reference is used only for scoring and the
+  separate diagnostic oracle. Focused tests cover length-vs-BOS classification,
+  exact identity without BOS, unchanged ordinary BOS behavior, bounded stored
+  lengths and premature-BOS accounting. Four focused tests and 399 CPU library
+  tests pass; four release benchmarks remain expected ignores. Scoped Clippy
+  passes with the repository's pre-existing library type-complexity lint
+  exempted. Source, artifact, tokenizer, TRAIN and sidecar pins match; seed 2782
+  and the prefix-length output root are absent.
+source: 98a6c26a757c0b00dce2414119d49af95d36d0a55c82ad207c1e6c770c269312
+release_binary: 91ed9c0182cf4350873e6e8fd17f3b6de0553955513c2184149664e8692c67a1
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `f5cb4f7a9`, source
+`98a6c26a757c0b00dce2414119d49af95d36d0a55c82ad207c1e6c770c269312`
+and release binary
+`91ed9c0182cf4350873e6e8fd17f3b6de0553955513c2184149664e8692c67a1`
+match. This was not an independent review. Seed 2782 may now be generated under
+the fixed construction and stop rule.
