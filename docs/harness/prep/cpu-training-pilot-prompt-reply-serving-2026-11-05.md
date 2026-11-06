@@ -178,8 +178,21 @@ check() {
 
 build_sidecar "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd seed1
 build_sidecar "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 seed2
+build_sidecar "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd seed1-repeat
+build_sidecar "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1 seed2-repeat
 check seed1 "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
 check seed2 "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+check seed1-repeat "$SEED1" a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd
+check seed2-repeat "$SEED2" da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1
+cmp "$OUT/reports/seed1.sidecar.json" "$OUT/reports/seed1-repeat.sidecar.json"
+cmp "$OUT/reports/seed2.sidecar.json" "$OUT/reports/seed2-repeat.sidecar.json"
+normalize() {
+  jq -S 'walk(if type == "object"
+    then del(.selection_elapsed_us, .prompts_per_second)
+    else . end)' "$1"
+}
+cmp <(normalize "$OUT/reports/seed1.json") <(normalize "$OUT/reports/seed1-repeat.json")
+cmp <(normalize "$OUT/reports/seed2.json") <(normalize "$OUT/reports/seed2-repeat.json")
 jq -e '
   .reading.exact_reference == 39 and .reading.opening_correct == 131
   and .reading.correct_body_positions == 948 and .reading.premature_bos == 0
