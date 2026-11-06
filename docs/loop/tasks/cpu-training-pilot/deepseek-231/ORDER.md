@@ -16,6 +16,13 @@ The ranker fits only on TRAIN examples whose exact reply is a candidate. The
 evaluation reference is never a selector input. No retrieved reply is injected
 into generation.
 
+Fit supervision uses four document-grouped TRAIN folds. For each held-out
+fold, suffix and boundary memory come from the other three folds, and the
+ranker observes branch features along that fold's reference prefix. This keeps
+the endpoint labels inside TRAIN while exposing them to unseen documents.
+The fresh panel is generated only if the preflight reaches the registered
+power floor.
+
 ## Fixed construction
 
 Keep deepseek-198's local `Longest32To1`, full prompt-plus-reply suffix memory,
