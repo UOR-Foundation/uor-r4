@@ -63,7 +63,10 @@ fn env_without_git() -> Vec<(String, String)> {
         .collect()
 }
 
-fn run_bounded(cmd: &mut Command, timeout: std::time::Duration) -> io::Result<std::process::Output> {
+fn run_bounded(
+    cmd: &mut Command,
+    timeout: std::time::Duration,
+) -> io::Result<std::process::Output> {
     let serial = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -206,9 +209,7 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
 
     match compile {
         Err(e) if e.kind() == io::ErrorKind::TimedOut => {
-            return Ok(VerifyOutcome::Timeout {
-                phase: "compile",
-            });
+            return Ok(VerifyOutcome::Timeout { phase: "compile" });
         }
         Err(e) => return Err(e),
         Ok(output) if !output.status.success() => {
@@ -339,10 +340,7 @@ fn verify_vectors() {
             .iter()
             .filter(|r| !matches!(r.outcome, VerifyOutcome::Pass { .. }))
             .collect();
-        assert!(
-            failures.is_empty(),
-            "frozen rows failed: {failures:#?}"
-        );
+        assert!(failures.is_empty(), "frozen rows failed: {failures:#?}");
         for r in &results {
             if let VerifyOutcome::Pass { passed } = &r.outcome {
                 assert!(*passed > 0, "row {} reported 0 passed", r.row_id);
@@ -353,11 +351,15 @@ fn verify_vectors() {
     #[test]
     fn parse_test_result_line() {
         assert_eq!(
-            parse_test_result("test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"),
+            parse_test_result(
+                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
+            ),
             Some((1, 0))
         );
         assert_eq!(
-            parse_test_result("test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"),
+            parse_test_result(
+                "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"
+            ),
             Some((0, 1))
         );
         assert_eq!(parse_test_result("no match here"), None);
