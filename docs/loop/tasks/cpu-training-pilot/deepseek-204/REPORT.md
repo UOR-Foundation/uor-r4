@@ -19,6 +19,18 @@ understanding, useful chat or GPU qualification. The treatment is
 artifact-independent, while the Q12 writer-query arm remains a matched
 geometric control.
 
+## What did not work
+
+- Bigram Jaccard, shuffled complete replies, fixed ordinal and Q12
+  writer-query geometry were all weaker than unigram-set retrieval.
+- The Q12 geometry tie reduced exact replies to **34/31** and body positions to
+  **913/836**, so writer geometry did not improve the token-set ranking.
+- The design was first motivated by sealed trace analysis; no single trace-only
+  endpoint feature was robust enough to justify another stop-table experiment.
+- Independent review was unavailable under the current delegation policy. The
+  FIT and GO records are explicitly a local exact-head self-review, not an
+  independent review.
+
 ## What changed
 
 Added `prompt_retrieval.rs`, which:
@@ -139,6 +151,11 @@ geometry-tie arm are controls, not causes of the pass.
   or VSA index if it can preserve the gain;
 - generalization beyond replies already present in TRAIN;
 - Claude's independent scale probe, export and serving track.
+
+## Skills used
+
+No system-provided Codex skill applied. Repository D22/D67, D84 CPU research,
+exact-evidence and protected-delivery procedures were used.
 
 ## Plain summary
 

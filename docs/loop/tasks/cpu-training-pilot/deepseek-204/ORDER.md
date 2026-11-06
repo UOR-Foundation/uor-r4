@@ -11,34 +11,18 @@ prompt's token set and each TRAIN prompt's token set, then emit that reply with
 BOS. This removes tokenwise termination from the completion arm and adds prompt
 context that full-history suffix lookup did not expose.
 
-Primary similarity is exact unigram-set Jaccard:
-
-```text
-intersection(prompt_tokens, train_prompt_tokens)
------------------------------------------------
-union(prompt_tokens, train_prompt_tokens)
-```
-
-Cross-multiplication orders the rational scores without floating point. Equal
-scores choose the lowest TRAIN ordinal. No matrix multiplication, softmax,
-dense transformer path or float serving is used.
+Primary similarity is exact unigram-set Jaccard, ordered by integer
+cross-multiplication. Equal scores choose the lowest TRAIN ordinal. Neither
+matrix multiplication, probabilistic normalization nor float serving is used.
 
 This is D84 CPU development research. It is exact-memory retrieval, not general
 reasoning, useful chat or GPU qualification.
 
-## Why this is new
-
-- deepseek-198/200/202 all retained tokenwise generation and changed only the
-  stop source, stop key or closure mode.
-- The sealed deepseek-198/202 trace analysis found no robust endpoint-only
-  separator. Whole closures still emitted mostly the same premature training
-  reply.
-- A complete-response retrieval arm makes content and natural stopping one
-  bounded object.
-- An already-opened seed-2776 exploratory run produced 52/449 exact replies on
-  both artifacts and zero premature stops for the ordinal-tie arm, versus 17
-  exact and 71/64 premature for deepseek-202 closure. Seed 2776 is closed and
-  cannot decide this experiment.
+The earlier continuation units retained tokenwise generation and changed only
+the stop source, key or closure mode. Existing trace signals did not robustly
+separate endpoints. This unit instead retrieves one complete response. Closed
+seed 2776 was exploratory only: its ordinal-tie arm reached 52/449 exact with
+zero premature stops, versus 17 exact and 71/64 premature for deepseek-202.
 
 ## Arms
 
@@ -51,9 +35,7 @@ reasoning, useful chat or GPU qualification.
 6. `reference_membership_oracle`: diagnostic upper bound that returns the
    reference only when that complete reply occurred anywhere in TRAIN.
 
-The Q12 writer-query L1 tie arm remains a control. The exploratory seed-2776
-result showed that geometry did not improve the token-set rank, so the
-primary treatment keeps the artifact-independent ordinal tie.
+The Q12 tie arm remains a control; seed 2776 showed no gain from geometry.
 
 ## Data and power
 
@@ -85,33 +67,19 @@ The shuffled control must be behaviorally non-vacuous. A changed complete
 reply on fewer than 100 rows is `CONTROL_FAULT`. Fewer than 200 reachable rows
 is `POWER_LIMITED`.
 
-## Compute class
-
-Local CPU development on the Ryzen 9 9950X. No GPU, pod, paid API, upload or
-external model. Serving remains integer-only and unchanged.
-
 ## Cost
 
-- implementation and focused tests: 15 minutes;
-- release and generator builds: 2 minutes;
-- TRAIN preflight and fresh panel: 2 minutes;
-- four artifact runs and two repeats: 2 minutes;
-- evidence and delivery: 15 minutes;
-- total bounded increment: 36 minutes;
-- whole run deadline: 30 minutes;
-- evaluators: 32 Rayon workers and 2 GiB peak RSS;
-- retained evidence: at most 32 MiB; fresh targets: 8 GiB.
+Local CPU only on the Ryzen 9 9950X; no GPU, pod, paid API or upload. The
+30-minute run cap uses 32 Rayon workers, 2 GiB peak RSS and 32 MiB retained
+evidence. Builds, panel, runs, evidence and delivery have a 36-minute bound.
 
 ## Done when
 
 1. The exact token-set memory, controls, CLI and focused tests are implemented.
-2. A FIT-reviewed pre-registration and fresh D67 GO are recorded.
-3. The fresh seed-2777 panel and both artifact seeds run with every control and
-   repeat.
-4. REPORT, compact evidence, notebook, item/current state and research program
-   record the result.
-5. Reviewed merge, protected queue merge, fresh-main verification and claim
-   release complete.
+2. FIT and GO precede fresh seed 2777 and both artifact runs with controls and
+   repeats.
+3. REPORT, evidence and program records are complete, followed by protected
+   merge, fresh-main verification and claim release.
 
 ## Stop rule
 
