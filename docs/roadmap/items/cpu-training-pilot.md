@@ -777,6 +777,27 @@ Retrieved-prefix body positions were **452/427** against model-only
 **33/459** exact and native termination remains open. See
 [deepseek-219](../../loop/tasks/cpu-training-pilot/deepseek-219/REPORT.md).
 
+The next training-through-serving test replaced raw target distance with an
+eight-rival Q12 hinge over the exact final served query. The cyclic
+shuffled-target control changed **2,529/2,538** labels but selected the same
+eight gain moves and produced the same artifact as the true-target arm.
+Held-out top-1 stayed **291** for frozen, true, random and shuffled arms. This
+is a **CONTROL_FAULT**, not a mechanism negative: the shuffle could not
+distinguish label-dependent learning. Seed 2 and the repeat stopped under the
+registered rule. See
+[deepseek-221](../../loop/tasks/cpu-training-pilot/deepseek-221/REPORT.md).
+
+The stored-length termination follow-up combined deepseek-198's full-sequence
+content selector with the nearest TRAIN reply's length. On fresh seed 2783 and
+both artifacts it emitted all **457** reachable replies with zero premature BOS
+and made **6** exact and **560** body positions, beating local and shuffled
+length controls at **0/425**. The boundary arm retained **14/760**, so the
+registered body-retention bar failed. Full retrieval made **42/879** and a
+reference-length oracle **16/599**. This is a **REJECT** for the fixed
+stored-length substitution: a retrieved budget stops the model but does not
+preserve the full-sequence content trajectory. See
+[deepseek-223](../../loop/tasks/cpu-training-pilot/deepseek-223/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

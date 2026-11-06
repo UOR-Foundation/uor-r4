@@ -45,6 +45,10 @@ name = "cpu-copy-suffix-arbitration"
 path = "src/bin/cpu-copy-suffix-arbitration.rs"
 
 [[bin]]
+name = "cpu-content-length-driver"
+path = "src/bin/cpu-content-length-driver.rs"
+
+[[bin]]
 name = "cpu-copy-full-boundary"
 path = "src/bin/cpu-copy-full-boundary.rs"
 
@@ -107,6 +111,10 @@ path = "src/bin/cpu-memory-panel-driver.rs"
 [[bin]]
 name = "cpu-gain-panel-driver"
 path = "src/bin/cpu-gain-panel-driver.rs"
+
+[[bin]]
+name = "cpu-nearest-rival-gain-driver"
+path = "src/bin/cpu-nearest-rival-gain-driver.rs"
 
 [[bin]]
 name = "cpu-copy-key-reply"

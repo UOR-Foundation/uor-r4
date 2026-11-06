@@ -253,6 +253,27 @@ Retrieved-prefix body positions were **452/427** against model-only
 at **33/459** exact and the small absolute gain does not change serving. See
 [deepseek-219](../loop/tasks/cpu-training-pilot/deepseek-219/REPORT.md).
 
+The next training-through-serving attempt replaced target distance with Claude's
+successful nearest-rival idea: an eight-rival Q12 hinge over the exact final
+served query. The cyclic shuffled-target control changed **2,529/2,538**
+labels, but selected the same eight final-gain moves and produced a
+byte-identical artifact to the true-target arm. Held-out top-1 stayed **291**
+for frozen, true, random and shuffled arms. This is a **CONTROL_FAULT**, not a
+mechanism negative; seed 2 and the repeat stopped. See
+[deepseek-221](../loop/tasks/cpu-training-pilot/deepseek-221/REPORT.md).
+
+The termination follow-up combined the positive deepseek-198 full-sequence
+content selector with deepseek-219's reference-independent retrieved length.
+On fresh seed 2783 and both artifacts, stored length emitted all **457**
+reachable replies with zero premature BOS and made **6** exact and **560** body
+positions. It beat local and shuffled length controls at **0/425**, but the
+original boundary arm made **14/760**, so the registered body-retention bar
+failed. Full retrieval made **42/879** and a reference-length oracle **16/599**;
+a correct length alone did not preserve content quality. This is a **REJECT**
+for the fixed stored-length substitution, not full-sequence content or
+geometric termination. See
+[deepseek-223](../loop/tasks/cpu-training-pilot/deepseek-223/REPORT.md).
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.

@@ -1,3 +1,37 @@
+## 2026-11-06 — Stored-length completion removes bad stops but loses content quality (deepseek)
+
+The full-sequence suffix content selector from deepseek-198 was paired with the
+nearest TRAIN reply's stored length instead of its boundary stop. On fresh seed
+2783 and both public artifacts it emitted all **457** reachable replies with
+zero premature BOS and **0** BOS stops, making **6** exact replies and **560**
+body positions. It beat local and shuffled length controls at **0** exact and
+**425** body positions.
+
+The registered retention bar failed: the original boundary control made
+**14** exact replies and **760** body positions. Full retrieval remained
+stronger at **42/879**, while a reference-length oracle made **16/599**. A
+correct length alone does not preserve the content trajectory.
+
+This is a **REJECT** for the fixed stored-length substitution, not for
+full-sequence content or geometric termination. The next mechanism must expose
+continuation-state evidence rather than treat a retrieved length as sufficient
+termination. Record:
+[deepseek-223](../loop/tasks/cpu-training-pilot/deepseek-223/REPORT.md).
+
+## 2026-11-06 — Nearest-rival gain control is behaviorally vacuous (deepseek)
+
+An eight-rival Q12 hinge trainer evaluated every final-gain move through the
+exact CPU served query. A cyclic shuffle changed **2,529/2,538** target labels,
+but the shuffled-target trainer selected the same eight gain moves and produced
+a byte-identical artifact (`d658d37c…`) to the true-target arm. Held-out top-1
+stayed **291/2,431** in frozen, true, random and shuffled arms.
+
+This is a **CONTROL_FAULT**, not a mechanism result. The registered stop rule
+halted before seed 2 and the repeat. The target shuffle must become
+behaviorally distinct before this nearest-rival objective can be interpreted.
+Record:
+[deepseek-221](../loop/tasks/cpu-training-pilot/deepseek-221/REPORT.md).
+
 ## 2026-11-06 — Retrieved-prefix length completion passes controls (deepseek)
 
 The four-token retrieved prefix from deepseek-217 was paired with the nearest
