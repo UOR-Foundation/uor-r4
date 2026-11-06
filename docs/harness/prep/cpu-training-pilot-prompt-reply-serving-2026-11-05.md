@@ -16,7 +16,9 @@ the parser did not bind the sidecar's ignored protocol ids to the loaded
 dialogue protocol. Attempt 2 adds that validation without changing selection,
 data or bar and is preserved at `2026-11-05-attempt-2`. The exact API build
 then found a CLI-only protocol scope fault. Attempt 3 fixes that binding and
-decides at a fresh output root.
+is preserved at `2026-11-05-attempt-3`. Final review then required the public
+serving attachment to bind the loaded tokenizer bytes and protocol directly.
+Attempt 4 adds that validation and decides at a fresh output root.
 
 ## Question
 
@@ -99,11 +101,11 @@ sidecar checks have a 30-minute bound.
 ## Base, source and inputs
 
 - base: `c0e6b6757`;
-- implementation: `689ce8a3f`;
+- implementation: `ab6afb920`;
 - prompt-reply module:
   `344b599f2ae521656741666d907c63eb432331e11837f6d591a6341de3aedf22`;
 - OpenAI integration:
-  `376183d14cf25b3bfc0362c46e4d2544235ab09f2e5f29ce8a91b7b77df31155`;
+  `93e5a80e058299f3d1ccc65e687320e6dc82c11281d2e6991ce6aeb2b901cde0`;
 - CLI:
   `fb60135b74a27181404983b726d7d3ab69d696fbbbbea1fa0d91aeaaeff328ae`;
 - builder:
@@ -127,7 +129,7 @@ sidecar checks have a 30-minute bound.
 
 ## Output
 
-`local/deepseek/prompt-reply-serving/2026-11-05-attempt-3`
+`local/deepseek/prompt-reply-serving/2026-11-05-attempt-4`
 
 ## Steps
 
@@ -137,14 +139,14 @@ Run only after FIT and GO. Use a fresh output root and fail closed.
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-prompt-retrieval-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-3
+OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
 PANEL=$SHARED/local/deepseek/prompt-retrieval/2026-11-05/panels/dd-2777
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/prompt-reply-serving
-IMPL=689ce8a3f
+IMPL=ab6afb920
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL" -- crates/uor-r4-integer crates/uor-r4-cpu-train
@@ -233,22 +235,22 @@ test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 TEST FITNESS: FIT - M2 #2030 prompt-reply serving sidecar
 sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-serving-2026-11-05.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
-note: Implementation 689ce8a3f binds ignored control ids to the loaded
-  protocol and compiles the CLI path; 473 serving library tests and 19 OpenAI
-  loopback tests pass; strict CPU Clippy and targeted formatting pass; earlier
-  output roots are preserved and the attempt-3 root is absent.
+note: Implementation ab6afb920 binds ignored control ids, the CLI protocol and
+  the loaded tokenizer bytes; 473 serving library tests and 19 OpenAI loopback
+  tests pass; strict CPU Clippy and targeted formatting pass; earlier output
+  roots are preserved and the attempt-4 root is absent.
 date: 2026-11-05
 A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone
 before compute.
 
-Earlier attempts' FIT records remain in the harness ledger. Attempt 3's
+Earlier attempts' FIT records remain in the harness ledger. Attempt 4's
 reviewer identifies the same limitation: this was a local self-review.
 
 ## Pre-run GO
 
 GO - exact-head self-review under the current disabled-delegation policy,
-2026-11-05. Implementation `689ce8a3f` is clean; source, tokenizer, artifacts,
+2026-11-05. Implementation `ab6afb920` is clean; source, tokenizer, artifacts,
 TRAIN panel, evaluation panel and generator inputs match. Earlier outputs are
-preserved, and the attempt-3 root was absent at GO.
+preserved, and the attempt-4 root was absent at GO.
