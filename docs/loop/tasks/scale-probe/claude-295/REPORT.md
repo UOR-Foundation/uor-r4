@@ -10,18 +10,19 @@ Widths 256 and 512 are trained, sealed and graded; width 1,024 did not run (the 
 
 - **On human-written text, the training loss does not fall.** This is the unit's main result. It is not yet classified as instrument or mechanism (§4.2).
   - Width 256, all 6 grid cells: `train_loss_mean` is 1.00381–1.00390 at step 1,024 and 1.00296–1.00362 at step 8,192 (`progress.jsonl` in each cell's run folder, sealed in `runs/A`).
-  - Width 512, all 6 grid cells: 1.00322–1.00331 at step 1,024, rising to about 1.0037–1.0040 by step 4,096, and 1.00343–1.00381 at step 8,192 (`progress.jsonl` in each cell's run folder, sealed in `runs/C`). So every 512 cell ends higher than it starts. D1 at 512 makes 3.41 passes over its TRAIN.
-  - Width 512 does no better on the panel: R6 (512 against 256 at D3) reads `inside`, and every 512 cell is behind its TRAIN's unigram (Width 512, below).
+  - Width 512, all 6 grid cells: 1.00322–1.00331 at step 1,024, rising to 1.0037–1.0041 at step 4,096, and 1.00343–1.00381 at step 8,192 (`progress.jsonl` in each cell's run folder, sealed in `runs/C`). So every 512 cell ends higher than it starts. D1 at 512 makes 3.41 passes over its TRAIN.
+  - Width 512 is not measurably better on the panel at these two seeds: R6 (512 against 256 at D3) reads `inside`, which is not distinguishable at this power, not "no difference" (L-007). Every 512 cell is behind its TRAIN's unigram (Width 512, below).
   - The same recipe on templated text (the contrast cell, 256, mw-balp TRAIN) falls from 1.00280 to 0.82460 over the same 8,192 steps.
-  - On the held-out panel every width-256 cell is `behind` its own TRAIN's unigram table, by 12,460–25,917 rows (`pair/w256-dX-vs-unigram.json`). So the trunk has not learned even its TRAIN's token frequencies.
+  - On the held-out panel every width-256 cell is `behind` its own TRAIN's unigram table, by 12,460–25,917 rows (`pair/w256-dX-vs-unigram.json`). So always naming TRAIN's commonest token would beat it: the trunk predicts tokens in roughly their mix (below), not the commonest one.
   - The templated cell, which never saw human text, scores 14,282 on the same panel, inside the real-text cells' range of 11,504–24,961.
   - **What the trunk predicts:** the mix of human text's tokens, spread across contexts, not the likeliest token for each context. These counts were computed on the laptop from the sealed no-memory rows.
     - On wiki-00000 (396,045 rows), w256-d3-s1 predicts 2,823 distinct tokens; the targets hold 3,081.
-    - Its commonest predictions are the targets' commonest tokens at about their own rates: token 223 is predicted 10,585 times and is the target 8,979 times; token 265, 9,397 and 9,191; token 85, 8,052 and 8,197.
-    - It is right on 5,335 rows. A guess blind to context, drawn with the same token mix, would be right on 2,193 (`Σ` over tokens of the target count × the predicted count / rows). So the context lifts it 2.4×, while always naming the commonest token is right on 6,851, and T2 on 71,600.
-    - The same holds for w256-d1-s1 (4,620 against 2,275) and w256-d3-s2 (6,618 against 2,262), and on oasst2 (1,699–2,608 against 1,089–1,118).
+    - Most of its commonest predictions are the targets' commonest tokens at about their own rates: token 223 is predicted 10,585 times and is the target 8,979 times; token 265, 9,397 and 9,191; token 85, 8,052 and 8,197.
+    - Two are off their rates. Token 201, TRAIN's commonest, is predicted 10,189 times and is the target 6,851 times, about 49% over. Token 14, the panel's commonest target (10,845 times), is predicted 7,761 times.
+    - It is right on 5,335 rows. A guess blind to context, drawn with the same token mix, would be right on 2,193 (`Σ` over tokens of the target count × the predicted count / rows). So the context lifts it 2.4×. Always naming TRAIN's commonest token (201, the unigram's guess) is right on 6,851, and T2 on 71,600.
+    - The same holds for w256-d1-s1 (4,620 against 2,275) and w256-d3-s2 (6,618 against 2,262), and on oasst2 (1,699–2,608 against 1,089–1,122).
     - **This is a lead for the classification, not a classification.** A nearest-token hinge against the best rival works where the next token is nearly fixed by the context, as in the templated text. Where many tokens can follow, it may match token frequencies rather than pick the likeliest one. It has not been tested.
-  - The second run unit classifies this first, instrument before mechanism, as Bar row 6 requires. Its first arm is the loader and mask check, which needs no GPU and comes before any GPU arm; it is described under "The decision on width 1,024" below.
+  - It is classified next, instrument before mechanism (§4.2). Casey's one-track direction of 6 November (#2028 6675163438) gives that to one-model-end-to-end's next unit (claude-296): a fixed-target test that splits instrument from mechanism. This replaces the plan the decision card below gave scale-probe's second run unit.
   - Nothing is closed: no configuration and no mechanism (§4.1).
 - **R1, R2 and R3, the deciding readings, are NOT RUN.** All three read width 1,024 at D3, and width 1,024 did not run in this unit. That is not a negative.
 - **Width 1,024 does not fit a 32 GB RTX 5090** (attempt 1, #3472).
@@ -69,10 +70,13 @@ Widths 256 and 512 are trained, sealed and graded; width 1,024 did not run (the 
 ## The decision on width 1,024
 
 My decision card is on #3472 (6674681832), after two fresh decision reviews, logged for Casey to reverse. The 96 GB ask on #2028 is withdrawn for now (6674683811).
+
+**Superseded in part.** After this card, Casey's one-track direction of 6 November (#2028 6675163438) made "the trunk learns human text" the only track. The classification moves to one-model-end-to-end (claude-296), as a fixed-target test, and width 1,024's cells wait until the trunk beats its TRAIN's unigram and T2 on the human panel. The card's plan, as decided, is kept below as the record.
+
 - **The decision.** Width 1,024's 7 cells move to the second run unit, which first classifies the real-text training loss.
 - **Why defer.** Read now, R1 and R2 would rest on an unclassified instrument: its real-text loss does not fall, and its cells are behind the unigram (§4.2).
   - At 256, D3 against D1 reads `ahead` on all rows and `mixed` on the unseen rows. So Bar row 5 is possible at 1,024, but its meaning would depend on that fault.
-- **What the second unit runs, in order:** at most 6 GPU runs at (256, D1, seed 1) on one 5090.
+- **What the card planned for the second unit, in order** (claude-296 now sets its own arms): at most 6 GPU runs at (256, D1, seed 1) on one 5090.
   1. The loader and mask, on the laptop with no GPU: what the trainer reads from D1's TRAIN against mw-balp's.
   2. The learning rate: at most two other rates, plus one longer-positions arm.
   3. The objective's margin and rivals: at most two settings.
@@ -92,11 +96,11 @@ My decision card is on #3472 (6674681832), after two fresh decision reviews, log
 
 ## What changed
 
-Docs only; no code changes. The instrument and the trainer are the pin's, `e052abf41`.
+Docs only, 4 files, about +330 lines (`loop pr-check` size: tests 0, code 0, docs 4 files, generated 0). No code changed: the instrument and the trainer are the pin's, `e052abf41`.
 
 - **The ORDER** and this REPORT, under `docs/loop/tasks/scale-probe/claude-295/`.
 - **One notebook row** in `docs/research/notebook/float-training.md`.
-- **Gap 9 in `docs/model/pipeline-map.md`** now says the slope is unread because the trunk does not yet learn human text, with the 256 and 512 numbers.
+- **Gap 9 in `docs/model/pipeline-map.md`** now says the slope is unread (width 1,024 did not run) and that the trunk's loss does not yet fall on human text, with the 256 and 512 numbers.
 - **The item stays `ready`.** This REPORT says `References #3472`, because the deciding slopes need width 1,024.
 - **Off the repository:**
   - the sealed runs, `results/claude/scale-probe-2026-11-05/runs/A` and `runs/C`, and R9's `r9/w256-d3-s1` and `r9/w512-d3-s1`, all in the store;
@@ -143,7 +147,7 @@ Training took 1,474–1,508 s per grid cell and 1,015 s for the contrast cell. S
 | D2 vs D1 | inside: band 13,480 | inside |
 
 - **The seen census** (step 8, `seen/`): unseen rows 1,326,589 against D1, 1,279,552 against D2 and 1,228,450 against D3, with 4,935 short rows throughout. These are exactly the sheet's census counts.
-- **R5's data slope at 256** is read from its end pair, D3 against D1: ahead on all rows, so it is distinguishable from flat at this width. It is mixed on the unseen rows. It is a gain of about 1,700 of 1.46M rows while the model is behind the unigram; it is not a measure of learning human text.
+- **R5's data slope at 256** is read from its end pair, D3 against D1: ahead on all rows, so it is distinguishable from flat at this width. It is mixed on the unseen rows. Per doubling of data that is half the end pair's `d`: about +830 / +911 rows at seeds 1 / 2. It is a gain of about 1,700 of 1.46M rows while the model is behind the unigram; it is not a measure of learning human text.
 - **R7, by source,** (256, D3, seed 1). Each source is listed as model / T2 / unigram:
   - oasst2 (184,542 rows): 1,699 / 30,868 / 4,601;
   - wiki-00000 (396,045 rows): 5,335 / 71,600 / 6,851;
@@ -190,8 +194,9 @@ Training took 2,875–2,932 s per cell. Whole-process scoring took 335–337 s, 
 | D3 vs D2 | mixed: d +7,169 / +2,475, band 4,694 | mixed |
 | D2 vs D1 | mixed: d −5,237 / −2,206, band 3,031 | mixed |
 
-- **R5's data slope at 512** is read from its end pair, D3 against D1: mixed, so it is not distinguishable from flat at this width and these seeds.
+- **R5's data slope at 512** is read from its end pair, D3 against D1: mixed, so it is not distinguishable from flat at this width and these seeds. Per doubling it is about +966 / +135 rows at seeds 1 / 2.
 - **R6, width 512 against width 256 at D3** (`pair/w512-d3-vs-w256-d3.json`, clean = D3's seen set): **inside** on all rows (d +166 / −9,408, band 9,574) and on unseen rows (d +261 / −6,942, band 7,203). Doubling the width is not distinguishable from no change at these seeds.
+- **R6's curvature** is named at width 1,024 (across widths at D3, and across data at 1,024), so it is NOT RUN. For information only, the data curvature `D3 − 2·D2 + D1` from the top-1 counts is −2,031 / +25,092 at 256 and +12,406 / +4,681 at 512 (seeds 1 / 2). At 256 the seeds disagree in sign.
 - **R7, by source,** (512, D3, seed 1), each as model / T2 / unigram:
   - oasst2: 2,116 / 30,868 / 4,601;
   - wiki-00000: 5,083 / 71,600 / 6,851;
@@ -209,7 +214,9 @@ Training took 2,875–2,932 s per cell. Whole-process scoring took 335–337 s, 
 ## Checks run at the head
 
 - **The head** adds this REPORT's width-512 sections, the notebook row and gap 9's 512 lines to `69c14edaa`. No code changed after the pin.
-- **The laptop gates:** `loop report --check --order docs/loop/tasks/scale-probe/claude-295/ORDER.md` and `loop pr-check --local`, run at the head before the review record.
+- **The laptop gates,** run at the head before the review record:
+  - `loop report --check --order docs/loop/tasks/scale-probe/claude-295/ORDER.md`: PASS;
+  - `loop pr-check --local`: PASS (order, scope, banned-presence, commit-order, report, owner-paths, rule-sources and rendered-lock). Its two D76 advisories are the ORDER's size (7,857 B, over its 4,096 B budget) and `docs/start/FILEMAP.md`'s stale rows, which this PR does not touch.
 - **The pods:** A down at 01:29Z, D's three starts deleted, and C down at 03:56:33Z, each after its seal was read back from the store. `uor-pod status` then showed 0 running pods.
 - **GPU spend:** about $6.93 on pods A and C (the watcher's $6.65 at 03:26Z, plus pod C's last 30 minutes at $0.563/h), and about $3 on pod D's three starts.
 - **Reviews, each in a fresh context:**
@@ -222,16 +229,16 @@ None applied.
 
 ## Still open
 
-- Width 1,024 and R1–R3: the second run unit, after the classification (the decision card above). Under Casey's one-track direction of 6 November (#2028 6675163438), the classification comes first, and width 1,024 waits until the trunk learns human text.
+- Width 1,024 and R1–R3: scale-probe's second run unit. Under Casey's one-track direction of 6 November (#2028 6675163438), it waits until the trunk beats its TRAIN's unigram and T2 on the human panel. The classification of the flat loss is one-model-end-to-end's next unit (claude-296).
 
 ## Plain summary
 
 This unit trained the project's one model on real, human-written text for the first time: Wikipedia and OASST2 replies, 28M tokens. It ran two sizes (256 and 512 numbers per position), three amounts of data and two seeds each, on two rented GPUs, and graded every model on 1.46M held-out positions.
 
-The model did not learn the text. Its training loss stayed flat at about 1.0035 for all 8,192 steps, while the same recipe on the project's templated text falls to 0.82. On held-out text, every model guesses the next token right less often than simply always naming TRAIN's single commonest token, and far less often than a table of "which token usually follows this one". The bigger model is no better than the smaller one, and serves at half the speed.
+The model did not learn the text. Its training loss stayed flat at about 1.0035 for all 8,192 steps, while the same recipe on the project's templated text falls to 0.82. On held-out text, every model guesses the next token right less often than simply always naming TRAIN's single commonest token, and far less often than a table of "which token usually follows this one". The bigger model is not measurably better than the smaller one at these two seeds, and serves at half the speed.
 
-What the model predicts is telling: the right mix of tokens, scattered across contexts, rather than the likeliest token for each context. The likely cause, still a hypothesis, is the training objective. It pushes each guess away from whichever token is nearest whenever that token is not the right answer. In ambiguous text that happens on most rows, even for the best guess.
+What the model predicts is telling: roughly the right mix of tokens, scattered across contexts, rather than the likeliest token for each context. One hypothesis, not yet tested, is the training objective. It pushes each guess away from whichever token is nearest whenever that token is not the right answer. In ambiguous text that happens on most rows, even for the best guess.
 
-The planned question, how much better the model gets per doubling in size, needs the largest size, 1,024, which did not fit the 32 GB card. A 96 GB card never started. That size waits. By Casey's direction, the next unit tests the objective with fixed targets, and every later unit works on getting the model to learn human text. GPU time cost about $10.
+The planned question, how much better the model gets per doubling in size, needs the largest size, 1,024, which did not fit the 32 GB card. A 96 GB card never started. That size waits. By Casey's direction, the next unit (one-model-end-to-end) trains on fixed targets to tell a measuring fault from a method fault, and every later unit works on getting the model to learn human text. GPU time cost about $10.
 
 References #3472.
