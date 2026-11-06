@@ -1094,6 +1094,12 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         "What is 17 - 25,",
         "What is 10 - 20?",
         "What is 50 - 12 + 1",
+        "What is 20 + 5 %",
+        "What is 20 + 5 / two",
+        "What is 20 + 5 (two)",
+        "What is 17 + 25 in binary",
+        "What is 20 + 10, then double it",
+        "What is 20 - 10 in binary",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,

@@ -1300,14 +1300,6 @@ fn exact_tool_numeric_range(expression: &str, has_prefix: bool) -> bool {
     left < right
 }
 
-fn exact_tool_binary_expression(expression: &str) -> bool {
-    let fields: Vec<&str> = expression.split_whitespace().collect();
-    fields.len() == 3
-        && fields[0].chars().all(|c| c.is_ascii_digit())
-        && matches!(fields[1], "+" | "-")
-        && fields[2].chars().all(|c| c.is_ascii_digit())
-}
-
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -1357,16 +1349,16 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if !raw_suffix.is_empty()
         && raw_suffix
             .chars()
-            .all(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'))
+            .all(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'))
         && exact_tool_numeric_range(expression, has_prefix)
     {
         return Ok(None);
     }
     let mut suffix = raw_suffix;
-    if suffix.starts_with(|c| matches!(c, '?' | '.' | '!')) {
+    if suffix.starts_with(|c| matches!(c, '?' | '.' | '!' | ',')) {
         suffix = suffix[1..].trim_start();
     }
-    suffix = suffix.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' '));
+    suffix = suffix.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' '));
     let normalized_suffix = suffix.to_ascii_lowercase();
     let unsupported_suffix = !normalized_suffix.is_empty()
         && ![
@@ -1375,9 +1367,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "show your work",
             "show the carry trace",
             "please show your work",
+            "please",
         ]
         .contains(&normalized_suffix.as_str());
-    let mut prose_arithmetic = false;
     if unsupported_suffix {
         let continued_arithmetic = suffix.chars().any(|c| {
             c.is_ascii_digit()
@@ -1386,11 +1378,8 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
                     '+' | '-' | '*' | '^' | '&' | '|' | '=' | '<' | '>' | '~' | '−'
                 )
         });
-        if !continued_arithmetic {
-            if exact_tool_numeric_range(expression, has_prefix) {
-                return Ok(None);
-            }
-            prose_arithmetic = exact_tool_binary_expression(expression);
+        if !continued_arithmetic && exact_tool_numeric_range(expression, has_prefix) {
+            return Ok(None);
         }
     }
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
@@ -1402,7 +1391,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         }
         return Ok(None);
     }
-    if unsupported_suffix && !prose_arithmetic {
+    if unsupported_suffix {
         if exact_tool_arithmetic_shaped(rest) {
             return Err(invalid(
                 "exact arithmetic supports only one unsigned decimal + or - expression",
@@ -2348,6 +2337,25 @@ mod tests {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
                 "punctuated time/telephone prose was intercepted: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_false_answer_regressions() {
+        for prompt in [
+            "What is 20 + 5 %",
+            "What is 20 + 5 / two",
+            "What is 20 + 5 (two)",
+            "What is 17 + 25 in binary",
+            "What is 20 + 10, then double it",
+            "What is 20 - 10 in binary",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("false-answer arithmetic boundary should be recognized")
+                    .is_err(),
+                "false-answer arithmetic request returned an exact answer: {prompt}"
             );
         }
     }

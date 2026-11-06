@@ -774,6 +774,22 @@ for (const [index, prompt] of ['What is 17 - 25?', 'What is 17 - 25,', 'What is 
     assert(closed.action === 'session_reset', `final-review boundary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
+for (const [index, prompt] of ['What is 20 + 5 %', 'What is 20 + 5 / two', 'What is 20 + 5 (two)', 'What is 17 + 25 in binary', 'What is 20 + 10, then double it', 'What is 20 - 10 in binary'].entries()) {
+    const id = `gen_final_review_false_answer_${index}`;
+    const conversationId = `conv_final_review_false_answer_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const boundary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(boundary.action === 'generate_error' && boundary.error.includes('exact arithmetic'), `false-answer arithmetic request must be an explicit error (${prompt}): ${JSON.stringify(boundary)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `false-answer arithmetic request emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `false-answer conversation did not close: ${JSON.stringify(closed)}`);
+}
+
 for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes'].entries()) {
     const id = `gen_final_review_ordinary_${index}`;
     const conversationId = `conv_final_review_ordinary_${index}`;
