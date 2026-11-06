@@ -263,9 +263,21 @@ describe('model source adapter', () => {
     it('completes the single pending operation on a no-ID operation error', async () => {
         const adapter = createModelSourceAdapter(store, sources(), worker());
         await adapter.loadFromUrl('https://example.com/model.lut');
-        adapter.handleWorkerMessage({ action: 'operation_error', error: 'legacy load failure' });
+        adapter.handleWorkerMessage({ action: 'operation_error', operation: 'load_model', error: 'legacy load failure' });
         expect(store.getState().artifact.phase).toBe('error');
         expect(store.getState().artifact.error).toContain('legacy load failure');
+        expect(store.canRun()).toBe(false);
+    });
+
+    it('only a load-model no-ID operation error fails the pending load', async () => {
+        const adapter = createModelSourceAdapter(store, sources(), worker());
+        await adapter.loadFromUrl('https://example.com/model.lut');
+        adapter.handleWorkerMessage({ action: 'operation_error', operation: 'generate', error: 'unrelated failure' });
+        expect(store.getState().artifact.phase).toBe('finalizing');
+        expect(store.canRun()).toBe(false);
+        adapter.handleWorkerMessage({ action: 'operation_error', operation: 'load_model', error: 'load failed' });
+        expect(store.getState().artifact.phase).toBe('error');
+        expect(store.getState().artifact.error).toContain('load failed');
         expect(store.canRun()).toBe(false);
     });
 

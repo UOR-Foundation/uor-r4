@@ -1079,6 +1079,7 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         ("What is 100 - 20?", "80"),
         ("What is 50 - 12,", "38"),
         ("What is 50 - 12 please", "38"),
+        ("2026 - 11", "2015"),
     ] {
         let response = dispatch_rpc_command(
             &mut backend,
@@ -1100,6 +1101,9 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         "What is 17 + 25 in binary",
         "What is 20 + 10, then double it",
         "What is 20 - 10 in binary",
+        "2026 - 11 - 05",
+        "5 pm - 6 pm + 3",
+        "1 (800) 555-0100 + 2",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,
@@ -1138,6 +1142,39 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         .expect("ordinary final-review prose RPC should succeed");
         assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
     }
+    let mut intercepted = Vec::new();
+    for prompt in [
+        "5 pm - 6, then dinner",
+        "12 - 1 pm, then lunch",
+        "5 people attended - 3 left",
+        "1 (800) 555-0100",
+        "(800) 555-0100",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary final-review prose RPC should succeed");
+        if response["handled"] != json!(false) {
+            intercepted.push(prompt);
+        }
+    }
+    assert!(
+        intercepted.is_empty(),
+        "ordinary final-review prose was intercepted: {intercepted:?}"
+    );
+    let subtraction_prose = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":"5 - 3 left"}]}),
+    )
+    .expect("tool-handled subtraction prose RPC should succeed");
+    assert_eq!(
+        subtraction_prose["handled"],
+        json!(true),
+        "5 - 3 left must remain tool-handled"
+    );
 }
 
 #[test]

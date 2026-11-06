@@ -754,6 +754,24 @@ for (const [index, prompt] of ['5 pm - 6 pm, then dinner', '2026-11-05T17:25 - 1
 const badTimeRangeProse = timeRangeProse.filter(({ expectedTokens, message }) => message.action !== 'generate_complete' || message.tokenCount !== expectedTokens);
 assert(badTimeRangeProse.length === 0, `time-range prose must use the ordinary model path: ${JSON.stringify(badTimeRangeProse)}`);
 
+const proseBoundary = [];
+for (const [index, prompt] of ['5 pm - 6, then dinner', '12 - 1 pm, then lunch', '5 people attended - 3 left', '1 (800) 555-0100', '(800) 555-0100'].entries()) {
+    const id = `gen_final_review_prose_${index}`;
+    const conversationId = `conv_final_review_prose_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    proseBoundary.push({ prompt, message: ordinary });
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `prose boundary conversation did not close: ${JSON.stringify(closed)}`);
+}
+const badProseBoundary = proseBoundary.filter(({ message }) => message.action !== 'generate_complete' || message.tokenCount !== 32);
+assert(badProseBoundary.length === 0, `prose boundary must use the ordinary model path: ${JSON.stringify(badProseBoundary)}`);
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;
@@ -790,6 +808,7 @@ for (const [index, [prompt, result]] of [
     ['What is 100 - 20?', '80'],
     ['What is 50 - 12,', '38'],
     ['What is 50 - 12 please', '38'],
+    ['2026 - 11', '2015'],
 ].entries()) {
     const id = `gen_final_review_exact_${index}`;
     const conversationId = `conv_final_review_exact_${index}`;
@@ -806,7 +825,7 @@ for (const [index, [prompt, result]] of [
     assert(closed.action === 'session_reset', `final-review exact conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['What is 17 - 25?', 'What is 17 - 25,', 'What is 10 - 20?', 'What is 50 - 12 + 1'].entries()) {
+for (const [index, prompt] of ['What is 17 - 25?', 'What is 17 - 25,', 'What is 10 - 20?', 'What is 50 - 12 + 1', '2026 - 11 - 05', '5 pm - 6 pm + 3', '1 (800) 555-0100 + 2'].entries()) {
     const id = `gen_final_review_boundary_${index}`;
     const conversationId = `conv_final_review_boundary_${index}`;
     await sendToWorker({

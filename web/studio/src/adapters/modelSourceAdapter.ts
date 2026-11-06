@@ -22,6 +22,7 @@ export interface WorkerCapabilities {
 export interface WorkerMessage {
     action: string;
     id?: number;
+    operation?: string;
     capabilities?: WorkerCapabilities;
     error?: string;
 }
@@ -228,7 +229,9 @@ export function createModelSourceAdapter(
                 }
                 return;
             }
-            if (message.action === 'operation_error' && (message.id === undefined || message.id === operation.operationId)) {
+            const idMatches = typeof message.id === 'number' && message.id === operation.operationId;
+            const noIdLoadError = message.id === undefined && message.operation === 'load_model';
+            if (message.action === 'operation_error' && (idMatches || noIdLoadError)) {
                 complete();
                 failCurrent(operation, message.error || 'Operation failed.');
             }

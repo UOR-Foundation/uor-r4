@@ -1092,29 +1092,129 @@ fn exact_tool_time_or_prose(text: &str) -> bool {
     }
 }
 
+fn exact_tool_has_meridiem(text: &str) -> bool {
+    let compact = text
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_lowercase();
+    compact.ends_with("am") || compact.ends_with("pm")
+}
+
+fn exact_tool_meridiem_time_prefix(text: &str) -> Option<&str> {
+    for (index, c) in text.char_indices() {
+        if index == 0 {
+            continue;
+        }
+        let candidate = text[..index].trim_end();
+        if candidate.is_empty()
+            || !exact_tool_time_atom(candidate)
+            || !exact_tool_has_meridiem(candidate)
+        {
+            continue;
+        }
+        if c.is_alphanumeric() {
+            continue;
+        }
+        return Some(text[index..].trim_start());
+    }
+    None
+}
+
+fn exact_tool_meridiem_time_or_prose(text: &str) -> bool {
+    let text = text.trim();
+    if exact_tool_time_atom(text) && exact_tool_has_meridiem(text) {
+        return true;
+    }
+    match exact_tool_meridiem_time_prefix(text) {
+        Some(remainder) => exact_tool_time_range_tail_is_prose(remainder),
+        None => false,
+    }
+}
+
+fn exact_tool_bare_hour_prose(text: &str) -> bool {
+    let text = text.trim_start();
+    let hour_len = text.chars().take_while(|c| c.is_ascii_digit()).count();
+    if hour_len == 0 || hour_len > 2 {
+        return false;
+    }
+    let Ok(hour) = text[..hour_len].parse::<u8>() else {
+        return false;
+    };
+    if !(1..=12).contains(&hour) {
+        return false;
+    }
+    let mut rest = &text[hour_len..];
+    if let Some(after_colon) = rest.strip_prefix(':') {
+        let minute_len = after_colon
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .count();
+        if minute_len != 2 {
+            return false;
+        }
+        let Ok(minute) = after_colon[..2].parse::<u8>() else {
+            return false;
+        };
+        if minute > 59 {
+            return false;
+        }
+        rest = &after_colon[2..];
+        if let Some(after_second_colon) = rest.strip_prefix(':') {
+            let second_len = after_second_colon
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .count();
+            if second_len != 2 {
+                return false;
+            }
+            let Ok(second) = after_second_colon[..2].parse::<u8>() else {
+                return false;
+            };
+            if second > 59 {
+                return false;
+            }
+            rest = &after_second_colon[2..];
+        }
+    }
+    if rest.chars().next().is_some_and(|c| c.is_alphanumeric()) {
+        return false;
+    }
+    exact_tool_time_range_tail_is_prose(rest)
+}
+
 fn exact_tool_is_time_range(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     let Some((left, right)) = rest.split_once(" - ") else {
         return false;
     };
-    exact_tool_time_atom(left.trim()) && exact_tool_time_or_prose(right)
+    let left = left.trim();
+    let right = right.trim();
+    if exact_tool_time_atom(left) && exact_tool_time_or_prose(right) {
+        return true;
+    }
+    if exact_tool_meridiem_time_or_prose(left) && exact_tool_bare_hour_prose(right) {
+        return true;
+    }
+    if exact_tool_meridiem_time_or_prose(right) && exact_tool_bare_hour_prose(left) {
+        return true;
+    }
+    false
 }
 
 fn exact_tool_is_signed_telephone(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
-    let Some(tail) = rest.strip_prefix('+') else {
-        return false;
-    };
-    if tail.contains('+') {
+    let body = rest.strip_prefix('+').unwrap_or(rest);
+    if body.contains('+') || body.contains(" - ") || body.contains(" + ") || body.ends_with('-') {
         return false;
     }
-    let digit_count = rest.chars().filter(|c| c.is_ascii_digit()).count();
-    let has_separator = rest.chars().any(|c| matches!(c, '-' | '(' | ')'));
+    let digit_count = body.chars().filter(|c| c.is_ascii_digit()).count();
+    let has_separator = body.chars().any(|c| matches!(c, '-' | '(' | ')'));
     (7..=15).contains(&digit_count)
         && has_separator
-        && rest
+        && body
             .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '(' | ')' | ' ' | '.'))
+            .all(|c| c.is_ascii_digit() || matches!(c, '-' | '(' | ')' | ' ' | '.'))
 }
 
 fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
@@ -1344,6 +1444,55 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
     })
 }
 
+fn exact_tool_number_leading_prose(text: &str) -> bool {
+    let text = text.trim();
+    let number_len = text.chars().take_while(|c| c.is_ascii_digit()).count();
+    if number_len == 0 {
+        return false;
+    }
+    let remainder = text[number_len..].trim_start();
+    if remainder.is_empty() || !remainder.chars().any(|c| c.is_alphabetic()) {
+        return false;
+    }
+    !remainder.chars().any(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '+' | '-'
+                    | '*'
+                    | '/'
+                    | '%'
+                    | '^'
+                    | '×'
+                    | '÷'
+                    | '&'
+                    | '|'
+                    | '='
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '−'
+                    | '≤'
+                    | '≥'
+                    | '≠'
+                    | '·'
+                    | '('
+                    | '{'
+                    | '['
+                    | ')'
+                    | '}'
+                    | ']'
+            )
+    })
+}
+
+fn exact_tool_is_number_leading_dash_prose(rest: &str) -> bool {
+    let Some((left, right)) = rest.split_once(" - ") else {
+        return false;
+    };
+    exact_tool_number_leading_prose(left) && exact_tool_number_leading_prose(right)
+}
+
 fn exact_tool_numeric_range(expression: &str, has_prefix: bool) -> bool {
     if has_prefix {
         return false;
@@ -1391,6 +1540,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         return Ok(None);
     }
     if exact_tool_is_ratio_prose(rest) {
+        return Ok(None);
+    }
+    if !has_prefix && exact_tool_is_number_leading_dash_prose(rest) {
         return Ok(None);
     }
     if rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t')) == "+" {
@@ -2456,5 +2608,48 @@ mod tests {
                 "time-range arithmetic boundary fell through: {prompt}"
             );
         }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_prose_boundary_regressions() {
+        let answer = |prompt: &str| {
+            exact_arithmetic_tool(prompt)
+                .unwrap_or_else(|| panic!("tool did not recognize {prompt}"))
+                .unwrap_or_else(|error| panic!("tool errored for {prompt}: {error}"))
+                .result
+        };
+        let intercepted: Vec<&str> = [
+            "5 pm - 6, then dinner",
+            "12 - 1 pm, then lunch",
+            "5 people attended - 3 left",
+            "1 (800) 555-0100",
+            "(800) 555-0100",
+        ]
+        .into_iter()
+        .filter(|prompt| exact_arithmetic_tool(prompt).is_some())
+        .collect();
+        assert!(
+            intercepted.is_empty(),
+            "ordinary prose was intercepted: {intercepted:?}"
+        );
+        assert_eq!(answer("2026 - 11"), "2015");
+        assert_eq!(answer("What is 50 - 12 please"), "38");
+        for prompt in [
+            "2026 - 11 - 05",
+            "5 pm - 6 pm + 3",
+            "2026-11-05T17:25 - 1",
+            "1 (800) 555-0100 + 2",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("prose-boundary arithmetic control should be recognized")
+                    .is_err(),
+                "prose-boundary arithmetic control fell through: {prompt}"
+            );
+        }
+        assert!(
+            exact_arithmetic_tool("5 - 3 left").is_some(),
+            "5 - 3 left must remain tool-handled rather than prose"
+        );
     }
 }
