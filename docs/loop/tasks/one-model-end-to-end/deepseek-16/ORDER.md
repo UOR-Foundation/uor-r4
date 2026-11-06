@@ -1,7 +1,7 @@
 # ORDER: one-model-end-to-end, deepseek-16 (current-checkpoint centroid)
 
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
-(#3407). Base: `a9a0f75ac`.
+(#3407). Base: `3a9c2f11d`.
 
 ## Goal
 

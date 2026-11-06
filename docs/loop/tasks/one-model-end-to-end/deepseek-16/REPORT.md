@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](ORDER.md). Sheet:
 [one-model-end-to-end-centroid-2026-11-06](../../../../harness/prep/one-model-end-to-end-centroid-2026-11-06.md).
-Base: `a9a0f75ac`.
+Base: `3a9c2f11d`.
 
 ## What did not work, first
 
@@ -18,8 +18,9 @@ Base: `a9a0f75ac`.
   exactly TRAIN plus its four registered panels. This unit adds explicit DEV omission;
   ordinary DEV scoring is unchanged.
 - **No capture was available when the execution package was prepared.** The private
-  store and Vast credentials are now installed, but both existing pods are busy and
-  must not be touched. The sheet remains PENDING, not FIT, and no panel was opened.
+  store and Vast credentials are now installed, but both existing pods
+  (`vast-59440058` and `vast-59440060`) are busy and no free GPU may be taken. The sheet
+  remains PENDING, not FIT, and no panel was opened.
 
 ## What changed
 
@@ -34,6 +35,17 @@ Base: `a9a0f75ac`.
 - Focused tests check both memory modes and the DEV omission rule.
 - A current-checkpoint sheet pins D3, both n3S archives, all four held-out panels and a
   two-seed zero/centroid/shuffle decision rule.
+- The capture job now uses the verified source pin, the bootstrap's actual source path,
+  a clean-tree check, a timestamp-plus-random immutable output id, a remote-collision
+  check, 128 GiB initial headroom and phase-specific post-capture/readback checks.
+- One six-hour timeout now bounds the whole job: downloads, CUDA tests/build, capture,
+  sealing, upload and readback. It preserves failure logs and checks a visible RTX 5090.
+- The job records selected checkpoint hashes, CUDA tests, the scorer binary, the whole
+  cache and its manifest, uploads every evidence file, and reads each one back.
+- The CPU evaluation commands now name the merged D84 evaluator, the required seed and
+  checkpoint root, separate seed reports and their aggregate. The sheet includes exact
+  checkpoint/cache restore, checksum, corpus-inventory, manifest and checkpoint-pin
+  checks plus CPU timeouts.
 
 No training, optimizer, serving or existing scoring decision changed.
 
@@ -61,7 +73,7 @@ Expected capture scale from published pins:
   --offline`: passed with the crate's pre-existing warnings.
 - D23, D25 and D32 ratchets: passed.
 - `uor-harness prep-check`: the sheet is structurally complete and `PENDING`.
-- `git diff --check`: passed.
+- `bash -n` on the capture job and `git diff --check`: passed.
 - Scoped Clippy and the full harness are run before delivery.
 
 Not run: cache capture, centroid evaluation, panel scoring or any GPU work.
@@ -86,7 +98,7 @@ Until those complete, the roadmap's centroid-refit step remains open.
 The readout experiment needs two things: queries from TRAIN to fit new output rows and
 queries from the held-out panels to grade them. The merged cache captured only the
 grading side. This change captures TRAIN as well and can record only the no-memory path,
-which halves the storage. The experiment is now fully specified against the current
-checkpoint and can produce the exact registered split inventory. Credentials are now
-available, but the sheet still needs fitness and pre-run review and both existing GPUs
-remain busy, so the actual model run has not happened.
+which halves the storage. The experiment is now fully specified against the merged
+evaluator, can produce the exact registered split inventory, and has credentials. Its
+package still needs test-fitness and pre-run review, and both existing GPUs remain
+busy, so the actual model run has not happened.
