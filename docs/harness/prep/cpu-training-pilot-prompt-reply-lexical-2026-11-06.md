@@ -4,7 +4,7 @@ Run ID: `cpu-training-pilot-prompt-reply-lexical-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS passed. The seed-2780 panel may be generated after GO.
 
 This is D84 CPU research. It isolates the artifact-independent features in the
 whole-reply ranker rejected by deepseek-213. It does not change serving.
@@ -103,6 +103,15 @@ Local CPU only. Cap: 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
   `2a298b44ea34d1a8e2d40191951d3da9b3300e2ac7de65e6c2ec13950a0b6424`;
 - sidecar seed 2:
   `6504dcb047ce7157dd5e968c29441505cf48d993f01ec63222125634c61963b7`.
+- implementation: `1f5b4fbcb`;
+- ranker source:
+  `8588af2f0e71718e96ed73170d22e42f49a226289071a5e86f13504d93c97454`;
+- binary source:
+  `d38faa656fef2dcad681394fd705d1eb170464d9800b3daaaa9b0a38d477d0dc`;
+- CPU crate export:
+  `b900a16aec7e08f3ec9b34c3490ecabfcfe224b77f807cb7e7c4340168ff78b8`;
+- release binary:
+  `723903ea3bacaf52aa758ee273f146f99d09f7551df09859864f43f44d8fcc45`.
 
 ## Output
 
@@ -114,8 +123,15 @@ Fresh panel: `.../panels/dd-2780`. Both roots are absent at registration.
 
 After FIT and GO, build `cpu-prompt-reply-ranker`, generate seed 2780 from the
 isolated generator copy, and run the binary three times per artifact in
-alternating order. Seal panel bytes, process reports, timings, source and
-binary pins, and tests; fill exact implementation pins before GO.
+alternating order:
+
+```sh
+"$BIN" "$SIDECAR" "$TRAIN" "$PANEL" "$ARTIFACT" "$TOKENIZER" \
+  --protocol 2 --expected-artifact "$ARTIFACT_SHA256" \
+  --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377
+```
+
+Seal panel bytes, process reports, timings, source and binary pins, and tests.
 
 ## Minimum test power
 
@@ -130,8 +146,19 @@ binary pins, and tests; fill exact implementation pins before GO.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - lexical ablation implementation pending.
+TEST FITNESS: FIT - M2 #2030 lexical reply-ranker ablation
+sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-lexical-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 1f5b4fbcb is clean. Five focused ranker tests and the full
+  399-test CPU library suite pass with four expected ignores. Combined and
+  lexical fits share groups and shuffles; lexical scoring excludes feature 5.
+  Input and source pins match; seed 2780 and its output root remain absent.
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `1f5b4fbcb`, source pins and release binary
+`723903ea3bacaf52aa758ee273f146f99d09f7551df09859864f43f44d8fcc45`
+match. This was not an independent review. Seed 2780 may now be generated under
+the fixed construction and stop rule.
