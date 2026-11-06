@@ -65,7 +65,7 @@ Final preflight timing:
 - wall: **0.35 s**;
 - user/system: **0.83 / 0.04 s**;
 - peak RSS: **112,152 KiB**;
-- retained evidence: **31,869 bytes** including the checksum manifest.
+- retained evidence: **32,035 bytes** including the checksum manifest.
 
 Inputs:
 
