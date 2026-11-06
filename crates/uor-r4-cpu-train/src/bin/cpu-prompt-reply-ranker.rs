@@ -79,6 +79,24 @@ fn run() -> Result<(), String> {
     let memory = derive_prompt_reply_rank_memory(&artifact, &train_examples, 64)
         .map_err(|error| error.to_string())?;
     let training = fit_prompt_reply_ranker(&memory).map_err(|error| error.to_string())?;
+    if config.train_only {
+        let output = serde_json::json!({
+            "schema": "uor-r4.cpu-prompt-reply-ranker-preflight/1",
+            "artifact_sha256": artifact_sha256,
+            "tokenizer_sha256": tokenizer_sha256,
+            "sidecar_sha256": uor_r4_discrete::corpus::sha256(&sidecar_bytes),
+            "train": panel_input(&config.train),
+            "training": training,
+            "feature_names": PROMPT_REPLY_RANK_FEATURE_NAMES,
+            "top_k": PROMPT_REPLY_RANK_TOP_K,
+            "shuffle_seed": PROMPT_REPLY_RANK_SHUFFLE_SEED,
+        });
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).map_err(|error| error.to_string())?
+        );
+        return Ok(());
+    }
     let (_, samples) = load_panel(&config.panel)?;
     let mut outputs = BTreeMap::new();
     for arm in PromptReplyRankArm::EVALUATION_ARMS {
@@ -213,6 +231,7 @@ struct Config {
     protocol: u8,
     expected_artifact_sha256: String,
     expected_tokenizer_sha256: String,
+    train_only: bool,
 }
 
 fn parse_args() -> Result<Config, String> {
@@ -220,9 +239,14 @@ fn parse_args() -> Result<Config, String> {
     let mut positional = Vec::new();
     let mut expected = BTreeMap::new();
     let mut protocol = 2u8;
+    let mut train_only = false;
     while let Some(flag) = args.next() {
         if !flag.starts_with("--") {
             positional.push(PathBuf::from(flag));
+            continue;
+        }
+        if flag == "--train-only" {
+            train_only = true;
             continue;
         }
         let value = args
@@ -255,6 +279,7 @@ fn parse_args() -> Result<Config, String> {
         protocol,
         expected_artifact_sha256: expected["artifact"].clone(),
         expected_tokenizer_sha256: expected["tokenizer"].clone(),
+        train_only,
     })
 }
 
@@ -271,5 +296,5 @@ fn set(
 }
 
 fn usage() -> &'static str {
-    "usage: cpu-prompt-reply-ranker SIDECAR TRAIN_DIR PANEL_DIR ARTIFACT TOKENIZER --protocol 1|2 --expected-artifact SHA --expected-tokenizer SHA"
+    "usage: cpu-prompt-reply-ranker SIDECAR TRAIN_DIR PANEL_DIR ARTIFACT TOKENIZER --protocol 1|2 --expected-artifact SHA --expected-tokenizer SHA [--train-only]"
 }
