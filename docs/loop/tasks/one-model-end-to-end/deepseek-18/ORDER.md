@@ -9,7 +9,8 @@ Deliver an exact, reviewable execution package for the current-checkpoint centro
 experiment without running it or touching either busy existing pod. The package must
 capture the registered TRAIN plus four-panel cache at both seeds, preserve all evidence,
 restore it on the D84 CPU host, and bind the evaluation to the captured checkpoint/cache
-identity.
+identity. This is the n3S development slice; it does not complete the roadmap's other
+sealed cells or substitute for them.
 
 ## Cancel probe
 

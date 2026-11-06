@@ -69,7 +69,7 @@ esac
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
 exec >> "$RUN/job.log" 2>&1
-OUTPUT_CLAIMED=1
+OUTPUT_CLAIMED=0
 on_exit() {
   local rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -110,9 +110,9 @@ command -v timeout >/dev/null || die "timeout is not installed"
 store_listing=$("$STORE" ls results/deepseek/ 2>"$RUN/store-list.err") ||
   die "could not list the DeepSeek store namespace"
 if grep -F "  $OUT_STORE/" <<<"$store_listing" >/dev/null; then
-  OUTPUT_CLAIMED=0
   die "refusing an existing store output: $OUT_STORE"
 fi
+OUTPUT_CLAIMED=1
 
 if [ ! -d "$REPO/.git" ]; then
   command -v git >/dev/null || die "git is not installed and repository $REPO is absent"
@@ -137,8 +137,8 @@ need_free_gib "$MIN_FREE_GIB"
 
 actual=$(git -C "$REPO" rev-parse HEAD)
 [ "$actual" = "$PIN" ] || die "repository is $actual, expected $PIN"
-[ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] ||
-  die "repository has tracked modifications"
+[ -z "$(git -C "$REPO" status --porcelain --untracked-files=all)" ] ||
+  die "repository tree is not clean"
 
 log "[0/6] run=$RUN output=$OUT_STORE source=$PIN"
 log "script_sha256=$(sha256sum "$0" | cut -d' ' -f1)"

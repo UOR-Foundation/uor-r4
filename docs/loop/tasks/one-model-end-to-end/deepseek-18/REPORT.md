@@ -36,6 +36,9 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 
 ## What changed
 
+Size: large (four paths, about 1,000 added lines and 50 deleted lines). The roadmap item
+has no registered size-line estimate, so a size ratio is undefined.
+
 - The sheet pins source `3a9c2f11d`, captures both pod ids from the reviewed lease
   commands, owns teardown from the first successful `up`, and requires both the job
   `EXIT` and the `uor-pod` wrapper's terminal record. The job uses a clean bootstrap
@@ -52,11 +55,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - The CPU section builds the registered evaluator, restores and verifies both the n3S
   checkpoint and captured cache, checks each status against its seed, source pin,
   capture binary, script hash and archive hash, records the evaluator source/binary
-  provenance, enforces 170 GiB to build and 146 GiB after build for both complete
-  restores, plus the 31 GiB post-restore reserve, binds each report to the captured
-  manifest and checkpoint files, then runs the evaluator and aggregate without a
-  self-set wall-clock cancellation. Each CPU attempt gets a fresh timestamp-plus-random
-  local root instead of mutating a prior restore.
+  provenance, enforces 170 GiB including a 24 GiB build allowance and 146 GiB after
+  build for both complete restores, plus the 31 GiB post-restore reserve, binds each
+  report to the captured manifest and checkpoint files, then runs the evaluator and
+  aggregate without a self-set wall-clock cancellation. Each CPU attempt gets a fresh
+  timestamp-plus-random local root instead of mutating a prior restore.
 
 ## Measurements
 
@@ -64,10 +67,12 @@ No model, cache or GPU job ran. The raw no-memory cache is 28.02 GiB by the pinn
 27,416,554 rows, width 256 and row records plus the 1,460,697 panel rows. The two
 parallel captures are estimated at 2-4 hours each. Each watcher renews its healthy
 lease until the job finishes; at a $1.15/h ceiling, a four-hour pair projects $9.20.
+The owner checkout's live shared model-time ledger was absent during preparation, so no
+historical balance is claimed; actual lease usage will be recorded at execution.
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d`.
+`2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b`.
 
 ## Checks run at the head
 
@@ -97,7 +102,9 @@ compute rules were used directly.
 3. Run the two captures without touching either existing busy pod.
 4. Restore both caches and checkpoints on the D84 host.
 5. Run the two evaluators, verify their manifest/checkpoint bindings, and aggregate.
-6. Record the registered result in the deepseek-16 REPORT and float-training notebook.
+6. Record the registered result in a new active task REPORT and the float-training
+   notebook; leave the merged deepseek-16/17 records historical.
+7. Keep the roadmap's other sealed cells explicitly NOT_RUN in this n3S slice.
 
 ## Plain summary
 

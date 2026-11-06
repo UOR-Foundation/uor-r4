@@ -1,13 +1,12 @@
 # ORDER: one-model-end-to-end, deepseek-16 (current-checkpoint centroid)
 
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
-(#3407). Base: `3a9c2f11d`.
+(#3407). Base: `a9a0f75ac`.
 
 ## Goal
 
-Run the first development slice of the roadmap's frozen-trunk centroid-refit step on the
-stable D3/8,192-step n3S checkpoint at seeds 1 and 2. This does not substitute for the
-roadmap's remaining sealed cells. Capture exact no-memory teacher-forced queries and
+Complete the roadmap's frozen-trunk centroid-refit step on the stable D3/8,192-step
+checkpoint at seeds 1 and 2. Capture exact no-memory teacher-forced queries and
 decisions once, then evaluate the original table, a TRAIN mean-centroid table and a
 matched shuffled-label control on CPU over the same 1,460,697 human-panel rows.
 
@@ -34,7 +33,7 @@ existing pod.
 4. The sheet pins D3, its four held-out panels, both archive hashes and the exact
    n3S checkpoint paths/hashes required by the run.
 5. A non-author FIT and a fresh D67 pre-run review are recorded before capture.
-6. Two seed caches are captured, one on each of two leased RTX 5090s, sealed and uploaded.
+6. Two seed caches are captured on one leased RTX 5090, sealed and uploaded.
 7. The CPU evaluator reproduces every frozen panel decision and reports original,
    centroid and shuffled control by panel and pooled across all four panels.
 8. The result lands in a REPORT and notebook row, with zeros exact and a mechanism

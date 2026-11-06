@@ -92,7 +92,7 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d
+JOB_SHA256=2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
@@ -386,7 +386,7 @@ test "$CAPTURE_STATUS2" = 0
 pod ids into the run record and owns teardown from the first successful `up`. A watcher
 returns only after both the job's `EXIT` and the `uor-pod` wrapper's terminal record exist;
 it treats a wrapper end without `EXIT` as a failure and stops renewing. On any failure,
-the EXIT trap takes down pods with no started job. It also takes down a finished pod only
+the EXIT trap takes down pods with no started job. For a finished pod it applies this policy:
 A successful result must have `EXIT 0`, `status.json`, the cache,
 `CACHE_TRANSFER_VERIFIED` and the normal-output archive checksum; a failed result may
 omit the cache only after complete diagnostics were uploaded and read back. Otherwise it
@@ -429,16 +429,17 @@ timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
 set -euo pipefail
 CPU_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 ROOT=local/deepseek/centroid-cache/2026-11-06/$CPU_RUN_ID
-CAPTURE_JOB_SHA256=3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d
+CAPTURE_JOB_SHA256=2eff68312c2a8bc4341d17ef25a0edd765e00313167c2d1675c5ae230f7d970b
 mkdir -p "$(dirname "$ROOT")"
 mkdir "$ROOT"
 printf 'cpu_run_root=%s\n' "$ROOT"
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
 [ "$available_gib" -ge 170 ] || { echo "need 170 GiB free, have $available_gib" >&2; exit 1; }
 export CARGO_TARGET_DIR="$ROOT/target"
-test -z "$(git status --porcelain --untracked-files=no)"
+test -z "$(git status --porcelain --untracked-files=all -- \
+  crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)"
 git diff --quiet 3a9c2f11d26991a70a22f88758cfb4589a1cf14d HEAD -- \
-  crates Cargo.toml Cargo.lock
+  crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml
 cargo build --release --locked -p uor-r4-cpu-train \
   --bin cpu-query-cache-evaluate --bin cpu-query-cache-aggregate
 {
@@ -504,7 +505,7 @@ available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
 ```
 
 ```sh
-RAYON_NUM_THREADS=32 /usr/bin/time -v \
+RAYON_NUM_THREADS=32 /usr/bin/time -v -o "$ROOT/centroid-s1.time.txt" \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-evaluate" "$CACHE_S1" \
   --seed 1 \
   --checkpoint-root "$CHECKPOINT_S1" \
@@ -546,7 +547,7 @@ jq -e '
   .cache.checkpoint_files["model.safetensors"] == "30bf5db7db6600211ee14a17557bbf54f24c86de8b7c16f93b795085f0bfc9e8" and
   .cache.checkpoint_files["hamming_read.safetensors"] == "25805079be3bcfe5917cf0b80a362e7a774aac931c5f4cdaf5351c272684a5bd"
 ' "$ROOT/centroid-s2.json"
-/usr/bin/time -v \
+/usr/bin/time -v -o "$ROOT/aggregate.time.txt" \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate" \
   "$ROOT/centroid-s1.json" "$ROOT/centroid-s2.json" --out "$ROOT/final.json"
 ```
@@ -607,9 +608,10 @@ for a fresh transfer panel; it cannot alone put the mechanism on the serving pat
   both-archive readback-size and floor checks, including a 40 GiB minimum. Each produced
   archive is decompressed by `zstd -t` before hashing and upload.
 - CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and an estimated 2
-  hours. It admits 170 GiB before the build, then 146 GiB after build for both retained
-  restores and the final reserve. Estimates are not cancellation rules. The point
-  estimator streams TRAIN; only one panel's queries are resident.
+  hours. It admits 170 GiB before the build (146 GiB for both retained restores plus a
+  24 GiB build allowance), then requires 146 GiB after build and 31 GiB after each
+  restore. Estimates are not cancellation rules. The point estimator streams TRAIN;
+  only one panel's queries are resident.
 - Each no-memory cache is about 29 GiB; the compressed archive is uploaded and read back.
 - Stop on any input/checkpoint mismatch, `CONTROL_FAULT`, insufficient power, archive
   ambiguity, resource breach or missing credential.
