@@ -1,0 +1,127 @@
+# Pre-registration: full-sequence content with stored-length completion
+
+Run ID: `cpu-training-pilot-content-length-2026-11-06`
+
+## Status
+
+REGISTERED. Implementation and TEST FITNESS precede compute.
+
+## Question
+
+Can the content-positive full-sequence suffix selector from deepseek-198 beat
+matched length-completion controls when the nearest TRAIN reply's stored length
+replaces its premature boundary stop?
+
+## Fixed construction
+
+Retrieve the raw-unigram-Jaccard top-1 TRAIN reply with lower-ordinal ties.
+Use its stored reply length as the completion budget, capped at 64, without
+reading the evaluation reference.
+
+At each token, keep the deepseek-198 content policy: local `Longest32To1`,
+full prompt-plus-reply suffix memory, two observations, strict-majority
+successor, global only when deeper than local, and local ties. Stop by BOS,
+stored length or context.
+
+Arms:
+
+- full-sequence content with stored length;
+- full-sequence content with the original boundary memory;
+- suffix-shuffled content with stored length;
+- shallow-local-global depth 4 with stored length;
+- local longest copy with stored length;
+- writer with stored length;
+- full stored retrieval;
+- reference-length oracle with full-sequence content.
+
+## Data split
+
+TRAIN `tt-2711`:
+
+- tokens:
+  `140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91`;
+- mask:
+  `d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad`;
+- manifest:
+  `d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5`.
+
+Fresh evaluation panel `cell=dev,dev`, seed 2783, protocol 2, 128
+conversations, generated only after FIT and GO.
+
+## Instrument gate
+
+Source, artifact, tokenizer, sidecar, TRAIN and fresh panel pins match; the
+panel and output roots are absent at registration. The suffix table has zero
+BOS transitions. The shuffle preserves support, observations and successor
+multisets while changing assignments. Every length is positive and at most 64.
+Every arm emits all reachable rows. Repeated processes match after timing
+removal.
+
+## Bar
+
+On both artifacts, the full-sequence stored-length arm must:
+
+- beat local-longest length completion on exact replies by two sigma;
+- beat shuffled-suffix length completion on exact replies by two sigma;
+- retain at least the better body count of the boundary and local-length arms;
+- emit all reachable replies with zero premature BOS;
+- change at least one token from local and shuffled controls;
+- repeat byte-identically.
+
+Full retrieval and the reference-length oracle are reported controls.
+
+## Outcomes
+
+**KEEP** if every bar passes; **REJECT** if active and a quality bar fails;
+**INSUFFICIENT_POWER** below 200 reachable rows or 100 deeper-global decisions;
+**CONTROL_FAULT** on drift, vacuous shuffle, invalid length or nondeterminism.
+
+## Stop rule
+
+Do not retune the suffix confidence rule, length source or comparison after
+seed 2783 opens. Stop on any prohibited path or failed instrument gate.
+
+## Cost
+
+Local CPU only; 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
+
+## Base and inputs
+
+- base: `bbb8c5332`;
+- tokenizer:
+  `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
+- artifact seed 1:
+  `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
+- artifact seed 2:
+  `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`;
+- sidecar seed 1:
+  `2a298b44ea34d1a8e2d40191951d3da9b3300e2ac7de65e6c2ec13950a0b6424`;
+- sidecar seed 2:
+  `6504dcb047ce7157dd5e968c29441505cf48d993f01ec63222125634c61963b7`.
+
+## Output
+
+`local/deepseek/content-length/2026-11-06`; fresh panel and output root absent
+at registration.
+
+## Steps
+
+Extend the suffix-arbitration evaluator with an exact stored-length endpoint;
+build the dedicated driver; run TRAIN preflight; generate seed 2783; evaluate
+both artifacts and repeats; seal source, panel, reports and artifacts.
+
+## Minimum test power
+
+- two artifacts;
+- at least 200 reachable replies;
+- at least 100 deeper-global decisions per artifact;
+- boundary, local-length, shuffled-length, writer, full and oracle controls;
+- paired exact/body comparisons and deterministic replay.
+
+## TEST FITNESS
+
+TEST FITNESS: PENDING - implementation pending.
+
+## Pre-run GO
+
+Pending after FIT.
