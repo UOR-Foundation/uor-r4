@@ -4,7 +4,9 @@ Run ID: `cpu-training-pilot-prompt-vsa-compression-2026-11-06`
 
 ## Status
 
-TEST FITNESS passed. Fresh seed-2778 evaluation may proceed after GO.
+TEST FITNESS passed. Attempt 1 stopped before panel generation on a stale
+standalone generator lockfile. Fresh seed-2778 evaluation continues in
+attempt 2 after the instrument-only isolation repair recorded below.
 
 This is D84 CPU serving research. It tests a deterministic lossy compressed
 representation of the exact deepseek-209 prompt selector. It is not a new
@@ -166,11 +168,31 @@ tests are capped at five minutes.
 
 ## Output
 
-`local/deepseek/prompt-vsa-compression/2026-11-06`
+Attempt 1: `local/deepseek/prompt-vsa-compression/2026-11-06` (sealed
+instrument fault; no panel created).
+
+Attempt 2: `local/deepseek/prompt-vsa-compression/2026-11-06-attempt-2`
 
 Fresh panel: `.../panels/dd-2778`
 
-Both roots are absent at registration.
+The attempt-2 root and panel were absent when the repair began.
+
+## Attempt log
+
+- Attempt 1 verified all input pins and the absent output roots, then stopped
+  before panel generation because the standalone generator `Cargo.lock` was
+  stale under `--locked`. The trap sealed the output root containing only
+  `generator-build.time.txt` and `SHA256SUMS`. No panel, model or evaluation
+  input was read by the generator.
+- Attempt 2 uses a byte copy of the generator under an ignored local path. Its
+  five path dependencies are rewritten to the reviewed worktree, and Cargo
+  resolves offline into that copy. The reviewed repository lockfile is not
+  modified. Generator manifest SHA-256:
+  `eabe169cfca1bf1a4562e14d6986ec2aeb06a933d4b78d52486e3a0b9e49c365`;
+  isolated lock SHA-256:
+  `a0d705600982aa1b60c9e5cc6d3b9503740376bffaffd4129a123cec272ee408`.
+  The generator source, seed, cell, tokenizer, protocol and requested panel
+  shape are unchanged.
 
 ## Steps
 
@@ -181,7 +203,7 @@ head before starting.
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-prompt-vsa-compression
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/prompt-vsa-compression/2026-11-06
+OUT=$SHARED/local/deepseek/prompt-vsa-compression/2026-11-06-attempt-2
 PANEL=$OUT/panels/dd-2778
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
@@ -191,6 +213,7 @@ SIDECAR1=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/report
 SIDECAR2=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed2.sidecar.json
 BUILD=$SOURCE/target/deepseek/prompt-vsa-compression
 GEN_TARGET=$SOURCE/target/deepseek/prompt-vsa-compression-generator
+GEN_SOURCE=$SOURCE/local/deepseek/prompt-vsa-compression-generator-attempt-2
 IMPL=16f35277a
 
 test ! -e "$OUT"
@@ -225,8 +248,8 @@ trap 'status=$?; trap - EXIT; seal || status=$?; exit "$status"' EXIT
 cd "$SOURCE"
 /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
   env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
-  cargo build --locked \
-  --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
+  cargo build --offline \
+  --manifest-path "$GEN_SOURCE/Cargo.toml" \
   --features panel-writer --bin heldout-panel
 GEN=$GEN_TARGET/debug/heldout-panel
 
