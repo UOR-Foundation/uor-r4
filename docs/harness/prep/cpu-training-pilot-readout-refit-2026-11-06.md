@@ -61,8 +61,9 @@ TRAIN `tt-2711`:
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`.
 
 Fresh evaluation is `cell=dev,dev`, seed 2789, protocol 2, 128
-conversations. The panel and output files are absent at registration and are
-generated only after FIT and GO.
+conversations. `panels/dd-2789` and `reports/dd-2789` are absent at
+registration and are generated only after FIT and GO. Only the TRAIN-only
+preflight files exist under the run root.
 
 ## Base artifacts
 
@@ -94,8 +95,8 @@ multiset. Each arm shares the panel, artifact and target rows. Run repeats must
 match after removing timing.
 
 The fresh panel must report `cell=dev,dev`, seed 2789, protocol 2, 128
-conversations and the pinned tokenizer. The panel and output roots are absent
-at GO.
+conversations and the pinned tokenizer. `panels/dd-2789` is absent immediately
+before generation, and `reports/dd-2789` is absent at GO.
 
 ## Power
 
@@ -149,16 +150,16 @@ nondeterminism.
 Local CPU only. Maximum 30 minutes, 2 GiB peak RSS and 32 MiB retained
 evidence.
 
-## Commands
+## Steps
 
-Release build:
+1. Release build:
 
 ```sh
 CARGO_BUILD_JOBS=32 CARGO_TARGET_DIR=target/deepseek/readout-refit \
   cargo build --release -p uor-r4-cpu-train --bin cpu-readout-refit
 ```
 
-Fresh panel after FIT and GO:
+2. Fresh panel after FIT and GO:
 
 ```sh
 cargo build --locked \
@@ -169,7 +170,7 @@ heldout-panel out=PANEL tokenizer=TOKENIZER \
   cell=dev,dev conversations=128 seed=2789 protocol=2
 ```
 
-Evaluate each artifact:
+3. Evaluate each artifact:
 
 ```sh
 RAYON_NUM_THREADS=16 cpu-readout-refit run \
@@ -187,7 +188,7 @@ RAYON_NUM_THREADS=16 cpu-readout-refit run \
 
 ## Source pins before FIT
 
-- implementation commit: `PENDING-EXACT-HEAD`
+- implementation commit: `af68e98f4`;
 - module:
   `21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae`;
 - driver:
@@ -201,9 +202,14 @@ RAYON_NUM_THREADS=16 cpu-readout-refit run \
 - release binary:
   `e537b82b3b2f5855dec99b83dd26d9529c5c1bef3770eae88750f411a9976ece`.
 
+4. Repeat each artifact in a fresh process, remove timing fields, and compare
+   the reports byte-for-byte.
+5. Seal the panel, reports, timing, source and binary pins, then deliver
+   through exact-head review and the protected merge queue.
+
 ## TEST FITNESS
 
-PENDING exact-head non-author review.
+TEST FITNESS: PENDING exact-head non-author review.
 
 ## Pre-run GO
 
