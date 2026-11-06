@@ -109,6 +109,16 @@ own branch evidence; a retrieved full reply is too brittle after divergence.
 - both artifacts have 471 reachable rows and deterministic repeats;
 - retrieval-reply shuffle changed 450 panel associations;
 - suffix shuffle changed 75,093 targets with zero BOS transitions.
+- D23, D25, D32 and claim-wording ratchets passed;
+- prep-check reports the aligned-endpoint sheet FIT and complete;
+- `loop report --check` and `loop pr-check --local` passed;
+- `loop gates --full`: 11/11 green;
+- `xtask docs-catalog --check`: 1,175 records, 20 lines, zero missing paths;
+- documentation links report zero broken targets added by deepseek-225;
+- full harness check: 287 rules, zero errors, 252 repository-wide warnings;
+- `xtask roadmap check` remains blocked by the pre-existing
+  `infra-desktop-client-tauri` status/issue mismatch, which this diff does not
+  touch.
 
 ## Skills used
 
