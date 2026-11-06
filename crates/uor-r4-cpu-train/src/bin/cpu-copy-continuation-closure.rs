@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use uor_r4_cpu_train::{
-    compare_continuation_closure_rows, continuation_closure_changes, derive_continuation_closure,
-    derive_full_sequence_suffix_content_memory, derive_reply_boundary_memory,
-    evaluate_continuation_closure_replies, shuffle_continuation_closure, validate_corpus_manifest,
-    ContinuationClosureArm, CopyKeyReplyMetric, CpuCorpusIdentity, CpuMaskedCorpus,
-    MemoryWeightSample, TimedContinuationClosureReading,
+    changed_closure_rows, compare_continuation_closure_rows, continuation_closure_changes,
+    derive_continuation_closure, derive_full_sequence_suffix_content_memory,
+    derive_reply_boundary_memory, evaluate_continuation_closure_replies,
+    shuffle_continuation_closure, validate_corpus_manifest, ContinuationClosureArm,
+    CopyKeyReplyMetric, CpuCorpusIdentity, CpuMaskedCorpus, MemoryWeightSample,
+    TimedContinuationClosureReading,
 };
 
 struct Panel {
@@ -109,8 +110,9 @@ fn run() -> Result<(), String> {
     let changes_vs_tokenwise = continuation_closure_changes(treatment, tokenwise);
     let changes_vs_shuffled = continuation_closure_changes(treatment, shuffled);
     let changes_vs_local = continuation_closure_changes(treatment, local_reply);
+    let closure_output_changes_vs_tokenwise = changed_closure_rows(treatment, tokenwise);
     let control_non_vacuous = changed_continuations > 0
-        && treatment.reading.closure_decisions >= 100
+        && closure_output_changes_vs_tokenwise >= 100
         && changes_vs_tokenwise > 0
         && changes_vs_shuffled > 0
         && changes_vs_local > 0;
@@ -181,6 +183,7 @@ fn run() -> Result<(), String> {
             "vs_tokenwise": changes_vs_tokenwise,
             "vs_shuffled": changes_vs_shuffled,
             "vs_local": changes_vs_local,
+            "closure_rows_vs_tokenwise": closure_output_changes_vs_tokenwise,
         },
         "comparisons": comparisons,
         "bar": {
@@ -191,7 +194,9 @@ fn run() -> Result<(), String> {
             "body_nonfall": body_nonfall,
             "premature_bos_at_most_4": premature_ok,
             "closure_decisions": treatment.reading.closure_decisions,
-            "closure_decisions_at_least_100": treatment.reading.closure_decisions >= 100,
+            "closure_changes": treatment.reading.closure_changes,
+            "closure_output_changes_vs_tokenwise": closure_output_changes_vs_tokenwise,
+            "closure_output_changes_at_least_100": closure_output_changes_vs_tokenwise >= 100,
             "control_non_vacuous": control_non_vacuous,
             "outcome": outcome,
         },

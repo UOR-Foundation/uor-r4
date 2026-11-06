@@ -120,6 +120,7 @@ pub struct ContinuationClosureStep {
     pub writer_token: u32,
     pub local_token: Option<u32>,
     pub global_token: Option<u32>,
+    pub source_token: u32,
     pub selected_token: u32,
     pub used_global: bool,
     pub local_copy_depth: Option<usize>,
@@ -129,6 +130,7 @@ pub struct ContinuationClosureStep {
     pub closure_count: u64,
     pub closure_distinct: u64,
     pub closure_tokens: u64,
+    pub continuation_sha256: String,
     pub stop_kind: Option<String>,
 }
 
@@ -150,6 +152,7 @@ pub struct ContinuationClosureReading {
     pub global_decisions: u64,
     pub writer_decisions: u64,
     pub closure_decisions: u64,
+    pub closure_changes: u64,
     pub closure_tokens: u64,
     pub reply_boundary_stops: u64,
     pub oracle_stops: u64,
@@ -470,22 +473,38 @@ pub fn generate_continuation_closure_reply(
             && global.is_some_and(|prediction| {
                 local_depth.is_none_or(|local_depth| prediction.depth > local_depth)
             });
+        let source_token = if matches!(
+            arm,
+            ContinuationClosureArm::ClosureOnly | ContinuationClosureArm::WriterBoundary
+        ) {
+            writer_token
+        } else if used_global {
+            global.expect("used_global requires global").token
+        } else if local_depth.is_some() {
+            local.as_ref().expect("local depth requires local").token
+        } else {
+            writer_token
+        };
 
-        let closure = match arm {
-            ContinuationClosureArm::ClosureOnly => closure_memory
-                .ok_or_else(|| invalid("closure-only arm has no closure table"))?
-                .predict_confident(&stream, CONTINUATION_CLOSURE_MIN_OBSERVATIONS),
+        let closure = if matches!(
+            arm,
             ContinuationClosureArm::SourceClosure
-            | ContinuationClosureArm::SourceClosureShuffled
-                if used_global =>
-            {
-                let content = global.expect("used_global requires content");
-                closure_memory
-                    .ok_or_else(|| invalid("closure arm has no closure table"))?
-                    .predict_confident(&stream, CONTINUATION_CLOSURE_MIN_OBSERVATIONS)
-                    .filter(|closure| closure.depth == content.depth)
-            }
-            _ => None,
+                | ContinuationClosureArm::SourceClosureShuffled
+                | ContinuationClosureArm::ClosureOnly
+        ) {
+            closure_memory
+                .ok_or_else(|| invalid("closure arm has no closure table"))?
+                .predict_confident(&stream, CONTINUATION_CLOSURE_MIN_OBSERVATIONS)
+                .filter(|closure| {
+                    closure_eligible(
+                        arm,
+                        used_global,
+                        global.map(|prediction| prediction.depth),
+                        closure.depth,
+                    )
+                })
+        } else {
+            None
         };
         if let Some(prediction) = closure {
             let total = tokens
@@ -504,6 +523,7 @@ pub fn generate_continuation_closure_reply(
                     writer_token,
                     local_token: local.as_ref().map(|decision| decision.token),
                     global_token: global.map(|prediction| prediction.token),
+                    source_token,
                     selected_token,
                     used_global,
                     local_copy_depth: local_depth,
@@ -513,6 +533,7 @@ pub fn generate_continuation_closure_reply(
                     closure_count: prediction.continuation_count,
                     closure_distinct: prediction.distinct_continuations,
                     closure_tokens: prediction.continuation.len() as u64,
+                    continuation_sha256: token_hash(&prediction.continuation),
                     stop_kind: Some("closure".to_owned()),
                 });
                 tokens.extend_from_slice(&prediction.continuation);
@@ -526,25 +547,14 @@ pub fn generate_continuation_closure_reply(
             }
         }
 
-        let selected_token = if matches!(
-            arm,
-            ContinuationClosureArm::ClosureOnly | ContinuationClosureArm::WriterBoundary
-        ) {
-            writer_token
-        } else if used_global {
-            global.expect("used_global requires global").token
-        } else if local_depth.is_some() {
-            local.as_ref().expect("local depth requires local").token
-        } else {
-            writer_token
-        };
         steps.push(ContinuationClosureStep {
             row,
             generated_step: tokens.len(),
             writer_token,
             local_token: local.as_ref().map(|decision| decision.token),
             global_token: global.map(|prediction| prediction.token),
-            selected_token,
+            source_token,
+            selected_token: source_token,
             used_global,
             local_copy_depth: local_depth,
             global_depth: global.map(|prediction| prediction.depth),
@@ -553,11 +563,12 @@ pub fn generate_continuation_closure_reply(
             closure_count: 0,
             closure_distinct: 0,
             closure_tokens: 0,
+            continuation_sha256: String::new(),
             stop_kind: None,
         });
-        let stop = reply_stop(selected_token, tokens.len(), prompt.len(), cap, context);
+        let stop = reply_stop(source_token, tokens.len(), prompt.len(), cap, context);
         if stop != Some(ReplyEnd::Bos) {
-            tokens.push(selected_token);
+            tokens.push(source_token);
         }
         if let Some(stop) = stop {
             return Ok((
@@ -572,11 +583,30 @@ pub fn generate_continuation_closure_reply(
                 steps,
             ));
         }
-        stream.push(selected_token);
+        stream.push(source_token);
         let step = forward
-            .step(selected_token, CpuFbsHead::Writer)
+            .step(source_token, CpuFbsHead::Writer)
             .map_err(|error| invalid(format!("continuation-closure generated step: {error}")))?;
         writer_token = step.token;
+    }
+}
+
+fn closure_eligible(
+    arm: ContinuationClosureArm,
+    used_global: bool,
+    content_depth: Option<usize>,
+    closure_depth: usize,
+) -> bool {
+    match arm {
+        ContinuationClosureArm::SourceClosure | ContinuationClosureArm::SourceClosureShuffled => {
+            used_global && content_depth == Some(closure_depth)
+        }
+        ContinuationClosureArm::ClosureOnly => true,
+        ContinuationClosureArm::TokenwiseContent
+        | ContinuationClosureArm::ContentNoBoundary
+        | ContinuationClosureArm::LocalReplyBoundary
+        | ContinuationClosureArm::WriterBoundary
+        | ContinuationClosureArm::ContentReferenceOracle => false,
     }
 }
 
@@ -593,6 +623,7 @@ fn step_without_source(
         writer_token,
         local_token: None,
         global_token: None,
+        source_token: selected_token,
         selected_token,
         used_global: false,
         local_copy_depth: None,
@@ -602,6 +633,7 @@ fn step_without_source(
         closure_count: 0,
         closure_distinct: 0,
         closure_tokens: 0,
+        continuation_sha256: String::new(),
         stop_kind: Some(stop_kind.to_owned()),
     }
 }
@@ -749,6 +781,39 @@ pub fn continuation_closure_changes(
         .count() as u64
 }
 
+pub fn changed_closure_rows(
+    candidate: &TimedContinuationClosureReading,
+    control: &TimedContinuationClosureReading,
+) -> u64 {
+    let closure_rows = candidate
+        .steps
+        .iter()
+        .filter(|step| step.stop_kind.as_deref() == Some("closure"))
+        .map(|step| step.row)
+        .collect::<BTreeSet<_>>();
+    let candidate_rows = candidate
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| (row.row, row.reply_sha256.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let control_rows = control
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| (row.row, row.reply_sha256.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    closure_rows
+        .into_iter()
+        .filter(|row| {
+            candidate_rows
+                .get(row)
+                .zip(control_rows.get(row))
+                .is_some_and(|(candidate, control)| candidate != control)
+        })
+        .count() as u64
+}
+
 fn summarize(
     arm: ContinuationClosureArm,
     rows: &[CopyKeyReplyRow],
@@ -771,6 +836,7 @@ fn summarize(
         global_decisions: 0,
         writer_decisions: 0,
         closure_decisions: 0,
+        closure_changes: 0,
         closure_tokens: 0,
         reply_boundary_stops: 0,
         oracle_stops: 0,
@@ -799,6 +865,10 @@ fn summarize(
         match step.stop_kind.as_deref() {
             Some("closure") => {
                 reading.closure_decisions = checked_add(reading.closure_decisions, 1)?;
+                reading.closure_changes = checked_add(
+                    reading.closure_changes,
+                    u64::from(step.selected_token != step.source_token),
+                )?;
                 reading.closure_tokens = checked_add(reading.closure_tokens, step.closure_tokens)?;
             }
             Some("reply") => {
@@ -893,6 +963,7 @@ fn decision_hash(steps: &[ContinuationClosureStep]) -> String {
         hasher.update(&step.writer_token.to_le_bytes());
         hasher.update(&step.local_token.unwrap_or(u32::MAX).to_le_bytes());
         hasher.update(&step.global_token.unwrap_or(u32::MAX).to_le_bytes());
+        hasher.update(&step.source_token.to_le_bytes());
         hasher.update(&step.selected_token.to_le_bytes());
         hasher.update(&[u8::from(step.used_global)]);
         hasher.update(&(step.local_copy_depth.unwrap_or(0) as u16).to_le_bytes());
@@ -902,6 +973,7 @@ fn decision_hash(steps: &[ContinuationClosureStep]) -> String {
         hasher.update(&step.closure_count.to_le_bytes());
         hasher.update(&step.closure_distinct.to_le_bytes());
         hasher.update(&step.closure_tokens.to_le_bytes());
+        hasher.update(step.continuation_sha256.as_bytes());
         hasher.update(step.stop_kind.as_deref().unwrap_or_default().as_bytes());
     }
     hasher.finalize().to_hex().to_string()
@@ -1040,5 +1112,137 @@ mod tests {
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].stop_kind.as_deref(), Some("closure"));
         assert_eq!(steps[0].closure_tokens, 4);
+        assert_eq!(steps[0].continuation_sha256, token_hash(&[10, 11, 12, 13]));
+    }
+
+    #[test]
+    fn source_closure_requires_matching_content_depth() {
+        assert!(closure_eligible(
+            ContinuationClosureArm::SourceClosure,
+            true,
+            Some(12),
+            12
+        ));
+        assert!(!closure_eligible(
+            ContinuationClosureArm::SourceClosure,
+            true,
+            Some(16),
+            12
+        ));
+        assert!(!closure_eligible(
+            ContinuationClosureArm::SourceClosure,
+            false,
+            Some(12),
+            12
+        ));
+        assert!(closure_eligible(
+            ContinuationClosureArm::ClosureOnly,
+            false,
+            None,
+            12
+        ));
+        assert!(!closure_eligible(
+            ContinuationClosureArm::ContentNoBoundary,
+            true,
+            Some(12),
+            12
+        ));
+    }
+
+    #[test]
+    fn closure_longer_than_cap_falls_back_tokenwise() {
+        let training = [
+            sample(&[1, 2, 3, 4], &[10, 11, 12, 13]),
+            sample(&[1, 2, 3, 4], &[10, 11, 12, 13]),
+        ];
+        let content = derive_full_sequence_suffix_content_memory(&training).unwrap();
+        let closure = derive_continuation_closure(&training).unwrap();
+        let boundary = derive_reply_boundary_memory(&training).unwrap();
+        let (reply, steps) = generate_continuation_closure_reply(
+            &artifact(),
+            &[1, 2, 3, 4],
+            3,
+            4,
+            ContinuationClosureArm::SourceClosure,
+            Some(&content),
+            Some(&closure),
+            &boundary,
+            202,
+            0,
+        )
+        .unwrap();
+        assert_eq!(reply.stop, "cap");
+        assert!(steps
+            .iter()
+            .all(|step| step.stop_kind.as_deref() != Some("closure")));
+    }
+
+    #[test]
+    fn closure_beyond_context_falls_back_tokenwise() {
+        let prompt = (1..=30).collect::<Vec<_>>();
+        let reply = [100, 101, 102, 103];
+        let training = [sample(&prompt, &reply), sample(&prompt, &reply)];
+        let content = derive_full_sequence_suffix_content_memory(&training).unwrap();
+        let closure = derive_continuation_closure(&training).unwrap();
+        let boundary = derive_reply_boundary_memory(&training).unwrap();
+        let (reply, steps) = generate_continuation_closure_reply(
+            &artifact(),
+            &prompt,
+            64,
+            reply.len(),
+            ContinuationClosureArm::SourceClosure,
+            Some(&content),
+            Some(&closure),
+            &boundary,
+            202,
+            0,
+        )
+        .unwrap();
+        assert_ne!(reply.stop, "bos");
+        assert!(steps
+            .iter()
+            .all(|step| step.stop_kind.as_deref() != Some("closure")));
+    }
+
+    #[test]
+    fn closure_change_accounting_compares_the_preclosure_source_token() {
+        let row = CopyKeyReplyRow {
+            row: 0,
+            reachable: true,
+            exact_reference: false,
+            bos_complete: true,
+            opening_correct: false,
+            premature_bos: false,
+            non_premature_bos: true,
+            generated_tokens: 4,
+            reference_tokens: 4,
+            correct_body_positions: 0,
+            copy_decisions: 0,
+            fallback_decisions: 1,
+            stop: "bos".to_owned(),
+            reply_sha256: String::new(),
+        };
+        let step = ContinuationClosureStep {
+            row: 0,
+            generated_step: 0,
+            writer_token: 9,
+            local_token: Some(5),
+            global_token: Some(5),
+            source_token: 5,
+            selected_token: 10,
+            used_global: true,
+            local_copy_depth: None,
+            global_depth: Some(8),
+            closure_depth: Some(8),
+            closure_observations: 2,
+            closure_count: 2,
+            closure_distinct: 1,
+            closure_tokens: 4,
+            continuation_sha256: token_hash(&[10, 11, 12, 13]),
+            stop_kind: Some("closure".to_owned()),
+        };
+        let reading = summarize(ContinuationClosureArm::SourceClosure, &[row], &[step]).unwrap();
+        assert_eq!(reading.closure_decisions, 1);
+        assert_eq!(reading.closure_changes, 1);
     }
 }

@@ -62,12 +62,13 @@ pub use content_readout::{
     CONTENT_MIN_TRAINING_ROWS, CONTENT_SIGNATURE_BITS, CONTENT_TRAJECTORY_SIGNATURE_BITS,
 };
 pub use continuation_closure::{
-    compare_continuation_closure_rows, continuation_closure_changes, derive_continuation_closure,
-    evaluate_continuation_closure_replies, generate_continuation_closure_reply,
-    shuffle_continuation_closure, ContinuationClosureArm, ContinuationClosureCensus,
-    ContinuationClosureMemory, ContinuationClosurePrediction, ContinuationClosureReading,
-    ContinuationClosureStep, TimedContinuationClosureReading, CONTINUATION_CLOSURE_MAX_DEPTH,
-    CONTINUATION_CLOSURE_MIN_DEPTH, CONTINUATION_CLOSURE_MIN_OBSERVATIONS,
+    changed_closure_rows, compare_continuation_closure_rows, continuation_closure_changes,
+    derive_continuation_closure, evaluate_continuation_closure_replies,
+    generate_continuation_closure_reply, shuffle_continuation_closure, ContinuationClosureArm,
+    ContinuationClosureCensus, ContinuationClosureMemory, ContinuationClosurePrediction,
+    ContinuationClosureReading, ContinuationClosureStep, TimedContinuationClosureReading,
+    CONTINUATION_CLOSURE_MAX_DEPTH, CONTINUATION_CLOSURE_MIN_DEPTH,
+    CONTINUATION_CLOSURE_MIN_OBSERVATIONS,
 };
 pub use copy_candidate_rank::{
     compare_ranked_copy_rows, derive_copy_candidate_rankers, evaluate_ranked_copy_replies,
