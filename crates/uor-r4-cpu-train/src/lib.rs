@@ -195,9 +195,11 @@ pub use quant_shadow::{
     CPU_QUANTIZATION_CHECKPOINT_SCHEMA,
 };
 pub use query_cache_eval::{
-    aggregate_query_cache_reports, evaluate_query_cache, CentroidEvaluationRequest,
-    REGISTERED_MINIMUM_OBSERVATIONS, REGISTERED_MIN_FIT_OBSERVATIONS,
-    REGISTERED_MIN_FITTED_ROWS,
+    aggregate_query_cache_reports, evaluate_query_cache, evaluate_registered_query_cache,
+    CentroidEvaluationRequest, REGISTERED_CONTEXT, REGISTERED_EXPECTED_ROWS,
+    REGISTERED_MINIMUM_OBSERVATIONS, REGISTERED_MIN_FIT_OBSERVATIONS, REGISTERED_MIN_FITTED_ROWS,
+    REGISTERED_PANEL_SPLITS, REGISTERED_POOLED_ROW_IDENTITY, REGISTERED_TRAIN_MASK_SHA256,
+    REGISTERED_TRAIN_SPLIT, REGISTERED_TRAIN_TOKENS_SHA256, REGISTERED_WIDTH,
 };
 pub use readout_refit::{
     evaluate_output_table, observe_refit_thresholds, paired_two_sigma, refit_output_table,

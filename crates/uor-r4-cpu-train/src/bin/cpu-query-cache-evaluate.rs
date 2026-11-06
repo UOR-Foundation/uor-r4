@@ -7,24 +7,27 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use uor_r4_cpu_train::{
-    evaluate_query_cache, CentroidEvaluationRequest, CpuTrainError,
-    REGISTERED_MINIMUM_OBSERVATIONS, REGISTERED_MIN_FITTED_ROWS, REGISTERED_MIN_FIT_OBSERVATIONS,
+    evaluate_registered_query_cache, CentroidEvaluationRequest, CpuTrainError,
+    REGISTERED_EXPECTED_ROWS, REGISTERED_MINIMUM_OBSERVATIONS, REGISTERED_MIN_FITTED_ROWS,
+    REGISTERED_MIN_FIT_OBSERVATIONS, REGISTERED_PANEL_SPLITS, REGISTERED_POOLED_ROW_IDENTITY,
+    REGISTERED_TRAIN_MASK_SHA256, REGISTERED_TRAIN_SPLIT, REGISTERED_TRAIN_TOKENS_SHA256,
 };
 
 fn main() -> Result<(), CpuTrainError> {
     let mut args = std::env::args().skip(1);
     let cache = PathBuf::from(args.next().ok_or_else(usage)?);
     let mut request = CentroidEvaluationRequest {
-        train_split: "train".to_owned(),
+        train_split: REGISTERED_TRAIN_SPLIT.to_owned(),
         panel_splits: Vec::new(),
         memory: false,
         minimum_observations: REGISTERED_MINIMUM_OBSERVATIONS,
         minimum_fitted_rows: REGISTERED_MIN_FITTED_ROWS,
         minimum_fit_observations: REGISTERED_MIN_FIT_OBSERVATIONS,
-        expected_train_tokens_sha256: None,
-        expected_train_mask_sha256: None,
-        expected_rows: None,
-        expected_row_identity: None,
+        expected_train_tokens_sha256: Some(REGISTERED_TRAIN_TOKENS_SHA256.to_owned()),
+        expected_train_mask_sha256: Some(REGISTERED_TRAIN_MASK_SHA256.to_owned()),
+        expected_rows: Some(REGISTERED_EXPECTED_ROWS),
+        expected_row_identity: Some(REGISTERED_POOLED_ROW_IDENTITY.to_owned()),
+        checkpoint_root: None,
     };
     let mut out = None;
     while let Some(flag) = args.next() {
@@ -48,16 +51,18 @@ fn main() -> Result<(), CpuTrainError> {
             "--expect-train-mask" => request.expected_train_mask_sha256 = Some(value),
             "--expect-rows" => request.expected_rows = Some(number(&flag, &value)?),
             "--expect-identity" => request.expected_row_identity = Some(value),
+            "--checkpoint-root" => request.checkpoint_root = Some(PathBuf::from(value)),
             "--out" => out = Some(PathBuf::from(value)),
             _ => return Err(CpuTrainError::Invalid(format!("unknown flag {flag}"))),
         }
     }
     if request.panel_splits.is_empty() {
-        return Err(CpuTrainError::Invalid(
-            "at least one --panel is required".to_owned(),
-        ));
+        request.panel_splits = REGISTERED_PANEL_SPLITS
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
     }
-    let report = evaluate_query_cache(&cache, &request)?;
+    let report = evaluate_registered_query_cache(&cache, &request)?;
     let bytes = serde_json::to_vec_pretty(&report)
         .map_err(|error| CpuTrainError::Invalid(error.to_string()))?;
     match out {

@@ -29,6 +29,39 @@ const QUERY_BLOCK_ROWS: usize = 64;
 pub const REGISTERED_MINIMUM_OBSERVATIONS: usize = 8;
 pub const REGISTERED_MIN_FITTED_ROWS: usize = 100;
 pub const REGISTERED_MIN_FIT_OBSERVATIONS: usize = 10_000;
+pub const REGISTERED_EXPECTED_ROWS: usize = 1_460_697;
+pub const REGISTERED_WIDTH: usize = 256;
+pub const REGISTERED_CONTEXT: usize = 192;
+pub const REGISTERED_TRAIN_SPLIT: &str = "train";
+pub const REGISTERED_PANEL_SPLITS: [&str; 4] = ["oasst2", "wiki-00000", "wiki-00020", "wiki-00040"];
+pub const REGISTERED_TRAIN_TOKENS_SHA256: &str =
+    "ed8f25374e99bd65cd509b5cfcdffb6a8476401a973ea02aaaaa0ea76e35ee52";
+pub const REGISTERED_TRAIN_MASK_SHA256: &str =
+    "ec6e520c7a67aaf6efc7aaf42bf7513b3e697239fb18b73a1e89f130eacd4875";
+pub const REGISTERED_POOLED_ROW_IDENTITY: &str =
+    "5f88a5b3295ba5d684a8c75206787642fd65a2377d2dbb268992ec5c71a621eb";
+const REGISTERED_PANEL_INPUTS: [(&str, &str, &str); 4] = [
+    (
+        "oasst2",
+        "02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e",
+        "9c5bb6567c6a4cded2dfb2280ae4acdc798e283a3beae8aaebc695656e1b4833",
+    ),
+    (
+        "wiki-00000",
+        "82b3a40c3ffe2cabd9164f636d9c2710fb054e171913eca944ebf819b70209f7",
+        "34fe6b68e0d039b914bb1cde789223ef463b37ea77af7f3d77ab90eb0977386f",
+    ),
+    (
+        "wiki-00020",
+        "9b7f1432b105f161ed8b54b01900d8fa791efc6dbfd5ad1d62a8d4d94a86d640",
+        "a6803ab3de3fae60c382416639ffa583c26ac822db78a37afd2c2d718767e00d",
+    ),
+    (
+        "wiki-00040",
+        "c927243b540bccdda8af8fb5a11aafa8b9041d4af30dd614f23d2ebb9aa5962d",
+        "9d95ea6de0eba07d4cdbc258b5fa6ae88def952f062d166ba417d783724fa625",
+    ),
+];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -81,6 +114,7 @@ struct CachedRows {
     copies: Vec<u8>,
 }
 
+#[derive(Debug)]
 struct QueryCache {
     root: PathBuf,
     manifest: QueryCacheManifest,
@@ -131,6 +165,7 @@ pub struct CentroidEvaluationRequest {
     pub expected_train_mask_sha256: Option<String>,
     pub expected_rows: Option<usize>,
     pub expected_row_identity: Option<String>,
+    pub checkpoint_root: Option<PathBuf>,
 }
 
 impl QueryCache {
@@ -152,15 +187,25 @@ impl QueryCache {
         if manifest.schema != QUERY_CACHE_SCHEMA
             || manifest.query_space != "q12-f32"
             || manifest.tokenizer_sha256 != PINNED_TOKENIZER_SHA256
+            || manifest.checkpoint.is_empty()
+            || manifest.data_root.is_empty()
+            || manifest.table_file.is_empty()
             || manifest.vocab == 0
             || manifest.width == 0
+            || manifest.width > i32::MAX as usize / u16::MAX as usize
             || manifest.splits.is_empty()
         {
             return Err(invalid("query cache manifest identity differs"));
         }
+        safe_relative(&manifest.table_file)?;
         let mut split_keys = BTreeSet::new();
         for split in &manifest.splits {
-            if split.context == 0 || !split_keys.insert((&split.split, split.memory)) {
+            safe_relative(&split.query_file)?;
+            safe_relative(&split.rows_file)?;
+            if split.context == 0
+                || split.rows == 0
+                || !split_keys.insert((&split.split, split.memory))
+            {
                 return Err(invalid("query cache split inventory differs"));
             }
         }
@@ -196,14 +241,96 @@ impl QueryCache {
         let rows = decode_cached_rows(&row_bytes, metadata.rows, self.manifest.vocab)?;
         Ok((metadata, rows))
     }
+
+    fn verify_manifest_files(
+        &self,
+        selected: &BTreeSet<(String, bool)>,
+        checkpoint_root: Option<&Path>,
+    ) -> Result<()> {
+        for split in &self.manifest.splits {
+            if selected.contains(&(split.split.clone(), split.memory)) {
+                continue;
+            }
+            verify_file_checked(&self.root.join(&split.query_file), &split.query_sha256)?;
+            verify_file_checked(&self.root.join(&split.rows_file), &split.rows_sha256)?;
+        }
+
+        let checkpoint_root = checkpoint_root
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(&self.manifest.checkpoint));
+        if self.manifest.checkpoint_files.is_empty() {
+            return Err(invalid("query cache checkpoint inventory is empty"));
+        }
+        for (file, expected) in &self.manifest.checkpoint_files {
+            safe_relative(file)?;
+            verify_file_checked(&checkpoint_root.join(file), expected)?;
+        }
+        match (
+            self.manifest.run_config.as_deref(),
+            self.manifest.run_config_sha256.as_deref(),
+        ) {
+            (None, None) => {}
+            (Some(original), Some(expected)) => {
+                let original = Path::new(original);
+                let candidates = [
+                    Some(original.to_path_buf()),
+                    Some(checkpoint_root.join("config.json")),
+                    checkpoint_root
+                        .parent()
+                        .and_then(Path::parent)
+                        .map(|run| run.join("config.json")),
+                ];
+                let mut matched = false;
+                for candidate in candidates.into_iter().flatten() {
+                    if candidate.is_file()
+                        && file_sha256(&candidate).is_ok_and(|actual| actual == expected)
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                if !matched {
+                    return Err(invalid("query cache run config hash differs"));
+                }
+            }
+            _ => return Err(invalid("query cache run config inventory differs")),
+        }
+        Ok(())
+    }
 }
 
 pub fn evaluate_query_cache(
     root: &Path,
     request: &CentroidEvaluationRequest,
 ) -> Result<serde_json::Value> {
+    evaluate_query_cache_inner(root, request, false)
+}
+
+pub fn evaluate_registered_query_cache(
+    root: &Path,
+    request: &CentroidEvaluationRequest,
+) -> Result<serde_json::Value> {
+    validate_registered_request(request)?;
+    evaluate_query_cache_inner(root, request, true)
+}
+
+fn evaluate_query_cache_inner(
+    root: &Path,
+    request: &CentroidEvaluationRequest,
+    registered: bool,
+) -> Result<serde_json::Value> {
     validate_request(request)?;
     let cache = QueryCache::open(root)?;
+    if registered {
+        validate_registered_cache(&cache, request)?;
+    }
+    let selected = request
+        .panel_splits
+        .iter()
+        .chain(std::iter::once(&request.train_split))
+        .map(|split| (split.clone(), request.memory))
+        .collect::<BTreeSet<_>>();
+    cache.verify_manifest_files(&selected, request.checkpoint_root.as_deref())?;
     let (train_metadata, train_rows) = cache.split(&request.train_split, request.memory)?;
     let train_identity_matches = request
         .expected_train_tokens_sha256
@@ -317,6 +444,7 @@ pub fn evaluate_query_cache(
     let shuffled_top8_correct = shuffled_top8.iter().filter(|&&hit| hit).count();
     let top8_holds = centroid_top8_correct >= original_top8_correct;
     let bar_passes = identity_exact
+        && train_identity_matches
         && identity_registered
         && rows_registered
         && power_ok
@@ -343,6 +471,11 @@ pub fn evaluate_query_cache(
 
     Ok(serde_json::json!({
         "schema": EVALUATION_SCHEMA,
+        "evaluation_profile": if registered {
+            "n3s-registered-v1"
+        } else {
+            "diagnostic"
+        },
         "status": status,
         "cache": {
             "root": cache.root,
@@ -430,6 +563,9 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
         if report["schema"] != EVALUATION_SCHEMA {
             return Err(invalid("query cache aggregate report schema differs"));
         }
+        if report["evaluation_profile"] != "n3s-registered-v1" {
+            return Err(invalid("query cache aggregate report is not registered"));
+        }
         let status = report["status"]
             .as_str()
             .ok_or_else(|| invalid("query cache aggregate report has no status"))?;
@@ -471,6 +607,14 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
                     .ok_or_else(|| invalid("query cache aggregate panel name is absent"))
             })
             .collect::<Result<Vec<_>>>()?;
+        if panel_names
+            != REGISTERED_PANEL_SPLITS
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        {
+            return Err(invalid("query cache aggregate panel inventory differs"));
+        }
         let request = &report["request"];
         let rows = request["expected_rows"]
             .as_u64()
@@ -487,6 +631,91 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
             .as_str()
             .ok_or_else(|| invalid("query cache aggregate TRAIN mask pin is absent"))?
             .to_owned();
+        let train_split = request["train_split"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate TRAIN split is absent"))?;
+        let minimum_observations = request["minimum_observations"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate minimum observations are absent"))?;
+        let minimum_fitted_rows = request["minimum_fitted_rows"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate minimum fitted rows are absent"))?;
+        let minimum_fit_observations = request["minimum_fit_observations"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate minimum fit observations are absent"))?;
+        if rows != REGISTERED_EXPECTED_ROWS as u64
+            || identity != REGISTERED_POOLED_ROW_IDENTITY
+            || train_tokens != REGISTERED_TRAIN_TOKENS_SHA256
+            || train_mask != REGISTERED_TRAIN_MASK_SHA256
+            || train_split != REGISTERED_TRAIN_SPLIT
+            || request["memory"].as_bool() != Some(false)
+            || minimum_observations != REGISTERED_MINIMUM_OBSERVATIONS as u64
+            || minimum_fitted_rows != REGISTERED_MIN_FITTED_ROWS as u64
+            || minimum_fit_observations != REGISTERED_MIN_FIT_OBSERVATIONS as u64
+            || report["fit"]["minimum_fitted_rows"] != REGISTERED_MIN_FITTED_ROWS
+            || report["fit"]["minimum_fit_observations"] != REGISTERED_MIN_FIT_OBSERVATIONS
+            || report["fit"]["control_strategy"] != "exact-count-stratified-cycle"
+            || report["cache"]["width"] != REGISTERED_WIDTH
+        {
+            return Err(invalid(
+                "query cache aggregate report differs from the registered evaluation",
+            ));
+        }
+        let pooled = &report["pooled"];
+        let fit = &report["fit"];
+        let fitted_rows = fit["fitted_rows"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate fitted rows are absent"))?;
+        let observations = fit["observations"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate observations are absent"))?;
+        let power_ok = fitted_rows >= REGISTERED_MIN_FITTED_ROWS as u64
+            && observations >= REGISTERED_MIN_FIT_OBSERVATIONS as u64;
+        let train_identity = report["train"]["identity_matches"].as_bool() == Some(true);
+        let shuffle_ok = fit["shuffled_changed_targets"]
+            .as_u64()
+            .is_some_and(|changed| changed > 0)
+            && fit["shuffled_changed_coordinates"]
+                .as_u64()
+                .is_some_and(|changed| changed > 0);
+        let top8_holds = pooled["top8_holds"].as_bool() == Some(true);
+        let centroid_top1 = pooled["centroid_top1"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate centroid top-1 is absent"))?;
+        let original_top1 = pooled["original_top1"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate original top-1 is absent"))?;
+        let shuffled_top1 = pooled["exact_count_shuffled_top1"]
+            .as_u64()
+            .ok_or_else(|| invalid("query cache aggregate shuffled top-1 is absent"))?;
+        let mechanism_bar = top8_holds
+            && centroid_top1 > original_top1
+            && centroid_top1 > shuffled_top1
+            && pooled["centroid_vs_original"]["passes"].as_bool() == Some(true)
+            && pooled["centroid_vs_exact_count_shuffled"]["passes"].as_bool() == Some(true);
+        let bar_passes = train_identity
+            && pooled["rows_match"].as_bool() == Some(true)
+            && pooled["identity_matches"].as_bool() == Some(true)
+            && power_ok
+            && shuffle_ok
+            && mechanism_bar;
+        let recomputed_status = if !train_identity || !shuffle_ok {
+            "CONTROL_FAULT"
+        } else if !power_ok {
+            "INSUFFICIENT_POWER"
+        } else if bar_passes {
+            "KEEP"
+        } else {
+            "REJECT"
+        };
+        if fit["power_ok"].as_bool() != Some(power_ok)
+            || pooled["bar_passes"].as_bool() != Some(bar_passes)
+            || status != recomputed_status
+        {
+            return Err(invalid(
+                "query cache aggregate report contradicts its own metrics",
+            ));
+        }
         if report["pooled"]["rows"].as_u64() != Some(rows)
             || report["pooled"]["row_identity_sha256"].as_str() != Some(identity.as_str())
         {
@@ -495,11 +724,14 @@ pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<se
             ));
         }
         let current = (
+            train_split.to_owned(),
             rows,
             identity,
             train_tokens,
             train_mask,
-            request["memory"].as_bool(),
+            minimum_observations,
+            minimum_fitted_rows,
+            minimum_fit_observations,
             panel_names,
         );
         if binding.as_ref().is_some_and(|binding| binding != &current) {
@@ -558,6 +790,83 @@ fn validate_request(request: &CentroidEvaluationRequest) -> Result<()> {
         return Err(invalid("query cache evaluation uses train as a panel"));
     }
     Ok(())
+}
+
+fn validate_registered_request(request: &CentroidEvaluationRequest) -> Result<()> {
+    if request.train_split != REGISTERED_TRAIN_SPLIT
+        || request.memory
+        || !request
+            .panel_splits
+            .iter()
+            .map(String::as_str)
+            .eq(REGISTERED_PANEL_SPLITS)
+        || request.minimum_observations != REGISTERED_MINIMUM_OBSERVATIONS
+        || request.minimum_fitted_rows != REGISTERED_MIN_FITTED_ROWS
+        || request.minimum_fit_observations != REGISTERED_MIN_FIT_OBSERVATIONS
+        || request.expected_train_tokens_sha256.as_deref() != Some(REGISTERED_TRAIN_TOKENS_SHA256)
+        || request.expected_train_mask_sha256.as_deref() != Some(REGISTERED_TRAIN_MASK_SHA256)
+        || request.expected_rows != Some(REGISTERED_EXPECTED_ROWS)
+        || request.expected_row_identity.as_deref() != Some(REGISTERED_POOLED_ROW_IDENTITY)
+    {
+        return Err(invalid(
+            "query cache request does not match the registered n3S evaluation",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_registered_cache(
+    cache: &QueryCache,
+    request: &CentroidEvaluationRequest,
+) -> Result<()> {
+    if cache.manifest.width != REGISTERED_WIDTH
+        || cache.manifest.splits.len() != 1 + REGISTERED_PANEL_SPLITS.len()
+        || cache
+            .manifest
+            .splits
+            .iter()
+            .any(|split| split.memory || split.label != "no-memory")
+    {
+        return Err(invalid(
+            "query cache does not match the registered n3S inventory",
+        ));
+    }
+    let train = registered_split(cache, REGISTERED_TRAIN_SPLIT)?;
+    if train.context != REGISTERED_CONTEXT
+        || train.tokens_sha256 != REGISTERED_TRAIN_TOKENS_SHA256
+        || train.mask_sha256 != REGISTERED_TRAIN_MASK_SHA256
+    {
+        return Err(invalid("query cache TRAIN split differs from registration"));
+    }
+    for (name, tokens, mask) in REGISTERED_PANEL_INPUTS {
+        let split = registered_split(cache, name)?;
+        if split.context != REGISTERED_CONTEXT
+            || split.tokens_sha256 != tokens
+            || split.mask_sha256 != mask
+        {
+            return Err(invalid(format!(
+                "query cache {name} split differs from registration"
+            )));
+        }
+    }
+    if cache.manifest.run_config.is_none() || cache.manifest.run_config_sha256.is_none() {
+        return Err(invalid("query cache run config is not registered"));
+    }
+    if request.checkpoint_root.is_some()
+        && !request.checkpoint_root.as_deref().is_some_and(Path::is_dir)
+    {
+        return Err(invalid("query cache checkpoint root is not a directory"));
+    }
+    Ok(())
+}
+
+fn registered_split<'a>(cache: &'a QueryCache, name: &str) -> Result<&'a QueryCacheSplit> {
+    cache
+        .manifest
+        .splits
+        .iter()
+        .find(|split| split.split == name && !split.memory)
+        .ok_or_else(|| invalid(format!("query cache has no registered {name} split")))
 }
 
 fn fit_streamed_tables(
@@ -632,17 +941,16 @@ fn fit_streamed_tables(
         hasher.update(&buffer);
         let target = target as usize;
         let candidate = target.saturating_mul(width);
-        let Some(control_target) = control_targets[target] else {
-            continue;
-        };
-        let control_target = control_target.saturating_mul(width);
+        let control_target = control_targets[target].map(|target| target.saturating_mul(width));
         for coordinate in 0..width {
             let at = coordinate * 4;
             let value =
                 f32::from_le_bytes([buffer[at], buffer[at + 1], buffer[at + 2], buffer[at + 3]]);
             let value = f64::from(f32_to_q12(value)?);
-            candidate_sums[candidate + coordinate] += value;
-            control_sums[control_target + coordinate] += value;
+            if let Some(control_target) = control_target {
+                candidate_sums[candidate + coordinate] += value;
+                control_sums[control_target + coordinate] += value;
+            }
         }
     }
     let mut tail = [0u8; 1];
@@ -910,6 +1218,35 @@ fn read_checked(root: &Path, file: &str, expected: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn verify_file_checked(path: &Path, expected: &str) -> Result<()> {
+    let actual = file_sha256(path)?;
+    if actual != expected {
+        return Err(invalid(format!(
+            "query cache file {} hash differs",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
+fn file_sha256(path: &Path) -> Result<String> {
+    let mut reader = BufReader::new(
+        File::open(path).map_err(|error| invalid(format!("{}: {error}", path.display())))?,
+    );
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0u8; 1024 * 1024];
+    loop {
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|error| invalid(format!("{}: {error}", path.display())))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
 fn safe_relative(file: &str) -> Result<()> {
     let path = Path::new(file);
     if file.is_empty()
@@ -1027,7 +1364,8 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let checkpoint = root.join("checkpoint");
         fs::create_dir_all(&checkpoint).unwrap();
-        fs::write(checkpoint.join("config.json"), b"{}").unwrap();
+        let checkpoint_config = b"{}";
+        fs::write(checkpoint.join("config.json"), checkpoint_config).unwrap();
         let cache_root = root.join("cache");
         fs::create_dir_all(cache_root.join("no-memory")).unwrap();
 
@@ -1072,7 +1410,10 @@ mod tests {
             checkpoint: checkpoint.display().to_string(),
             data_root: root.display().to_string(),
             tokenizer_sha256: PINNED_TOKENIZER_SHA256.to_owned(),
-            checkpoint_files: BTreeMap::new(),
+            checkpoint_files: BTreeMap::from([(
+                "config.json".to_owned(),
+                sha256(checkpoint_config),
+            )]),
             run_config: None,
             run_config_sha256: None,
             table_file: "table.f32".to_owned(),
@@ -1123,6 +1464,24 @@ mod tests {
         (root, cache_root)
     }
 
+    fn rewrite_manifest(cache_root: &Path, update: impl FnOnce(&mut QueryCacheManifest)) {
+        let path = cache_root.join("manifest.json");
+        let mut manifest: QueryCacheManifest =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        update(&mut manifest);
+        let bytes = serde_json::to_vec_pretty(&manifest).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        fs::write(
+            cache_root.join("seal.json"),
+            serde_json::to_vec_pretty(&QueryCacheSeal {
+                schema: QUERY_CACHE_SEAL_SCHEMA.to_owned(),
+                manifest_sha256: sha256(&bytes),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
     fn request() -> CentroidEvaluationRequest {
         CentroidEvaluationRequest {
             train_split: "train".to_owned(),
@@ -1134,7 +1493,29 @@ mod tests {
             expected_train_tokens_sha256: Some("train-tokens".to_owned()),
             expected_train_mask_sha256: Some("train-mask".to_owned()),
             expected_rows: Some(3),
-            expected_row_identity: None,
+            expected_row_identity: Some(
+                "4bcb985dd6bfd61c3bf7451f03f8f3dbe03643b09ac903da46db0e8015957274".to_owned(),
+            ),
+            checkpoint_root: None,
+        }
+    }
+
+    fn registered_request() -> CentroidEvaluationRequest {
+        CentroidEvaluationRequest {
+            train_split: REGISTERED_TRAIN_SPLIT.to_owned(),
+            panel_splits: REGISTERED_PANEL_SPLITS
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            memory: false,
+            minimum_observations: REGISTERED_MINIMUM_OBSERVATIONS,
+            minimum_fitted_rows: REGISTERED_MIN_FITTED_ROWS,
+            minimum_fit_observations: REGISTERED_MIN_FIT_OBSERVATIONS,
+            expected_train_tokens_sha256: Some(REGISTERED_TRAIN_TOKENS_SHA256.to_owned()),
+            expected_train_mask_sha256: Some(REGISTERED_TRAIN_MASK_SHA256.to_owned()),
+            expected_rows: Some(REGISTERED_EXPECTED_ROWS),
+            expected_row_identity: Some(REGISTERED_POOLED_ROW_IDENTITY.to_owned()),
+            checkpoint_root: None,
         }
     }
 
@@ -1143,14 +1524,20 @@ mod tests {
         assert_eq!(f32_to_q12(1.0 / Q12_SCALE).unwrap(), 1);
         assert_eq!(f32_to_q12(-1.0 / Q12_SCALE).unwrap(), -1);
         assert!(f32_to_q12(1.0 / 8192.0).is_err());
+        assert_eq!(q12_mean(1.0, 2).unwrap(), 1);
+        assert_eq!(q12_mean(-1.0, 2).unwrap(), -1);
+        assert_eq!(q12_mean(-3.0, 2).unwrap(), -2);
         let mut best = Vec::new();
-        for token in [5, 2, 4, 1] {
+        for token in [11, 1, 10, 2, 9, 3, 8, 4, 7, 5, 6, 12] {
             insert_best(&mut best, 3, token);
         }
         assert_eq!(
             best.iter().map(|candidate| candidate.1).collect::<Vec<_>>(),
-            [1, 2, 4, 5]
+            [1, 2, 3, 4, 5, 6, 7, 8]
         );
+        insert_best(&mut best, 3, 9);
+        assert_eq!(best.len(), 8);
+        assert_eq!(best.last().map(|candidate| candidate.1), Some(8));
     }
 
     #[test]
@@ -1178,19 +1565,14 @@ mod tests {
         assert_eq!(report["pooled"]["identity_matches"], true);
         assert_eq!(report["panels"][0]["identity"]["exact"], true);
 
-        let identity = report["pooled"]["row_identity_sha256"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        let mut registered = request();
-        registered.expected_row_identity = Some(identity);
+        let registered = request();
         let one = rayon::ThreadPoolBuilder::new()
             .num_threads(1)
             .build()
             .unwrap()
             .install(|| evaluate_query_cache(&cache_root, &registered).unwrap());
-        let four = rayon::ThreadPoolBuilder::new()
-            .num_threads(4)
+        let two = rayon::ThreadPoolBuilder::new()
+            .num_threads(2)
             .build()
             .unwrap()
             .install(|| evaluate_query_cache(&cache_root, &registered).unwrap());
@@ -1199,7 +1581,7 @@ mod tests {
             value["workers"] = 0.into();
             value
         };
-        assert_eq!(normalize(one), normalize(four));
+        assert_eq!(normalize(one), normalize(two));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1217,6 +1599,113 @@ mod tests {
         assert_eq!(fitted.singleton_control_targets, 1);
         assert_eq!(fitted.shuffled_changed_targets, 2);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn every_train_query_must_be_on_the_q12_grid_even_when_ineligible() {
+        let (root, cache_root) = fixture("ineligible-q12");
+        let query = cache_root.join("no-memory/train.queries.f32");
+        let mut bytes = fs::read(&query).unwrap();
+        let last = bytes.len() - 4;
+        bytes[last..].copy_from_slice(&(22.5 / Q12_SCALE).to_le_bytes());
+        fs::write(&query, &bytes).unwrap();
+        rewrite_manifest(&cache_root, |manifest| {
+            let train = manifest
+                .splits
+                .iter_mut()
+                .find(|split| split.split == "train")
+                .unwrap();
+            train.query_sha256 = sha256(&bytes);
+        });
+
+        let mut ineligible = request();
+        ineligible.minimum_observations = 3;
+        let error = evaluate_query_cache(&cache_root, &ineligible)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Q12"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn checkpoint_inventory_hashes_are_verified() {
+        let (root, cache_root) = fixture("checkpoint-hash");
+        fs::write(root.join("checkpoint/config.json"), b"[]").unwrap();
+        let error = evaluate_query_cache(&cache_root, &request())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("hash differs"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn every_manifest_split_and_run_config_hash_is_verified() {
+        let (root, cache_root) = fixture("manifest-inventory");
+        let panel_query = fs::read(cache_root.join("no-memory/p.queries.f32")).unwrap();
+        let panel_rows = fs::read(cache_root.join("no-memory/p.rows.bin")).unwrap();
+        fs::write(
+            cache_root.join("no-memory/unused.queries.f32"),
+            &panel_query,
+        )
+        .unwrap();
+        fs::write(cache_root.join("no-memory/unused.rows.bin"), &panel_rows).unwrap();
+        let run_config = root.join("run/config.json");
+        fs::create_dir_all(run_config.parent().unwrap()).unwrap();
+        let run_config_bytes = br#"{"steps":8192}"#;
+        fs::write(&run_config, run_config_bytes).unwrap();
+        rewrite_manifest(&cache_root, |manifest| {
+            let mut unused = manifest
+                .splits
+                .iter()
+                .find(|split| split.split == "p")
+                .unwrap()
+                .clone();
+            unused.split = "unused".to_owned();
+            unused.query_file = "no-memory/unused.queries.f32".to_owned();
+            unused.query_sha256 = sha256(&panel_query);
+            unused.rows_file = "no-memory/unused.rows.bin".to_owned();
+            unused.rows_sha256 = sha256(&panel_rows);
+            manifest.splits.push(unused);
+            manifest.run_config = Some(run_config.display().to_string());
+            manifest.run_config_sha256 = Some(sha256(run_config_bytes));
+        });
+
+        evaluate_query_cache(&cache_root, &request()).unwrap();
+        fs::write(&run_config, br#"{"steps":1}"#).unwrap();
+        let error = evaluate_query_cache(&cache_root, &request())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("run config hash differs"), "{error}");
+        fs::write(&run_config, run_config_bytes).unwrap();
+        fs::write(cache_root.join("no-memory/unused.queries.f32"), b"tampered").unwrap();
+        let error = evaluate_query_cache(&cache_root, &request())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("hash differs"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn widths_that_cannot_hold_exact_l1_are_refused() {
+        let (root, cache_root) = fixture("unsupported-width");
+        rewrite_manifest(&cache_root, |manifest| manifest.width = 32_769);
+        let error = QueryCache::open(&cache_root).unwrap_err().to_string();
+        assert!(error.contains("identity differs"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn registered_gate_cannot_be_relaxed_or_left_unpinned() {
+        let registered = registered_request();
+        validate_registered_request(&registered).unwrap();
+
+        let mut lowered = registered.clone();
+        lowered.minimum_observations = REGISTERED_MINIMUM_OBSERVATIONS - 1;
+        assert!(validate_registered_request(&lowered).is_err());
+
+        let mut unpinned = registered;
+        unpinned.expected_row_identity = None;
+        assert!(validate_registered_request(&unpinned).is_err());
     }
 
     #[test]
@@ -1249,26 +1738,80 @@ mod tests {
     #[test]
     fn two_seed_aggregate_has_fixed_precedence() {
         let report = |status: &str, manifest: &str, bar: bool| {
+            let control_fault = status == "CONTROL_FAULT";
+            let insufficient_power = status == "INSUFFICIENT_POWER";
+            let mechanism_pass = status != "REJECT";
+            let power_ok = !insufficient_power;
+            let fitted_rows = if power_ok {
+                REGISTERED_MIN_FITTED_ROWS
+            } else {
+                REGISTERED_MIN_FITTED_ROWS - 1
+            };
+            let observations = if power_ok {
+                REGISTERED_MIN_FIT_OBSERVATIONS
+            } else {
+                REGISTERED_MIN_FIT_OBSERVATIONS - 1
+            };
+            let panels = REGISTERED_PANEL_SPLITS
+                .into_iter()
+                .map(|split| {
+                    serde_json::json!({
+                        "split": split,
+                        "identity": {"exact": true},
+                    })
+                })
+                .collect::<Vec<_>>();
             serde_json::json!({
                 "schema": EVALUATION_SCHEMA,
+                "evaluation_profile": "n3s-registered-v1",
                 "status": status,
-                "cache": {"manifest_sha256": manifest, "checkpoint": manifest},
-                "request": {
-                    "expected_rows": 1_460_697,
-                    "expected_row_identity": "identity",
-                    "expected_train_tokens_sha256": "tokens",
-                    "expected_train_mask_sha256": "mask",
-                    "memory": false,
+                "cache": {
+                    "manifest_sha256": manifest,
+                    "checkpoint": manifest,
+                    "width": REGISTERED_WIDTH,
                 },
-                "fit": {"fitted_rows": 100, "observations": 10_000},
+                "request": {
+                    "train_split": REGISTERED_TRAIN_SPLIT,
+                    "expected_rows": REGISTERED_EXPECTED_ROWS,
+                    "expected_row_identity": REGISTERED_POOLED_ROW_IDENTITY,
+                    "expected_train_tokens_sha256": REGISTERED_TRAIN_TOKENS_SHA256,
+                    "expected_train_mask_sha256": REGISTERED_TRAIN_MASK_SHA256,
+                    "memory": false,
+                    "minimum_observations": REGISTERED_MINIMUM_OBSERVATIONS,
+                    "minimum_fitted_rows": REGISTERED_MIN_FITTED_ROWS,
+                    "minimum_fit_observations": REGISTERED_MIN_FIT_OBSERVATIONS,
+                },
+                "fit": {
+                    "fitted_rows": fitted_rows,
+                    "observations": observations,
+                    "minimum_fitted_rows": REGISTERED_MIN_FITTED_ROWS,
+                    "minimum_fit_observations": REGISTERED_MIN_FIT_OBSERVATIONS,
+                    "power_ok": power_ok,
+                    "control_strategy": "exact-count-stratified-cycle",
+                    "shuffled_changed_targets": 1,
+                    "shuffled_changed_coordinates": 1,
+                },
+                "train": {
+                    "identity_matches": !control_fault,
+                },
                 "pooled": {
                     "bar_passes": bar,
-                    "rows": 1_460_697,
+                    "rows": REGISTERED_EXPECTED_ROWS,
                     "rows_match": true,
                     "identity_matches": true,
-                    "row_identity_sha256": "identity",
+                    "row_identity_sha256": REGISTERED_POOLED_ROW_IDENTITY,
+                    "original_top1": 100,
+                    "centroid_top1": if mechanism_pass { 101 } else { 99 },
+                    "exact_count_shuffled_top1": 99,
+                    "top8_holds": mechanism_pass,
+                    "centroid_vs_original": {
+                        "passes": mechanism_pass,
+                    },
+                    "centroid_vs_exact_count_shuffled": {
+                        "passes": mechanism_pass,
+                    },
                 },
-                "panels": [{"split": "p", "identity": {"exact": true}}],
+                "panels": panels,
             })
         };
         let keep = aggregate_query_cache_reports(&[
@@ -1289,5 +1832,19 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(fault["status"], "CONTROL_FAULT");
+
+        let mut lowered = report("KEEP", "s1", true);
+        lowered["request"]["minimum_observations"] = 7.into();
+        let error = aggregate_query_cache_reports(&[lowered, report("KEEP", "s2", true)])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("registered evaluation"), "{error}");
+
+        let mut diagnostic = report("KEEP", "s1", true);
+        diagnostic["evaluation_profile"] = "diagnostic".into();
+        let error = aggregate_query_cache_reports(&[diagnostic, report("KEEP", "s2", true)])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("not registered"), "{error}");
     }
 }
