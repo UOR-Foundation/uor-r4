@@ -4,9 +4,11 @@ Run ID: `cpu-training-pilot-prompt-vsa-compression-2026-11-06`
 
 ## Status
 
-TEST FITNESS passed. Attempt 1 stopped before panel generation on a stale
-standalone generator lockfile. Fresh seed-2778 evaluation continues in
-attempt 2 after the instrument-only isolation repair recorded below.
+COMPLETE - **REJECT** for the selected 1024-bit modulo signature. It was
+**3.67x** faster inside the selector on both artifacts, but lost one exact
+reply, five openings and 50 body positions on fresh seed 2778. Exact 4,096-bit
+serving remains the default. Record:
+[deepseek-211](../../loop/tasks/cpu-training-pilot/deepseek-211/REPORT.md).
 
 This is D84 CPU serving research. It tests a deterministic lossy compressed
 representation of the exact deepseek-209 prompt selector. It is not a new
