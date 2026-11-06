@@ -704,6 +704,51 @@ artifact-bound discrete/VSA signature for literal token-set overlap, and
 response generation beyond the learned TRAIN reply set. See
 [deepseek-204](../../loop/tasks/cpu-training-pilot/deepseek-204/REPORT.md).
 
+The next unit made that exact-memory completion available at the loopback
+boundary. A strict `uor-r4.stack-prompt-reply-readout/1` sidecar binds the
+artifact, tokenizer, protocol and ignored control ids; `uor-chat --serve
+--prompt-reply` emits a complete stored reply with EOS or falls back to greedy
+generation when it cannot fit. Both artifacts matched all **471/471** CPU
+selections by source ordinal and reply SHA, retaining **39** exact replies,
+**131** openings, **948** body positions and zero premature BOS. Selection ran
+at approximately **9.8k-10.1k prompts/s**, sidecars were **62,846** bytes, and
+`UORLUT01` was unchanged. This is a **KEEP** for exact-memory serving. Remaining
+work is an artifact-bound VSA/vector prompt signature and generation beyond
+the learned TRAIN reply set. See
+[deepseek-207](../../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
+
+The next representation unit moved prompt retrieval from ordered sets to a
+4,096-bit binary vocabulary VSA index. Bitwise AND/OR popcounts preserve exact
+Jaccard decisions while avoiding ordered-set work. All **471/471** selections
+on both artifacts matched the literal-set and CPU arms; exact, opening, body
+and stopping readings remained **39/131/948/0**. Across three alternating
+processes per artifact, aggregate median throughput rose from **9,820.55** to
+**46,362.99 prompts/s** (**4.72x**) with unchanged sidecar bytes. This is a
+**KEEP** for exact binary VSA serving. Remaining representation work is a
+compressed or learned signature that can preserve the retrieval result. See
+[deepseek-209](../../loop/tasks/cpu-training-pilot/deepseek-209/REPORT.md).
+
+The first compressed-representation unit calibrated four fixed binary
+signatures on TRAIN only and selected 1,024-bit modulo. On fresh seed 2778 and
+both artifacts it was **3.67x** faster inside the selector, but exact, opening
+and body readings fell from **49/138/1061** to **48/133/1011**. Both arms
+emitted all 445 reachable replies with zero premature BOS and repeated
+exactly. This is a **REJECT** for the selected lossy candidate set; exact
+4,096-bit binary VSA remains the serving default. Future compression must
+preserve candidate rank rather than collide token identities. See
+[deepseek-211](../../loop/tasks/cpu-training-pilot/deepseek-211/REPORT.md).
+
+The next answer-selection unit trained an integer pairwise ranker over the raw
+Jaccard top-16 complete replies. It used 193 TRAIN leave-one-out groups, 119
+baseline-wrong groups and eight bounded token, reply-frequency and writer-query
+features. On fresh seed 2779, learned/raw exact and body changed from
+**55/966** to **59/1022** on artifact seed 2 but to **21/325** on artifact
+seed 1. The candidate oracle contained 163 exact replies, so coverage was not
+the limiter. This is a **REJECT** for the fixed shared additive recipe; exact
+Jaccard remains the serving default. The next learning attempt should separate
+artifact-independent lexical semantics from artifact-bound geometry. See
+[deepseek-213](../../loop/tasks/cpu-training-pilot/deepseek-213/REPORT.md).
+
 The next writer unit tested training on the model's own generated prefixes
 instead of reference prefixes. Its exact scan fed self-generated tokens through
 FBS, Hamming and opening/reply memory, aligned live queries with reference

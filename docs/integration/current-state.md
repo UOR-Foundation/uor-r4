@@ -1,3 +1,61 @@
+## 2026-11-06 — Learned whole-reply ranker is artifact-unstable (deepseek)
+
+A bounded integer pairwise perceptron ranked the raw Jaccard top-16 complete
+replies using eight token, reply-frequency and writer-query features. It trained
+on 193 leave-one-out TRAIN groups and evaluated on fresh seed 2779 with both
+public artifacts.
+
+Artifact seed 2 improved raw retrieval from **55 to 59** exact replies and
+**966 to 1,022** body positions. Artifact seed 1 fell from **55 to 21** exact
+and **966 to 325** body. All 464 reachable rows were emitted with zero premature
+BOS, and the candidate oracle contained 163 correct replies. This is a
+**REJECT** for the fixed shared additive ranking recipe; exact Jaccard remains
+the serving default. Record:
+[deepseek-213](../loop/tasks/cpu-training-pilot/deepseek-213/REPORT.md).
+
+## 2026-11-06 — Compressed prompt VSA loses retrieval quality (deepseek)
+
+TRAIN-only calibration selected a 1,024-bit modulo signature from a fixed
+256/512/1,024-bit candidate set for the prompt-reply index. On fresh seed 2778
+and both artifacts it was **3.67x** faster inside selection, but exact replies
+fell **49→48**, correct openings **138→133**, and correct body positions
+**1061→1011**. All 445 reachable replies were emitted with zero premature BOS
+and three-run repeats matched exactly.
+
+This is a **REJECT** for the selected lossy mapping. The exact 4,096-bit
+binary vocabulary signature remains the serving default; compressed research
+configuration does not change sidecars or `UORLUT01`. Record:
+[deepseek-211](../loop/tasks/cpu-training-pilot/deepseek-211/REPORT.md).
+
+## 2026-11-06 — Prompt retrieval moves to a binary VSA index (deepseek)
+
+The serving prompt-reply sidecar now loads each prompt as a 4,096-bit binary
+vocabulary vector. Bitwise AND/OR popcounts compute exact set intersection and
+union for the same Jaccard ordering. Across both artifacts, all **471/471**
+decisions match the literal-set selector and CPU oracle, retaining **39** exact
+replies, **131** openings, **948** body positions and zero premature BOS.
+
+Three alternating runs per artifact raised aggregate median selection
+throughput from **9,820.55** to **46,362.99 prompts/s**, a **4.72x** gain. The
+sidecar schema and bytes are unchanged. This is an exact representation change,
+not a new retrieval-quality claim or a learned compressed embedding. Record:
+[deepseek-209](../loop/tasks/cpu-training-pilot/deepseek-209/REPORT.md).
+
+## 2026-11-06 — Prompt-set retrieval reaches loopback serving (deepseek)
+
+The deepseek-204 prompt-set completion result is now a strict
+`uor-r4.stack-prompt-reply-readout/1` sidecar. It binds the artifact,
+tokenizer, dialogue protocol and ignored control ids, then returns one complete
+training reply through `uor-chat --serve --prompt-reply`.
+
+On both artifacts, all **471/471** panel selections matched the CPU arm by
+source ordinal and reply SHA. The served result retained **39** exact replies,
+**131** correct openings, **948** body positions and zero premature BOS.
+Selection throughput was about **9.8k-10.1k prompts/s**. Oversized responses
+fall back to ordinary greedy model generation. The result remains exact-memory
+serving, not fresh response generation. Record:
+[deepseek-207](../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
+
 ## 2026-11-05 — Prompt-set retrieval clears the CPU completion bar (deepseek)
 
 The completion object changed from a generated token trajectory to one complete

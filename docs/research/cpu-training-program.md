@@ -177,6 +177,52 @@ is to turn the token-set index into an artifact-bound discrete sidecar and test
 whether geometric or VSA signatures can preserve the gain. See
 [deepseek-204](../loop/tasks/cpu-training-pilot/deepseek-204/REPORT.md).
 
+The positive result is now available at the local serving boundary as a strict
+discrete sidecar. `uor-r4.stack-prompt-reply-readout/1` binds the exact
+artifact, tokenizer, dialogue protocol and control ids. On both public
+artifacts it matched all **471/471** CPU selections by source ordinal and reply
+SHA, preserving **39** exact replies, **131** openings and **948** body
+positions with no `UORLUT01` change. The loopback path emits the full stored
+reply with EOS and falls back to ordinary greedy generation when the response
+does not fit. Selection throughput was approximately **9.8k-10.1k prompts/s**.
+This is serving-contract evidence, not generation beyond the learned TRAIN
+reply set. The next representation should test whether an artifact-bound VSA or
+vector signature can preserve the same row-level result. See
+[deepseek-207](../loop/tasks/cpu-training-pilot/deepseek-207/REPORT.md).
+
+The selector itself then moved from ordered sets to a vocabulary-dimensional
+binary VSA index. Each prompt loads as **4,096 bits** in 64 `u64` words, and
+AND/OR popcounts recover exact set intersection and union. All **471/471**
+decisions on both artifacts matched the literal-set and CPU arms, preserving
+**39** exact replies, **131** openings and **948** body positions. Across three
+alternating processes per artifact, aggregate median throughput rose from
+**9,820.55** to **46,362.99 prompts/s** (**4.72x**) with unchanged sidecar
+bytes. This validates binary set geometry in serving but still uses one-hot
+vocabulary dimensions; the open question is whether a compressed learned VSA
+signature can preserve the result. See
+[deepseek-209](../loop/tasks/cpu-training-pilot/deepseek-209/REPORT.md).
+
+The first compressed-signature test calibrated four fixed binary candidates on
+TRAIN only and selected 1,024-bit modulo. On fresh seed 2778 and both artifacts
+it raised isolated selection throughput by **3.67x**, but exact replies,
+openings and body positions fell by **1/5/50** per artifact. All 445 reachable
+rows still emitted with zero premature BOS and exact repeats. This is a
+**REJECT** for the selected lossy map, not for compression generally. The next
+representation must preserve candidate rank while reducing width, rather than
+colliding distinct token ids. See
+[deepseek-211](../loop/tasks/cpu-training-pilot/deepseek-211/REPORT.md).
+
+The next answer-selection unit trained a small integer ranker on TRAIN
+leave-one-out prompt neighbors. The ranker saw the raw Jaccard top-16 and eight
+token, reply-frequency and writer-query features. On fresh seed 2779 it changed
+raw exact/body from **55/966** to **59/1022** on artifact seed 2 but to
+**21/325** on artifact seed 1. The candidate oracle held **163** exact replies,
+so the loss was not insufficient candidate coverage. This is a **REJECT** for
+the fixed shared additive recipe. The next answer-selection attempt should keep
+artifact-independent lexical features separate from artifact-bound geometric
+features. See
+[deepseek-213](../loop/tasks/cpu-training-pilot/deepseek-213/REPORT.md).
+
 ### 5. Quantization and exact memory
 
 Hamming reads, exact turn memory, saved-session restart and the finite integer/float shadow gate are complete. A genuine trained FBS float snapshot is not available, so the trained-artifact float-shadow and complete-reply comparisons remain `NOT_RUN`.
