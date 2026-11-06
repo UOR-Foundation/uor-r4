@@ -1,7 +1,7 @@
-# REPORT: fbs-query-cache, deepseek-1
+# REPORT: float-training-module, deepseek-1 (FBS query cache)
 
 Lab: deepseek. Item:
-[fbs-query-cache](../../../../roadmap/items/fbs-query-cache.md) (#3801).
+[float-training-module](../../../../roadmap/items/float-training-module.md) (#3801).
 Order: [ORDER.md](ORDER.md). Base: `ff5156bcc`.
 
 ## Result
@@ -114,8 +114,6 @@ Passed:
 - Scoped `cargo clippy -p uor-r4-float-train --lib --bins --no-deps --locked
   --offline -- -D warnings`, with only the crate's pre-existing lint categories
   allowed: passed.
-- `cargo xtask roadmap check`: **143 items OK**.
-- `cargo xtask roadmap render --check`: passed.
 - Focused tests cover query/table/decision-byte mutation, sealed-manifest
   mutation, wrong memory mode, duplicate positions, immutable cache roots,
   blocked row order and lower-id top-8 ties.

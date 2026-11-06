@@ -1,7 +1,7 @@
-# ORDER: fbs-query-cache, deepseek-1
+# ORDER: float-training-module, deepseek-1 (FBS query cache)
 
-Lab: deepseek. Item:
-[fbs-query-cache](../../../../roadmap/items/fbs-query-cache.md) (#3801).
+Lab: deepseek. Item: [float-training-module](../../../../roadmap/items/float-training-module.md)
+(#3801 records the query-cache work).
 Base: `ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f`.
 
 ## Goal
@@ -56,8 +56,5 @@ Ask means decide, record here and in REPORT, and continue.
 ## Files in scope
 
 - `crates/uor-r4-float-train/**`
-- `docs/harness/prep/fbs-query-cache*`
-- `docs/labs/fbs-query-cache/**`
-- `docs/loop/tasks/fbs-query-cache/**`
+- `docs/loop/tasks/float-training-module/deepseek-1/**`
 - `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/fbs-query-cache.md`
