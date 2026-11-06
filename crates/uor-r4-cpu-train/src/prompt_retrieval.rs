@@ -3,7 +3,7 @@
 //! Retrieval ranks training prompts by exact token-set Jaccard overlap, then
 //! resolves ties with the exact Q12 writer-query L1 distance. It emits the
 //! selected complete reply and BOS in one decision. No matrix multiplication,
-//! softmax or floating-point serving arithmetic is used.
+//! probabilistic normalization or floating-point serving arithmetic is used.
 
 use std::collections::BTreeSet;
 
