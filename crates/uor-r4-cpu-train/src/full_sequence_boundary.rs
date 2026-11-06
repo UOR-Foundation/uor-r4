@@ -661,17 +661,19 @@ pub fn full_boundary_stop_changes(
     left: &TimedFullBoundaryReading,
     right: &TimedFullBoundaryReading,
 ) -> u64 {
-    let stops = |reading: &TimedFullBoundaryReading| {
-        reading
-            .steps
+    stop_changes(&left.steps, &right.steps)
+}
+
+fn stop_changes(left: &[FullBoundaryStep], right: &[FullBoundaryStep]) -> u64 {
+    let stops = |steps: &[FullBoundaryStep]| {
+        steps
             .iter()
             .filter_map(|step| {
-                step.stop_kind.as_ref().map(|kind| {
+                step.stop_kind.as_ref().map(|_| {
                     (
                         step.row,
                         (
                             step.generated_step,
-                            kind.clone(),
                             step.stop_depth,
                             step.stop_terminal,
                             step.stop_nonterminal,
@@ -918,5 +920,47 @@ mod tests {
                 "nonterminal count changed for {suffix:?}"
             );
         }
+    }
+
+    fn stop_step(
+        row: usize,
+        generated_step: usize,
+        kind: &str,
+        depth: usize,
+        terminal: u64,
+        nonterminal: u64,
+    ) -> FullBoundaryStep {
+        FullBoundaryStep {
+            row,
+            generated_step,
+            writer_token: 0,
+            local_token: None,
+            global_token: None,
+            selected_token: POINT_KEY_BOS,
+            used_global: false,
+            local_copy_depth: None,
+            global_depth: None,
+            stop_kind: Some(kind.to_owned()),
+            stop_depth: Some(depth),
+            stop_terminal: terminal,
+            stop_nonterminal: nonterminal,
+        }
+    }
+
+    #[test]
+    fn stop_changes_ignore_source_label_when_behavior_matches() {
+        let full = [stop_step(7, 12, "full", 8, 2, 0)];
+        let reply = [stop_step(7, 12, "reply", 8, 2, 0)];
+        assert_eq!(stop_changes(&full, &reply), 0);
+    }
+
+    #[test]
+    fn stop_changes_detect_timing_counts_and_stop_presence() {
+        let full = [stop_step(7, 12, "full", 8, 2, 0)];
+        let later = [stop_step(7, 13, "full", 8, 2, 0)];
+        assert_eq!(stop_changes(&full, &later), 1);
+        let different_counts = [stop_step(7, 12, "full", 7, 3, 0)];
+        assert_eq!(stop_changes(&full, &different_counts), 1);
+        assert_eq!(stop_changes(&full, &[]), 1);
     }
 }

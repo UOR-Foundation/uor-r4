@@ -5,8 +5,8 @@ use uor_r4_cpu_train::{
     compare_full_boundary_rows, derive_full_sequence_boundary,
     derive_full_sequence_suffix_content_memory, derive_reply_boundary_memory,
     evaluate_full_boundary_replies, full_boundary_stop_changes, shuffle_full_boundary,
-    shuffle_suffix_memory, validate_corpus_manifest, CopyKeyReplyMetric, CpuCorpusIdentity,
-    CpuMaskedCorpus, FullBoundaryArm, MemoryWeightSample, TimedFullBoundaryReading,
+    validate_corpus_manifest, CopyKeyReplyMetric, CpuCorpusIdentity, CpuMaskedCorpus,
+    FullBoundaryArm, MemoryWeightSample, TimedFullBoundaryReading,
 };
 
 struct Panel {
@@ -40,8 +40,6 @@ fn run() -> Result<(), String> {
 
     let content =
         derive_full_sequence_suffix_content_memory(&train.samples).map_err(|e| e.to_string())?;
-    let (shuffled_content, changed_content_targets) =
-        shuffle_suffix_memory(&content, config.seed).map_err(|e| e.to_string())?;
     let full_boundary = derive_full_sequence_boundary(&train.samples).map_err(|e| e.to_string())?;
     let (shuffled_boundary, changed_boundary_terminals) =
         shuffle_full_boundary(&full_boundary, config.seed).map_err(|e| e.to_string())?;
@@ -52,9 +50,9 @@ fn run() -> Result<(), String> {
         let content_table = match arm {
             FullBoundaryArm::ContentFullBoundary
             | FullBoundaryArm::ContentReplyBoundary
+            | FullBoundaryArm::ContentShuffledFullBoundary
             | FullBoundaryArm::ContentNoBoundary
             | FullBoundaryArm::ContentReferenceOracle => Some(&content),
-            FullBoundaryArm::ContentShuffledFullBoundary => Some(&shuffled_content),
             FullBoundaryArm::LocalFullBoundary
             | FullBoundaryArm::LocalReplyBoundary
             | FullBoundaryArm::WriterFullBoundary => None,
@@ -110,10 +108,8 @@ fn run() -> Result<(), String> {
     )?;
     let stop_changes_vs_reply = full_boundary_stop_changes(treatment, reply);
     let stop_changes_vs_shuffled = full_boundary_stop_changes(treatment, shuffled);
-    let control_non_vacuous = changed_content_targets > 0
-        && changed_boundary_terminals > 0
-        && stop_changes_vs_reply > 0
-        && stop_changes_vs_shuffled > 0;
+    let control_non_vacuous =
+        changed_boundary_terminals > 0 && stop_changes_vs_reply > 0 && stop_changes_vs_shuffled > 0;
     let required_exact = oracle.reading.exact_reference.div_ceil(2).max(5);
     let exact_pass = comparisons["content_reply_boundary"]["exact_reference"]["passes"]
         .as_bool()
@@ -168,7 +164,6 @@ fn run() -> Result<(), String> {
             "content": content.census(),
             "full_boundary": full_boundary.census(),
             "shuffled_boundary": shuffled_boundary.census(),
-            "changed_content_targets": changed_content_targets,
             "changed_boundary_terminals": changed_boundary_terminals,
         },
         "changes": {
