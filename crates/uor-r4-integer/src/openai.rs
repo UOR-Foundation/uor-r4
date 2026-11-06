@@ -1,6 +1,7 @@
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -364,6 +365,15 @@ impl OpenAiServing {
         if readout.artifact_sha256() != self.model.artifact_sha256() {
             return Err(StackError::PromptReply(
                 "prompt-reply readout does not bind the loaded artifact".to_owned(),
+            )
+            .into());
+        }
+        let tokenizer_sha256 = hex::encode(Sha256::digest(&self.tokenizer_json));
+        if readout.tokenizer_sha256() != tokenizer_sha256
+            || readout.protocol_version() != self.protocol_version
+        {
+            return Err(StackError::PromptReply(
+                "prompt-reply readout does not bind the loaded tokenizer and protocol".to_owned(),
             )
             .into());
         }
