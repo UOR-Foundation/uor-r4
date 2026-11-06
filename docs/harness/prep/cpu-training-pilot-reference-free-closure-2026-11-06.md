@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-reference-free-closure-2026-11-06`
 
 ## Status
 
-Pending TEST FITNESS. The fixed construction and fresh seed were registered
-before seed 2788 opened.
+Complete as **INSUFFICIENT_POWER**. FIT/GO were recorded at `4166a6f1b` before
+seed 2788 opened; artifact seed 1 then hit the fixed power floor and stopped the
+run before seed 2 and repeats.
 
 ## Question
 
