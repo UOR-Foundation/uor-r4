@@ -20,7 +20,7 @@ With (near) unchanged, do more steps (32,768, four times claude-296's) or more d
 ## Base artifact
 
 - **The pin:** `92ea7ccdf45d7924f6cd3cac1498d262ee6ce692` (`main` after #3763). No code changes in this unit.
-- **All four cells are trained at the pin,** (n1S) included, so every pair compares one binary with itself. Between claude-296's pin (`48c4bf384`) and this one:
+- **All four cells are trained at the pin,** (n1S) included, so every pair compares one pin, built on each pod. The two pods' `binaries.sha256` may differ, as compiled CUDA builds do; that is expected, not an I-3 failure. Between claude-296's pin (`48c4bf384`) and this one:
   - `uor-r4-float-train`, `uor-r4-core`, `uor-r4-tokenizer` and the scale-probe instrument are unchanged;
   - `uor-r4-integer`, which the trainer links, gains a prompt-reply serving module (`stack/prompt_reply.rs`, `openai.rs`, `uor-chat.rs`).
 
@@ -96,7 +96,7 @@ Four arms each get a chance at the bar, a four-way selection; the band at both s
 ## Steps
 
 1. The ORDER at the pin; this sheet's FIT; the job script's D67 pre-run review.
-2. `uor-pod status` first. Two Vast pods with two RTX 5090s each, if the fleet has room inside the shared caps (4 pods, $8/h); otherwise one two-card pod running both seeds' lanes in turn. Leased, a watcher armed on each.
+2. `uor-pod status` first. Two Vast pods with two RTX 5090s each, one per seed, at most $2.00/h each, if the fleet has room inside the shared caps (4 pods, $8/h). If no two-card host answers for a seed, that seed gets a one-card pod: its job runs the four cells in turn, longest first, in about 4.5 hours, the one exception to the 4-hour cap (6 hours, recorded). Leased, with a watcher armed on each, whose spend stop is the pod's price times 4 hours.
 3. On each pod: setup, I-0, I-3, the arms' smokes (I-1).
 4. One pod per seed. On each, card 0 runs (n3L), then (n1S); card 1 runs (n1L), then (n3S). Every run trains alone on its card.
 5. Score each final checkpoint with claude-296's `--score-rows` command, one panel per process.
@@ -110,9 +110,9 @@ Four arms each get a chance at the bar, a four-way selection; the band at both s
 
 ## Cost
 
-- **Training:** 32,768 steps at about 0.197 s a step is about 1.79 hours; 8,192 steps about 27 minutes. That rate is claude-296's, with its 8 DEV evaluations; 32 evaluations add about 5 minutes a long run. Each card trains 2.24 hours.
+- **Training:** 32,768 steps at about 0.197 s a step is about 1.79 hours; 8,192 steps about 27 minutes. That rate is claude-296's, DEV evaluations every 1,024 steps included, the same spacing used here. Each card trains 2.24 hours.
 - **Wall time:** about 2.8 hours with setup, scoring and the seal.
-- **About $10** at two two-card pods near $1.8/h each. The cap is $14 and 4 hours. The charter's extend rule holds: a healthy run is never cut for a self-set budget.
+- **About $10** at two two-card pods near $1.8/h each. The cap is $16 (two pods at most $2.00/h for 4 hours) and 4 hours a pod, with the one-card fallback's 6 hours as the one exception. The charter's extend rule holds: a healthy run is never cut for a self-set budget.
 
 ## Stop rule
 
@@ -134,3 +134,12 @@ Four arms each get a chance at the bar, a four-way selection; the band at both s
 - **m4:** I-s checks the seen sets.
 - **m5:** the lanes are balanced (2.24 hours a card), the DEV cost is named, and `uor-pod status` comes first.
 - **Nit:** "either hinge" is exactly 1 at equal scores.
+
+## Changes after the D67 pre-run review (PASS WITH CHANGES: 2 majors, 3 minors, 2 nits)
+
+- **M1:** the spend stop follows the pod's price (its price × 4 hours, rounded up to the dollar), a host above $2.00/h is refused, and the cap is $16 for the two pods.
+- **M2:** Step 2's fallback is a one-card pod for that seed, with its 6 hours stated as the one exception to the cap.
+- **m3:** the seal refuses a store path that already holds files.
+- **m4:** "one pin, built on each pod"; the two pods' binary shas may differ.
+- **m5:** a cross-TRAIN pair runs: claude-295's D1 cells against its D3 cells, `clean=` D1's seen set, exit 0 with verdicts on all rows and on unseen rows.
+- **Nits:** the cost line no longer counts the DEV evaluations twice; the watcher's header names the new budget rule.
