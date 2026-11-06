@@ -783,7 +783,7 @@ pub fn continuation_closure_changes(
 
 pub fn changed_closure_rows(
     candidate: &TimedContinuationClosureReading,
-    control: &TimedContinuationClosureReading,
+    controls: &[&TimedContinuationClosureReading],
 ) -> u64 {
     let closure_rows = candidate
         .steps
@@ -797,19 +797,25 @@ pub fn changed_closure_rows(
         .filter(|row| row.reachable)
         .map(|row| (row.row, row.reply_sha256.as_str()))
         .collect::<BTreeMap<_, _>>();
-    let control_rows = control
-        .rows
+    let control_rows = controls
         .iter()
-        .filter(|row| row.reachable)
-        .map(|row| (row.row, row.reply_sha256.as_str()))
-        .collect::<BTreeMap<_, _>>();
+        .map(|control| {
+            control
+                .rows
+                .iter()
+                .filter(|row| row.reachable)
+                .map(|row| (row.row, row.reply_sha256.as_str()))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .collect::<Vec<_>>();
     closure_rows
         .into_iter()
         .filter(|row| {
-            candidate_rows
-                .get(row)
-                .zip(control_rows.get(row))
-                .is_some_and(|(candidate, control)| candidate != control)
+            candidate_rows.get(row).is_some_and(|candidate| {
+                control_rows
+                    .iter()
+                    .any(|control| control.get(row).is_none_or(|control| candidate != control))
+            })
         })
         .count() as u64
 }

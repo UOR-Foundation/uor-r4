@@ -74,10 +74,10 @@ Per artifact seed:
 - both public dual-c131 raw artifact seeds;
 - 64-token cap;
 - at least 200 reference-reachable replies per artifact seed;
-- at least 100 treatment closure selections where local or tokenwise content
-  would differ;
-- non-vacuous closure shuffle and at least one changed decision versus
-  tokenwise content, no-boundary, shuffled and local;
+- at least 100 closure rows whose complete reply differs from tokenwise content
+  or local reply output;
+- non-vacuous closure shuffle and at least one changed complete reply versus
+  tokenwise content, closure-only, no-boundary, shuffled and local;
 - fresh-process repeats of both artifact seeds.
 
 ## Bar
@@ -86,13 +86,14 @@ On both artifacts, `source_closure` must:
 
 - keep premature BOS at or below four;
 - produce at least `max(5, ceil(content_oracle_exact / 2))` exact replies;
-- beat tokenwise content and shuffled closure on exact replies by the paired
-  two-sigma rule;
+- beat tokenwise content, closure-only and shuffled closure on exact replies
+  by the paired two-sigma rule;
 - keep correct body positions at or above `content_no_boundary` and
-  `local_reply_boundary`;
-- make at least 100 closure selections;
-- differ from tokenwise, local and shuffled on at least one reachable
-  decision;
+  `local_reply_boundary`, and at or above `closure_only`;
+- make at least 100 closure rows whose complete reply differs from tokenwise
+  or local output;
+- differ from tokenwise, closure-only, no-boundary, local and shuffled on at
+  least one reachable decision;
 - repeat exactly after timing removal.
 
 If the oracle has fewer than ten exact bodies, exact comparison is

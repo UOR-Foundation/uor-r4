@@ -109,23 +109,33 @@ fn run() -> Result<(), String> {
     )?;
     let changes_vs_tokenwise = continuation_closure_changes(treatment, tokenwise);
     let changes_vs_shuffled = continuation_closure_changes(treatment, shuffled);
+    let changes_vs_closure_only = continuation_closure_changes(treatment, closure_only);
+    let changes_vs_no_boundary = continuation_closure_changes(treatment, no_boundary);
     let changes_vs_local = continuation_closure_changes(treatment, local_reply);
-    let closure_output_changes_vs_tokenwise = changed_closure_rows(treatment, tokenwise);
+    let closure_output_changes = changed_closure_rows(treatment, &[tokenwise, local_reply]);
     let control_non_vacuous = changed_continuations > 0
-        && closure_output_changes_vs_tokenwise >= 100
+        && closure_output_changes >= 100
         && changes_vs_tokenwise > 0
         && changes_vs_shuffled > 0
+        && changes_vs_closure_only > 0
+        && changes_vs_no_boundary > 0
         && changes_vs_local > 0;
     let required_exact = oracle.reading.exact_reference.div_ceil(2).max(5);
     let exact_pass = comparisons["tokenwise_content"]["exact_reference"]["passes"]
         .as_bool()
         .unwrap_or(false)
+        && comparisons["closure_only"]["exact_reference"]["passes"]
+            .as_bool()
+            .unwrap_or(false)
         && comparisons["source_closure_shuffled"]["exact_reference"]["passes"]
             .as_bool()
             .unwrap_or(false);
-    let body_nonfall = treatment.reading.correct_body_positions
+    let body_nonfall_vs_controls = treatment.reading.correct_body_positions
         >= no_boundary.reading.correct_body_positions
         && treatment.reading.correct_body_positions >= local_reply.reading.correct_body_positions;
+    let body_nonfall_vs_closure_only =
+        treatment.reading.correct_body_positions >= closure_only.reading.correct_body_positions;
+    let body_nonfall = body_nonfall_vs_controls && body_nonfall_vs_closure_only;
     let premature_ok = treatment.reading.premature_bos <= 4;
     let exact_power = oracle.reading.exact_reference >= 10;
     let outcome = if !control_non_vacuous {
@@ -182,8 +192,10 @@ fn run() -> Result<(), String> {
         "changes": {
             "vs_tokenwise": changes_vs_tokenwise,
             "vs_shuffled": changes_vs_shuffled,
+            "vs_closure_only": changes_vs_closure_only,
+            "vs_no_boundary": changes_vs_no_boundary,
             "vs_local": changes_vs_local,
-            "closure_rows_vs_tokenwise": closure_output_changes_vs_tokenwise,
+            "closure_rows_vs_tokenwise_or_local": closure_output_changes,
         },
         "comparisons": comparisons,
         "bar": {
@@ -191,12 +203,14 @@ fn run() -> Result<(), String> {
             "required_exact": required_exact,
             "exact_floor_pass": treatment.reading.exact_reference >= required_exact,
             "exact_comparisons_pass": exact_pass,
+            "body_nonfall_vs_controls": body_nonfall_vs_controls,
+            "body_nonfall_vs_closure_only": body_nonfall_vs_closure_only,
             "body_nonfall": body_nonfall,
             "premature_bos_at_most_4": premature_ok,
             "closure_decisions": treatment.reading.closure_decisions,
             "closure_changes": treatment.reading.closure_changes,
-            "closure_output_changes_vs_tokenwise": closure_output_changes_vs_tokenwise,
-            "closure_output_changes_at_least_100": closure_output_changes_vs_tokenwise >= 100,
+            "closure_output_changes_vs_tokenwise_or_local": closure_output_changes,
+            "closure_output_changes_at_least_100": closure_output_changes >= 100,
             "control_non_vacuous": control_non_vacuous,
             "outcome": outcome,
         },
