@@ -145,7 +145,7 @@
 //! decision rows, and each panel's exact, n-gram and value-masked template overlap with TRAIN. A
 //! count that needs no GPU; one JSON line.
 //!
-//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S]`:
+//! `train-in-space --data-root DIR --score-rows CHECKPOINT --out DIR [--fresh-v2 DIR] [--panel NAME=DIR ...] [--samples N] [--reply-tokens N] [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--seed S] [--query-cache-out DIR]`:
 //! one-model-end-to-end's per-row scorer (claude-205), on the GPU. Every scored DEV row (and
 //! Fresh V2 row) of the step-N checkpoint, with its memory on and taken out, and greedy samples,
 //! as JSON files in `--out` (`in_space_long::score_rows`). Prints one JSON line per file. The rate,
@@ -154,6 +154,10 @@
 //! Flock rank rule with the memory on, each with its reply-table hits (protocol I-A, I-E, I-F,
 //! claude-208). `--flock-cell M,...` (thousandths of a score) adds the cell rule's samples at each
 //! margin, with the memory on (claude-213).
+//! `--query-cache-out DIR` writes the query-cache/1 evidence from that same scoring forward, for
+//! the separately built CPU readout evaluator. It also captures TRAIN, selected by `--train-split`
+//! when supplied, as the cache's `train` split. `--query-cache-memory 0|1` captures one memory
+//! mode instead of both. It changes no scoring decision.
 //!
 //! `train-in-space --data-root DIR --cell-grade 1 --runs DIR --panel NAME=DIR --flock-cell M,...`:
 //! grades the cell rule on the laptop (claude-213, `in_space_long::cell_grade`) from `--runs`'
@@ -323,6 +327,8 @@ fn main() -> Result<()> {
     let mut past_window: Option<String> = None;
     let mut past_stride: Option<usize> = None;
     let mut context_given = false;
+    let mut query_cache_out: Option<PathBuf> = None;
+    let mut query_cache_memory = None;
     let mut key_levels: Vec<(String, u8)> = Vec::new();
     let mut keys_runs: Option<PathBuf> = None;
     let mut scopes: Vec<ReadScope> = Vec::new();
@@ -554,6 +560,8 @@ fn main() -> Result<()> {
             "--decode-cache" => decode_cache = switch(&value)?,
             "--past-window" => past_window = Some(value.clone()),
             "--past-window-stride" => past_stride = Some(number(&value)?),
+            "--query-cache-out" => query_cache_out = Some(PathBuf::from(value)),
+            "--query-cache-memory" => query_cache_memory = Some(switch(&value)?),
             "--sample-opening" => {
                 last_opening = Some(match value.as_str() {
                     "first" => false,
@@ -799,6 +807,16 @@ fn main() -> Result<()> {
     if !panel_queries.is_empty() && score.is_none() && !census_on {
         return Err(FloatTrainError::Invalid(
             "--panel-queries applies to --score-rows and --census only".to_owned(),
+        ));
+    }
+    if query_cache_out.is_some() && score.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--query-cache-out applies to --score-rows only".to_owned(),
+        ));
+    }
+    if query_cache_memory.is_some() && query_cache_out.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--query-cache-memory needs --query-cache-out".to_owned(),
         ));
     }
     if overturn_on && fresh_v2.is_some() {
@@ -1086,6 +1104,7 @@ fn main() -> Result<()> {
             &data_root,
             &checkpoint,
             &out,
+            config.train_split.as_ref(),
             fresh_v2.as_deref(),
             &extra_panels,
             config.samples,
@@ -1116,6 +1135,8 @@ fn main() -> Result<()> {
             &panel_queries,
             past_window,
             context_given,
+            query_cache_out.as_deref(),
+            query_cache_memory,
         )? {
             println!("{}", serde_json::to_string(&file)?);
         }
