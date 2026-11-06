@@ -3,7 +3,7 @@
 Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](ORDER.md). Prep:
-[full-sequence boundary sheet](../../../harness/prep/cpu-training-pilot-full-sequence-boundary-2026-11-05.md).
+[full-sequence boundary sheet](../../../../harness/prep/cpu-training-pilot-full-sequence-boundary-2026-11-05.md).
 Base: `5ed64d3ca`.
 
 ## Status

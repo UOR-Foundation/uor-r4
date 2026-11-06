@@ -565,4 +565,3 @@ verified.
 - retained attempt-2 evidence is **5,268,949** bytes and sealed by
   `SHA256SUMS` SHA-256
   `310dca229a6889c4a4e228a7fd0dad60ce919589a25c89ff9b995685ba6fafe5`.
-
