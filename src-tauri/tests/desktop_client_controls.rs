@@ -1038,6 +1038,32 @@ fn native_exact_arithmetic_review23_boundary_regressions() {
 }
 
 #[test]
+fn native_exact_arithmetic_review27_boundary_regressions() {
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    for prompt in ["17-", "What is 17-?", "17--25", "2026-11-05 - 1 minute"] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("review27 arithmetic boundary RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert!(response["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
+    }
+    for prompt in ["24/7 support", "1/2 cup", "50-12"] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary ratio/no-space prose RPC should succeed");
+        assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
+    }
+}
+
+#[test]
 fn native_write_file_enforces_its_size_cap() {
     let root = unique_temp_dir("write-cap");
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());

@@ -295,6 +295,192 @@ test('legacy bundled clicks surface current rejection and suppress stale rejecti
     assert.deepEqual(stale.messages, []);
 });
 
+async function applyModelSourceChangeGuard(app) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    const start = html.indexOf('function onModelSourceChanged(');
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                const source = html.slice(start, index + 1);
+                const cleared = [];
+                vm.runInNewContext(`${source};onModelSourceChanged`, {
+                    app,
+                    abortApiForLocalSource() {},
+                    clearWorkerModel() { cleared.push(true); app.caps = null; app.readyLoadId = null; },
+                    setModelStatus() {},
+                    updatePrivacyStatus() {},
+                    updateComposerState() {},
+                    setView() {},
+                    toast() {},
+                })({ detail: { kind: 'wasm', bytes: new Uint8Array([1]) } });
+                return cleared;
+            }
+        }
+    }
+    throw new Error('unterminated model-source change handler');
+}
+
+test('a deferred source commit during generation preserves healthy capabilities', async () => {
+    const app = { generating: true, caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, worker: null };
+    const cleared = await applyModelSourceChangeGuard(app);
+    assert.deepEqual(cleared, []);
+    assert.deepEqual(app.caps, { schema: 'healthy' });
+    assert.equal(app.readyLoadId, 7);
+});
+
+async function pageFunction(marker, name, context, file = new URL('../../index.html', import.meta.url)) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const html = readFileSync(file, 'utf8');
+    const start = html.indexOf(marker);
+    if (start === -1) throw new Error(`missing page function ${name}`);
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                return vm.runInNewContext(`${html.slice(start, index + 1)};${name}`, context);
+            }
+        }
+    }
+    throw new Error(`unterminated page function ${name}`);
+}
+
+async function installPageSourceHandlers(api, app, harness, notices = []) {
+    const cleared = [];
+    const toast = (text, tone) => notices.push({ text, tone });
+    const guard = await pageFunction('function guardModelSourceOperations(', 'guardModelSourceOperations', { toast, app });
+    guard(api, globalThis.document);
+    const handler = await pageFunction('function onModelSourceChanged(', 'onModelSourceChanged', {
+        app,
+        ModelSources: api,
+        toast,
+        abortApiForLocalSource() {},
+        clearWorkerModel() { cleared.push(true); app.caps = null; app.readyLoadId = null; },
+        setModelStatus() {},
+        updatePrivacyStatus() {},
+        updateComposerState() {},
+        setView() {},
+        renderMessages() {},
+        isNativeLoopback() { return false; },
+    });
+    globalThis.document.addEventListener('uor-model-source-changed', handler);
+    const dispatch = globalThis.document.dispatchEvent;
+    globalThis.document.dispatchEvent = function (event) {
+        dispatch.call(this, event);
+        harness.fire(event.type, event);
+        return true;
+    };
+    return { cleared, toast };
+}
+
+test('a load started before generation cannot replace the healthy model when it commits during generation', async () => {
+    const bytes = artifactBytes();
+    const gate = deferred();
+    const harness = await fresh(() => gate.promise);
+    const app = { generating: false, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, workerState: 'ready' };
+    const page = await installPageSourceHandlers(harness.api, app, harness);
+    const load = harness.api.loadFromUrl('https://example.com/late.lut', { operationId: 1, sourceId: 'url' });
+    app.generating = true;
+    gate.resolve(response(bytes));
+    const result = await load;
+    assert.equal(result.stale, undefined);
+    assert.deepEqual(page.cleared, []);
+    assert.deepEqual(app.caps, { schema: 'healthy' });
+    assert.equal(app.readyLoadId, 7);
+    assert.equal(app.currentLoadId, 7);
+    assert.equal(harness.events.filter((event) => event.type === 'uor-model-source-changed' && event.detail.kind === 'wasm').length, 1);
+});
+
+test('API use during generation is blocked before the active source changes', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const notices = [];
+    const app = { generating: true, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7, apiConfig: null };
+    await installPageSourceHandlers(harness.api, app, harness, notices);
+    const before = harness.api.active();
+    const card = { dataset: { apiId: 'api-1' } };
+    const target = {
+        closest(selector) {
+            if (selector === '[data-action="api-use"]') return target;
+            if (selector === '[data-api-id]') return card;
+            return null;
+        },
+    };
+    let prevented = false;
+    let stopped = false;
+    harness.fire('click', {
+        target,
+        preventDefault() { prevented = true; },
+        stopImmediatePropagation() { stopped = true; },
+    });
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.deepEqual(harness.api.active(), before);
+    assert.deepEqual(app.caps, { schema: 'healthy' });
+    assert.equal(app.readyLoadId, 7);
+    assert.deepEqual(notices, [{ text: 'Stop the current reply before changing models.', tone: 'warn' }]);
+
+    app.generating = false;
+    let preventedAfter = false;
+    harness.fire('click', {
+        target,
+        preventDefault() { preventedAfter = true; },
+        stopImmediatePropagation() {},
+    });
+    assert.equal(preventedAfter, false);
+    assert.equal(notices.length, 1);
+    assert.deepEqual(harness.api.active(), before);
+});
+
+test('API selection supersedes an in-flight source rejection', async () => {
+    const gate = deferred();
+    const harness = await fresh(() => gate.promise);
+    const notices = [];
+    const app = { generating: false, mode: 'wasm', caps: { schema: 'healthy' }, readyLoadId: 7, currentLoadId: 7 };
+    await installPageSourceHandlers(harness.api, app, harness, notices);
+    const load = harness.api.loadFromUrl('https://example.com/a.lut');
+    harness.api.setActive({ kind: 'api', id: harness.api.list().api[0].id });
+    gate.reject(new Error('late source failed'));
+    await assert.rejects(load, (error) => {
+        assert.equal(error.uorStale, true);
+        return /late source failed/.test(error.message);
+    });
+    assert.deepEqual(notices.filter((notice) => notice.tone === 'error'), []);
+    assert.equal(harness.api.active().kind, 'api');
+});
+
+test('a stale load-url rejection is not shown as the current source error', async () => {
+    const staleError = new Error('late source failed');
+    staleError.uorStale = true;
+    const currentError = new Error('current source failed');
+    for (const [error, expected] of [[staleError, []], [currentError, [{ tone: 'error', text: 'current source failed' }]]]) {
+        const messages = [];
+        const context = {
+            MODEL_SCOPE_SELECTOR: '[data-scope="models"]',
+            mounted: {},
+            latestOperationId: 1,
+            document: { querySelector() { return { value: 'https://example.com/a.lut' }; } },
+            api: { loadFromUrl() { return Promise.reject(error); } },
+            setMessage(tone, text) { messages.push({ tone, text }); },
+        };
+        const onClick = await pageFunction('async function onClick(', 'onClick', context, new URL('./model_sources.js', import.meta.url));
+        const target = {
+            dataset: { action: 'load-url' },
+            closest(selector) { return selector === '[data-action]' ? target : {}; },
+        };
+        await onClick({ target });
+        assert.deepEqual(messages, expected);
+    }
+});
+
 test('page source loads preserve start-time order when legacy calls omit metadata', async () => {
     const bytes = artifactBytes();
     const first = deferred();

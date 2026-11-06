@@ -1155,6 +1155,15 @@ fn exact_tool_is_iso_date_time_core(rest: &str) -> bool {
     }
 }
 
+fn exact_tool_leading_numeric_dash(text: &str) -> bool {
+    let text = text.trim_start();
+    let Some(after) = text.strip_prefix('-') else {
+        return false;
+    };
+    after.chars().next().is_some_and(char::is_whitespace)
+        && after.trim_start().starts_with(|c: char| c.is_ascii_digit())
+}
+
 fn exact_tool_is_iso_date_time(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     if exact_tool_is_iso_date_time_core(rest) {
@@ -1172,6 +1181,7 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
             }
             if !tail.starts_with('+')
                 && !exact_tool_leading_operator_minus(tail)
+                && !exact_tool_leading_numeric_dash(tail)
                 && !exact_tool_arithmetic_shaped(tail)
             {
                 return true;
@@ -1217,6 +1227,58 @@ fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     })
 }
 
+fn exact_tool_is_ratio_prose(rest: &str) -> bool {
+    let rest = rest.trim();
+    let Some((numerator, tail)) = rest.split_once('/') else {
+        return false;
+    };
+    if numerator.is_empty()
+        || numerator.len() > 10
+        || !numerator.chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    if tail.contains('/') {
+        return false;
+    }
+    let tail = tail.trim_start();
+    let denominator_len = tail.chars().take_while(|c| c.is_ascii_digit()).count();
+    if denominator_len == 0 || denominator_len > 10 {
+        return false;
+    }
+    let after = tail[denominator_len..].trim_start();
+    if after.is_empty() || !after.chars().next().is_some_and(char::is_alphabetic) {
+        return false;
+    }
+    !after.chars().any(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '+' | '-'
+                    | '*'
+                    | '/'
+                    | '%'
+                    | '^'
+                    | '×'
+                    | '÷'
+                    | '&'
+                    | '|'
+                    | '='
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '−'
+                    | '≤'
+                    | '≥'
+                    | '≠'
+                    | '·'
+                    | '('
+                    | '{'
+                    | '['
+            )
+    })
+}
+
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -1242,6 +1304,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         return Ok(None);
     }
     if exact_tool_is_iso_date_time(rest) {
+        return Ok(None);
+    }
+    if exact_tool_is_ratio_prose(rest) {
         return Ok(None);
     }
     if rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t')) == "+" {
@@ -1366,6 +1431,18 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
                         && exact_tool_operand_start(&expression[index + 1..])))
         });
         if !has_spaced_subtraction {
+            let digits_and_hyphens = expression.chars().all(|c| c.is_ascii_digit() || c == '-');
+            if !digits_and_hyphens {
+                return Ok(None);
+            }
+            let interior_single_hyphen = expression.matches('-').count() == 1
+                && !expression.starts_with('-')
+                && !expression.ends_with('-');
+            if !interior_single_hyphen {
+                return Err(invalid(
+                    "exact arithmetic expects one decimal addition or subtraction",
+                ));
+            }
             return Ok(None);
         }
     }
@@ -2172,5 +2249,23 @@ mod tests {
             .expect("valid subtraction with sentence punctuation should be recognized")
             .expect("valid subtraction should be exact");
         assert_eq!(subtraction.result, "38");
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_review27_boundary_regressions() {
+        for prompt in ["17-", "What is 17-?", "17--25", "2026-11-05 - 1 minute"] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("review27 arithmetic boundary should be recognized")
+                    .is_err(),
+                "review27 arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for prompt in ["24/7 support", "1/2 cup", "50-12"] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary ratio/no-space prose was intercepted: {prompt}"
+            );
+        }
     }
 }

@@ -1167,6 +1167,7 @@ async function onClick(event) {
             api.removeApi(card.dataset.apiId);
         }
     } catch (error) {
+        if (error && error.uorStale === true) return;
         if (sourceOperationId !== null && sourceOperationId < latestOperationId) return;
         setMessage('error', String(error && error.message ? error.message : error));
     }
@@ -1217,6 +1218,7 @@ async function onChange(event) {
         try {
             await api.loadLocalFile(input.files[0]);
         } catch (error) {
+            if (error && error.uorStale === true) return;
             setMessage('error', String(error && error.message ? error.message : error));
         }
     }

@@ -1974,12 +1974,25 @@
                 };
             });
             if (doc && typeof doc.addEventListener === 'function') {
+                doc.addEventListener('uor-model-source-changed', function (event) {
+                    var detail = event && event.detail ? event.detail : {};
+                    if (detail.kind === 'api') latestOperationId += 1;
+                });
                 doc.addEventListener('click', function (event) {
-                    var target = event.target && event.target.closest ? event.target.closest('[data-action="load-bundled"]') : null;
-                    if (!target) return;
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                    return sources.loadBundled();
+                    var closest = event.target && event.target.closest;
+                    if (!closest) return;
+                    var bundled = event.target.closest('[data-action="load-bundled"]');
+                    if (bundled) {
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        return sources.loadBundled();
+                    }
+                    var apiUse = event.target.closest('[data-action="api-use"]');
+                    if (apiUse && app.generating) {
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        toast('Stop the current reply before changing models.', 'warn');
+                    }
                 }, true);
             }
         }
@@ -2003,6 +2016,10 @@
 
         function onModelSourceChanged(event) {
             var detail = event && event.detail ? event.detail : {};
+            var switchesSource = detail.kind === 'wasm'
+                || (detail.kind === 'api' && detail.apiConfig)
+                || (detail.kind === 'state' && detail.removedActive);
+            if (app.generating && switchesSource) return;
             if (detail.kind === 'wasm' && detail.bytes) {
                 abortApiForLocalSource();
                 app.mode = 'wasm';
