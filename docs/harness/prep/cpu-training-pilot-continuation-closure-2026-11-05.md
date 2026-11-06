@@ -228,11 +228,11 @@ finish() {
     find "$OUT/reports" -type f -name '*.json' -print0 |
       xargs -0 -r gzip -9 || status=$?
   fi
+  seal || status=$?
   if test "$(du -sb "$OUT" | cut -f1)" -gt 33554432; then
     echo "retained evidence exceeds 32 MiB" >&2
     status=1
   fi
-  seal || status=$?
   exit "$status"
 }
 trap finish EXIT
@@ -371,7 +371,6 @@ normalize() {
 cmp <(normalize "$OUT/reports/seed1.json") <(normalize "$OUT/reports/seed1-repeat.json")
 cmp <(normalize "$OUT/reports/seed2.json") <(normalize "$OUT/reports/seed2-repeat.json")
 find "$OUT/reports" -type f -name '*.json' -print0 | xargs -0 -r gzip -9
-test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 ```
 
 ## Stop rule
