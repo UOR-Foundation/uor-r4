@@ -4,7 +4,12 @@ Run ID: `cpu-training-pilot-prompt-reply-ranker-2026-11-06`
 
 ## Status
 
-TEST FITNESS passed. The seed-2779 panel may be generated after GO.
+COMPLETE - **REJECT**. The learned ranker improved seed 2 from **55 to 59**
+exact replies and 966 to 1,022 body positions, but seed 1 fell from **55 to
+21** exact and 966 to 325 body positions. All 464 reachable rows were emitted
+with zero premature BOS; the 163-row candidate oracle and matched shuffle
+confirm valid power and controls. Record:
+[deepseek-213](../../loop/tasks/cpu-training-pilot/deepseek-213/REPORT.md).
 
 This is D84 CPU research. It learns a small integer ranking function over
 existing TRAIN prompts and complete replies. It does not synthesize new text,
