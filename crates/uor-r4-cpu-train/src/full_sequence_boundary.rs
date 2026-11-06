@@ -667,36 +667,12 @@ pub fn full_boundary_stop_changes(
     left: &TimedFullBoundaryReading,
     right: &TimedFullBoundaryReading,
 ) -> u64 {
-    let left_reachable = left
-        .rows
-        .iter()
-        .filter(|row| row.reachable)
-        .map(|row| row.row)
-        .collect::<BTreeSet<_>>();
-    let reachable_rows = right
-        .rows
-        .iter()
-        .filter(|row| row.reachable)
-        .map(|row| row.row)
-        .filter(|row| left_reachable.contains(row))
-        .collect::<BTreeSet<_>>();
-    stop_changes_on_rows(&left.steps, &right.steps, &reachable_rows)
-}
-
-fn stop_changes_on_rows(
-    left: &[FullBoundaryStep],
-    right: &[FullBoundaryStep],
-    rows: &BTreeSet<usize>,
-) -> u64 {
-    let stops = |steps: &[FullBoundaryStep]| {
-        steps
+    let stops = |reading: &TimedFullBoundaryReading| {
+        reading
+            .rows
             .iter()
-            .filter(|step| rows.contains(&step.row))
-            .filter_map(|step| {
-                step.stop_kind
-                    .as_ref()
-                    .map(|_| (step.row, step.generated_step))
-            })
+            .filter(|row| row.reachable)
+            .map(|row| (row.row, (row.stop == "bos").then_some(row.generated_tokens)))
             .collect::<BTreeMap<_, _>>()
     };
     let left = stops(left);
@@ -705,7 +681,11 @@ fn stop_changes_on_rows(
         .chain(right.keys())
         .collect::<BTreeSet<_>>()
         .into_iter()
-        .filter(|row| left.get(row) != right.get(row))
+        .filter(|row| {
+            left.get(row)
+                .zip(right.get(row))
+                .is_some_and(|(left, right)| left != right)
+        })
         .count() as u64
 }
 
@@ -938,53 +918,87 @@ mod tests {
         }
     }
 
-    fn stop_step(
+    fn reply_row(
         row: usize,
-        generated_step: usize,
-        kind: &str,
-        depth: usize,
-        terminal: u64,
-        nonterminal: u64,
-    ) -> FullBoundaryStep {
-        FullBoundaryStep {
+        reachable: bool,
+        generated_tokens: u64,
+        stop: &str,
+    ) -> CopyKeyReplyRow {
+        CopyKeyReplyRow {
             row,
-            generated_step,
-            writer_token: 0,
-            local_token: None,
-            global_token: None,
-            selected_token: POINT_KEY_BOS,
-            used_global: false,
-            local_copy_depth: None,
-            global_depth: None,
-            stop_kind: Some(kind.to_owned()),
-            stop_depth: Some(depth),
-            stop_terminal: terminal,
-            stop_nonterminal: nonterminal,
+            reachable,
+            exact_reference: false,
+            bos_complete: stop == "bos",
+            opening_correct: false,
+            premature_bos: false,
+            non_premature_bos: stop == "bos",
+            generated_tokens,
+            reference_tokens: generated_tokens,
+            correct_body_positions: 0,
+            copy_decisions: 0,
+            fallback_decisions: 0,
+            stop: stop.to_owned(),
+            reply_sha256: String::new(),
+        }
+    }
+
+    fn reading(rows: Vec<CopyKeyReplyRow>) -> TimedFullBoundaryReading {
+        TimedFullBoundaryReading {
+            reading: FullBoundaryReading {
+                arm: FullBoundaryArm::ContentFullBoundary,
+                replies: rows.len() as u64,
+                reference_reachable: rows.iter().filter(|row| row.reachable).count() as u64,
+                exact_reference: 0,
+                bos_complete: 0,
+                opening_correct: 0,
+                premature_bos: 0,
+                non_premature_bos: 0,
+                generated_tokens: 0,
+                reference_tokens: 0,
+                correct_body_positions: 0,
+                decisions: 0,
+                local_decisions: 0,
+                global_decisions: 0,
+                writer_decisions: 0,
+                full_boundary_stops: 0,
+                reply_boundary_stops: 0,
+                oracle_stops: 0,
+            },
+            rows,
+            steps: Vec::new(),
+            reply_sha256: String::new(),
+            decision_sha256: String::new(),
+            wall_elapsed_us: 0,
+            generated_tokens_per_second: 0.0,
         }
     }
 
     #[test]
     fn stop_changes_ignore_source_label_when_behavior_matches() {
-        let full = [stop_step(7, 12, "full", 8, 2, 0)];
-        let reply = [stop_step(7, 12, "reply", 7, 3, 0)];
-        let rows = BTreeSet::from([7]);
-        assert_eq!(stop_changes_on_rows(&full, &reply, &rows), 0);
+        let learned = reading(vec![reply_row(7, true, 12, "bos")]);
+        let natural = reading(vec![reply_row(7, true, 12, "bos")]);
+        assert_eq!(full_boundary_stop_changes(&learned, &natural), 0);
     }
 
     #[test]
-    fn stop_changes_detect_timing_counts_and_stop_presence() {
-        let full = [stop_step(7, 12, "full", 8, 2, 0)];
-        let later = [stop_step(7, 13, "full", 8, 2, 0)];
-        let rows = BTreeSet::from([7]);
-        assert_eq!(stop_changes_on_rows(&full, &later, &rows), 1);
-        assert_eq!(stop_changes_on_rows(&full, &[], &rows), 1);
+    fn stop_changes_detect_timing_and_stop_presence() {
+        let early = reading(vec![reply_row(7, true, 12, "bos")]);
+        let late = reading(vec![reply_row(7, true, 13, "bos")]);
+        assert_eq!(full_boundary_stop_changes(&early, &late), 1);
+        let no_stop = reading(vec![reply_row(7, true, 13, "cap")]);
+        assert_eq!(full_boundary_stop_changes(&early, &no_stop), 1);
     }
 
     #[test]
     fn stop_changes_exclude_rows_unreachable_in_either_arm() {
-        let full = [stop_step(9, 12, "full", 8, 2, 0)];
-        let shuffled = [stop_step(9, 13, "shuffled_full", 7, 3, 0)];
-        let rows = BTreeSet::from([7]);
-        assert_eq!(stop_changes_on_rows(&full, &shuffled, &rows), 0);
+        let reachable_stop = reading(vec![reply_row(7, true, 12, "bos")]);
+        let unreachable_change = reading(vec![
+            reply_row(7, true, 12, "bos"),
+            reply_row(9, false, 13, "cap"),
+        ]);
+        assert_eq!(
+            full_boundary_stop_changes(&reachable_stop, &unreachable_change),
+            0
+        );
     }
 }
