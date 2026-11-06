@@ -14,6 +14,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadma
   - The same recipe on templated text (the contrast cell, 256, mw-balp TRAIN) falls from 1.00280 to 0.82460 over the same 8,192 steps.
   - On the held-out panel every width-256 cell is `behind` its own TRAIN's unigram table, by 12,460–25,917 rows (`pair/w256-dX-vs-unigram.json`). So the trunk has not learned even its TRAIN's token frequencies.
   - The templated cell, which never saw human text, scores 14,282 on the same panel, inside the real-text cells' range of 11,504–24,961.
+  - **What the trunk predicts:** the mix of human text's tokens, spread across contexts, not the likeliest token for each context. These counts were computed on the laptop from the sealed no-memory rows.
+    - On wiki-00000 (396,045 rows), w256-d3-s1 predicts 2,823 distinct tokens; the targets hold 3,081.
+    - Its commonest predictions are the targets' commonest tokens at about their own rates: token 223 is predicted 10,585 times and is the target 8,979 times; token 265, 9,397 and 9,191; token 85, 8,052 and 8,197.
+    - It is right on 5,335 rows. A guess blind to context, drawn with the same token mix, would be right on 2,193 (`Σ` over tokens of the target count × the predicted count / rows). So the context lifts it 2.4×, while always naming the commonest token is right on 6,851, and T2 on 71,600.
+    - The same holds for w256-d1-s1 (4,620 against 2,275) and w256-d3-s2 (6,618 against 2,262), and on oasst2 (1,699–2,608 against 1,089–1,118).
+    - **This is a lead for the classification, not a classification.** A nearest-token hinge against the best rival works where the next token is nearly fixed by the context, as in the templated text. Where many tokens can follow, it may match token frequencies rather than pick the likeliest one. It has not been tested.
   - The second run unit classifies this first, instrument before mechanism, as Bar row 6 requires. Its first arm is the loader and mask check, which needs no GPU and comes before any GPU arm; it is described under "The decision on width 1,024" below.
   - Nothing is closed: no configuration and no mechanism (§4.1).
 - **R1, R2 and R3, the deciding readings, are NOT RUN.** All three read width 1,024 at D3, and width 1,024 did not run in this unit. That is not a negative.
