@@ -1121,22 +1121,25 @@ async function onClick(event) {
             const names = models.map((model) => model.name).filter(Boolean);
             setMessage('info', `${names.length} pinned model${names.length === 1 ? '' : 's'}: ${names.join(', ') || 'none found'}. This list does not switch the running sidecar weights.`);
         } else if (action === 'load-bundled') {
+            const load = loadBundled();
             sourceOperationId = latestOperationId;
-            await loadBundled();
+            await load;
         } else if (action === 'load-published') {
             target.disabled = true;
             target.setAttribute('aria-busy', 'true');
             try {
+                const load = api.loadPublished(target.dataset.modelId);
                 sourceOperationId = latestOperationId;
-                await api.loadPublished(target.dataset.modelId);
+                await load;
             } finally {
                 target.disabled = false;
                 target.removeAttribute('aria-busy');
             }
         } else if (action === 'load-url') {
             const input = document.querySelector('#modelUrlInput');
+            const load = api.loadFromUrl(input.value);
             sourceOperationId = latestOperationId;
-            await api.loadFromUrl(input.value);
+            await load;
         } else if (action === 'add-api') {
             editing = { id: null, values: { preset: 'local-uor', label: API_PRESETS[0].label, baseUrl: API_PRESETS[0].baseUrl, model: API_PRESETS[0].model, apiKey: '' } };
             mounted.render();

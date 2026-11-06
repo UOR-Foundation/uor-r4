@@ -244,6 +244,57 @@ async function applyPageOperationGuard(api, toast = () => {}, app = { generating
     throw new Error('unterminated page source-operation guard');
 }
 
+async function legacyBundledClick(loadBundled) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const path = process.env.UOR_LEGACY_ONCLICK_SOURCE || new URL('./model_sources.js', import.meta.url);
+    const html = readFileSync(path, 'utf8');
+    const start = html.indexOf('async function onClick(');
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                const source = html.slice(start, index + 1);
+                const messages = [];
+                const context = {
+                    MODEL_SCOPE_SELECTOR: '[data-scope="models"]',
+                    mounted: {},
+                    latestOperationId: 0,
+                    loadBundled,
+                    setMessage(tone, text) { messages.push({ tone, text }); },
+                };
+                const onClick = vm.runInNewContext(`${source};onClick`, context);
+                const target = { dataset: { action: 'load-bundled' }, closest() { return target; } };
+                return { context, messages, run: () => onClick({ target }) };
+            }
+        }
+    }
+    throw new Error('unterminated legacy click handler');
+}
+
+test('legacy bundled clicks surface current rejection and suppress stale rejection', async () => {
+    const current = await legacyBundledClick(async () => {
+        current.context.latestOperationId += 1;
+        throw new Error('current source failed');
+    });
+    await current.run();
+    assert.deepEqual(current.messages, [{ tone: 'error', text: 'current source failed' }]);
+
+    let rejectLoad;
+    const stale = await legacyBundledClick(() => {
+        stale.context.latestOperationId += 1;
+        return new Promise((_resolve, reject) => { rejectLoad = reject; });
+    });
+    const running = stale.run();
+    stale.context.latestOperationId += 1;
+    rejectLoad(new Error('stale source failed'));
+    await running;
+    assert.deepEqual(stale.messages, []);
+});
+
 test('page source loads preserve start-time order when legacy calls omit metadata', async () => {
     const bytes = artifactBytes();
     const first = deferred();
