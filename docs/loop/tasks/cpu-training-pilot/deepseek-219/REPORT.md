@@ -124,6 +124,16 @@ result.
 - repeated decisions and replies matched exactly after timing removal;
 - every length arm recorded positive bounded budgets and zero BOS stops;
 - sealed 24-file local evidence checksum verified;
+- full harness check: 284 rules, 0 errors and 251 repository-wide advisory
+  warnings;
+- D23, D25 and D32 ratchets unchanged, claim wording passed, and prep-check
+  reports FIT with compute allowed;
+- `xtask links`: 1,277 pre-existing repository-wide broken links and none among
+  the newly added prefix-length evidence links;
+- `xtask docs-catalog --check`: 1,175 records, 20 lines, zero missing paths;
+- `xtask roadmap check` remains blocked by the pre-existing
+  `infra-desktop-client-tauri` status/issue mismatch, which this diff does not
+  touch;
 - implementation review: local exact-head self-review at `f5cb4f7a9`.
 
 ## Delivery
