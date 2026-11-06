@@ -144,6 +144,11 @@ geometry-tie arm are controls, not causes of the pass.
 - final D23 wording correction left the release binary byte-identical:
   `6f9eda0b9ad014407780635ce2ae24dff409d58936d82420ce0f7228e4ae5368`.
 
+## Skills used
+
+No system-provided Codex skill applied. Repository D22/D67, D84 CPU research,
+exact-evidence and protected-delivery procedures were used.
+
 ## Still open
 
 - integration of prompt-set retrieval as a bounded CPU sidecar;
@@ -151,11 +156,6 @@ geometry-tie arm are controls, not causes of the pass.
   or VSA index if it can preserve the gain;
 - generalization beyond replies already present in TRAIN;
 - Claude's independent scale probe, export and serving track.
-
-## Skills used
-
-No system-provided Codex skill applied. Repository D22/D67, D84 CPU research,
-exact-evidence and protected-delivery procedures were used.
 
 ## Plain summary
 
