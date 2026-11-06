@@ -136,15 +136,15 @@ Local CPU only. Cap: 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
   `2a298b44ea34d1a8e2d40191951d3da9b3300e2ac7de65e6c2ec13950a0b6424`;
 - sidecar seed 2:
   `6504dcb047ce7157dd5e968c29441505cf48d993f01ec63222125634c61963b7`.
-- implementation: `deb0c4f2d`;
+- implementation: `169af13d5`;
 - ranker module:
   `714ecd92f79d7c4aa145f3e00211df793160d1a15a502b9fdbb8187ea9e37409`;
 - ranker binary source:
-  `989e078b9deb23dfcec8dc923ec0118b73180f0c7a1228291058aa4c1e7ef64f`;
+  `70a05489a4030cb982172d86328efa493e7515a224cdb3b12c72dbf48d61c115`;
 - CPU crate export source:
   `0ac072c3aed799fc62f795c02dd35ce23077f986cc2f5a74cf3191e5c17446cf`;
 - ranker release binary:
-  `6693948bd105fc8fbd4936bd6d7651c626cf4d93119f76c2d3815f2f15864043`.
+  `254716c7f70e92df69c15ca279ad7320052decf47248f5e104b82b4096d2e3d9`.
 
 ## Panel and output
 
@@ -183,7 +183,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 SIDECAR1=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed1.sidecar.json
 SIDECAR2=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-4/reports/seed2.sidecar.json
-IMPL=deb0c4f2d
+IMPL=169af13d5
 
 git -C "$SOURCE" diff --quiet "$IMPL" -- \
   crates/uor-r4-cpu-train/src/lib.rs \
@@ -235,7 +235,7 @@ hash and generator manifest/lock under `$OUT`; fail closed on any drift.
 TEST FITNESS: FIT - M2 #2030 integer whole-reply neighbor ranker
 sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-ranker-2026-11-06.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
-note: Implementation deb0c4f2d is clean. Four focused ranker tests and the full
+note: Implementation 169af13d5 is clean. Four focused ranker tests and the full
   398-test CPU library suite pass with four expected ignores. The exact one-hot
   selector and sidecars are unchanged; all inputs and source pins match; the
   seed-2779 panel and output root remain absent.
@@ -244,7 +244,7 @@ date: 2026-11-06
 ## Pre-run GO
 
 GO - exact-head self-review under the current disabled-delegation policy.
-Implementation `deb0c4f2d`, source pins and release binary
-`6693948bd105fc8fbd4936bd6d7651c626cf4d93119f76c2d3815f2f15864043`
+Implementation `169af13d5`, source pins and release binary
+`254716c7f70e92df69c15ca279ad7320052decf47248f5e104b82b4096d2e3d9`
 match. This was not an independent review. Seed 2779 may now be generated under
 the fixed construction and stop rule above.
