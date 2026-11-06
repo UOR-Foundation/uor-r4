@@ -35,9 +35,10 @@ Base: `3a9c2f11d`.
 - Focused tests check both memory modes and the DEV omission rule.
 - A current-checkpoint sheet pins D3, both n3S archives, all four held-out panels and a
   two-seed zero/centroid/shuffle decision rule.
-- The capture job now uses the verified source pin, the bootstrap's actual source path,
-  a clean-tree check, a timestamp-plus-random immutable output id, a remote-collision
-  check, 128 GiB initial headroom and phase-specific post-capture/readback checks.
+- The capture job now uses the verified source pin, the bootstrap checkout when present
+  and an exact job-owned clone when a binary-cache hit omits it, a clean-tree check, a
+  timestamp-plus-random immutable output id, a remote-collision check, 128 GiB initial
+  headroom and phase-specific post-capture/readback checks.
 - The whole job has no self-set wall-clock cancellation: downloads, CUDA tests/build,
   capture, sealing, upload and readback continue while healthy. The watcher renews the
   lease and checks both the job's `EXIT` and the `uor-pod` wrapper's terminal record.

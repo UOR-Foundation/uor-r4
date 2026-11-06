@@ -26,7 +26,7 @@ MIN_FREE_GIB=${UOR_CENTROID_MIN_FREE_GIB:-128}
 
 die() {
   if [ -d "$RUN" ]; then
-    printf 'centroid-cache: %s\n' "$*" | tee -a "$RUN/job.log" >&2
+    printf 'centroid-cache: %s\n' "$*" >&2
   else
     echo "centroid-cache: $*" >&2
   fi
@@ -55,7 +55,7 @@ need_readback_room() {
     die "/workspace has $((available_kib / 1048576)) GiB free; readback needs $((required_kib / 1048576)) GiB (archive plus reserve)"
 }
 log() {
-  printf '%s\n' "$*" | tee -a "$RUN/job.log"
+  printf '%s\n' "$*"
 }
 
 case $RUN_ID in
@@ -71,6 +71,7 @@ command -v timeout >/dev/null || die "timeout is not installed"
 [ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
+exec >> "$RUN/job.log" 2>&1
 OUTPUT_CLAIMED=1
 on_exit() {
   local rc=$?
@@ -113,6 +114,19 @@ if grep -F "  $OUT_STORE/" <<<"$store_listing" >/dev/null; then
   die "refusing an existing store output: $OUT_STORE"
 fi
 
+if [ ! -d "$REPO/.git" ]; then
+  command -v git >/dev/null || die "git is not installed and repository $REPO is absent"
+  REPO="$RUN/source-$PIN"
+  install -d "$REPO"
+  git -C "$REPO" init --quiet
+  git -C "$REPO" remote add origin https://github.com/UOR-Foundation/uor-r4.git
+  git -C "$REPO" fetch --quiet --depth 1 origin "$PIN" ||
+    die "could not fetch source pin $PIN"
+  git -C "$REPO" checkout --quiet --detach FETCH_HEAD ||
+    die "could not check out source pin $PIN"
+  log "source checkout created at $REPO"
+fi
+
 [ -d "$REPO/.git" ] || die "missing repository at $REPO"
 command -v zstd >/dev/null || die "zstd is not installed"
 command -v jq >/dev/null || die "jq is not installed"
@@ -129,12 +143,12 @@ actual=$(git -C "$REPO" rev-parse HEAD)
 log "[0/6] run=$RUN output=$OUT_STORE source=$PIN"
 log "script_sha256=$(sha256sum "$0" | cut -d' ' -f1)"
 log "[1/6] fetch pinned inputs"
-"$STORE" get "results/claude/scale-probe-2026-11-05/inputs/d3/" "$RUN/download" | tee -a "$RUN/job.log"
+"$STORE" get "results/claude/scale-probe-2026-11-05/inputs/d3/" "$RUN/download"
 for panel in oasst2 wiki-00000 wiki-00020 wiki-00040; do
-  "$STORE" get "results/claude/real-text-corpus-2026-11-05/$panel/heldout/" "$RUN/download" | tee -a "$RUN/job.log"
+  "$STORE" get "results/claude/real-text-corpus-2026-11-05/$panel/heldout/" "$RUN/download"
 done
-"$STORE" get "w2-inputs/2026-10-25/driver-data/" "$RUN/download" | tee -a "$RUN/job.log"
-"$STORE" get "$RUN_STORE/$ARCHIVE" "$RUN/download" | tee -a "$RUN/job.log"
+"$STORE" get "w2-inputs/2026-10-25/driver-data/" "$RUN/download"
+"$STORE" get "$RUN_STORE/$ARCHIVE" "$RUN/download"
 
 DATA=$RUN/download/w2-inputs/2026-10-25/driver-data
 D3=$RUN/download/results/claude/scale-probe-2026-11-05/inputs/d3
@@ -168,7 +182,7 @@ tar -xzf "$ARCHIVE_PATH" -C "$RUN/seed" \
   "oh/run/$runcase/models/step-008192/model.safetensors" \
   "oh/run/$runcase/models/step-008192/config.json" \
   "oh/run/$runcase/models/step-008192/hamming_read.safetensors" \
-  "oh/run/SHA256SUMS.files" 2>&1 | tee -a "$RUN/job.log"
+  "oh/run/SHA256SUMS.files"
 
 case $SEED in
   1)
@@ -188,14 +202,13 @@ selected="$RUN/selected-checkpoint.sha256"
 grep -E "  \\./($runcase/(config\\.json|models/step-008192/(config\\.json|model\\.safetensors|hamming_read\\.safetensors)))$" \
   "$RUN/seed/oh/run/SHA256SUMS.files" > "$selected"
 [ "$(wc -l < "$selected")" -eq 4 ] || die "checkpoint SHA manifest did not select four files"
-(cd "$RUN/seed/oh/run" && sha256sum -c "$selected") 2>&1 | tee -a "$RUN/job.log"
+(cd "$RUN/seed/oh/run" && sha256sum -c "$selected")
 
 log "[3/6] build and test pinned CUDA scorer"
 export CARGO_TARGET_DIR="$RUN/target"
-(cd "$REPO" && cargo test --locked --offline -p uor-r4-float-train --features cuda --lib) \
-  2>&1 | tee -a "$RUN/job.log"
+(cd "$REPO" && cargo test --locked --offline -p uor-r4-float-train --features cuda --lib)
 (cd "$REPO" && cargo build --release --locked --offline -p uor-r4-float-train --features cuda \
-  --bin train-in-space) 2>&1 | tee -a "$RUN/job.log"
+  --bin train-in-space)
 sha256sum "$CARGO_TARGET_DIR/release/train-in-space" > "$RUN/binaries.sha256"
 need_free_gib 118
 
@@ -276,9 +289,8 @@ jq -e '
   die "cache manifest does not contain the registered five-split inventory"
 (cd "$RUN/results" && find cache -type f -print0 | sort -z | xargs -0 sha256sum) \
   > "$RUN/results/cache.SHA256SUMS"
-tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache \
-  2>&1 | tee -a "$RUN/job.log"
-(cd "$RUN/results" && sha256sum cache.tar.zst | tee -a "$RUN/job.log") \
+tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache
+(cd "$RUN/results" && sha256sum cache.tar.zst) \
   > "$RUN/results/cache.tar.zst.sha256"
 need_readback_room "$RUN/results/cache.tar.zst"
 
@@ -315,4 +327,3 @@ done
 "$STORE" get "$OUT_STORE/store.log" "$RUN/readback" >/dev/null
 cmp "$RUN/transfer.log" "$RUN/readback/$OUT_STORE/store.log" ||
   die "uploaded transfer log did not read back"
-cat "$RUN/status.json"

@@ -9,9 +9,9 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   cached DEV in addition to TRAIN and four panels, while the strict evaluator accepts
   exactly five no-memory splits. DeepSeek-17 merged the `--query-cache-dev 0` repair.
 - **The first job did not name a runnable pod source.** Its default checkout did not
-  exist on a fresh bootstrap, and its source pin did not contain the newly added job.
-  The job is now copied separately and checked by hash against a source checkout at the
-  verified pin.
+  exist on every fresh bootstrap path, and its source pin did not contain the newly added
+  job. The job is now copied separately, uses a clean bootstrap checkout when present,
+  and otherwise fetches and checks out its own exact source pin.
 - **The first resource checks could not guarantee completion.** They checked 80 GiB
   before and after capture but then made compressed and readback copies. The package now
   starts with 128 GiB, checks 118 GiB immediately before capture, requires 80 GiB after
@@ -38,7 +38,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 
 - The sheet pins source `3a9c2f11d`, captures both pod ids from the reviewed lease
   commands, owns teardown from the first successful `up`, and requires both the job
-  `EXIT` and the `uor-pod` wrapper's terminal record. It leaves either existing busy pod
+  `EXIT` and the `uor-pod` wrapper's terminal record. The job uses a clean bootstrap
+  checkout or fetches its own exact pinned clone. It leaves either existing busy pod
   untouched.
 - The capture command uses `--query-cache-memory 0 --query-cache-dev 0`; its cache is
   exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`. The job
@@ -50,10 +51,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   uploads and reads back the cache, checksums, logs, GPU record and status.
 - The CPU section builds the registered evaluator, restores and verifies both the n3S
   checkpoint and captured cache, checks each status against its seed, source pin,
-  capture binary and archive hash, records the evaluator source/binary provenance,
-  enforces a 120 GiB restore floor and the 31 GiB post-restore reserve, binds each
-  report to the captured manifest and checkpoint files, then runs the evaluator and
-  aggregate without a self-set wall-clock cancellation.
+  capture binary, script hash and archive hash, records the evaluator source/binary
+  provenance, enforces 170 GiB to build and 146 GiB after build for both complete
+  restores, plus the 31 GiB post-restore reserve, binds each report to the captured
+  manifest and checkpoint files, then runs the evaluator and aggregate without a
+  self-set wall-clock cancellation.
 
 ## Measurements
 
@@ -64,7 +66,7 @@ lease until the job finishes; at a $1.15/h ceiling, a four-hour pair projects $9
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`2ed70cd8d27207e50f91929c51bc4d3f511dbbb336d43818fd19e0eb5c6febb5`.
+`d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c`.
 
 ## Checks run at the head
 

@@ -91,13 +91,16 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=2ed70cd8d27207e50f91929c51bc4d3f511dbbb336d43818fd19e0eb5c6febb5
+JOB_SHA256=d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
   exit 1
 }
 
+DISCOVERY_DIR=$(mktemp -d "${TMPDIR:-/tmp}/uor-centroid.XXXXXX")
+DISCOVERY_INDEX="$DISCOVERY_DIR/index"
+: > "$DISCOVERY_INDEX"
 PODS=()
 SESSIONS=()
 RUN_DIRS=()
@@ -161,6 +164,7 @@ resolve_pod() {
 cleanup() {
   local rc=$? i
   trap - EXIT
+  discover_up_pods || true
   for i in "${!PODS[@]}"; do
     resolve_pod "$i" || rc=1
   done
@@ -169,12 +173,22 @@ cleanup() {
 trap cleanup EXIT
 
 create_capture_pod() {
-  local session=$1 purpose=$2 output pod
-  output=$(scripts/pod/uor-pod up --lab deepseek --session "$session" --gpu 5090 \
+  local session=$1 seed=$2 purpose=$3 discovery="$DISCOVERY_DIR/$1.pod" pod
+  printf '%s\t%s\t%s\n' "$discovery" "$session" "$seed" >> "$DISCOVERY_INDEX"
+  if ! scripts/pod/uor-pod up --lab deepseek --session "$session" --gpu 5090 \
     --count 1 --hours 7 --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
-    --purpose "$purpose" 2>&1 | tee /dev/stderr) || return 1
-  pod=$(printf '%s\n' "$output" |
-    sed -n 's/^Pod \([^ ]*\) created;.*/\1/p' | tail -1)
+    --purpose "$purpose" 2>&1 |
+    awk -v discovery="$discovery" '
+      { print }
+      $1 == "Pod" && $3 == "created;" {
+        print $2 > discovery
+        close(discovery)
+      }
+    '; then
+    return 1
+  fi
+  discover_up_pods
+  pod=$(sed -n '1p' "$discovery")
   [ -n "$pod" ] || {
     echo "could not parse the pod id from uor-pod up" >&2
     return 1
@@ -183,12 +197,26 @@ create_capture_pod() {
 }
 
 register_pod() {
+  local existing
+  for existing in "${PODS[@]}"; do
+    [ "$existing" != "$1" ] || return 0
+  done
   PODS+=("$1")
   SESSIONS+=("$2")
   RUN_DIRS+=("/workspace/uor-r4/runs/deepseek-centroid-cache-s$3")
   STARTED+=(0)
   FINISHED+=(0)
   RESOLVED+=(0)
+}
+
+discover_up_pods() {
+  local discovery session seed pod
+  [ -f "$DISCOVERY_INDEX" ] || return 0
+  while IFS=$'\t' read -r discovery session seed; do
+    [ -f "$discovery" ] || continue
+    pod=$(sed -n '1p' "$discovery")
+    [ -n "$pod" ] && register_pod "$pod" "$session" "$seed"
+  done < "$DISCOVERY_INDEX"
 }
 
 start_capture() {
@@ -209,7 +237,7 @@ start_capture() {
 
 watch_capture() {
   local pod=$1 seed=$2 session=$3 log=$4 script=$5 now last=0 failures=0 probe
-  local exit_seen run_seen live_seen
+  local exit_seen run_seen live_seen status_output
   while true; do
     if probe=$(scripts/pod/uor-pod ssh "$pod" \
       "e=0; g=0; p=0; test -f '/workspace/uor-r4/runs/deepseek-centroid-cache-s$seed/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; pgrep -f \"^bash $script\" >/dev/null && p=1; printf '%s %s %s\n' \"\$e\" \"\$g\" \"\$p\""); then
@@ -234,8 +262,18 @@ watch_capture() {
     else
       failures=$((failures + 1))
       if [ "$failures" -ge 20 ]; then
-        echo "$pod was unreachable for 10 minutes" >&2
-        return 1
+        if status_output=$(scripts/pod/uor-pod status 2>/dev/null); then
+          if grep -Eq "^$pod .* RUNNING " <<<"$status_output"; then
+            echo "$pod SSH was lost for 10 minutes but the provider still lists it; retaining the lease" >&2
+            failures=0
+          else
+            echo "$pod is no longer listed by the provider" >&2
+            return 1
+          fi
+        else
+          echo "provider status for $pod is temporarily unavailable; retaining the lease" >&2
+          failures=0
+        fi
       fi
     fi
     now=$(date +%s)
@@ -251,12 +289,10 @@ watch_capture() {
 }
 
 scripts/pod/uor-pod status --du
-create_capture_pod centroid-s1 "n3S centroid cache seed 1"
+create_capture_pod centroid-s1 1 "n3S centroid cache seed 1"
 POD1=$CREATED_POD
-register_pod "$POD1" centroid-s1 1
-create_capture_pod centroid-s2 "n3S centroid cache seed 2"
+create_capture_pod centroid-s2 2 "n3S centroid cache seed 2"
 POD2=$CREATED_POD
-register_pod "$POD2" centroid-s2 2
 
 # Copy the exact D67-reviewed script to each pod, then check its recorded SHA-256.
 scripts/pod/uor-pod ssh "$POD1" 'cat > /workspace/centroid-cache-job.sh' \
@@ -271,17 +307,26 @@ scripts/pod/uor-pod ssh "$POD2" 'command -v pgrep >/dev/null'
 start_capture 0 "$POD1" centroid-s1 1
 RUN_LOG1=$CAPTURE_RUN_LOG
 RUN_SCRIPT1=$CAPTURE_RUN_SCRIPT
-start_capture 1 "$POD2" centroid-s2 2
-RUN_LOG2=$CAPTURE_RUN_LOG
-RUN_SCRIPT2=$CAPTURE_RUN_SCRIPT
 
 # Watch both jobs and renew each healthy lease every 25 minutes. Returning
 # requires both the job's EXIT and the uor-pod wrapper's terminal record.
 watch_capture "$POD1" 1 centroid-s1 "$RUN_LOG1" "$RUN_SCRIPT1" &
 WATCH1=$!
-watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" "$RUN_SCRIPT2" &
-WATCH2=$!
-ACTIVE_WATCHES=("$WATCH1" "$WATCH2")
+ACTIVE_WATCHES=("$WATCH1")
+WATCH2=
+CAPTURE_STATUS1=
+CAPTURE_STATUS2=
+SECOND_START_FAILED=0
+if start_capture 1 "$POD2" centroid-s2 2; then
+  RUN_LOG2=$CAPTURE_RUN_LOG
+  RUN_SCRIPT2=$CAPTURE_RUN_SCRIPT
+  watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" "$RUN_SCRIPT2" &
+  WATCH2=$!
+  ACTIVE_WATCHES+=("$WATCH2")
+else
+  SECOND_START_FAILED=1
+  echo "seed 2 did not start; seed 1 remains watched and will finish" >&2
+fi
 WATCH_FAILED=0
 while [ "${#ACTIVE_WATCHES[@]}" -gt 0 ]; do
   FINISHED_WATCH=
@@ -312,6 +357,7 @@ while [ "${#ACTIVE_WATCHES[@]}" -gt 0 ]; do
   done
   ACTIVE_WATCHES=("${remaining_watches[@]}")
 done
+test "$SECOND_START_FAILED" = 0
 test "$WATCH_FAILED" = 0
 test "$CAPTURE_STATUS1" = 0
 test "$CAPTURE_STATUS2" = 0
@@ -350,8 +396,9 @@ produces the candidate's table is `CONTROL_FAULT`.
 
 ## CPU evaluation
 
-Restore and build on the D84 host. The following seed-1 block is repeated mechanically
-for seed 2, substituting `s2`/`2` and its pin:
+Build and admit the run on the D84 host with the first part of the following block. Its
+seed-specific restore section is then run once for seed 1 and once for seed 2,
+substituting `s2`/`2` and its pin. The build and global disk floors are not repeated.
 
 Set `OUT_STORE_S1` and `OUT_STORE_S2` from the two jobs' `[0/6] output=` log lines. The
 timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
@@ -359,9 +406,10 @@ timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
 ```sh
 set -euo pipefail
 ROOT=local/deepseek/centroid-cache/2026-11-06
+CAPTURE_JOB_SHA256=d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c
 mkdir -p "$ROOT"
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
-[ "$available_gib" -ge 120 ] || { echo "need 120 GiB free, have $available_gib" >&2; exit 1; }
+[ "$available_gib" -ge 170 ] || { echo "need 170 GiB free, have $available_gib" >&2; exit 1; }
 export CARGO_TARGET_DIR="$ROOT/target"
 test -z "$(git status --porcelain --untracked-files=no)"
 git diff --quiet 3a9c2f11d26991a70a22f88758cfb4589a1cf14d HEAD -- \
@@ -374,6 +422,11 @@ cargo build --release --locked -p uor-r4-cpu-train \
   sha256sum "$CARGO_TARGET_DIR/release/cpu-query-cache-evaluate" \
     "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate"
 } > "$ROOT/evaluator-provenance.txt"
+available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
+[ "$available_gib" -ge 146 ] || {
+  echo "need 146 GiB free after build for two complete restores, have $available_gib" >&2
+  exit 1
+}
 
 # Fetch the pinned checkpoint archive, its published checksum and the captured cache.
 CKPT_STORE=results/claude/one-model-end-to-end-steps-data-2026-11-06/runs/s1
@@ -402,6 +455,8 @@ scripts/pod/uor-store get "$OUT_STORE_S1/cache.tar.zst" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/cache.tar.zst.sha256" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/cache.SHA256SUMS" "$CACHE_DOWN"
 scripts/pod/uor-store get "$OUT_STORE_S1/status.json" "$CACHE_DOWN"
+scripts/pod/uor-store get "$OUT_STORE_S1/binaries.sha256" "$CACHE_DOWN"
+scripts/pod/uor-store get "$OUT_STORE_S1/job.log" "$CACHE_DOWN"
 ARCHIVE_ROOT="$CACHE_DOWN/$OUT_STORE_S1"
 (cd "$ARCHIVE_ROOT" && sha256sum -c cache.tar.zst.sha256)
 mkdir -p "$ROOT/s1/cache-extracted"
@@ -409,10 +464,12 @@ tar --zstd -xf "$ARCHIVE_ROOT/cache.tar.zst" -C "$ROOT/s1/cache-extracted"
 (cd "$ROOT/s1/cache-extracted" && sha256sum -c "$ARCHIVE_ROOT/cache.SHA256SUMS")
 CACHE_S1="$ROOT/s1/cache-extracted/cache"
 STATUS="$ARCHIVE_ROOT/status.json"
-jq -e '
+BINARY_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/binaries.sha256")
+grep -Fxq "script_sha256=$CAPTURE_JOB_SHA256" "$ARCHIVE_ROOT/job.log"
+jq -e --arg binary "$BINARY_SHA" '
   .seed == 1 and .status == "CAPTURED" and
   .source_pin == "3a9c2f11d26991a70a22f88758cfb4589a1cf14d" and
-  (.capture_binary_sha256 | test("^[0-9a-f]{64}$"))
+  .capture_binary_sha256 == $binary
 ' "$STATUS"
 TAR_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/cache.tar.zst.sha256")
 jq -e --arg sha "$TAR_SHA" '.cache_tar_sha256 == $sha' "$STATUS"
@@ -524,8 +581,9 @@ panel; it cannot alone put the mechanism on the serving path.
   compressed-size and readback checks, including a 40 GiB minimum. `zstd` has a functional
   round-trip preflight.
 - CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and an estimated 2
-  hours. Estimates are not cancellation rules. The point estimator streams TRAIN; only
-  one panel's queries are resident.
+  hours. It admits 170 GiB before the build, then 146 GiB after build for both retained
+  restores and the final reserve. Estimates are not cancellation rules. The point
+  estimator streams TRAIN; only one panel's queries are resident.
 - Each no-memory cache is about 29 GiB; the compressed archive is uploaded and read back.
 - Stop on any input/checkpoint mismatch, `CONTROL_FAULT`, insufficient power, archive
   ambiguity, resource breach or missing credential.
