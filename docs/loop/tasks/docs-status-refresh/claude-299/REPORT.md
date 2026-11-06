@@ -1,6 +1,6 @@
 # REPORT: the README front page in plain terms, claude-299
 
-Lab: claude. Item: docs-status-refresh (#3380). Order: [ORDER.md](./ORDER.md).
+Lab: claude. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Order: [ORDER.md](./ORDER.md).
 
 ## What did not work, or is not done
 

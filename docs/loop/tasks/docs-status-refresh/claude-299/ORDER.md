@@ -1,6 +1,6 @@
 # ORDER: the README front page in plain terms, claude-299
 
-Lab: claude. Item: docs-status-refresh (#3380). Base: `1f2bd76ce58503f25ef24e415dd193bf57086ddb`.
+Lab: claude. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-refresh.md) (#3380). Base: `1f2bd76ce58503f25ef24e415dd193bf57086ddb`.
 
 Casey's direct instruction of 6 Nov 2026 was to clean up the repository documentation, "including the readme so that the repo remains a professional open research project". README.md and CONTRIBUTING.md are Kimi's files and #3380 is Kimi's item. This unit is made on the owner's instruction and is noted to Kimi on #2028 (6688130273).
 
@@ -19,6 +19,7 @@ Correct CONTRIBUTING.md's milestone line to match the issue labels.
 - `CONTRIBUTING.md`
 - `docs/loop/tasks/docs-status-refresh/claude-299/ORDER.md`
 - `docs/loop/tasks/docs-status-refresh/claude-299/REPORT.md`
+- `docs/roadmap/items/docs-status-refresh.md`, only to add this unit's task folder to the item's scope
 
 No other file may change. This unit has no model run, GPU, bar, status or rule change.
 
