@@ -111,6 +111,8 @@ struct FittedTables {
     shuffled: Vec<i16>,
     fitted_rows: usize,
     observations: usize,
+    control_strata: usize,
+    singleton_control_targets: usize,
     changed_coordinates: u64,
     displacement_l1: u64,
     shuffled_changed_targets: usize,
@@ -290,9 +292,9 @@ pub fn evaluate_query_cache(
             },
             "original": original.counts,
             "centroid": centroid.counts,
-            "shuffled_target": shuffled.counts,
+            "exact_count_shuffled_target": shuffled.counts,
             "centroid_vs_original": paired(&centroid.top1_rows, &original.top1_rows),
-            "centroid_vs_shuffled": paired(&centroid.top1_rows, &shuffled.top1_rows),
+            "centroid_vs_exact_count_shuffled": paired(&centroid.top1_rows, &shuffled.top1_rows),
             "centroid_top8_not_below_original": centroid.counts.top8_correct >= original.counts.top8_correct,
         }));
     }
@@ -376,6 +378,9 @@ pub fn evaluate_query_cache(
             "minimum_fitted_rows": request.minimum_fitted_rows,
             "minimum_fit_observations": request.minimum_fit_observations,
             "power_ok": power_ok,
+            "control_strategy": "exact-count-stratified-cycle",
+            "control_strata": fitted.control_strata,
+            "singleton_control_targets": fitted.singleton_control_targets,
             "changed_coordinates": fitted.changed_coordinates,
             "displacement_l1": fitted.displacement_l1,
             "shuffled_changed_targets": fitted.shuffled_changed_targets,
@@ -390,13 +395,13 @@ pub fn evaluate_query_cache(
             "identity_matches": identity_registered,
             "original_top1": original_top1_correct,
             "centroid_top1": centroid_top1_correct,
-            "shuffled_top1": shuffled_top1_correct,
+            "exact_count_shuffled_top1": shuffled_top1_correct,
             "original_top8": original_top8_correct,
             "centroid_top8": centroid_top8_correct,
-            "shuffled_top8": shuffled_top8_correct,
+            "exact_count_shuffled_top8": shuffled_top8_correct,
             "top8_holds": top8_holds,
             "centroid_vs_original": paired_original,
-            "centroid_vs_shuffled": paired_shuffled,
+            "centroid_vs_exact_count_shuffled": paired_shuffled,
             "decision_sha256": sha256(
                 &pooled_original_tokens
                     .iter()
@@ -578,23 +583,22 @@ fn fit_streamed_tables(
         return Err(invalid("query cache centroid has no eligible rows"));
     }
     let fitted_observations = fitted_tokens.iter().map(|&token| counts[token]).sum();
-    let eligible = fitted_tokens.iter().copied().collect::<BTreeSet<_>>();
-    let labels = rows
-        .targets
-        .iter()
-        .copied()
-        .filter(|target| eligible.contains(&(*target as usize)))
-        .collect::<Vec<_>>();
-    if labels.len() < 2 {
-        return Err(invalid(
-            "query cache matched shuffle has fewer than two rows",
-        ));
+    let mut strata = BTreeMap::<usize, Vec<usize>>::new();
+    for &token in &fitted_tokens {
+        strata.entry(counts[token]).or_default().push(token);
     }
-    let offset = labels.len() / 2;
-    let shuffled_changed_targets = labels
+    let control_strata = strata.len();
+    let singleton_control_targets = strata.values().filter(|targets| targets.len() == 1).count();
+    let mut control_targets = vec![None; vocab];
+    for targets in strata.values() {
+        for (index, &target) in targets.iter().enumerate() {
+            control_targets[target] = Some(targets[(index + 1) % targets.len()]);
+        }
+    }
+    let shuffled_changed_targets = control_targets
         .iter()
         .enumerate()
-        .filter(|(index, target)| **target != labels[(index + offset) % labels.len()])
+        .filter(|(token, control)| control.is_some_and(|control| *token != control))
         .count();
 
     let mut candidate_sums = vec![0f64; vocab.saturating_mul(width)];
@@ -621,7 +625,6 @@ fn fit_streamed_tables(
         .checked_mul(4)
         .ok_or_else(|| invalid("query cache row width overflows"))?;
     let mut buffer = vec![0u8; row_bytes];
-    let mut slot = 0usize;
     for (row, &target) in rows.targets.iter().enumerate() {
         reader
             .read_exact(&mut buffer)
@@ -629,23 +632,17 @@ fn fit_streamed_tables(
         hasher.update(&buffer);
         let target = target as usize;
         let candidate = target.saturating_mul(width);
-        let is_eligible = eligible.contains(&target);
-        let control_target = if is_eligible {
-            let assigned = labels[(slot + offset) % labels.len()] as usize;
-            slot += 1;
-            Some(assigned.saturating_mul(width))
-        } else {
-            None
+        let Some(control_target) = control_targets[target] else {
+            continue;
         };
+        let control_target = control_target.saturating_mul(width);
         for coordinate in 0..width {
             let at = coordinate * 4;
             let value =
                 f32::from_le_bytes([buffer[at], buffer[at + 1], buffer[at + 2], buffer[at + 3]]);
             let value = f64::from(f32_to_q12(value)?);
-            if is_eligible {
-                candidate_sums[candidate + coordinate] += value;
-                control_sums[control_target.expect("control target") + coordinate] += value;
-            }
+            candidate_sums[candidate + coordinate] += value;
+            control_sums[control_target + coordinate] += value;
         }
     }
     let mut tail = [0u8; 1];
@@ -680,6 +677,8 @@ fn fit_streamed_tables(
         shuffled,
         fitted_rows: fitted_tokens.len(),
         observations: fitted_observations,
+        control_strata,
+        singleton_control_targets,
         changed_coordinates,
         displacement_l1,
         shuffled_changed_targets,
@@ -1036,14 +1035,14 @@ mod tests {
         let table_bytes = f32_bytes(&table);
         fs::write(cache_root.join("table.f32"), &table_bytes).unwrap();
         let train_rows = CachedRows {
-            targets: vec![0, 0, 1, 1, 1, 2],
-            positions: vec![1, 2, 3, 4, 5, 6],
-            nearest: vec![0, 0, 1, 1, 1, 2],
-            writer: vec![0, 0, 1, 1, 1, 2],
-            opens: vec![0; 6],
-            copies: vec![0; 6],
+            targets: vec![0, 0, 0, 1, 1, 1, 2],
+            positions: vec![1, 2, 3, 4, 5, 6, 7],
+            nearest: vec![0, 0, 0, 1, 1, 1, 2],
+            writer: vec![0, 0, 0, 1, 1, 1, 2],
+            opens: vec![0; 7],
+            copies: vec![0; 7],
         };
-        let train_queries = f32_bytes(&q12(&[0, 2, 12, 14, 16, 20]));
+        let train_queries = f32_bytes(&q12(&[0, 2, 4, 14, 16, 18, 22]));
         fs::write(
             cache_root.join("no-memory/train.queries.f32"),
             &train_queries,
@@ -1087,7 +1086,7 @@ mod tests {
                     label: "no-memory".to_owned(),
                     memory: false,
                     context: 4,
-                    rows: 6,
+                    rows: 7,
                     tokens_sha256: "train-tokens".to_owned(),
                     mask_sha256: "train-mask".to_owned(),
                     query_file: "no-memory/train.queries.f32".to_owned(),
@@ -1131,7 +1130,7 @@ mod tests {
             memory: false,
             minimum_observations: 1,
             minimum_fitted_rows: 3,
-            minimum_fit_observations: 6,
+            minimum_fit_observations: 7,
             expected_train_tokens_sha256: Some("train-tokens".to_owned()),
             expected_train_mask_sha256: Some("train-mask".to_owned()),
             expected_rows: Some(3),
@@ -1155,14 +1154,20 @@ mod tests {
     }
 
     #[test]
-    fn matched_shuffle_uses_every_eligible_row_and_is_not_vacuous() {
+    fn exact_count_shuffle_uses_every_eligible_row_and_is_not_vacuous() {
         let (root, cache_root) = fixture("matched");
         let report = evaluate_query_cache(&cache_root, &request()).unwrap();
         assert_eq!(report["status"], "REJECT");
         assert_eq!(report["fit"]["fitted_rows"], 3);
-        assert_eq!(report["fit"]["observations"], 6);
+        assert_eq!(report["fit"]["observations"], 7);
         assert_eq!(report["fit"]["power_ok"], true);
-        assert!(report["fit"]["shuffled_changed_targets"].as_u64().unwrap() > 0);
+        assert_eq!(
+            report["fit"]["control_strategy"],
+            "exact-count-stratified-cycle"
+        );
+        assert_eq!(report["fit"]["control_strata"], 2);
+        assert_eq!(report["fit"]["singleton_control_targets"], 1);
+        assert_eq!(report["fit"]["shuffled_changed_targets"], 2);
         assert!(
             report["fit"]["shuffled_changed_coordinates"]
                 .as_u64()
@@ -1195,6 +1200,22 @@ mod tests {
             value
         };
         assert_eq!(normalize(one), normalize(four));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn singleton_count_strata_use_their_own_query_in_both_arms() {
+        let (root, cache_root) = fixture("singleton-control");
+        let cache = QueryCache::open(&cache_root).unwrap();
+        let (metadata, rows) = cache.split("train", false).unwrap();
+        let fitted = fit_streamed_tables(&cache, metadata, &rows, &request()).unwrap();
+
+        assert_eq!(fitted.centroid[0], 2);
+        assert_eq!(fitted.shuffled[0], 16);
+        assert_eq!(fitted.centroid[2], 22);
+        assert_eq!(fitted.shuffled[2], 22);
+        assert_eq!(fitted.singleton_control_targets, 1);
+        assert_eq!(fitted.shuffled_changed_targets, 2);
         fs::remove_dir_all(root).unwrap();
     }
 

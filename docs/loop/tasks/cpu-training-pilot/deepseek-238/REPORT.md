@@ -7,10 +7,11 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 - The first centroid evaluator ran in `uor-r4-float-train`, outside the named D84
   CPU module. This unit moves evaluation into `uor-r4-cpu-train`.
-- Its matched control skipped singleton observation-count groups, leaving original rows
-  in the control while the candidate refit them. The replacement permutes every eligible
-  observation's label, preserves each target's total count and the global query multiset,
-  and faults if the shuffle or resulting table is vacuous.
+- Its first matched control rotated across all eligible observations, so a rare or
+  singleton target could receive another target's query distribution. The replacement
+  groups eligible target IDs by exact observation count, cycles each non-singleton group
+  once, keeps singleton targets on their own centroid in both arms, and faults if the
+  resulting shuffle or table is vacuous.
 - Its power, pooled identity and pooled comparison existed only in prose. The new
   evaluator enforces fitted-row/observation floors, computes split and pooled
   `(position,target)` identities, and emits the pooled paired bar.
@@ -28,13 +29,15 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
   Q12 F32 query values on the exact `1/4096` grid.
 - Converts queries and tables to exact i16 Q12 and evaluates whole-table L1 in ordered
   64-query Rayon blocks.
-- Streams TRAIN into target and rotated-label centroid sums, then evaluates original,
-  centroid and control tables on held-out rows.
+- Streams TRAIN into target and exact-observation-count-stratified control sums, then
+  evaluates original, centroid and control tables on held-out rows. The report names the
+  control strategy and records its strata and singleton-target counts.
 - Reports per-panel and pooled counts, pooled identities, power, candidate/control paired
   tests, top-8 preservation and deterministic decision hashes. It also checks the
   registered TRAIN token and mask hashes and reports split contexts.
-- Added focused tests for Q12 conversion/ties, matched non-vacuous shuffle, power,
-  registered identity, tampering and worker-count determinism.
+- Added focused tests for Q12 conversion/ties, an exact-count non-vacuous shuffle with a
+  self-mapped singleton stratum, power, registered identity, tampering and worker-count
+  determinism.
 
 No GPU scorer, trainer, serving path or model artifact changed.
 
@@ -50,11 +53,13 @@ available at this head.
 ## Checks run at the head
 
 - `cargo test -p uor-r4-cpu-train --locked --offline --no-fail-fast`:
-  **428 library tests passed, 4 ignored; all binary tests passed**.
-- Focused `query_cache_eval` tests: **4 passed**.
+  **430 library tests passed, 4 ignored; all binary tests passed**.
+- Focused `query_cache_eval` tests: **5 passed**.
 - `cargo check -p uor-r4-cpu-train --bin cpu-query-cache-evaluate --locked --offline`:
   passed.
-- Scoped Clippy, with only the four pre-existing crate lint categories allowed: passed.
+- Scoped strict Clippy, with only the four pre-existing crate lint categories allowed
+  (`type_complexity`, `needless_borrow`, `cloned_ref_to_slice_refs`,
+  `unnecessary_min_or_max`): passed.
 - D23/D25/D32 ratchets: passed.
 - New-file Rustfmt and `git diff --check`: passed.
 - Full harness checks are run before delivery.
