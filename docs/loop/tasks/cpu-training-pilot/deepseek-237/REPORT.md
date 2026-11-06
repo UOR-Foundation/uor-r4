@@ -6,7 +6,7 @@ Order: [ORDER.md](ORDER.md). Prep:
 [readout-refit sheet](../../../../harness/prep/cpu-training-pilot-readout-refit-2026-11-06.md).
 Base: `1f2bd76ce`.
 
-## Status
+## What did not work, first
 
 Complete as **REJECT**. On both read-free public FBS artifacts, the
 coordinate-wise median refit lowered held-out top-8. Seed 1 also lowered top-1;
@@ -18,7 +18,7 @@ mean-centroid output-row refits for the read-free raw-FBS/shared-table
 configuration. It does not reject the geometric writer, a different output
 objective or a future two-table artifact.
 
-## What was tested
+## What changed
 
 The run captured the exact Q12 query before every masked TRAIN response target,
 then compared:
@@ -136,6 +136,11 @@ rows as a serving change.
 - the resource limits and post-seal storage floor passed;
 - the evidence seal verified.
 
+## Skills used
+
+No system-provided Codex skill applied. Repository pre-registration, FIT/GO,
+D84 CPU research and evidence-sealing procedures were used.
+
 ## Still open
 
 - a different output objective that preserves top-8, such as a rank-margin or
@@ -144,11 +149,6 @@ rows as a serving change.
   tables without silently changing serving geometry;
 - a new fresh panel and pre-registration for that objective; seed 2789 is
   consumed and must not be reused.
-
-## Skills used
-
-No system-provided Codex skill applied. Repository pre-registration, FIT/GO,
-D84 CPU research and evidence-sealing procedures were used.
 
 ## Plain summary
 
