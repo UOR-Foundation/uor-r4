@@ -526,6 +526,72 @@ for (const [index, prompt] of [
     assert(iso.action === 'generate_complete' && iso.tokenCount === expectedTokens, `ordinary signed/date prose must use the ordinary model path: ${JSON.stringify(iso)}`);
 }
 
+for (let index = 0; index < 16; index += 1) {
+    const conversationId = `conv_verify_iso_${index}`;
+    const id = `close_review18_preclean_${index}`;
+    await sendToWorker({ action: 'close_session', id, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === id);
+    assert(closed.action === 'session_reset', `pre-existing review conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of [
+    '2026-11-05  - 1',
+    '2026-11-05, - 1',
+    '2026-11-05T17:25+01:00, - 1',
+    '2026-11-05  -',
+    '2026-11-05 +',
+    'What is 17 & 25?',
+    '17 | 25',
+    '17 << 2',
+    '17 = 25',
+    '17 (25)',
+    `${' '.repeat(200)}2026-11-05  - 1`,
+    `${' '.repeat(200)}2026-11-05, - 1`,
+    `${' '.repeat(200)}2026-11-05T17:25+01:00, - 1`,
+    `${' '.repeat(200)}2026-11-05 +`,
+    '+1 800 555 0100 + 2',
+    '10 - 20 minutes + 3',
+].entries()) {
+    const id = `gen_review18_boundary_${index}`;
+    const conversationId = `conv_review18_boundary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const boundary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(boundary.action === 'generate_error', `review arithmetic boundary must fail explicitly instead of generating (${prompt}): ${JSON.stringify(boundary)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `review arithmetic boundary emitted model chunks (${prompt})`);
+    const expectedError = index >= 10 && index <= 13 ? '160-byte' : 'exact arithmetic';
+    assert(boundary.error.includes(expectedError), `review arithmetic boundary returned the wrong error (${prompt}): ${JSON.stringify(boundary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review arithmetic boundary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of ['+1 800 555 0100', '+1 2 3', '10 - 20 minutes'].entries()) {
+    const id = `gen_review18_ordinary_${index}`;
+    const conversationId = `conv_review18_ordinary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: {
+            conversationId,
+            messages: [{ role: 'user', content: prompt }],
+            options: { max_new_tokens: 32 },
+        },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `ordinary signed/range prose must use the ordinary model path: ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `ordinary review conversation did not close: ${JSON.stringify(closed)}`);
+}
+
 const staleLoad = sendToWorker({
     action: 'load_model',
     id: 101,

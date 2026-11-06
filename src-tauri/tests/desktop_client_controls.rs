@@ -882,6 +882,64 @@ fn native_exact_arithmetic_rpc_returns_a_tool_answer_or_falls_through() {
 }
 
 #[test]
+fn native_exact_arithmetic_review18_boundary_regressions() {
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    for prompt in [
+        "2026-11-05  - 1",
+        "2026-11-05, - 1",
+        "2026-11-05T17:25+01:00, - 1",
+        "2026-11-05  -",
+        "2026-11-05 +",
+        "What is 17 & 25?",
+        "17 | 25",
+        "17 << 2",
+        "17 = 25",
+        "17 (25)",
+        "+1 800 555 0100 + 2",
+        "10 - 20 minutes + 3",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("review arithmetic boundary RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert!(response["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
+    }
+    for prompt in [
+        "2026-11-05  - 1",
+        "2026-11-05, - 1",
+        "2026-11-05T17:25+01:00, - 1",
+        "2026-11-05 +",
+    ] {
+        let prompt = format!("{}{}", " ".repeat(200), prompt);
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("overlong review arithmetic boundary RPC should succeed");
+        assert_eq!(response["handled"], json!(true));
+        assert!(response["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("160-byte"));
+    }
+    for prompt in ["+1 800 555 0100", "+1 2 3", "10 - 20 minutes"] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary signed/range prose RPC should succeed");
+        assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
+    }
+}
+
+#[test]
 fn native_write_file_enforces_its_size_cap() {
     let root = unique_temp_dir("write-cap");
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());

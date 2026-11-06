@@ -876,7 +876,24 @@ fn exact_tool_operand_start(rest: &str) -> bool {
     rest.trim_start().starts_with(|c: char| {
         matches!(
             c,
-            '0'..='9' | '+' | '-' | '.' | '(' | '{' | '[' | '%' | '^' | '*' | '/' | '×' | '÷'
+            '0'..='9'
+                | '+'
+                | '-'
+                | '.'
+                | '('
+                | '{'
+                | '['
+                | '%'
+                | '^'
+                | '*'
+                | '/'
+                | '×'
+                | '÷'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
         )
     })
 }
@@ -892,7 +909,24 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     if !rest.starts_with(|c: char| {
         matches!(
             c,
-            '0'..='9' | '+' | '-' | '.' | '(' | '{' | '[' | '%' | '^' | '*' | '/' | '×' | '÷'
+            '0'..='9'
+                | '+'
+                | '-'
+                | '.'
+                | '('
+                | '{'
+                | '['
+                | '%'
+                | '^'
+                | '*'
+                | '/'
+                | '×'
+                | '÷'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
         )
     }) || !rest.chars().any(|c| c.is_ascii_digit())
     {
@@ -908,7 +942,10 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         {
             continue;
         }
-        if matches!(c, '+' | '*' | '/' | '%' | '^' | '×' | '÷') {
+        if matches!(
+            c,
+            '+' | '*' | '/' | '%' | '^' | '×' | '÷' | '&' | '|' | '=' | '<' | '>' | '(' | '{' | '['
+        ) {
             return true;
         }
         if c == '-' {
@@ -1034,8 +1071,9 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
             continue;
         }
         let head = &rest[..index];
-        let tail = &rest[index + 1..];
+        let tail = rest[index + 1..].trim_start();
         if exact_tool_is_iso_date_time_core(head)
+            && !tail.starts_with('+')
             && !exact_tool_leading_operator_minus(tail)
             && !exact_tool_arithmetic_shaped(tail)
         {
@@ -1127,6 +1165,19 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "please show your work",
         ]
         .contains(&normalized_suffix.as_str());
+    if unsupported_suffix {
+        let fields: Vec<&str> = expression.split_whitespace().collect();
+        let numeric_range_prose = fields.len() == 3
+            && fields[0].chars().all(|c| c.is_ascii_digit())
+            && fields[1] == "-"
+            && fields[2].chars().all(|c| c.is_ascii_digit())
+            && suffix
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace());
+        if numeric_range_prose {
+            return Ok(None);
+        }
+    }
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
         let trailing_operator = expression.trim_end().ends_with(|c| matches!(c, '+' | '-'));
         if exact_tool_arithmetic_shaped(rest) || (!unsupported_suffix && trailing_operator) {
@@ -1207,6 +1258,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         ));
     }
     let fields: Vec<&str> = normalized.split_whitespace().collect();
+    if fields.len() != 3 && operator_count == 1 && expression.starts_with('+') {
+        return Ok(None);
+    }
     if fields.len() != 3 {
         return Err(invalid(
             "exact arithmetic expects one decimal addition or subtraction",
@@ -1865,5 +1919,47 @@ mod tests {
             .err()
             .expect("oversized operand should be an error");
         assert!(overflow.to_string().contains("10-digit tool bound"));
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_review18_boundary_regressions() {
+        for prompt in [
+            "2026-11-05  - 1",
+            "2026-11-05, - 1",
+            "2026-11-05T17:25+01:00, - 1",
+            "2026-11-05  -",
+            "2026-11-05 +",
+            "What is 17 & 25?",
+            "17 | 25",
+            "17 << 2",
+            "17 = 25",
+            "17 (25)",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("review arithmetic boundary should be recognized")
+                    .is_err(),
+                "review arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for prompt in [
+            "2026-11-05  - 1",
+            "2026-11-05, - 1",
+            "2026-11-05T17:25+01:00, - 1",
+            "2026-11-05 +",
+        ] {
+            let overlong = format!("{}{}", " ".repeat(200), prompt);
+            let error = exact_arithmetic_tool(&overlong)
+                .expect("overlong review arithmetic boundary should be recognized")
+                .err()
+                .expect("overlong review arithmetic boundary should be an error");
+            assert!(error.to_string().contains("160-byte"), "{overlong}");
+        }
+        for prompt in ["+1 800 555 0100", "+1 2 3", "10 - 20 minutes"] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary signed/range prose was intercepted: {prompt}"
+            );
+        }
     }
 }
