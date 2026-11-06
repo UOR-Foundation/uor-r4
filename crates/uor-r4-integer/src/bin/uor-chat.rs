@@ -1714,6 +1714,7 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                 model.artifact_sha256(),
                 &tokenizer_sha256,
                 cli.protocol,
+                &[protocol.bos_id, protocol.eos_id, protocol.unk_id],
                 model.shape().vocab,
             )?;
             Some((

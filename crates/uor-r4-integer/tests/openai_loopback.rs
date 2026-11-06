@@ -273,6 +273,7 @@ fn serving_with_prompt_reply() -> (OpenAiServing, String, String) {
         model.artifact_sha256(),
         readout.tokenizer_sha256(),
         2,
+        &[0, 1, 2],
         model.shape().vocab,
     )
     .unwrap();

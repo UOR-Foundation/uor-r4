@@ -83,6 +83,7 @@ fn run() -> Result<(), String> {
         &artifact_sha256,
         &tokenizer_sha256,
         config.protocol,
+        &[protocol.bos_id, protocol.eos_id, protocol.unk_id],
         identity.vocab,
     )
     .map_err(|error| error.to_string())?;

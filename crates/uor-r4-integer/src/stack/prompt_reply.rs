@@ -94,6 +94,7 @@ impl PromptReplyReadout {
         artifact_sha256: &str,
         tokenizer_sha256: &str,
         expected_protocol: u8,
+        expected_ignore_token_ids: &[u32],
         vocab: usize,
     ) -> Result<Self, StackError> {
         if bytes.len() as u64 > MAX_PROMPT_REPLY_SIDECAR_BYTES {
@@ -129,6 +130,12 @@ impl PromptReplyReadout {
                 sidecar.protocol_version
             )));
         }
+        if sidecar.ignore_token_ids != expected_ignore_token_ids {
+            return Err(prompt_error(format!(
+                "sidecar ignores {:?}, protocol requires {expected_ignore_token_ids:?}",
+                sidecar.ignore_token_ids
+            )));
+        }
         let mut readout = Self::from_entries(
             sidecar.artifact_sha256,
             sidecar.tokenizer_sha256,
@@ -146,6 +153,7 @@ impl PromptReplyReadout {
         artifact_sha256: &str,
         tokenizer_sha256: &str,
         expected_protocol: u8,
+        expected_ignore_token_ids: &[u32],
         vocab: usize,
     ) -> Result<Self, StackError> {
         Self::read_sidecar(
@@ -153,6 +161,7 @@ impl PromptReplyReadout {
             artifact_sha256,
             tokenizer_sha256,
             expected_protocol,
+            expected_ignore_token_ids,
             vocab,
         )
         .map(|(_, readout)| readout)
@@ -163,6 +172,7 @@ impl PromptReplyReadout {
         artifact_sha256: &str,
         tokenizer_sha256: &str,
         expected_protocol: u8,
+        expected_ignore_token_ids: &[u32],
         vocab: usize,
     ) -> Result<(Vec<u8>, Self), StackError> {
         let file = std::fs::File::open(path).map_err(StackError::Io)?;
@@ -175,6 +185,7 @@ impl PromptReplyReadout {
             artifact_sha256,
             tokenizer_sha256,
             expected_protocol,
+            expected_ignore_token_ids,
             vocab,
         )?;
         Ok((bytes, readout))
@@ -401,23 +412,53 @@ mod tests {
     fn sidecar_round_trips_and_binds_artifact_tokenizer_and_protocol() {
         let readout = readout(vec![example(&[3, 4], &[10, 11])]);
         let bytes = readout.to_sidecar_bytes().unwrap();
-        let loaded =
-            PromptReplyReadout::from_sidecar(&bytes, &"a".repeat(64), &"b".repeat(64), 2, 64)
-                .unwrap();
+        let loaded = PromptReplyReadout::from_sidecar(
+            &bytes,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            2,
+            &[0, 1, 2],
+            64,
+        )
+        .unwrap();
         assert_eq!(loaded.entries(), 1);
         assert!(loaded.sidecar_sha256().is_some());
-        assert!(
-            PromptReplyReadout::from_sidecar(&bytes, &"c".repeat(64), &"b".repeat(64), 2, 64)
-                .is_err()
-        );
-        assert!(
-            PromptReplyReadout::from_sidecar(&bytes, &"a".repeat(64), &"c".repeat(64), 2, 64)
-                .is_err()
-        );
-        assert!(
-            PromptReplyReadout::from_sidecar(&bytes, &"a".repeat(64), &"b".repeat(64), 1, 64)
-                .is_err()
-        );
+        assert!(PromptReplyReadout::from_sidecar(
+            &bytes,
+            &"c".repeat(64),
+            &"b".repeat(64),
+            2,
+            &[0, 1, 2],
+            64
+        )
+        .is_err());
+        assert!(PromptReplyReadout::from_sidecar(
+            &bytes,
+            &"a".repeat(64),
+            &"c".repeat(64),
+            2,
+            &[0, 1, 2],
+            64
+        )
+        .is_err());
+        assert!(PromptReplyReadout::from_sidecar(
+            &bytes,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            1,
+            &[0, 1, 2],
+            64
+        )
+        .is_err());
+        assert!(PromptReplyReadout::from_sidecar(
+            &bytes,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            2,
+            &[0, 1, 3],
+            64
+        )
+        .is_err());
     }
 
     #[test]
@@ -437,6 +478,7 @@ mod tests {
             &"a".repeat(64),
             &"b".repeat(64),
             2,
+            &[0, 1, 2],
             64
         )
         .is_err());
