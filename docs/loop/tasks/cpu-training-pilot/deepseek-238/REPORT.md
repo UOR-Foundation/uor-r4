@@ -23,6 +23,7 @@ Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training
 
 - Added `query_cache_eval` to `uor-r4-cpu-train`.
 - Added `cpu-query-cache-evaluate`.
+- Added `cpu-query-cache-aggregate` for the two-seed control/power/bar precedence.
 - Verifies the cache seal, manifest, table, split rows and query hashes, and requires
   Q12 F32 query values on the exact `1/4096` grid.
 - Converts queries and tables to exact i16 Q12 and evaluates whole-table L1 in ordered
@@ -50,7 +51,7 @@ available at this head.
 
 - `cargo test -p uor-r4-cpu-train --locked --offline --no-fail-fast`:
   **428 library tests passed, 4 ignored; all binary tests passed**.
-- Focused `query_cache_eval` tests: **3 passed**.
+- Focused `query_cache_eval` tests: **4 passed**.
 - `cargo check -p uor-r4-cpu-train --bin cpu-query-cache-evaluate --locked --offline`:
   passed.
 - Scoped Clippy, with only the four pre-existing crate lint categories allowed: passed.

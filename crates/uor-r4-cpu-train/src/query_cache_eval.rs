@@ -346,10 +346,15 @@ pub fn evaluate_query_cache(
             "root": cache.root,
             "manifest_sha256": cache.manifest_sha256,
             "checkpoint": cache.manifest.checkpoint,
-            "table_sha256": cache.manifest.table_sha256,
+            "checkpoint_files": &cache.manifest.checkpoint_files,
+            "run_config": &cache.manifest.run_config,
+            "run_config_sha256": &cache.manifest.run_config_sha256,
+            "data_root": &cache.manifest.data_root,
+            "tokenizer_sha256": &cache.manifest.tokenizer_sha256,
+            "table_sha256": &cache.manifest.table_sha256,
             "vocab": cache.manifest.vocab,
             "width": cache.manifest.width,
-            "query_space": cache.manifest.query_space,
+            "query_space": &cache.manifest.query_space,
         },
         "request": request,
         "train": {
@@ -403,6 +408,78 @@ pub fn evaluate_query_cache(
             "bar_passes": bar_passes,
         },
         "panels": panels,
+    }))
+}
+
+pub fn aggregate_query_cache_reports(reports: &[serde_json::Value]) -> Result<serde_json::Value> {
+    if reports.len() != 2 {
+        return Err(invalid(
+            "query cache aggregate needs exactly two seed reports",
+        ));
+    }
+    let mut manifests = BTreeSet::new();
+    let mut seeds = Vec::new();
+    let mut statuses = Vec::new();
+    for report in reports {
+        if report["schema"] != EVALUATION_SCHEMA {
+            return Err(invalid("query cache aggregate report schema differs"));
+        }
+        let status = report["status"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate report has no status"))?;
+        if !matches!(
+            status,
+            "KEEP" | "REJECT" | "INSUFFICIENT_POWER" | "CONTROL_FAULT"
+        ) {
+            return Err(invalid("query cache aggregate report status differs"));
+        }
+        let manifest = report["cache"]["manifest_sha256"]
+            .as_str()
+            .ok_or_else(|| invalid("query cache aggregate manifest identity is absent"))?;
+        if !manifests.insert(manifest.to_owned()) {
+            return Err(invalid("query cache aggregate repeats a cache"));
+        }
+        if report["pooled"]["bar_passes"].as_bool() != Some(status == "KEEP") {
+            return Err(invalid("query cache aggregate status and bar differ"));
+        }
+        let panel_identity_exact = report["panels"]
+            .as_array()
+            .ok_or_else(|| invalid("query cache aggregate panels are absent"))?
+            .iter()
+            .all(|panel| panel["identity"]["exact"].as_bool() == Some(true));
+        if !panel_identity_exact {
+            return Err(invalid("query cache aggregate panel identity differs"));
+        }
+        seeds.push(serde_json::json!({
+            "cache_manifest_sha256": manifest,
+            "checkpoint": report["cache"]["checkpoint"],
+            "status": status,
+            "fit": report["fit"],
+            "pooled": report["pooled"],
+        }));
+        statuses.push(status);
+    }
+    let status = if statuses.contains(&"CONTROL_FAULT") {
+        "CONTROL_FAULT"
+    } else if statuses.contains(&"INSUFFICIENT_POWER") {
+        "INSUFFICIENT_POWER"
+    } else if statuses.iter().all(|status| *status == "KEEP") {
+        "KEEP_ON_DEVELOPMENT_PANEL"
+    } else {
+        "REJECT"
+    };
+    let payload = serde_json::json!({
+        "schema": "uor-r4.cpu-query-cache-aggregate/1",
+        "status": status,
+        "seeds": seeds,
+    });
+    let semantic = serde_json::to_vec(&payload)
+        .map_err(|error| invalid(format!("query cache aggregate: {error}")))?;
+    Ok(serde_json::json!({
+        "schema": payload["schema"],
+        "status": status,
+        "seeds": payload["seeds"],
+        "decision_sha256": sha256(&semantic),
     }))
 }
 
@@ -1095,5 +1172,37 @@ mod tests {
         fs::write(&query, bytes).unwrap();
         assert!(evaluate_query_cache(&cache_root, &request()).is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn two_seed_aggregate_has_fixed_precedence() {
+        let report = |status: &str, manifest: &str, bar: bool| {
+            serde_json::json!({
+                "schema": EVALUATION_SCHEMA,
+                "status": status,
+                "cache": {"manifest_sha256": manifest, "checkpoint": manifest},
+                "fit": {"fitted_rows": 100, "observations": 10_000},
+                "pooled": {"bar_passes": bar, "rows": 1_460_697},
+                "panels": [{"identity": {"exact": true}}],
+            })
+        };
+        let keep = aggregate_query_cache_reports(&[
+            report("KEEP", "s1", true),
+            report("KEEP", "s2", true),
+        ])
+        .unwrap();
+        assert_eq!(keep["status"], "KEEP_ON_DEVELOPMENT_PANEL");
+        let reject = aggregate_query_cache_reports(&[
+            report("KEEP", "s1", true),
+            report("REJECT", "s2", false),
+        ])
+        .unwrap();
+        assert_eq!(reject["status"], "REJECT");
+        let fault = aggregate_query_cache_reports(&[
+            report("INSUFFICIENT_POWER", "s1", false),
+            report("CONTROL_FAULT", "s2", false),
+        ])
+        .unwrap();
+        assert_eq!(fault["status"], "CONTROL_FAULT");
     }
 }

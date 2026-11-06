@@ -195,8 +195,9 @@ pub use quant_shadow::{
     CPU_QUANTIZATION_CHECKPOINT_SCHEMA,
 };
 pub use query_cache_eval::{
-    evaluate_query_cache, CentroidEvaluationRequest, REGISTERED_MINIMUM_OBSERVATIONS,
-    REGISTERED_MIN_FIT_OBSERVATIONS, REGISTERED_MIN_FITTED_ROWS,
+    aggregate_query_cache_reports, evaluate_query_cache, CentroidEvaluationRequest,
+    REGISTERED_MINIMUM_OBSERVATIONS, REGISTERED_MIN_FIT_OBSERVATIONS,
+    REGISTERED_MIN_FITTED_ROWS,
 };
 pub use readout_refit::{
     evaluate_output_table, observe_refit_thresholds, paired_two_sigma, refit_output_table,

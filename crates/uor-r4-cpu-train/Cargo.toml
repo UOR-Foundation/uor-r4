@@ -144,3 +144,7 @@ path = "src/bin/cpu-readout-refit.rs"
 [[bin]]
 name = "cpu-query-cache-evaluate"
 path = "src/bin/cpu-query-cache-evaluate.rs"
+
+[[bin]]
+name = "cpu-query-cache-aggregate"
+path = "src/bin/cpu-query-cache-aggregate.rs"

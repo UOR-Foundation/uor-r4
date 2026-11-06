@@ -83,6 +83,8 @@ evaluates the original, centroid and control over panel rows. It enforces the
 registered fitted-row/observation floor, computes split and pooled row
 identities, and emits the pooled paired bar in Rust. The query forward remains
 GPU research; this CPU binary starts from its captured Q12 evidence.
+`cpu-query-cache-aggregate` applies control-fault, power and two-seed keep/reject
+precedence to the two evaluator reports.
 
 ## Checks
 
