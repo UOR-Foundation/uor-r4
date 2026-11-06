@@ -42,6 +42,11 @@ No model-level measurement changed. The repaired no-memory cache inventory is TR
 
 Not run: CUDA tests, GPU capture, cache evaluation or model scoring.
 
+## Skills used
+
+No system-provided Codex skill applied. The repository's loop, D22 and delivery rules
+were used directly.
+
 ## Still open
 
 1. Merge this inventory repair and use its verified main commit as the capture pin.
