@@ -4,9 +4,12 @@ Run ID: `cpu-training-pilot-readout-refit-2026-11-06`
 
 ## Status
 
-**TEST FITNESS: FIT** and **D67 PRE-RUN: GO** at implementation
-`4bc9ca67c`, reviewed exact docs head `aecd5f323`. No fresh DEV panel has been
-generated or read.
+Complete as **FINAL_REJECT**. TEST FITNESS was FIT and D67 pre-run GO was
+recorded at implementation `4bc9ca67c`. The reviewed execution head was
+`8907ce5c9`; both artifacts and both repeats ran on fresh seed 2789. The
+pre-run sheet omitted the `reports/` parent creation, so the transaction
+resumed after creating that parent without regenerating the panel or changing
+the analysis. See [REPORT](../../loop/tasks/cpu-training-pilot/deepseek-237/REPORT.md).
 
 ## Question
 
@@ -393,6 +396,10 @@ AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
 test "$AVAILABLE" -ge 32346472448
 df -B1 "$REPO" >"$OUT/storage-before-reports.txt"
 sha256sum -c "$OUT/execution-pins.sha256"
+# Post-run reproducibility correction: the original command omitted this
+# parent creation. The seed-2789 execution resumed here after the panel was
+# already generated.
+mkdir "$OUT/reports"
 mkdir "$REPORTS"
 ```
 
