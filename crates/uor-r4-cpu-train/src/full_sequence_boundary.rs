@@ -91,6 +91,9 @@ pub struct FullBoundaryCensus {
     pub nonterminal_occurrences: u64,
     pub terminal_only_suffixes: u64,
     pub ambiguous_suffixes: u64,
+    pub suffixes_by_depth: [u64; FULL_BOUNDARY_MAX_DEPTH],
+    pub terminal_by_depth: [u64; FULL_BOUNDARY_MAX_DEPTH],
+    pub nonterminal_by_depth: [u64; FULL_BOUNDARY_MAX_DEPTH],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -163,8 +166,20 @@ impl FullSequenceBoundaryMemory {
             nonterminal_occurrences: 0,
             terminal_only_suffixes: 0,
             ambiguous_suffixes: 0,
+            suffixes_by_depth: [0; FULL_BOUNDARY_MAX_DEPTH],
+            terminal_by_depth: [0; FULL_BOUNDARY_MAX_DEPTH],
+            nonterminal_by_depth: [0; FULL_BOUNDARY_MAX_DEPTH],
         };
-        for counts in self.entries.values() {
+        for (suffix, counts) in &self.entries {
+            let depth = suffix.len();
+            if !(FULL_BOUNDARY_MIN_DEPTH..=FULL_BOUNDARY_MAX_DEPTH).contains(&depth) {
+                continue;
+            }
+            census.suffixes_by_depth[depth - 1] += 1;
+            census.terminal_by_depth[depth - 1] =
+                census.terminal_by_depth[depth - 1].saturating_add(counts.terminal);
+            census.nonterminal_by_depth[depth - 1] =
+                census.nonterminal_by_depth[depth - 1].saturating_add(counts.nonterminal);
             census.terminal_occurrences =
                 census.terminal_occurrences.saturating_add(counts.terminal);
             census.nonterminal_occurrences = census
@@ -879,6 +894,20 @@ mod tests {
         .unwrap();
         let (shuffled, changed) = shuffle_full_boundary(&boundary, 200).unwrap();
         assert!(changed > 0);
+        let original_census = boundary.census();
+        let shuffled_census = shuffled.census();
+        assert_eq!(
+            original_census.suffixes_by_depth,
+            shuffled_census.suffixes_by_depth
+        );
+        assert_eq!(
+            original_census.terminal_by_depth,
+            shuffled_census.terminal_by_depth
+        );
+        assert_eq!(
+            original_census.nonterminal_by_depth,
+            shuffled_census.nonterminal_by_depth
+        );
         assert_eq!(
             boundary.entries.keys().collect::<Vec<_>>(),
             shuffled.entries.keys().collect::<Vec<_>>()
@@ -888,21 +917,6 @@ mod tests {
                 counts.nonterminal, shuffled.entries[suffix].nonterminal,
                 "nonterminal count changed for {suffix:?}"
             );
-        }
-        for depth in FULL_BOUNDARY_MIN_DEPTH..=FULL_BOUNDARY_MAX_DEPTH {
-            let totals = |memory: &FullSequenceBoundaryMemory| {
-                let entries = memory
-                    .entries
-                    .iter()
-                    .filter(|(suffix, _)| suffix.len() == depth)
-                    .map(|(_, counts)| *counts)
-                    .collect::<Vec<_>>();
-                (
-                    entries.iter().map(|counts| counts.terminal).sum::<u64>(),
-                    entries.iter().map(|counts| counts.nonterminal).sum::<u64>(),
-                )
-            };
-            assert_eq!(totals(&boundary), totals(&shuffled), "depth {depth}");
         }
     }
 }
