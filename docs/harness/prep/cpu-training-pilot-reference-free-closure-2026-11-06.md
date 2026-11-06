@@ -144,3 +144,11 @@ date: 2026-11-06
 GO at `4166a6f1b6d48da1f48e7405ebb79b3a2fed335b`. Source, driver and
 release binary hashes match the FIT record. Seed 2788 may now be generated
 under the fixed construction and stop rule.
+
+## Outcome
+
+**INSUFFICIENT_POWER on artifact seed 1.** Closure selected **195** candidates
+and changed **21** complete branches from first-boundary, below the required
+100; only **18** rows had an exact candidate, below the required 20. Seed 2 and
+repeats were not run. The seed-1 readings remain reported but are not promoted
+to a mechanism negative.
