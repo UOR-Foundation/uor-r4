@@ -391,7 +391,7 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
                 globalThis.document.documentElement.dataset[name] = '';
             });
         },
-        setModelStatus() {},
+        setModelStatus(text, tone, detail) { (app.modelStatusLog || (app.modelStatusLog = [])).push({ text, tone, detail }); },
         updatePrivacyStatus() {},
         updateComposerState() {},
         setView() {},
@@ -411,10 +411,11 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
 }
 
 async function installWorkerMessageHandler(app, notices = []) {
+    const setModelStatus = (text, tone, detail) => { (app.modelStatusLog || (app.modelStatusLog = [])).push({ text, tone, detail }); };
     const restoreHealthyModelState = await pageFunctionIfPresent(
         'function restoreHealthyModelState(',
         'restoreHealthyModelState',
-        { app, document: globalThis.document, updateCapabilitiesFooter() {} },
+        { app, document: globalThis.document, updateCapabilitiesFooter() {}, setModelStatus, setEngineStatus() {}, describeCapabilities() { return ''; } },
     ) || (() => false);
     const clearWorkerModel = () => {
         app.caps = null;
@@ -435,7 +436,7 @@ async function installWorkerMessageHandler(app, notices = []) {
         clearWorkerModel,
         setEngineStatus() {},
         describeCapabilities() { return ''; },
-        setModelStatus() {},
+        setModelStatus,
         isDiscreteCapabilities() { return false; },
         setPredictorMode() {},
         fillPredictorSha() {},
@@ -819,7 +820,7 @@ test('a stop-generation load rejection restores the healthy ready model and igno
 });
 
 function healthyModelFixture() {
-    const caps = { schema: 'uor-r4.lut-stack/1', file_name: 'healthy.lut', artifact_sha256: 'a'.repeat(64), sha256_verified: true, artifact_bytes: 1024, tokenizer_label: 'healthy-tokenizer', source: 'file', source_label: 'healthy', synthetic: false };
+    const caps = { schema: 'uor-r4.lut-stack/1', file_name: 'healthy.lut', artifact_sha256: 'a'.repeat(64), sha256_verified: true, artifact_bytes: 1024, tokenizer_label: 'healthy-tokenizer', source: 'file', source_label: 'healthy', synthetic: true, can_generate: true, engine_supported: true, status_label: 'synthetic stand-in', engine: 'serving-wasm' };
     const meta = { kind: 'local-file', label: 'healthy', fileName: 'healthy.lut' };
     const tokenizer = { mode: 'byte-bpe', vocab: 17 };
     const dataset = globalThis.document.documentElement.dataset;
@@ -851,6 +852,7 @@ function healthyModelFixture() {
         apiConfig: null,
         predictionRequests: {},
         healthyModelSnapshot: null,
+        modelStatusLog: [],
     };
     return { app, caps, meta, tokenizer, dataset };
 }
@@ -925,4 +927,41 @@ test('a successful new load clears the captured state instead of restoring it', 
     assert.equal(app.healthyModelSnapshot, null);
     assert.equal(dataset.modelSchema, newCaps.schema);
     assert.equal(dataset.modelSource, 'url');
+});
+
+test('a second overlapping source change keeps the first healthy snapshot', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const { app, caps } = healthyModelFixture();
+    const notices = [];
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    page.handle({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'first.lut', meta: { kind: 'local-file', label: 'first' }, expectedSha256: '', tokenizerArtifact: null } });
+    const firstSnapshot = app.healthyModelSnapshot;
+    assert.ok(firstSnapshot, 'the first load must capture the healthy snapshot');
+    page.handle({ detail: { kind: 'wasm', bytes: new Uint8Array([2]), fileName: 'second.lut', meta: { kind: 'local-file', label: 'second' }, expectedSha256: '', tokenizerArtifact: null } });
+    assert.equal(app.healthyModelSnapshot, firstSnapshot, 'the second overlapping load must retain the first snapshot');
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
+    onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: app.currentLoadId, error: 'Stop generation before loading a stack artifact.' } });
+    assert.deepEqual(app.caps, caps);
+    assert.equal(app.currentLoadId, 6);
+    assert.equal(app.readyLoadId, 6);
+});
+
+test('restoring the healthy model updates the visible status label and readiness', async () => {
+    const { app } = healthyModelFixture();
+    const capture = await pageFunction('function captureHealthyModelState(', 'captureHealthyModelState', { app, document: globalThis.document });
+    app.healthyModelSnapshot = capture();
+    assert.ok(app.healthyModelSnapshot, 'the healthy state must be captured for the restore');
+    app.caps = null;
+    app.currentLoadId = 7;
+    const notices = [];
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
+    onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: 7, error: 'Stop generation before loading a stack artifact.' } });
+    assert.equal(app.currentLoadId, 6);
+    assert.deepEqual(app.modelStatusLog.at(-1), { text: 'synthetic stand-in · uor-r4.lut-stack/1', tone: 'warn', detail: '' });
+    const chatReadiness = await pageFunction('function chatReadiness(', 'chatReadiness', {
+        app,
+        normalizeBaseUrl() { return 'http://local'; },
+        isDiscreteCapabilities() { return false; },
+    });
+    assert.equal(chatReadiness(), true);
 });

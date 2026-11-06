@@ -2021,6 +2021,7 @@
         }
 
         function captureHealthyModelState() {
+            if (app.healthyModelSnapshot) return app.healthyModelSnapshot;
             if (!app.caps) return null;
             var dataset = document.documentElement.dataset;
             return {
@@ -2060,6 +2061,13 @@
             Object.keys(snapshot.dataset).forEach(function (name) {
                 dataset[name] = snapshot.dataset[name];
             });
+            var capabilityDetail = typeof describeCapabilities === 'function' ? describeCapabilities() : '';
+            if (typeof setEngineStatus === 'function') {
+                setEngineStatus('ready', 'ok', 'Engine: ' + (app.caps.engine || 'serving-wasm') + ' · ' + capabilityDetail);
+            }
+            if (typeof setModelStatus === 'function') {
+                setModelStatus((app.caps.status_label || 'loaded') + ' · ' + (app.caps.schema || 'schema?'), app.caps.synthetic ? 'warn' : 'ok', capabilityDetail);
+            }
             if (typeof updateCapabilitiesFooter === 'function') updateCapabilitiesFooter();
             return true;
         }

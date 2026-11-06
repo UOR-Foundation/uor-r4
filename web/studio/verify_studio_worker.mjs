@@ -690,6 +690,36 @@ await sendToWorker({
 const validSubtraction = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_review23_valid_subtraction');
 assert(validSubtraction.action === 'generate_complete' && validSubtraction.fullText.startsWith('38\n') && validSubtraction.tokenCount === 0, `valid subtraction with punctuation must remain exact: ${JSON.stringify(validSubtraction)}`);
 
+const activeJobGeneration = sendToWorker({
+    action: 'generate',
+    id: 'gen_active_job',
+    payload: { conversationId: 'conv_active_job', messages: [{ role: 'user', content: 'active job' }], options: { max_new_tokens: 32 } },
+});
+const blockedActiveLoad = sendToWorker({
+    action: 'load_model',
+    id: 201,
+    payload: {
+        bytes: stackBytes.buffer.slice(stackBytes.byteOffset, stackBytes.byteOffset + stackBytes.byteLength),
+        fileName: 'blocked-active.lut',
+    },
+});
+const blockedActiveLoadMessage = await waitForMessage((m) => (m.action === 'operation_error' || m.action === 'model_loaded') && m.id === 201);
+assert(blockedActiveLoadMessage.action === 'operation_error' && blockedActiveLoadMessage.operation === 'load_model' && /Stop generation before loading/.test(blockedActiveLoadMessage.error), `an active-job load must be rejected: ${JSON.stringify(blockedActiveLoadMessage)}`);
+assert(!emittedMessages.some((m) => m.action === 'model_loaded' && m.id === 201), 'a blocked active-job load must not replace the healthy model');
+await blockedActiveLoad;
+const activeJobCompletion = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_active_job');
+assert(activeJobCompletion.action === 'generate_complete' && activeJobCompletion.tokenCount === 32, `the active generation must complete after the rejected load: ${JSON.stringify(activeJobCompletion)}`);
+await activeJobGeneration;
+await sendToWorker({ action: 'generate', id: 'gen_after_active_job', payload: { conversationId: 'conv_after_active_job', messages: [{ role: 'user', content: 'after active job' }], options: { max_new_tokens: 32 } } });
+const afterActiveJobCompletion = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_after_active_job');
+assert(afterActiveJobCompletion.action === 'generate_complete' && afterActiveJobCompletion.tokenCount === 32, `the healthy model must remain usable: ${JSON.stringify(afterActiveJobCompletion)}`);
+await sendToWorker({ action: 'close_session', id: 'close_active_job', payload: { conversationId: 'conv_active_job' } });
+const closedActiveJob = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_active_job');
+assert(closedActiveJob.action === 'session_reset', `active-job conversation did not close: ${JSON.stringify(closedActiveJob)}`);
+await sendToWorker({ action: 'close_session', id: 'close_after_active_job', payload: { conversationId: 'conv_after_active_job' } });
+const closedAfterActiveJob = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_after_active_job');
+assert(closedAfterActiveJob.action === 'session_reset', `post-active-job conversation did not close: ${JSON.stringify(closedAfterActiveJob)}`);
+
 for (const [index, prompt] of ['5 pm - 6 pm?', '9am - 5pm?', '5:00 PM - 6:00 PM?', '+1-800-555-0100?'].entries()) {
     const id = `gen_final_review_punctuation_${index}`;
     const conversationId = `conv_final_review_punctuation_${index}`;
