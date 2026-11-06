@@ -40,7 +40,7 @@ unit learning rate, Q-bound weights, and exact source-order tie breaking.
 
 Arms: learned whole-branch selection; matched shuffled-label selection;
 first-boundary; longest-spine; boundary-terminal-volume heuristic;
-reference-length endpoint oracle; original replay of the first boundary; full
+reference-exact endpoint oracle; original replay of the first boundary; full
 stored retrieval.
 
 ## Data and power

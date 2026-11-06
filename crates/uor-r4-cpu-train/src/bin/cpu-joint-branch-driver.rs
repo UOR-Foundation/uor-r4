@@ -55,12 +55,13 @@ fn run() -> Result<(), String> {
     let boundary_census = boundary.census();
     let training = fit_joint_branch_selector(&train.conversations, config.cap, config.seed)
         .map_err(|error| error.to_string())?;
-    if config.preflight {
-        let eligible = training.supervised_groups >= 96 && training.baseline_wrong_groups > 0;
+    let eligible = training.supervised_groups >= 96 && training.baseline_wrong_groups > 0;
+    if config.preflight || !eligible {
         let report = serde_json::json!({
             "schema": "uor-r4.cpu-joint-branch-preflight/1",
             "substrate": "cpu-development-research",
             "qualification": "development-only",
+            "mode": if config.preflight { "preflight" } else { "auto_stop" },
             "inputs": {
                 "train": panel_input(&train),
                 "artifact": config.artifact,
@@ -74,7 +75,11 @@ fn run() -> Result<(), String> {
             "bar": {
                 "minimum_supervised_groups": 96,
                 "eligible": eligible,
-                "outcome": if eligible { "GO" } else { "INSUFFICIENT_POWER" },
+                "outcome": if eligible && config.preflight {
+                    "GO"
+                } else {
+                    "INSUFFICIENT_POWER"
+                },
             },
         });
         println!(

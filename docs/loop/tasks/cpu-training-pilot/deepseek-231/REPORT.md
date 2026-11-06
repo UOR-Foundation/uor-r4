@@ -47,7 +47,7 @@ Added `joint_branch.rs`, a bounded integer whole-branch selector:
   fresh compute when power is absent.
 
 Added the `cpu-joint-branch-driver` and six focused tests. The implementation
-adds **1,698** code and test lines across the two new Rust files plus 13 lines
+adds **1,703** code and test lines across the two new Rust files plus 13 lines
 of crate integration, above the item's current code estimate. No serving
 default, artifact format, `UORLUT01`, CUDA, float path or Claude-owned source
 changed.
@@ -65,7 +65,7 @@ Final preflight timing:
 - wall: **0.35 s**;
 - user/system: **0.83 / 0.04 s**;
 - peak RSS: **112,152 KiB**;
-- retained evidence: under 8 KiB.
+- retained evidence: **31,869 bytes** including the checksum manifest.
 
 Inputs:
 
@@ -79,7 +79,10 @@ Inputs:
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`.
 
 Compact result: [result.json](evidence/result.json). Raw preflight:
-[preflight.json](evidence/preflight.json).
+[preflight.json](evidence/preflight.json). Raw earlier generated-spine
+receipt: [preflight-full-memory.json](evidence/preflight-full-memory.json).
+The default no-flag run also stopped before arm evaluation:
+[auto-stop.json](evidence/auto-stop.json).
 
 ## Interpretation
 

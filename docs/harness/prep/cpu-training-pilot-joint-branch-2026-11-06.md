@@ -6,8 +6,8 @@ Run ID: `cpu-training-pilot-joint-branch-2026-11-06`
 
 **STOPPED BEFORE FRESH PANEL — INSUFFICIENT_POWER.** This sheet records the
 fixed design and the TRAIN-only preflight. No seed-2787 panel was generated and
-no fresh evaluation result is claimed. TEST FITNESS was not issued because the
-preflight stopped under the registered power floor before compute.
+no fresh evaluation result is claimed. It was written retrospectively after
+the TRAIN preflight, so it does not claim prior TEST FITNESS for that run.
 
 ## Question
 
@@ -38,7 +38,7 @@ Arms: learned whole-branch selection; matched shuffled-label selection;
 first boundary; longest spine; boundary-terminal-volume; reference-endpoint
 oracle; full stored retrieval.
 
-## Data
+## Data split
 
 TRAIN `tt-2711`:
 
@@ -51,6 +51,15 @@ TRAIN `tt-2711`:
 
 Planned fresh panel: `cell=dev,dev`, seed 2787, protocol 2, 128
 conversations. It was not generated.
+
+## Base artifact
+
+- artifact seed 1:
+  `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
+- artifact seed 2:
+  `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`;
+- tokenizer:
+  `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`.
 
 ## Power floor
 
@@ -113,6 +122,19 @@ Local CPU only; 30 minutes, 2 GiB peak RSS and 32 MiB retained evidence.
   `a9df5263e8b170931d876e7fc3ccbbf1b41805e8a07f90248528c62d57f56cfd`;
 - artifact seed 2:
   `da56fe96b14a4a0bf383996873f10f3b149f63ebcc22d14e3dfaa260a8db51d1`.
+
+## Steps
+
+1. Implement the generated-spine evaluator and complete-branch selector.
+2. Run the TRAIN-only generated-spine preflight.
+3. Replace full-memory fit with document-grouped four-fold holdout after the
+   first preflight shows no wrong first-boundary group.
+4. Run the reference-prefix preflight and stop at the registered power floor.
+5. Do not generate seed 2787 or evaluate a fresh artifact.
+
+## TEST FITNESS
+
+TEST FITNESS: NOT_FIT - retrospective design and preflight receipt; the preflight stopped below the registered power floor before fresh-panel generation, so no fresh compute is claimed.
 
 ## Output
 
