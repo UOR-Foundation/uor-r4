@@ -42,7 +42,9 @@ At each generated decision:
 3. For the treatment, accept a whole continuation only when a confident
    closure exists at the same depth as the selected global content suffix.
 4. Confidence requires at least two observations and a strict majority of
-   identical complete continuations.
+   identical complete continuations. A nonempty continuation must begin with
+   the selected global content token; an empty terminal continuation is
+   allowed.
 5. Emit the whole continuation as one decision and stop at its natural end
    when it fits the cap and context. Otherwise continue tokenwise.
 
@@ -122,9 +124,9 @@ external model. Serving remains integer-only and unchanged.
 
 - base: `d56427955`;
 - implementation:
-  `f0890eefc23d2752b45a4b75dfb81acdc98ac0e3`;
+  `2a78ca02c6031238edc0705dd469760a22e7a77f`;
 - `continuation_closure.rs` SHA-256:
-  `865a35f4c4f0390f15c0aeafe5c5cc7149602f90e9e6be20dbf3fb23beba8a53`;
+  `7b157052ce776dc7dd203b3663f4f74ac58296d256bb7dceac7416ee69005bac`;
 - `cpu-copy-continuation-closure.rs` SHA-256:
   `fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c`;
 - `suffix_memory.rs` SHA-256:
@@ -185,7 +187,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/continuation-closure
 GEN_TARGET=$SOURCE/target/deepseek/continuation-closure-generator
-IMPL=f0890eefc23d2752b45a4b75dfb81acdc98ac0e3
+IMPL=2a78ca02c6031238edc0705dd469760a22e7a77f
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 RUN_DEADLINE=$((SECONDS + 1800))
 
@@ -201,7 +203,7 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  865a35f4c4f0390f15c0aeafe5c5cc7149602f90e9e6be20dbf3fb23beba8a53 "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
+  7b157052ce776dc7dd203b3663f4f74ac58296d256bb7dceac7416ee69005bac "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
   fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-continuation-closure.rs" \
   7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   2138e1b05d833beb9f8b2ff3bb93024df1cb7cf1aa5663aad665a0384a8f119b "$SOURCE/crates/uor-r4-cpu-train/src/reply_boundary.rs" \
