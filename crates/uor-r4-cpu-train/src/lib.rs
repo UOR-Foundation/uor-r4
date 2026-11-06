@@ -31,6 +31,7 @@ mod panel;
 mod prompt_retrieval;
 mod prompt_reply_rank;
 mod quant_shadow;
+mod query_cache_eval;
 mod readout_refit;
 mod reply_boundary;
 mod reply_eval;
@@ -192,6 +193,10 @@ pub use quant_shadow::{
     quantization_gate, CpuFloatPanelReading, CpuPanelGap, CpuQuantizationCheckpoint,
     CpuQuantizationPanelReading, CpuQuantizationShadow, CpuQuantizationStep, QuantizationGate,
     CPU_QUANTIZATION_CHECKPOINT_SCHEMA,
+};
+pub use query_cache_eval::{
+    evaluate_query_cache, CentroidEvaluationRequest, REGISTERED_MINIMUM_OBSERVATIONS,
+    REGISTERED_MIN_FIT_OBSERVATIONS, REGISTERED_MIN_FITTED_ROWS,
 };
 pub use readout_refit::{
     evaluate_output_table, observe_refit_thresholds, paired_two_sigma, refit_output_table,
