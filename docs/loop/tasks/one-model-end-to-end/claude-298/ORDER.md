@@ -1,50 +1,61 @@
 # ORDER: one-model-end-to-end, claude-298
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `1f2bd76ce`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `1f2bd76ce58503f25ef24e415dd193bf57086ddb`.
 
 ## Goal
 
-The item's done-when reads:
+Casey's one track (#2028 6675163438, 6 Nov 2026, "Yes, one track"): the trunk's no-memory top-1 must beat its TRAIN's unigram and its T2 on the human held-out panel, beyond the paired band, at every seed.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+claude-297 (#3774) found two things. Data moves the trunk. And its best cell, (n3L), D3 at 32,768 steps and batch 16, sits `inside` D3's T2 because its two seeds disagree: 272,867 / 234,892 against 256,660. `pair`'s band includes the seed spread, so added seeds cannot turn it ahead.
+
+This unit takes claude-297's data branch, "train longer at D3", with one change that also attacks the spread: batch 64 in place of 16, at seeds 1 and 2. It follows the sheet [`one-model-end-to-end-d3-batch-2026-11-06`](../../../../harness/prep/one-model-end-to-end-d3-batch-2026-11-06.md).
+
+| arm | batch | steps | tokens against (n3L) |
+|---|---|---|---|
+| (b64S) | 64 | 8,192 | equal |
+| (b64L) | 64 | 32,768 (16,384 if the throughput gate I-t says so) | 4× (2×) |
+
+claude-297's sealed (n3L) is the batch-16 control. The trainer is unchanged between the two pins.
+
+## Claim check
+
+- **(a) The step.** This is step 1's follow-on in the roadmap item's one-track sequence: the "data moves it" branch of claude-297's sheet. claude-297 merged as `1f2bd76ce58503f25ef24e415dd193bf57086ddb`.
+- **(b) What it changes in the model.** It tests whether the trunk's recipe meets the one-track bar when trained on more of D3 with a less noisy gradient. If it does not, it shows whether the seed spread is gradient noise.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at 14:42Z on 6 Nov, before any work. Class: instrument.
+1. **No hold.**
+   - There is no `local/loop/STOP`, and #2028's labels are `roadmap` and `roadmap:tracker`, with no `loop:pause`.
+   - #3407's last comments are claude-296's merge note and claude-297's intent, FIT and D67 notes.
+2. **The inputs are in the store:** D3 at `results/claude/scale-probe-2026-11-05/inputs/d3` (tokens 53.3 MB, mask 26.7 MB, manifest).
+   - The panels and D3's seen set are where claude-297 read them: `local/claude/claude-295/seen/d3`, now in the main checkout's `local/claude`.
+   - claude-297's (n3L) grades are at `local/claude/claude-297/grade/`.
+3. **The caps:** `uor-pod status` shows 0 pods running and $0/h of $8/h.
+   - The Vast adapter was rebuilt for this worktree at `local/claude/pp-target` and is used through `UOR_POD_VAST_BIN`.
+
+Result: GO.
+
+## Done when
+
+1. **The sheet** is at `docs/harness/prep/`, and its FIT is posted on #3407.
+2. **The D67 pre-run review** of the job and watch scripts passes in a fresh context. It is posted on #3407 before a pod goes up.
+3. **The runs**, or the stop rule's NOT_RUNs, are sealed under `results/claude/one-model-end-to-end-d3-batch-2026-11-06/`, each pod's with a `SHA256SUMS` that was read back. The pods are down.
+4. **The REPORT** gives, negatives first:
+   - each arm against D3's T2 and unigram, by the sheet's Bar, on all rows and on unseen rows;
+   - the levers, and each arm's seed spread beside (n3L)'s;
+   - I-0 to I-5, I-t, I-s and I-r;
+   - one row in `docs/research/notebook/float-training.md`.
+
+   It ends `References #3407`.
+
+## Stop and ask if
+
+"Ask" means decide, record it here and in the REPORT, and go on; nothing waits.
+- **The sheet's stop rule:** an I-0 or I-3 failure stops that pod. A failed arm is NOT_RUN at its failing step.
+- **The cap:** $14, and 6 hours a one-card pod. When a watcher's stop fires on a healthy run, extend it and renew the lease; never cancel it.
+- **Casey says "hold":** no further launches.
+- **The laptop's free disk falls under 5 GiB:** downloads pause until my own store-sealed copies are cleared.
 
 ## Files in scope
 
@@ -72,10 +83,3 @@ To fill in.
 - `crates/uor-r4-integer/src/bin/fbs-toks.rs`
 - `crates/uor-r4-training/src/milestone_world_v2.rs`
 
-## Done when
-
-To fill in.
-
-## Stop and ask if
-
-To fill in.
