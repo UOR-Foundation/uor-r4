@@ -23,8 +23,8 @@ the capture remains blocked on FIT and the D67 pre-run review.
 1. The sheet uses the merged evaluator CLI, separate seed reports and the aggregate.
 2. The capture job names the verified source pin, the bootstrap's actual source path and
    an immutable remote run id, and refuses an existing remote output.
-3. The whole job, not only the capture subprocess, is bounded; GPU, disk, compression and
-   upload/readback resources are checked.
+3. GPU, disk, compression and upload/readback resources are checked; watchers renew
+   healthy leases and no self-set wall clock cancels the job.
 4. Both seed caches are explicitly limited to exactly five no-memory splits: TRAIN plus
    the four registered panels.
 5. CPU restore verifies the checkpoint archive, cache archive, manifest and checkpoint

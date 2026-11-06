@@ -84,11 +84,13 @@ archive with a different selected checkpoint or config is a stop.
 
 ## Steps
 
-The reviewed pod script is run once per seed on a fresh Codex-owned RTX 5090. Check
+The reviewed pod script is run once per seed on a fresh DeepSeek-owned RTX 5090. Check
 `scripts/pod/uor-pod status` first. Do not lease, stop or inspect either existing busy pod.
 Two fresh one-card pods keep the run parallel and at most four total:
 
 ```sh
+set -euo pipefail
+export UOR_POD_MAX_RATE=4.50
 scripts/pod/uor-pod status --du
 scripts/pod/uor-pod up --lab deepseek --session centroid-s1 --gpu 5090 --count 1 --hours 7 \
   --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
@@ -110,15 +112,29 @@ scripts/pod/uor-pod run "$POD1" --lab deepseek --session centroid-s1 --gpu 0 -- 
 scripts/pod/uor-pod run "$POD2" --lab deepseek --session centroid-s2 --gpu 0 -- \
   bash /workspace/centroid-cache-job.sh 2
 
-# Each watcher exits within the seven-hour lease. The job itself stops at six hours.
-timeout 25200s bash -c '
-  until scripts/pod/uor-pod ssh "$1" \
-    "test -f /workspace/deepseek-centroid-cache-s$2/EXIT"; do sleep 30; done
-' _ "$POD1" 1
-timeout 25200s bash -c '
-  until scripts/pod/uor-pod ssh "$1" \
-    "test -f /workspace/deepseek-centroid-cache-s$2/EXIT"; do sleep 30; done
-' _ "$POD2" 2
+# Watch both jobs and renew each healthy lease every 25 minutes. The capture job
+# has no self-set wall-clock cancellation.
+watch_capture() {
+  local pod=$1 seed=$2 session=$3 now last=0
+  while true; do
+    if scripts/pod/uor-pod ssh "$pod" \
+      "test -f /workspace/deepseek-centroid-cache-s$seed/EXIT"; then
+      return 0
+    fi
+    now=$(date +%s)
+    if [ $((now - last)) -ge 1500 ]; then
+      scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7
+      last=$now
+    fi
+    sleep 30
+  done
+}
+watch_capture "$POD1" 1 centroid-s1 &
+WATCH1=$!
+watch_capture "$POD2" 2 centroid-s2 &
+WATCH2=$!
+wait "$WATCH1"
+wait "$WATCH2"
 
 CAPTURE_STATUS1=$(scripts/pod/uor-pod ssh "$POD1" 'cat /workspace/deepseek-centroid-cache-s1/EXIT')
 CAPTURE_STATUS2=$(scripts/pod/uor-pod ssh "$POD2" 'cat /workspace/deepseek-centroid-cache-s2/EXIT')
@@ -133,8 +149,10 @@ test "$CAPTURE_STATUS2" = 0
 `JOB_SHA256` is the value recorded by the D67 review. `POD1` and `POD2` are the two new
 pod ids; store them in the run record. Watch each remote
 `/workspace/deepseek-centroid-cache-s{1,2}/EXIT` without touching the other pods. Once it
-exists, require the uploaded `status.json` and all readbacks before releasing and taking
-that pod down. A non-zero exit preserves its logs under `$OUT_STORE/failure/`.
+exists, all uploads and success readbacks have finished, or the failure trap has uploaded
+its diagnostics. Require the uploaded `status.json` before releasing and taking a
+successful pod down. A non-zero exit preserves its logs under `$OUT_STORE/failure/`; its
+`EXIT` is uploaded last, immediately before the local `EXIT` marker appears.
 
 The script invokes `train-in-space` with `--query-cache-memory 0` and
 `--query-cache-dev 0`. That yields exactly TRAIN plus the four registered panels; DEV is
@@ -166,13 +184,23 @@ Set `OUT_STORE_S1` and `OUT_STORE_S2` from the two jobs' `[0/6] output=` log lin
 timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
 
 ```sh
+set -euo pipefail
 ROOT=local/deepseek/centroid-cache/2026-11-06
+mkdir -p "$ROOT"
+available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
+[ "$available_gib" -ge 120 ] || { echo "need 120 GiB free, have $available_gib" >&2; exit 1; }
 export CARGO_TARGET_DIR="$ROOT/target"
+test -z "$(git status --porcelain --untracked-files=no)"
+git diff --quiet 3a9c2f11d26991a70a22f88758cfb4589a1cf14d HEAD -- \
+  crates Cargo.toml Cargo.lock
 cargo build --release --locked -p uor-r4-cpu-train \
   --bin cpu-query-cache-evaluate --bin cpu-query-cache-aggregate
-sha256sum "$CARGO_TARGET_DIR/release/cpu-query-cache-evaluate" \
-  "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate" \
-  > "$ROOT/evaluator-binaries.sha256"
+{
+  printf 'base=%s\nhead=%s\n' \
+    3a9c2f11d26991a70a22f88758cfb4589a1cf14d "$(git rev-parse HEAD)"
+  sha256sum "$CARGO_TARGET_DIR/release/cpu-query-cache-evaluate" \
+    "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate"
+} > "$ROOT/evaluator-provenance.txt"
 
 # Fetch the pinned checkpoint archive, its published checksum and the captured cache.
 CKPT_STORE=results/claude/one-model-end-to-end-steps-data-2026-11-06/runs/s1
@@ -216,10 +244,12 @@ jq -e '
 TAR_SHA=$(cut -d' ' -f1 "$ARCHIVE_ROOT/cache.tar.zst.sha256")
 jq -e --arg sha "$TAR_SHA" '.cache_tar_sha256 == $sha' "$STATUS"
 MANIFEST=$(jq -r .cache_manifest_sha256 "$STATUS")
+available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
+[ "$available_gib" -ge 31 ]
 ```
 
 ```sh
-RAYON_NUM_THREADS=32 /usr/bin/time -v timeout 7200s \
+RAYON_NUM_THREADS=32 /usr/bin/time -v \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-evaluate" "$CACHE_S1" \
   --seed 1 \
   --checkpoint-root "$CHECKPOINT_S1" \
@@ -254,7 +284,7 @@ jq -e '
   .cache.checkpoint_files["model.safetensors"] == "c64894f3648e2663bfe1f323836c9fc22c6989c9a6f2917e8ce1f25c6a686fb2" and
   .cache.checkpoint_files["hamming_read.safetensors"] == "e2347c4ef266c2166e870926a44e740edbd5c27065ed6a0ccda5ab11da5998b5"
 ' "$ROOT/centroid-s1.json"
-/usr/bin/time -v timeout 300s \
+/usr/bin/time -v \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate" \
   "$ROOT/centroid-s1.json" "$ROOT/centroid-s2.json" --out "$ROOT/final.json"
 ```
@@ -307,16 +337,16 @@ panel; it cannot alone put the mechanism on the serving path.
 ## Cost and stop
 
 - Two parallel one-card captures, each reading 27.42M TRAIN rows and 1.46M panel rows.
-- Estimate: 2-4 hours on each pod. The hard job limit is six hours per seed inside a
-  seven-hour lease that includes bootstrap; at a $1.15/h ceiling the two leases cost at
-  most $16.10. The system cap remains four pods and $8/h globally.
+- Estimate: 2-4 hours on each pod. The watcher renews each healthy lease; estimates are
+  not cancellation rules. At a $1.15/h ceiling a four-hour run on each of two leases costs
+  about $9.20, and the system cap remains four pods and $8/h globally.
 - The raw cache is 28.02 GiB. The job requires 128 GiB free initially, 80 GiB after
-  capture and 40 GiB before archive readback; this covers the raw cache, compressed
-  archive, readback copy and reserve.
-- The entire job, including downloads, CUDA tests/build, capture, sealing and upload, is
-  inside one six-hour `timeout`. `zstd` has a functional round-trip preflight.
-- CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and 2 hours. The point
-  estimator streams TRAIN; only one panel's queries are resident.
+  capture and the compressed archive size plus a 31 GiB reserve before readback (with a
+  40 GiB minimum). This keeps the project's 30 GiB floor plus margin through the second
+  copy. `zstd` has a functional round-trip preflight.
+- CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and an estimated 2
+  hours. Estimates are not cancellation rules. The point estimator streams TRAIN; only
+  one panel's queries are resident.
 - Each no-memory cache is about 29 GiB; the compressed archive is uploaded and read back.
 - Stop on any input/checkpoint mismatch, `CONTROL_FAULT`, insufficient power, archive
   ambiguity, resource breach or missing credential.

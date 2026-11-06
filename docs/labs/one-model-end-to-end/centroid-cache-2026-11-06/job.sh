@@ -22,7 +22,6 @@ STORE=/root/uor-store
 RUN_STORE=results/claude/one-model-end-to-end-steps-data-2026-11-06/runs/s$SEED
 ARCHIVE=steps-data-s$SEED.tar.gz
 OUT_STORE=results/deepseek/one-model-end-to-end-centroid-2026-11-06/s$SEED-$RUN_ID
-LIMIT_SECONDS=${UOR_CENTROID_LIMIT_SECONDS:-21600}
 MIN_FREE_GIB=${UOR_CENTROID_MIN_FREE_GIB:-128}
 
 die() {
@@ -45,6 +44,16 @@ need_free_gib() {
   [ "$available" -ge "$want" ] ||
     die "/workspace has ${available} GiB free, below ${want} GiB"
 }
+need_readback_room() {
+  local archive=$1 archive_kib available_kib required_kib
+  archive_kib=$((($(stat -c %s "$archive") + 1023) / 1024))
+  available_kib=$(df -Pk /workspace | awk 'NR==2 {print $4}')
+  required_kib=$((archive_kib + 31 * 1048576))
+  [ "$required_kib" -lt $((40 * 1048576)) ] &&
+    required_kib=$((40 * 1048576))
+  [ "$available_kib" -ge "$required_kib" ] ||
+    die "/workspace has $((available_kib / 1048576)) GiB free; readback needs $((required_kib / 1048576)) GiB (archive plus reserve)"
+}
 log() {
   printf '%s\n' "$*" | tee -a "$RUN/job.log"
 }
@@ -56,29 +65,28 @@ case $RUN in
   /workspace/*) ;;
   *) die "UOR_CENTROID_RUN must stay under /workspace: $RUN" ;;
 esac
-case $LIMIT_SECONDS in ''|*[!0-9]*) die "LIMIT_SECONDS must be an integer" ;; esac
 case $MIN_FREE_GIB in ''|*[!0-9]*) die "MIN_FREE_GIB must be an integer" ;; esac
-[ "$LIMIT_SECONDS" -gt 0 ] && [ "$LIMIT_SECONDS" -le 21600 ] ||
-  die "LIMIT_SECONDS must be between 1 and 21600"
 [ "$MIN_FREE_GIB" -ge 128 ] || die "MIN_FREE_GIB may not be below 128"
 command -v timeout >/dev/null || die "timeout is not installed"
-if [ "${UOR_CENTROID_TIMED:-0}" != 1 ]; then
-  export UOR_CENTROID_TIMED=1
-  exec timeout --signal=TERM --kill-after=60s "$LIMIT_SECONDS" bash "$0" "$@"
-fi
 [ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
 OUTPUT_CLAIMED=0
 on_exit() {
   local rc=$?
-  printf '%s\n' "$rc" > "$RUN/EXIT"
   if [ "$OUTPUT_CLAIMED" = 1 ] && [ "$rc" -ne 0 ] && [ -x "$STORE" ]; then
-    for file in job.log store.log store-list.err capture.stderr capture.stdout.jsonl; do
+    printf '%s\n' "$rc" > "$RUN/exit.code"
+    for file in job.log transfer.log store-list.err capture.stderr capture.stdout.jsonl \
+      binaries.sha256 gpu.txt selected-checkpoint.sha256 status.json \
+      results/cache.tar.zst.sha256 results/cache.SHA256SUMS exit.code; do
       [ -f "$RUN/$file" ] || continue
-      timeout 20s "$STORE" put "$RUN/$file" "$OUT_STORE/failure/$file" >/dev/null 2>&1 || true
+      destination=$file
+      [ "$file" = exit.code ] && destination=EXIT
+      timeout 20s "$STORE" put "$RUN/$file" "$OUT_STORE/failure/$destination" \
+        >/dev/null 2>&1 || true
     done
   fi
+  printf '%s\n' "$rc" > "$RUN/EXIT"
 }
 trap on_exit EXIT
 
@@ -102,7 +110,7 @@ actual=$(git -C "$REPO" rev-parse HEAD)
 [ -z "$(git -C "$REPO" status --porcelain --untracked-files=no)" ] ||
   die "repository has tracked modifications"
 
-log "[0/6] run=$RUN output=$OUT_STORE source=$PIN limit=${LIMIT_SECONDS}s"
+log "[0/6] run=$RUN output=$OUT_STORE source=$PIN"
 log "script_sha256=$(sha256sum "$0" | cut -d' ' -f1)"
 log "[1/6] fetch pinned inputs"
 "$STORE" get "results/claude/scale-probe-2026-11-05/inputs/d3/" "$RUN/download" | tee -a "$RUN/job.log"
@@ -222,20 +230,20 @@ tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache \
   2>&1 | tee -a "$RUN/job.log"
 (cd "$RUN/results" && sha256sum cache.tar.zst | tee -a "$RUN/job.log") \
   > "$RUN/results/cache.tar.zst.sha256"
-need_free_gib 40
+need_readback_room "$RUN/results/cache.tar.zst"
 
 log "[6/6] upload and read back sealed evidence"
 for file in results/cache.tar.zst results/cache.tar.zst.sha256 results/cache.SHA256SUMS \
   capture.stderr capture.stdout.jsonl binaries.sha256 gpu.txt; do
-  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/store.log" 2>&1
+  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/transfer.log" 2>&1
 done
 for file in results/cache.tar.zst.sha256 results/cache.SHA256SUMS capture.stderr \
   capture.stdout.jsonl binaries.sha256 gpu.txt; do
-  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/store.log" 2>&1
+  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
 done
-"$STORE" get "$OUT_STORE/cache.tar.zst" "$RUN/readback" >> "$RUN/store.log" 2>&1
+"$STORE" get "$OUT_STORE/cache.tar.zst" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
 readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/cache.tar.zst" | cut -d' ' -f1)
 [ "$readback_sha" = "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" ] ||
   die "uploaded cache archive did not read back"
@@ -246,10 +254,14 @@ printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","started"
   "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" \
   "$(cut -d' ' -f1 "$RUN/binaries.sha256")" \
   > "$RUN/status.json"
-for file in status.json store.log job.log; do
-  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/store.log" 2>&1
-  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/store.log" 2>&1
+for file in status.json job.log; do
+  "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/transfer.log" 2>&1
+  "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
 done
+"$STORE" put "$RUN/transfer.log" "$OUT_STORE/store.log" >/dev/null
+"$STORE" get "$OUT_STORE/store.log" "$RUN/readback" >/dev/null
+cmp "$RUN/transfer.log" "$RUN/readback/$OUT_STORE/store.log" ||
+  die "uploaded transfer log did not read back"
 cat "$RUN/status.json"
