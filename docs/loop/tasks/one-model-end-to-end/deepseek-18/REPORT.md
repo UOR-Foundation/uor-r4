@@ -15,7 +15,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - **The first resource checks could not guarantee completion.** They checked 80 GiB
   before and after capture but then made compressed and readback copies. The package now
   starts with 128 GiB, checks 118 GiB immediately before capture, requires 80 GiB after
-  capture and gates readback on the actual compressed size plus a 31 GiB reserve.
+  capture and gates readback on both compressed archive sizes plus a 31 GiB reserve.
 - **The first timeout covered only the scorer.** Downloads, CUDA tests/build, sealing,
   compression and uploads could outlive it, while a self-set wall budget must not cancel
   a healthy run. The self-cancelling timeout is removed; the watcher renews each healthy
@@ -26,7 +26,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - **A failure could advertise `EXIT` before its diagnostics reached the store.** Failure
   evidence is uploaded and read back first. A complete set is marked by `failure/EXIT`;
   an incomplete set creates `FAILURE_EVIDENCE_INCOMPLETE`. A pod whose cache exists but
-  was not transfer-verified is also retained instead of deleting its only copy.
+  was not transfer-verified is renewed and marked `KEEP` instead of deleting its only copy.
 - **The first remote output was not immutable.** A second-resolution id could collide
   with an existing prefix, and `uor-store` updates files rather than replacing a folder.
   The id now has a random suffix and an existing remote prefix is refused.
@@ -55,7 +55,8 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   provenance, enforces 170 GiB to build and 146 GiB after build for both complete
   restores, plus the 31 GiB post-restore reserve, binds each report to the captured
   manifest and checkpoint files, then runs the evaluator and aggregate without a
-  self-set wall-clock cancellation.
+  self-set wall-clock cancellation. Each CPU attempt gets a fresh timestamp-plus-random
+  local root instead of mutating a prior restore.
 
 ## Measurements
 
@@ -66,7 +67,7 @@ lease until the job finishes; at a $1.15/h ceiling, a four-hour pair projects $9
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c`.
+`3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d`.
 
 ## Checks run at the head
 

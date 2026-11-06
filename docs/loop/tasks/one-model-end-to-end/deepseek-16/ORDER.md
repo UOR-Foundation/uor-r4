@@ -5,8 +5,9 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 
 ## Goal
 
-Complete the roadmap's frozen-trunk centroid-refit step on the stable D3/8,192-step
-checkpoint at seeds 1 and 2. Capture exact no-memory teacher-forced queries and
+Run the first development slice of the roadmap's frozen-trunk centroid-refit step on the
+stable D3/8,192-step n3S checkpoint at seeds 1 and 2. This does not substitute for the
+roadmap's remaining sealed cells. Capture exact no-memory teacher-forced queries and
 decisions once, then evaluate the original table, a TRAIN mean-centroid table and a
 matched shuffled-label control on CPU over the same 1,460,697 human-panel rows.
 

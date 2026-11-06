@@ -2,7 +2,8 @@
 
 Lab: deepseek. Item: one-model-end-to-end (#3407). Orders:
 [deepseek-16](../../loop/tasks/one-model-end-to-end/deepseek-16/ORDER.md) and
-[deepseek-17](../../loop/tasks/one-model-end-to-end/deepseek-17/ORDER.md).
+[deepseek-17](../../loop/tasks/one-model-end-to-end/deepseek-17/ORDER.md), with delivery
+under [deepseek-18](../../loop/tasks/one-model-end-to-end/deepseek-18/ORDER.md).
 
 TEST FITNESS: PENDING - this execution package is complete, but it has not received a
 fresh non-author review. No capture or evaluation is authorized until that review writes
@@ -91,7 +92,7 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c
+JOB_SHA256=3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
@@ -114,8 +115,17 @@ teardown_pod() {
   scripts/pod/uor-pod down "$pod" --lab deepseek --session "$session" --confirm-archived
 }
 
+retain_pod() {
+  local pod=$1 session=$2 reason=$3
+  echo "retaining $pod: $reason" >&2
+  echo "inspect it, preserve unique evidence, then unkeep and down it explicitly" >&2
+  scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7 || true
+  scripts/pod/uor-pod keep "$pod" --purpose "centroid failure retained: $reason" || true
+}
+
 resolve_pod() {
   local i=$1 pod=${PODS[$1]} probe status incomplete cache_present cache_verified
+  local status_present normal_present
   [ "${RESOLVED[$i]}" != 1 ] || return 0
   POD_STATUS=UNAVAILABLE
   if [ "${STARTED[$i]}" != 1 ]; then
@@ -124,7 +134,7 @@ resolve_pod() {
     return 0
   fi
   if [ "${FINISHED[$i]}" != 1 ]; then
-    echo "retaining $pod: job did not reach a verified terminal state" >&2
+    retain_pod "$pod" "${SESSIONS[$i]}" "job did not reach a verified terminal state"
     RESOLVED[i]=1
     return 0
   fi
@@ -134,25 +144,34 @@ resolve_pod() {
      c=0; { test -e '${RUN_DIRS[$i]}/results/cache' || \
        test -e '${RUN_DIRS[$i]}/results/cache.tar.zst'; } && c=1; \
      v=0; test -e '${RUN_DIRS[$i]}/CACHE_TRANSFER_VERIFIED' && v=1; \
-     printf '%s %s %s %s\n' \"\$s\" \"\$e\" \"\$c\" \"\$v\""); then
-    echo "retaining $pod: terminal evidence could not be read" >&2
+     f=0; test -e '${RUN_DIRS[$i]}/status.json' && f=1; \
+     n=0; test -e '${RUN_DIRS[$i]}/results/normal-outputs.tar.zst.sha256' && n=1; \
+     printf '%s %s %s %s %s %s\n' \"\$s\" \"\$e\" \"\$c\" \"\$v\" \"\$f\" \"\$n\""); then
+    retain_pod "$pod" "${SESSIONS[$i]}" "terminal evidence could not be read"
     RESOLVED[i]=1
     return 0
   fi
-  read -r status incomplete cache_present cache_verified <<<"$probe"
+  read -r status incomplete cache_present cache_verified status_present normal_present <<<"$probe"
   POD_STATUS=$status
   case $status in
     0)
-      teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
+      if [ "$incomplete" = 0 ] && [ "$cache_present" = 1 ] &&
+        [ "$cache_verified" = 1 ] && [ "$status_present" = 1 ] &&
+        [ "$normal_present" = 1 ]; then
+        teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
+      else
+        retain_pod "$pod" "${SESSIONS[$i]}" \
+          "successful EXIT lacks verified cache, status or normal-output evidence"
+      fi
       ;;
     ''|*[!0-9]*)
-      echo "retaining $pod: EXIT is missing or malformed" >&2
+      retain_pod "$pod" "${SESSIONS[$i]}" "EXIT is missing or malformed"
       ;;
     *)
       if [ "$incomplete" = 1 ]; then
-        echo "retaining $pod: failure evidence is incomplete" >&2
+        retain_pod "$pod" "${SESSIONS[$i]}" "failure evidence is incomplete"
       elif [ "$cache_present" = 1 ] && [ "$cache_verified" != 1 ]; then
-        echo "retaining $pod: cache transfer was not verified" >&2
+        retain_pod "$pod" "${SESSIONS[$i]}" "cache transfer was not verified"
       else
         teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
       fi
@@ -368,8 +387,11 @@ pod ids into the run record and owns teardown from the first successful `up`. A 
 returns only after both the job's `EXIT` and the `uor-pod` wrapper's terminal record exist;
 it treats a wrapper end without `EXIT` as a failure and stops renewing. On any failure,
 the EXIT trap takes down pods with no started job. It also takes down a finished pod only
-when its failure diagnostics were fully uploaded and read back and any cache was either
-absent or transfer-verified; otherwise it retains the pod and prints its id for inspection.
+A successful result must have `EXIT 0`, `status.json`, the cache,
+`CACHE_TRANSFER_VERIFIED` and the normal-output archive checksum; a failed result may
+omit the cache only after complete diagnostics were uploaded and read back. Otherwise it
+renews the lease, marks the pod `KEEP`, prints its id and leaves explicit
+evidence-preservation instructions.
 Each pod is resolved as soon as its own watcher finishes, so a completed seed does not
 remain billed while its sibling runs. No self-set wall clock cancels either capture.
 
@@ -405,9 +427,12 @@ timestamp-plus-random run id is immutable; do not reconstruct or reuse it.
 
 ```sh
 set -euo pipefail
-ROOT=local/deepseek/centroid-cache/2026-11-06
-CAPTURE_JOB_SHA256=d4b39892f60727536077f2585738f93487e137f097ba50c9495c60e1d439715c
-mkdir -p "$ROOT"
+CPU_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+ROOT=local/deepseek/centroid-cache/2026-11-06/$CPU_RUN_ID
+CAPTURE_JOB_SHA256=3cf54bfb40a9be97e5dd3cd68c6e5fd63bc2687664b6174d0782fa9a69b2a48d
+mkdir -p "$(dirname "$ROOT")"
+mkdir "$ROOT"
+printf 'cpu_run_root=%s\n' "$ROOT"
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
 [ "$available_gib" -ge 170 ] || { echo "need 170 GiB free, have $available_gib" >&2; exit 1; }
 export CARGO_TARGET_DIR="$ROOT/target"
@@ -564,10 +589,11 @@ For each seed, pool the four panels:
   `candidate_only >= max(2, ceil(2 * sqrt(candidate_only + control_only)))`;
 - the same paired rule must hold against the matched shuffle.
 
-All conditions must hold at both seeds for a positive development result. Otherwise this
-closes mean-centroid refit for the tested n3S configuration. Because this panel selected
-the n3S checkpoint, even a positive can only nominate the candidate for a fresh transfer
-panel; it cannot alone put the mechanism on the serving path.
+All conditions must hold at both seeds for a positive development result. If every seed
+returns `REJECT`, that closes mean-centroid refit for the tested n3S configuration.
+`CONTROL_FAULT` and `INSUFFICIENT_POWER` are instrument outcomes, not closures. Because
+this panel selected the n3S checkpoint, even a positive can only nominate the candidate
+for a fresh transfer panel; it cannot alone put the mechanism on the serving path.
 
 ## Cost and stop
 
@@ -578,8 +604,8 @@ panel; it cannot alone put the mechanism on the serving path.
 - The raw cache is 28.02 GiB. The job requires 128 GiB at admission and again requires
   118 GiB after downloads and build but before capture; that second gate covers three
   raw-size-equivalent copies plus the 31 GiB reserve. It retains the actual post-capture,
-  compressed-size and readback checks, including a 40 GiB minimum. `zstd` has a functional
-  round-trip preflight.
+  both-archive readback-size and floor checks, including a 40 GiB minimum. Each produced
+  archive is decompressed by `zstd -t` before hashing and upload.
 - CPU evaluation: 32 Rayon workers, at most 32 GiB projected RSS and an estimated 2
   hours. It admits 170 GiB before the build, then 146 GiB after build for both retained
   restores and the final reserve. Estimates are not cancellation rules. The point

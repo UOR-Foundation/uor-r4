@@ -45,8 +45,9 @@ need_free_gib() {
     die "/workspace has ${available} GiB free, below ${want} GiB"
 }
 need_readback_room() {
-  local archive=$1 archive_kib available_kib required_kib
-  archive_kib=$((($(stat -c %s "$archive") + 1023) / 1024))
+  local cache_archive=$1 normal_archive=$2 archive_kib available_kib required_kib
+  archive_kib=$((($(stat -c %s "$cache_archive") +
+    $(stat -c %s "$normal_archive") + 1023) / 1024))
   available_kib=$(df -Pk /workspace | awk 'NR==2 {print $4}')
   required_kib=$((archive_kib + 31 * 1048576))
   [ "$required_kib" -lt $((40 * 1048576)) ] &&
@@ -65,10 +66,6 @@ case $RUN in
   /workspace/*) ;;
   *) die "UOR_CENTROID_RUN must stay under /workspace: $RUN" ;;
 esac
-case $MIN_FREE_GIB in ''|*[!0-9]*) die "MIN_FREE_GIB must be an integer" ;; esac
-[ "$MIN_FREE_GIB" -ge 128 ] || die "MIN_FREE_GIB may not be below 128"
-command -v timeout >/dev/null || die "timeout is not installed"
-[ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
 exec >> "$RUN/job.log" 2>&1
@@ -82,7 +79,7 @@ on_exit() {
       for file in job.log transfer.log store-list.err capture.stderr capture.stdout.jsonl \
         binaries.sha256 gpu.txt selected-checkpoint.sha256 status.json \
         CACHE_TRANSFER_VERIFIED results/cache.tar.zst.sha256 \
-        results/cache.SHA256SUMS exit.code; do
+        results/cache.SHA256SUMS results/normal-outputs.tar.zst.sha256 exit.code; do
         [ -f "$RUN/$file" ] || continue
         destination=$file
         [ "$file" = exit.code ] && destination=EXIT
@@ -106,6 +103,9 @@ on_exit() {
 }
 trap on_exit EXIT
 
+case $MIN_FREE_GIB in ''|*[!0-9]*) die "MIN_FREE_GIB must be an integer" ;; esac
+[ "$MIN_FREE_GIB" -ge 128 ] || die "MIN_FREE_GIB may not be below 128"
+command -v timeout >/dev/null || die "timeout is not installed"
 [ -x "$STORE" ] || die "uor-store is not installed"
 store_listing=$("$STORE" ls results/deepseek/ 2>"$RUN/store-list.err") ||
   die "could not list the DeepSeek store namespace"
@@ -287,20 +287,28 @@ jq -e '
     .mask_sha256 == "9d95ea6de0eba07d4cdbc258b5fa6ae88def952f062d166ba417d783724fa625")
 ' "$RUN/results/cache/manifest.json" >/dev/null ||
   die "cache manifest does not contain the registered five-split inventory"
+tar -I 'zstd -3 -T0' -cf "$RUN/results/normal-outputs.tar.zst" -C "$RUN" out/score
+zstd -q -t "$RUN/results/normal-outputs.tar.zst"
+(cd "$RUN/results" && sha256sum normal-outputs.tar.zst) \
+  > "$RUN/results/normal-outputs.tar.zst.sha256"
 (cd "$RUN/results" && find cache -type f -print0 | sort -z | xargs -0 sha256sum) \
   > "$RUN/results/cache.SHA256SUMS"
 tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache
+zstd -q -t "$RUN/results/cache.tar.zst"
 (cd "$RUN/results" && sha256sum cache.tar.zst) \
   > "$RUN/results/cache.tar.zst.sha256"
-need_readback_room "$RUN/results/cache.tar.zst"
+need_readback_room "$RUN/results/cache.tar.zst" "$RUN/results/normal-outputs.tar.zst"
 
 log "[6/6] upload and read back sealed evidence"
 for file in results/cache.tar.zst results/cache.tar.zst.sha256 results/cache.SHA256SUMS \
-  capture.stderr capture.stdout.jsonl binaries.sha256 gpu.txt; do
+  results/normal-outputs.tar.zst results/normal-outputs.tar.zst.sha256 \
+  capture.stderr capture.stdout.jsonl binaries.sha256 gpu.txt selected-checkpoint.sha256; do
   "$STORE" put "$RUN/$file" "$OUT_STORE/$file" >> "$RUN/transfer.log" 2>&1
 done
 for file in results/cache.tar.zst.sha256 results/cache.SHA256SUMS capture.stderr \
-  capture.stdout.jsonl binaries.sha256 gpu.txt; do
+  capture.stdout.jsonl results/normal-outputs.tar.zst \
+  results/normal-outputs.tar.zst.sha256 binaries.sha256 gpu.txt \
+  selected-checkpoint.sha256; do
   "$STORE" get "$OUT_STORE/$file" "$RUN/readback" >> "$RUN/transfer.log" 2>&1
   cmp "$RUN/$file" "$RUN/readback/$OUT_STORE/$file" ||
     die "uploaded $file did not read back"
@@ -311,10 +319,12 @@ readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/cache.tar.zst" | cut -d' ' -f
   die "uploaded cache archive did not read back"
 touch "$RUN/CACHE_TRANSFER_VERIFIED"
 
-printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","started":"%s","finished":"%s","cache_manifest_sha256":"%s","cache_tar_sha256":"%s","capture_binary_sha256":"%s"}\n' \
+normal_sha=$(cut -d' ' -f1 "$RUN/results/normal-outputs.tar.zst.sha256")
+printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","started":"%s","finished":"%s","cache_manifest_sha256":"%s","cache_tar_sha256":"%s","normal_outputs_tar_sha256":"%s","capture_binary_sha256":"%s"}\n' \
   "$SEED" "$RUN_ID" "$PIN" "$started" "$finished" \
   "$(sha256sum "$RUN/results/cache/manifest.json" | cut -d' ' -f1)" \
   "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" \
+  "$normal_sha" \
   "$(cut -d' ' -f1 "$RUN/binaries.sha256")" \
   > "$RUN/status.json"
 for file in status.json job.log; do

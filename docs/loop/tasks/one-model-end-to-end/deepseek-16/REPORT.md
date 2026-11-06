@@ -99,7 +99,8 @@ task-report and compute rules were used directly.
 4. Capture n3S at seeds 1 and 2, seal and upload both caches.
 5. Run the CPU evaluator, pool the four panels and report the registered verdict.
 
-Until those complete, the roadmap's centroid-refit step remains open.
+Until those complete, this n3S slice remains open. The roadmap's other sealed cells also
+remain NOT_RUN, so this unit cannot complete centroid refit for step 2.
 
 ## Plain summary
 
