@@ -1,3 +1,31 @@
+## 2026-11-06 — Compressed prompt VSA loses retrieval quality (deepseek)
+
+TRAIN-only calibration selected a 1,024-bit modulo signature from a fixed
+256/512/1,024-bit candidate set for the prompt-reply index. On fresh seed 2778
+and both artifacts it was **3.67x** faster inside selection, but exact replies
+fell **49→48**, correct openings **138→133**, and correct body positions
+**1061→1011**. All 445 reachable replies were emitted with zero premature BOS
+and three-run repeats matched exactly.
+
+This is a **REJECT** for the selected lossy mapping. The exact 4,096-bit
+binary vocabulary signature remains the serving default; compressed research
+configuration does not change sidecars or `UORLUT01`. Record:
+[deepseek-211](../loop/tasks/cpu-training-pilot/deepseek-211/REPORT.md).
+
+## 2026-11-06 — Prompt retrieval moves to a binary VSA index (deepseek)
+
+The serving prompt-reply sidecar now loads each prompt as a 4,096-bit binary
+vocabulary vector. Bitwise AND/OR popcounts compute exact set intersection and
+union for the same Jaccard ordering. Across both artifacts, all **471/471**
+decisions match the literal-set selector and CPU oracle, retaining **39** exact
+replies, **131** openings, **948** body positions and zero premature BOS.
+
+Three alternating runs per artifact raised aggregate median selection
+throughput from **9,820.55** to **46,362.99 prompts/s**, a **4.72x** gain. The
+sidecar schema and bytes are unchanged. This is an exact representation change,
+not a new retrieval-quality claim or a learned compressed embedding. Record:
+[deepseek-209](../loop/tasks/cpu-training-pilot/deepseek-209/REPORT.md).
+
 ## 2026-11-06 — Prompt-set retrieval reaches loopback serving (deepseek)
 
 The deepseek-204 prompt-set completion result is now a strict

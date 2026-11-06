@@ -1,8 +1,10 @@
 //! Artifact-bound complete-reply retrieval for stack serving.
 //!
-//! A sidecar stores prompt/reply token pairs from a training corpus. At a chat
-//! boundary it ranks prompts by exact token-set Jaccard overlap and returns one
-//! complete reply. The model artifact and dialogue bytes are unchanged.
+//! A sidecar stores prompt/reply token pairs from a training corpus. At load
+//! time each prompt becomes a vocabulary-dimensional binary vector. At a chat
+//! boundary, bitwise AND/OR popcounts recover exact set Jaccard overlap and the
+//! selector returns one complete reply. The model artifact and dialogue bytes
+//! are unchanged.
 
 use std::collections::BTreeSet;
 use std::io::Read;
@@ -19,6 +21,72 @@ pub const MAX_PROMPT_REPLY_ENTRIES: usize = 100_000;
 pub const MAX_PROMPT_REPLY_PROMPT_TOKENS: usize = 65_536;
 pub const MAX_PROMPT_REPLY_REPLY_TOKENS: usize = 4_096;
 
+/// Deterministic token-to-bit mapping used by a prompt signature.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PromptReplySignatureMapping {
+    /// Each token id addresses its exact vocabulary bit.
+    Vocabulary,
+    /// Fold the token id modulo the signature width.
+    Modulo,
+    /// Fold a SplitMix64 hash of the token id modulo the signature width.
+    SplitMix64,
+}
+
+/// Frozen width and token mapping for prompt-reply signatures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PromptReplySignatureConfig {
+    words: usize,
+    mapping: PromptReplySignatureMapping,
+}
+
+impl PromptReplySignatureConfig {
+    /// The exact vocabulary-dimensional signature used by serving defaults.
+    pub fn exact(vocab: usize) -> Self {
+        Self {
+            words: vocab.div_ceil(64),
+            mapping: PromptReplySignatureMapping::Vocabulary,
+        }
+    }
+
+    /// A lossy compressed signature for bounded research evaluation.
+    pub fn compressed(
+        words: usize,
+        mapping: PromptReplySignatureMapping,
+    ) -> Result<Self, StackError> {
+        if words == 0 {
+            return Err(prompt_error("signature width must be at least 64 bits"));
+        }
+        if mapping == PromptReplySignatureMapping::Vocabulary {
+            return Err(prompt_error(
+                "vocabulary mapping requires an exact signature config",
+            ));
+        }
+        Ok(Self { words, mapping })
+    }
+
+    pub fn words(self) -> usize {
+        self.words
+    }
+
+    pub fn bits(self) -> usize {
+        self.words * 64
+    }
+
+    pub fn mapping(self) -> PromptReplySignatureMapping {
+        self.mapping
+    }
+
+    fn bit(self, token: usize) -> usize {
+        match self.mapping {
+            PromptReplySignatureMapping::Vocabulary => token,
+            PromptReplySignatureMapping::Modulo => token % self.bits(),
+            PromptReplySignatureMapping::SplitMix64 => {
+                (splitmix64(token as u64) as usize) % self.bits()
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PromptReplyExample {
@@ -28,7 +96,8 @@ pub struct PromptReplyExample {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PromptReplyIndex {
-    prompt: BTreeSet<u32>,
+    prompt_tokens: Vec<u32>,
+    prompt_signature: Vec<u64>,
     reply: Vec<u32>,
 }
 
@@ -39,6 +108,7 @@ pub struct PromptReplyReadout {
     protocol_version: u8,
     ignore_token_ids: Vec<u32>,
     entries: Vec<PromptReplyIndex>,
+    signature: PromptReplySignatureConfig,
     sidecar_sha256: Option<String>,
 }
 
@@ -70,6 +140,31 @@ impl PromptReplyReadout {
         entries: Vec<PromptReplyExample>,
         vocab: usize,
     ) -> Result<Self, StackError> {
+        Self::from_entries_with_signature(
+            artifact_sha256,
+            tokenizer_sha256,
+            protocol_version,
+            ignore_token_ids,
+            entries,
+            vocab,
+            PromptReplySignatureConfig::exact(vocab),
+        )
+    }
+
+    /// Build a readout with an explicit deterministic signature construction.
+    ///
+    /// Serving defaults call [`Self::from_entries`], which keeps the exact
+    /// vocabulary-dimensional mapping. This constructor exists for bounded
+    /// representation research against unchanged sidecar bytes.
+    pub fn from_entries_with_signature(
+        artifact_sha256: impl Into<String>,
+        tokenizer_sha256: impl Into<String>,
+        protocol_version: u8,
+        ignore_token_ids: Vec<u32>,
+        entries: Vec<PromptReplyExample>,
+        vocab: usize,
+        signature: PromptReplySignatureConfig,
+    ) -> Result<Self, StackError> {
         let artifact_sha256 = artifact_sha256.into();
         let tokenizer_sha256 = tokenizer_sha256.into();
         validate_hash(&artifact_sha256, "artifact_sha256")?;
@@ -78,13 +173,15 @@ impl PromptReplyReadout {
             return Err(prompt_error("protocol_version must be 1 or 2"));
         }
         validate_ignore_ids(&ignore_token_ids)?;
-        let indexes = validate_entries(entries, &ignore_token_ids, vocab)?;
+        validate_signature(vocab, signature)?;
+        let indexes = validate_entries(entries, &ignore_token_ids, vocab, signature)?;
         Ok(Self {
             artifact_sha256,
             tokenizer_sha256,
             protocol_version,
             ignore_token_ids: ignore_token_ids.into_iter().collect(),
             entries: indexes,
+            signature,
             sidecar_sha256: None,
         })
     }
@@ -96,6 +193,26 @@ impl PromptReplyReadout {
         expected_protocol: u8,
         expected_ignore_token_ids: &[u32],
         vocab: usize,
+    ) -> Result<Self, StackError> {
+        Self::from_sidecar_with_signature(
+            bytes,
+            artifact_sha256,
+            tokenizer_sha256,
+            expected_protocol,
+            expected_ignore_token_ids,
+            vocab,
+            PromptReplySignatureConfig::exact(vocab),
+        )
+    }
+
+    pub fn from_sidecar_with_signature(
+        bytes: &[u8],
+        artifact_sha256: &str,
+        tokenizer_sha256: &str,
+        expected_protocol: u8,
+        expected_ignore_token_ids: &[u32],
+        vocab: usize,
+        signature: PromptReplySignatureConfig,
     ) -> Result<Self, StackError> {
         if bytes.len() as u64 > MAX_PROMPT_REPLY_SIDECAR_BYTES {
             return Err(prompt_error(format!(
@@ -136,13 +253,14 @@ impl PromptReplyReadout {
                 sidecar.ignore_token_ids
             )));
         }
-        let mut readout = Self::from_entries(
+        let mut readout = Self::from_entries_with_signature(
             sidecar.artifact_sha256,
             sidecar.tokenizer_sha256,
             sidecar.protocol_version,
             sidecar.ignore_token_ids,
             sidecar.entries,
             vocab,
+            signature,
         )?;
         readout.sidecar_sha256 = Some(hex::encode(sha2::Sha256::digest(bytes)));
         Ok(readout)
@@ -175,18 +293,39 @@ impl PromptReplyReadout {
         expected_ignore_token_ids: &[u32],
         vocab: usize,
     ) -> Result<(Vec<u8>, Self), StackError> {
+        Self::read_sidecar_with_signature(
+            path,
+            artifact_sha256,
+            tokenizer_sha256,
+            expected_protocol,
+            expected_ignore_token_ids,
+            vocab,
+            PromptReplySignatureConfig::exact(vocab),
+        )
+    }
+
+    pub fn read_sidecar_with_signature(
+        path: &Path,
+        artifact_sha256: &str,
+        tokenizer_sha256: &str,
+        expected_protocol: u8,
+        expected_ignore_token_ids: &[u32],
+        vocab: usize,
+        signature: PromptReplySignatureConfig,
+    ) -> Result<(Vec<u8>, Self), StackError> {
         let file = std::fs::File::open(path).map_err(StackError::Io)?;
         let mut bytes = Vec::new();
         file.take(MAX_PROMPT_REPLY_SIDECAR_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(StackError::Io)?;
-        let readout = Self::from_sidecar(
+        let readout = Self::from_sidecar_with_signature(
             &bytes,
             artifact_sha256,
             tokenizer_sha256,
             expected_protocol,
             expected_ignore_token_ids,
             vocab,
+            signature,
         )?;
         Ok((bytes, readout))
     }
@@ -202,7 +341,7 @@ impl PromptReplyReadout {
                 .entries
                 .iter()
                 .map(|entry| PromptReplyExample {
-                    prompt: entry.prompt.iter().copied().collect(),
+                    prompt: entry.prompt_tokens.clone(),
                     reply: entry.reply.clone(),
                 })
                 .collect(),
@@ -213,6 +352,18 @@ impl PromptReplyReadout {
 
     pub fn entries(&self) -> usize {
         self.entries.len()
+    }
+
+    pub fn signature_words(&self) -> usize {
+        self.signature.words()
+    }
+
+    pub fn signature_bits(&self) -> usize {
+        self.signature.bits()
+    }
+
+    pub fn signature_mapping(&self) -> PromptReplySignatureMapping {
+        self.signature.mapping()
     }
 
     pub fn artifact_sha256(&self) -> &str {
@@ -241,18 +392,19 @@ impl PromptReplyReadout {
             .iter()
             .copied()
             .collect::<BTreeSet<_>>();
-        let query = history
-            .iter()
-            .copied()
-            .filter(|token| !ignored.contains(token))
-            .collect::<BTreeSet<_>>();
-        if query.is_empty() {
+        let mut query = vec![0u64; self.signature.words()];
+        for &token in history {
+            if !ignored.contains(&token) {
+                let bit = self.signature.bit(token as usize);
+                query[bit / 64] |= 1u64 << (bit % 64);
+            }
+        }
+        if query.iter().all(|&word| word == 0) {
             return None;
         }
         let mut best: Option<(u64, u64, usize)> = None;
         for (ordinal, entry) in self.entries.iter().enumerate() {
-            let numerator = query.intersection(&entry.prompt).count() as u64;
-            let denominator = query.union(&entry.prompt).count() as u64;
+            let (numerator, denominator) = signature_overlap(&query, &entry.prompt_signature);
             let replace = match best {
                 None => true,
                 Some((best_num, best_den, best_ordinal)) => {
@@ -281,15 +433,13 @@ fn validate_entries(
     entries: Vec<PromptReplyExample>,
     ignore_token_ids: &[u32],
     vocab: usize,
+    signature: PromptReplySignatureConfig,
 ) -> Result<Vec<PromptReplyIndex>, StackError> {
     if entries.is_empty() || entries.len() > MAX_PROMPT_REPLY_ENTRIES {
         return Err(prompt_error(format!(
             "entry count {} is outside 1..={MAX_PROMPT_REPLY_ENTRIES}",
             entries.len()
         )));
-    }
-    if vocab == 0 {
-        return Err(prompt_error("vocabulary is empty"));
     }
     let ignored = ignore_token_ids.iter().copied().collect::<BTreeSet<_>>();
     entries
@@ -320,12 +470,60 @@ fn validate_entries(
                     )));
                 }
             }
+            let mut prompt_signature = vec![0u64; signature.words()];
+            for &token in &entry.prompt {
+                let bit = signature.bit(token as usize);
+                prompt_signature[bit / 64] |= 1u64 << (bit % 64);
+            }
             Ok(PromptReplyIndex {
-                prompt: entry.prompt.into_iter().collect(),
+                prompt_tokens: entry.prompt,
+                prompt_signature,
                 reply: entry.reply,
             })
         })
         .collect()
+}
+
+fn validate_signature(
+    vocab: usize,
+    signature: PromptReplySignatureConfig,
+) -> Result<(), StackError> {
+    if vocab == 0 {
+        return Err(prompt_error("vocabulary is empty"));
+    }
+    let exact_words = vocab.div_ceil(64);
+    if signature.words() == 0 || signature.words() > exact_words {
+        return Err(prompt_error(format!(
+            "signature words {} are outside 1..={exact_words}",
+            signature.words()
+        )));
+    }
+    if signature.mapping() == PromptReplySignatureMapping::Vocabulary
+        && signature.words() != exact_words
+    {
+        return Err(prompt_error(
+            "vocabulary mapping requires the exact signature width",
+        ));
+    }
+    Ok(())
+}
+
+fn splitmix64(mut value: u64) -> u64 {
+    value = value.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
+}
+
+fn signature_overlap(left: &[u64], right: &[u64]) -> (u64, u64) {
+    left.iter()
+        .zip(right)
+        .fold((0u64, 0u64), |(intersection, union), (&left, &right)| {
+            (
+                intersection + u64::from((left & right).count_ones()),
+                union + u64::from((left | right).count_ones()),
+            )
+        })
 }
 
 fn validate_ignore_ids(ids: &[u32]) -> Result<(), StackError> {
@@ -387,6 +585,23 @@ mod tests {
         .unwrap()
     }
 
+    fn readout_with_signature(
+        entries: Vec<PromptReplyExample>,
+        vocab: usize,
+        signature: PromptReplySignatureConfig,
+    ) -> PromptReplyReadout {
+        PromptReplyReadout::from_entries_with_signature(
+            "a".repeat(64),
+            "b".repeat(64),
+            2,
+            vec![0, 1, 2],
+            entries,
+            vocab,
+            signature,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn selects_complete_reply_by_exact_set_overlap_and_lower_tie() {
         let readout = readout(vec![
@@ -399,6 +614,111 @@ mod tests {
         assert_eq!(selection.reply, [10]);
         assert_eq!(selection.similarity_numerator, 2);
         assert_eq!(selection.similarity_denominator, 4);
+    }
+
+    #[test]
+    fn binary_signature_preserves_set_counts_and_hamming_symmetric_difference() {
+        let readout = readout(vec![example(&[3, 4], &[10])]);
+        let query = [3, 5];
+        let mut query_signature = vec![0u64; readout.signature_words()];
+        for token in query {
+            query_signature[token as usize / 64] |= 1u64 << (token as usize % 64);
+        }
+        let (intersection, union) =
+            signature_overlap(&query_signature, &readout.entries[0].prompt_signature);
+        let hamming: u32 = query_signature
+            .iter()
+            .zip(&readout.entries[0].prompt_signature)
+            .map(|(&left, &right)| (left ^ right).count_ones())
+            .sum();
+        assert_eq!((intersection, union, hamming), (1, 3, 2));
+        assert_eq!(hamming, union as u32 - intersection as u32);
+    }
+
+    #[test]
+    fn compressed_signature_collisions_reduce_set_counts_deterministically() {
+        let exact = PromptReplyReadout::from_entries(
+            "a".repeat(64),
+            "b".repeat(64),
+            2,
+            vec![0, 1, 2],
+            vec![example(&[3, 67], &[10])],
+            128,
+        )
+        .unwrap();
+        let folded = readout_with_signature(
+            vec![example(&[3, 67], &[10])],
+            128,
+            PromptReplySignatureConfig::compressed(1, PromptReplySignatureMapping::Modulo).unwrap(),
+        );
+        assert_eq!(folded.signature_bits(), 64);
+        assert_eq!(
+            folded.signature_mapping(),
+            PromptReplySignatureMapping::Modulo
+        );
+        assert_eq!(
+            exact
+                .select(&[3])
+                .map(|row| (row.similarity_numerator, row.similarity_denominator)),
+            Some((1, 2))
+        );
+        assert_eq!(
+            folded
+                .select(&[3])
+                .map(|row| (row.similarity_numerator, row.similarity_denominator)),
+            Some((1, 1))
+        );
+        assert_eq!(
+            folded.select(&[3]),
+            folded.select(&[3]),
+            "compressed selection must repeat exactly"
+        );
+    }
+
+    #[test]
+    fn compressed_sidecar_round_trip_keeps_exact_sidecar_bytes() {
+        let entries = vec![example(&[3, 67], &[10, 11])];
+        let exact = PromptReplyReadout::from_entries(
+            "a".repeat(64),
+            "b".repeat(64),
+            2,
+            vec![0, 1, 2],
+            entries.clone(),
+            128,
+        )
+        .unwrap();
+        let signature =
+            PromptReplySignatureConfig::compressed(1, PromptReplySignatureMapping::SplitMix64)
+                .unwrap();
+        let compressed = readout_with_signature(entries, 128, signature);
+        let bytes = compressed.to_sidecar_bytes().unwrap();
+        assert_eq!(bytes, exact.to_sidecar_bytes().unwrap());
+        let loaded = PromptReplyReadout::from_sidecar_with_signature(
+            &bytes,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            2,
+            &[0, 1, 2],
+            128,
+            signature,
+        )
+        .unwrap();
+        assert_eq!(
+            loaded.signature_mapping(),
+            PromptReplySignatureMapping::SplitMix64
+        );
+        assert_eq!(loaded.select(&[67]), compressed.select(&[67]));
+    }
+
+    #[test]
+    fn compressed_signature_config_refuses_zero_or_exact_mapping() {
+        assert!(
+            PromptReplySignatureConfig::compressed(0, PromptReplySignatureMapping::Modulo).is_err()
+        );
+        assert!(
+            PromptReplySignatureConfig::compressed(1, PromptReplySignatureMapping::Vocabulary)
+                .is_err()
+        );
     }
 
     #[test]
