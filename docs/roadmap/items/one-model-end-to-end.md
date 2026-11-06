@@ -96,8 +96,9 @@ parked until then. The sequence, each step chosen by the one before it:
    two seeds, of 1,460,697 rows, seed 1 / seed 2: (n1S) 216,675 / 223,689, (n1L) 232,100 / 225,571, (n3S)
    236,892 / 241,075, (n3L) 272,867 / 234,892, against T2's 253,018 (D1) and 256,660 (D3) and the unigram's
    37,421. (n3L) reads `inside` its T2 (ahead at seed 1, behind at seed 2); the other cells are behind. Data is
-   the one lever decided at both seeds (D3 ahead of D1 at 8,192 steps). By the sheet, the next unit adds seeds
-   to (n3L) before any other change; the step-2 refit can ride on the same unit.
+   the one lever decided at both seeds (D3 ahead of D1 at 8,192 steps). `pair`'s band includes the seed spread,
+   so added seeds cannot turn (n3L) ahead. The decision review takes the sheet's data branch instead: longer at
+   D3, or more human text, with a recipe whose seeds agree. (n3L)'s seeds split by step 8,192.
 2. **Centroid refit of the readout, on step 1's sealed checkpoints.** With the trunk frozen, teacher-force TRAIN
    and set each token's point to the mean hidden state that precedes it: the closed-form fit of the nearest
    readout. It is geometric and TRAIN-only, with no exponential, no product of matrices and no memory. Arms: each

@@ -12,7 +12,7 @@ Eight runs were trained, scored, sealed and graded: the sheet's 2×2 of TRAIN D1
   - (n3L), D3 at 32,768 steps, reads `inside` against its T2 (d +16,207 / −21,768, band 37,975). It is ahead at seed 1 (272,867 against 256,660) and behind at seed 2 (234,892). On unseen rows it is `inside` too (d +7,250 / −24,231, band 31,481).
   - The other three cells are `behind` their T2 at both seeds (table below).
 - **The long runs are not stable across seeds.** (n3L)'s two seeds land 37,975 rows apart, and (n1L)'s 6,529 apart, against 4,183 and 7,014 for the 8,192-step cells. The band that decides the bar is that spread, so at two seeds a long run cannot show a lead smaller than about 38,000 rows.
-  - The spread is the optimizer's, not the measurement's (§4.2, instrument against mechanism): the trainer is deterministic per seed. Seed 2's lost first run reached loss 0.9593 at step 31,744; its rerun on another host ended at 0.9594. Seed 1's (n3L) was already lower at step 8,192 (0.9601 against 0.9791) and stayed lower to the end (0.9306 against 0.9594).
+  - The spread is the optimizer's, not the measurement's (§4.2, instrument against mechanism): seed 2's training loss reproduced exactly across hosts. At step 31,744 its lost first run (Quebec) and its rerun (Czechia) both read 0.9592743465327658 for (n3L) and 0.9693796455394477 for (n1L), to every printed digit. The lost run kept no models, so seed 2's top-1 itself was not reproduced, only the trajectory. Seed 1's (n3L) was already lower at step 8,192 (0.9601 against 0.9791) and stayed lower to the end (0.9306 against 0.9594).
 - **Steps alone do not clearly move it.** The steps lever at D1, (n1L) against (n1S), is `mixed` (d +15,425 / +1,882, band 13,543): ahead at seed 1, not distinguishable at seed 2.
 - **(n1L)'s loss and its top-1 disagree across seeds.** Seed 2 ends at a lower loss (0.9695 against 0.9754) and fewer hits (225,571 against 232,100). Loss is read only within an arm (the sheet), and this is why.
 - **Seed 2's first run was lost to a host fault** at step 31,744 of 32,768 and rerun from step 0, because the trainer at the pin has no resume (Departures).
@@ -30,9 +30,9 @@ Panel top-1, no memory, on the 1,460,697-row human panel (row identity `5f88a5b3
 | (n3S) D3, 8,192 | 236,892 / 241,075 | behind (−19,768 / −15,585, band 4,183) | behind (−23,055 / −19,022, band 4,033) | ahead (band 4,183) | 37.7% / 38.7% |
 | (n3L) D3, 32,768 | 272,867 / 234,892 | **inside** (+16,207 / −21,768, band 37,975) | inside (+7,250 / −24,231, band 31,481) | ahead (band 37,975) | 47.3% / 36.0% |
 
-T2's share is the cell's hits minus the pair's `b` (rows T2 gets and the cell misses), over T2's hits (`pair/<cell>-vs-t2.json`).
+T2's share is the cell's hits minus the pair's `b` (rows the cell gets and T2 misses, since d = b − c), so the rows both get, over T2's hits (`pair/<cell>-vs-t2.json`).
 
-**By the sheet's Bar:** (n3L) reads "Not distinguishable from T2 at these seeds. The next unit adds seeds to that arm before any other change." The other three read "Not met for that configuration only" (§4.1).
+**By the sheet's Bar:** (n3L) reads "Not distinguishable from T2 at these seeds. The next unit adds seeds to that arm before any other change." The other three read "Not met for that configuration only" (§4.1). Under `pair`'s band rule, added seeds cannot turn (n3L) ahead (Still open), so that next step is set aside.
 
 ### The levers
 
@@ -45,7 +45,7 @@ The D1 cell is the A side, so a D1 `behind` means the D3 cell is ahead.
 | data at 32,768 steps | (n1L) − (n3L) | mixed | −40,767 / −9,321 (31,446) |
 | both | (n1S) − (n3L) | mixed | −56,192 / −11,203 (44,989) |
 
-The data lever is the only one decided at both seeds: D3 moves the trunk, by 17,000–20,000 rows at 8,192 steps, beyond the band at both seeds and on unseen rows (d −15,160 / −13,867, band 1,293). Under "What each outcome unlocks", this is "None does, and data moves it". It sits under the Bar's first instruction for (n3L), more seeds.
+The data lever is the only one decided at both seeds: D3 moves the trunk, by 17,000–20,000 rows at 8,192 steps, beyond the band at both seeds and on unseen rows (d −15,160 / −13,867, band 1,293). Under "What each outcome unlocks", this is "None does, and data moves it": the next unit trains longer at D3, or on more human text.
 
 **Record only:** (n1S) reproduces claude-296's sealed (near) exactly at both seeds (`record-n1S-vs-296near`, d 0 / 0), across the two pins; the trainer binary is the same file (`528a2634…`).
 
@@ -59,7 +59,7 @@ The data lever is the only one decided at both seeds: D3 moves the trunk, by 17,
   - The trainer at the pin has no resume, and its checkpoints hold no optimizer state. Finishing from step 31,744 would have reset the optimizer late in a decaying schedule, a different configuration, so those cells are NOT_RUN on that pod.
   - Seed 2 was rerun from step 0 on the one-card fallback, vast-59396995 (1×5090, $0.986/h, Czechia), with the same limits as seed 1.
   - A two-card replacement (vast-59396933, $2.191/h) was over the sheet's $2.00/h ceiling and was deleted unused after 185 s.
-  - The lost run's logs (no models) are kept locally, sha256 `baaa1becfa8fc85333edf7eadf327e450a77afa80fc86825b364a7adde6c6418`. Its last losses at step 31,744 were 0.9694 for (n1L) and 0.9593 for (n3L); the rerun ended at 0.9695 and 0.9594.
+  - The lost run's logs (no models) are kept locally, sha256 `baaa1becfa8fc85333edf7eadf327e450a77afa80fc86825b364a7adde6c6418`. Its last losses, at step 31,744, were 0.9693796455394477 for (n1L) and 0.9592743465327658 for (n3L). The rerun read the same at that step (`progress.jsonl`) and ended at 0.9695 and 0.9594 at step 32,768.
 - **The two seeds' binaries were built on different pods,** as the sheet's Base artifact allows. Both read `train-in-space-92ea7ccd`, sha256 `528a26342dbd83b05fee3b410b880cd6cf2827c5b4f5bce95a89679cd31fb98a` (`binaries.sha256`).
 
 ## What changed
@@ -91,7 +91,7 @@ Three leads were put on the roadmap, in order: a centroid refit of the readout o
 - **I-4:** all eight graded checkpoints score the same 1,460,697 rows, identity `5f88a5b3295ba5d684a8c75206787642fd65a2377d2dbb268992ec5c71a621eb`.
 - **I-5:** every scored checkpoint's `.i5` reads `same` on every panel and on DEV (40 of 40 lines), and DEV's rows agree across the four per-panel processes (`*.dev-agree`).
 - **I-s:** the grades and pairs ran with claude-295's seen sets for D1 and D3 (`local/claude/claude-295/seen/d{1,3}`), and `pair` accepted them; every pair names its `clean_seen_sha256`.
-- **Every train, score and chain exit is 0** (24 of 24 exit files), and both chains ended `job=0 seal=0`.
+- **Every train, score and chain exit is 0.** That is 56 of 56 exit files, 28 a seed: 8 train (the smokes included), 4 per-cell scores and 16 per-panel scores. Each pod's `oh/run/EXIT` reads 0, and both chains ended `job=0 seal=0`.
 
 ### Timings and the pod
 
@@ -115,7 +115,13 @@ None applied.
 
 ## Still open
 
-- **The one-track bar** is not met. By the sheet's Bar, the next unit adds seeds to (n3L) before any other change: seeds 3 to 6, about $1.6 each on one card. If (n3L)'s mean lead over T2 holds beyond the wider band, the bar is met; if it does not, data is the lever that moved, and longer D3 or more human text is next.
+- **The one-track bar** is not met.
+- **More seeds cannot move (n3L)'s verdict, so the decision review sets the sheet's seeds rule aside here** ([claude], 6 Nov). `pair` gives every seed a band of at least the spread of d across all the seeds given, and `ahead` needs every seed beyond its band (`docs/labs/scale-probe/instrument/src/lib.rs` lines 919–953). It also takes at most three seeds.
+  - Seed 2's d is −21,768. For the lowest seed to be ahead, its d would have to exceed max d − min d, which is at least 0. A seed with a negative d can never do that, so no added seed can turn (n3L) `ahead`.
+  - The Bar's line for an `inside` arm ("adds seeds to that arm before any other change") was written without that case in mind. Spending GPU time on it would buy a reading that cannot change.
+  - The sheet's pre-registered branch that does apply is "None does, and data moves it": (n3S) against (n1S) is decided at both seeds. Its next unit trains longer at D3, or on more human text.
+  - The seed spread itself is the second target. (n3L)'s seeds separate by step 8,192 (loss 0.9601 against 0.9791), so a recipe whose seeds agree is part of meeting the bar.
+  - This choice is logged for Casey, who can reverse it.
 - **The centroid refit** (the roadmap's step 2) can ride on this unit's sealed checkpoints, which hold the models.
 - **The trainer has no resume.** A host fault late in a 32,768-step run costs the whole run. Saving optimizer state in the checkpoints would let a run continue exactly.
 
@@ -125,8 +131,8 @@ This unit trained the model longer and on three times as much human text, at two
 
 More text clearly helps: at both seeds it adds about 17,000–20,000 correct guesses out of 1.46 million. Training four times longer helps less clearly.
 
-The best setting, three times the text and four times the steps, beat T2 at the first seed (272,867 against 256,660 correct) but not at the second (234,892). The two seeds landed in different places while training, and the difference is real, not a measuring fault: rerunning the second seed from scratch on another machine gave the same result.
+The best setting, three times the text and four times the steps, beat T2 at the first seed (272,867 against 256,660 correct) but not at the second (234,892). The two seeds landed in different places while training, and the difference is real, not a measuring fault: rerunning the second seed from scratch on another machine retraced its training exactly.
 
-So the bar is not met yet. The next step is to run that setting at more seeds and see whether it beats T2 on average. GPU time cost about $15.
+So the bar is not met yet. More seeds would not help: the grading rule needs every seed to be ahead, and the second seed already is not. The next step is more training on the larger text, with a recipe whose seeds land in the same place. GPU time cost about $15.
 
 References #3407
