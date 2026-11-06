@@ -4,8 +4,10 @@ Run ID: `cpu-training-pilot-content-branch-endpoint-2026-11-06`
 
 ## Status
 
-TEST FITNESS: FIT. Pre-run GO recorded at implementation `75a126c97`; seed 2785
-and the output root remain absent.
+Complete as **REJECT**. FIT/GO were recorded at `75a126c97`. Top-8 made 48
+endpoint stops per artifact and reduced premature BOS, but only 175/208 of 437
+rows completed and exact/body stayed at the boundary values of 14 and 936/933.
+The shuffled guard also made 14 exact replies. Repeats were identical.
 
 ## Question
 
