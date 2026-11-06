@@ -358,13 +358,14 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
     const cleared = [];
     let aborts = 0;
     const toast = (text, tone) => notices.push({ text, tone });
+    const abortForLocalSource = await pageFunction('function abortApiForLocalSource(', 'abortApiForLocalSource', { app });
     const handler = await pageFunction('function onModelSourceChanged(', 'onModelSourceChanged', {
         app,
         ModelSources: api,
         toast,
         window: { performance: { now: () => 0 } },
         performance: { now: () => 0 },
-        abortApiForLocalSource() { aborts += 1; },
+        abortApiForLocalSource() { aborts += 1; abortForLocalSource(); },
         clearWorkerModel() { cleared.push(true); app.caps = null; app.readyLoadId = null; },
         setModelStatus() {},
         updatePrivacyStatus() {},
@@ -559,7 +560,10 @@ test('removing the active API during generation fails closed', async () => {
     harness.api.setActive({ kind: 'api', id: entry.id });
     assert.equal(app.mode, 'api');
     app.generating = true;
+    app.activeGenerationKind = 'api';
+    app.abortController = new AbortController();
     harness.api.removeApi(entry.id);
+    assert.equal(app.abortController.signal.aborted, true);
     assert.equal(page.aborts, 1);
     assert.equal(app.mode, 'wasm');
     assert.equal(app.apiConfig, null);
@@ -734,4 +738,24 @@ test('a stale bundled rejection after a newer source does not toast', async () =
     bundled.reject(new Error('older source failed'));
     await assert.rejects(bundledLoad, /older source failed/);
     assert.deepEqual(notices, []);
+});
+
+test('a stop-generation load rejection restores the healthy ready model and ignores the stale load', async () => {
+    const app = { currentLoadId: 8, readyLoadId: 7, caps: { schema: 'healthy' }, workerState: 'loading', generating: true, activeGenerationKind: 'wasm' };
+    const notices = [];
+    const onWorkerMessage = await pageFunction('function onWorkerMessage(', 'onWorkerMessage', {
+        app,
+        toast(text, tone) { notices.push({ text, tone }); },
+        updateComposerState() {},
+    });
+    onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: 8, error: 'Stop generation before loading a stack artifact.' } });
+    assert.equal(app.currentLoadId, 7);
+    assert.equal(app.readyLoadId, 7);
+    assert.equal(app.workerState, 'ready');
+    assert.deepEqual(notices, [{ text: 'Stop generation before loading a stack artifact.', tone: 'warn' }]);
+    const ready = !(app.workerState !== 'ready' || (app.currentLoadId !== undefined && app.readyLoadId !== app.currentLoadId));
+    assert.equal(ready, true);
+    onWorkerMessage({ data: { action: 'model_loaded', id: 8, capabilities: { file_name: 'stale.lut', artifact_sha256: '0'.repeat(64) } } });
+    assert.deepEqual(app.caps, { schema: 'healthy' });
+    assert.equal(app.readyLoadId, 7);
 });

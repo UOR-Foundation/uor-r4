@@ -121,7 +121,12 @@ export function createDesktopOpenAI({ invoke, Channel, maxQueueBytes = DEFAULT_M
         if (parsed.pathname !== '/v1/chat/completions') {
             throw new Error('Unsupported desktop OpenAI endpoint: ' + parsed.pathname);
         }
-        const exact = await invoke('native_exact_arithmetic', { request: String(init.body || '{}') });
+        let exact = null;
+        try {
+            exact = await invoke('native_exact_arithmetic', { request: String(init.body || '{}') });
+        } catch (_error) {
+            exact = null;
+        }
         if (exact?.handled) {
             if (exact.error) {
                 return jsonResponse({ error: { message: String(exact.error), type: 'invalid_request_error' } }, 400);

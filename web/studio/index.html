@@ -1422,7 +1422,14 @@
                 if (message.operation === 'load_model' && typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var workerError = String(message.error || 'Operation failed.');
                 if (message.operation === 'load_model' && /Stop generation before loading/.test(workerError)) {
-                    app.workerState = app.caps ? 'ready' : 'error';
+                    if (app.caps) {
+                        app.workerState = 'ready';
+                        if (app.readyLoadId !== null && app.readyLoadId !== undefined) {
+                            app.currentLoadId = app.readyLoadId;
+                        }
+                    } else {
+                        app.workerState = 'error';
+                    }
                     toast(workerError, 'warn');
                     updateComposerState();
                     return;

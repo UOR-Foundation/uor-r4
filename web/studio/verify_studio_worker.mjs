@@ -721,6 +721,59 @@ for (const [index, prompt] of ['24/7 support', '1/2 cup', '50-12', '11-05-2026',
     assert(closed.action === 'session_reset', `review27 ordinary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
+for (const [index, [prompt, result]] of [
+    ['What is 10 - 2?', '8'],
+    ['What is 100 - 20?', '80'],
+    ['What is 50 - 12,', '38'],
+    ['What is 50 - 12 please', '38'],
+].entries()) {
+    const id = `gen_final_review_exact_${index}`;
+    const conversationId = `conv_final_review_exact_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const exact = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(exact.action === 'generate_complete' && exact.fullText.startsWith(`${result}\n`) && exact.tokenCount === 0, `final-review arithmetic must compute exactly (${prompt}): ${JSON.stringify(exact)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `final-review arithmetic emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `final-review exact conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of ['What is 17 - 25?', 'What is 17 - 25,', 'What is 10 - 20?', 'What is 50 - 12 + 1'].entries()) {
+    const id = `gen_final_review_boundary_${index}`;
+    const conversationId = `conv_final_review_boundary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const boundary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    const underflow = prompt.includes('17 - 25') || prompt === 'What is 10 - 20?';
+    assert(boundary.action === 'generate_error' && (underflow ? /underflow/i.test(boundary.error) : boundary.error.includes('exact arithmetic')), `final-review arithmetic boundary must fail explicitly (${prompt}): ${JSON.stringify(boundary)}`);
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `final-review arithmetic boundary emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `final-review boundary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes', '5 pm - 6 pm?', '9am - 5pm?', '5:00 PM - 6:00 PM?', '+1-800-555-0100?'].entries()) {
+    const id = `gen_final_review_ordinary_${index}`;
+    const conversationId = `conv_final_review_ordinary_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `ordinary final-review prose must use the ordinary model path (${prompt}): ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `final-review ordinary conversation did not close: ${JSON.stringify(closed)}`);
+}
+
 const staleLoad = sendToWorker({
     action: 'load_model',
     id: 101,

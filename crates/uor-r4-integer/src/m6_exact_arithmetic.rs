@@ -1035,6 +1035,7 @@ fn exact_tool_time_atom(text: &str) -> bool {
 }
 
 fn exact_tool_is_time_range(rest: &str) -> bool {
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     let fields: Vec<&str> = rest.split(" - ").collect();
     fields.len() == 2
         && exact_tool_time_atom(fields[0].trim())
@@ -1042,6 +1043,7 @@ fn exact_tool_is_time_range(rest: &str) -> bool {
 }
 
 fn exact_tool_is_signed_telephone(rest: &str) -> bool {
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     let Some(tail) = rest.strip_prefix('+') else {
         return false;
     };
@@ -1279,6 +1281,33 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
     })
 }
 
+fn exact_tool_numeric_range(expression: &str, has_prefix: bool) -> bool {
+    if has_prefix {
+        return false;
+    }
+    let fields: Vec<&str> = expression.split_whitespace().collect();
+    if fields.len() != 3 || fields[1] != "-" {
+        return false;
+    }
+    if !fields[0].chars().all(|c| c.is_ascii_digit())
+        || !fields[2].chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    let (Ok(left), Ok(right)) = (fields[0].parse::<u64>(), fields[2].parse::<u64>()) else {
+        return false;
+    };
+    left < right
+}
+
+fn exact_tool_binary_expression(expression: &str) -> bool {
+    let fields: Vec<&str> = expression.split_whitespace().collect();
+    fields.len() == 3
+        && fields[0].chars().all(|c| c.is_ascii_digit())
+        && matches!(fields[1], "+" | "-")
+        && fields[2].chars().all(|c| c.is_ascii_digit())
+}
+
 fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator, u64)>> {
     let trimmed = prompt.trim();
     if trimmed.is_empty() {
@@ -1329,16 +1358,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         && raw_suffix
             .chars()
             .all(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'))
+        && exact_tool_numeric_range(expression, has_prefix)
     {
-        let fields: Vec<&str> = expression.split_whitespace().collect();
-        if fields.len() == 3
-            && fields[0].chars().all(|c| c.is_ascii_digit())
-            && fields[1] == "-"
-            && fields[2].chars().all(|c| c.is_ascii_digit())
-            && fields[0] < fields[2]
-        {
-            return Ok(None);
-        }
+        return Ok(None);
     }
     let mut suffix = raw_suffix;
     if suffix.starts_with(|c| matches!(c, '?' | '.' | '!')) {
@@ -1355,9 +1377,8 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "please show your work",
         ]
         .contains(&normalized_suffix.as_str());
+    let mut prose_arithmetic = false;
     if unsupported_suffix {
-        let fields: Vec<&str> = expression.split_whitespace().collect();
-        let unit_text = !suffix.is_empty();
         let continued_arithmetic = suffix.chars().any(|c| {
             c.is_ascii_digit()
                 || matches!(
@@ -1365,14 +1386,11 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
                     '+' | '-' | '*' | '^' | '&' | '|' | '=' | '<' | '>' | '~' | '−'
                 )
         });
-        let numeric_range_prose = fields.len() == 3
-            && fields[0].chars().all(|c| c.is_ascii_digit())
-            && fields[1] == "-"
-            && fields[2].chars().all(|c| c.is_ascii_digit())
-            && unit_text
-            && !continued_arithmetic;
-        if numeric_range_prose {
-            return Ok(None);
+        if !continued_arithmetic {
+            if exact_tool_numeric_range(expression, has_prefix) {
+                return Ok(None);
+            }
+            prose_arithmetic = exact_tool_binary_expression(expression);
         }
     }
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
@@ -1384,7 +1402,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         }
         return Ok(None);
     }
-    if unsupported_suffix {
+    if unsupported_suffix && !prose_arithmetic {
         if exact_tool_arithmetic_shaped(rest) {
             return Err(invalid(
                 "exact arithmetic supports only one unsigned decimal + or - expression",
@@ -2270,6 +2288,51 @@ mod tests {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
                 "ordinary ratio/date/telephone prose was intercepted: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_range_and_punctuation_regressions() {
+        let answer = |prompt: &str| {
+            exact_arithmetic_tool(prompt)
+                .unwrap_or_else(|| panic!("tool did not recognize {prompt}"))
+                .unwrap_or_else(|error| panic!("tool errored for {prompt}: {error}"))
+                .result
+        };
+        assert_eq!(answer("What is 10 - 2?"), "8");
+        assert_eq!(answer("What is 100 - 20?"), "80");
+        assert_eq!(answer("What is 50 - 12,"), "38");
+        assert_eq!(answer("What is 50 - 12 please"), "38");
+        assert_eq!(
+            answer("What is 50 - 12? Answer with the number first."),
+            "38"
+        );
+        for prompt in [
+            "What is 17 - 25?",
+            "What is 17 - 25,",
+            "What is 10 - 20?",
+            "What is 50 - 12 + 1",
+            "10 - 20 minutes + 3",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("final-review arithmetic boundary should be recognized")
+                    .is_err(),
+                "final-review arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for prompt in [
+            "10 - 20?",
+            "10 - 20 minutes",
+            "5 pm - 6 pm?",
+            "9am - 5pm?",
+            "5:00 PM - 6:00 PM?",
+            "+1-800-555-0100?",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary final-review prose was intercepted: {prompt}"
             );
         }
     }

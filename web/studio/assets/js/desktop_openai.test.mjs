@@ -212,3 +212,36 @@ test('desktop exact arithmetic propagates unsupported signed forms as explicit e
     const body = await response.json();
     assert.match(body.error.message, /supports only one unsigned decimal/);
 });
+
+test('a rejected exact-arithmetic probe continues through the ordinary sidecar stream', async () => {
+    const calls = [];
+    const { fetch } = createDesktopOpenAI({
+        invoke: async (command, args) => {
+            calls.push(command);
+            if (command === 'native_exact_arithmetic') throw new Error('probe unavailable');
+            if (command === 'host_cancel_chat') return {};
+            if (command !== 'native_chat_completions') throw new Error('unexpected ' + command);
+            args.onEvent.emit({
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+                bodyChunk: Array.from(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hello"}}]}\r\n\r\n')),
+                terminal: false,
+            });
+            args.onEvent.emit({
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' },
+                bodyChunk: Array.from(new TextEncoder().encode('data: [DONE]\r\n\r\n')),
+                terminal: true,
+            });
+            return { status: 200, headers: { 'content-type': 'text/event-stream' } };
+        },
+        Channel: TestChannel,
+    });
+    const response = await fetch('/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'uor-chat', stream: true }) });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/event-stream/);
+    const text = await response.text();
+    assert.match(text, /hello/);
+    assert.match(text, /\[DONE\]/);
+    assert.deepEqual(calls, ['native_exact_arithmetic', 'native_chat_completions']);
+});
