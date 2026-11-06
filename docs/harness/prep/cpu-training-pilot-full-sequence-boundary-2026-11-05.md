@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-full-sequence-boundary-2026-11-05`
 
 ## Status
 
-ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2 IS RELEASED TO RUN with
-`TEST FITNESS: FIT` at `5fb6700fa` and D67 GO.
+ATTEMPT 1 STOPPED AS `CONTROL_FAULT`; ATTEMPT 2'S FIRST INVOCATION HAD A
+SHELL-WRAPPER FAULT AND NO PANEL WAS CREATED. The corrected runner is pending
+renewed FIT and GO.
 
 Attempt 1 built the pinned source and generator, then stopped at TRAIN
 preflight before generating seed 2775. Full and reply-only boundaries made the
@@ -267,6 +268,19 @@ after opening seed 2775.
   `29f8df161bcc21475d7f7a3e15312a118c0f441549d99381bf4252ccf9920469`;
 - seed 2775 and `panels/dd-2775` were not created.
 
+## Attempt 2 invocation fault
+
+- source, input, artifact, tokenizer and generator pins passed;
+- `/usr/bin/time` was invoked outside the shell helper and could not execute
+  `run_limited`; the command exited 127 before any build, preflight or panel;
+- no seed-2775 file was created;
+- the empty scaffold was preserved at
+  `local/deepseek/full-sequence-boundary/2026-11-05-attempt-2-invocation-fault`,
+  whose `SHA256SUMS` has SHA-256
+  `b4a9e236e87f26d2b5ee2bf196f788259f13661fe319f42bf5491d8bc8f89674`;
+- attempt 2 now invokes `run_limited /usr/bin/time ...`, so the global timeout
+  wraps the measured command.
+
 ## R12 authority
 
 1. **What is measured:** paired complete replies under fixed selectors.
@@ -363,12 +377,12 @@ check_rss() {
 }
 
 cd "$SOURCE"
-/usr/bin/time -v -o "$OUT/build.time.txt" \
-  run_limited env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
+run_limited /usr/bin/time -v -o "$OUT/build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$BUILD" \
   cargo build --locked --release -p uor-r4-cpu-train --bin cpu-copy-full-boundary
 check_rss "$OUT/build.time.txt" 4194304
-/usr/bin/time -v -o "$OUT/generator-build.time.txt" \
-  run_limited env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
+run_limited /usr/bin/time -v -o "$OUT/generator-build.time.txt" \
+  env CARGO_BUILD_JOBS=16 CARGO_TARGET_DIR="$GEN_TARGET" \
   cargo build --locked \
   --manifest-path "$SOURCE/docs/labs/one-model-end-to-end/instrument/Cargo.toml" \
   --features panel-writer --bin heldout-panel
@@ -380,8 +394,8 @@ TRAIN_TOKENS_SHA=$(sha256sum "$TRAIN/tokens.u16" | cut -d ' ' -f1)
 TRAIN_MASK_SHA=$(sha256sum "$TRAIN/response_mask.u8" | cut -d ' ' -f1)
 TRAIN_MANIFEST_SHA=$(sha256sum "$TRAIN/manifest.json" | cut -d ' ' -f1)
 
-/usr/bin/time -v -o "$OUT/reports/train-preflight.time.txt" \
-  run_limited env RAYON_NUM_THREADS=32 "$BIN" \
+run_limited /usr/bin/time -v -o "$OUT/reports/train-preflight.time.txt" \
+  env RAYON_NUM_THREADS=32 "$BIN" \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$SEED1" \
@@ -417,8 +431,8 @@ jq -e '
   and .arms.content_full_boundary.reading.full_boundary_stops > 0
 ' "$OUT/reports/train-preflight.json" >/dev/null
 
-/usr/bin/time -v -o "$OUT/panel.time.txt" \
-  run_limited "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
+run_limited /usr/bin/time -v -o "$OUT/panel.time.txt" \
+  "$GEN" out="$PANEL" tokenizer="$TOKENIZER" \
   cell=dev,dev conversations=128 seed=2775 protocol=2 \
   >"$OUT/panel.stdout.json"
 check_rss "$OUT/panel.time.txt" 2097152
@@ -435,8 +449,8 @@ PANEL_MANIFEST_SHA=$(sha256sum "$PANEL/manifest.json" | cut -d ' ' -f1)
 
 run() {
   name=$1 artifact=$2 expected=$3
-  /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
-    run_limited env RAYON_NUM_THREADS=32 "$BIN" \
+  run_limited /usr/bin/time -v -o "$OUT/reports/$name.time.txt" \
+    env RAYON_NUM_THREADS=32 "$BIN" \
     "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
     "$PANEL/tokens.u16" "$PANEL/response_mask.u8" "$PANEL/manifest.json" \
     "$artifact" \
@@ -509,23 +523,9 @@ selectors or bars.
 
 ## TEST FITNESS
 
-TEST FITNESS: FIT - M2 #2030 full-sequence reply boundary attempt 2
-
-reviewer: `full_boundary_attempt2_final_fit`
-date: 2026-11-05
-head: `5fb6700fabe38604bb77f3bfd1ec34597c16e5f1`
-note: Preflight correction, fresh per-artifact non-vacuity gates, compressed
-evidence on every exit, global 30-minute deadline, unchanged source and absent
-seed were verified.
+TEST FITNESS: PENDING
 
 ## D67 pre-run review
 
-D67 PRE-RUN: GO - registration head
-`1e1ce657502622d47c021d770e7a65af64de114e`.
-
-reviewer: `full_boundary_attempt2_final_go`
-date: 2026-11-05
-note: Source remained at FIT head `5fb6700fa`; pins, compact failure evidence,
-global deadline, fallback report compression, evaluation gates and isolation
-were verified. Attempt-2 root and seed 2775 were absent.
+D67 PRE-RUN: PENDING
 
