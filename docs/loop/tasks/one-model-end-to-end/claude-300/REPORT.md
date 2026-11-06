@@ -15,7 +15,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **`--micro-batch M`** for `train-in-space` (`LongConfig::micro_batch`; 0 is off and left out of `config.json`). `run_long` refuses an M that does not divide `--batch`.
 - **`step_gradient`** runs a training step's windows forward and backward M at a time.
   - Each forward's loss is scaled by its share nᵢ/N of the step's scored rows, so the summed gradient is the whole batch's. One forward of the whole batch is left unscaled, so a run without the flag takes the same steps as before.
-  - `add_grads` sums the forwards' gradients. Candle keeps only the variables' gradients after a backward, so no activation outlives its forward.
+  - `add_grads` sums the forwards' gradients. Candle keeps only the variables' gradients after a backward, so no forward's activations should be held past its backward. No run here measured peak memory; the next sheet's smoke gates on it.
   - The reported loss is the forwards' weighted sum, which equals the whole batch's mean.
 - **Each forward's turn-memory rows, reply rows and cut mask** are built before the step's clock starts, as they were before this unit. Each row is indexed at its window's place in its own forward. Memory dropout draws keep the window's place in the whole batch.
 - `docs/loop/tasks/one-model-end-to-end/claude-300/`: the ORDER and this REPORT.
@@ -32,6 +32,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Checks run at the head
 
+- **The laptop checks below** ran in the session. Their output was not saved except for the CPU suite, which was rerun at `0029e153` into the main checkout's `local/claude/claude-300/cpu-tests-0029e153.out` (the crates are unchanged since).
 - **CPU:** `cargo test -p uor-r4-float-train --lib --bins` passes: 283 library tests, plus every binary's tests.
   - `a_micro_batch_is_refused_unless_it_divides_the_batch_and_is_written_only_when_set`.
   - `each_micro_batch_names_the_whole_batchs_rows_at_its_own_place`: a batch of four shuffled windows, with one dropped, split into micro-batches of 1, 2 and 4. Shifted back by their forward's start, each micro-batch's opening and reply rows are the whole batch's.
@@ -57,6 +58,6 @@ None.
 
 ## Plain summary
 
-The trainer can now build one large batch out of several small ones. It runs each small batch through the model, adds up their corrections, and makes one update. The memory need is that of the small batch, so the batch-64 test that ran out of memory last time can now run on the same card. A test on the graphics card shows the small batches give the same update as the large one. It fails, as it should, when the small batches are counted the wrong way.
+The trainer can now build one large batch out of several small ones. It runs each small batch through the model, adds up their corrections, and makes one update. Only one small batch's working memory should be held at a time, so the batch-64 test that ran out of memory last time should fit on the same card. That is not measured yet; the next test checks it before it trains. A test on the graphics card shows the small batches give the same update as the large one. It fails, as it should, when the small batches are counted the wrong way.
 
 References #3407.
