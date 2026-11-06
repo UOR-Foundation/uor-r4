@@ -51,13 +51,13 @@ unchanged.
 
 - base: `5ed64d3ca`;
 - implementation commit:
-  `53b0295a4eba400e0657479edd9cada8fb39c1cd`;
+  `b1f4218513546bdadedf54374c2613e56fb56347`;
 - `Cargo.toml` SHA-256:
   `92386d60bd97535fa65d1e702ab106c206ce4dfff79917d7a92be72b450d4f3f`;
 - `lib.rs` SHA-256:
   `2de49bbe965a16e3c96832e224ba4ec77512b5f0cf769755562e24cf9850aff3`;
 - `full_sequence_boundary.rs` SHA-256:
-  `59d7af21d1551b6d6ab1d1ae3dc970b9980b9568375f4bd2b25233a1569b5c9b`;
+  `5a78d92ead446b979fbd54c673b8d7c3c08d530859802714199699453d54a3ad`;
 - `cpu-copy-full-boundary.rs` SHA-256:
   `74271a97fb09ad17e2c0fd07bc1b66515399d7578bf2e071b0741377b3bf4a0f`;
 - `suffix_memory.rs` SHA-256:
@@ -264,7 +264,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/full-sequence-boundary
 GEN_TARGET=$SOURCE/target/deepseek/full-sequence-boundary-generator
-IMPL=53b0295a4eba400e0657479edd9cada8fb39c1cd
+IMPL=b1f4218513546bdadedf54374c2613e56fb56347
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 
 test ! -e "$OUT"
@@ -281,7 +281,7 @@ printf '%s  %s\n' \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
   92386d60bd97535fa65d1e702ab106c206ce4dfff79917d7a92be72b450d4f3f "$SOURCE/crates/uor-r4-cpu-train/Cargo.toml" \
   2de49bbe965a16e3c96832e224ba4ec77512b5f0cf769755562e24cf9850aff3 "$SOURCE/crates/uor-r4-cpu-train/src/lib.rs" \
-  59d7af21d1551b6d6ab1d1ae3dc970b9980b9568375f4bd2b25233a1569b5c9b "$SOURCE/crates/uor-r4-cpu-train/src/full_sequence_boundary.rs" \
+  5a78d92ead446b979fbd54c673b8d7c3c08d530859802714199699453d54a3ad "$SOURCE/crates/uor-r4-cpu-train/src/full_sequence_boundary.rs" \
   74271a97fb09ad17e2c0fd07bc1b66515399d7578bf2e071b0741377b3bf4a0f "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-full-boundary.rs" \
   7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   2138e1b05d833beb9f8b2ff3bb93024df1cb7cf1aa5663aad665a0384a8f119b "$SOURCE/crates/uor-r4-cpu-train/src/reply_boundary.rs" \
