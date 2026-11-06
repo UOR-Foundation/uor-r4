@@ -1,50 +1,63 @@
 # ORDER: one-model-end-to-end, claude-296
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `5fc76143d`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `5fc76143d`.
 
 ## Goal
 
-The item's done-when reads:
+Casey's one track (#2028 6675163438, 6 Nov 2026, "Yes, one track"): every claude unit goes to making the trunk learn human-written text. The bar is no-memory top-1 that beats its TRAIN's unigram and its T2 on the human held-out panel, beyond the paired band.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+This unit classifies claude-295's flat loss on human text, instrument before mechanism (§4.2). It follows the prep sheet [`one-model-end-to-end-human-text-2026-11-06`](../../../../harness/prep/one-model-end-to-end-human-text-2026-11-06.md), FIT in round 2. The arms are at (256, D1), seeds 1 and 2, against claude-295's sealed control:
+- (m1), fixed targets: `--train-targets mode:1`;
+- (lr3): `--lr 0.003`;
+- (near): `--objective nearest`.
+
+It serves the item's done-when 3. The model to ship has to learn human text before its protocol can score it.
+
+## Claim check
+
+- **(a) The step.** This is step 2 of the one track's order: "finish claude-295 fast; the classification unit (claude-296, one-model-end-to-end); whatever it finds, until the bar is met". claude-295 merged as `9e2c0125bac53f92900cf62762dd3f4cd67ff5ae` (#3750).
+- **(b) What it changes in the model.** It finds out whether the trunk learns human text when each context has a single target, and whether the learning rate or the objective moves the flat loss. The answer names the next change to the recipe of the model the project ships.
 
 ## Cancel probe (run first)
 
-To fill in.
+Run at 04:29Z on 6 Nov, before any code. Class: instrument.
+
+1. **No hold.**
+   - There is no `local/loop/STOP`, and #2028 has no `loop:pause` label (`loop next`: kill switch off).
+   - #3407's last four comments are claude-281's two notes and DeepSeek's two copy-key notes, none of them a hold.
+2. **The inputs are in the store.**
+   - D1 is in `results/claude/scale-probe-2026-11-05/inputs/d1` (tokens 13.4 MB, mask 6.7 MB, manifest).
+   - The control's sealed runs are in `runs/A` (`scale-probe-A.tar.gz`, `SHA256SUMS`).
+   - The control's grades `grade/w256-d1-s{1,2}` and its no-memory rows are on the laptop, from claude-295.
+3. **The caps:** `uor-pod status` shows 0 pods running, $0/h of $8/h, and 16 RTX 5090 offers from $0.563/h.
+4. **The trainer is unchanged since claude-295's pin:** `crates/uor-r4-float-train/` has no diff from `e052abf41` at the base. So the control and the arms run the same code, apart from the new flag.
+
+Result: GO.
+
+## Done when
+
+1. **The code.**
+   - `--train-targets observed|mode:K` (K from 1 to 4), with its refusals, the I-m print and the sheet's unit tests.
+   - Green on the laptop: the crate's tests and a stub-CUDA `cargo check`, with a negative gate for the `mode:1`-equals-brute-force-T2 test.
+2. **The sheet** is at `docs/harness/prep/`, and its FIT is posted on #3407.
+3. **The D67 pre-run review** of the job and watch scripts passes in a fresh context and is posted on #3407 before the pod goes up.
+4. **The runs.** The six runs, or the stop rule's NOT_RUNs, are sealed under `results/claude/one-model-end-to-end-human-text-2026-11-06/` with a `SHA256SUMS` that was read back. The pod is down.
+5. **The REPORT** gives:
+   - training positions a second first;
+   - Q1 and Q2 by the sheet's Bar;
+   - I-0 to I-5 and I-m;
+   - one row in `docs/research/notebook/float-training.md`.
+
+   The item stays `ready`, and the REPORT says `References #3407`.
+
+## Stop and ask if
+
+"Ask" means decide, record it here and in the REPORT, and go on; nothing waits.
+- **The sheet's stop rule:** I-0, I-3 or I-m failing stops everything. A failed arm is NOT_RUN at its failing step. Side by side out of memory goes back to one at a time.
+- **The cap:** $3 and 4 hours. Arms still running at the cap are NOT_RUN.
+- **A watcher's time or spend stop fires on a healthy run:** extend it and renew the lease; never cancel it.
+- **Casey says "hold":** no further launches, and nothing is named or closed.
+- **The laptop's free disk falls under 5 GiB:** downloads pause until my own store-sealed copies are cleared.
 
 ## Files in scope
 
@@ -71,11 +84,3 @@ To fill in.
 - `crates/uor-r4-training/Cargo.toml`
 - `crates/uor-r4-integer/src/bin/fbs-toks.rs`
 - `crates/uor-r4-training/src/milestone_world_v2.rs`
-
-## Done when
-
-To fill in.
-
-## Stop and ask if
-
-To fill in.
