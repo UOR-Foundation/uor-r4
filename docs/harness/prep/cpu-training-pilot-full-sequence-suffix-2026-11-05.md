@@ -2,6 +2,16 @@
 
 Run ID: `cpu-training-pilot-full-sequence-suffix-2026-11-05`
 
+## Status
+
+COMPLETE - REJECT under the combined pre-registered bar, with a positive
+content result. Full-sequence depth arbitration raised exact replies from
+0/0 to 17/17 and body positions from 578/578 to 847/844 on artifact seeds 1
+and 2, while the unchanged boundary made 85/104 premature stops against the
+four-stop ceiling. Content is promoted as a promising configuration; the
+combined decode is not. Record:
+[deepseek-198](../../loop/tasks/cpu-training-pilot/deepseek-198/REPORT.md).
+
 ## Question
 
 Can reply-target suffix memory trained over full prompt-plus-reply histories
