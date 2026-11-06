@@ -1359,6 +1359,19 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         suffix = suffix[1..].trim_start();
     }
     suffix = suffix.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' '));
+    let continued_arithmetic = suffix.chars().any(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '+' | '-' | '*' | '^' | '&' | '|' | '=' | '<' | '>' | '~' | '−'
+            )
+    });
+    if !suffix.is_empty()
+        && !continued_arithmetic
+        && exact_tool_numeric_range(expression, has_prefix)
+    {
+        return Ok(None);
+    }
     let normalized_suffix = suffix.to_ascii_lowercase();
     let unsupported_suffix = !normalized_suffix.is_empty()
         && ![
@@ -1370,18 +1383,6 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             "please",
         ]
         .contains(&normalized_suffix.as_str());
-    if unsupported_suffix {
-        let continued_arithmetic = suffix.chars().any(|c| {
-            c.is_ascii_digit()
-                || matches!(
-                    c,
-                    '+' | '-' | '*' | '^' | '&' | '|' | '=' | '<' | '>' | '~' | '−'
-                )
-        });
-        if !continued_arithmetic && exact_tool_numeric_range(expression, has_prefix) {
-            return Ok(None);
-        }
-    }
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
         let trailing_operator = expression.trim_end().ends_with(|c| matches!(c, '+' | '-'));
         if exact_tool_arithmetic_shaped(rest) || (!unsupported_suffix && trailing_operator) {
@@ -2356,6 +2357,22 @@ mod tests {
                     .expect("false-answer arithmetic boundary should be recognized")
                     .is_err(),
                 "false-answer arithmetic request returned an exact answer: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_supported_suffix_range_regressions() {
+        for prompt in [
+            "10 - 20 please",
+            "10 - 20, please",
+            "10 - 20, show your work",
+            "10 - 20, answer with the number first",
+            "10 - 20, please show your work",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "no-prefix range with a supported suffix was intercepted: {prompt}"
             );
         }
     }

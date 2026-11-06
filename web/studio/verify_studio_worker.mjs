@@ -790,16 +790,17 @@ for (const [index, prompt] of ['What is 20 + 5 %', 'What is 20 + 5 / two', 'What
     assert(closed.action === 'session_reset', `false-answer conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes'].entries()) {
+for (const [index, prompt] of ['10 - 20?', '10 - 20 minutes', '10 - 20 please', '10 - 20, please', '10 - 20, show your work', '10 - 20, answer with the number first', '10 - 20, please show your work'].entries()) {
     const id = `gen_final_review_ordinary_${index}`;
     const conversationId = `conv_final_review_ordinary_${index}`;
+    const expectedTokens = prompt.includes('answer with the number first') ? 8 : 32;
     await sendToWorker({
         action: 'generate',
         id,
-        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: expectedTokens } },
     });
     const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
-    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `ordinary final-review prose must use the ordinary model path (${prompt}): ${JSON.stringify(ordinary)}`);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === expectedTokens, `ordinary final-review prose must use the ordinary model path (${prompt}): ${JSON.stringify(ordinary)}`);
     await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
     const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
     assert(closed.action === 'session_reset', `final-review ordinary conversation did not close: ${JSON.stringify(closed)}`);

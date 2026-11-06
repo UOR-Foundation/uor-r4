@@ -1118,6 +1118,11 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
     for prompt in [
         "10 - 20?",
         "10 - 20 minutes",
+        "10 - 20 please",
+        "10 - 20, please",
+        "10 - 20, show your work",
+        "10 - 20, answer with the number first",
+        "10 - 20, please show your work",
         "5 pm - 6 pm?",
         "9am - 5pm?",
         "5:00 PM - 6:00 PM?",
