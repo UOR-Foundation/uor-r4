@@ -1202,19 +1202,67 @@ fn exact_tool_is_time_range(rest: &str) -> bool {
     false
 }
 
-fn exact_tool_is_signed_telephone(rest: &str) -> bool {
+fn exact_tool_phone_digits(text: &str, count: usize) -> Option<&str> {
+    let digits = text.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits != count {
+        return None;
+    }
+    Some(&text[count..])
+}
+
+fn exact_tool_phone_separator(text: &str) -> Option<&str> {
+    if let Some(rest) = text.strip_prefix('-') {
+        return Some(rest);
+    }
+    let spaces = text.chars().take_while(|c| matches!(c, ' ' | '\t')).count();
+    if spaces == 0 {
+        return None;
+    }
+    Some(&text[spaces..])
+}
+
+fn exact_tool_phone_area(text: &str) -> Option<&str> {
+    if let Some(rest) = text.strip_prefix('(') {
+        let after = exact_tool_phone_digits(rest, 3)?;
+        return after.strip_prefix(')');
+    }
+    exact_tool_phone_digits(text, 3)
+}
+
+fn exact_tool_phone_shape_matches(text: &str) -> bool {
+    let Some(after_area) = exact_tool_phone_area(text) else {
+        return false;
+    };
+    let Some(after_area_sep) = exact_tool_phone_separator(after_area) else {
+        return false;
+    };
+    let Some(after_exchange) = exact_tool_phone_digits(after_area_sep, 3) else {
+        return false;
+    };
+    let Some(after_exchange_sep) = exact_tool_phone_separator(after_exchange) else {
+        return false;
+    };
+    let Some(after_subscriber) = exact_tool_phone_digits(after_exchange_sep, 4) else {
+        return false;
+    };
+    after_subscriber.trim().is_empty()
+}
+
+fn exact_tool_is_phone_shape(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     let body = rest.strip_prefix('+').unwrap_or(rest);
-    if body.contains('+') || body.contains(" - ") || body.contains(" + ") || body.ends_with('-') {
+    if body.contains('+') {
         return false;
     }
-    let digit_count = body.chars().filter(|c| c.is_ascii_digit()).count();
-    let has_separator = body.chars().any(|c| matches!(c, '-' | '(' | ')'));
-    (7..=15).contains(&digit_count)
-        && has_separator
-        && body
-            .chars()
-            .all(|c| c.is_ascii_digit() || matches!(c, '-' | '(' | ')' | ' ' | '.'))
+    if exact_tool_phone_shape_matches(body) {
+        return true;
+    }
+    if let Some(after_country) = body.strip_prefix('1') {
+        if let Some(after_separator) = exact_tool_phone_separator(after_country) {
+            return exact_tool_phone_shape_matches(after_separator);
+        }
+    }
+    false
 }
 
 fn exact_tool_two_digits(bytes: &[u8], offset: usize) -> Option<u8> {
@@ -1530,7 +1578,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if !has_prefix && trimmed.starts_with(|c: char| c.is_ascii_alphabetic()) {
         return Ok(None);
     }
-    if exact_tool_is_signed_telephone(rest) {
+    if exact_tool_is_phone_shape(rest) {
         return Ok(None);
     }
     if exact_tool_is_time_range(rest) {
@@ -2624,6 +2672,9 @@ mod tests {
             "5 people attended - 3 left",
             "1 (800) 555-0100",
             "(800) 555-0100",
+            "1-800-555-0100",
+            "+1-800-555-0100",
+            "+1 800 555 0100",
         ]
         .into_iter()
         .filter(|prompt| exact_arithmetic_tool(prompt).is_some())
@@ -2647,6 +2698,20 @@ mod tests {
                 "prose-boundary arithmetic control fell through: {prompt}"
             );
         }
+        let wrongly_fell_through: Vec<&str> = [
+            "What is (1234567-8)?",
+            "(1234567-8)",
+            "1 (800) 555-0100 -2",
+            "(800) 555-0100 -2",
+            "5 people attended - 3 left + 2",
+        ]
+        .into_iter()
+        .filter(|prompt| exact_arithmetic_tool(prompt).is_none())
+        .collect();
+        assert!(
+            wrongly_fell_through.is_empty(),
+            "grouped or continued arithmetic fell through: {wrongly_fell_through:?}"
+        );
         assert!(
             exact_arithmetic_tool("5 - 3 left").is_some(),
             "5 - 3 left must remain tool-handled rather than prose"

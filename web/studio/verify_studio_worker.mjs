@@ -772,6 +772,24 @@ for (const [index, prompt] of ['5 pm - 6, then dinner', '12 - 1 pm, then lunch',
 const badProseBoundary = proseBoundary.filter(({ message }) => message.action !== 'generate_complete' || message.tokenCount !== 32);
 assert(badProseBoundary.length === 0, `prose boundary must use the ordinary model path: ${JSON.stringify(badProseBoundary)}`);
 
+const groupedArithmetic = [];
+for (const [index, prompt] of ['What is (1234567-8)?', '(1234567-8)', '1 (800) 555-0100 -2', '(800) 555-0100 -2', '5 people attended - 3 left + 2'].entries()) {
+    const id = `gen_final_review_grouped_${index}`;
+    const conversationId = `conv_final_review_grouped_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const result = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    groupedArithmetic.push({ prompt, message: result });
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `grouped arithmetic conversation did not close: ${JSON.stringify(closed)}`);
+}
+const badGroupedArithmetic = groupedArithmetic.filter(({ message }) => message.action !== 'generate_error');
+assert(badGroupedArithmetic.length === 0, `grouped/continued arithmetic must be explicit errors: ${JSON.stringify(badGroupedArithmetic)}`);
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;
