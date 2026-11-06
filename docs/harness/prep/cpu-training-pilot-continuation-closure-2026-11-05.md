@@ -4,8 +4,9 @@ Run ID: `cpu-training-pilot-continuation-closure-2026-11-05`
 
 ## Status
 
-RELEASED TO RUN - `TEST FITNESS: FIT` and D67 pre-run `GO` recorded. Seed
-2776, the panel and the output root were absent when GO was issued.
+COMPLETE - **REJECT**. Whole continuation was non-vacuous but tied tokenwise
+content on exact replies and still exceeded the premature-stop ceiling.
+Record: [deepseek-202](../../loop/tasks/cpu-training-pilot/deepseek-202/REPORT.md).
 
 This is D84 CPU development research. It is exact-memory evidence, not
 fresh-wording generalization, serving integration, useful chat or GPU
@@ -382,6 +383,27 @@ minutes; peak RSS above 2 GiB; retained evidence above 32 MiB; or any need to
 change serving, CUDA, float-training, exporter or Claude-owned source. Once
 seed 2776 is read, do not change closure depth, confidence, shuffle, selectors
 or bars.
+
+## Result
+
+- fresh panel seed 2776: 128 `dev,dev` protocol-2 conversations;
+- 449 reference-reachable replies per artifact;
+- table: 80,728 suffixes, 111,656 observations and 715,428 continuation
+  tokens;
+- shuffle: 79,384 changed continuation assignments with preserved census;
+- source closure: **17/17** exact, **71/64** premature, **682/678** body;
+- tokenwise content: **17/17** exact, **74/98** premature, **682/678** body;
+- closure only: **12/12** exact, **78/19** premature, **238/243** body;
+- shuffled closure: **0/0** exact, **18/18** premature, **602/598** body;
+- content no-boundary: **0/0** exact, **682/678** body;
+- content oracle: **30/30** exact, **682/678** body;
+- 187 closure rows were behaviorally displaced versus tokenwise or local;
+- 8/39 complete replies changed versus tokenwise;
+- all other-control change gates passed;
+- repeats matched after timing removal;
+- retained evidence is **10,045,094** bytes and sealed by `SHA256SUMS`
+  SHA-256
+  `899bbca44564d63705496103846096ec74f2698a2aaf859865afe9e7372d6669`.
 
 ## TEST FITNESS
 
