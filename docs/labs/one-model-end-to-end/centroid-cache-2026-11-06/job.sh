@@ -71,20 +71,34 @@ command -v timeout >/dev/null || die "timeout is not installed"
 [ -x "$STORE" ] || { [ -x /root/uor-store ] && STORE=/root/uor-store; }
 [ ! -e "$RUN" ] || die "refusing an existing run directory: $RUN"
 install -d "$RUN/download" "$RUN/seed" "$RUN/out" "$RUN/results"
-OUTPUT_CLAIMED=0
+OUTPUT_CLAIMED=1
 on_exit() {
   local rc=$?
-  if [ "$OUTPUT_CLAIMED" = 1 ] && [ "$rc" -ne 0 ] && [ -x "$STORE" ]; then
+  if [ "$rc" -ne 0 ]; then
     printf '%s\n' "$rc" > "$RUN/exit.code"
-    for file in job.log transfer.log store-list.err capture.stderr capture.stdout.jsonl \
-      binaries.sha256 gpu.txt selected-checkpoint.sha256 status.json \
-      results/cache.tar.zst.sha256 results/cache.SHA256SUMS exit.code; do
-      [ -f "$RUN/$file" ] || continue
-      destination=$file
-      [ "$file" = exit.code ] && destination=EXIT
-      timeout 20s "$STORE" put "$RUN/$file" "$OUT_STORE/failure/$destination" \
-        >/dev/null 2>&1 || true
-    done
+    failure_complete=1
+    if [ "$OUTPUT_CLAIMED" = 1 ] && [ -x "$STORE" ]; then
+      for file in job.log transfer.log store-list.err capture.stderr capture.stdout.jsonl \
+        binaries.sha256 gpu.txt selected-checkpoint.sha256 status.json \
+        results/cache.tar.zst.sha256 results/cache.SHA256SUMS exit.code; do
+        [ -f "$RUN/$file" ] || continue
+        destination=$file
+        [ "$file" = exit.code ] && destination=EXIT
+        if ! timeout 20s "$STORE" put "$RUN/$file" "$OUT_STORE/failure/$destination" \
+            >/dev/null 2>&1 ||
+          ! timeout 20s "$STORE" get "$OUT_STORE/failure/$destination" \
+            "$RUN/failure-readback" >/dev/null 2>&1 ||
+          ! cmp -s "$RUN/$file" "$RUN/failure-readback/$OUT_STORE/failure/$destination"; then
+          failure_complete=0
+        fi
+      done
+    else
+      failure_complete=0
+    fi
+    if [ "$failure_complete" != 1 ]; then
+      printf 'failure diagnostics were not fully uploaded and read back\n' \
+        > "$RUN/FAILURE_EVIDENCE_INCOMPLETE"
+    fi
   fi
   printf '%s\n' "$rc" > "$RUN/EXIT"
 }
@@ -94,9 +108,9 @@ trap on_exit EXIT
 store_listing=$("$STORE" ls results/deepseek/ 2>"$RUN/store-list.err") ||
   die "could not list the DeepSeek store namespace"
 if grep -F "  $OUT_STORE/" <<<"$store_listing" >/dev/null; then
+  OUTPUT_CLAIMED=0
   die "refusing an existing store output: $OUT_STORE"
 fi
-OUTPUT_CLAIMED=1
 
 [ -d "$REPO/.git" ] || die "missing repository at $REPO"
 command -v zstd >/dev/null || die "zstd is not installed"

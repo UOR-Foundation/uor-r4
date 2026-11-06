@@ -38,14 +38,18 @@ Base: `3a9c2f11d`.
 - The capture job now uses the verified source pin, the bootstrap's actual source path,
   a clean-tree check, a timestamp-plus-random immutable output id, a remote-collision
   check, 128 GiB initial headroom and phase-specific post-capture/readback checks.
-- One six-hour timeout now bounds the whole job: downloads, CUDA tests/build, capture,
-  sealing, upload and readback. It preserves failure logs and checks a visible RTX 5090.
+- The whole job has no self-set wall-clock cancellation: downloads, CUDA tests/build,
+  capture, sealing, upload and readback continue while healthy. The watcher renews the
+  lease and checks both the job's `EXIT` and the `uor-pod` wrapper's terminal record.
+- Failure diagnostics are uploaded and read back before `EXIT`; if that handoff is
+  incomplete, the pod is retained for inspection instead of being deleted.
+- The job checks a visible RTX 5090 and preserves all normal completion evidence.
 - The job records selected checkpoint hashes, CUDA tests, the scorer binary, the whole
-  cache and its manifest, uploads every evidence file, and reads each one back.
+  cache and its manifest, and reads every completed evidence set back.
 - The CPU evaluation commands now name the merged D84 evaluator, the required seed and
   checkpoint root, separate seed reports and their aggregate. The sheet includes exact
   checkpoint/cache restore, checksum, corpus-inventory, manifest and checkpoint-pin
-  checks plus CPU timeouts.
+  checks without a self-set CPU wall-clock cancellation.
 
 No training, optimizer, serving or existing scoring decision changed.
 
@@ -59,8 +63,8 @@ Expected capture scale from published pins:
 - TRAIN: 27,416,554 scored rows;
 - panel: 1,460,697 scored rows across four roots;
 - no-memory cache: about 29 GiB per seed before the seal;
-- proposed run: one RTX 5090 capture per seed, estimated 2-4 hours each, with the
-  package's hard wall and price caps.
+- proposed run: one RTX 5090 capture per seed, estimated 2-4 hours each, within the
+  package's price caps; the estimates are not stop rules.
 
 ## Checks run at the head
 

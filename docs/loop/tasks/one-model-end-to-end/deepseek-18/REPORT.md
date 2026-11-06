@@ -24,18 +24,20 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   transfer record now has a stable source file and is copied to the uploaded `store.log`
   only after the other readbacks finish.
 - **A failure could advertise `EXIT` before its diagnostics reached the store.** Failure
-  evidence is uploaded first and `store.log`/`EXIT` are the final records.
+  evidence is uploaded and read back first. A complete set is marked by `failure/EXIT`;
+  an incomplete set creates `FAILURE_EVIDENCE_INCOMPLETE` and the pod is retained.
 - **The first remote output was not immutable.** A second-resolution id could collide
   with an existing prefix, and `uor-store` updates files rather than replacing a folder.
   The id now has a random suffix and an existing remote prefix is refused.
-- **The first readback covered only the archive and its checksum.** Every uploaded cache,
-  log and status file is now read back and compared before the pod may be released.
+- **The first readback covered only the archive and its checksum.** Every evidence upload
+  needed for an accepted or failed result is now read back and compared before a pod may
+  be released.
 
 ## What changed
 
-- The sheet pins source `3a9c2f11d`, gives the two-pod lease/run sequence, requires a
-  reviewed script hash, watches both `EXIT` files, releases and takes both pods down
-  before testing their saved status, and explicitly leaves either existing busy pod
+- The sheet pins source `3a9c2f11d`, captures both pod ids from the reviewed lease
+  commands, owns teardown from the first successful `up`, and requires both the job
+  `EXIT` and the `uor-pod` wrapper's terminal record. It leaves either existing busy pod
   untouched.
 - The capture command uses `--query-cache-memory 0 --query-cache-dev 0`; its cache is
   exactly TRAIN plus `oasst2`, `wiki-00000`, `wiki-00020` and `wiki-00040`.
@@ -60,12 +62,13 @@ lease until the job finishes; at a $1.15/h ceiling, a four-hour pair projects $9
 
 `uor-harness prep-check` reports the sheet structurally complete and `PENDING`. The final
 job hash is
-`87cecbb4131bae3fd68b69d4dd98d063a1254361ed1ffcd1c03ddb69fff07b94`.
+`e999d28146855be3a68722d427c928e84d4588ba345e98301d88aa494c002682`.
 
 ## Checks run at the head
 
 - `bash -n` on the capture job: passed.
 - `shellcheck -x` on the capture job: passed.
+- `bash -n` and `shellcheck` on the sheet's lease/run block: passed.
 - `git diff --check`: passed.
 - `uor-harness loop report --check --order` for both deepseek-16 and deepseek-18:
   passed.

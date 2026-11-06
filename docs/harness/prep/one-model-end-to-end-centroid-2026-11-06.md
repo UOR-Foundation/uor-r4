@@ -91,13 +91,144 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
+JOB_SHA256=e999d28146855be3a68722d427c928e84d4588ba345e98301d88aa494c002682
+[ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
+  cut -d' ' -f1)" = "$JOB_SHA256" ] || {
+  echo "local capture script does not match the reviewed hash" >&2
+  exit 1
+}
+
+PODS=()
+SESSIONS=()
+RUN_DIRS=()
+STARTED=()
+FINISHED=()
+
+teardown_pod() {
+  local pod=$1 session=$2
+  scripts/pod/uor-pod release "$pod" --lab deepseek --session "$session" || true
+  scripts/pod/uor-pod down "$pod" --lab deepseek --session "$session" --confirm-archived
+}
+
+cleanup() {
+  local rc=$? i pod status
+  trap - EXIT
+  for i in "${!PODS[@]}"; do
+    pod=${PODS[$i]}
+    if [ "${STARTED[$i]}" = 1 ]; then
+      if [ "${FINISHED[$i]}" != 1 ]; then
+        echo "retaining $pod: job did not reach a verified terminal state" >&2
+        rc=1
+        continue
+      fi
+      status=$(scripts/pod/uor-pod ssh "$pod" \
+        "cat '${RUN_DIRS[$i]}/EXIT' 2>/dev/null || true") || status=
+      case $status in
+        0) ;;
+        ''|*[!0-9]*)
+          echo "retaining $pod: EXIT is missing or malformed" >&2
+          rc=1
+          continue
+          ;;
+        *)
+          if ! scripts/pod/uor-pod ssh "$pod" \
+            "test ! -e '${RUN_DIRS[$i]}/FAILURE_EVIDENCE_INCOMPLETE'"; then
+            echo "retaining $pod: failure evidence is incomplete" >&2
+            rc=1
+            continue
+          fi
+          ;;
+      esac
+    fi
+    teardown_pod "$pod" "${SESSIONS[$i]}" || rc=1
+  done
+  exit "$rc"
+}
+trap cleanup EXIT
+
+create_capture_pod() {
+  local session=$1 purpose=$2 output pod
+  output=$(scripts/pod/uor-pod up --lab deepseek --session "$session" --gpu 5090 \
+    --count 1 --hours 7 --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
+    --purpose "$purpose" 2>&1 | tee /dev/stderr) || return 1
+  pod=$(printf '%s\n' "$output" |
+    sed -n 's/^Pod \([^ ]*\) created;.*/\1/p' | tail -1)
+  [ -n "$pod" ] || {
+    echo "could not parse the pod id from uor-pod up" >&2
+    return 1
+  }
+  CREATED_POD=$pod
+}
+
+register_pod() {
+  PODS+=("$1")
+  SESSIONS+=("$2")
+  RUN_DIRS+=("/workspace/deepseek-centroid-cache-s$3")
+  STARTED+=(0)
+  FINISHED+=(0)
+}
+
+start_capture() {
+  local index=$1 pod=$2 session=$3 seed=$4 output log
+  STARTED[index]=1
+  output=$(scripts/pod/uor-pod run "$pod" --lab deepseek --session "$session" \
+    --gpu 0 -- bash /workspace/centroid-cache-job.sh "$seed" 2>&1 |
+    tee /dev/stderr) || return 1
+  log=$(printf '%s\n' "$output" |
+    sed -n 's/^Started on .* Log: //p' | tail -1)
+  [ -n "$log" ] || {
+    echo "could not parse the remote job log from uor-pod run" >&2
+    return 1
+  }
+  CAPTURE_RUN_LOG=$log
+}
+
+watch_capture() {
+  local pod=$1 seed=$2 session=$3 log=$4 now last=0 failures=0 probe
+  local exit_seen run_seen
+  while true; do
+    if probe=$(scripts/pod/uor-pod ssh "$pod" \
+      "e=0; g=0; test -f '/workspace/deepseek-centroid-cache-s$seed/EXIT' && e=1; test -f '$log' && grep -q '^# exit=' '$log' && g=1; printf '%s %s\n' \"\$e\" \"\$g\""); then
+      read -r exit_seen run_seen <<<"$probe"
+      failures=0
+      case "$exit_seen:$run_seen" in
+        1:1) return 0 ;;
+        0:1)
+          echo "$pod ended without writing EXIT" >&2
+          return 1
+          ;;
+        0:0|1:0) ;;
+        *)
+          echo "$pod returned an invalid watch state: $probe" >&2
+          return 1
+          ;;
+      esac
+    else
+      failures=$((failures + 1))
+      if [ "$failures" -ge 20 ]; then
+        echo "$pod was unreachable for 10 minutes" >&2
+        return 1
+      fi
+    fi
+    now=$(date +%s)
+    if [ $((now - last)) -ge 1500 ]; then
+      if ! scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7; then
+        echo "could not renew $pod" >&2
+        return 1
+      fi
+      last=$now
+    fi
+    sleep 30
+  done
+}
+
 scripts/pod/uor-pod status --du
-scripts/pod/uor-pod up --lab deepseek --session centroid-s1 --gpu 5090 --count 1 --hours 7 \
-  --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
-  --purpose "n3S centroid cache seed 1"
-scripts/pod/uor-pod up --lab deepseek --session centroid-s2 --gpu 5090 --count 1 --hours 7 \
-  --ref 3a9c2f11d26991a70a22f88758cfb4589a1cf14d \
-  --purpose "n3S centroid cache seed 2"
+create_capture_pod centroid-s1 "n3S centroid cache seed 1"
+POD1=$CREATED_POD
+register_pod "$POD1" centroid-s1 1
+create_capture_pod centroid-s2 "n3S centroid cache seed 2"
+POD2=$CREATED_POD
+register_pod "$POD2" centroid-s2 2
 
 # Copy the exact D67-reviewed script to each pod, then check its recorded SHA-256.
 scripts/pod/uor-pod ssh "$POD1" 'cat > /workspace/centroid-cache-job.sh' \
@@ -107,52 +238,35 @@ scripts/pod/uor-pod ssh "$POD2" 'cat > /workspace/centroid-cache-job.sh' \
 scripts/pod/uor-pod ssh "$POD1" "printf '%s  /workspace/centroid-cache-job.sh\n' '$JOB_SHA256' | sha256sum -c -"
 scripts/pod/uor-pod ssh "$POD2" "printf '%s  /workspace/centroid-cache-job.sh\n' '$JOB_SHA256' | sha256sum -c -"
 
-scripts/pod/uor-pod run "$POD1" --lab deepseek --session centroid-s1 --gpu 0 -- \
-  bash /workspace/centroid-cache-job.sh 1
-scripts/pod/uor-pod run "$POD2" --lab deepseek --session centroid-s2 --gpu 0 -- \
-  bash /workspace/centroid-cache-job.sh 2
+start_capture 0 "$POD1" centroid-s1 1
+RUN_LOG1=$CAPTURE_RUN_LOG
+start_capture 1 "$POD2" centroid-s2 2
+RUN_LOG2=$CAPTURE_RUN_LOG
 
-# Watch both jobs and renew each healthy lease every 25 minutes. The capture job
-# has no self-set wall-clock cancellation.
-watch_capture() {
-  local pod=$1 seed=$2 session=$3 now last=0
-  while true; do
-    if scripts/pod/uor-pod ssh "$pod" \
-      "test -f /workspace/deepseek-centroid-cache-s$seed/EXIT"; then
-      return 0
-    fi
-    now=$(date +%s)
-    if [ $((now - last)) -ge 1500 ]; then
-      scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7
-      last=$now
-    fi
-    sleep 30
-  done
-}
-watch_capture "$POD1" 1 centroid-s1 &
+# Watch both jobs and renew each healthy lease every 25 minutes. Returning
+# requires both the job's EXIT and the uor-pod wrapper's terminal record.
+watch_capture "$POD1" 1 centroid-s1 "$RUN_LOG1" &
 WATCH1=$!
-watch_capture "$POD2" 2 centroid-s2 &
+watch_capture "$POD2" 2 centroid-s2 "$RUN_LOG2" &
 WATCH2=$!
 wait "$WATCH1"
+FINISHED[0]=1
 wait "$WATCH2"
+FINISHED[1]=1
 
 CAPTURE_STATUS1=$(scripts/pod/uor-pod ssh "$POD1" 'cat /workspace/deepseek-centroid-cache-s1/EXIT')
 CAPTURE_STATUS2=$(scripts/pod/uor-pod ssh "$POD2" 'cat /workspace/deepseek-centroid-cache-s2/EXIT')
-scripts/pod/uor-pod release "$POD1" --lab deepseek --session centroid-s1
-scripts/pod/uor-pod release "$POD2" --lab deepseek --session centroid-s2
-scripts/pod/uor-pod down "$POD1" --lab deepseek --session centroid-s1 --confirm-archived
-scripts/pod/uor-pod down "$POD2" --lab deepseek --session centroid-s2 --confirm-archived
 test "$CAPTURE_STATUS1" = 0
 test "$CAPTURE_STATUS2" = 0
 ```
 
-`JOB_SHA256` is the value recorded by the D67 review. `POD1` and `POD2` are the two new
-pod ids; store them in the run record. Watch each remote
-`/workspace/deepseek-centroid-cache-s{1,2}/EXIT` without touching the other pods. Once it
-exists, all uploads and success readbacks have finished, or the failure trap has uploaded
-its diagnostics. Require the uploaded `status.json` before releasing and taking a
-successful pod down. A non-zero exit preserves its logs under `$OUT_STORE/failure/`; its
-`EXIT` is uploaded last, immediately before the local `EXIT` marker appears.
+`JOB_SHA256` is replaced with the value recorded by the D67 review. The block captures both
+pod ids into the run record and owns teardown from the first successful `up`. A watcher
+returns only after both the job's `EXIT` and the `uor-pod` wrapper's terminal record exist;
+it treats a wrapper end without `EXIT` as a failure and stops renewing. On any failure,
+the EXIT trap takes down pods with no started job. It also takes down a finished pod only
+when its failure diagnostics were fully uploaded and read back; otherwise it retains the
+pod and prints its id for inspection. No self-set wall clock cancels either capture.
 
 The script invokes `train-in-space` with `--query-cache-memory 0` and
 `--query-cache-dev 0`. That yields exactly TRAIN plus the four registered panels; DEV is
