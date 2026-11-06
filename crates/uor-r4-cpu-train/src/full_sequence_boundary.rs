@@ -614,11 +614,18 @@ pub fn full_boundary_changes(
     candidate: &TimedFullBoundaryReading,
     control: &TimedFullBoundaryReading,
 ) -> FullBoundaryChanges {
-    let reachable_rows = candidate
+    let candidate_reachable = candidate
         .rows
         .iter()
         .filter(|row| row.reachable)
         .map(|row| row.row)
+        .collect::<BTreeSet<_>>();
+    let reachable_rows = control
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .filter(|row| candidate_reachable.contains(row))
         .collect::<BTreeSet<_>>();
     let candidate_steps = candidate
         .steps
@@ -633,13 +640,12 @@ pub fn full_boundary_changes(
         .map(|step| ((step.row, step.generated_step), step.selected_token))
         .collect::<BTreeMap<_, _>>();
     let changed = candidate_steps
-        .iter()
-        .filter_map(|(key, token)| {
-            control_steps
-                .get(key)
-                .filter(|control_token| *control_token != token)
-                .map(|_| *key)
-        })
+        .keys()
+        .chain(control_steps.keys())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter(|key| candidate_steps.get(*key) != control_steps.get(*key))
+        .copied()
         .collect::<Vec<_>>();
     let divergent_rows = changed
         .iter()
@@ -661,13 +667,31 @@ pub fn full_boundary_stop_changes(
     left: &TimedFullBoundaryReading,
     right: &TimedFullBoundaryReading,
 ) -> u64 {
-    stop_changes(&left.steps, &right.steps)
+    let left_reachable = left
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .collect::<BTreeSet<_>>();
+    let reachable_rows = right
+        .rows
+        .iter()
+        .filter(|row| row.reachable)
+        .map(|row| row.row)
+        .filter(|row| left_reachable.contains(row))
+        .collect::<BTreeSet<_>>();
+    stop_changes_on_rows(&left.steps, &right.steps, &reachable_rows)
 }
 
-fn stop_changes(left: &[FullBoundaryStep], right: &[FullBoundaryStep]) -> u64 {
+fn stop_changes_on_rows(
+    left: &[FullBoundaryStep],
+    right: &[FullBoundaryStep],
+    rows: &BTreeSet<usize>,
+) -> u64 {
     let stops = |steps: &[FullBoundaryStep]| {
         steps
             .iter()
+            .filter(|step| rows.contains(&step.row))
             .filter_map(|step| {
                 step.stop_kind.as_ref().map(|_| {
                     (
@@ -951,16 +975,26 @@ mod tests {
     fn stop_changes_ignore_source_label_when_behavior_matches() {
         let full = [stop_step(7, 12, "full", 8, 2, 0)];
         let reply = [stop_step(7, 12, "reply", 8, 2, 0)];
-        assert_eq!(stop_changes(&full, &reply), 0);
+        let rows = BTreeSet::from([7]);
+        assert_eq!(stop_changes_on_rows(&full, &reply, &rows), 0);
     }
 
     #[test]
     fn stop_changes_detect_timing_counts_and_stop_presence() {
         let full = [stop_step(7, 12, "full", 8, 2, 0)];
         let later = [stop_step(7, 13, "full", 8, 2, 0)];
-        assert_eq!(stop_changes(&full, &later), 1);
+        let rows = BTreeSet::from([7]);
+        assert_eq!(stop_changes_on_rows(&full, &later, &rows), 1);
         let different_counts = [stop_step(7, 12, "full", 7, 3, 0)];
-        assert_eq!(stop_changes(&full, &different_counts), 1);
-        assert_eq!(stop_changes(&full, &[]), 1);
+        assert_eq!(stop_changes_on_rows(&full, &different_counts, &rows), 1);
+        assert_eq!(stop_changes_on_rows(&full, &[], &rows), 1);
+    }
+
+    #[test]
+    fn stop_changes_exclude_rows_unreachable_in_either_arm() {
+        let full = [stop_step(9, 12, "full", 8, 2, 0)];
+        let shuffled = [stop_step(9, 13, "shuffled_full", 7, 3, 0)];
+        let rows = BTreeSet::from([7]);
+        assert_eq!(stop_changes_on_rows(&full, &shuffled, &rows), 0);
     }
 }
