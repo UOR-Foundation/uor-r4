@@ -75,7 +75,7 @@ My decision card is on #3472 (6674681832), after two fresh decision reviews, log
 
 - **The decision.** Width 1,024's 7 cells move to the second run unit, which first classifies the real-text training loss.
 - **Why defer.** Read now, R1 and R2 would rest on an unclassified instrument: its real-text loss does not fall, and its cells are behind the unigram (§4.2).
-  - At 256, D3 against D1 reads `ahead` on all rows and `mixed` on the unseen rows. So Bar row 5 is possible at 1,024, but its meaning would depend on that fault.
+  - At 256, D3 against D1 reads `ahead` on all rows and `mixed` on the unseen rows. So Bar row 5 is possible at 1,024, but its meaning would depend on that unclassified loss.
 - **What the card planned for the second unit, in order** (claude-296 now sets its own arms): at most 6 GPU runs at (256, D1, seed 1) on one 5090.
   1. The loader and mask, on the laptop with no GPU: what the trainer reads from D1's TRAIN against mw-balp's.
   2. The learning rate: at most two other rates, plus one longer-positions arm.
@@ -213,7 +213,7 @@ Training took 2,875–2,932 s per cell. Whole-process scoring took 335–337 s, 
 
 ## Checks run at the head
 
-- **The head** adds this REPORT's width-512 sections, the notebook row and gap 9's 512 lines to `69c14edaa`. No code changed after the pin.
+- **The head** is the final commit of this PR: the width-512 sections, the notebook row, gap 9's 512 lines, and the two exact-head review rounds' fixes. No code changed after the pin.
 - **The laptop gates,** run at the head before the review record:
   - `loop report --check --order docs/loop/tasks/scale-probe/claude-295/ORDER.md`: PASS;
   - `loop pr-check --local`: PASS (order, scope, banned-presence, commit-order, report, owner-paths, rule-sources and rendered-lock). Its two D76 advisories are the ORDER's size (7,857 B, over its 4,096 B budget) and `docs/start/FILEMAP.md`'s stale rows, which this PR does not touch.
