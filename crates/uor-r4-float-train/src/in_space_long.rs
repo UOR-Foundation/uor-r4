@@ -1401,6 +1401,54 @@ fn step_gradient(
     sum.ok_or_else(|| invalid(format!("training step {step} has no scored row")))
 }
 
+/// One forward's turn-memory rows, reply rows and cut mask, set before it runs (claude-300).
+#[derive(Default)]
+struct ForwardRows {
+    memory: Option<Vec<usize>>,
+    replies: Option<crate::flock_read_memory::ReplyRows>,
+    mask: Option<Vec<u8>>,
+}
+
+/// The opening rows of the forward of the batch's windows `lo..hi` (claude-300): window `b`, TRAIN
+/// window `picked[b]`, sits at `b − lo` in that forward. `kept(b)` takes the window's place in the
+/// whole batch.
+fn forward_openings(
+    picked: &[usize],
+    lo: usize,
+    hi: usize,
+    context: usize,
+    openings: &[Vec<usize>],
+    kept: impl Fn(usize) -> bool,
+) -> Vec<usize> {
+    (lo..hi)
+        .filter(|&b| kept(b))
+        .flat_map(|b| {
+            openings[picked[b]]
+                .iter()
+                .map(move |&offset| (b - lo) * context + offset)
+        })
+        .collect()
+}
+
+/// The reply rows, with their keys, of the same forward as [`forward_openings`].
+fn forward_replies(
+    picked: &[usize],
+    lo: usize,
+    hi: usize,
+    context: usize,
+    replies: &ReplyOffsets,
+    kept: impl Fn(usize) -> bool,
+) -> crate::flock_read_memory::ReplyRows {
+    (lo..hi)
+        .filter(|&b| kept(b))
+        .flat_map(|b| {
+            replies[picked[b]]
+                .iter()
+                .map(move |(offset, key)| ((b - lo) * context + offset, key.clone()))
+        })
+        .collect()
+}
+
 /// Add `more`'s gradients into `acc`, variable by variable.
 fn add_grads(
     acc: &mut candle_core::backprop::GradStore,
@@ -12048,40 +12096,43 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         let picked = &order[cursor..cursor + config.batch];
         let windows: Vec<&CausalWindow> = picked.iter().map(|&i| &usable[i]).collect();
         cursor += config.batch;
-        // The rows of the forward of the batch's windows `lo..hi` (all of them, unless the step
-        // is in micro-batches), each window `b` at its place `b − lo` in that forward.
-        let forward_rows = |lo: usize, hi: usize| -> Result<()> {
-            // A window the memory is dropped from (protocol I-B) names no memory row below. Its
-            // draw keeps its place in the whole batch, so micro-batches leave the draws alone.
-            let kept = |b: usize| {
-                !memory_dropped(config.seed, step, b, config.batch, config.turn_memory_dropout)
-            };
-            // The opening rows, which the turn memory moves; none when it is off.
-            crate::flock_read_memory::set_memory_rows(memory.as_ref().map(|_| {
-                (lo..hi)
-                    .filter(|&b| kept(b))
-                    .flat_map(|b| {
-                        train_openings[picked[b]]
-                            .iter()
-                            .map(move |&offset| (b - lo) * config.context + offset)
-                    })
-                    .collect()
-            }));
-            // The reply rows past their openings, with their keys (claude-193); none when there
-            // is no reply table.
-            crate::flock_read_memory::set_reply_rows((!train_replies.is_empty()).then(|| {
-                (lo..hi)
-                    .filter(|&b| kept(b))
-                    .flat_map(|b| {
-                        train_replies[picked[b]].iter().map(move |(offset, key)| {
-                            ((b - lo) * config.context + offset, key.clone())
-                        })
-                    })
-                    .collect()
-            }));
-            // Under the cut (claude-216), every reply row reads only before its reply.
-            if trained_cut_on() {
-                set_reply_mask(Some(window_input_mask(&windows[lo..hi], &train_mask)?));
+        // Each forward's rows, built before the step's clock starts: one forward of the whole
+        // batch, or one per micro-batch. A window the memory is dropped from (protocol I-B)
+        // names no memory row; its draw keeps its place in the whole batch.
+        let micro = match config.micro_batch {
+            0 => config.batch,
+            m => m,
+        };
+        let kept = |b: usize| {
+            !memory_dropped(config.seed, step, b, config.batch, config.turn_memory_dropout)
+        };
+        let mut forwards: Vec<ForwardRows> = (0..config.batch)
+            .step_by(micro)
+            .map(|lo| {
+                let hi = (lo + micro).min(config.batch);
+                Ok(ForwardRows {
+                    // The opening rows, which the turn memory moves; none when it is off.
+                    memory: memory.as_ref().map(|_| {
+                        forward_openings(picked, lo, hi, config.context, &train_openings, kept)
+                    }),
+                    // The reply rows past their openings, with their keys (claude-193); none
+                    // when there is no reply table.
+                    replies: (!train_replies.is_empty()).then(|| {
+                        forward_replies(picked, lo, hi, config.context, &train_replies, kept)
+                    }),
+                    // Under the cut (claude-216), every reply row reads only before its reply.
+                    mask: trained_cut_on()
+                        .then(|| window_input_mask(&windows[lo..hi], &train_mask))
+                        .transpose()?,
+                })
+            })
+            .collect::<Result<_>>()?;
+        let forward_rows = |lo: usize, _hi: usize| -> Result<()> {
+            let rows = std::mem::take(&mut forwards[lo / micro]);
+            crate::flock_read_memory::set_memory_rows(rows.memory);
+            crate::flock_read_memory::set_reply_rows(rows.replies);
+            if let Some(mask) = rows.mask {
+                set_reply_mask(Some(mask));
             }
             Ok(())
         };
@@ -14591,6 +14642,35 @@ mod tests {
         config.micro_batch = 4;
         let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
         assert!(json.contains("\"micro_batch\": 4"), "{json}");
+    }
+
+    #[test]
+    fn each_micro_batch_names_the_whole_batchs_rows_at_its_own_place() {
+        // Six TRAIN windows of context 10, a batch of four of them in a shuffled order, and a
+        // dropout that drops the window at the whole batch's place 2.
+        let context = 10;
+        let picked = [4usize, 0, 5, 2];
+        let openings: Vec<Vec<usize>> = (0..6).map(|i| vec![i, i + 3]).collect();
+        let replies: ReplyOffsets = (0..6).map(|i| vec![(i + 1, vec![i as u32, 7])]).collect();
+        let kept = |b: usize| b != 2;
+        let whole = forward_openings(&picked, 0, 4, context, &openings, kept);
+        assert_eq!(whole, vec![4, 7, 10, 13, 32, 35]);
+        let whole_replies = forward_replies(&picked, 0, 4, context, &replies, kept);
+        for micro in [1usize, 2, 4] {
+            let (mut rows, mut reply_rows) = (Vec::new(), Vec::new());
+            for lo in (0..4).step_by(micro) {
+                let part = forward_openings(&picked, lo, lo + micro, context, &openings, kept);
+                // Every row lies inside its own forward's windows.
+                assert!(part.iter().all(|&r| r < micro * context), "micro {micro}: {part:?}");
+                rows.extend(part.iter().map(|&r| lo * context + r));
+                let part = forward_replies(&picked, lo, lo + micro, context, &replies, kept);
+                assert!(part.iter().all(|(r, _)| *r < micro * context));
+                reply_rows.extend(part.into_iter().map(|(r, k)| (lo * context + r, k)));
+            }
+            // Shifted back by their forward's start, they are the whole batch's rows.
+            assert_eq!(rows, whole, "micro {micro}");
+            assert_eq!(reply_rows, whole_replies, "micro {micro}");
+        }
     }
 
     #[test]
