@@ -10,6 +10,12 @@ This is D84 CPU development and serving-contract evidence. It does not claim
 general response generation, fresh language understanding, GPU qualification
 or useful chat.
 
+Attempt 1 completed at implementation `6a48ad613` and is preserved at
+`local/deepseek/prompt-reply-serving/2026-11-05`. Exact-head review found that
+the parser did not bind the sidecar's ignored protocol ids to the loaded
+dialogue protocol. Attempt 2 adds that validation without changing selection,
+data or bar, and decides at a fresh output root.
+
 ## Question
 
 Can the positive deepseek-204 exact prompt-set retrieval result be persisted as
@@ -91,17 +97,17 @@ sidecar checks have a 30-minute bound.
 ## Base, source and inputs
 
 - base: `c0e6b6757`;
-- implementation: `6a48ad613`;
+- implementation: `c6204928b`;
 - prompt-reply module:
-  `06241465fa35fc39baa0b6f8fa608ba7356908d14da124ae062a9a7f6c26832d`;
+  `344b599f2ae521656741666d907c63eb432331e11837f6d591a6341de3aedf22`;
 - OpenAI integration:
   `376183d14cf25b3bfc0362c46e4d2544235ab09f2e5f29ce8a91b7b77df31155`;
 - CLI:
-  `5d730c1ef4eb56755a3d4994ecb9a56ee5eec83b39b5309036fa077f3be63f9a`;
+  `1550679d46e15860a985338886ba22d8b130242908c89a2c770aa424e8e98a9a`;
 - builder:
-  `e2b31137ffefc422a699a419cb28841bb1d80b3fcc2157697c2f7f0789d21c15`;
+  `dc061cea85383c7acd067893356acd345743e399d3c04bdf8ef804bcf2bd0080`;
 - serving check:
-  `5ebe1703f509398c6d25e2635c3d56593c95014fba79b5865e95a0cbb099175f`;
+  `97627cc56cddc4c770a89e7ddcf2f98b1a38d9cc15e5c4e846869013ac243b6f`;
 - tokenizer:
   `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377`;
 - artifact seed 1:
@@ -119,7 +125,7 @@ sidecar checks have a 30-minute bound.
 
 ## Output
 
-`local/deepseek/prompt-reply-serving/2026-11-05`
+`local/deepseek/prompt-reply-serving/2026-11-05-attempt-2`
 
 ## Steps
 
@@ -129,14 +135,14 @@ Run only after FIT and GO. Use a fresh output root and fail closed.
 set -euo pipefail
 SOURCE=/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-prompt-retrieval-serving
 SHARED=/home/callard/projects/codex-playground/uor-r4
-OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05
+OUT=$SHARED/local/deepseek/prompt-reply-serving/2026-11-05-attempt-2
 TRAIN=$SHARED/local/deepseek/copy-key-longest-reply/2026-11-05-attempt-2/panels/tt-2711
 PANEL=$SHARED/local/deepseek/prompt-retrieval/2026-11-05/panels/dd-2777
 TOKENIZER=$SHARED/local/deepseek/m2-evidence/tokenizer.json
 SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/prompt-reply-serving
-IMPL=6a48ad613
+IMPL=c6204928b
 
 test ! -e "$OUT"
 git -C "$SOURCE" diff --quiet "$IMPL" -- crates/uor-r4-integer crates/uor-r4-cpu-train
@@ -225,19 +231,22 @@ test "$(du -sb "$OUT" | cut -f1)" -le 33554432
 TEST FITNESS: FIT - M2 #2030 prompt-reply serving sidecar
 sheet: docs/harness/prep/cpu-training-pilot-prompt-reply-serving-2026-11-05.md
 reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
-note: Exact-head source and input pins match; 473 serving library tests and 19
-  OpenAI loopback tests pass; strict CPU Clippy and targeted formatting pass;
-  persisted sidecar reproduces 39/471 exact, 948 body, zero premature; output
-  root absent.
+note: Implementation c6204928b binds ignored control ids to the loaded
+  protocol; 473 serving library tests and 19 OpenAI loopback tests pass;
+  strict CPU Clippy and targeted formatting pass; attempt-1 output is
+  preserved and the attempt-2 root is absent.
 date: 2026-11-05
 A FIT verdict clears compute for the configuration in this sheet only (D22).
 
 Every mechanism pre-registration gets a TEST FITNESS review on its milestone
 before compute.
 
+Attempt 1's prior FIT remains recorded in the harness ledger. Attempt 2's
+reviewer identifies the same limitation: this was a local self-review.
+
 ## Pre-run GO
 
 GO - exact-head self-review under the current disabled-delegation policy,
-2026-11-05. Implementation `6a48ad613` is clean; source, tokenizer, artifacts,
-TRAIN panel, evaluation panel and generator inputs match. The review
-limitation is explicit: this was not an independent reviewer.
+2026-11-05. Implementation `c6204928b` is clean; source, tokenizer, artifacts,
+TRAIN panel, evaluation panel and generator inputs match. Attempt-1 output is
+preserved, and the attempt-2 root was absent at GO.
