@@ -631,6 +631,7 @@
             apiFirstTokenNs: null,
             apiMetrics: null,
             pendingModelSourceChange: null,
+            healthyModelSnapshot: null,
         };
 
         function $(selector, root) {
@@ -1341,11 +1342,13 @@
                             : invalidHash
                                 ? 'Worker returned missing or invalid artifact SHA-256 ' + (artifactSha256 || '<missing hash>') + '; expected a 64-character lowercase hex digest' + (app.expectedSha256 ? ' (' + app.expectedSha256 + ')' : '') + '.'
                                 : 'Worker returned artifact SHA-256 ' + artifactSha256 + ' instead of the expected ' + app.expectedSha256 + '.';
+                    app.healthyModelSnapshot = null;
                     clearWorkerModel();
                     setModelStatus(identityError, 'err');
                     toast(identityError, 'error');
                     return;
                 }
+                app.healthyModelSnapshot = null;
                 app.caps = capabilities;
                 app.readyLoadId = app.currentLoadId === undefined ? null : app.currentLoadId;
                 app.workerState = 'ready';
@@ -1422,7 +1425,11 @@
                 if (message.operation === 'load_model' && typeof message.id === 'number' && message.id !== app.currentLoadId) return;
                 var workerError = String(message.error || 'Operation failed.');
                 if (message.operation === 'load_model' && /Stop generation before loading/.test(workerError)) {
-                    if (app.caps) {
+                    var restoredHealthyModel = restoreHealthyModelState(app.healthyModelSnapshot);
+                    app.healthyModelSnapshot = null;
+                    if (restoredHealthyModel) {
+                        app.workerState = 'ready';
+                    } else if (app.caps) {
                         app.workerState = 'ready';
                         if (app.readyLoadId !== null && app.readyLoadId !== undefined) {
                             app.currentLoadId = app.readyLoadId;
@@ -1437,6 +1444,7 @@
                 app.lastWorkerError = workerError;
                 document.documentElement.dataset.lastWorkerError = workerError;
                 if (message.operation === 'load_model') {
+                    app.healthyModelSnapshot = null;
                     app.workerState = 'error';
                     clearWorkerModel();
                     setModelStatus(workerError, 'err');
@@ -2012,6 +2020,50 @@
             }
         }
 
+        function captureHealthyModelState() {
+            if (!app.caps) return null;
+            var dataset = document.documentElement.dataset;
+            return {
+                caps: app.caps,
+                modelMeta: app.modelMeta,
+                tokenizerArtifact: app.tokenizerArtifact,
+                loadMs: app.loadMs,
+                requestedFileName: app.requestedFileName,
+                expectedSha256: app.expectedSha256,
+                loadId: app.readyLoadId,
+                dataset: {
+                    modelSchema: dataset.modelSchema,
+                    modelSha256: dataset.modelSha256,
+                    modelShaVerified: dataset.modelShaVerified,
+                    modelSize: dataset.modelSize,
+                    modelTokenizer: dataset.modelTokenizer,
+                    modelSource: dataset.modelSource,
+                    modelSourceLabel: dataset.modelSourceLabel,
+                    modelDiscrete: dataset.modelDiscrete,
+                    modelLoadMs: dataset.modelLoadMs,
+                },
+            };
+        }
+
+        function restoreHealthyModelState(snapshot) {
+            if (!snapshot || snapshot.loadId === null || snapshot.loadId === undefined) return false;
+            app.caps = snapshot.caps;
+            app.modelMeta = snapshot.modelMeta;
+            app.tokenizerArtifact = snapshot.tokenizerArtifact;
+            app.loadMs = snapshot.loadMs;
+            app.requestedFileName = snapshot.requestedFileName;
+            app.expectedSha256 = snapshot.expectedSha256;
+            app.currentLoadId = snapshot.loadId;
+            app.readyLoadId = snapshot.loadId;
+            app.workerState = 'ready';
+            var dataset = document.documentElement.dataset;
+            Object.keys(snapshot.dataset).forEach(function (name) {
+                dataset[name] = snapshot.dataset[name];
+            });
+            if (typeof updateCapabilitiesFooter === 'function') updateCapabilitiesFooter();
+            return true;
+        }
+
         function clearWorkerModel() {
             app.caps = null;
             app.modelMeta = null;
@@ -2041,6 +2093,7 @@
                 app.pendingModelSourceChange = null;
             }
             if (detail.kind === 'wasm' && detail.bytes) {
+                app.healthyModelSnapshot = captureHealthyModelState();
                 abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;
@@ -2073,6 +2126,7 @@
                 return;
             }
             if (detail.kind === 'api' && detail.apiConfig) {
+                app.healthyModelSnapshot = null;
                 app.currentLoadId = (app.currentLoadId || 0) + 1;
                 app.workerState = 'loading';
                 clearWorkerModel();
@@ -2104,6 +2158,7 @@
             }
             if (detail.kind === 'state' && detail.removedActive) {
                 app.pendingModelSourceChange = null;
+                app.healthyModelSnapshot = null;
                 abortApiForLocalSource();
                 app.mode = 'wasm';
                 app.apiConfig = null;

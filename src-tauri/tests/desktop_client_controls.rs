@@ -1123,6 +1123,8 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         "10 - 20, show your work",
         "10 - 20, answer with the number first",
         "10 - 20, please show your work",
+        "5 pm - 6 pm, then dinner",
+        "2026-11-05T17:25 - 18:00",
         "5 pm - 6 pm?",
         "9am - 5pm?",
         "5:00 PM - 6:00 PM?",

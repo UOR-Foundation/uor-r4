@@ -1034,12 +1034,70 @@ fn exact_tool_time_atom(text: &str) -> bool {
                 && fields[2].parse::<u8>().is_ok_and(|second| second <= 59)))
 }
 
+fn exact_tool_time_range_tail_is_prose(text: &str) -> bool {
+    !text.chars().any(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '+' | '-'
+                    | '*'
+                    | '/'
+                    | '%'
+                    | '^'
+                    | '×'
+                    | '÷'
+                    | '&'
+                    | '|'
+                    | '='
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '−'
+                    | '≤'
+                    | '≥'
+                    | '≠'
+                    | '·'
+                    | '('
+                    | '{'
+                    | '['
+            )
+    })
+}
+
+fn exact_tool_time_atom_prefix(text: &str) -> Option<&str> {
+    for (index, c) in text.char_indices() {
+        if index == 0 {
+            continue;
+        }
+        let candidate = text[..index].trim_end();
+        if candidate.is_empty() || !exact_tool_time_atom(candidate) {
+            continue;
+        }
+        if c.is_alphanumeric() {
+            continue;
+        }
+        return Some(text[index..].trim_start());
+    }
+    None
+}
+
+fn exact_tool_time_or_prose(text: &str) -> bool {
+    let text = text.trim();
+    if exact_tool_time_atom(text) {
+        return true;
+    }
+    match exact_tool_time_atom_prefix(text) {
+        Some(remainder) => exact_tool_time_range_tail_is_prose(remainder),
+        None => false,
+    }
+}
+
 fn exact_tool_is_time_range(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
-    let fields: Vec<&str> = rest.split(" - ").collect();
-    fields.len() == 2
-        && exact_tool_time_atom(fields[0].trim())
-        && exact_tool_time_atom(fields[1].trim())
+    let Some((left, right)) = rest.split_once(" - ") else {
+        return false;
+    };
+    exact_tool_time_atom(left.trim()) && exact_tool_time_or_prose(right)
 }
 
 fn exact_tool_is_signed_telephone(rest: &str) -> bool {
@@ -1170,6 +1228,11 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     if exact_tool_is_iso_date_time_core(rest) {
         return true;
+    }
+    if let Some((head, tail)) = rest.split_once(" - ") {
+        if exact_tool_is_iso_date_time_core(head.trim_end()) && exact_tool_time_or_prose(tail) {
+            return true;
+        }
     }
     for (index, c) in rest.char_indices() {
         if !matches!(c, ',' | ' ' | '\t') {
@@ -2373,6 +2436,24 @@ mod tests {
             assert!(
                 exact_arithmetic_tool(prompt).is_none(),
                 "no-prefix range with a supported suffix was intercepted: {prompt}"
+            );
+        }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_time_range_prose_regressions() {
+        for prompt in ["5 pm - 6 pm, then dinner", "2026-11-05T17:25 - 18:00"] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary time-range prose was intercepted: {prompt}"
+            );
+        }
+        for prompt in ["5 pm - 6 pm + 3", "2026-11-05T17:25 - 1"] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("time-range arithmetic boundary should be recognized")
+                    .is_err(),
+                "time-range arithmetic boundary fell through: {prompt}"
             );
         }
     }

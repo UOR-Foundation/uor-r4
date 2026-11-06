@@ -46,6 +46,7 @@ async function fresh(fetchImpl, seed, storageMode = 'working') {
     }
     globalThis.document = {
         baseURI: 'https://example.test/',
+        documentElement: { dataset: {} },
         addEventListener(type, listener) {
             if (!listeners.has(type)) listeners.set(type, []);
             listeners.get(type).push(listener);
@@ -354,19 +355,42 @@ async function pageFunction(marker, name, context, file = new URL('../../index.h
     throw new Error(`unterminated page function ${name}`);
 }
 
+async function pageFunctionIfPresent(marker, name, context) {
+    const { readFileSync } = await import('node:fs');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    if (!html.includes(marker)) return null;
+    return pageFunction(marker, name, context);
+}
+
 async function installPageSourceHandlers(api, app, harness, notices = []) {
     const cleared = [];
     let aborts = 0;
     const toast = (text, tone) => notices.push({ text, tone });
+    const captureHealthyModelState = await pageFunctionIfPresent(
+        'function captureHealthyModelState(',
+        'captureHealthyModelState',
+        { app, document: globalThis.document },
+    ) || (() => null);
     const abortForLocalSource = await pageFunction('function abortApiForLocalSource(', 'abortApiForLocalSource', { app });
     const handler = await pageFunction('function onModelSourceChanged(', 'onModelSourceChanged', {
         app,
         ModelSources: api,
         toast,
+        captureHealthyModelState,
         window: { performance: { now: () => 0 } },
         performance: { now: () => 0 },
         abortApiForLocalSource() { aborts += 1; abortForLocalSource(); },
-        clearWorkerModel() { cleared.push(true); app.caps = null; app.readyLoadId = null; },
+        clearWorkerModel() {
+            cleared.push(true);
+            app.caps = null;
+            app.modelMeta = null;
+            app.tokenizerArtifact = null;
+            app.readyLoadId = null;
+            app.loadMs = null;
+            ['modelSchema', 'modelSha256', 'modelShaVerified', 'modelSize', 'modelTokenizer', 'modelSource', 'modelSourceLabel', 'modelDiscrete', 'modelLoadMs'].forEach((name) => {
+                globalThis.document.documentElement.dataset[name] = '';
+            });
+        },
         setModelStatus() {},
         updatePrivacyStatus() {},
         updateComposerState() {},
@@ -383,7 +407,45 @@ async function installPageSourceHandlers(api, app, harness, notices = []) {
         harness.fire(event.type, event);
         return true;
     };
-    return { cleared, toast, get aborts() { return aborts; } };
+    return { cleared, toast, handle: handler, get aborts() { return aborts; } };
+}
+
+async function installWorkerMessageHandler(app, notices = []) {
+    const restoreHealthyModelState = await pageFunctionIfPresent(
+        'function restoreHealthyModelState(',
+        'restoreHealthyModelState',
+        { app, document: globalThis.document, updateCapabilitiesFooter() {} },
+    ) || (() => false);
+    const clearWorkerModel = () => {
+        app.caps = null;
+        app.modelMeta = null;
+        app.tokenizerArtifact = null;
+        app.readyLoadId = null;
+        app.loadMs = null;
+        ['modelSchema', 'modelSha256', 'modelShaVerified', 'modelSize', 'modelTokenizer', 'modelSource', 'modelSourceLabel', 'modelDiscrete', 'modelLoadMs'].forEach((name) => {
+            globalThis.document.documentElement.dataset[name] = '';
+        });
+    };
+    return pageFunction('function onWorkerMessage(', 'onWorkerMessage', {
+        app,
+        document: globalThis.document,
+        toast(text, tone) { notices.push({ text, tone }); },
+        updateComposerState() {},
+        restoreHealthyModelState,
+        clearWorkerModel,
+        setEngineStatus() {},
+        describeCapabilities() { return ''; },
+        setModelStatus() {},
+        isDiscreteCapabilities() { return false; },
+        setPredictorMode() {},
+        fillPredictorSha() {},
+        fillPredictorModelInfo() {},
+        updateCapabilitiesFooter() {},
+        renderMessages() {},
+        restoreActiveConversation() {},
+        window: { performance: { now: () => 0 } },
+        performance: { now: () => 0 },
+    });
 }
 
 test('a load started before generation cannot replace the healthy model when it commits during generation', async () => {
@@ -743,11 +805,7 @@ test('a stale bundled rejection after a newer source does not toast', async () =
 test('a stop-generation load rejection restores the healthy ready model and ignores the stale load', async () => {
     const app = { currentLoadId: 8, readyLoadId: 7, caps: { schema: 'healthy' }, workerState: 'loading', generating: true, activeGenerationKind: 'wasm' };
     const notices = [];
-    const onWorkerMessage = await pageFunction('function onWorkerMessage(', 'onWorkerMessage', {
-        app,
-        toast(text, tone) { notices.push({ text, tone }); },
-        updateComposerState() {},
-    });
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
     onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: 8, error: 'Stop generation before loading a stack artifact.' } });
     assert.equal(app.currentLoadId, 7);
     assert.equal(app.readyLoadId, 7);
@@ -758,4 +816,113 @@ test('a stop-generation load rejection restores the healthy ready model and igno
     onWorkerMessage({ data: { action: 'model_loaded', id: 8, capabilities: { file_name: 'stale.lut', artifact_sha256: '0'.repeat(64) } } });
     assert.deepEqual(app.caps, { schema: 'healthy' });
     assert.equal(app.readyLoadId, 7);
+});
+
+function healthyModelFixture() {
+    const caps = { schema: 'uor-r4.lut-stack/1', file_name: 'healthy.lut', artifact_sha256: 'a'.repeat(64), sha256_verified: true, artifact_bytes: 1024, tokenizer_label: 'healthy-tokenizer', source: 'file', source_label: 'healthy', synthetic: false };
+    const meta = { kind: 'local-file', label: 'healthy', fileName: 'healthy.lut' };
+    const tokenizer = { mode: 'byte-bpe', vocab: 17 };
+    const dataset = globalThis.document.documentElement.dataset;
+    Object.keys(dataset).forEach((key) => { delete dataset[key]; });
+    Object.assign(dataset, {
+        modelSchema: caps.schema,
+        modelSha256: caps.artifact_sha256,
+        modelShaVerified: 'true',
+        modelSize: '1024',
+        modelTokenizer: caps.tokenizer_label,
+        modelSource: 'file',
+        modelSourceLabel: 'healthy',
+        modelDiscrete: 'false',
+        modelLoadMs: '12',
+    });
+    const app = {
+        generating: false,
+        mode: 'wasm',
+        caps,
+        modelMeta: meta,
+        tokenizerArtifact: tokenizer,
+        loadMs: 12,
+        readyLoadId: 6,
+        currentLoadId: 6,
+        requestedFileName: 'healthy.lut',
+        expectedSha256: 'a'.repeat(64),
+        workerState: 'ready',
+        worker: null,
+        apiConfig: null,
+        predictionRequests: {},
+        healthyModelSnapshot: null,
+    };
+    return { app, caps, meta, tokenizer, dataset };
+}
+
+test('a stop-generation load rejection restores the state captured before the source change', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const { app, caps, meta, tokenizer, dataset } = healthyModelFixture();
+    const notices = [];
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    page.handle({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'new.lut', meta: { kind: 'local-file', label: 'new' }, expectedSha256: '', tokenizerArtifact: null } });
+    assert.equal(app.caps, null);
+    assert.ok(app.healthyModelSnapshot, 'the healthy state must be captured before the source change clears it');
+    assert.deepEqual(app.healthyModelSnapshot.caps, caps);
+    const newLoadId = app.currentLoadId;
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
+    onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: newLoadId, error: 'Stop generation before loading a stack artifact.' } });
+    assert.deepEqual(app.caps, caps);
+    assert.deepEqual(app.modelMeta, meta);
+    assert.deepEqual(app.tokenizerArtifact, tokenizer);
+    assert.equal(app.loadMs, 12);
+    assert.equal(app.currentLoadId, 6);
+    assert.equal(app.readyLoadId, 6);
+    assert.equal(app.workerState, 'ready');
+    assert.equal(app.healthyModelSnapshot, null);
+    assert.deepEqual(dataset, {
+        modelSchema: caps.schema,
+        modelSha256: caps.artifact_sha256,
+        modelShaVerified: 'true',
+        modelSize: '1024',
+        modelTokenizer: caps.tokenizer_label,
+        modelSource: 'file',
+        modelSourceLabel: 'healthy',
+        modelDiscrete: 'false',
+        modelLoadMs: '12',
+    });
+    const ready = !(app.workerState !== 'ready' || (app.currentLoadId !== undefined && app.readyLoadId !== app.currentLoadId));
+    assert.equal(ready, true);
+    onWorkerMessage({ data: { action: 'model_loaded', id: newLoadId, capabilities: { ...caps, file_name: 'new.lut', artifact_sha256: 'b'.repeat(64) } } });
+    assert.deepEqual(app.caps, caps);
+    assert.equal(app.readyLoadId, 6);
+});
+
+test('a different load error after a source change does not restore the old model', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const { app } = healthyModelFixture();
+    const notices = [];
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    page.handle({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'new.lut', meta: { kind: 'local-file', label: 'new' }, expectedSha256: '', tokenizerArtifact: null } });
+    const newLoadId = app.currentLoadId;
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
+    onWorkerMessage({ data: { action: 'operation_error', operation: 'load_model', id: newLoadId, error: 'The artifact header is invalid.' } });
+    assert.equal(app.caps, null);
+    assert.equal(app.modelMeta, null);
+    assert.equal(app.healthyModelSnapshot, null);
+    assert.equal(app.workerState, 'error');
+    assert.equal(app.currentLoadId, newLoadId);
+});
+
+test('a successful new load clears the captured state instead of restoring it', async () => {
+    const harness = await fresh(async () => { throw new Error('network must not run'); });
+    const { app, dataset } = healthyModelFixture();
+    const notices = [];
+    const page = await installPageSourceHandlers(harness.api, app, harness, notices);
+    page.handle({ detail: { kind: 'wasm', bytes: new Uint8Array([1]), fileName: 'new.lut', meta: { kind: 'local-file', label: 'new' }, expectedSha256: '', tokenizerArtifact: null } });
+    const newLoadId = app.currentLoadId;
+    const onWorkerMessage = await installWorkerMessageHandler(app, notices);
+    const newCaps = { schema: 'uor-r4.lut-stack/2', file_name: 'new.lut', artifact_sha256: 'b'.repeat(64), sha256_verified: false, artifact_bytes: 2048, tokenizer_label: 'new-tokenizer', source: 'url', source_label: 'new', synthetic: false };
+    onWorkerMessage({ data: { action: 'model_loaded', id: newLoadId, capabilities: newCaps } });
+    assert.deepEqual(app.caps, newCaps);
+    assert.equal(app.readyLoadId, newLoadId);
+    assert.equal(app.workerState, 'ready');
+    assert.equal(app.healthyModelSnapshot, null);
+    assert.equal(dataset.modelSchema, newCaps.schema);
+    assert.equal(dataset.modelSource, 'url');
 });

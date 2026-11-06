@@ -705,6 +705,25 @@ for (const [index, prompt] of ['5 pm - 6 pm?', '9am - 5pm?', '5:00 PM - 6:00 PM?
     assert(closed.action === 'session_reset', `punctuated prose conversation did not close: ${JSON.stringify(closed)}`);
 }
 
+const timeRangeProse = [];
+for (const [index, prompt] of ['5 pm - 6 pm, then dinner', '2026-11-05T17:25 - 18:00'].entries()) {
+    const id = `gen_final_review_time_range_${index}`;
+    const conversationId = `conv_final_review_time_range_${index}`;
+    const expectedTokens = prompt.includes('T17:25') ? 8 : 32;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: expectedTokens } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    timeRangeProse.push({ prompt, expectedTokens, message: ordinary });
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `time-range prose conversation did not close: ${JSON.stringify(closed)}`);
+}
+const badTimeRangeProse = timeRangeProse.filter(({ expectedTokens, message }) => message.action !== 'generate_complete' || message.tokenCount !== expectedTokens);
+assert(badTimeRangeProse.length === 0, `time-range prose must use the ordinary model path: ${JSON.stringify(badTimeRangeProse)}`);
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;
