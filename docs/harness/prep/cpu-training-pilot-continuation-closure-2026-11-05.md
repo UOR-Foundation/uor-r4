@@ -123,9 +123,9 @@ external model. Serving remains integer-only and unchanged.
 
 - base: `d56427955`;
 - implementation:
-  `2a78ca02c6031238edc0705dd469760a22e7a77f`;
+  `668fb23504b010767c88d502f73646f73a0e290b`;
 - `continuation_closure.rs` SHA-256:
-  `7b157052ce776dc7dd203b3663f4f74ac58296d256bb7dceac7416ee69005bac`;
+  `8c1b499b5b1db7d5236f89b9278d33ec29be0bd179943e0eb8a7764dfe4f31c4`;
 - `cpu-copy-continuation-closure.rs` SHA-256:
   `fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c`;
 - `suffix_memory.rs` SHA-256:
@@ -188,7 +188,7 @@ SEED1=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-1-raw_both.uorlut
 SEED2=$SHARED/local/deepseek/public-fbs-dual/dual-c131-seed-2-raw_both.uorlut
 BUILD=$SOURCE/target/deepseek/continuation-closure
 GEN_TARGET=$SOURCE/target/deepseek/continuation-closure-generator
-IMPL=2a78ca02c6031238edc0705dd469760a22e7a77f
+IMPL=668fb23504b010767c88d502f73646f73a0e290b
 GEN_TREE=869e65db6d0bb997a5f1094ab0de4efa1ac10c25
 RUN_DEADLINE=$((SECONDS + 1800))
 
@@ -204,7 +204,7 @@ printf '%s  %s\n' \
   140cf50d638d6066aec0a31345183712b6fc5d95502384223b91af9504b48f91 "$TRAIN/tokens.u16" \
   d0aaa2b1007e62098ab943187f25e13bddbaed3508dce881a176c2827052c0ad "$TRAIN/response_mask.u8" \
   d570caedbb628167c59b96b14746863b99998c2f67289d1deca16dbebd402ba5 "$TRAIN/manifest.json" \
-  7b157052ce776dc7dd203b3663f4f74ac58296d256bb7dceac7416ee69005bac "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
+  8c1b499b5b1db7d5236f89b9278d33ec29be0bd179943e0eb8a7764dfe4f31c4 "$SOURCE/crates/uor-r4-cpu-train/src/continuation_closure.rs" \
   fe6113182a2aae309ed4d6174f3ddde2bd873a4125f90655cc1cbfc4b0399c0c "$SOURCE/crates/uor-r4-cpu-train/src/bin/cpu-copy-continuation-closure.rs" \
   7cff7a71b61cc7c38b3b048124296e6cc64a77441e622e9f34b5ff6531656c37 "$SOURCE/crates/uor-r4-cpu-train/src/suffix_memory.rs" \
   2138e1b05d833beb9f8b2ff3bb93024df1cb7cf1aa5663aad665a0384a8f119b "$SOURCE/crates/uor-r4-cpu-train/src/reply_boundary.rs" \
@@ -221,7 +221,21 @@ seal() {
     sha256sum -c SHA256SUMS --quiet
   )
 }
-trap 'status=$?; trap - EXIT; if test -d "$OUT/reports"; then find "$OUT/reports" -type f -name "*.json" -print0 | xargs -0 -r gzip -9 || status=$?; fi; seal || status=$?; exit "$status"' EXIT
+finish() {
+  local status=$?
+  trap - EXIT
+  if test -d "$OUT/reports"; then
+    find "$OUT/reports" -type f -name '*.json' -print0 |
+      xargs -0 -r gzip -9 || status=$?
+  fi
+  if test "$(du -sb "$OUT" | cut -f1)" -gt 33554432; then
+    echo "retained evidence exceeds 32 MiB" >&2
+    status=1
+  fi
+  seal || status=$?
+  exit "$status"
+}
+trap finish EXIT
 run_limited() {
   local remaining=$((RUN_DEADLINE - SECONDS))
   test "$remaining" -gt 0
