@@ -790,6 +790,37 @@ for (const [index, prompt] of ['What is (1234567-8)?', '(1234567-8)', '1 (800) 5
 const badGroupedArithmetic = groupedArithmetic.filter(({ message }) => message.action !== 'generate_error');
 assert(badGroupedArithmetic.length === 0, `grouped/continued arithmetic must be explicit errors: ${JSON.stringify(badGroupedArithmetic)}`);
 
+const ratioInstruction = [];
+for (const [index, prompt] of ['17/25 show your work', '17/25 please', '17/25 answer with the number first', '17/25 in binary'].entries()) {
+    const id = `gen_final_review_ratio_${index}`;
+    const conversationId = `conv_final_review_ratio_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const result = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    ratioInstruction.push({ prompt, message: result });
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `ratio instruction conversation did not close: ${JSON.stringify(closed)}`);
+}
+const ratioFailures = ratioInstruction.filter(({ message }) => message.action !== 'generate_error' || !message.error.includes('exact arithmetic'));
+const paddedRatioPrompt = `${' '.repeat(200)}17/25 show your work`;
+await sendToWorker({
+    action: 'generate',
+    id: 'gen_final_review_ratio_padded',
+    payload: { conversationId: 'conv_final_review_ratio_padded', messages: [{ role: 'user', content: paddedRatioPrompt }], options: { max_new_tokens: 32 } },
+});
+const paddedRatio = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === 'gen_final_review_ratio_padded');
+if (!(paddedRatio.action === 'generate_error' && paddedRatio.error.includes('160-byte'))) {
+    ratioFailures.push({ prompt: 'over-160-byte instruction-suffixed division', message: paddedRatio });
+}
+assert(ratioFailures.length === 0, `instruction-suffixed division must be an explicit error: ${JSON.stringify(ratioFailures)}`);
+await sendToWorker({ action: 'close_session', id: 'close_gen_final_review_ratio_padded', payload: { conversationId: 'conv_final_review_ratio_padded' } });
+const closedPaddedRatio = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_gen_final_review_ratio_padded');
+assert(closedPaddedRatio.action === 'session_reset', `padded ratio conversation did not close: ${JSON.stringify(closedPaddedRatio)}`);
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;

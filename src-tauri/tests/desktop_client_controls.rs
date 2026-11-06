@@ -1201,6 +1201,45 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
         missing_errors.is_empty(),
         "grouped or continued arithmetic must be explicit non-empty errors: {missing_errors:?}"
     );
+    let mut ratio_failures: Vec<String> = Vec::new();
+    for prompt in [
+        "17/25 show your work",
+        "17/25 please",
+        "17/25 answer with the number first",
+        "17/25 in binary",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("instruction-suffixed division RPC should succeed");
+        let explicit_error = response["handled"] == json!(true)
+            && response["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty());
+        if !explicit_error {
+            ratio_failures.push(prompt.to_string());
+        }
+    }
+    let padded_ratio = format!("{}17/25 show your work", " ".repeat(200));
+    let padded_response = dispatch_rpc_command(
+        &mut backend,
+        "native_exact_arithmetic",
+        &json!({"model":"uor-chat","messages":[{"role":"user","content":padded_ratio}]}),
+    )
+    .expect("padded instruction-suffixed division RPC should succeed");
+    let padded_ok = padded_response["handled"] == json!(true)
+        && padded_response["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("160-byte"));
+    if !padded_ok {
+        ratio_failures.push("over-160-byte instruction-suffixed division".to_string());
+    }
+    assert!(
+        ratio_failures.is_empty(),
+        "instruction-suffixed division must be an explicit non-empty error: {ratio_failures:?}"
+    );
 }
 
 #[test]

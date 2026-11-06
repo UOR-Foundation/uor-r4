@@ -1463,6 +1463,22 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
     if after.is_empty() || !after.chars().next().is_some_and(char::is_alphabetic) {
         return false;
     }
+    let lower_after = after.to_ascii_lowercase();
+    if [
+        "answer with the number first",
+        "answer with number first",
+        "show your work",
+        "show the carry trace",
+        "please show your work",
+        "please",
+        "in binary",
+        "binary",
+    ]
+    .iter()
+    .any(|suffix| lower_after.starts_with(suffix))
+    {
+        return false;
+    }
     !after.chars().any(|c| {
         c.is_ascii_digit()
             || matches!(
@@ -2718,6 +2734,37 @@ mod tests {
         assert!(
             exact_arithmetic_tool("5 - 3 left").is_some(),
             "5 - 3 left must remain tool-handled rather than prose"
+        );
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_final_review_ratio_instruction_regressions() {
+        for prompt in ["24/7 support", "1/2 cup"] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary ratio prose was intercepted: {prompt}"
+            );
+        }
+        let mut failures: Vec<String> = Vec::new();
+        for prompt in [
+            "17/25 show your work",
+            "17/25 please",
+            "17/25 answer with the number first",
+            "17/25 in binary",
+        ] {
+            match exact_arithmetic_tool(prompt) {
+                Some(Err(error)) if !error.to_string().is_empty() => {}
+                _ => failures.push(prompt.to_string()),
+            }
+        }
+        let padded = format!("{}17/25 show your work", " ".repeat(200));
+        match exact_arithmetic_tool(&padded) {
+            Some(Err(error)) if error.to_string().contains("160-byte") => {}
+            _ => failures.push("over-160-byte instruction-suffixed division".to_string()),
+        }
+        assert!(
+            failures.is_empty(),
+            "instruction-suffixed division must be an explicit error: {failures:?}"
         );
     }
 }
