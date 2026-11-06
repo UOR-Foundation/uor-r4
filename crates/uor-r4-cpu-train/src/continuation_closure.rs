@@ -500,7 +500,9 @@ pub fn generate_continuation_closure_reply(
                         arm,
                         used_global,
                         global.map(|prediction| prediction.depth),
+                        global.map(|prediction| prediction.token),
                         closure.depth,
+                        &closure.continuation,
                     )
                 })
         } else {
@@ -595,11 +597,17 @@ fn closure_eligible(
     arm: ContinuationClosureArm,
     used_global: bool,
     content_depth: Option<usize>,
+    content_token: Option<u32>,
     closure_depth: usize,
+    continuation: &[u32],
 ) -> bool {
     match arm {
         ContinuationClosureArm::SourceClosure | ContinuationClosureArm::SourceClosureShuffled => {
-            used_global && content_depth == Some(closure_depth)
+            used_global
+                && content_depth == Some(closure_depth)
+                && continuation
+                    .first()
+                    .is_none_or(|token| content_token == Some(*token))
         }
         ContinuationClosureArm::ClosureOnly => true,
         ContinuationClosureArm::TokenwiseContent
@@ -1127,31 +1135,57 @@ mod tests {
             ContinuationClosureArm::SourceClosure,
             true,
             Some(12),
-            12
+            Some(10),
+            12,
+            &[10, 11],
         ));
         assert!(!closure_eligible(
             ContinuationClosureArm::SourceClosure,
             true,
             Some(16),
-            12
+            Some(10),
+            12,
+            &[10, 11],
         ));
         assert!(!closure_eligible(
             ContinuationClosureArm::SourceClosure,
             false,
             Some(12),
-            12
+            Some(10),
+            12,
+            &[10, 11],
+        ));
+        assert!(!closure_eligible(
+            ContinuationClosureArm::SourceClosure,
+            true,
+            Some(12),
+            Some(9),
+            12,
+            &[10, 11],
+        ));
+        assert!(closure_eligible(
+            ContinuationClosureArm::SourceClosure,
+            true,
+            Some(12),
+            Some(9),
+            12,
+            &[],
         ));
         assert!(closure_eligible(
             ContinuationClosureArm::ClosureOnly,
             false,
             None,
-            12
+            None,
+            12,
+            &[10, 11],
         ));
         assert!(!closure_eligible(
             ContinuationClosureArm::ContentNoBoundary,
             true,
             Some(12),
-            12
+            Some(10),
+            12,
+            &[10, 11],
         ));
     }
 

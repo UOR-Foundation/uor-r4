@@ -45,7 +45,8 @@ At each generated decision:
    local; equal-depth ties remain local.
 3. If treatment selects global, look up a confident whole continuation at
    that same suffix depth. A continuation requires at least two observations
-   and a strict-majority complete continuation.
+   and a strict-majority complete continuation whose first token agrees with
+   the selected global token. An empty terminal continuation is allowed.
 4. Emit that complete continuation when it fits the cap and context, then
    stop with BOS. Otherwise continue tokenwise from the selected source.
 5. With no global selection, preserve tokenwise local, then writer.
