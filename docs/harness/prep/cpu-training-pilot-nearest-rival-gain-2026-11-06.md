@@ -4,7 +4,8 @@ Run ID: `cpu-training-pilot-nearest-rival-gain-2026-11-06`
 
 ## Status
 
-REGISTERED. Implementation and TEST FITNESS precede compute.
+TEST FITNESS: FIT. Pre-run GO recorded below. Implementation
+`2ba8b56b6`; the output root remains absent.
 
 ## Question
 
@@ -119,8 +120,36 @@ seal reports, timing, artifacts and source/binary pins.
 
 ## TEST FITNESS
 
-TEST FITNESS: PENDING - implementation pending.
+TEST FITNESS: FIT - M2 #2030 nearest-rival served-gain training
+sheet: docs/harness/prep/cpu-training-pilot-nearest-rival-gain-2026-11-06.md
+reviewer: deepseek exact-head self-review (independent delegation unavailable in this run)
+note: Implementation 2ba8b56b6 adds an exact eight-rival final-gain trainer and
+  driver over deepseek-97's frozen memory baselines. Rival identities refresh
+  once per step, all 512 gain candidates use the exact served query and fixed
+  step rivals, and ties are deterministic by hinge, target distance, top-1,
+  coordinate and sign. The cyclic target-label shuffle preserves the target
+  multiset and refuses a vacuous shift. Three focused tests cover fixed-vs-
+  refreshed rival agreement, target exclusion/uniqueness, shuffle matching,
+  lexicographic improvement and final-gain-only mutation. The full CPU library
+  passes 402 tests with four expected ignores; scoped Clippy passes with the
+  pre-existing type-complexity lint exempted; formatting and diff checks pass.
+  Source, baseline, corpus and output-root absence were verified.
+source:
+  `db819022a1f5a4ad6dd1db5fd61a854352cf0d902683d20aaf0b453e97665e62`;
+driver:
+  `2087f747509282d5d62b6239ed6ce68ed4c1935dcf73ebe8d83c6997eb61eb01`;
+release_binary:
+  `542a2d9980dec9b57eaa2e107427df0919c166d70ffebaf271335ad8b3e80e3b`;
+date: 2026-11-06
 
 ## Pre-run GO
 
-Pending after FIT.
+GO - exact-head self-review under the current disabled-delegation policy.
+Implementation `2ba8b56b6`, source
+`db819022a1f5a4ad6dd1db5fd61a854352cf0d902683d20aaf0b453e97665e62`,
+driver
+`2087f747509282d5d62b6239ed6ce68ed4c1935dcf73ebe8d83c6997eb61eb01`
+and release binary
+`542a2d9980dec9b57eaa2e107427df0919c166d70ffebaf271335ad8b3e80e3b`
+match. This was not an independent review. The two public seeds and one
+fresh-process repeat may now run under the fixed construction and stop rule.

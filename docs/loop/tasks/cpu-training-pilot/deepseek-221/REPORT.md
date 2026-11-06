@@ -8,7 +8,8 @@ Base: `4fde31439`.
 
 ## Status
 
-IN PROGRESS. Registration only.
+IN PROGRESS. TEST FITNESS: FIT and pre-run GO recorded at implementation
+`2ba8b56b6`; the public CPU runs have not started.
 
 ## What did not work
 
@@ -16,8 +17,12 @@ Not yet measured.
 
 ## What changed
 
-Registered an eight-rival served-gain objective using deepseek-97's frozen
-memory baselines and matched held-out panel.
+Added an exact eight-rival final-gain trainer and a dedicated driver. The
+trainer refreshes rival identities after each step, evaluates every gain
+coordinate at both signs through the exact CPU FBS query, and uses a cyclic
+target-label shuffle that preserves the target multiset. The driver starts
+from deepseek-97's frozen memory baselines and includes frozen, random,
+shuffled-target and memory-off controls.
 
 ## Measurements
 
@@ -25,7 +30,13 @@ Not yet run.
 
 ## Checks run at the head
 
-- fresh output and source/binary pins reserved before compute.
+- focused nearest-rival tests: 3 passed;
+- full `uor-r4-cpu-train` library: 402 passed, 4 expected ignores;
+- scoped Clippy passed for the changed binary with the pre-existing
+  `type_complexity` lint exempted;
+- changed trainer and driver formatting plus `git diff --check` passed;
+- source, driver, baseline, corpus and output-root absence were verified
+  before GO.
 
 ## Skills used
 
@@ -33,7 +44,7 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-- implementation, FIT/GO, fresh result and delivery.
+- two-seed public comparison, sealed evidence and delivery.
 
 ## Plain summary
 
