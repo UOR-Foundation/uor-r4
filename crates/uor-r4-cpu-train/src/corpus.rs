@@ -278,6 +278,18 @@ impl CpuMaskedCorpus {
         Ok(examples)
     }
 
+    /// Every masked reply target with its complete causal prefix.
+    pub fn causal_samples(&self) -> Result<Vec<RankMarginSample>> {
+        let mut samples = Vec::new();
+        for document in &self.documents {
+            samples.extend(self.document_samples(document)?);
+        }
+        if samples.is_empty() {
+            return Err(invalid("corpus has no causal response targets"));
+        }
+        Ok(samples)
+    }
+
     fn document_samples(&self, document: &Range<usize>) -> Result<Vec<RankMarginSample>> {
         let mut samples = Vec::new();
         for target_position in document.start + 1..document.end {
