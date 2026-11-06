@@ -13,6 +13,8 @@
     "measured_preflight_seconds": 30,
     "four_fresh_evaluations_seconds": 360,
     "focused_checks_seconds": 120,
+    "checkpointing_seconds": 0,
+    "checkpointing_storage_bytes": 0,
     "evidence_and_delivery_seconds": 150,
     "retry_allowance_seconds": 180,
     "wall_limit_seconds": 1800

@@ -133,7 +133,9 @@ shares the panel, artifact and target rows.
 The aggregator requires four reports: two artifacts with two fresh-process
 reports each. The normalized semantic report, which removes all timing and
 resource fields, must match within each artifact. Only the aggregator can emit
-the final KEEP/REJECT/INSUFFICIENT_POWER/CONTROL_FAULT result.
+the final KEEP/REJECT/INSUFFICIENT_POWER/CONTROL_FAULT result. Every failed
+post-argument run becomes an artifact-scoped `CONTROL_FAULT` report; malformed
+CLI invocations remain nonzero command errors.
 
 The fresh panel must report `cell=dev,dev`, seed 2789, protocol 2, 128
 conversations, BOS 0 and the pinned tokenizer. `panels/dd-2789` is absent
@@ -211,6 +213,10 @@ MAIN=/home/callard/projects/codex-playground/uor-r4
 OUT="$REPO/local/deepseek/readout-refit/2026-11-06"
 BIN="$REPO/target/deepseek/readout-refit/release/cpu-readout-refit"
 cd "$REPO"
+mkdir -p "$OUT"
+AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
+test "$AVAILABLE" -ge 32346472448
+df -B1 "$REPO" >"$OUT/storage-before.txt"
 git merge-base --is-ancestor 9f12624e2 HEAD
 sha256sum -c <<'EOF'
 21abcad62049f20e5c8ec6d0b4d2393642bc560655386c5c9219578a5a704eae  crates/uor-r4-cpu-train/src/readout_refit.rs
@@ -220,7 +226,7 @@ ac1423f5d48e73a3425737395b5772326e990b857818c6a268f00ed9f716ddd2  crates/uor-r4-
 85840169921e2611b1482ca2c2a47fb41c54f8513b37ce57d9224e1fe2c63b2d  crates/uor-r4-cpu-train/src/train.rs
 EOF
 /usr/bin/time -v -o "$OUT/build-go.time.txt" \
-CARGO_BUILD_JOBS=32 CARGO_TARGET_DIR=target/deepseek/readout-refit \
+env CARGO_BUILD_JOBS=32 CARGO_TARGET_DIR=target/deepseek/readout-refit \
   cargo build --locked --release -p uor-r4-cpu-train \
   --bin cpu-readout-refit
 test "$(sha256sum "$BIN" | cut -d' ' -f1)" = \
@@ -256,7 +262,7 @@ EOF
 
 ```sh
 /usr/bin/time -v -o "$OUT/preflight-go-seed1.time.txt" \
-RAYON_NUM_THREADS=16 "$BIN" preflight \
+env RAYON_NUM_THREADS=16 "$BIN" preflight \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$SEED1" \
   --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
@@ -272,7 +278,7 @@ jq -e '
 ' "$OUT/preflight-go-seed1.json" >/dev/null
 
 /usr/bin/time -v -o "$OUT/preflight-go-seed2.time.txt" \
-RAYON_NUM_THREADS=16 "$BIN" preflight \
+env RAYON_NUM_THREADS=16 "$BIN" preflight \
   "$TRAIN/tokens.u16" "$TRAIN/response_mask.u8" "$TRAIN/manifest.json" \
   "$SEED2" \
   --expected-tokenizer a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377 \
@@ -288,6 +294,9 @@ jq -e '
 ' "$OUT/preflight-go-seed2.json" >/dev/null
 test ! -e "$PANEL"
 test ! -e "$REPORTS"
+AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
+test "$AVAILABLE" -ge 32346472448
+df -B1 "$REPO" >"$OUT/storage-before-panel.txt"
 ```
 
 4. Generate the fresh panel:
@@ -359,9 +368,12 @@ jq -e '
 8. Seal panel, reports, source and binary pins:
 
 ```sh
+AVAILABLE=$(df -B1 "$REPO" | tail -n 1 | awk '{print $4}')
+test "$AVAILABLE" -ge 32346472448
+df -B1 "$REPO" >"$OUT/storage-after.txt"
 (
   cd "$OUT"
-  find . -type f ! -name SHA256SUMS -print0 | sort -z |
+  find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.tmp -print0 | sort -z |
     xargs -0 -r sha256sum >SHA256SUMS.tmp
   mv SHA256SUMS.tmp SHA256SUMS
   sha256sum -c SHA256SUMS
