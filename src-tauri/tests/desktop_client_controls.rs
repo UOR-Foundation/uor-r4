@@ -1214,6 +1214,22 @@ fn native_exact_arithmetic_final_review_range_and_punctuation_regressions() {
             "ordinary ratio prose was intercepted: {prompt}"
         );
     }
+    let mut intercepted_units = Vec::new();
+    for prompt in ["1/2 gallon", "1/2 gram", "1/2 liter", "1/2 dozen"] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("ordinary unit ratio RPC should succeed");
+        if response["handled"] != json!(false) {
+            intercepted_units.push(prompt);
+        }
+    }
+    assert!(
+        intercepted_units.is_empty(),
+        "ordinary unit ratio prose was intercepted: {intercepted_units:?}"
+    );
     let mut ratio_failures: Vec<String> = Vec::new();
     for prompt in [
         "17/25 show your work",

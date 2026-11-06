@@ -834,6 +834,24 @@ await sendToWorker({ action: 'close_session', id: 'close_gen_final_review_ratio_
 const closedPaddedInDecimal = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === 'close_gen_final_review_ratio_padded_decimal');
 assert(closedPaddedInDecimal.action === 'session_reset', `padded in-decimal conversation did not close: ${JSON.stringify(closedPaddedInDecimal)}`);
 
+const ratioUnitProse = [];
+for (const [index, prompt] of ['1/2 gallon', '1/2 gram', '1/2 liter', '1/2 dozen'].entries()) {
+    const id = `gen_final_review_ratio_unit_${index}`;
+    const conversationId = `conv_final_review_ratio_unit_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const result = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    ratioUnitProse.push({ prompt, message: result });
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `ratio unit conversation did not close: ${JSON.stringify(closed)}`);
+}
+const badRatioUnitProse = ratioUnitProse.filter(({ message }) => message.action !== 'generate_complete' || message.tokenCount !== 32);
+assert(badRatioUnitProse.length === 0, `ordinary unit ratio prose must use the ordinary model path: ${JSON.stringify(badRatioUnitProse)}`);
+
 for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 minute'].entries()) {
     const id = `gen_review27_boundary_${index}`;
     const conversationId = `conv_review27_boundary_${index}`;

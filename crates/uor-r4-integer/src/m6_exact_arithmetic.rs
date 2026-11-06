@@ -1452,6 +1452,14 @@ fn exact_tool_ratio_suffix_allowed(text: &str) -> bool {
         "support",
         "cup",
         "cups",
+        "gallon",
+        "gallons",
+        "gram",
+        "grams",
+        "liter",
+        "liters",
+        "dozen",
+        "dozens",
         "ml",
         "l",
         "g",
@@ -2784,6 +2792,14 @@ mod tests {
                 "ordinary ratio prose was intercepted: {prompt}"
             );
         }
+        let intercepted_units: Vec<&str> = ["1/2 gallon", "1/2 gram", "1/2 liter", "1/2 dozen"]
+            .into_iter()
+            .filter(|prompt| exact_arithmetic_tool(prompt).is_some())
+            .collect();
+        assert!(
+            intercepted_units.is_empty(),
+            "ordinary unit ratio prose was intercepted: {intercepted_units:?}"
+        );
         let mut failures: Vec<String> = Vec::new();
         for prompt in [
             "17/25 show your work",
