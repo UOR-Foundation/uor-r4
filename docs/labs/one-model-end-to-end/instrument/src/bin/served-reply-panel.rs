@@ -924,7 +924,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FBS_SYNTH_NON_SQUARE};
     use uor_r4_integer::stack::{
         add_point_key_uorlut01, export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot,
         FbsReplyTable, PointKeyImage, MEMORY_PAD,
@@ -946,43 +946,19 @@ mod tests {
     }
 
     fn fixture(seed: u64, layers: usize) -> CpuFbsForward {
-        let mut snapshot = synthetic_fbs_trunk_with(
-            seed,
-            FbsSynth {
-                vocab: 512,
-                d: 64,
-                mlp: 96,
-                layers,
-                context: 16,
-                kept: 8,
-                gain_lo: 0.75,
-                gain_span: 1.5,
-                table: 0.5,
-                decay_step: 0.25,
-            },
-        );
+        let mut spec = FBS_SYNTH_NON_SQUARE;
+        spec.layers = layers;
+        let mut snapshot = synthetic_fbs_trunk_with(seed, spec);
         snapshot.readout_nearest = true;
         CpuFbsForward::from_artifact(&export_fbs_trunk_uorlut01(&snapshot).unwrap()).unwrap()
     }
 
     fn point_key_fixture(seed: u64) -> CpuFbsForward {
-        let mut snapshot = synthetic_fbs_trunk_with(
-            seed,
-            FbsSynth {
-                vocab: 512,
-                d: 64,
-                mlp: 96,
-                layers: 3,
-                context: 24,
-                kept: 8,
-                gain_lo: 0.75,
-                gain_span: 1.5,
-                table: 0.5,
-                decay_step: 0.25,
-            },
-        );
+        let mut spec = FBS_SYNTH_NON_SQUARE;
+        spec.context = 24;
+        let mut snapshot = synthetic_fbs_trunk_with(seed, spec);
         snapshot.readout_nearest = true;
-        let weight = vec![1.0; snapshot.width];
+        let weight = snapshot.final_norm.clone();
         snapshot.memory = Some(FbsMemorySnapshot {
             k: 4,
             key_window: 192,
