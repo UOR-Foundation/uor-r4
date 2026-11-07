@@ -160,12 +160,13 @@ async function cdpConnect(wsUrl) {
     return { ws, send, events };
 }
 
-async function trapPageLoad(cdp, origin, path) {
+async function trapPageLoad(cdp, origin, path, options = {}) {
     const target = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const attached = await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
     const sessionId = attached.sessionId;
     await cdp.send('Network.enable', {}, sessionId);
     await cdp.send('Page.enable', {}, sessionId);
+    await cdp.send('Runtime.enable', {}, sessionId);
     // Capture dedicated/service worker targets too: auto-attach to every child,
     // enable Network on its own session and resume it (waitForDebuggerOnStart).
     await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId);
@@ -207,8 +208,47 @@ async function trapPageLoad(cdp, origin, path) {
         if (!/^https?:/i.test(u)) return false;
         try { return new URL(u).origin !== origin; } catch (_e) { return true; }
     });
+    let typed = null;
+    if (options.typed) {
+        const evaluation = await cdp.send('Runtime.evaluate', {
+            expression: `(async()=>{
+                const models = Array.from(document.querySelectorAll('button')).find((button) => button.textContent === 'Models');
+                if (models) models.click();
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                const root = document.getElementById('studio-typed-root');
+                const typedMcp = document.querySelectorAll('#studio-typed-root .mcp-connections').length;
+                const load = Array.from(root.querySelectorAll('button')).find((button) => button.textContent === 'Load bundled demo');
+                if (load) load.click();
+                let artifactReady = false;
+                for (let attempt = 0; attempt < 50; attempt += 1) {
+                    if (root.textContent.includes('Artifact: ready')) { artifactReady = true; break; }
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+                }
+                const app = document.getElementById('app');
+                return {
+                    shell: Boolean(document.querySelector('#studio-typed-root .studio-shell')),
+                    active: document.getElementById('studio-typed-root')?.dataset.active === 'true',
+                    legacyHidden: app ? getComputedStyle(app).display === 'none' : false,
+                    legacyMcp: document.querySelectorAll('#app #mcpConnections').length,
+                    typedMcp,
+                    artifactReady,
+                    bodyText: document.body.innerText.slice(0, 500),
+                    rootText: document.getElementById('studio-typed-root')?.textContent?.slice(0, 500),
+                    legacyReady: Boolean(window.__studioUi && window.__studioFiles),
+                    legacyWorker: Boolean(window.__studioApp?.worker),
+                    scriptCount: document.scripts.length,
+                };
+            })()`,
+            awaitPromise: true,
+            returnByValue: true,
+        }, sessionId);
+        typed = evaluation.result.value;
+    }
+    const runtimeErrors = options.typed ? cdp.events.slice(before)
+        .filter((event) => event.method === 'Runtime.exceptionThrown' || event.method === 'Runtime.consoleAPICalled')
+        .map((event) => event.params) : [];
     await cdp.send('Target.closeTarget', { targetId: target.targetId });
-    return { path: path, loaded: loaded, requested: requested.length, external: external };
+    return { path: path, loaded: loaded, requested: requested.length, external: external, typed: typed, runtimeErrors: runtimeErrors };
 }
 
 async function main() {
@@ -228,6 +268,19 @@ async function main() {
         const index = await trapPageLoad(cdp, origin, '/studio/index.html');
         assert(index.loaded, 'index.html never fired loadEventFired');
         assert(index.external.length === 0, 'index.html made external load requests: ' + JSON.stringify(index.external));
+        const typedPreview = process.env.UOR_STUDIO_TYPED === '1'
+            ? await trapPageLoad(cdp, origin, '/studio/dist/index.html?typed=1', { typed: true })
+            : null;
+        if (typedPreview) {
+            if (process.env.UOR_STUDIO_DEBUG === '1') console.log('TYPED_RUNTIME_ERRORS ' + JSON.stringify(typedPreview.runtimeErrors));
+            assert(typedPreview.loaded, 'typed preview never fired loadEventFired');
+            assert(typedPreview.external.length === 0, 'typed preview made external load requests: ' + JSON.stringify(typedPreview.external));
+            assert(typedPreview.typed?.shell && typedPreview.typed.active, 'typed preview did not mount StudioApp: ' + JSON.stringify(typedPreview.typed));
+            assert(typedPreview.typed.legacyHidden, 'legacy shell remained visible in typed preview');
+            assert(typedPreview.typed.legacyMcp === 0, 'legacy MCP auto-boot mounted in typed preview');
+            assert(typedPreview.typed.typedMcp === 1, 'typed MCP panel missing or duplicated: ' + JSON.stringify(typedPreview.typed));
+            assert(typedPreview.typed.artifactReady, 'typed bundled demo did not reach Artifact: ready: ' + JSON.stringify(typedPreview.typed));
+        }
         const router = await trapPageLoad(cdp, origin, '/studio/geometric_prime_router_webapp.html');
         const report = {
             verdict: 'RUNTIME PAGE-LOAD TRAP PASSED',
@@ -237,6 +290,7 @@ async function main() {
                 'geometric_prime_router_webapp.html': { loaded: router.loaded, requests: router.requested, external: router.external },
             },
         };
+        if (typedPreview) report.pages['typed=1'] = { loaded: typedPreview.loaded, requests: typedPreview.requested, external: typedPreview.external, checks: typedPreview.typed };
         if (router.external.length > 0) {
             if (strictRouter) {
                 report.verdict = 'RUNTIME PAGE-LOAD TRAP FAILED';

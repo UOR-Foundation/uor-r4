@@ -1,0 +1,38 @@
+# REPORT: mount the real typed Studio application, kimi-52
+
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `ab4a5b328`. The exact delivery head/tree and logs will be recorded on PR #3835 after protected delivery; before push they are local evidence.
+
+## What did not work
+
+- The typed tree was only an exported library. New bootstrap and built-browser checks failed because there was no `bootstrap.ts`, no typed root, and Vite used library mode.
+- The first application build emitted absolute `/assets/...` URLs, so the browser never loaded the bundle beneath the Studio's hosted subdirectory. `viteConfig.test.ts` failed before `base: './'` was added.
+- The next mount exposed a readiness race: `getSettings` and workspace tabs were not initialized when the typed shell called them. The bootstrap now waits for those methods and refuses incomplete initialization with a timeout test.
+- After the mount worked, the bundled model failed with HTTP 404 because `dist/pkg` was not staged. The build now copies generated model/tokenizer/catalog artifacts there. A final instrument-order issue recorded MCP after model loading had returned to Agent; it now records MCP before that transition.
+- Two test-only typing fixes were needed: a structural model-source mock and the optional Vite `build` access. No product behavior was changed to silence a test.
+
+## What changed
+
+- `src/main.ts` invokes `mountTypedStudio` only for `?typed=1`; default `index.html` retains the legacy application. `src/bootstrap.ts` waits for workflow methods, creates the lifecycle store/model adapter, reuses the existing `window.__studioApp.worker` when present, and mounts `StudioApp` through Preact.
+- Vite builds `index.html` as an application with relative asset URLs. `src/stage-dist.mjs` copies generated artifacts to `dist/pkg` without adding dependencies or committing binaries.
+- Legacy MCP auto-boot returns immediately in the typed preview, so only the typed MCP panel mounts and no request is made by the legacy mount.
+- Additive browser checks prove a visible typed shell, hidden legacy shell, zero legacy MCP mounts, one typed MCP panel, bundled model readiness, and zero external requests. Existing default-page checks are unchanged and green.
+
+## Measurements
+
+- Bootstrap/config checks: **5/5 tests pass** (four bootstrap plus one Vite config).
+- Complete typed suite: **382/382 tests across 46 files**.
+- Plain-JS suite: **112/112 tests pass**.
+- TypeScript and application build: PASS; main JS **284.77 kB** (gzip **86.37 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
+- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, **7 requests, zero external**.
+- Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
+- Harness build, `loop report --check`, `loop pr-check --local`, and `loop gates --full`: **NOT_RUN** until the evidence commit.
+
+## Checks and limits
+
+Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, and 404 failures. `kimi-52-precheck/` contains green pre-commit evidence. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
+
+This is a mounted development preview, not final lifecycle migration, production publication, desktop acceptance, or an autonomous/model capability claim. Legacy workflow services remain temporarily bridged during the preview. Later Phase A units replace those owners, finish native/shared packaging and acceptance, and publish only after review.
+
+## Plain summary
+
+The typed Studio is now a real Vite application that can mount and load the bundled UOR demo. The default public page and production publish remain untouched in this unit. All declared product checks pass; no real endpoint, final migration, packaged-GUI, useful-chat, M7/M8, or accessibility-certification claim is made.

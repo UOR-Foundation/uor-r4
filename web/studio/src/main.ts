@@ -24,4 +24,16 @@ export * from './components/Settings.js';
 export * from './components/StudioApp.js';
 export * from './components/types.js';
 import './studio.css';
+import { mountTypedStudio, typedPreviewRequested } from './bootstrap.js';
+
 export const foundation = {};
+
+if (typedPreviewRequested(window.location.search)) {
+    const root = document.getElementById('studio-typed-root');
+    if (root) {
+        void mountTypedStudio(root).catch((error) => {
+            root.dataset.active = 'true';
+            root.textContent = `The typed Studio could not start: ${String(error)}`;
+        });
+    }
+}

@@ -1,0 +1,58 @@
+import { h, render } from 'preact';
+import { LifecycleStore } from './state/lifecycle.js';
+import { createModelSourceAdapter } from './adapters/modelSourceAdapter.js';
+import { createLegacyWorkflowApis } from './adapters/workflow.js';
+import type { LegacyWorkflowApis } from './adapters/workflow.js';
+import { ModelSources } from '../assets/js/model_sources.js';
+import { StudioApp } from './components/StudioApp.js';
+
+interface LegacyAppWindow extends Window {
+    __studioApp?: { worker: Worker | null };
+}
+
+export function typedPreviewRequested(search: string): boolean {
+    return new URLSearchParams(search).get('typed') === '1';
+}
+
+async function waitForWorkflowApis(timeoutMs: number): Promise<LegacyWorkflowApis> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const apis = createLegacyWorkflowApis();
+        if (apis.files && typeof apis.files.tabs === 'function' && apis.sessions && typeof apis.ui.getSettings === 'function') return apis;
+        await new Promise((resolve) => window.setTimeout(resolve, 25));
+    }
+    throw new Error('The existing Studio workflow services did not initialize.');
+}
+
+export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?: number } = {}) {
+    const apis = await waitForWorkflowApis(options.timeoutMs ?? 5000);
+    const store = new LifecycleStore();
+    const legacyWorker = (window as LegacyAppWindow).__studioApp?.worker || null;
+    const worker = legacyWorker || new Worker(new URL('../assets/js/uor_model_worker.js', import.meta.url), { type: 'module' });
+    const adapter = createModelSourceAdapter(store, ModelSources, worker);
+    const forwardMessage = (event: MessageEvent) => adapter.handleWorkerMessage(event.data);
+    worker.addEventListener('message', forwardMessage);
+    render(h(StudioApp, {
+        store,
+        adapter,
+        sources: ModelSources,
+        files: apis.files,
+        sessions: apis.sessions,
+        ui: apis.ui,
+    }), root);
+    root.dataset.active = 'true';
+    return {
+        store,
+        worker,
+        adapter,
+        files: apis.files,
+        sessions: apis.sessions,
+        ui: apis.ui,
+        dispose() {
+            worker.removeEventListener('message', forwardMessage);
+            if (!legacyWorker) worker.terminate();
+            root.dataset.active = 'false';
+            render(null, root);
+        },
+    };
+}
