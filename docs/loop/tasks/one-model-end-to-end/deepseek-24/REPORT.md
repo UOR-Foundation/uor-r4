@@ -33,8 +33,9 @@ training or model evaluation yet.
 - The report records chosen-token mismatches, exact rank mismatches, float and
   integer top-1 counts, EOS rank for every row, the number of EOS rank
   disagreements and the largest rank delta.
-- The output binds the checkpoint artifact, tokenizer, panel inputs, labels,
-  plan and manifest hashes and refuses case or target misalignment.
+- The output binds the checkpoint's model/config/Hamming files, artifact,
+  tokenizer, panel inputs, labels, plan and manifest hashes and refuses case or
+  target misalignment.
 
 ## Measurements
 

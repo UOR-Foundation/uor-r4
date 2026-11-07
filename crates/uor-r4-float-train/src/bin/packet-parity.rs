@@ -178,6 +178,16 @@ fn run() -> Result<()> {
     }
 
     let checkpoint = PathBuf::from(flag("checkpoint")?);
+    let file_sha = |name: &str| -> Result<String> {
+        let path = checkpoint.join(name);
+        let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
+        Ok(sha256(&bytes))
+    };
+    let checkpoint_hashes = serde_json::json!({
+        "model.safetensors": file_sha("model.safetensors")?,
+        "config.json": file_sha("config.json")?,
+        "hamming_read.safetensors": file_sha("hamming_read.safetensors")?,
+    });
     let artifact = fs::read(flag("artifact")?).map_err(|error| format!("artifact: {error}"))?;
     let artifact_sha = sha256(&artifact);
     let device = Device::new_cuda(0).map_err(|error| format!("CUDA device: {error}"))?;
@@ -207,6 +217,7 @@ fn run() -> Result<()> {
     let report = serde_json::json!({
         "schema": SCHEMA,
         "inputs": {
+            "checkpoint_files": checkpoint_hashes,
             "artifact_sha256": artifact_sha,
             "tokenizer_sha256": tokenizer_sha,
             "inputs_sha256": inputs_sha,
