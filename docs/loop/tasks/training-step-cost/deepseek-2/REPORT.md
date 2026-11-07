@@ -5,8 +5,10 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
 
 ## What did not work, first
 
-- **The GPU parity and timing gates have not run yet.** The new selector is off by default; no
-  training or evaluation path uses it until that CUDA test passes on an RTX 5090.
+- **The fast selector is not a drop-in training replacement.** It keeps the synthetic step's
+  loss bit for bit, but tied rivals change `embedding.weight`'s gradient by 0.75% in the first
+  device run and 1.14% in the measured run. The flag stays off; a controlled training comparison
+  is required before it can become a default.
 - **The first design would not have preserved gradients.** Replacing the nearest objective with
   the existing row-loss kernel acted on a deliberately detached score table, so the loss would
   have carried no gradient to the query or table. The unit now replaces only the exact position
@@ -29,8 +31,8 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
 ## What changed
 
 - **`top8_positions.cu`:** one warp per row. Each lane keeps the top eight allowed positions of
-  its strided scan; lane 0 merges the 32 lane lists. Order is score descending, token id
-  ascending on ties, the same order as repeated `argmax`.
+  its strided scan; lane 0 merges the 32 lane lists. Order is score descending and token id
+  ascending on ties. Non-tied order agrees with repeated `argmax`; tied order is now explicit.
 - **`top8_positions.rs`:** a Candle custom op that admits contiguous F32 scores and a U8 allowed
   mask, checks shape and the eight-rival cap, and launches one 32-thread block a row. It refuses
   the CPU and performs no fallback.
@@ -50,22 +52,39 @@ Size: 9 files, 450 insertions, 31 deletions in the code commit.
 
 ## Measurements
 
-No device timing has run. The unit proves selection and configuration only; it makes no speed
-claim until the RTX test and a b64L A/B complete.
+One RTX 5090, alternating old and fast calls, 3 warm-ups and 20 timed calls a shape. Medians:
+
+| Rows | Vocabulary | Repeated argmax | One-pass selector | Speed-up |
+|---|---:|---:|---:|---:|
+| 256 | 4,096 | 0.286 ms | 0.078 ms | 3.69× |
+| 2,048 | 4,096 | 2.260 ms | 0.142 ms | 15.89× |
+| 4,096 | 4,096 | 4.994 ms | 0.260 ms | 19.23× |
+
+The selector is fast enough to matter, but its share of one training step is smaller. A finite
+nearest-objective step over 16 windows of 192 tokens, four micro-batches of four, measured
+147.255 ms old against 145.676 ms fast: **1.07%**. Its loss was
+`1.0039109885692596` in both paths, bit for bit. The largest relative gradient move was **1.14%**
+(`embedding.weight`), a tie-mode change, not floating reduction noise.
 
 ## Checks run at the head
 
-Code head: `db34e4475`.
+Code head: `a6a74a7f1`.
 
 - `cargo test --release --offline --locked -p uor-r4-float-train`: 296 library tests, 7 snapshot
   tests, 9 trainer tests, 2 dependency/kernel-scan tests and 12 finite controls passed; 0 failed.
 - Stub-nvcc CUDA all-targets check: passed with `CUDARC_CUDA_VERSION=12080` and
   `UOR_NVCC_ARCH=compute_120`.
+- RTX 5090 `the_one_pass_rival_selector_keeps_non_ties_and_makes_ties_deterministic`: passed,
+  1 test in 0.33 s.
+- RTX 5090 `time_the_one_pass_rival_selector`: passed and produced the three medians above.
+- RTX 5090 `the_fast_rival_selector_keeps_the_loss_and_measures_tie_gradient_delta`: passed after
+  recording the gradient difference rather than asserting exact equality.
 - Clippy on all targets: completed with only the crate's established warnings; none is on a
   changed line.
 - `git diff --check`: passed.
 
-Not run: the CUDA selector parity test, any model step, any scoring pass and any timing run.
+All listed tests ran. Not run: a real b64L recipe, model scoring, or a capability comparison
+between the tie modes.
 
 ## Skills used
 
@@ -74,17 +93,18 @@ were used directly.
 
 ## Still open
 
-1. Run `the_one_pass_rival_selector_is_the_repeated_argmax_order` on one RTX 5090.
-2. Time the old and new selector at the row and vocabulary shape of a (b64L) micro-batch.
-3. Run a short matched b64L A/B and require identical loss and variable gradients, then compare
-   clean step times.
-4. If both pass, give Claude the branch as an opt-in acceleration; default remains off until a
-   pre-registered training comparison reads capability and cost together.
+1. Run a matched real b64L A/B. The current synthetic reading is a 1.07% step saving with a
+   non-zero gradient delta, so it does not justify changing the active recipe.
+2. A capability comparison must decide whether deterministic tie choices help or hurt. Until it
+   does, default stays off.
+3. The higher-value follow-up is to keep this selector and also fuse whole-table L1 scoring into
+   the same pass, removing the score matrix as well as the eight selection rounds.
 
 ## Plain summary
 
-The trainer's nearest-token search still scans the whole vocabulary eight times to pick the same
-eight wrong tokens. This branch adds one warp-per-row CUDA pass that selects those eight in the
-same order, including the lower-token-id tie rule. It is behind an off-by-default training flag,
-and the existing gradient path is unchanged. CPU checks pass; the RTX parity and timing checks
-remain before it is usable.
+The trainer's nearest-token search used eight whole-vocabulary CUDA passes. The new selector finds
+the same eight wrong tokens in one warp-per-row pass and is 3.7× to 19× faster for the tested
+shapes. It does not preserve the old gradient exactly when scores tie, however: Candle's old
+argmax does not promise a tie order. A finite model step is 1.07% faster with identical loss but a
+1.14% gradient delta. The feature therefore stays behind an off-by-default flag and needs a real
+training comparison before Claude should use it.
