@@ -4,7 +4,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## What did not work, first
 
-- **There is no 32,768-step reading, and this unit will not produce one.** The unit was stopped by the owner's decision before any training ran. Two RTX 5090 pods, `vast-59596793` (seed 1) and `vast-59596829` (seed 2), came up at $0.563/h each. Both were deleted while still bootstrapping, before any script was copied or job started. This is a stop by decision, not a measurement: it closes nothing about training length (§4.1, L-007).
+- **There is no 32,768-step reading, and this unit will not produce one.** The unit was stopped by the owner's decision before any training ran. Two RTX 5090 pods, `vast-59596793` (seed 1) and `vast-59596829` (seed 2), came up at $0.563/h each. Seed 1 had finished its bootstrap (`up-s1.log`: parity PASS, SSH ready) and seed 2 was still waiting for SSH. Both were deleted before any script was copied or any job started. This is a stop by decision, not a measurement: it closes nothing about training length (§4.1, L-007).
 - **The training-to-serving pipeline is not closed, and this unit's runs would not have closed it.** No (b64L) checkpoint has been exported or served. The served-form check that claude-301 named as the next step never ran, because claude-302 to claude-304 each stopped early. In the sheet's row 4 ("twice the steps buy nothing measurable"), this unit's checkpoint would have gone unused.
 - **D67 minor 6 was not done:** `gt/test-seal.sh` does not cover the store's empty-root probe, because the job hard-codes `/root/uor-store`. It is moot here, since nothing was sealed.
 
@@ -31,7 +31,7 @@ In Claude's chat, Casey asked whether every gap from training to serving is clos
 
 None from training: the sheet's Readings, Bar, tokens lever and mid-run reading are unread. I-r ran on the laptop before the launch (7 Nov): PASS, 120 fields equal (`local/claude/claude-307/ir/result.txt`).
 
-Spend: two pods, each up at most 533 s before deletion (start epochs in `up-s1.epoch` and `up-s2.epoch`), at $0.563/h: at most $0.17 together.
+Spend: two pods at $0.563/h. The compute ledger (`~/.local/share/uor-r4/compute`) records uptimes of 356 s (seed 1, down 16:33:36Z) and 350 s (seed 2, down 16:33:52Z): about $0.11 together.
 
 ## Checks run at the head
 
@@ -52,4 +52,4 @@ None beyond the loop's own steps.
 
 ## Plain summary
 
-This unit was about to spend about $9 training the current best model for twice as long. Casey asked whether that would actually feed the model, or whether it was guess-and-check while the path from training to a usable, served model was still unfinished. The honest answer was that the path is unfinished: no trained model of this kind has been exported or served yet. So I stopped before any training ran, spending under $0.20. Next, the existing trained model goes through export, serving and the reply tests first, so later training lands on a path that works.
+This unit was about to spend about $9 training the current best model for twice as long. Casey asked whether that would actually feed the model, or whether it was guess-and-check while the path from training to a usable, served model was still unfinished. The honest answer was that the path is unfinished: no trained model of this kind has been exported or served yet. So I stopped before any training ran, spending about $0.11. Next, the existing trained model goes through export, serving and the reply tests first, so later training lands on a path that works.
