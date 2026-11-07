@@ -19,7 +19,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **The data lever does not move.** D4 against claude-301's (b64L-D3), at equal positions (201.3M) and equal steps:
   - on unseen rows, the deciding reading, it is `inside`: −58,807 / +4,794, band 63,601;
   - on all rows it is `inside` as well: −71,949 / +5,185, band 77,134;
-  - oasst2 alone is `mixed` both ways: unseen −10,005 / −839 (band 9,166), all rows −12,106 / −1,183 (band 10,923);
+  - oasst2 alone is `mixed` both ways: unseen −10,005 / −839 (band 9,166), all rows −12,106 / −1,183 (band 10,923). Seed 1 is `behind` there on its own, and seed 2 is inside;
   - each wiki sub-panel is `inside`, on unseen rows and on all rows.
   - No sub-panel reads `behind`, so the outcome map's row 2 does not apply.
 - **The seeds disagree, and seed 1 is the run that falls short.**
@@ -65,7 +65,7 @@ The bar is not distinguishable from T2, and the unseen lever reads `inside`. Tha
 
 - `docs/harness/prep/one-model-end-to-end-d4-2026-11-07.md`: the sheet, with both FIT rounds and the D67 fixes applied.
 - `docs/loop/tasks/one-model-end-to-end/claude-306/`: the ORDER and this REPORT.
-- `docs/research/notebook/float-training.md`: one row, verdict **negative**: it closes (b64L) on D4 at 16,384 steps and these seeds, never the mechanism (D22).
+- `docs/research/notebook/float-training.md`: one row, verdict **inconclusive**. The bar reads `mixed`, which the sheet's Bar records as "not distinguishable at these seeds", never as a negative (L-007). Row 6 picks the next unit; it closes nothing.
 - No code changed. The trainer is pinned at `ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f`.
 
 ## Measurements
