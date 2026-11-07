@@ -14667,6 +14667,102 @@ mod tests {
 
     #[cfg(feature = "cuda")]
     #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn the_fast_rival_selector_matches_a_nearest_training_step() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let windows: Vec<CausalWindow> = (0..16usize)
+            .map(|b| {
+                let input_ids: Vec<u32> = (0..SHEET_CONTEXT)
+                    .map(|i| ((i * 37 + b * 101) % 4095 + 1) as u32)
+                    .collect();
+                let scored_offsets: Vec<usize> = (20..SHEET_CONTEXT - 1).collect();
+                CausalWindow {
+                    doc_id: b,
+                    scored_targets: scored_offsets.iter().map(|&o| input_ids[o + 1]).collect(),
+                    scored_corpus_positions: scored_offsets
+                        .iter()
+                        .map(|&o| b * SHEET_CONTEXT + o + 1)
+                        .collect(),
+                    input_ids,
+                    scored_offsets,
+                }
+            })
+            .collect();
+        let windows: Vec<&CausalWindow> = windows.iter().collect();
+        let step = |fast: bool| {
+            with_fast_rivals(fast, || {
+                step_gradient(
+                    &model,
+                    PointObjective::Nearest,
+                    &windows,
+                    4,
+                    SHEET_CONTEXT,
+                    false,
+                    1,
+                    3,
+                    |_, _| Ok(()),
+                )
+            })
+            .unwrap()
+        };
+        let (old_loss, old_grads) = step(false);
+        let (fast_loss, fast_grads) = step(true);
+        assert_eq!(old_loss.to_bits(), fast_loss.to_bits());
+        let mut compared = 0;
+        for (name, var) in model.variables() {
+            let (a, b) = (
+                old_grads.get(var.as_tensor()),
+                fast_grads.get(var.as_tensor()),
+            );
+            assert_eq!(a.is_some(), b.is_some(), "{name}");
+            let (Some(a), Some(b)) = (a, b) else {
+                continue;
+            };
+            let flat = |t: &Tensor| {
+                t.flatten_all()
+                    .unwrap()
+                    .to_dtype(DType::F32)
+                    .unwrap()
+                    .to_vec1::<f32>()
+                    .unwrap()
+            };
+            let (a, b) = (flat(a), flat(b));
+            assert_eq!(a, b, "{name}");
+            compared += 1;
+        }
+        assert!(compared > 0);
+
+        for _ in 0..2 {
+            drop(step(false));
+            drop(step(true));
+        }
+        let mut old = Vec::with_capacity(8);
+        let mut fast = Vec::with_capacity(8);
+        for _ in 0..8 {
+            let started = Instant::now();
+            drop(step(false));
+            old.push(started.elapsed().as_secs_f64() * 1_000.0);
+
+            let started = Instant::now();
+            drop(step(true));
+            fast.push(started.elapsed().as_secs_f64() * 1_000.0);
+        }
+        old.sort_by(f64::total_cmp);
+        fast.sort_by(f64::total_cmp);
+        println!(
+            "{}",
+            serde_json::json!({
+                "loss": fast_loss,
+                "gradients_equal": true,
+                "old_step_ms": old[old.len() / 2],
+                "fast_step_ms": fast[fast.len() / 2],
+            })
+        );
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
     fn whole_table_scores_do_not_depend_on_the_chunk() {
         let device = Device::new_cuda(0).unwrap();
         let table = Tensor::new(
