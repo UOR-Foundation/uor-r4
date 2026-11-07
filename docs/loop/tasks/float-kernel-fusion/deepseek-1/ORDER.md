@@ -5,15 +5,18 @@ Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kerne
 
 ## Goal
 
-Complete the item's done-when 4 and 5 on the current training line:
+Complete the training half of the item's done-when 4 and the training default in done-when 5 on
+the current one-model line:
 
 > 4. **The cost,** on an RTX 5090 at P2b's recipe: kernel launches and seconds per training
 > step, chain against fused, by the trainer clock (and `nsys`, if the pod has it).
 > 5. The flag defaults on only when 2 and 3 hold. One notebook row and a REPORT.
 
 Claude-285's done-when 2 and 3 already hold on an RTX 5090. This unit measures the fused
-quantizers on the current b64L human-text recipe, checks that 256-step checkpoints remain
-bit-identical, and turns fusion on for `train-in-space` only if the measured step improves.
+quantizers on the current b64L human-text recipe at both short and long context, checks every
+saved 256-step training artifact, and turns fusion on for served `train-in-space` training only
+if both shapes improve. The item's cached-decode half of done-when 4 remains open: the current
+flag is training-only, and this ORDER does not claim the item's complete done-when 4.
 
 ## Claim check
 
@@ -23,8 +26,8 @@ bit-identical, and turns fusion on for `train-in-space` only if the measured ste
 - **What changes in the model:** no value or gradient. `activation_quantize16` and
   `q16_residual` already execute their exact fused replacements under `--fused-quantize 1`;
   claude-285 proved the losses, gradients, samples and eight-step checkpoints bit-identical.
-  This unit extends the equality window and changes the default only if the measured clock says
-  the fused path is faster.
+  This unit extends the equality window across the current b64L recipe and both timing shapes,
+  then changes the training default only if the measured clock says the fused path is faster.
 - **Claude's work is isolated:** this branch does not touch `claude/d3-tokens`, Claude's two
   running pods or their files. The source change, if earned, is one trainer default plus its
   docs and tests on `deepseek/float-kernel-fusion`.
@@ -56,21 +59,24 @@ No kernel source, model objective, data, checkpoint or serving artifact changes.
 1. The laptop checks pass: the float-train library tests, the focused flag-default test,
    stub-CUDA `cargo check`, `cargo clippy` for the crate, `git diff --check`, the loop report
    and local PR checks.
-2. On one leased RTX 5090, four 256-step b64L runs execute in the registered order
-   `OFF, ON, ON, OFF`, with equal seeds, data, micro-batch and eval cadence.
-3. The step clock is read over steps 128 to 256 in every run, after warm-up, and the ON/OFF
-   gain is reported against the OFF and ON pair spreads.
-4. All four step-128 and step-256 model files are byte-identical, and the loss columns agree.
-   Any difference fails the correctness gate before a speed result is read.
-5. The launch count is reported from the measured call counts and the registered tensor-op
-   counts for each chain. An `nsys` launch count is added if the pod provides it; otherwise
-   that absence is explicit.
-6. If the gain is above noise and at least 0.5% of a step, `train-in-space` defaults
-   `--fused-quantize` to `1`; an explicit `0` still selects the chain. Otherwise the default
-   stays `0`, and the REPORT closes the performance configuration without calling the geometry
-   negative.
+2. On one leased RTX 5090, four 256-step runs execute at (S), 192 x 16 with batch 64 in four
+   micro-batches of 16, and four at (L), 2,048 x 4, each in the registered `OFF, ON, ON, OFF`
+   order with equal seeds, data and eval cadence.
+3. The step clock is read from the three post-warm-up 64-step windows in every run. Per shape,
+   the ON/OFF gain is reported against the within-run window spread, the OFF pair spread, the ON
+   pair spread, and the registered noise floors of 0.46% at (S) and 0.25% at (L).
+4. Every `models/step-*` directory at steps 0, 64, 128, 192 and 256 is byte-identical across the
+   four runs of a shape, and full `progress.jsonl` records are equal after removing only the two
+   timing fields. Any difference fails the correctness gate before a speed result is read.
+5. Launch counts are measured with `nsys` for a no-evaluation 32-step smoke at each shape if the
+   pod has `nsys`. If absent, the two smoke runs still report their fused and chain call counts
+   separately from the 256-step runs and the source-derived tensor-op count is labelled a
+   lower-bound estimate, never an observed launch count.
+6. If both shapes improve beyond noise as defined in the sheet, `train-in-space` defaults
+   served training to fused quantizers; an explicit `0` still selects the chain. If either shape
+   does not improve, the default stays `0`.
 7. The RTX 5090 run is sealed and read back, the pod is down, and one notebook row and a
-   negatives-first REPORT record the result.
+   negatives-first REPORT record the result. The item remains open for its cached-decode cost.
 
 ## Stop and decide
 
@@ -79,7 +85,8 @@ Ask means decide, record and continue.
 - **Checkpoint or loss mismatch:** stop the speed reading. Classify instrument or kernel, keep
   the default off unless the exact cause is repaired and the run repeats.
 - **Fewer than three usable 128-step intervals:** add one balanced block on the same pod.
-- **Cost or pod cap:** one RTX 5090, at most $3 and 40 minutes. A healthy run is not cancelled
-  for a self-set budget; extend and record instead.
+- **Cost or pod cap:** one RTX 5090, planned for $3 and 40 minutes at no more than $1.15/h.
+  A healthy run is not cancelled for a self-set budget; extend, renew and record instead, within
+  the owner's four-pod and $8/h caps.
 - **Other lab's pod:** never lease, reuse or inspect its GPUs. Create our own within the shared
   caps or stop compute and finish the code review.
