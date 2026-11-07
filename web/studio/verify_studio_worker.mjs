@@ -878,6 +878,14 @@ for (const [index, [prompt, expected]] of [
     ['17-25', 'underflow'],
     ['What is 17-25?', 'underflow'],
     [`${' '.repeat(200)}50-12`, '160-byte'],
+    ['11 -05', '6'],
+    ['2026 -11', '2015'],
+    ['What is 10 -20?', 'underflow'],
+    ['What is 12 -25?', 'underflow'],
+    ['2026-11-05 -1', 'exact arithmetic'],
+    ['2026-11-05, -1', 'exact arithmetic'],
+    ['2026-11-05T17:25+01:00, -1', 'exact arithmetic'],
+    ['2026-11-05 +1', 'exact arithmetic'],
     ['17/25 of 3', 'exact arithmetic'],
     ['5-10 minutes + 3', 'exact arithmetic'],
     ['2026-11-05 - 2026-11-10 + 3', 'exact arithmetic'],
@@ -890,8 +898,8 @@ for (const [index, [prompt, expected]] of [
         payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
     });
     const result = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
-    if (expected === '38') {
-        assert(result.action === 'generate_complete' && result.fullText.startsWith('38\n') && result.tokenCount === 0, `compact subtraction must compute exactly (${prompt}): ${JSON.stringify(result)}`);
+    if (['38', '6', '2015'].includes(expected)) {
+        assert(result.action === 'generate_complete' && result.fullText.startsWith(`${expected}\n`) && result.tokenCount === 0, `compact subtraction must compute exactly (${prompt}): ${JSON.stringify(result)}`);
     } else {
         assert(result.action === 'generate_error' && result.error.includes(expected), `compact subtraction must fail explicitly (${prompt}): ${JSON.stringify(result)}`);
     }
@@ -901,7 +909,7 @@ for (const [index, [prompt, expected]] of [
     assert(closed.action === 'session_reset', `compact subtraction conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['3/4 of the students passed', '5-10 minutes', '50-12 minutes', '2026-11-05 - 2026-11-10'].entries()) {
+for (const [index, prompt] of ['3/4 of the students passed', '5-10 minutes', '50-12 minutes', '2026-11-05 - 2026-11-10', '12:00 - 1, then lunch', '5:00 - 6', '12 - 1:00', '5 - 6:00', '3/4 of the 20 students passed', '5-10 minutes, 3 times', '2026-11-05 - 2026-11-10, 3 days'].entries()) {
     const id = `gen_review29_range_${index}`;
     const conversationId = `conv_review29_range_${index}`;
     await sendToWorker({

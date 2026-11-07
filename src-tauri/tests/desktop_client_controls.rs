@@ -1090,6 +1090,20 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
         assert_eq!(response["result"], json!("38"), "wrong result: {prompt}");
     }
+    for (prompt, expected) in [("11 -05", "6"), ("2026 -11", "2015")] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("one-sided date-like subtraction RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert_eq!(
+            response["result"],
+            json!(expected),
+            "wrong result: {prompt}"
+        );
+    }
     for prompt in ["17-25", "What is 17-25?"] {
         let response = dispatch_rpc_command(
             &mut backend,
@@ -1126,6 +1140,13 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         "5-10 minutes",
         "50-12 minutes",
         "2026-11-05 - 2026-11-10",
+        "12:00 - 1, then lunch",
+        "5:00 - 6",
+        "12 - 1:00",
+        "5 - 6:00",
+        "3/4 of the 20 students passed",
+        "5-10 minutes, 3 times",
+        "2026-11-05 - 2026-11-10, 3 days",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,
@@ -1136,6 +1157,12 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
     }
     for prompt in [
+        "What is 10 -20?",
+        "What is 12 -25?",
+        "2026-11-05 -1",
+        "2026-11-05, -1",
+        "2026-11-05T17:25+01:00, -1",
+        "2026-11-05 +1",
         "17/25 of 3",
         "5-10 minutes + 3",
         "2026-11-05 - 2026-11-10 + 3",

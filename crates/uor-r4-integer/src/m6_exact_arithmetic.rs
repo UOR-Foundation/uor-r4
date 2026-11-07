@@ -909,6 +909,8 @@ fn exact_tool_compact_subtraction_shape(expression: &str) -> bool {
     let (Some(left), Some(right), None) = (fields.next(), fields.next(), fields.next()) else {
         return false;
     };
+    let left_raw = left;
+    let right_raw = right;
     let left = left.trim();
     let right = right.trim();
     if left.is_empty()
@@ -918,18 +920,59 @@ fn exact_tool_compact_subtraction_shape(expression: &str) -> bool {
     {
         return false;
     }
-    let no_space_date_pair = if left.len() == 4 && right.len() == 2 {
-        right
-            .parse::<u8>()
-            .is_ok_and(|month| (1..=12).contains(&month))
-    } else if left.len() == 2 && right.len() == 2 {
-        left.parse::<u8>()
-            .is_ok_and(|month| (1..=12).contains(&month))
-            && right.parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
-    } else {
-        false
-    };
+    let adjacent = left_raw == left && right_raw == right;
+    let no_space_date_pair = adjacent
+        && if left.len() == 4 && right.len() == 2 {
+            right
+                .parse::<u8>()
+                .is_ok_and(|month| (1..=12).contains(&month))
+        } else if left.len() == 2 && right.len() == 2 {
+            left.parse::<u8>()
+                .is_ok_and(|month| (1..=12).contains(&month))
+                && right.parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
+        } else {
+            false
+        };
     !no_space_date_pair
+}
+
+fn exact_tool_count_prose(text: &str) -> bool {
+    let alphabetic_words = text
+        .split_whitespace()
+        .filter(|word| word.chars().any(char::is_alphabetic))
+        .count();
+    let required_words = if text.trim_start().starts_with(|c: char| c.is_ascii_digit()) {
+        1
+    } else {
+        2
+    };
+    if alphabetic_words < required_words {
+        return false;
+    }
+    !text.chars().any(|c| {
+        matches!(
+            c,
+            '+' | '-'
+                | '*'
+                | '/'
+                | '%'
+                | '^'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
+                | '~'
+                | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
+                | '('
+                | '{'
+                | '['
+        )
+    })
 }
 
 fn exact_tool_compact_range_prose(expression: &str, suffix: &str) -> bool {
@@ -937,27 +980,33 @@ fn exact_tool_compact_range_prose(expression: &str, suffix: &str) -> bool {
         return false;
     }
     if suffix.chars().any(|c| {
-        c.is_ascii_digit()
-            || matches!(
-                c,
-                '+' | '-'
-                    | '*'
-                    | '/'
-                    | '%'
-                    | '^'
-                    | '&'
-                    | '|'
-                    | '='
-                    | '<'
-                    | '>'
-                    | '~'
-                    | '−'
-                    | '('
-                    | '{'
-                    | '['
-            )
+        matches!(
+            c,
+            '+' | '-'
+                | '*'
+                | '/'
+                | '%'
+                | '^'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
+                | '~'
+                | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
+                | '('
+                | '{'
+                | '['
+        )
     }) {
         return false;
+    }
+    if suffix.chars().any(|c| c.is_ascii_digit()) {
+        return exact_tool_count_prose(suffix);
     }
     exact_tool_ratio_suffix_allowed(&suffix.to_ascii_lowercase())
 }
@@ -1042,6 +1091,7 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
             let next = rest[index + 1..].chars().next();
             if previous.is_some_and(char::is_whitespace)
                 && (next.is_none()
+                    || next.is_some_and(|next| next.is_ascii_digit())
                     || (next.is_some_and(char::is_whitespace)
                         && exact_tool_operand_start(&rest[index + 1..])))
             {
@@ -1251,6 +1301,12 @@ fn exact_tool_is_time_range(rest: &str) -> bool {
     if exact_tool_time_atom(left) && exact_tool_time_or_prose(right) {
         return true;
     }
+    if exact_tool_time_atom(left) && exact_tool_bare_hour_prose(right) {
+        return true;
+    }
+    if exact_tool_bare_hour_prose(left) && exact_tool_time_atom(right) {
+        return true;
+    }
     if exact_tool_meridiem_time_or_prose(left) && exact_tool_bare_hour_prose(right) {
         return true;
     }
@@ -1430,6 +1486,18 @@ fn exact_tool_leading_numeric_dash(text: &str) -> bool {
         && after.trim_start().starts_with(|c: char| c.is_ascii_digit())
 }
 
+fn exact_tool_signed_numeric_tail(text: &str) -> bool {
+    let text = text.trim();
+    let Some(sign) = text.chars().next() else {
+        return false;
+    };
+    if !matches!(sign, '+' | '-') {
+        return false;
+    }
+    let digits = text[sign.len_utf8()..].trim_start();
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
 fn exact_tool_is_iso_date_time(rest: &str) -> bool {
     let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
     if exact_tool_is_iso_date_time_core(rest) {
@@ -1451,6 +1519,7 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
                 return true;
             }
             if !tail.starts_with('+')
+                && !exact_tool_signed_numeric_tail(tail)
                 && !exact_tool_leading_operator_minus(tail)
                 && !exact_tool_leading_numeric_dash(tail)
                 && !exact_tool_arithmetic_shaped(tail)
@@ -1467,7 +1536,25 @@ fn exact_tool_is_iso_date_range(rest: &str) -> bool {
     let Some((left, right)) = rest.split_once(" - ") else {
         return false;
     };
-    exact_tool_is_iso_date_time_core(left.trim()) && exact_tool_is_iso_date_time_core(right.trim())
+    let left = left.trim();
+    let right = right.trim();
+    if exact_tool_is_iso_date_time_core(left) && exact_tool_is_iso_date_time_core(right) {
+        return true;
+    }
+    for (index, c) in right.char_indices() {
+        if !matches!(c, ',' | ' ' | '\t') {
+            continue;
+        }
+        let head = &right[..index];
+        let tail = right[index + 1..].trim_start();
+        if exact_tool_is_iso_date_time_core(left)
+            && exact_tool_is_iso_date_time_core(head)
+            && exact_tool_count_prose(tail)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn exact_tool_leading_operator_minus(expression: &str) -> bool {
@@ -1593,33 +1680,38 @@ fn exact_tool_is_ratio_prose(rest: &str) -> bool {
     if !exact_tool_ratio_suffix_allowed(&lower_after) {
         return false;
     }
-    !after.chars().any(|c| {
-        c.is_ascii_digit()
-            || matches!(
-                c,
-                '+' | '-'
-                    | '*'
-                    | '/'
-                    | '%'
-                    | '^'
-                    | '×'
-                    | '÷'
-                    | '&'
-                    | '|'
-                    | '='
-                    | '<'
-                    | '>'
-                    | '~'
-                    | '−'
-                    | '≤'
-                    | '≥'
-                    | '≠'
-                    | '·'
-                    | '('
-                    | '{'
-                    | '['
-            )
-    })
+    if after.chars().any(|c| {
+        matches!(
+            c,
+            '+' | '-'
+                | '*'
+                | '/'
+                | '%'
+                | '^'
+                | '×'
+                | '÷'
+                | '&'
+                | '|'
+                | '='
+                | '<'
+                | '>'
+                | '~'
+                | '−'
+                | '≤'
+                | '≥'
+                | '≠'
+                | '·'
+                | '('
+                | '{'
+                | '['
+        )
+    }) {
+        return false;
+    }
+    if after.chars().any(|c| c.is_ascii_digit()) {
+        return exact_tool_count_prose(after);
+    }
+    true
 }
 
 fn exact_tool_number_leading_prose(text: &str) -> bool {
@@ -1834,6 +1926,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
             let next = expression[index + 1..].chars().next();
             previous.is_some_and(char::is_whitespace)
                 && (next.is_none()
+                    || next.is_some_and(|next| next.is_ascii_digit())
                     || (next.is_some_and(char::is_whitespace)
                         && exact_tool_operand_start(&expression[index + 1..])))
         });
@@ -2724,6 +2817,41 @@ mod tests {
                     .expect("review29 arithmetic boundary should be recognized")
                     .is_err(),
                 "review29 arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for prompt in [
+            "What is 10 -20?",
+            "What is 12 -25?",
+            "2026-11-05 -1",
+            "2026-11-05, -1",
+            "2026-11-05T17:25+01:00, -1",
+            "2026-11-05 +1",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("review15 arithmetic boundary should be recognized")
+                    .is_err(),
+                "review15 arithmetic boundary fell through: {prompt}"
+            );
+        }
+        for (prompt, expected) in [("11 -05", "6"), ("2026 -11", "2015")] {
+            let answer = exact_arithmetic_tool(prompt)
+                .expect("one-sided date-like subtraction should be recognized")
+                .expect("one-sided date-like subtraction should compute exactly");
+            assert_eq!(answer.result, expected, "wrong result: {prompt}");
+        }
+        for prompt in [
+            "12:00 - 1, then lunch",
+            "5:00 - 6",
+            "12 - 1:00",
+            "5 - 6:00",
+            "3/4 of the 20 students passed",
+            "5-10 minutes, 3 times",
+            "2026-11-05 - 2026-11-10, 3 days",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary count/clock prose was intercepted: {prompt}"
             );
         }
         let compact = exact_arithmetic_tool("50-12")

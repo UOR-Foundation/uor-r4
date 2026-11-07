@@ -1,6 +1,6 @@
 # ORDER: repair Studio loading and share exact arithmetic
 
-Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Initial base: `ed9b5b9aa196f086387e8afd6564430adb793716`; current `origin/main` base: `3a9c2f11d26991a70a22f88758cfb4589a1cf14d`, including registration PR #3730 and all non-overlapping main deliveries through that base.
+Lab: kimi. Item: [m7-lexlean-studio-tools](../../../../roadmap/items/m7-lexlean-studio-tools.md) (#3704). Initial base: `ed9b5b9aa196f086387e8afd6564430adb793716`. The `3a9c2f11d26991a70a22f88758cfb4589a1cf14d` base was ORDER-time history, including registration PR #3730; `195c217783fbecd58db70dd842129e90cff2a69c` was an intermediate merged base. Current `origin/main` base: `d43e339502eabf5351c49677929e14c6a8fc5b51`, including all non-overlapping main deliveries through that base.
 
 ## Owner request and measured decision
 
