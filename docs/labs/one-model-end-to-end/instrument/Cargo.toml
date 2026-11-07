@@ -13,6 +13,7 @@ resolver = "2"
 [features]
 panel-writer = ["dep:uor-r4-training", "dep:uor-r4-core"]
 cpu-parity = ["dep:uor-r4-integer", "dep:uor-r4-cpu-train", "dep:uor-r4-core"]
+cuda-parity = ["cpu-parity", "dep:uor-r4-float-train"]
 
 [[bin]]
 name = "heldout-panel"
@@ -42,12 +43,18 @@ name = "corpus-panel-overlap"
 path = "src/bin/corpus-panel-overlap.rs"
 required-features = ["cpu-parity"]
 
+[[bin]]
+name = "packet-parity"
+path = "src/bin/packet-parity.rs"
+required-features = ["cuda-parity"]
+
 [dependencies]
 uor-r4-training = { path = "../../../../crates/uor-r4-training", optional = true }
 uor-r4-core = { path = "../../../../crates/uor-r4-core", optional = true }
 uor-r4-tokenizer = { path = "../../../../crates/uor-r4-tokenizer" }
 uor-r4-integer = { path = "../../../../crates/uor-r4-integer", features = ["serving-wasm"], optional = true }
 uor-r4-cpu-train = { path = "../../../../crates/uor-r4-cpu-train", optional = true }
+uor-r4-float-train = { path = "../../../../crates/uor-r4-float-train", features = ["cuda"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.8"
