@@ -102,7 +102,7 @@ benchmark.
 
 After removing wall and rate fields, the two full seed-1 reports both normalized
 to SHA-256
-`1c0c0a8b3a41e75ed3a12d96a88910e615251d69386cae8ae521c64d2977a09e`.
+`7df7c78c10a35f465f47cc54a9c73c77aadb52a045af30d54268f13f946a7967`.
 
 The compact bound result is
 [result.json](./evidence/result.json).

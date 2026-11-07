@@ -10,6 +10,12 @@
     "mask_sha256": "8b79a29c5bf27616e2337bdf05b444364f94e7d07acd3e144dc7714e96c9fe68",
     "tokenizer_sha256": "a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377"
   },
+  "settings": {
+    "max_evaluation_rows": 4900,
+    "max_reply_examples": 16,
+    "reply_tokens": 16,
+    "margin_q12": 1
+  },
   "seed_1": {
     "artifact_sha256": "9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9",
     "snapshot_sha256": "0c2f4c1cefa293c5076293535e3dda4b206e409167610733d75ea3455bdf722c",
@@ -67,7 +73,7 @@
     "seed_2_snapshot_sha256": "a80c406da9ace065d90d78aeaf9115b4c937b182f5b72b11fe900368b31f8f6d"
   },
   "deterministic_replay": {
-    "normalized_report_sha256": "1c0c0a8b3a41e75ed3a12d96a88910e615251d69386cae8ae521c64d2977a09e",
+    "normalized_report_sha256": "7df7c78c10a35f465f47cc54a9c73c77aadb52a045af30d54268f13f946a7967",
     "matched": true
   },
   "limitations": [
