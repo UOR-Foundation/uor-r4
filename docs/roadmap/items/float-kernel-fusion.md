@@ -41,6 +41,12 @@ Why these two kernels first:
    - **Where:** `src/fused_quantize.cu`, built f32 only as its own PTX module, so the pinned `cuda_stack.cu` is unchanged. The kernels run behind `train-in-space --fused-quantize 1`, whose default is 0.
    - **What held on one RTX 5090:** each kernel equals its chain bit for bit. That covers the ops' forward and gradient on edge rows, one training step at P2b's recipe at (S) and (L) (the loss and every gradient), and eight training steps' models, samples and progress.
    - **What is left:** what the kernels save (done-when 4) and the flag's default (done-when 5).
+   - **The training cost is ready to run:** [deepseek-1's
+     sheet](../../harness/prep/float-kernel-fusion-fused-cost-2026-11-07.md) passed a fresh
+     non-author FIT review at `820a1103b`. It is computed as NOT_RUN for now because the owner's
+     current pipeline-first direction defers new training runs. The flag remains off; a later
+     pre-run review starts the short/long-context timing and asks whether the training default
+     should change.
 
 ## Done when
 

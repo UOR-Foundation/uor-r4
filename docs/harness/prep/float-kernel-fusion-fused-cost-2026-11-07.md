@@ -3,7 +3,8 @@
 Lab: deepseek. Item: [float-kernel-fusion](../../roadmap/items/float-kernel-fusion.md)
 (#3678). Order: [deepseek-1](../../loop/tasks/float-kernel-fusion/deepseek-1/ORDER.md).
 
-TEST FITNESS: PENDING (a fresh non-author review must precede compute).
+TEST FITNESS: FIT - M2 #2030 (a fresh non-author Codex review at `820a1103b`, 7 Nov). Its
+conditions are in the Verdict section. Compute remains deferred by the execution gate above.
 
 ## Why
 
@@ -275,3 +276,15 @@ checkpoints per run.
   source-derived lower bound.
 - Never touch Claude's pods. If no own pod can be created under the caps, leave compute NOT_RUN
   and do not substitute the laptop CPU.
+
+## Verdict
+
+TEST FITNESS: FIT - M2 #2030
+sheet: docs/harness/prep/float-kernel-fusion-fused-cost-2026-11-07.md
+reviewer: codex
+note: 820a1103b; extension pooling, noise, exactness and terminal outcomes specified; exact ignored tests require one pass each; paired 1/32-step smokes isolate 31 training steps; no-nsys fallback is labelled correctly; pipeline-first compute gate recorded.
+date: 2026-11-07
+
+A FIT verdict clears compute for the configuration in that sheet only (D22).
+
+Every mechanism pre-registration gets a TEST FITNESS review on its milestone before compute.
