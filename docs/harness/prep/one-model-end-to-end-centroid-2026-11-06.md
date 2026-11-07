@@ -360,7 +360,7 @@ watch_capture() {
   done
 }
 
-scripts/pod/uor-pod status --du
+scripts/pod/uor-pod status
 create_capture_pod centroid-s1 1 "b64L centroid cache seed 1"
 POD1=$CREATED_POD
 create_capture_pod centroid-s2 2 "b64L centroid cache seed 2"
