@@ -142,7 +142,7 @@ These are registered here, before any pod goes up.
 
 - **The paired band** is `max(2·√(b+c), the two-seed spread)`, `scale-probe pair`'s.
 - **The bar:** claude-301's (b64L-16k) against D3's T2 read d +75,038 / +85,590, band 10,552 (all spread). The bar here has about 7× headroom if (b64L-32k) is no worse.
-- **The tokens lever** pairs seed s with seed s. The same seed and TRAIN give the same data order, so the pairing is not arbitrary, as claude-306's was; the two runs differ in their learning rate from step 1 and in their last 16,384 steps.
+- **The tokens lever** pairs seed s with seed s. At the pin, each epoch's order is `epoch_order(n, seed, epoch)` (`in_space_long.rs:2363`), which does not depend on `--steps`. So both runs see the same batches for their first 16,384 steps, and the pairing is not arbitrary, as claude-306's was. The two runs differ in their learning rate from step 1, and in the second run's last 16,384 steps.
   - claude-301's own tokens lever (8,192 → 16,384) had a band of 34,618, all spread. A like spread here means an `inside` covers gains up to about 35,000 rows, about 10% of (b64L-16k)'s 331,698 / 342,250 top-1.
   - The McNemar floor, 2·√(b+c), is about 1,100 rows over the whole panel.
   - So an `inside` means "within that band", not "no effect".
