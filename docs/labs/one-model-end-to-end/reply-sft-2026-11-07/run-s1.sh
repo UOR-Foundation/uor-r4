@@ -217,8 +217,11 @@ cleanup() {
         --confirm-archived || rc=1
     else
       echo "run did not prove a sealed readback; archiving the pod before teardown" >&2
-      stop_remote_job || rc=1
-      "$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1
+      if stop_remote_job; then
+        "$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1
+      else
+        rc=1
+      fi
     fi
   fi
   [ "$STATUS" = SEALED ] || rc=1

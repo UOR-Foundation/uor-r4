@@ -62,6 +62,9 @@ spend.
 - **The post-repair FIT review found the step-0 exception was unconditional.**
   After the DEV checks were added, the predicate still accepted any step-0
   training-loss value instead of only the null value emitted before training.
+- **The merged-tree FIT review found two incomplete protections.** The positive
+  train-loss branch had no permanent gate or mutation, and failure cleanup
+  attempted `down --to-store` even after `stop_remote_job` failed.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -146,7 +149,8 @@ spend.
 - The launcher builds the Vast provider adapter from the reviewed checkout
   before calling `uor-pod status` or `uor-pod up`.
 - Failure cleanup forces a nonzero status for every non-sealed run, including
-  SIGINT and SIGTERM paths, after attempting the archive and teardown.
+  SIGINT and SIGTERM paths. It archives and tears down only after the active job
+  has stopped; a failed stop leaves the pod and reports failure.
 - The outcome map's partial-movement row now covers every guard-passing case
   with any EOS/generation/content movement that does not meet rows 3–5,
   removing the prior logical gap before the catch-all.
@@ -175,8 +179,15 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `3d7b0130b670574f5468d3396b806e9a3fbea059`, reviewer session
   `01a1b83b-0416-7ba0-85bb-d8371645cd69`, because step-0 training loss was
   still accepted without validation.
-- `gate.sh`: 173 checks passed after the step-0 and both-margin pins.
-- `test-mutants.sh`: 59 of 59 semantic mutations caught.
+- Merged-tree FIT review: **NO-GO** at
+  `b640dcdc7b78b19965c3961ac4d0601243fb894e`, reviewed-runtime
+  `fe816bc244d526d591d2caadd27efaade461c81efd64991f354bd0738f17ac08`,
+  reviewer session `01a1b84a-8abf-7a62-89cd-7e1e98b8fa36`, because the
+  positive-step training-loss rule lacked permanent coverage and failed-stop
+  cleanup still attempted teardown.
+- `gate.sh`: 177 checks passed after adding the positive progress rules and
+  stop-before-teardown coupling.
+- `test-mutants.sh`: 62 of 62 semantic mutations caught.
 - Direct evaluation of the progress predicate accepted null and absent step-0
   training loss; it rejected finite, infinite and string step-0 training loss,
   non-finite positive-step training loss, and null or non-finite DEV loss,

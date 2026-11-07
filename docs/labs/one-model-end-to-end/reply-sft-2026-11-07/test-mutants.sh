@@ -141,6 +141,8 @@ mutate missing-seal-cap "$JOB" \
   'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' \
   'if false; then'
 mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
+mutate unchecked-positive-progress "$JOB" \
+  '([.[] | select(.step > 0)] | length) > 0 and' 'true and'
 mutate unchecked-dev-loss "$JOB" \
   '((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and' \
   '(.dev_loss != null) and'
@@ -150,6 +152,10 @@ mutate unchecked-dev-address-margin "$JOB" \
   '(.dev_address_margin | isfinite)' 'true'
 mutate unchecked-step-zero-train-loss "$JOB" \
   'then .train_loss_mean == null' 'then true'
+mutate unchecked-positive-train-loss "$JOB" \
+  'else ((.train_loss_mean | type) == "number" and
+         (.train_loss_mean | isfinite))' \
+  'else true'
 mutate checkpoint-progress-unchecked "$JOB" \
   'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
 mutate base-sample-unchecked "$JOB" \
@@ -194,7 +200,10 @@ mutate unreachable-as-stopped "$LAUNCHER" \
   '*) failures=0; unreachable=$((unreachable + 1)) ;;' \
   '*) failures=$((failures + 1)); unreachable=0 ;;'
 mutate no-rental-discovery "$LAUNCHER" 'discover_owned_pod' 'true'
-mutate no-active-stop "$LAUNCHER" 'stop_remote_job || rc=1' 'true || rc=1'
+mutate no-active-stop "$LAUNCHER" 'if stop_remote_job; then' 'if true; then'
+mutate teardown-after-failed-stop "$LAUNCHER" \
+  '"$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1' \
+  'true'
 mutate signal-cleanup-success "$LAUNCHER" \
   '[ "$STATUS" = SEALED ] || rc=1' \
   '[ "$STATUS" = SEALED ] || true'
