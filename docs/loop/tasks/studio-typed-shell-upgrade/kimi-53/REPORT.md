@@ -1,6 +1,6 @@
 # REPORT: make the mounted Studio visible and the evidence truthful, kimi-53
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `d620d5536cc13f0ab44bbda193368e7cf6d1df2a`, tree `e1e4c9021e963b387c48c3da44f709405db0b4ac`; reviewed merge base: `e9bfd7751e3eb31736178d23289e8d99480bb0d0`. Agent-31 returned CHANGES at the base. The final exact delivery head/tree and logs will be recorded on PR #3835 after protected delivery; before push they are local evidence.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `d620d5536cc13f0ab44bbda193368e7cf6d1df2a`, tree `e1e4c9021e963b387c48c3da44f709405db0b4ac`; reviewed merge base: `e9bfd7751e3eb31736178d23289e8d99480bb0d0`. Agent-31 returned CHANGES at the base. The exact final HEAD/tree are captured in `identity.log` and will be posted on PR #3835 after push, not embedded as a self-referential REPORT hash. Before push they are local evidence.
 
 ## What did not work
 

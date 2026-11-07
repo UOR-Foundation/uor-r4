@@ -30,7 +30,7 @@ No publisher, deployment, Tauri, engine, worker, tokenizer, `studio_api.js`, mod
 
 - Mount and error paths set `root.hidden = false`; dispose restores `root.hidden = true`. The root's computed display is not `none`, and typed-only text is visible while the legacy app is hidden.
 - A direct test proves no mount/default mutation without `typed=1`; incomplete initialization still refuses render and leaves an explicit visible error path. Existing worker reuse is preserved.
-- The REPORT records the actual merge base, exact final HEAD/tree, and all executed checks; it no longer says completed local gates are NOT_RUN. Publication wording says only that the default source UI remains legacy and no publish ran; it does not imply current staging can ship the typed app.
+- The REPORT records the actual merge base and all executed checks. Exact final HEAD/tree are captured in `identity.log` and posted on PR after push, not embedded as a self-referential REPORT hash. Publication wording says only that the default source UI remains legacy and no publish ran; it does not imply current staging can ship the typed app.
 - Focused/full Studio checks, plain-JS, all four legacy checks, report/local-PR checks, and full gates pass at the new exact head. Fresh exact-head review approves before ready/queue.
 - PR keeps `References #3500`; no production publish, final migration, Tauri acceptance, or model-capability claim.
 

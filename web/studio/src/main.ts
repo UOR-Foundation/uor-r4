@@ -28,13 +28,15 @@ import { mountTypedStudio, typedPreviewRequested } from './bootstrap.js';
 
 export const foundation = {};
 
+export function showMountError(root: HTMLElement, error: unknown): void {
+    root.hidden = false;
+    root.dataset.active = 'true';
+    root.textContent = `The typed Studio could not start: ${String(error)}`;
+}
+
 if (typedPreviewRequested(window.location.search)) {
     const root = document.getElementById('studio-typed-root');
     if (root) {
-        void mountTypedStudio(root).catch((error) => {
-            root.hidden = false;
-            root.dataset.active = 'true';
-            root.textContent = `The typed Studio could not start: ${String(error)}`;
-        });
+        void mountTypedStudio(root).catch((error) => showMountError(root, error));
     }
 }

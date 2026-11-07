@@ -277,6 +277,7 @@ async function main() {
             if (process.env.UOR_STUDIO_DEBUG === '1') console.log('TYPED_RUNTIME_ERRORS ' + JSON.stringify(typedPreview.runtimeErrors));
             assert(typedPreview.loaded, 'typed preview never fired loadEventFired');
             assert(typedPreview.external.length === 0, 'typed preview made external load requests: ' + JSON.stringify(typedPreview.external));
+            assert(typedPreview.runtimeErrors.length === 0, 'typed preview emitted runtime errors: ' + JSON.stringify(typedPreview.runtimeErrors));
             assert(typedPreview.typed?.shell && typedPreview.typed.active, 'typed preview did not mount StudioApp: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.legacyHidden, 'legacy shell remained visible in typed preview');
             assert(typedPreview.typed.legacyMcp === 0, 'legacy MCP auto-boot mounted in typed preview');
