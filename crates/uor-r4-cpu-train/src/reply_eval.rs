@@ -1708,13 +1708,9 @@ mod tests {
                 next = Some(step.token);
             }
         }
-        bounded_reply(
-            next.unwrap(),
-            prompt.len(),
-            cap,
-            context,
-            |token| Ok(forward.step(token, head).unwrap().token),
-        )
+        bounded_reply(next.unwrap(), prompt.len(), cap, context, |token| {
+            Ok(forward.step(token, head).unwrap().token)
+        })
         .unwrap()
     }
 
@@ -1736,7 +1732,8 @@ mod tests {
             nearest
         );
         assert_eq!(
-            generate_reply_with_prefix(&nearest_artifact, &prompt, &nearest.tokens[..1], 4).unwrap(),
+            generate_reply_with_prefix(&nearest_artifact, &prompt, &nearest.tokens[..1], 4)
+                .unwrap(),
             nearest
         );
     }
