@@ -139,7 +139,12 @@ struct TeacherForcedRow {
     answer: String,
     reference_ids: Vec<u32>,
     target_ranks: Vec<usize>,
+    raw_target_ranks: Vec<usize>,
+    raw_nearest_tokens: Vec<u32>,
     eos_rank: Option<usize>,
+    raw_eos_rank: Option<usize>,
+    point_key_overrides: usize,
+    chosen_target_mismatches: usize,
     candidate_count: usize,
 }
 
@@ -506,7 +511,7 @@ fn nearest_rank(
     target_token: u32,
     served_token: u32,
 ) -> Result<NearestRank> {
-    if width == 0 || table.len() % width != 0 {
+    if width == 0 || !table.len().is_multiple_of(width) {
         return Err("nearest-rank table shape differs".to_owned());
     }
     let vocabulary = table.len() / width;
@@ -539,8 +544,7 @@ fn nearest_rank(
             raw_nearest = token as u32;
         }
         if token != target
-            && (candidate > target_score
-                || (candidate == target_score && token < target))
+            && (candidate > target_score || (candidate == target_score && token < target))
         {
             raw_rank += 1;
         }
@@ -555,8 +559,7 @@ fn nearest_rank(
             .filter(|&token| token != target && token as u32 != served_token)
             .filter(|&token| {
                 let candidate = score(token);
-                candidate > target_score
-                    || (candidate == target_score && token < target)
+                candidate > target_score || (candidate == target_score && token < target)
             })
             .count()
     };
@@ -579,9 +582,7 @@ fn teacher_forced_nearest_ranks(
     if prompt.is_empty() {
         return Err("teacher-forced ranking needs a nonempty prompt".to_owned());
     }
-    if prompt.len().saturating_add(targets.len().saturating_sub(1))
-        > forward.context_length()
-    {
+    if prompt.len().saturating_add(targets.len().saturating_sub(1)) > forward.context_length() {
         return Err("teacher-forced sequence passes the context".to_owned());
     }
     forward.reset();
@@ -640,7 +641,12 @@ fn teacher_forced_row(
         ));
     }
     let mut target_ranks = Vec::with_capacity(reference_ids.len());
+    let mut raw_target_ranks = Vec::with_capacity(reference_ids.len());
+    let mut raw_nearest_tokens = Vec::with_capacity(reference_ids.len());
     let mut eos_rank = None;
+    let mut raw_eos_rank = None;
+    let mut point_key_overrides = 0;
+    let mut chosen_target_mismatches = 0;
     let mut candidate_count = 0;
     for (target, diagnostic) in reference_ids.iter().zip(&diagnostics) {
         if diagnostic.target_token != *target {
@@ -648,8 +654,13 @@ fn teacher_forced_row(
         }
         candidate_count = diagnostic.candidate_count;
         target_ranks.push(diagnostic.rank);
+        raw_target_ranks.push(diagnostic.raw_rank);
+        raw_nearest_tokens.push(diagnostic.raw_nearest_token);
+        point_key_overrides += usize::from(diagnostic.point_key_override);
+        chosen_target_mismatches += usize::from(diagnostic.chosen_token != *target);
         if *target == EOS {
             eos_rank = Some(diagnostic.rank);
+            raw_eos_rank = Some(diagnostic.raw_rank);
         }
     }
     Ok(TeacherForcedRow {
@@ -658,7 +669,12 @@ fn teacher_forced_row(
         answer,
         reference_ids,
         target_ranks,
+        raw_target_ranks,
+        raw_nearest_tokens,
         eos_rank,
+        raw_eos_rank,
+        point_key_overrides,
+        chosen_target_mismatches,
         candidate_count,
     })
 }
@@ -675,6 +691,11 @@ fn teacher_forced_report(rows: Vec<TeacherForcedRow>) -> Result<serde_json::Valu
         .flat_map(|row| row.target_ranks.iter().copied())
         .collect();
     let eos: Vec<usize> = rows.iter().filter_map(|row| row.eos_rank).collect();
+    let raw_targets: Vec<usize> = rows
+        .iter()
+        .flat_map(|row| row.raw_target_ranks.iter().copied())
+        .collect();
+    let raw_eos: Vec<usize> = rows.iter().filter_map(|row| row.raw_eos_rank).collect();
     if eos.len() != rows.len() {
         return Err("teacher-forced rows do not each hold one EOS rank".to_owned());
     }
@@ -684,6 +705,7 @@ fn teacher_forced_report(rows: Vec<TeacherForcedRow>) -> Result<serde_json::Valu
     }
     let mut tally = rank_tally(&targets, &eos);
     tally.eos_targets = eos.len();
+    let raw_tally = rank_tally(&raw_targets, &raw_eos);
     let per_stratum = {
         let mut by_stratum: BTreeMap<String, (Vec<usize>, Vec<usize>)> = BTreeMap::new();
         for row in &rows {
@@ -703,6 +725,10 @@ fn teacher_forced_report(rows: Vec<TeacherForcedRow>) -> Result<serde_json::Valu
         "reference": "shortest frozen accepted answer",
         "candidate_count": *candidates.first().unwrap_or(&0),
         "totals": tally,
+        "raw_totals": raw_tally,
+        "point_key_overrides": rows.iter().map(|row| row.point_key_overrides).sum::<usize>(),
+        "chosen_target_mismatches": rows.iter().map(|row| row.chosen_target_mismatches).sum::<usize>(),
+        "raw_nearest_target_matches": rows.iter().map(|row| row.reference_ids.iter().zip(&row.raw_nearest_tokens).filter(|(target, nearest)| target == nearest).count()).sum::<usize>(),
         "per_stratum": per_stratum,
         "rows": rows,
     }))
@@ -898,6 +924,11 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
+    use uor_r4_integer::stack::{
+        add_point_key_uorlut01, export_fbs_trunk_uorlut01, FbsMemoryEntry, FbsMemorySnapshot,
+        FbsReplyTable, PointKeyImage, MEMORY_PAD,
+    };
 
     /// The pinned tokenizer (`d36d3e87…`) lives outside the repository: name it in
     /// `UOR_PANEL_TOKENIZER`. Without it, the tests that need it say so and pass.
@@ -912,6 +943,81 @@ mod tests {
     fn answers(accepted: &str) -> FrozenAnswers {
         serde_json::from_value(serde_json::json!({"accepted": [accepted], "intent": "current"}))
             .unwrap()
+    }
+
+    fn fixture(seed: u64, layers: usize) -> CpuFbsForward {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            seed,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers,
+                context: 16,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = true;
+        CpuFbsForward::from_artifact(&export_fbs_trunk_uorlut01(&snapshot).unwrap()).unwrap()
+    }
+
+    fn point_key_fixture(seed: u64) -> CpuFbsForward {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            seed,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 3,
+                context: 24,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = true;
+        let weight = vec![1.0; snapshot.width];
+        snapshot.memory = Some(FbsMemorySnapshot {
+            k: 4,
+            key_window: 192,
+            opening: vec![FbsMemoryEntry {
+                key: vec![13, 17],
+                value: 42,
+            }],
+            opening_weight: weight.clone(),
+            reply: Some(FbsReplyTable {
+                turn: 2,
+                entries: vec![
+                    FbsMemoryEntry {
+                        key: vec![7, 11, MEMORY_PAD, 1, MEMORY_PAD, 42],
+                        value: 77,
+                    },
+                    FbsMemoryEntry {
+                        key: vec![7, 11, MEMORY_PAD, 2, MEMORY_PAD, 77],
+                        value: 99,
+                    },
+                ],
+                weight,
+            }),
+        });
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let artifact = add_point_key_uorlut01(
+            &artifact,
+            &PointKeyImage {
+                width: snapshot.width,
+                points: vec![0; snapshot.width],
+                targets: vec![99],
+                vote_k: 1,
+            },
+        )
+        .unwrap();
+        CpuFbsForward::from_artifact(&artifact).unwrap()
     }
 
     #[test]
@@ -1049,6 +1155,42 @@ mod tests {
         assert_eq!(overridden.raw_rank, 2);
         assert_eq!(overridden.raw_nearest_token, 0);
         assert!(overridden.point_key_override);
+    }
+
+    #[test]
+    fn teacher_forced_ranks_follow_the_artifact_and_context_boundary() {
+        let mut cpu = fixture(29, 2);
+        let rows = teacher_forced_nearest_ranks(&mut cpu, &[0, 5, 9], &[7, 11, 3]).unwrap();
+        assert_eq!(
+            rows.iter().map(|row| row.target_token).collect::<Vec<_>>(),
+            [7, 11, 3]
+        );
+        assert!(rows
+            .iter()
+            .all(|row| (1..=row.candidate_count).contains(&row.rank)));
+
+        let prompt = vec![0; cpu.context_length() - 1];
+        let rows = teacher_forced_nearest_ranks(&mut cpu, &prompt, &[2, 3]).unwrap();
+        assert_eq!(
+            rows.iter().map(|row| row.target_token).collect::<Vec<_>>(),
+            [2, 3]
+        );
+    }
+
+    #[test]
+    fn teacher_forced_ranks_observe_a_real_point_key_override() {
+        let mut cpu = point_key_fixture(83);
+        let prompt = [0, 7, 11];
+        let opening = teacher_forced_nearest_ranks(&mut cpu, &prompt, &[99]).unwrap();
+        assert_eq!(opening[0].chosen_token, 99);
+        assert_eq!(opening[0].rank, 1);
+        assert!(opening[0].point_key_override);
+
+        let raw_target = opening[0].raw_nearest_token;
+        let other = teacher_forced_nearest_ranks(&mut cpu, &prompt, &[raw_target]).unwrap();
+        assert_eq!(other[0].chosen_token, 99);
+        assert_eq!(other[0].rank, 2);
+        assert!(other[0].point_key_override);
     }
 
     #[test]

@@ -88,8 +88,12 @@ Outputs:
 ## Checks run at the head
 
 - `UOR_PANEL_TOKENIZER=<pinned tokenizer> cargo test --offline --locked
-  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 12 passed, 0 failed,
-  including nearest ties, the point-key override and teacher-forced alignment.
+  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 14 passed, 0 failed,
+  including a real point-key override, teacher-forced target order, the context
+  boundary and nearest ties.
+- `cargo clippy --offline --locked --features cpu-parity --all-targets
+  --no-deps -- -D warnings`: passed.
+- `rustfmt --edition 2021 --check` on the changed binary: passed.
 - `cargo run --release --offline --locked --features cpu-parity --bin
   served-reply-panel` on the regenerated panel in both renderings: exit 0.
 - The one-user generation-only run reproduces claude-309's published totals:
