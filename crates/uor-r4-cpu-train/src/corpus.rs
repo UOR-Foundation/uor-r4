@@ -259,7 +259,7 @@ impl CpuMaskedCorpus {
         let mut next = 0usize;
         let mut examples = Vec::with_capacity(selected);
         self.for_each_conversation_span(|ordinal, prompt_start, start, end| {
-            if next < selected && observed == next * total / selected {
+            if next < selected && observed == even_rank(next, total, selected) {
                 examples.push(self.conversation_example_at(ordinal, prompt_start, start, end));
                 next += 1;
             }
@@ -357,7 +357,7 @@ impl CpuMaskedCorpus {
         let mut next = 0usize;
         let mut samples = Vec::with_capacity(selected);
         self.for_each_causal_position(|position, document_start| {
-            if next < selected && observed == next * total / selected {
+            if next < selected && observed == even_rank(next, total, selected) {
                 samples.push(self.causal_sample_at(position, document_start));
                 next += 1;
             }
@@ -523,6 +523,10 @@ fn evenly_cap<T: Clone>(values: Vec<T>, maximum: usize) -> Vec<T> {
     (0..maximum)
         .map(|index| values[index * values.len() / maximum].clone())
         .collect()
+}
+
+fn even_rank(rank: usize, total: usize, selected: usize) -> usize {
+    usize::try_from(rank as u128 * total as u128 / selected as u128).unwrap_or(usize::MAX)
 }
 
 #[cfg(test)]
