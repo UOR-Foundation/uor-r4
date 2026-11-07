@@ -32,6 +32,15 @@ Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kerne
 - **The FIT record** is in the sheet plus the live DeepSeek receipt:
   `TEST FITNESS: FIT - M2 #2030`, reviewer `codex`, date 7 November 2026.
 
+## Measurements
+
+- **No model or device measurement ran.** The only result is the documentation and readiness
+  verdict: FIT at `820a1103b`, with compute held for the current project direction.
+- **Host verification:** 295 float-train library tests passed; every-target CPU `cargo check`
+  passed; Clippy reported only the pre-existing crate and vendor warnings.
+- **No default changed:** `--fused-quantize` still defaults off. A later pre-run review and the
+  registered short/long-context run are required before the training default can change.
+
 ## Checks run at the head
 
 - `cargo test --release --locked -p uor-r4-float-train --lib`, with
@@ -43,15 +52,6 @@ Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kerne
 - `uor-harness prep-check`: the sheet reads **FIT** with all required sections.
 - `git diff --check`: passed.
 - Not run: CUDA tests, fused/chain training, training timing, `nsys`, model scoring, or a pod.
-
-## Measurements
-
-- **No model or device measurement ran.** The only result is the documentation and readiness
-  verdict: FIT at `820a1103b`, with compute held for the current project direction.
-- **Host verification:** 295 float-train library tests passed; every-target CPU `cargo check`
-  passed; Clippy reported only the pre-existing crate and vendor warnings.
-- **No default changed:** `--fused-quantize` still defaults off. A later pre-run review and the
-  registered short/long-context run are required before the training default can change.
 
 ## Skills used
 
