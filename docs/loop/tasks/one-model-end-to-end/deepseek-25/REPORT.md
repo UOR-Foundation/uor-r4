@@ -61,7 +61,8 @@ seed-1 envelope.
 
 - `gate.sh`: 85 checks passed.
 - `test-mutants.sh`: 28 of 28 semantic mutations caught.
-- `checkpoint_ready_marker_records_completion`: passed.
+- Full `uor-r4-float-train` library suite: 307 passed, including
+  `checkpoint_ready_marker_records_completion`.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.
 
