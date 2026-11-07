@@ -82,6 +82,18 @@ done
 
 require_line '--max-evaluation 512 --max-replies 1 --reply-tokens 1 \' "$JOB"
 require_line 'kill -STOP "$TRAIN_PID" 2>/dev/null || true' "$JOB"
+awk '
+  {
+    line=$0
+    sub(/^[ \t]+/, "", line)
+    sub(/[ \t]+$/, "", line)
+    if (previous == "kill -TERM \"$TRAIN_PID\" 2>/dev/null || true" &&
+        line == "kill -CONT \"$TRAIN_PID\" 2>/dev/null || true") found = 1
+    previous = line
+  }
+  END { exit(found ? 0 : 1) }
+' "$JOB" || fail "$JOB does not continue a stopped trainer after SIGTERM"
+checks=$((checks + 1))
 require_line 'if [ "$guard" -lt 93 ]; then' "$JOB"
 require_line 'elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"
 require_line '[ "$base_guard" -ge 93 ] || die "base continuation guard is $base_guard, below 93"' "$JOB"

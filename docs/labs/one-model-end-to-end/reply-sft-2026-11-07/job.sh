@@ -350,6 +350,7 @@ while kill -0 "$TRAIN_PID" 2>/dev/null; do
         kill -CONT "$TRAIN_PID" 2>/dev/null || true
       else
         kill -TERM "$TRAIN_PID" 2>/dev/null || true
+        kill -CONT "$TRAIN_PID" 2>/dev/null || true
       fi
       next=$((next + 256))
     fi
