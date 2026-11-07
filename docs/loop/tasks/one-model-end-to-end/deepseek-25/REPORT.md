@@ -65,6 +65,11 @@ spend.
 - **The merged-tree FIT review found two incomplete protections.** The positive
   train-loss branch had no permanent gate or mutation, and failure cleanup
   attempted `down --to-store` even after `stop_remote_job` failed.
+- **The final FIT review found four deeper launch-path defects.** A detached
+  job could start before its log path was returned and then evade cleanup, the
+  continuation guard stopped before the registered best-checkpoint outcome,
+  the exactly-one-step-0 clause had no mutation, and initialization was checked
+  only after training.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -150,7 +155,18 @@ spend.
   before calling `uor-pod status` or `uor-pod up`.
 - Failure cleanup forces a nonzero status for every non-sealed run, including
   SIGINT and SIGTERM paths. It archives and tears down only after the active job
-  has stopped; a failed stop leaves the pod and reports failure.
+  has stopped; a failed stop leaves the pod and reports failure. If post-start
+  submission fails before the log path is returned, cleanup finds the exact
+  session's unique job script over SSH; an unidentifiable attempted submission
+  fails without teardown.
+- The continuation guard is recorded at every checkpoint but does not stop the
+  run. Only row 2's registered no-ranking-movement stop fires during training;
+  row 1 is applied after all checkpoints through 1,024, when the best checkpoint
+  can be selected.
+- The trainer publishes `.init-ready` only after writing `init.json`, then waits
+  for the controller's approval file before optimization. The controller
+  validates the exact initialization record and releases that wait; an invalid
+  record stops the trainer while it is still blocked at initialization.
 - The outcome map's partial-movement row now covers every guard-passing case
   with any EOS/generation/content movement that does not meet rows 3–5,
   removing the prior logical gap before the catch-all.
@@ -185,15 +201,22 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   reviewer session `01a1b84a-8abf-7a62-89cd-7e1e98b8fa36`, because the
   positive-step training-loss rule lacked permanent coverage and failed-stop
   cleanup still attempted teardown.
-- `gate.sh`: 177 checks passed after adding the positive progress rules and
-  stop-before-teardown coupling.
-- `test-mutants.sh`: 62 of 62 semantic mutations caught.
+- Final FIT review: **NO-GO** at
+  `8f1e54aaf87bbaee018a4986592114ea9f6178d5`, reviewed-runtime
+  `eb47a400271fd879c537634e14f7047891354659e3f573bc3a2f0ccdc40ac6fc`,
+  reviewer session `01a1b854-3cf8-7781-9a8d-658b19fffd58`, because detached
+  submission could lose its job identity, the guard stopped early, one progress
+  mutation was missing, and initialization was validated after training.
+- `gate.sh`: 186 checks passed after adding the submission fallback, registered
+  stop point, exactly-one-step-0 mutation and initialization handshake.
+- `test-mutants.sh`: 65 of 65 semantic mutations caught.
 - Direct evaluation of the progress predicate accepted null and absent step-0
   training loss; it rejected finite, infinite and string step-0 training loss,
   non-finite positive-step training loss, and null or non-finite DEV loss,
   token margin and address margin.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
-  --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.
+  --lib`: 308 passed, including `checkpoint_ready_marker_records_completion`
+  and `initialization_record_is_ready_before_controller_approval`.
 - The bare suite invocation omitted `CARGO_TARGET_DIR`; the existing save/load
   test requires an owned artifact directory and failed that precondition. The
   environment-qualified run above passed. The pod job exports the same target
@@ -210,7 +233,7 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh D67 review of the exact runtime, then the seed-1 run.
+- Fresh FIT and D67 reviews of the exact repaired runtime, then the seed-1 run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary

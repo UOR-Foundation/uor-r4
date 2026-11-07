@@ -89,7 +89,10 @@ mutate_first() {
 mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
 mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
 mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
-mutate weak-guard "$JOB" '[ "$guard" -lt 93 ]' '[ "$guard" -lt 0 ]'
+mutate early-guard-stop "$JOB" \
+  'touch "$marker" || die "could not mark checkpoint $step scored"' \
+  'if [ "$guard" -lt 93 ]; then STOP_REASON="continuation-failure-step-$step"; kill "$TRAIN_PID" 2>/dev/null || true; fi
+  touch "$marker" || die "could not mark checkpoint $step scored"'
 mutate weak-base-guard "$JOB" '[ "$base_guard" -eq 132 ]' '[ "$base_guard" -ge 0 ]'
 mutate wrong-base-rank "$JOB" '.eos_rank_min == 5' '.eos_rank_min == 0'
 mutate missing-per-turn-free "$JOB" \
@@ -141,6 +144,9 @@ mutate missing-seal-cap "$JOB" \
   'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' \
   'if false; then'
 mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
+mutate unchecked-single-step-zero "$JOB" \
+  '(map(select(.step == 0)) | length) == 1 and' \
+  '(map(select(.step == 0)) | length) >= 1 and'
 mutate unchecked-positive-progress "$JOB" \
   '([.[] | select(.step > 0)] | length) > 0 and' 'true and'
 mutate unchecked-dev-loss "$JOB" \
@@ -204,6 +210,12 @@ mutate no-active-stop "$LAUNCHER" 'if stop_remote_job; then' 'if true; then'
 mutate teardown-after-failed-stop "$LAUNCHER" \
   '"$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1' \
   'true'
+mutate unknown-submission-success "$LAUNCHER" \
+  '[ "$SUBMISSION_ATTEMPTED" -ne 1 ] || {' \
+  'false || {'
+mutate no-remote-job-discovery "$LAUNCHER" \
+  "-name '*-"'$SESSION'"-gpu0.sh' -print" \
+  "-name '*.sh' -print"
 mutate signal-cleanup-success "$LAUNCHER" \
   '[ "$STATUS" = SEALED ] || rc=1' \
   '[ "$STATUS" = SEALED ] || true'

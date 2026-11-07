@@ -374,10 +374,7 @@ score_checkpoint() {
     '{step:$step, guard_top1:$guard, eos_top1:$eos_top1, eos_rank_p50:$eos_p50}' \
     >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl" ||
     die "could not record checkpoint $step readings"
-  if [ "$guard" -lt 93 ]; then
-    STOP_REASON="continuation-failure-step-$step"
-    kill "$TRAIN_PID" 2>/dev/null || true
-  elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then
+  if [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then
     STOP_REASON="no-ranking-movement-step-512"
     kill "$TRAIN_PID" 2>/dev/null || true
   fi
@@ -480,6 +477,7 @@ train_and_score() {
   TRAIN_RUN=$run_dir
   install -d "$RUN/grades/$label" "$RUN/artifacts/$label" \
     "$RUN/scores/$label" "$RUN/panel/$label"
+  UOR_TRAIN_INIT_APPROVAL="$RUN/control/init-approved" \
   "$TRAIN_BIN" \
     --data-root "$RUN/inputs/data" \
     --init-from "$B64L" \
@@ -494,6 +492,28 @@ train_and_score() {
     --eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \
     > "$RUN/logs/train-$label.log" 2>&1 &
   TRAIN_PID=$!
+
+  local init_wait=0
+  while [ ! -f "$run_dir/.init-ready" ]; do
+    if ! kill -0 "$TRAIN_PID" 2>/dev/null; then
+      wait "$TRAIN_PID" || train_rc=$?
+      TRAIN_PID=
+      [ "$train_rc" -ne 0 ] ||
+        die "trainer exited before publishing its initialization record"
+      if [ -z "$STOP_REASON" ]; then
+        TRAIN_FAILURE=$train_rc
+        return 0
+      fi
+      die "trainer exited before initialization after a registered stop"
+    fi
+    [ "$init_wait" -lt 120 ] ||
+      die "trainer did not publish initialization within 120 seconds"
+    sleep 1
+    init_wait=$((init_wait + 1))
+  done
+  check_initialization "$run_dir"
+  touch "$RUN/control/init-approved" ||
+    die "could not approve the validated initialization"
 
   while kill -0 "$TRAIN_PID" 2>/dev/null; do
     if [ "$next" -le 1024 ]; then
@@ -519,7 +539,6 @@ train_and_score() {
     TRAIN_FAILURE=$train_rc
     return 0
   fi
-  check_initialization "$run_dir"
   while [ "$next" -le 1024 ]; do
     checkpoint="$run_dir/models/step-$(printf '%06d' "$next")"
     if [ -d "$checkpoint" ]; then

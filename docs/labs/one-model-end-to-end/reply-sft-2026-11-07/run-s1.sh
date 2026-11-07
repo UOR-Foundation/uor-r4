@@ -155,6 +155,7 @@ RESOLVED=0
 STATUS=FAILED
 JOB_LOG=
 JOB_SCRIPT=
+SUBMISSION_ATTEMPTED=0
 discover_owned_pod() {
   [ -z "$POD" ] || return 0
   if [ -f "$CONTROLLER/up.log" ]; then
@@ -169,20 +170,38 @@ discover_owned_pod() {
   done
 }
 discover_submitted_job() {
-  [ -z "$JOB_SCRIPT" ] && [ -f "$CONTROLLER/run.out" ] || return 0
-  JOB_LOG=$(awk '/Log: / {
-    for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }
-  }' "$CONTROLLER/run.out")
-  case "$JOB_LOG" in
-    /workspace/uor-r4/jobs/*.log) ;;
-    *) JOB_LOG=; return 0 ;;
-  esac
-  JOB_SCRIPT="${JOB_LOG%.log}.sh"
+  local candidates count
+  if [ -z "$JOB_SCRIPT" ] && [ -f "$CONTROLLER/run.out" ]; then
+    JOB_LOG=$(awk '/Log: / {
+      for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }
+    }' "$CONTROLLER/run.out")
+    case "$JOB_LOG" in
+      /workspace/uor-r4/jobs/*.log) JOB_SCRIPT="${JOB_LOG%.log}.sh" ;;
+      *) JOB_LOG= ;;
+    esac
+  fi
+  if [ -z "$JOB_SCRIPT" ] && [ -n "$POD" ]; then
+    candidates=$("$POD_TOOL" ssh "$POD" \
+      "find /workspace/uor-r4/jobs/deepseek -maxdepth 1 -type f \
+        -name '*-$SESSION-gpu0.sh' -print" 2>/dev/null) || return 0
+    count=$(printf '%s\n' "$candidates" | awk 'NF { found++ } END { print found + 0 }')
+    [ "$count" -eq 1 ] || return 0
+    JOB_SCRIPT=$candidates
+    JOB_LOG="${JOB_SCRIPT%.sh}.log"
+  fi
+  [ -n "$JOB_SCRIPT" ] || return 0
   printf '%s\n' "$JOB_LOG" > "$CONTROLLER/job-log.path"
 }
 stop_remote_job() {
   discover_submitted_job
-  [ -n "$POD" ] && [ -n "$JOB_SCRIPT" ] || return 0
+  [ -n "$POD" ] || return 0
+  if [ -z "$JOB_SCRIPT" ]; then
+    [ "$SUBMISSION_ATTEMPTED" -ne 1 ] || {
+      echo "submission was attempted, but the remote job cannot be identified; the pod is retained" >&2
+      return 1
+    }
+    return 0
+  fi
   "$POD_TOOL" ssh "$POD" \
     "line=\$(ps -eo pid=,pgid=,args= |
        awk -v script='$JOB_SCRIPT' '
@@ -244,6 +263,7 @@ printf '%s\n' "$POD" > "$CONTROLLER/pod"
   tee "$CONTROLLER/job-upload.sha256"
 
 started=$(date +%s)
+SUBMISSION_ATTEMPTED=1
 if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \
   env UOR_SFT_PIN="$PIN" UOR_SFT_RUN_ID="$RUN_ID" UOR_SFT_RUN="$RUN" \
   UOR_SFT_OUT_STORE="$OUT_STORE" \

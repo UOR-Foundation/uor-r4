@@ -124,8 +124,11 @@ termination_count=$(
 [ "$termination_count" -eq 2 ] ||
   fail "$JOB does not continue both stopped-trainer SIGTERM paths"
 checks=$((checks + 1))
-require_line 'if [ "$guard" -lt 93 ]; then' "$JOB"
-require_line 'elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"
+if grep -Fq 'STOP_REASON="continuation-failure-step-$step"' "$JOB"; then
+  fail "$JOB stops on the continuation guard instead of applying row 1 at the best checkpoint"
+fi
+checks=$((checks + 1))
+require_line 'if [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"
 require_line 'run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null ||' "$JOB"
 require_line 'run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/dev/null ||' "$JOB"
 require_line 'run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||' "$JOB"
@@ -133,6 +136,16 @@ require_line 'touch "$marker" || die "could not mark checkpoint $step scored"' "
 require_line '--reply-tokens 64 --out "$out" || return 1' "$JOB"
 require_line 'check_progress "$TRAIN_RUN/progress.jsonl"' "$JOB"
 require_line 'check_progress "$run_dir/progress.jsonl"' "$JOB"
+require_line 'UOR_TRAIN_INIT_APPROVAL="$RUN/control/init-approved" \' "$JOB"
+require_line 'while [ ! -f "$run_dir/.init-ready" ]; do' "$JOB"
+require_line 'check_initialization "$run_dir"' "$JOB"
+require_line 'touch "$RUN/control/init-approved" ||' "$JOB"
+grep -Fq 'fs::write(out.join(INIT_READY_MARKER), b"ready\n")?;' "$TRAINER" ||
+  fail "$TRAINER does not publish initialization readiness after writing the record"
+checks=$((checks + 1))
+grep -Fq 'wait_for_initialization_approval(out, approval.as_deref())?;' "$TRAINER" ||
+  fail "$TRAINER does not wait for initialization approval before training"
+checks=$((checks + 1))
 require_line 'run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null' "$JOB"
 require_line '.eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and' "$JOB"
 require_line '.eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and' "$JOB"
@@ -267,6 +280,11 @@ require_line 'if [ $((now - started)) -lt 300 ]; then' "$LAUNCHER"
 require_line 'if [ "$unreachable" -ge 15 ]; then' "$LAUNCHER"
 require_line 'if stop_remote_job; then' "$LAUNCHER"
 require_line '"$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1' "$LAUNCHER"
+require_line 'SUBMISSION_ATTEMPTED=1' "$LAUNCHER"
+require_line '[ "$SUBMISSION_ATTEMPTED" -ne 1 ] || {' "$LAUNCHER"
+grep -Fq -- "-name '*-"'$SESSION'"-gpu0.sh' -print" "$LAUNCHER" ||
+  fail "$LAUNCHER cannot discover a submitted job when uor-pod loses its log-path output"
+checks=$((checks + 1))
 if grep -Fq 'WRAPPER_PID' "$LAUNCHER"; then
   fail "$LAUNCHER still waits on the detached-job submission wrapper"
 fi
