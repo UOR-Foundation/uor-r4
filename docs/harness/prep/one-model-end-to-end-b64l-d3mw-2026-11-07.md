@@ -23,7 +23,7 @@ At (b64L)'s recipe and pin, with TRAIN changed to D3 + `mw-balp/train`:
 - do its stopped replies stay varied?
 - does it keep (b64L-D3)'s no-memory hits on the held-out human text?
 
-The held-out answer is the mix's, at a fixed step count. D3 is 69.2% of the windows seen: about 725,700 D3 windows, against 1,048,576 for (b64L-D3), so 4.73 passes over D3 against 6.84. A cost read here mixes two causes: fewer D3 passes, and mw-balp's content. This run cannot separate them.
+The held-out answer is the mix's, at a fixed step count. D3 is 69.2% of the windows seen: about 725,600 D3 windows, against 1,048,576 for (b64L-D3), so 4.73 passes over D3 against 6.84. A cost read here mixes two causes: fewer D3 passes, and mw-balp's content. This run cannot separate them.
 
 ## Base artifact
 
@@ -206,12 +206,12 @@ Registered before any pod goes up. They are claude-312's, with TRAIN swapped:
   - That the bar decides here is an **inference**. This run's EOS exposure, 1.06 per window, sits between those ends, where no spread has been measured.
   - A seed within 32 of 128 (96 to 160) is reported as "near the bar", as collapse is near 64. The row still follows the bar.
 - **Collapse** is a count over EOS-stopped rows. (b64L-mw)'s two seeds read 73 and 40, a spread of 33 about the bar of 64. A reading near 64 is not decisive, and the REPORT says so.
-- **The held-out pair** uses `scale-probe pair`'s band, as claude-313's did: there it was 3,567 rows against a d of about −304,000. A cost of a tenth of claude-313's is still far outside the band.
+- **The held-out pair** uses `scale-probe pair`'s band, as claude-313's did: there it was 3,567 rows against a d of about −304,000. A cost of a tenth of claude-313's would be far outside claude-313's band of 3,567. This run's own band is not yet measured, so this is an inference.
 
 ## Cost
 
 - **claude-313's measured runs:** $2.43 for both pods, on RTX 5090s.
-- **Here:** the step time does not depend on TRAIN, so about $1.8–2.3 a pod and $3.6–4.6 for both.
+- **Here:** the step time does not depend on TRAIN, since each step reads 64 windows padded to 192. So about $2.4 for both at claude-313's rate, and about $3.0 at the $0.70/h ceiling ($2.43 × 0.70 / 0.563).
 - **The budget notice, not a cap:** 2 pods × 4 h × $0.70 = $5.60. A healthy run is never cancelled for a self-set budget. If a slow card bills past $5.60, the REPORT says by how much.
 
 ## Stop rule

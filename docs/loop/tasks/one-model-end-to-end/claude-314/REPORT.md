@@ -25,7 +25,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **the held-out pair:** against (b64L-D3); it now decides between rows 2 and 3;
   - **the outcome map:** nine rows, with a ratio row and a no-stop row;
   - **new checks:** I-xc, and the window count in I-3;
-  - **reviews:** FIT round 1 and the D67 review, both applied; **pre-run review: GO.**
+  - **reviews:** FIT round 1, applied; the D67 pre-run review: **GO**, minors applied.
 - **Run scripts** in `local/claude/claude-314/`, not committed, as for claude-312. They are claude-312's four scripts with:
   - TRAIN swapped to one folder fetch, and its I-3 block now checking three shas, the manifest included;
   - the window count recorded;
@@ -87,7 +87,7 @@ None beyond the loop's own steps.
 
 ## Still open
 
-- **The run:** the next unit, on two RTX 5090 pods under this sheet and the scripts at the recorded hashes. It costs about $3.6–4.6, with a budget notice at $5.60 that is not a cap.
+- **The run:** the next unit, on two RTX 5090 pods under this sheet and the scripts at the recorded hashes. It costs about $2.4–3.0, with a budget notice at $5.60 that is not a cap.
 - **The laptop reader for Step 6** is to be written in the run unit, from claude-313's `read-313.sh`. It needs `train=` the mix, the pair against (b64L-D3), and I-xc and I-c repeated first.
 - **mw-balp's licence and generator** are not recorded anywhere.
 - **`served-reply-panel`'s timer** still re-parses the artifact for every row (claude-311).
@@ -100,4 +100,4 @@ Our model never stops talking when trained on human text alone. Trained on a sho
 - are its replies still varied;
 - does it keep its score on unseen human text.
 
-The combined corpus is checked byte for byte against its two parts and stored. Two fresh reviews checked the plan and the scripts before any money is spent. One found that a broken export step could have looked like "the model never stops", so that step now has its own check, and it passed. The other found nothing that blocks the run. The run costs about $4 and is the next unit.
+The combined corpus is checked byte for byte against its two parts and stored. Two fresh reviews checked the plan and the scripts before any money is spent. One found that a broken export step could have looked like "the model never stops", so that step now has its own check, and it passed. The other found nothing that blocks the run. The run costs about $2.4–3.0 and is the next unit.
