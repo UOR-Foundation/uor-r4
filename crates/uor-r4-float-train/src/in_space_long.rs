@@ -852,6 +852,21 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
             config.hamming_read
         )));
     }
+    for (name, wanted) in [
+        ("retain_rates", config.retain_rates),
+        ("fold_scores", config.fold_scores),
+        ("reflect_floor", config.reflect_floor),
+        ("fix_input_table", config.fix_input_table),
+        ("train_as_served", config.train_as_served),
+    ] {
+        let declared = source_config_bool(&source, name, &source_path)?;
+        if declared != wanted {
+            return Err(invalid(format!(
+                "--init-from source run config {} declares {name}={declared}, but this run uses {name}={wanted}",
+                source_path.display()
+            )));
+        }
+    }
     for sidecar in UNSUPPORTED_INIT_SIDECARS {
         let path = checkpoint.join(sidecar);
         if path.exists() {
@@ -14139,6 +14154,25 @@ mod tests {
             error.contains("declares turn_memory=8") && error.contains("cannot resume"),
             "{error}"
         );
+
+        fs::write(&run_config, br#"{"steps":8,"retain_rates":true}"#).unwrap();
+        let flags = LongConfig {
+            width: 32,
+            init_from: Some(source.clone()),
+            ..config(0, None)
+        };
+        let error = validate_checkpoint_selection(&flags)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("declares retain_rates=true") && error.contains("retain_rates=false"),
+            "{error}"
+        );
+        let matching_flags = LongConfig {
+            retain_rates: true,
+            ..flags
+        };
+        validate_checkpoint_selection(&matching_flags).unwrap();
 
         fs::write(&run_config, br#"{"steps":8,"hamming_read":0}"#).unwrap();
         fs::write(source.join(HAMMING_SIDECAR), b"present").unwrap();

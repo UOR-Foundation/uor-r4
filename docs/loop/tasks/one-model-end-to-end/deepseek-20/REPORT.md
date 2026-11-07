@@ -28,6 +28,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   initialization path now parses the source run config, refuses every unsupported nonzero
   read declaration and reply memory, and requires its declared Hamming head count to equal
   the command. A count-free refusal replaces the old hard-coded four-head hint.
+- **The next review found that forward-mode flags could still change.** The source's
+  `retain_rates`, `fold_scores`, `reflect_floor`, `fix_input_table` and `train_as_served`
+  values must now equal the command. This is material for `(b64L)`, whose source sets
+  `retain_rates` and `train_as_served` true; loading it with defaults would silently read
+  its recurrence table differently.
 
 ## What changed
 
