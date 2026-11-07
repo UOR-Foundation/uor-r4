@@ -5,10 +5,15 @@ Order: [ORDER.md](ORDER.md). Base: `2b46c7080` (after PR #3825).
 
 ## What did not work, first
 
-- The fused scoring and selection path has not run on a CUDA device yet. It remains behind the
-  existing off-by-default `--fast-rivals` flag.
-- The first selector-only path saved just 1.07% of a synthetic step and changed tied gradients,
-  so this unit measures the larger fused search rather than promoting that result.
+- **The fused path is not a bit-identical training replacement.** Its loss is bit-equal in the
+  finite model step, but `embedding.weight`'s largest relative gradient move is 1.14%, the same
+  delta as the selector-only tie result. It remains off by default pending a controlled training
+  comparison.
+- **The first parity fixture tied in L1.** Old and new chose the same set but ordered the lower
+  scores differently. The fixture now uses a deterministic continuous LCG and 32-wide vectors;
+  exact order agrees there.
+- The selector-only path from deepseek-2 saved only 1.07% of a synthetic step. This fused search
+  removes the score matrix and the selection passes together.
 
 ## What changed
 
@@ -26,12 +31,38 @@ No default path, serving path, pinned CUDA source or checkpoint fingerprint chan
 
 ## Measurements
 
-GPU parity and timing are pending.
+One RTX 5090. Search medians alternate the old score matrix plus repeated argmax and the fused
+kernel, after two warm-ups and over ten timed calls a shape:
+
+| Rows | Vocabulary | Width | Old search | Fused search | Speed-up |
+|---:|---:|---:|---:|---:|---:|
+| 256 | 4,096 | 256 | 7.565 ms | 1.492 ms | 5.07× |
+| 2,048 | 4,096 | 256 | 47.323 ms | 2.859 ms | 16.55× |
+| 4,096 | 4,096 | 256 | 93.519 ms | 4.458 ms | 20.98× |
+
+The synthetic nearest-objective step, 16 windows × 192 tokens in four micro-batches of four:
+**139.524 ms old, 83.627 ms fused, 40.1% shorter (1.67×)**. Loss is identical:
+`1.0039109885692596`. `embedding.weight`'s largest relative gradient move is **1.14%**; the test
+does not localize the cause, with tied rival selection the leading hypothesis.
 
 ## Checks run at the head
 
-- CPU all-targets check: passed.
-- CUDA parity, timing and the full checks are pending.
+Result-producing code head: `d429eb7b9`. Later commits change records only.
+
+- `cargo test --release --offline --locked -p uor-r4-float-train`: 297 library tests, 7 snapshot
+  tests, 9 trainer tests, 2 dependency/kernel-scan tests and 12 finite controls passed; 0 failed.
+- The pod's real nvcc 12.8 build compiled the CUDA-enabled library, binaries and tests before
+  running the named device tests.
+- RTX 5090 `the_fused_nearest_selector_matches_the_old_search_on_untied_rows`: passed.
+- RTX 5090 `time_the_fused_nearest_search`: passed and produced the search table above.
+- RTX 5090 `the_fast_rival_selector_keeps_the_loss_and_measures_tie_gradient_delta`: passed,
+  now through the fused path, with the measurements above.
+- Clippy on all targets: completed with the crate's established warnings; none is on a changed
+  line.
+- `git diff --check`: passed.
+
+Spend about $0.08 on one RTX 5090; the job logs are archived at
+`vast-archive/vast-59603424/uor-r4/jobs`.
 
 ## Skills used
 
@@ -39,14 +70,19 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-1. Compile and run the fused solver on an RTX 5090.
-2. Compare its untied positions with the old search.
-3. Measure score-plus-selection and the synthetic nearest step with and without fusion.
-4. Keep the flag off and report a negative unless the positions, loss, time and gradient behavior
-   support a later controlled training unit.
+1. Run a matched real b64L A/B. The fused search cuts the synthetic step by 40.1%, enough to
+   matter, but tied gradients differ. That run must compare top-1, openings and copies as well
+   as step time before defaulting the flag.
+2. A capability comparison must decide whether deterministic tie choices help or hurt. Until it
+   does, default stays off.
+3. If the real run holds, make the fused search the served-training path; the separate
+   selector kernel remains useful for writer-cell objectives.
 
 ## Plain summary
 
-The prior selector accelerated only the last part of the rival search. This branch fuses the
-whole-table L1 scoring and top-eight selection so the large score matrix is never materialized.
-It is off by default and awaits CUDA parity and timing.
+The trainer used to write every query's scores against every token and then scan the vocabulary
+eight times. The fused kernel now computes the L1 scores and keeps the eight nearest wrong tokens
+without writing that large matrix. Search time falls 5.1×–21× and a finite model step falls 40.1%,
+with identical loss. Tied rival choices still move the synthetic gradient by 1.14%, so the feature
+stays behind an off-by-default flag and needs one real training comparison before Claude should
+use it.
