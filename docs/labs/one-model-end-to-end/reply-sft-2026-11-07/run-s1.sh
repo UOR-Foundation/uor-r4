@@ -84,15 +84,29 @@ printf '%s\n' "$POD" > "$CONTROLLER/pod"
   tee "$CONTROLLER/job-upload.sha256"
 
 started=$(date +%s)
-"$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \
+if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \
   env UOR_SFT_PIN="$PIN" UOR_SFT_RUN="$RUN" UOR_SFT_OUT_STORE="$OUT_STORE" \
   bash /workspace/one-model-reply-sft-job.sh 1 \
-  > "$CONTROLLER/run.out" 2>&1 &
-WRAPPER_PID=$!
+  > "$CONTROLLER/run.out" 2>&1; then
+  cat "$CONTROLLER/run.out" >&2
+  echo "could not submit the remote SFT job" >&2
+  exit 1
+fi
+JOB_LOG=$(awk '/Log: / {
+  for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }
+}' "$CONTROLLER/run.out")
+case "$JOB_LOG" in
+  /workspace/uor-r4/jobs/*) ;;
+  *) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;
+esac
+printf '%s\n' "$JOB_LOG" > "$CONTROLLER/job-log.path"
 last_renew=$started
 failures=0
 
-while kill -0 "$WRAPPER_PID" 2>/dev/null; do
+while :; do
+  job_exit=$("$POD_TOOL" ssh "$POD" \
+    "sed -n 's/^# exit=\\([0-9][0-9]*\\) .*/\\1/p' '$JOB_LOG' 2>/dev/null | tail -1") || job_exit=
+  [ -z "$job_exit" ] || break
   now=$(date +%s)
   if [ $((now - started)) -gt "$MAXSEC" ]; then
     echo "watcher time limit reached; the healthy job is not cancelled" |
@@ -107,23 +121,28 @@ while kill -0 "$WRAPPER_PID" 2>/dev/null; do
     fi
     last_renew=$now
   fi
-  if "$POD_TOOL" ssh "$POD" "test ! -f '$RUN/EXIT'" >/dev/null 2>&1; then
+  if "$POD_TOOL" ssh "$POD" "test -f '$JOB_LOG'" >/dev/null 2>&1; then
     failures=0
   else
     failures=$((failures + 1))
-    if [ "$failures" -ge 20 ]; then
+    if [ "$failures" -ge 3 ]; then
       if ! "$POD_TOOL" status 2>/dev/null | grep -Eq "^$POD .* RUNNING "; then
-        echo "$POD disappeared before writing EXIT" >&2
+        echo "$POD disappeared before writing its job log" >&2
         exit 1
       fi
-      failures=0
+      echo "the running pod has no job log at $JOB_LOG; the job did not start" >&2
+      exit 1
     fi
   fi
   sleep 20
 done
 
-wait "$WRAPPER_PID"
-cat "$CONTROLLER/run.out"
+"$POD_TOOL" ssh "$POD" "tail -n 200 '$JOB_LOG'" |
+  tee "$CONTROLLER/job-tail.log"
+[ "$job_exit" -eq 0 ] || {
+  echo "remote SFT job exited $job_exit; the pod is retained for its failure seal" >&2
+  exit 1
+}
 mkdir -p "$CONTROLLER/readback"
 "$STORE" get "$OUT_STORE/READBACK" "$CONTROLLER/readback" >/dev/null
 READBACK_FILE="$CONTROLLER/readback/$OUT_STORE/READBACK"

@@ -126,7 +126,20 @@ require_line 'READBACK_STATUS=verified' "$JOB"
 
 require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu 5090 \' "$LAUNCHER"
 require_line '--count 1 --hours 2 --ref "$PIN" \' "$LAUNCHER"
-require_line '"$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \' "$LAUNCHER"
+require_line 'if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \' "$LAUNCHER"
+grep -Fqx "JOB_LOG=\$(awk '/Log: / {" "$LAUNCHER" ||
+  fail "$LAUNCHER does not begin parsing uor-pod's job-log path"
+checks=$((checks + 1))
+grep -Fq 'for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }' \
+  "$LAUNCHER" || fail "$LAUNCHER does not parse the log path from uor-pod's one-line success message"
+checks=$((checks + 1))
+require_line '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' "$LAUNCHER"
+require_line '[ -z "$job_exit" ] || break' "$LAUNCHER"
+require_line '[ "$job_exit" -eq 0 ] || {' "$LAUNCHER"
+if grep -Fq 'WRAPPER_PID' "$LAUNCHER"; then
+  fail "$LAUNCHER still waits on the detached-job submission wrapper"
+fi
+checks=$((checks + 1))
 require_line 'if ! "$POD_TOOL" renew "$POD" --lab deepseek --session "$SESSION" --hours 2 \' "$LAUNCHER"
 require_line '"$STORE" get "$OUT_STORE/READBACK" "$CONTROLLER/readback" >/dev/null' "$LAUNCHER"
 require_line '[ -f "$READBACK_FILE" ] || { echo "no READBACK file was returned" >&2; exit 1; }' "$LAUNCHER"

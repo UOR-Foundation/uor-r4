@@ -20,6 +20,17 @@ grep -Fq 'seed 2 is conditional and is not launched by this script' "$TMP/seed-t
   echo "unmodified job refused seed 2 for the wrong reason" >&2
   exit 1
 }
+actual_log=$(
+  printf '%s\n' \
+    'Started on vast-example gpu 0 (queues behind any job holding the GPU lock). Log: /workspace/uor-r4/jobs/deepseek/example.log' |
+    awk '/Log: / {
+      for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }
+    }'
+)
+[ "$actual_log" = /workspace/uor-r4/jobs/deepseek/example.log ] || {
+  echo "the controller does not parse uor-pod's actual job-log line" >&2
+  exit 1
+}
 
 mutate() {
   local name=$1 file=$2 search=$3 replacement=$4
@@ -92,6 +103,12 @@ mutate directory-readback "$JOB" \
   '[ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS)' \
   '[ -d "$sealed" ]'
 mutate two-gpus "$LAUNCHER" '--count 1 --hours 2' '--count 2 --hours 2'
+mutate submit-only-wait "$LAUNCHER" \
+  '[ -z "$job_exit" ] || break' 'break'
+mutate ignored-remote-exit "$LAUNCHER" '[ "$job_exit" -eq 0 ] || {' 'true || {'
+mutate missing-job-log "$LAUNCHER" \
+  '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' \
+  '*) ;;'
 mutate no-renew "$LAUNCHER" 'if ! "$POD_TOOL" renew "$POD"' 'if ! true'
 mutate launcher-readback-true "$LAUNCHER" \
   '[ "$(cat "$READBACK_FILE")" = verified ]' 'true'
