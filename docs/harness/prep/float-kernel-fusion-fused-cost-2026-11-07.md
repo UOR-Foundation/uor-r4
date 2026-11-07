@@ -21,10 +21,17 @@ the fused path bit-identical:
 - one training step's loss and every gradient, at short and long context;
 - eight steps' models, samples and progress values.
 
-The true fused gain was never measured, and the training flag still defaults off. Claude now
-needs 32,768-step runs at about 0.63-0.70 s a step. This experiment decides whether future
-served training defaults to the smaller launch graph. The item's cached-decode half of
-done-when 4 remains a later unit because the current flag is training-only.
+The true fused gain was never measured, and the training flag still defaults off. When training
+repeats resume after the current pipeline-first work, their measured step is 0.63-0.70 s. This
+experiment decides whether those future served-training runs default to the smaller launch
+graph. The item's cached-decode half of done-when 4 remains a later unit because the current
+flag is training-only.
+
+**Execution gate:** the newest project direction is pipeline first. No GPU is leased while the
+current one-model export, integer-serving and parity path remains the owner's prerequisite. The
+sheet may receive FIT and the source and scripts may receive a D67 review now; the launch waits
+for that direction to clear or for the top session's decision review to name this microbenchmark
+as an exception.
 
 ## Question
 
@@ -116,12 +123,18 @@ windows without evaluation time.
   rates from the two runs of each mode. Let `off` and `on` be their medians, and
   `gain = (off - on) / off`. Report `1 / off` and `1 / on` as seconds per optimizer step, and
   `off x batch x context` and `on x batch x context` as training context tokens/s.
+  - **Extension:** if the bar reaches row 4, add `A2, B2, B3, A3` and pool twelve rates per
+    mode instead. Recompute `off`, `on`, both absolute costs and `gain` from those twelve-rate
+    medians.
 - **R3, noise.** Per shape, take the largest of:
   - the three-window mean for A0 against A1;
   - the three-window mean for B0 against B1;
   - the largest within-run spread between a window rate and that run's median rate;
   - the registered floor: 0.46% at (S), 0.25% at (L).
   Normalize each spread by that shape's OFF median.
+  - **Extension:** repeat both pair comparisons for A2 against A3 and B2 against B3, take the
+    largest within-run spread across all eight runs, and retain the same floor. The bar uses the
+    resulting extended R3.
 - **R4, exactness.**
   - For every shape and every step in `0,64,128,192,256`, every file under each run's model
     directory is compared by relative path and SHA-256 across A0, B0, B1 and A1. This includes
@@ -132,6 +145,9 @@ windows without evaluation time.
     `samples.md` or `samples.jsonl` the run creates is byte-identical. This is the complete
     deterministic run output apart from `progress.jsonl`'s two timing fields and the expected
     `fused-quantize.json`.
+  - If row 4 runs the extension, the same model-file, run-config, samples and normalized-progress
+    checks apply across A0, B0, B1, A1, A2, B2, B3 and A3 at all five checkpoints. An extension
+    run that cannot join that equality set stops the timing read.
   - The ON runs must report nonzero fused activation and residual calls; the OFF runs must
     report nonzero chain calls for each. The expected modes are also read from each
     `fused-quantize.json`.
@@ -143,10 +159,12 @@ windows without evaluation time.
   - If `nsys` exists, profile both smokes under
     `nsys profile --trace=cuda --sample=none --stats=true` and use the difference between their
     total kernel launches, divided by 31, as launches per training step. Retain both reports.
-  - If `nsys` is absent, convert the isolated 31-step calls to calls per training step and use
-    `2 x (activation_calls x 49 + residual_calls x 13)` for OFF and
-    `2 x (activation_calls + residual_calls)` for ON. Label this a source-derived lower-bound
-    estimate, never an observed launch count.
+  - If `nsys` is absent, report the isolated per-training-step calls for both paths. Report the
+    source's 49 activation-chain and 13 residual-chain tensor operations as a **forward-only
+    lower bound**. Do not multiply those figures by two: the straight-through backward graph
+    does not repeat the forward operation chain. Report ON as two fused launches per call only
+    after I-0 confirms its backward kernel. If total launches are required, record them as
+    UNAVAILABLE rather than inventing a count.
 
 ## Bar
 
@@ -158,8 +176,9 @@ Every row requires R4. The first matching row decides:
 | 2 | Either shape has a non-positive gain, or a gain no larger than its noise | Keep the default off and record the measured boundary. |
 | 3 | Both shapes have `gain > 2 x noise` | Default served training to fused quantizers; explicit `0` remains the reference. |
 | 4 | Otherwise | Run one complete `OFF, ON, ON, OFF` block for each unresolved shape on the same pod, within the owner caps, and re-read with all windows. |
-| 5 | After the additional block, both shapes have `gain > 2 x noise` | Default served training to fused quantizers. |
-| 6 | After the additional block, either shape remains at or below `2 x noise` | Keep the default off and record the result as inconclusive after the registered extension. |
+| 5 | An extension run fails R4 or I-1 to I-5 | Stop without a speed reading or default change. |
+| 6 | After the single additional block, both shapes have pooled `gain > 2 x noise` | Default served training to fused quantizers. |
+| 7 | After the single additional block, either shape remains at or below pooled `2 x noise` | Keep the default off and record the result as inconclusive after the registered extension. |
 
 The bar is about cost and output equality, not model quality. A positive result licenses changing
 the source default for CUDA served training, with the RTX 5090 as its qualified performance
@@ -167,8 +186,19 @@ evidence and other cards remaining unqualified. It is not a serving or cached-de
 
 ## Instrument checks
 
-- **I-0:** on the pod, with `UOR_NVCC_ARCH=compute_120` and `--test-threads=1`, run:
-  - the CUDA library suite;
+- **I-0:** on the pod, with `UOR_NVCC_ARCH=compute_120`, run the CUDA library suite with:
+
+  ```text
+  cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- --test-threads=1
+  ```
+
+  Then run each named ignored test separately with:
+
+  ```text
+  cargo test --release --locked -p uor-r4-float-train --features cuda --lib TEST_NAME -- --ignored --exact --test-threads=1
+  ```
+
+  The four named ignored tests are:
   - `in_space_long::tests::one_step_as_served_is_bit_equal_with_the_fused_quantizers`;
   - `fused_quantize::tests::gpu::g1_the_activation_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
   - `fused_quantize::tests::gpu::g1_the_residual_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
@@ -188,7 +218,8 @@ evidence and other cards remaining unqualified. It is not a serving or cached-de
 ## Steps
 
 1. Receive FIT and a D67 pre-run review of the exact pin, binary build, commands, equality
-   grader, seal and watcher.
+   grader, seal and watcher. Before creating a pod, re-read the current plan and newest notebook
+   row. If pipeline-first still stands, deliver the reviewed preparation with compute NOT_RUN.
 2. Run `uor-pod status`; create and lease one RTX 5090 at no more than $1.15/h inside the
    shared caps. Never touch another lab's pod.
 3. Bootstrap the reviewed pin; build the binary; record its SHA-256, `nvcc --version`, driver,
@@ -208,9 +239,11 @@ Six post-warm-up 64-step windows per mode at each shape, from two process runs i
 `OFF, ON, ON, OFF` order. The rate uses the trainer's synchronized whole-step clock. The
 registered noise includes both cross-process and within-run variation. A result that does not
 clear twice that noise adds a complete balanced block rather than adopting a small point
-estimate. The comparison is structural and output-exact, so the two seed rule is replaced by
-two independent process runs, six time windows per process arm, and five exact checkpoints;
-the chart's lead quantity is throughput, not model quality.
+estimate. This is a deterministic structural-performance measurement, not a model-quality
+decisive run: the same seed and inputs are deliberate because any model difference is a failed
+instrument check. Repetition comes from two independent processes per arm initially and four
+after the one registered extension, with three time windows per process and five exact
+checkpoints per run.
 
 ## Cost
 
@@ -219,13 +252,18 @@ the chart's lead quantity is throughput, not model quality.
 - **Training:** eight runs x 256 steps, at about 0.63-0.70 s a step, about 24 minutes.
 - **Eight count smokes and optional `nsys`:** about 8 minutes.
 - **Seal and read-back:** about 5 minutes.
-- Planned total: about 50 minutes, with an optional balanced extension adding about 24 minutes,
-  a $3 planning bound, and no more than $1.15/h.
+- Planned total: about 50 minutes, with an optional balanced extension adding about 24 minutes.
+  Include one full 50-minute retry projection for a pod or bootstrap failure: 124 minutes and
+  about $2.38 at $1.15/h. Add the extension only if the first run reaches its registered
+  inconclusive branch. The planning bound is $3; a healthy overrun is extended and recorded.
 - **Storage:** inputs about 0.1 GiB; eight output roots and five checkpoints each, about 4-6
   GiB temporary; eight count-smoke roots about 2 GiB; build target about 12 GiB; retained seal
   about 2 GiB. The extension adds its own roots within the same estimates. The pre-run records
   current free space, requires the project's 30 GiB + 128 MiB floor, and records the
   absent/present model ledger rather than inventing a balance.
+- **Host:** one trainer process, no CPU model compute; record host CPU, thread allocation,
+  available RAM, peak RAM and load in the pre-run. Record the active storage receipt or its
+  absence before launch.
 - **Hard limits:** the owner's four-pod and $8/h shared caps, the disk floor, and a failed or
   diverged run. A healthy overrun is extended and recorded, not cancelled.
 
