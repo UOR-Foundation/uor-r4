@@ -80,19 +80,36 @@ do
   require_line "check_file $hash \\" "$JOB"
 done
 
-require_line '--max-evaluation 512 --max-replies 1 --reply-tokens 1 \' "$JOB"
+grade_flag_lines=$(
+  awk '
+    {
+      line=$0
+      sub(/^[ \t]+/, "", line)
+      sub(/[ \t]+$/, "", line)
+      if (line == "--max-evaluation 512 --max-replies 1 --reply-tokens 1 \\") found++
+    }
+    END { print found }
+  ' "$JOB"
+)
+[ "$grade_flag_lines" -eq 2 ] ||
+  fail "$JOB does not pin both checkpoint and base-control grade flags"
+checks=$((checks + 1))
 require_line 'kill -STOP "$TRAIN_PID" 2>/dev/null || true' "$JOB"
-awk '
+termination_count=$(
+  awk '
   {
     line=$0
     sub(/^[ \t]+/, "", line)
     sub(/[ \t]+$/, "", line)
     if (previous == "kill -TERM \"$TRAIN_PID\" 2>/dev/null || true" &&
-        line == "kill -CONT \"$TRAIN_PID\" 2>/dev/null || true") found = 1
+        line == "kill -CONT \"$TRAIN_PID\" 2>/dev/null || true") found++
     previous = line
   }
-  END { exit(found ? 0 : 1) }
-' "$JOB" || fail "$JOB does not continue a stopped trainer after SIGTERM"
+  END { print found }
+' "$JOB"
+)
+[ "$termination_count" -eq 2 ] ||
+  fail "$JOB does not continue both stopped-trainer SIGTERM paths"
 checks=$((checks + 1))
 require_line 'if [ "$guard" -lt 93 ]; then' "$JOB"
 require_line 'elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"

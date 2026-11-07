@@ -42,6 +42,27 @@ mutate() {
   caught=$((caught + 1))
 }
 
+mutate_first() {
+  local name=$1 file=$2 search=$3 replacement=$4
+  attempted=$((attempted + 1))
+  local target="$TMP/$name"
+  cp "$file" "$target"
+  SEARCH=$search REPLACE=$replacement perl -0pi -e \
+    's/\Q$ENV{SEARCH}\E/$ENV{REPLACE}/' "$target"
+  cmp -s "$file" "$target" && {
+    echo "mutation $name did not change its file" >&2
+    exit 1
+  }
+  if "$HERE/gate.sh" \
+    "$([ "$file" = "$JOB" ] && printf '%s' "$target" || printf '%s' "$JOB")" \
+    "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
+    >/dev/null 2>&1; then
+    echo "mutation $name escaped" >&2
+    exit 1
+  fi
+  caught=$((caught + 1))
+}
+
 mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
 mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
 mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
@@ -54,6 +75,9 @@ mutate wrong-seed "$JOB" '--seed 1 \' '--seed 2 \'
 mutate seed-two-enabled "$JOB" '2) echo "seed 2 is conditional and is not launched by this script" >&2; exit 2 ;;' '2) ;;'
 mutate zero-replies "$JOB" '--max-replies 1 --reply-tokens 1' \
   '--max-replies 0 --reply-tokens 1'
+mutate_first checkpoint-zero-replies "$JOB" \
+  '--max-evaluation 512 --max-replies 1 --reply-tokens 1' \
+  '--max-evaluation 512 --max-replies 0 --reply-tokens 1'
 mutate wrong-panel-target "$JOB" \
   'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' \
   'PANEL_BIN="$REPO/docs/labs/one-model-end-to-end/instrument/target/release/served-reply-panel"'

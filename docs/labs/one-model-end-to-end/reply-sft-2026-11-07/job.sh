@@ -83,7 +83,8 @@ on_exit() {
   # Detach the seal from RUN/job.log, whose bytes are about to be hashed.
   exec >> "$RUN.seal.log" 2>&1
   if [ -n "$TRAIN_PID" ] && kill -0 "$TRAIN_PID" 2>/dev/null; then
-    kill "$TRAIN_PID" 2>/dev/null || true
+    kill -TERM "$TRAIN_PID" 2>/dev/null || true
+    kill -CONT "$TRAIN_PID" 2>/dev/null || true
     wait "$TRAIN_PID" 2>/dev/null || true
   fi
   printf '%s\n' "$rc" > "$RUN/EXIT"
