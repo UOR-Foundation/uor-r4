@@ -47,6 +47,9 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - The CPU restore now processes both seeds from the same specification in one loop. It has
   no hand-substituted seed table and checks the captured status and CPU reports against the
   same input identity.
+- The CPU source gate names the evaluator's local dependency closure, so unrelated trainer
+  changes on fresh `main` do not invalidate the evaluation while any evaluator dependency
+  change still does.
 - The fixed evaluator's `n3s-registered-v1` string is declared as a frozen evaluation
   protocol identifier rather than a checkpoint name. The specification names
   `b64l-centroid-v1` as the target, the CPU checks both values, and it writes a

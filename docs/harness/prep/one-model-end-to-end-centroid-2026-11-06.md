@@ -511,10 +511,14 @@ printf 'cpu_run_root=%s\n' "$ROOT"
 available_gib=$(df -Pk "$ROOT" | awk 'NR==2 {print int($4 / 1048576)}')
 [ "$available_gib" -ge 170 ] || { echo "need 170 GiB free, have $available_gib" >&2; exit 1; }
 export CARGO_TARGET_DIR="$ROOT/target"
+CPU_SOURCE_PATHS=(
+  crates/uor-r4-cpu-train crates/uor-r4-core crates/uor-r4-discrete
+  crates/uor-r4-integer crates/uor-r4-source-interface crates/uor-r4-tokenizer
+  crates/uor-r4-vision third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml
+)
 test -z "$(git status --porcelain --untracked-files=all -- \
-  crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml)"
-git diff --quiet "$SOURCE_PIN" HEAD -- \
-  crates third_party Cargo.toml Cargo.lock .cargo rust-toolchain.toml
+  "${CPU_SOURCE_PATHS[@]}")"
+git diff --quiet "$SOURCE_PIN" HEAD -- "${CPU_SOURCE_PATHS[@]}"
 cargo build --release --locked -p uor-r4-cpu-train \
   --bin cpu-query-cache-evaluate --bin cpu-query-cache-aggregate
 {
