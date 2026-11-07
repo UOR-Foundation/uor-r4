@@ -4,17 +4,16 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Finished steps
 
-- kimi-4 ported and integrated the typed controller, added accessible `/` and `@` interactions, exported the controller, and recorded scoped documentation/evidence in commit `1e50254cc0ca790545d1353ccc11acc357f9c4ce`.
-- The initial exact-head suite passed 327 Vitest tests, 112 plain-JS tests, typecheck/build, four legacy checks, local PR/report/claim checks, and all 11 full gates.
-- The fresh exact-head reviewer returned CHANGES: normal controlled-draft input/clear callbacks were duplicated and history edits could propagate to the parent; image attachments consumed the text budget; ArrowUp/Home, `/`-Escape, empty-mention, focus-after-selection and unsuccessful-send evidence was incomplete; and the controller omitted the legacy default-options argument.
+- kimi-4 delivered the typed controller and accessible interactions in `1e50254cc0ca790545d1353ccc11acc357f9c4ce`; its declared product and harness checks passed.
+- Fresh review returned CHANGES: duplicate controlled-draft callbacks and persisted history edits, images consuming the text budget, incomplete keyboard/empty/focus/failure evidence, and a missing default-options argument.
 
 ## Goal
 
-Repair those findings without broadening the typed-component unit. Preserve every kimi-4 behavior and the existing public APIs, lifecycle store, legacy page, engine, model/source/privacy behavior, and controlled draft/paste contract. This remains a development-library unit, not a live-page cutover.
+Repair those findings without broadening the typed-component unit. Preserve kimi-4 behavior, public APIs, lifecycle state, legacy page, model/source/privacy behavior, and controlled drafts. No live-page cutover.
 
 ## Cancel probe
 
-The callback duplication follows from both the Preact `onInput` and the controller's native `input` listener calling the same external setter. The image accounting follows from passing every retained attachment to the text reader instead of filtering `kind === 'image'`. Add focused failing tests before the repair. If a proposed fix weakens legacy history/draft semantics, stop rather than changing those semantics.
+Callback duplication has two input paths; image accounting includes every attachment kind. Add focused failing tests first. Stop rather than weakening legacy history/draft semantics.
 
 ## Files in scope
 

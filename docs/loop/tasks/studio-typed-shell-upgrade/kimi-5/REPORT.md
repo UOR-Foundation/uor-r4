@@ -34,7 +34,7 @@ No dependency, legacy page/controller, engine, worker, tokenizer, `studio_api.js
 
 Red-first repair evidence is in `red-review-controller.log` and `red-review-interactions.log`; focused green evidence is in `green-review-repairs.log`. Full-suite and build evidence is in `full-vitest-repairs.log`, `typecheck-repairs.log`, and `build-repairs.log`. New exact-head suite/gate/diff files supersede the kimi-4 evidence for delivery; all earlier logs remain preserved locally under `web/studio/.superpowers/sdd/studio-ts-composer/checks/`.
 
-The local PR check's D76 scope advisory covers the notebook and implementation plan explicitly authorized by the ORDER; no generated roadmap/issue scope was edited. The original combined kimi-4 commit-order advisory is historical, and this repair ORDER was committed alone before repair code. FILEMAP advisories concern unrelated existing folders. Branch-claim handling is kept out of the committed product diff and disclosed with the final harness evidence.
+The local PR check's D76 scope advisory covers the notebook and implementation plan explicitly authorized by the ORDER; no generated roadmap/issue scope was edited. The original combined kimi-4 commit-order advisory is historical, and this repair ORDER was committed alone before repair code. FILEMAP advisories concern unrelated existing folders. The `status.branch_claimed` rule passed in isolation at the repair head (`1 rules, 0 failed`); the local claim was then released and no coordination file was committed.
 
 Fresh exact-head review, green GitHub checks, protected merge, and fresh-main verification remain required. PR #3817 stays draft until a new review approves the repaired head. It uses `References #3500`, and the issue remains open.
 
