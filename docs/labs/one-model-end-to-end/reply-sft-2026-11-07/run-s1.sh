@@ -15,15 +15,23 @@ ROOT=$(git rev-parse --show-toplevel)
 POD_TOOL="$ROOT/scripts/pod/uor-pod"
 STORE="$ROOT/scripts/pod/uor-store"
 JOB="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"
-RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
+RUN_ID=$(date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]')-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 SESSION="deepseek-sft-$RUN_ID"
 RUN="/workspace/uor-r4/runs/deepseek-sft-s1-$RUN_ID"
 OUT_STORE="results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1-$RUN_ID"
+STORE_TOPIC="results/deepseek/one-model-end-to-end-reply-sft-2026-11-07"
 CONTROLLER="$ROOT/local/deepseek/one-model-sft-2026-11-07/$RUN_ID"
 MAXSEC=${UOR_SFT_MAXSEC:-7200}
+STALL_SEC=${UOR_SFT_STALL_SEC:-1800}
+MODEL_TIME="$ROOT/.uor-models/native-joint-learning-2026-09-04/model-time.json"
+STORAGE_RECEIPT=${UOR_STORAGE_RECEIPT:-"$ROOT/.uor-models/native-joint-learning-2026-09-04/storage-receipt.json"}
+MIN_FREE_KIB=31588352
 
 case "$MAXSEC" in ''|*[!0-9]*) echo "UOR_SFT_MAXSEC must be an integer" >&2; exit 2 ;; esac
 [ "$MAXSEC" -le 21600 ] || { echo "UOR_SFT_MAXSEC may not exceed six hours" >&2; exit 2; }
+case "$STALL_SEC" in ''|*[!0-9]*) echo "UOR_SFT_STALL_SEC must be an integer" >&2; exit 2 ;; esac
+[ "$STALL_SEC" -ge 300 ] && [ "$STALL_SEC" -le 7200 ] ||
+  { echo "UOR_SFT_STALL_SEC must be 300 to 7200 seconds" >&2; exit 2; }
 [ -x "$POD_TOOL" ] || { echo "missing $POD_TOOL" >&2; exit 2; }
 [ -x "$STORE" ] || { echo "missing $STORE" >&2; exit 2; }
 [ -f "$JOB" ] || { echo "missing $JOB" >&2; exit 2; }
@@ -32,8 +40,43 @@ git cat-file -e "$PIN^{commit}" || { echo "local repository does not contain $PI
   { echo "local HEAD is not the reviewed pin $PIN" >&2; exit 2; }
 [ -z "$(git status --porcelain --untracked-files=no)" ] ||
   { echo "tracked files differ from the reviewed pin $PIN" >&2; exit 2; }
+git fetch --quiet origin main || { echo "could not refresh origin/main" >&2; exit 2; }
+git merge-base --is-ancestor "$PIN" origin/main ||
+  { echo "$PIN is not merged on origin/main" >&2; exit 2; }
 
 install -d "$CONTROLLER"
+free_kib=$(df -Pk "$ROOT" | awk 'NR == 2 { print $4 }')
+case "$free_kib" in ''|*[!0-9]*) echo "could not measure free space" >&2; exit 2 ;; esac
+[ "$free_kib" -ge "$MIN_FREE_KIB" ] ||
+  { echo "free space ${free_kib} KiB is below the 30 GiB + 128 MiB floor" >&2; exit 2; }
+model_time_state=absent
+model_time_value=null
+if [ -f "$MODEL_TIME" ]; then
+  jq empty "$MODEL_TIME" || { echo "model-time ledger is not valid JSON" >&2; exit 2; }
+  model_time_state=present
+  model_time_value=$(jq -c . "$MODEL_TIME")
+fi
+storage_receipt_state=absent
+storage_receipt_value=null
+if [ -f "$STORAGE_RECEIPT" ]; then
+  jq empty "$STORAGE_RECEIPT" || { echo "storage receipt is not valid JSON" >&2; exit 2; }
+  storage_receipt_state=present
+  storage_receipt_value=$(jq -c . "$STORAGE_RECEIPT")
+fi
+cpu_count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 0)
+mem_available_kib=$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0)
+case "$cpu_count" in ''|*[!0-9]*) cpu_count=0 ;; esac
+case "$mem_available_kib" in ''|*[!0-9]*) mem_available_kib=0 ;; esac
+df -Pk "$ROOT" > "$CONTROLLER/df-before.txt"
+free -b > "$CONTROLLER/free-before.txt"
+jq -n --arg model_time_state "$model_time_state" --argjson model_time "$model_time_value" \
+  --arg storage_state "$storage_receipt_state" --argjson storage "$storage_receipt_value" \
+  --argjson free_kib "$free_kib" --argjson cpu_count "$cpu_count" \
+  --argjson mem_available_kib "$mem_available_kib" \
+  '{model_time_state:$model_time_state,model_time:$model_time,
+    storage_receipt_state:$storage_state,storage_receipt:$storage,
+    free_kib:$free_kib,floor_kib:31588352,cpu_count:$cpu_count,
+    mem_available_kib:$mem_available_kib}' > "$CONTROLLER/resource-state.json"
 JOB_SHA256=$(sha256sum "$JOB" | cut -d' ' -f1)
 printf '%s  %s\n' "$JOB_SHA256" "$JOB" > "$CONTROLLER/job.sha256"
 {
@@ -43,17 +86,47 @@ printf '%s  %s\n' "$JOB_SHA256" "$JOB" > "$CONTROLLER/job.sha256"
   printf 'export UOR_SFT_SESSION=%q\n' "$SESSION"
 } > "$CONTROLLER/controller.env"
 
-if listings=$("$STORE" ls "$OUT_STORE" 2>/dev/null) && [ -n "$listings" ]; then
+if ! listings=$("$STORE" ls "$STORE_TOPIC"); then
+  echo "cannot verify the store topic $STORE_TOPIC; no pod will be rented" >&2
+  exit 1
+fi
+if printf '%s\n' "$listings" |
+  awk -v path="$OUT_STORE/" 'index($0, path) { found = 1 } END { exit(found ? 0 : 1) }'; then
   echo "refusing nonempty store root $OUT_STORE" >&2
   exit 1
 fi
 
 "$POD_TOOL" status | tee "$CONTROLLER/status-before.txt"
-export UOR_POD_MAX_RATE=${UOR_POD_MAX_RATE:-1.15}
+export UOR_POD_MAX_PODS=4
+export UOR_POD_MAX_RATE=8.00
 
 POD=
 RESOLVED=0
 STATUS=FAILED
+JOB_LOG=
+JOB_SCRIPT=
+stop_remote_job() {
+  [ -n "$POD" ] && [ -n "$JOB_SCRIPT" ] || return 0
+  "$POD_TOOL" ssh "$POD" \
+    "line=\$(ps -eo pid=,pgid=,args= |
+       awk -v script='$JOB_SCRIPT' '
+         /^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]/ {
+           for (i = 3; i <= NF; i++) if (\$i == script) { print \$1, \$2; exit }
+         }')
+     set -- \$line
+     if [ \$# -eq 2 ]; then kill -TERM -- -\$2 2>/dev/null || true; fi" ||
+    true
+  local waited=0
+  while [ "$waited" -lt 12 ]; do
+    if "$POD_TOOL" ssh "$POD" 'flock -n /root/gpu0.lock true' >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 5
+    waited=$((waited + 1))
+  done
+  echo "remote SFT job still holds GPU 0 after termination; the pod is retained" >&2
+  return 1
+}
 cleanup() {
   local rc=$?
   trap - EXIT INT TERM
@@ -66,6 +139,7 @@ cleanup() {
         --confirm-archived || rc=1
     else
       echo "run did not prove a sealed readback; archiving the pod before teardown" >&2
+      stop_remote_job || rc=1
       "$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1
     fi
   fi
@@ -89,7 +163,8 @@ printf '%s\n' "$POD" > "$CONTROLLER/pod"
 
 started=$(date +%s)
 if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \
-  env UOR_SFT_PIN="$PIN" UOR_SFT_RUN="$RUN" UOR_SFT_OUT_STORE="$OUT_STORE" \
+  env UOR_SFT_PIN="$PIN" UOR_SFT_RUN_ID="$RUN_ID" UOR_SFT_RUN="$RUN" \
+  UOR_SFT_OUT_STORE="$OUT_STORE" \
   bash /workspace/one-model-reply-sft-job.sh 1 \
   > "$CONTROLLER/run.out" 2>&1; then
   cat "$CONTROLLER/run.out" >&2
@@ -102,6 +177,11 @@ JOB_LOG=$(awk '/Log: / {
 case "$JOB_LOG" in
   /workspace/uor-r4/jobs/*) ;;
   *) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;
+esac
+JOB_SCRIPT="${JOB_LOG%.log}.sh"
+case "$JOB_SCRIPT" in
+  /workspace/uor-r4/jobs/*.sh) ;;
+  *) echo "uor-pod reported an invalid job script path" >&2; exit 1 ;;
 esac
 printf '%s\n' "$JOB_LOG" > "$CONTROLLER/job-log.path"
 last_renew=$started
@@ -119,6 +199,20 @@ while :; do
     *) failures=$((failures + 1)) ;;
   esac
   now=$(date +%s)
+  progress_line=$("$POD_TOOL" ssh "$POD" \
+    "now=\$(date +%s)
+     latest=\$(find '$RUN' -type f -printf '%T@\\n' 2>/dev/null | sort -nr | head -1 | cut -d. -f1)
+     printf '%s %s\\n' \"\$now\" \"\${latest:-0}\"") || progress_line=
+  read -r remote_now latest_progress <<< "$progress_line" || true
+  case "$remote_now:$latest_progress" in
+    *[!0-9:]*|:*) ;;
+    *)
+      if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then
+        echo "$POD has made no file progress for at least $STALL_SEC seconds" >&2
+        exit 1
+      fi
+      ;;
+  esac
   if [ $((now - started)) -gt "$MAXSEC" ]; then
     echo "watcher time limit reached; the healthy job is not cancelled" |
       tee -a "$CONTROLLER/watch.log"

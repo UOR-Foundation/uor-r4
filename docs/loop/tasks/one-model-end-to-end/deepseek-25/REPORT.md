@@ -22,6 +22,25 @@ spend.
 - **A log file alone did not prove the job was alive.** If the remote wrapper
   died without writing `# exit=N`, polling the existing log could continue
   indefinitely while the pod billed.
+- **The store preflight treated failure as an empty output root.** A failed
+  listing could therefore rent a pod that could never upload its seal.
+- **A missing expected checkpoint was silently skipped.** A trainer that
+  exited zero after writing only some of the four checkpoints could pass the
+  post-run loop.
+- **The registered export command could not export the train-as-served base.**
+  `cpu-fbs-export` requires both `--raw-gates` and `--raw-transition`; without
+  them the job would fail before the first base control.
+- **The generated pod session failed uor-pod's lowercase validator.** The UTC
+  timestamp introduced uppercase `T` and `Z`.
+- **The launcher's `$1.15/h` cap was global, not per-pod.** With other labs
+  already running, it could reject a valid one-GPU launch; it also left the
+  owner's actual four-pod/$8-per-hour caps dependent on ambient environment.
+- **A live hung job could renew forever, and cleanup could not delete it while
+  its GPU lock remained held.** There was no file-progress watchdog or active
+  process-group termination.
+- **The seal included the panel build target and duplicate downloads.** That
+  contradicted the sheet's retained-storage projection and risked uploading
+  build products as research evidence.
 
 ## What changed
 
@@ -50,17 +69,58 @@ spend.
 - The remote probe reports the terminal exit when present, the GPU lock while
   the job runs, or a stopped state when the log exists but the job no longer
   holds its lock. Three consecutive stopped probes fail the controller.
+- Store access is checked against the existing topic before rental. A listing
+  failure aborts; only a successful listing can prove the new run root is
+  absent.
+- The job now requires the exact 512-row sample fingerprint on every grade,
+  verifies `init.json` against the registered model/config/run hashes, and
+  reproduces the registered corpus-panel overlap audit before training. The
+  overlap report is checked by content because its JSON embeds input paths and
+  therefore has a run-root-dependent file hash.
+- A missing expected checkpoint fails unless a registered stop already ended
+  the schedule.
+- Base export and every checkpoint export now pass both raw served-snapshot
+  flags, and the base artifact must reproduce `9a370566…`.
+- Run IDs are lowercased before the uor-pod session is formed. The global caps
+  are pinned to four pods and $8/hour, while the launch remains one RTX 5090.
+- The exact pin must be contained in freshly fetched `origin/main`.
+- Launch records free space, force-reads memory state, and authenticates or
+  records absence of `model-time.json` and the storage receipt before rental.
+- The controller fails after 30 minutes without a newer file under the run
+  root. Failure cleanup terminates the exact remote process group, waits for
+  GPU 0's lock to clear, then seals the pod through `down --to-store`.
+- The base archive is extracted only for the checkpoint and run config; the
+  archive and temporary download root are removed before training. The panel
+  build uses `/workspace/uor-r4/build`, outside the sealed run.
+- The first trainer attempt is micro-batch 16. Only a classified OOM permits
+  one fresh micro-batch-8 attempt; both attempts keep separate checkpoint,
+  artifact, grade, panel and reading roots.
+- The outcome map's partial-movement row now covers every guard-passing case
+  with any EOS/generation/content movement that does not meet rows 3–5,
+  removing the prior logical gap before the catch-all.
 
 ## Measurements
 
-No model or GPU measurement ran. The repair changes control flow only: job
-submission remains one RTX 5090 under the reviewed 36–39 minute, $0.69–0.75
-seed-1 envelope.
+No model training or GPU measurement ran. Local preflight downloaded and
+re-hashed all 18 runtime data/base files; every hash matched the registered
+value. The exact base checkpoint exported to
+`9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9`.
+The 512-row grade reproduced fingerprint `b724656f…` and `132/512`.
+
+The current overlap instrument reproduced 25,071 documents, 79,679 assistant
+replies and zero findings in all four overlap categories. Its path-bearing JSON
+hashed to `587a24c1…`, demonstrating why the controller checks its content
+rather than the historical path-dependent file hash. The base per-turn teacher
+ranks were 5/7/13 with top-8 198; one-user ranks were 18/138/873 with top-8 0.
+
+The repair leaves the planned workload unchanged: one RTX 5090, 36–39 minutes
+normally, with the registered one-retry projection at about $1.50. The launch
+now seals under 100 MiB and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- `gate.sh`: 85 checks passed.
-- `test-mutants.sh`: 28 of 28 semantic mutations caught.
+- `gate.sh`: 119 checks passed.
+- `test-mutants.sh`: 41 of 41 semantic mutations caught.
 - Full `uor-r4-float-train` library suite: 307 passed, including
   `checkpoint_ready_marker_records_completion`.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.

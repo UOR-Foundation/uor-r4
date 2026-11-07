@@ -39,6 +39,8 @@ require_line '*) echo "SEED must be 1; seed 2 is a later decision" >&2; exit 2 ;
 require_line 'got=$(sha256sum "$path" | cut -d'"'"' '"'"' -f1)' "$JOB"
 require_line '[ "$got" = "$want" ] || die "$path hashes to $got, not $want"' "$JOB"
 require_line 'OUT_STORE=${UOR_SFT_OUT_STORE:-results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1}' "$JOB"
+require_line 'store_listing=$("$STORE" ls "$STORE_TOPIC") ||' "$JOB"
+require_line 'die "cannot verify the store topic before training: $STORE_TOPIC"' "$JOB"
 require_line 'if [ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS); then' "$JOB"
 require_line 'if "$STORE" put "$RUN" "$OUT_STORE"; then' "$JOB"
 require_line '"$STORE" put "$RUN.readback-status" "$OUT_STORE/READBACK" ||' "$JOB"
@@ -95,9 +97,14 @@ grade_flag_lines=$(
 [ "$grade_flag_lines" -eq 2 ] ||
   fail "$JOB does not pin both checkpoint and base-control grade flags"
 checks=$((checks + 1))
+raw_flag_lines=$(grep -Fc -- '--raw-gates --raw-transition' "$JOB")
+[ "$raw_flag_lines" -eq 2 ] ||
+  fail "$JOB does not pass raw served snapshots to both exports"
+checks=$((checks + 1))
 require_line 'kill -STOP "$TRAIN_PID" 2>/dev/null || true' "$JOB"
 require_line 'if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then' "$JOB"
 require_line '[ -f "$checkpoint/.checkpoint-ready" ] ||' "$JOB"
+require_line 'elif [ -z "$STOP_REASON" ]; then' "$JOB"
 grep -Fq 'mark_checkpoint_ready(&directory)?;' "$TRAINER" ||
   fail "$TRAINER does not mark a checkpoint complete after saving it"
 checks=$((checks + 1))
@@ -123,20 +130,62 @@ require_line 'run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teac
 require_line '.eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and' "$JOB"
 require_line '.eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and' "$JOB"
 require_line '.complete == 0 and .eos_stops == 0 and .bos_stops == 0 and' "$JOB"
+per_turn_free_lines=$(grep -Fc "' base-per-turn-generated" "$JOB")
+[ "$per_turn_free_lines" -eq 1 ] ||
+  fail "$JOB does not reproduce the per-turn free-generation control"
+checks=$((checks + 1))
 require_line '[ "$base_guard" -eq 132 ] ||' "$JOB"
+grep -Fq '.evaluation.samples == 512 and' "$JOB" ||
+  fail "$JOB does not require the registered 512-row sample count"
+checks=$((checks + 1))
+require_line '.evaluation.sample_fingerprint ==' "$JOB"
+grep -Fq 'b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4' "$JOB" ||
+  fail "$JOB does not pin the registered 512-row sample fingerprint"
+checks=$((checks + 1))
+require_line '.run_config.sha256 ==' "$JOB"
+require_line '.files["model.safetensors"].sha256 ==' "$JOB"
+require_line '[ -f "$run/init.json" ] ||' "$JOB"
+require_line 'check_file 9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9 \' "$JOB"
+require_line '.counts.documents == 25071 and .counts.assistant_replies == 79679 and' "$JOB"
+grep -Fq '.counts.exact_accepted_assistant_reply == 0 and' "$JOB" ||
+  fail "$JOB does not reject accepted-answer overlap"
+checks=$((checks + 1))
+grep -Fq '.counts.assistant_replies_with_panel_6gram == 0' "$JOB" ||
+  fail "$JOB does not require the registered overlap count"
+checks=$((checks + 1))
+require_line 'die "corpus-panel overlap audit differs from the registered reading"' "$JOB"
+require_line 'die "checkpoint $next is missing without a registered stop"' "$JOB"
+require_line 'if ! train_and_score 16 attempt-1 "$RUN/run"; then' "$JOB"
+require_line 'train_and_score 8 attempt-2 "$RUN/run-mb8" ||' "$JOB"
+grep -Fq 'CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' "$JOB" ||
+  fail "$JOB does not classify the registered OOM retry"
+checks=$((checks + 1))
 require_line '--init-from "$B64L" \' "$JOB"
 require_line '--train-split "$RUN/inputs/mix" \' "$JOB"
 require_line '--train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \' "$JOB"
 require_line '--train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \' "$JOB"
-require_line '--batch 64 --micro-batch 16 --steps 1024 \' "$JOB"
+require_line '--batch 64 --micro-batch "$micro" --steps 1024 \' "$JOB"
 require_line '--eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \' "$JOB"
-require_line 'CARGO_TARGET_DIR="$RUN/panel-target" \' "$JOB"
-require_line 'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' "$JOB"
+require_line 'PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID/panel-target}' "$JOB"
+require_line 'CARGO_TARGET_DIR="$PANEL_TARGET" \' "$JOB"
+require_line 'PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"' "$JOB"
+require_line 'oh/run/b64L-s1/models/step-016384 oh/run/b64L-s1/config.json' "$JOB"
+require_line 'rm -rf "$RUN/download"' "$JOB"
+require_line 'rm -f "$RUN/inputs/d3-accum-s1.tar.gz"' "$JOB"
 require_line 'READBACK_STATUS=verified' "$JOB"
 
 require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu 5090 \' "$LAUNCHER"
 require_line '[ "$(git rev-parse HEAD)" = "$PIN" ] ||' "$LAUNCHER"
 require_line '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' "$LAUNCHER"
+require_line 'git merge-base --is-ancestor "$PIN" origin/main ||' "$LAUNCHER"
+require_line 'model_time_state=absent' "$LAUNCHER"
+require_line '[ "$free_kib" -ge "$MIN_FREE_KIB" ] ||' "$LAUNCHER"
+require_line 'export UOR_POD_MAX_PODS=4' "$LAUNCHER"
+require_line 'export UOR_POD_MAX_RATE=8.00' "$LAUNCHER"
+require_line 'if ! listings=$("$STORE" ls "$STORE_TOPIC"); then' "$LAUNCHER"
+grep -Fq 'cannot verify the store topic $STORE_TOPIC; no pod will be rented' "$LAUNCHER" ||
+  fail "$LAUNCHER does not fail closed when the store preflight cannot be read"
+checks=$((checks + 1))
 require_line '--count 1 --hours 2 --ref "$PIN" \' "$LAUNCHER"
 require_line 'if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \' "$LAUNCHER"
 grep -Fqx "JOB_LOG=\$(awk '/Log: / {" "$LAUNCHER" ||
@@ -146,6 +195,9 @@ grep -Fq 'for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }' 
   "$LAUNCHER" || fail "$LAUNCHER does not parse the log path from uor-pod's one-line success message"
 checks=$((checks + 1))
 require_line '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' "$LAUNCHER"
+grep -Fq "date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]'" "$LAUNCHER" ||
+  fail "$LAUNCHER does not normalize the uor-pod session to lowercase"
+checks=$((checks + 1))
 grep -Fq 'job_exit=${probe#exit }; break ;;' "$LAUNCHER" ||
   fail "$LAUNCHER does not stop on the terminal remote exit"
 checks=$((checks + 1))
@@ -154,6 +206,8 @@ grep -Fq 'elif ! flock -n /root/gpu0.lock true; then printf '"'"'running\\n'"'"'
   "$LAUNCHER" || fail "$LAUNCHER does not distinguish a live GPU job from a stopped one"
 checks=$((checks + 1))
 require_line 'echo "$POD is running, but GPU 0 has no live job and $JOB_LOG has no terminal exit" >&2' "$LAUNCHER"
+require_line 'if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then' "$LAUNCHER"
+require_line 'stop_remote_job || rc=1' "$LAUNCHER"
 if grep -Fq 'WRAPPER_PID' "$LAUNCHER"; then
   fail "$LAUNCHER still waits on the detached-job submission wrapper"
 fi

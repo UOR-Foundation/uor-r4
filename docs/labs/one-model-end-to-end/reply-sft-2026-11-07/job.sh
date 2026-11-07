@@ -28,9 +28,11 @@ esac
 RUN_ID=${UOR_SFT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')}
 RUN=${UOR_SFT_RUN:-/workspace/uor-r4/runs/deepseek-sft-s$SEED}
 OUT_STORE=${UOR_SFT_OUT_STORE:-results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1}
+STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07
 STORE=/root/uor-store
 REPO=${UOR_REPO:-/root/uor-sft-src-$PIN}
 TARGET=${CARGO_TARGET_DIR:-/workspace/uor-r4/target-deepseek-sft}
+PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID/panel-target}
 export RAYON_NUM_THREADS=${UOR_SFT_CPU_THREADS:-8}
 export CARGO_TARGET_DIR=$TARGET
 
@@ -69,8 +71,12 @@ command -v sha256sum >/dev/null || die "sha256sum is required"
 command -v nvidia-smi >/dev/null || die "nvidia-smi is required"
 [ -x "$STORE" ] || die "uor-store is not installed"
 
-store_listing=$("$STORE" ls "$OUT_STORE" 2>/dev/null || true)
-[ -z "$store_listing" ] || die "refusing a nonempty store output: $OUT_STORE"
+store_listing=$("$STORE" ls "$STORE_TOPIC") ||
+  die "cannot verify the store topic before training: $STORE_TOPIC"
+if printf '%s\n' "$store_listing" |
+  awk -v path="$OUT_STORE/" 'index($0, path) { found = 1 } END { exit(found ? 0 : 1) }'; then
+  die "refusing a nonempty store output: $OUT_STORE"
+fi
 
 install -d "$RUN/inputs" "$RUN/control" "$RUN/checkpoints" "$RUN/artifacts" \
   "$RUN/grades" "$RUN/panel" "$RUN/download" "$RUN/logs"
@@ -78,6 +84,8 @@ exec > >(tee -a "$RUN/job.log") 2>&1
 
 TRAIN_PID=
 STOP_REASON=
+TRAIN_RUN=
+ATTEMPT=
 on_exit() {
   local rc=$?
   # Detach the seal from RUN/job.log, whose bytes are about to be hashed.
@@ -201,7 +209,8 @@ check_file a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078 \
   "$RUN/inputs/data/ft/dev/response_mask.u8"
 
 install -d "$RUN/inputs/base"
-tar -xzf "$RUN/inputs/d3-accum-s1.tar.gz" -C "$RUN/inputs/base"
+tar -xzf "$RUN/inputs/d3-accum-s1.tar.gz" -C "$RUN/inputs/base" \
+  oh/run/b64L-s1/models/step-016384 oh/run/b64L-s1/config.json
 B64L="$RUN/inputs/base/oh/run/b64L-s1/models/step-016384"
 B64L_CONFIG="$RUN/inputs/base/oh/run/b64L-s1/config.json"
 [ -d "$B64L" ] || die "the base archive has no $B64L"
@@ -213,6 +222,8 @@ check_file 672de97fcc329b10c3cde591f66047352851f9fe1d02df85a168190f5ba12ddd \
   "$B64L/hamming_read.safetensors"
 check_file 6b2b84640e37d1f6322a5b4ab6db0d783469d7adf4db1c7e67b532d4310056f2 \
   "$B64L_CONFIG"
+rm -rf "$RUN/download"
+rm -f "$RUN/inputs/d3-accum-s1.tar.gz"
 
 log "building pinned binaries"
 (
@@ -228,42 +239,51 @@ log "building pinned binaries"
 )
 (
   cd "$REPO/docs/labs/one-model-end-to-end/instrument"
-  CARGO_TARGET_DIR="$RUN/panel-target" \
-    cargo build --release --locked --features cpu-parity --bin served-reply-panel
+  CARGO_TARGET_DIR="$PANEL_TARGET" \
+    cargo build --release --locked --features cpu-parity \
+      --bin served-reply-panel --bin corpus-panel-overlap
 )
 
 TRAIN_BIN="$TARGET/release/train-in-space"
 GRADE_BIN="$TARGET/release/cpu-checkpoint-grade"
 EXPORT_BIN="$TARGET/release/cpu-fbs-export"
-PANEL_BIN="$RUN/panel-target/release/served-reply-panel"
-for binary in "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN"; do
+PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"
+OVERLAP_BIN="$PANEL_TARGET/release/corpus-panel-overlap"
+for binary in "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN" "$OVERLAP_BIN"; do
   [ -x "$binary" ] || die "build did not produce $binary"
 done
-sha256sum "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN" > "$RUN/binaries.sha256"
+sha256sum "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN" "$OVERLAP_BIN" \
+  > "$RUN/binaries.sha256"
 
 grade_checkpoint() {
   local step=$1 checkpoint=$2 grade_dir artifact_dir
-  grade_dir="$RUN/grades/step-$(printf '%06d' "$step")"
-  artifact_dir="$RUN/artifacts/step-$(printf '%06d' "$step")"
+  grade_dir="$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step")"
+  artifact_dir="$RUN/artifacts/$ATTEMPT/step-$(printf '%06d' "$step")"
   install -d "$artifact_dir"
   "$GRADE_BIN" \
     --checkpoint "$checkpoint" \
-    --run-config "$RUN/run/config.json" \
+    --run-config "$TRAIN_RUN/config.json" \
     --snapshot-out "$artifact_dir/model.snapshot" \
     --artifact-out "$artifact_dir/model.uorlut" \
     --tokens "$RUN/inputs/oasst2-heldout/tokens.u16" \
     --mask "$RUN/inputs/oasst2-heldout/response_mask.u8" \
     --manifest "$RUN/inputs/oasst2-heldout/manifest.json" \
     --max-evaluation 512 --max-replies 1 --reply-tokens 1 \
+    --raw-gates --raw-transition \
     --out "$grade_dir.json"
   jq -e '.evaluation.top1_correct >= 0' "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade has no top-1 count"
+  jq -e '.evaluation.samples == 512 and
+    .evaluation.sample_fingerprint ==
+    "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
+    "$grade_dir.json" >/dev/null ||
+    die "checkpoint $step grade did not use the registered 512-row sample"
 }
 
 run_panel() {
   local step=$1 artifact=$2 rendering=$3 teacher=$4 label=$5
   local out
-  out="$RUN/panel/step-$(printf '%06d' "$step")-$label.json"
+  out="$RUN/panel/${ATTEMPT:+$ATTEMPT/}step-$(printf '%06d' "$step")-$label.json"
   "$PANEL_BIN" \
     --artifact "$artifact" \
     --tokenizer "$RUN/inputs/data/tokenizer.json" \
@@ -279,27 +299,28 @@ run_panel() {
 score_checkpoint() {
   local step=$1 checkpoint=$2
   local marker artifact
-  marker="$RUN/checkpoints/step-$(printf '%06d' "$step").scored"
+  marker="$RUN/checkpoints/$ATTEMPT/step-$(printf '%06d' "$step").scored"
   [ ! -e "$marker" ] || return 0
   [ -d "$checkpoint" ] || die "checkpoint $step is missing"
-  cp -a "$checkpoint" "$RUN/checkpoints/step-$(printf '%06d' "$step")"
+  install -d "$RUN/checkpoints/$ATTEMPT"
+  cp -a "$checkpoint" "$RUN/checkpoints/$ATTEMPT/step-$(printf '%06d' "$step")"
   grade_checkpoint "$step" "$checkpoint"
-  artifact="$RUN/artifacts/step-$(printf '%06d' "$step")/model.uorlut"
+  artifact="$RUN/artifacts/$ATTEMPT/step-$(printf '%06d' "$step")/model.uorlut"
   run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null
   run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/dev/null
   run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null
   touch "$marker"
 
   local guard eos_top1 eos_p50
-  guard=$(jq -r '.evaluation.top1_correct' "$RUN/grades/step-$(printf '%06d' "$step").json")
+  guard=$(jq -r '.evaluation.top1_correct' "$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step").json")
   eos_top1=$(jq -r '.teacher_forced.totals.eos_top1' \
-    "$RUN/panel/step-$(printf '%06d' "$step")-per-turn-teacher.json")
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json")
   eos_p50=$(jq -r '.teacher_forced.totals.eos_rank_p50' \
-    "$RUN/panel/step-$(printf '%06d' "$step")-per-turn-teacher.json")
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json")
   jq -n --argjson step "$step" --argjson guard "$guard" \
     --argjson eos_top1 "$eos_top1" --argjson eos_p50 "$eos_p50" \
     '{step:$step, guard_top1:$guard, eos_top1:$eos_top1, eos_rank_p50:$eos_p50}' \
-    >> "$RUN/checkpoint-readings.jsonl"
+    >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl"
   if [ "$guard" -lt 93 ]; then
     STOP_REASON="continuation-failure-step-$step"
     kill "$TRAIN_PID" 2>/dev/null || true
@@ -309,10 +330,40 @@ score_checkpoint() {
   fi
 }
 
+log "panel-overlap control"
+"$OVERLAP_BIN" \
+  --tokens "$RUN/inputs/mix/tokens.u16" \
+  --mask "$RUN/inputs/mix/response_mask.u8" \
+  --tokenizer "$RUN/inputs/data/tokenizer.json" \
+  --plan "$RUN/inputs/m2-fresh256/plan.json" \
+  --labels "$RUN/inputs/m2-fresh256/labels.json" \
+  --out "$RUN/control/corpus-panel-overlap.json"
+jq -e '.pass == true and
+  .tokens_sha256 ==
+    "3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3" and
+  .mask_sha256 ==
+    "67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b" and
+  .tokenizer_sha256 ==
+    "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89" and
+  .plan.sha256 ==
+    "0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715" and
+  .labels.sha256 ==
+    "3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be" and
+  .counts.documents == 25071 and .counts.assistant_replies == 79679 and
+  .counts.exact_panel_in_document == 0 and
+  .counts.exact_accepted_assistant_reply == 0 and
+  .counts.documents_with_panel_6gram == 0 and
+  .counts.assistant_replies_with_panel_6gram == 0' \
+  "$RUN/control/corpus-panel-overlap.json" >/dev/null ||
+  die "corpus-panel overlap audit differs from the registered reading"
+
 log "base controls"
 BASE_ARTIFACT="$RUN/control/b64L-s1.uorlut"
 "$EXPORT_BIN" --checkpoint "$B64L" --run-config "$B64L_CONFIG" \
-  --snapshot-out "$RUN/control/b64L-s1.snapshot" --out "$BASE_ARTIFACT"
+  --snapshot-out "$RUN/control/b64L-s1.snapshot" --out "$BASE_ARTIFACT" \
+  --raw-gates --raw-transition
+check_file 9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9 \
+  "$BASE_ARTIFACT"
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 1 base-per-turn-teacher >/dev/null
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 0 base-per-turn-generated >/dev/null
 run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null
@@ -336,67 +387,111 @@ base_totals '.teacher_forced.totals |
 base_totals '.totals |
   .complete == 0 and .eos_stops == 0 and .bos_stops == 0 and
   .context_stops == 0 and .cap_stops == 256' base-one-user-generated
+base_totals '.totals |
+  .complete == 0 and .eos_stops == 0 and .bos_stops == 0 and
+  .context_stops == 0 and .cap_stops == 256' base-per-turn-generated
 base_guard=$(jq -r '.evaluation.top1_correct' "$RUN/control/base-grade.json")
 [ "$base_guard" -eq 132 ] ||
   die "base continuation guard is $base_guard, not the registered 132/512"
 
-log "training"
-"$TRAIN_BIN" \
-  --data-root "$RUN/inputs/data" \
-  --init-from "$B64L" \
-  --train-split "$RUN/inputs/mix" \
-  --train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
-  --train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \
-  --out "$RUN/run" \
-  --objective nearest --retain-rates 1 --decay-mult 1 \
-  --lr 0.0002 --lr-end 0 --train-as-served 1 \
-  --context 192 --width 256 --hamming-read 4 \
-  --batch 64 --micro-batch 16 --steps 1024 \
-  --eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \
-  > "$RUN/logs/train.log" 2>&1 &
-TRAIN_PID=$!
+check_initialization() {
+  local run=$1
+  [ -f "$run/init.json" ] ||
+    die "training wrote no checkpoint-initialization record"
+  jq -e '.mode == "checkpoint" and .optimizer == "fresh" and .schedule == "fresh" and
+    .run_config.sha256 ==
+      "6b2b84640e37d1f6322a5b4ab6db0d783469d7adf4db1c7e67b532d4310056f2" and
+    .files["model.safetensors"].sha256 ==
+      "6fd2d764171cc416d5ff272e19e3ebe0644183ab9c43ca0662706756ac75f5de" and
+    .files["config.json"].sha256 ==
+      "1045acb61d92d390f0f61617ffa4c1847437473c9694c09787b48bf46e761ed2" and
+    .files["hamming_read.safetensors"].sha256 ==
+      "672de97fcc329b10c3cde591f66047352851f9fe1d02df85a168190f5ba12ddd"' \
+    "$run/init.json" >/dev/null ||
+    die "checkpoint-initialization record differs from the registered base"
+}
 
-next=256
-while kill -0 "$TRAIN_PID" 2>/dev/null; do
-  if [ "$next" -le 1024 ]; then
-    checkpoint="$RUN/run/models/step-$(printf '%06d' "$next")"
-    if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then
-      kill -STOP "$TRAIN_PID" 2>/dev/null || true
-      score_checkpoint "$next" "$checkpoint"
-      if [ -z "$STOP_REASON" ]; then
-        kill -CONT "$TRAIN_PID" 2>/dev/null || true
-      else
-        kill -TERM "$TRAIN_PID" 2>/dev/null || true
-        kill -CONT "$TRAIN_PID" 2>/dev/null || true
+train_and_score() {
+  local micro=$1 label=$2 run_dir=$3
+  local next=256 train_rc=0 checkpoint
+  ATTEMPT=$label
+  TRAIN_RUN=$run_dir
+  install -d "$RUN/grades/$label" "$RUN/artifacts/$label" \
+    "$RUN/checkpoints/$label" "$RUN/panel/$label"
+  "$TRAIN_BIN" \
+    --data-root "$RUN/inputs/data" \
+    --init-from "$B64L" \
+    --train-split "$RUN/inputs/mix" \
+    --train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
+    --train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \
+    --out "$run_dir" \
+    --objective nearest --retain-rates 1 --decay-mult 1 \
+    --lr 0.0002 --lr-end 0 --train-as-served 1 \
+    --context 192 --width 256 --hamming-read 4 \
+    --batch 64 --micro-batch "$micro" --steps 1024 \
+    --eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \
+    > "$RUN/logs/train-$label.log" 2>&1 &
+  TRAIN_PID=$!
+
+  while kill -0 "$TRAIN_PID" 2>/dev/null; do
+    if [ "$next" -le 1024 ]; then
+      checkpoint="$run_dir/models/step-$(printf '%06d' "$next")"
+      if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then
+        kill -STOP "$TRAIN_PID" 2>/dev/null || true
+        score_checkpoint "$next" "$checkpoint"
+        if [ -z "$STOP_REASON" ]; then
+          kill -CONT "$TRAIN_PID" 2>/dev/null || true
+        else
+          kill -TERM "$TRAIN_PID" 2>/dev/null || true
+          kill -CONT "$TRAIN_PID" 2>/dev/null || true
+        fi
+        next=$((next + 256))
       fi
-      next=$((next + 256))
     fi
-  fi
-  sleep 5
-done
-train_rc=0
-wait "$TRAIN_PID" || train_rc=$?
-TRAIN_PID=
+    sleep 5
+  done
+  wait "$TRAIN_PID" || train_rc=$?
+  TRAIN_PID=
 
-while [ "$next" -le 1024 ]; do
-  checkpoint="$RUN/run/models/step-$(printf '%06d' "$next")"
-  if [ -d "$checkpoint" ]; then
-    [ -f "$checkpoint/.checkpoint-ready" ] ||
-      die "checkpoint $next has no completion marker"
-    score_checkpoint "$next" "$checkpoint"
+  if [ "$train_rc" -ne 0 ] && [ -z "$STOP_REASON" ]; then
+    return 1
   fi
-  next=$((next + 256))
-done
+  check_initialization "$run_dir"
+  while [ "$next" -le 1024 ]; do
+    checkpoint="$run_dir/models/step-$(printf '%06d' "$next")"
+    if [ -d "$checkpoint" ]; then
+      [ -f "$checkpoint/.checkpoint-ready" ] ||
+        die "checkpoint $next has no completion marker"
+      score_checkpoint "$next" "$checkpoint"
+    elif [ -z "$STOP_REASON" ]; then
+      die "checkpoint $next is missing without a registered stop"
+    fi
+    next=$((next + 256))
+  done
+  [ -s "$run_dir/progress.jsonl" ] || die "training wrote no progress"
+  jq -e 'select(.step == 0 or (.train_loss_mean | numbers | isfinite))' \
+    "$run_dir/progress.jsonl" >/dev/null || die "progress has a non-finite loss"
+  if [ -f "$RUN/checkpoint-readings-$label.jsonl" ]; then
+    cp "$RUN/checkpoint-readings-$label.jsonl" "$RUN/checkpoint-readings.jsonl"
+  fi
+  return 0
+}
 
-if [ "$train_rc" -ne 0 ] && [ -z "$STOP_REASON" ]; then
-  die "trainer exited $train_rc without a registered stop"
+log "training"
+if ! train_and_score 16 attempt-1 "$RUN/run"; then
+  if grep -Eiq 'out of memory|CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' \
+    "$RUN/logs/train-attempt-1.log"; then
+    log "micro-batch 16 ran out of memory; retrying once at micro-batch 8"
+    STOP_REASON=
+    train_and_score 8 attempt-2 "$RUN/run-mb8" ||
+      die "trainer failed after the registered micro-batch-8 retry"
+  else
+    die "trainer failed before a registered stop"
+  fi
 fi
 if [ -n "$STOP_REASON" ]; then
   log "registered stop: $STOP_REASON"
 else
   log "training completed all 1,024 steps"
 fi
-[ -s "$RUN/run/progress.jsonl" ] || die "training wrote no progress"
-jq -e 'select(.train_loss_mean == null or (.train_loss_mean | isfinite))' \
-  "$RUN/run/progress.jsonl" >/dev/null || die "progress has a non-finite loss"
 log "job complete"

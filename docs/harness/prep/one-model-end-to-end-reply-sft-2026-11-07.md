@@ -186,10 +186,13 @@ At checkpoints 256, 512, 768 and 1,024, export and score:
 1. `cpu-checkpoint-grade --checkpoint STEP --run-config $SEAL/run/config.json
    --snapshot-out ... --artifact-out ... --tokens OASST2_HELDOUT/tokens.u16
    --mask OASST2_HELDOUT/response_mask.u8 --manifest OASST2_HELDOUT/manifest.json
-   --max-evaluation 512 --max-replies 1 --reply-tokens 1 --out ...`.
+   --max-evaluation 512 --max-replies 1 --reply-tokens 1
+   --raw-gates --raw-transition --out ...`.
    `cpu-checkpoint-grade` refuses `--max-replies 0`; one one-token reply
    exercises the export path while the continuation gate reads the 512-row
-   nearest grade.
+   nearest grade. The source run trained as served, so the exporter requires
+   both raw-snapshot flags; the base export uses the same two flags and must
+   reproduce artifact `9a370566…`.
    Record nearest top-1, its pass/fail against 93, and the export hashes.
 2. `served-reply-panel --artifact ... --rendering per-turn/v1
    --teacher-forced 1 ...`. Record EOS top-1/top-8/top-32, median rank,
@@ -217,7 +220,7 @@ The first-match outcome map is:
 | 3 | EOS top-1 >= 16/256, median rank <= 3, free EOS stops >= 16/256, complete accepted rows >= 4/256, and guard >= 93/512 | **Positive:** termination and some useful content moved together. Unlock seed 2 and a longer run from the best checkpoint. |
 | 4 | EOS top-1 >= 16, free EOS stops >= 16, guard >= 93, complete rows < 4 | **Termination signal, content gap.** No seed 2 yet; first compare first divergence on per-turn replies, then extend answer-content SFT. |
 | 5 | EOS top-1 >= 16, guard >= 93, free EOS stops < 16 | **Ranking-generation gap.** No seed 2; diagnose the teacher-forced/free-generation mismatch before adding EOS weight. |
-| 6 | 0 < EOS top-1 < 16 or median rank improves below 7 but the other thresholds miss | **Partial ranking movement.** No seed 2; run one 2,048-step dose extension at a new root, then apply thresholds 1-5. |
+| 6 | guard >= 93 and at least one movement signal is present (EOS top-1 > 0, free EOS stops > 0, complete rows > 0, or median EOS rank < 7), but rows 3-5 do not apply | **Partial movement.** No seed 2; run one 2,048-step dose extension at a new root, then apply thresholds 1-5. |
 | 7 | none of the above | **No signal at 1,024.** Close this configuration and inspect the scored windows; do not run seed 2. |
 
 A positive result establishes that this recipe can move the served model. It
@@ -254,7 +257,7 @@ The executable review unit is deepseek-23:
 
 1. Record the fresh FIT and D67 review of the merged code, this sheet, job chain,
    exact input packet and seal paths.
-2. `uor-pod status`; acquire one RTX 5090 32 GiB pod under a Codex-lab lease
+2. `uor-pod status`; acquire one RTX 5090 32 GiB pod under a DeepSeek-lab lease
    inside the four-pod/$8h caps. Never touch Claude's pods.
 3. Build the exact merged pin, fetch and hash every input, run the training-unit
    CPU tests, and reproduce the base rank/free/continuation controls.
@@ -262,7 +265,8 @@ The executable review unit is deepseek-23:
    checkpoint, export and score before proceeding. At step 512, apply row 2 of
    the outcome map and stop the process if it matches.
 5. At completion or stop, seal checkpoints, exports, panel outputs, grades and
-   logs under `results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1/`,
+   logs under
+   `results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1-<run-id>/`,
    read back, then take the pod down.
 6. Apply the outcome map. Run seed 2 only after row 3 and a fresh decision
    review.
@@ -284,9 +288,10 @@ Resource projection:
 - lease/watcher limit: 1.5 h, with healthy-run extension recorded if needed;
 - local CPU: at most 8 Rayon threads for instruments; no local model training;
 - local RAM: 16 GiB envelope; panel/grader run one at a time;
-- new retained data: 20 MiB; pod checkpoints/exports: under 1 GiB; pod build:
-  under 20 GiB; local build/scratch: under 10 GiB;
-- current free space measured at review: 203,999,088 KiB, above the project's
+- sealed input, checkpoint, export, grade and panel evidence: under 100 MiB;
+  pod panel build outside the seal: under 20 GiB; local build/scratch: under
+  10 GiB;
+- current free space measured at review: 163,126,048 KiB, above the project's
   30 GiB + 128 MiB floor;
 - `model-time.json` and an active storage receipt were absent at review; launch
   must re-check and record that state.

@@ -31,6 +31,18 @@ actual_log=$(
   echo "the controller does not parse uor-pod's actual job-log line" >&2
   exit 1
 }
+remote_process=$(
+  printf '%s\n' \
+    '123 456 bash /workspace/uor-r4/jobs/deepseek/example.sh' |
+    awk -v script=/workspace/uor-r4/jobs/deepseek/example.sh '
+      /^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]/ {
+        for (i = 3; i <= NF; i++) if ($i == script) { print $1, $2; exit }
+      }'
+)
+[ "$remote_process" = '123 456' ] || {
+  echo "the controller does not identify the exact remote process group" >&2
+  exit 1
+}
 
 mutate() {
   local name=$1 file=$2 search=$3 replacement=$4
@@ -80,10 +92,14 @@ mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
 mutate weak-guard "$JOB" '[ "$guard" -lt 93 ]' '[ "$guard" -lt 0 ]'
 mutate weak-base-guard "$JOB" '[ "$base_guard" -eq 132 ]' '[ "$base_guard" -ge 0 ]'
 mutate wrong-base-rank "$JOB" '.eos_rank_min == 5' '.eos_rank_min == 0'
+mutate missing-per-turn-free "$JOB" \
+  "' base-per-turn-generated" "' base-one-user-generated"
 mutate no-freeze "$JOB" 'kill -STOP "$TRAIN_PID"' 'kill -CONT "$TRAIN_PID"'
 mutate partial-checkpoint "$JOB" \
   'if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then' \
   'if [ -d "$checkpoint" ]; then'
+mutate missing-checkpoint "$JOB" \
+  'elif [ -z "$STOP_REASON" ]; then' 'elif false; then'
 mutate no-termination-cont "$JOB" 'kill -CONT "$TRAIN_PID" 2>/dev/null || true' ''
 mutate wrong-eval "$JOB" '--eval-every 256' '--eval-every 2560'
 mutate wrong-seed "$JOB" '--seed 1 \' '--seed 2 \'
@@ -93,8 +109,10 @@ mutate zero-replies "$JOB" '--max-replies 1 --reply-tokens 1' \
 mutate_first checkpoint-zero-replies "$JOB" \
   '--max-evaluation 512 --max-replies 1 --reply-tokens 1' \
   '--max-evaluation 512 --max-replies 0 --reply-tokens 1'
+mutate_first raw-export-flags "$JOB" \
+  '--raw-gates --raw-transition \' '--raw-gates \'
 mutate wrong-panel-target "$JOB" \
-  'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' \
+  'PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"' \
   'PANEL_BIN="$REPO/docs/labs/one-model-end-to-end/instrument/target/release/served-reply-panel"'
 mutate mixed-hash "$JOB" \
   3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
@@ -102,14 +120,32 @@ mutate mixed-hash "$JOB" \
 mutate forge-hash "$JOB" \
   'got=$(sha256sum "$path" | cut -d'"'"' '"'"' -f1)' \
   'got=$want'
+mutate wrong-sample "$JOB" \
+  b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4 \
+  0000000000000000000000000000000000000000000000000000000000000000
+mutate missing-init-check "$JOB" '[ -f "$run/init.json" ] ||' 'true ||'
+mutate missing-oom-retry "$JOB" \
+  'if ! train_and_score 16 attempt-1 "$RUN/run"; then' \
+  'if false; then'
+mutate overlap-accepted "$JOB" \
+  '.counts.exact_accepted_assistant_reply == 0 and' \
+  '.counts.exact_accepted_assistant_reply >= 0 and'
 mutate no-readback "$JOB" 'READBACK_STATUS=verified' 'READBACK_STATUS=unknown'
 mutate directory-readback "$JOB" \
   '[ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS)' \
   '[ -d "$sealed" ]'
 mutate two-gpus "$LAUNCHER" '--count 1 --hours 2' '--count 2 --hours 2'
+mutate uppercase-session "$LAUNCHER" \
+  " | tr '[:upper:]' '[:lower:]'" ''
 mutate dirty-launch "$LAUNCHER" \
   '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' \
   'true ||'
+mutate unmerged-pin "$LAUNCHER" \
+  'git merge-base --is-ancestor "$PIN" origin/main ||' 'true ||'
+mutate weak-global-cap "$LAUNCHER" \
+  'export UOR_POD_MAX_RATE=8.00' 'export UOR_POD_MAX_RATE=80.00'
+mutate store-preflight-fail-open "$LAUNCHER" \
+  'if ! listings=$("$STORE" ls "$STORE_TOPIC"); then' 'if false; then'
 mutate submit-only-wait "$LAUNCHER" \
   "'exit '*) job_exit=\${probe#exit }; break ;;" '*) break ;;'
 mutate dead-job-ignored "$LAUNCHER" \
@@ -120,6 +156,10 @@ mutate missing-job-log "$LAUNCHER" \
   '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' \
   '*) ;;'
 mutate no-renew "$LAUNCHER" 'if ! "$POD_TOOL" renew "$POD"' 'if ! true'
+mutate no-stall-stop "$LAUNCHER" \
+  'if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then' \
+  'if false; then'
+mutate no-active-stop "$LAUNCHER" 'stop_remote_job || rc=1' 'true || rc=1'
 mutate launcher-readback-true "$LAUNCHER" \
   '[ "$(cat "$READBACK_FILE")" = verified ]' 'true'
 mutate launcher-exit-true "$LAUNCHER" \
