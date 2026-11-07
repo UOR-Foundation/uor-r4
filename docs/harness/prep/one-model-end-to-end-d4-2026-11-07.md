@@ -2,7 +2,12 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-306. The one track is Casey's, 6 Nov: "Yes, one track" (#2028 6675163438). Every claude unit works to make the trunk's no-memory top-1 beat its TRAIN's unigram and T2 on the human held-out panel, beyond the paired band, at every seed.
 
-TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 7 Nov). It found no blockers. Its three majors are applied: the unseen lever decides, the outcome map covers every row, and I-r checks every field. Its six minors are applied too.
+TEST FITNESS: FIT WITH CHANGES, round 2 (a fresh non-author review, 7 Nov). It found no blockers, and said the sheet is fit once its major is applied. That major and its five minors are applied:
+- the outcome map is read first-match, with no overlap and every behind case covered;
+- I-r checks the input shas, and I-s checks the lever's seen set;
+- a NOT_RUN seed reruns once.
+
+Round 1, also FIT WITH CHANGES, found no blockers; its three majors and six minors are applied. This is the FIT's two-round cap.
 
 **Why.**
 - **claude-301 (#3800) met the bar** with (b64L) on TRAIN D3, "met; unseen ahead". Its tokens lever at batch 64 read `ahead`.
@@ -70,7 +75,8 @@ At seeds 1 and 2:
   - The pair uses no table, and `clean=` D4's seen set.
   - `pair` lets two cells differ in TRAIN. It refuses if a cell's own two seeds differ in TRAIN, and it refuses a `clean=` whose TRAIN is not a1's.
   - **The unseen section decides the lever** (FIT round 1). That is `pair`'s `unseen` block: rows whose context is in neither TRAIN, since D3 is inside D4.
-    - D4 sees 282,585 − 227,312 = 55,273 more panel rows than D3. That is about 5× the expected band, so the all-rows lever favours D4 by what it holds, not by what it learned.
+    - D4 sees 282,585 − 227,312 = 55,273 more panel rows than D3. That is about 5× the bar's band of 10,552, and about 3× the lever's widest band of about 17,000 (Minimum test power). So the all-rows lever favours D4 by what it holds, not by what it learned.
+    - "In neither TRAIN" holds up to the 8-grams that cross a root boundary in D3's mix, which D4's mix need not hold. The effect is negligible.
     - The all-rows lever is recorded beside the unseen one. An all-rows `ahead` with the unseen lever not `ahead` reads "the gain is on contexts D4 holds".
     - The sub-panels are read the same way, unseen first.
 - **The oasst2 sub-panel, read on its own,** for both the bar and the lever. Its share of TRAIN falls 2.6×, so this caveat is named before any reading: if the lever is behind on oasst2 and ahead on the wiki sub-panels, that reads as a change in the mix share, not as "more text hurts".
@@ -84,7 +90,7 @@ Verdict words are `scale-probe pair`'s, at both seeds. Mixed reads "not distingu
 
 | (b64L-D4) against D4's T2 (whole panel, all rows) | against D4's unigram | reading |
 |---|---|---|
-| ahead | ahead | **The one-track bar is met on D4.** The unseen-row verdict is written beside it: "met; unseen ahead" or "met; unseen behind (the lead is on contexts TRAIN holds)". |
+| ahead | ahead | **The one-track bar is met on D4.** The unseen-row verdict is written beside it as `pair` returns it, for example "met; unseen ahead", "met; unseen inside" or "met; unseen behind (the lead is on contexts TRAIN holds)". |
 | ahead | not ahead | **Not met.** The grade is checked. |
 | mixed or inside | any | **Not distinguishable from T2 at these seeds.** |
 | behind | any | **Not met,** for this configuration only (§4.1). |
@@ -93,22 +99,29 @@ Verdict words are `scale-probe pair`'s, at both seeds. Mixed reads "not distingu
 
 ## What each outcome unlocks
 
-"The lever" below is the unseen lever (Readings). "Wiki" means all three wiki sub-panels, by their own unseen verdicts.
+"The lever" below is the unseen lever (Readings). The bar's verdicts are claude-298's four:
+- "met": ahead of T2 and of the unigram;
+- "ahead of T2 only";
+- "not distinguishable": T2 `mixed` or `inside`;
+- "behind T2".
 
-| bar on D4 | unseen lever | the next unit |
-|---|---|---|
-| met | `ahead` | **Distinct text moves the trunk at equal positions.** D4 replaces D3 as the trunk's TRAIN. Next: more human text again (a D5: more wiki shards, the OASST2 share restored), at width 256. |
-| met | `inside` | **At 201.3M positions, 7.2 passes of D3 cost nothing measurable against 2.72 of D4.** Text is not the limit at this budget. D4 replaces D3, since it holds D3 and loses nothing. Next: the tokens lever on D4, (b64L) at 32,768 steps under its own sheet. claude-301's tokens lever read `ahead`. |
-| met | `mixed` | **Not distinguishable at two seeds.** The trunk keeps D3. The sub-panel levers and the spreads pick the next unit, as a decision review in the REPORT. |
-| any | `behind` | First the grade and I-r are checked. If they hold, the sub-panels decide, unseen verdicts: |
-| | — behind on oasst2, not on wiki | The mix share, as named in Readings. Next: D4 with OASST2's share restored to D3's 13.5%. |
-| | — behind on wiki (oasst2 either way) | **D4 is a worse TRAIN for this recipe.** The trunk keeps D3. Next: the tokens lever on D3, (b64L) at 32,768 steps. |
-| ahead of T2, not of the unigram | any | **Not met.** The grade is checked against claude-305's tables. If it holds, this is a result about D4: the trunk keeps D3, and the next unit is a decision review on the unigram gap. |
-| mixed or inside (not distinguishable from T2) | `ahead` or `inside` | **Not met on D4 at these seeds** (configuration only, §4.1). The trunk keeps D3. Next: the tokens lever on D3, since claude-301's met the bar there with room. |
-| behind T2 | not `behind` | **Not met,** configuration only. The trunk keeps D3. Next: a decision review recorded in the REPORT, before any further unit on D4. |
-| any | `mixed`, bar not met | As the row above for the bar's verdict. |
+**The rows are read top to bottom, and the first row that matches decides** (FIT round 2). Each (bar, lever) pair therefore has exactly one next unit.
 
-**A seed that is NOT_RUN** reruns under this sheet at a new seal root (`runs-2/`) before any reading, under the Stop rule's limits. No reading is made on one seed.
+| # | bar on D4 | unseen lever | the next unit |
+|---|---|---|---|
+| 1 | ahead of T2 only | any | **Not met.** The grade is checked against claude-305's tables. If it holds, this is a result about D4: the trunk keeps D3, and the next unit is a decision review on the unigram gap. |
+| 2 | any other | `behind` | First the grade and I-r are checked. If they hold, the sub-panels' unseen verdicts decide, first match again: |
+| 2a | | any wiki sub-panel `behind` | **D4 is a worse TRAIN for this recipe.** The trunk keeps D3. Next: the tokens lever on D3, (b64L) at 32,768 steps. |
+| 2b | | oasst2 `behind`, no wiki sub-panel `behind` | The mix share, as named in Readings. Next: D4 with OASST2's share restored to D3's 13.5%. |
+| 2c | | no sub-panel `behind` | The pooled lever alone is behind. The trunk keeps D3, and the next unit is a decision review in the REPORT. |
+| 3 | met | `ahead` | **Distinct text moves the trunk at equal positions.** D4 replaces D3 as the trunk's TRAIN. Next: more human text again (a D5: more wiki shards, the OASST2 share restored), at width 256. |
+| 4 | met | `inside` | **At 201.3M positions, 7.2 passes of D3 cost nothing measurable against 2.72 of D4.** Text is not the limit at this budget. D4 replaces D3, since it holds D3 and loses nothing. Next: the tokens lever on D4, (b64L) at 32,768 steps under its own sheet. claude-301's tokens lever read `ahead`. |
+| 5 | met | `mixed` | **Not distinguishable at two seeds.** The trunk keeps D3. The sub-panel levers and the spreads pick the next unit, as a decision review in the REPORT. |
+| 6 | not distinguishable | `ahead` or `inside` | **Not met on D4 at these seeds** (configuration only, §4.1). The trunk keeps D3. Next: the tokens lever on D3, since claude-301 met the bar there with room. |
+| 7 | not distinguishable | `mixed` | The trunk keeps D3. Next: a decision review in the REPORT. |
+| 8 | behind T2 | `ahead`, `inside` or `mixed` | **Not met,** configuration only. The trunk keeps D3. Next: a decision review recorded in the REPORT, before any further unit on D4. |
+
+**A seed that is NOT_RUN** reruns once under this sheet, at the seal root `runs-2/`, before any reading (FIT round 2). If the rerun is NOT_RUN for the same class of cause (out of memory, divergence, a gate), that is recorded as the result. The table is then read as "not met on D4, configuration only" (row 8's next unit). No reading is made on one seed.
 
 ## Instrument checks
 
@@ -135,6 +148,8 @@ These are registered here, before any pod goes up.
 - **I-r, run on the laptop before any lever is read** (widened in FIT round 1):
   - claude-301's (b64L-D3) grades are re-paired against D3's T2, with `clean=` D3's seen set (`local/claude/claude-295/seen/d3`). The `scale-probe` build used is the one that grades D4, and its binary sha is recorded.
   - Every `d`, `band`, `spread` and `verdict` field of the result must equal claude-301's `pair/b64L-vs-t2.json`. That covers the whole panel (+75,038 / +85,590, band 10,552), the unseen rows (+56,353 / +64,841, band 8,488) and every sub-panel, so a wrong or stale exclusion path fails it.
+  - Its `inputs_grade_sha256` must also equal the reference's: `a1`, `a2`, `table`, and `clean_seen_sha256` `53000ba1…`.
+- **I-s on the lever** (FIT round 2): the data lever's `inputs_grade_sha256.clean_seen_sha256` must be the sha256 of D4's `seen.json` (`d5443f95…`), and that file's `excluded_sha256` must be `511b0289…`. Otherwise the lever is not read.
   - If it fails, the data lever is not read. (b64L-D4)'s bar still stands.
 - **Not repeated: claude-301's I-e.** It is the equivalence check of accumulation against the whole batch on the real recipe.
   - It passed at this pin, recipe and binary, on both of claude-301's hosts: worst gap 1.3 × 10⁻⁷, control 6.8 × 10⁻⁵ / 1.85 × 10⁻⁵.
@@ -172,7 +187,7 @@ These are registered here, before any pod goes up.
 
 - **claude-301's measured (b64L) runs:** 10,924 s and 12,008 s of training on RTX 5090s at $0.986 and $1.00/h, about $2.99 and $3.34.
   - Its run-2 pods billed $4.84 and $5.48, with (b64S) at 5,444 / 6,035 s.
-  - Taking those two pods' totals, less both arms' training, leaves about 0.4 h a pod for setup, I-e, the smokes and both scorings.
+  - Taking claude-301's two pod totals, less both of its arms' training, leaves about 0.4 h a pod. On those pods that time covered setup, I-e, two smokes and two scorings. Here there is one smoke, one scoring and no I-e.
 - **Here:**
   - Setup, the inputs, the smoke and the scoring: about 0.5 h.
   - Training: about 3.0–3.4 h.
@@ -200,3 +215,11 @@ These are registered here, before any pod goes up.
    - the outcome map is a table that covers every combination;
    - I-r checks every field;
    - the stop rule and the outcome map agree on a failed seed.
+8. **FIT round 2:**
+   - the outcome map is first-match;
+   - I-r checks the input shas;
+   - I-s checks the lever's seen set;
+   - a NOT_RUN seed reruns once, to `runs-2/`.
+9. **D67:**
+   - the seal root is a parameter (`runs` or `runs-2`);
+   - the watcher's budget is PRICE × 5 h with no rounding up, so the two pods stay inside $11.50.
