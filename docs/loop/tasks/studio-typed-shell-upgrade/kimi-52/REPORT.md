@@ -22,8 +22,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Bootstrap/config checks at that stage: **7/7 tests pass** (four bootstrap, two main, one Vite config). The final cumulative suite is **384/384 tests across 46 files**.
 - Complete typed suite: **384/384 tests across 46 files**.
 - Plain-JS suite: **112/112 tests pass**.
-- TypeScript and application build: PASS; main JS **284.83 kB** (gzip **86.39 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
-- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **7 requests, zero external**.
+- Historical kimi-52 build measurements, not the final code-split head: TypeScript and application build PASS; main JS **284.83 kB** (gzip **86.39 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted. Final build dimensions are in the kimi-56 report.
+- Historical kimi-52 built-browser preview, not the final request count: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **7 requests, zero external**. Final browser evidence is in the kimi-56 report.
 - Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
 - At the final committed repair state, harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks pass.
 

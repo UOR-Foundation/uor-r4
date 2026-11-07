@@ -47,10 +47,8 @@ describe('foundation public entry', () => {
         root.hidden = true;
         document.body.appendChild(root);
         window.history.replaceState(null, '', '/?typed=1');
-        vi.doMock('./bootstrap.js', async (importOriginal) => {
-            const actual = await importOriginal<typeof import('./bootstrap.js')>();
-            return { ...actual, mountTypedStudio: vi.fn(async () => { throw new Error('init failed'); }) };
-        });
+        legacyWindow.__studioFiles = { tabs: () => [], activeFile: () => null };
+        legacyWindow.__studioUi = { getSettings: () => ({}) };
         const pending = import('./main.js');
         await vi.advanceTimersByTimeAsync(5000);
         await pending;
@@ -59,6 +57,7 @@ describe('foundation public entry', () => {
         expect(root.hidden).toBe(false);
         expect(root.dataset.active).toBe('true');
         expect(root.textContent).toContain('The typed Studio could not start');
+        expect(root.textContent).toContain('The existing Studio workflow services did not initialize.');
         expect(getComputedStyle(root).display).not.toBe('none');
     });
 });

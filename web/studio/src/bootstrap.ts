@@ -18,7 +18,17 @@ async function waitForWorkflowApis(timeoutMs: number): Promise<LegacyWorkflowApi
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
         const apis = createLegacyWorkflowApis();
-        if (apis.files && typeof apis.files.tabs === 'function' && apis.sessions && typeof apis.ui.getSettings === 'function') return apis;
+        if (
+            apis.files
+            && apis.sessions
+            && typeof apis.files.tabs === 'function'
+            && typeof apis.files.activeFile === 'function'
+            && typeof apis.ui.getSettings === 'function'
+            && typeof apis.ui.getAttachments === 'function'
+            && typeof apis.sessions.listSessions === 'function'
+            && typeof apis.sessions.activeSessionId === 'function'
+            && typeof apis.sessions.getConversationMessages === 'function'
+        ) return apis;
         await new Promise((resolve) => window.setTimeout(resolve, 25));
     }
     throw new Error('The existing Studio workflow services did not initialize.');

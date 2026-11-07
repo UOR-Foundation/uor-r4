@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'preact';
 import { LifecycleStore } from './state/lifecycle.js';
 import { mountTypedStudio, typedPreviewRequested } from './bootstrap.js';
+import { StudioApp } from './components/StudioApp.js';
 
 vi.mock('preact', async (importOriginal) => {
     const actual = await importOriginal<typeof import('preact')>();
@@ -28,8 +29,14 @@ describe('typed Studio bootstrap', () => {
         vi.clearAllMocks();
         vi.stubGlobal('Worker', FakeWorker);
         delete legacyWindow.__studioApp;
-        legacyWindow.__studioFiles = { tabs: () => [] };
-        legacyWindow.__studioUi = { getSettings: () => ({}) };
+        legacyWindow.__studioFiles = { tabs: () => [], activeFile: () => null };
+        legacyWindow.__studioUi = {
+            getSettings: () => ({}),
+            getAttachments: () => [],
+            listSessions: () => [],
+            activeSessionId: () => null,
+            getConversationMessages: () => [],
+        };
     });
 
     it('mounts only for the explicit typed=1 preview', () => {
@@ -39,11 +46,11 @@ describe('typed Studio bootstrap', () => {
         expect(typedPreviewRequested('')).toBe(false);
     });
 
-    it('mounts the real StudioApp with lifecycle, model worker, and workflow APIs', async () => {
+    it('passes the real StudioApp with lifecycle, model worker, and workflow APIs to Preact', async () => {
         const root = document.createElement('div');
         const mounted = await mountTypedStudio(root);
         expect(render).toHaveBeenCalledOnce();
-        expect(render).toHaveBeenCalledWith(expect.anything(), root);
+        expect(render).toHaveBeenCalledWith(expect.objectContaining({ type: StudioApp }), root);
         expect(root.hidden).toBe(false);
         expect(mounted.store).toBeInstanceOf(LifecycleStore);
         expect(mounted.worker).toBeInstanceOf(FakeWorker);
@@ -67,9 +74,9 @@ describe('typed Studio bootstrap', () => {
         expect(root.hidden).toBe(true);
     });
 
-    it('refuses to mount before the workflow methods initialize', async () => {
+    it('refuses to mount when session methods are missing', async () => {
         const root = document.createElement('div');
-        legacyWindow.__studioUi = {};
+        legacyWindow.__studioUi = { getSettings: () => ({}), getAttachments: () => [] };
         await expect(mountTypedStudio(root, { timeoutMs: 10 })).rejects.toThrow('did not initialize');
         expect(render).not.toHaveBeenCalled();
         expect(root.hidden).toBe(false);
