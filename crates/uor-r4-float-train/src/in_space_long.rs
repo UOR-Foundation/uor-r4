@@ -14612,6 +14612,57 @@ mod tests {
 
     #[cfg(feature = "cuda")]
     #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn time_the_one_pass_rival_selector() {
+        let device = Device::new_cuda(0).unwrap();
+        for rows in [256usize, 2_048, 4_096] {
+            let vocabulary = 4_096usize;
+            let values: Vec<f32> = (0..rows * vocabulary)
+                .map(|i| -((i.wrapping_mul(2_654_435_761) % 1_000_003) as f32) / 1_000_003.0)
+                .collect();
+            let scores = Tensor::from_vec(values, (rows, vocabulary), &device).unwrap();
+            let allowed = Tensor::ones((rows, vocabulary), DType::U8, &device).unwrap();
+            let run = |fast: bool| {
+                with_fast_rivals(fast, || best_positions(&scores, &allowed, 8)).unwrap()
+            };
+            assert_eq!(
+                run(false).to_vec2::<u32>().unwrap(),
+                run(true).to_vec2::<u32>().unwrap()
+            );
+            for _ in 0..3 {
+                let _ = run(false);
+                let _ = run(true);
+            }
+            device.synchronize().unwrap();
+            let mut old = Vec::with_capacity(20);
+            let mut fast = Vec::with_capacity(20);
+            for _ in 0..20 {
+                let start = Instant::now();
+                let _ = run(false);
+                device.synchronize().unwrap();
+                old.push(start.elapsed().as_secs_f64() * 1_000.0);
+
+                let start = Instant::now();
+                let _ = run(true);
+                device.synchronize().unwrap();
+                fast.push(start.elapsed().as_secs_f64() * 1_000.0);
+            }
+            old.sort_by(f64::total_cmp);
+            fast.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                serde_json::json!({
+                    "rows": rows,
+                    "vocabulary": vocabulary,
+                    "old_ms": old[old.len() / 2],
+                    "fast_ms": fast[fast.len() / 2],
+                })
+            );
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
     fn whole_table_scores_do_not_depend_on_the_chunk() {
         let device = Device::new_cuda(0).unwrap();
         let table = Tensor::new(
