@@ -12,8 +12,8 @@
 //! A reply is the run of scored targets after the previous scored EOS of the same document (or
 //! after its BOS) up to and including a scored EOS; scored targets after a document's last scored
 //! EOS are counted as unterminated. With a manifest, roots are contiguous in file order, their
-//! `tokens_taken` must sum to the token count, and each root's `scored_taken` must equal either
-//! the trainer-scored count or the raw mask-one count; the JSON names which.
+//! `tokens_taken` must sum to the token count, each non-empty root must start at a BOS, and each
+//! root's `scored_taken` must equal the trainer-scored count.
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};

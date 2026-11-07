@@ -6,7 +6,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **EOS was a rare training target for (b64L): 756 per million of its scored targets.** D3 scores 27,416,554 targets, and 20,729 of them are EOS, about one every 1,320. DEV, the conversations its replies are judged on, has 85,812 per million, about one every 12 scored reply tokens, about 113 times more often. This is consistent with claude-309's reading (the served model stopped on 0 of 256 panel replies, and the float model emitted EOS on 0 of 16 DEV prompts). No run here varied the EOS share, so it does not test the cause.
 - **Most of D3's scored targets, and most of its EOS, are Wikipedia.** The wiki roots are scored in full (every non-BOS token) and hold 24,181,749 of the 27,416,554 scored targets (88%). Each wiki article ends in one scored EOS: 12,945 of the 20,729. Between consecutive scored EOS, the median run is 510 scored targets over all of D3. In DEV it is 11 (max 50).
-- **In oasst2 the mask is a reply mask, but the replies are long.** It leaves 533,543 non-BOS tokens unscored, the user turns. This matches the encoder, which gives mask 1 only to assistant content and its EOS (`crates/uor-r4-tokenizer/src/dialogue.rs:11-14`). The 1,599 unscored EOS are the terminators of documents that end on a user turn. oasst2 has 7,784 scored EOS in 3,234,805 scored targets, 2,406 per million: the median reply runs 349 scored targets and the mean about 416. DEV scores 33% of its positions, and its replies are short.
+- **In oasst2 the mask is a reply mask, but the replies are long.** It leaves 533,543 non-BOS tokens unscored: the non-reply tokens (user and system turns, role markers, separators). This matches the encoder, which gives mask 1 only to assistant content and its EOS (`crates/uor-r4-tokenizer/src/dialogue.rs:11-14`). The 1,599 unscored EOS fit the encoder's unmasked terminal EOS for documents that end on a non-assistant turn; this unit did not count them per document. oasst2 has 7,784 scored EOS in 3,234,805 scored targets, 2,406 per million: the median reply runs 349 scored targets and the mean about 416. DEV scores 33% of its positions, and its replies are short.
 
 ## What changed
 
@@ -31,7 +31,7 @@ D3 (`tokens.u16` `ed8f2537…`, `response_mask.u8` `ec6e520c…`, its manifest) 
 | **D3** | 27,968,113 | 27,416,554 | 22,328 | 20,729 | 756 | 510 (max 96,128) |
 | **DEV** | 42,856 | 14,287 | 1,226 | 1,226 | 85,812 | 11 (max 50) |
 
-The rates are integer parts per million (integer part), as the bin records them per root and in total. The cancel probe passed: no open PR or claim counted D3's EOS targets, and D3's two arrays hashed to the pinned `ed8f2537…` and `ec6e520c…`. Outputs: `out/d3.json` `e6534537f2c2baf285d474da7de47aaa580e0fdea7f77d8abb1508cc25d06ede`, `out/dev.json` `19225cd3fbcad73111d600e2ef0252d3721c5bed9a299fa0ab32179140d1c18a`. Every root's scored count matched its manifest `scored_taken`, and 0 scored targets were left without a closing EOS.
+The rates are parts per million, truncated to an integer, as the bin records them per root and in total. The cancel probe passed: no open PR or claim counted D3's EOS targets, and D3's two arrays hashed to the pinned `ed8f2537…` and `ec6e520c…`. Outputs: `out/d3.json` `e6534537f2c2baf285d474da7de47aaa580e0fdea7f77d8abb1508cc25d06ede`, `out/dev.json` `19225cd3fbcad73111d600e2ef0252d3721c5bed9a299fa0ab32179140d1c18a`. Every root's scored count matched its manifest `scored_taken`, and 0 scored targets were left without a closing EOS.
 
 ## Checks run at the head
 
