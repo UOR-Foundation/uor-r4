@@ -105,7 +105,7 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e
+JOB_SHA256=a451145ae5b508d7c79aa6e17f11cc1e301665692ab411752575595db6c57cd5
 SPEC_SHA256=865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
@@ -498,7 +498,7 @@ set -euo pipefail
 CPU_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 ROOT=local/deepseek/centroid-cache/2026-11-06/$CPU_RUN_ID
 SPEC=docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/checkpoint-inputs.json
-CAPTURE_JOB_SHA256=e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e
+CAPTURE_JOB_SHA256=a451145ae5b508d7c79aa6e17f11cc1e301665692ab411752575595db6c57cd5
 CAPTURE_SPEC_SHA256=865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71
 [ "$(sha256sum "$SPEC" | cut -d' ' -f1)" = "$CAPTURE_SPEC_SHA256" ]
 SOURCE_PIN=$(jq -er .source_pin "$SPEC")

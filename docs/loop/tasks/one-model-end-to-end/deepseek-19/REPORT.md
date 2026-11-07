@@ -74,7 +74,7 @@ package change, with no runtime Rust or model arithmetic.
 - No model, cache, pod, GPU, CPU evaluator or training process ran.
 
 The final job hash is
-`e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e`;
+`a451145ae5b508d7c79aa6e17f11cc1e301665692ab411752575595db6c57cd5`;
 the input-specification hash is
 `865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71`.
 
@@ -82,6 +82,7 @@ the input-specification hash is
 
 - `bash -n` and `shellcheck -x` on the capture job: passed.
 - `--check-spec` for seeds 1 and 2: passed.
+- The capture job's `spec_sha256=` log record and the CPU restore's exact grep agree.
 - Local archive, inner-manifest, checkpoint-file and run/model-config verification for both
   seeds: passed.
 - Cache archive safety test: a regular `cache/` tree was accepted and a symbolic-link

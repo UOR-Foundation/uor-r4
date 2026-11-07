@@ -262,6 +262,7 @@ actual=$(git -C "$REPO" rev-parse HEAD)
   die "repository tree is not clean"
 
 log "[0/6] run=$RUN output=$OUT_STORE source=$PIN spec=$SPEC_SHA256"
+log "spec_sha256=$SPEC_SHA256"
 log "script_sha256=$(sha256sum "$0" | cut -d' ' -f1)"
 log "[1/6] fetch pinned inputs"
 "$STORE" get "results/claude/scale-probe-2026-11-05/inputs/d3/" "$RUN/download"
