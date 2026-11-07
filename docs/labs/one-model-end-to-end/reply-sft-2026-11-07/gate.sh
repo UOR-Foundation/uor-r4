@@ -182,6 +182,8 @@ require_line 'model_time_state=absent' "$LAUNCHER"
 require_line '[ "$free_kib" -ge "$MIN_FREE_KIB" ] ||' "$LAUNCHER"
 require_line 'export UOR_POD_MAX_PODS=4' "$LAUNCHER"
 require_line 'export UOR_POD_MAX_RATE=8.00' "$LAUNCHER"
+require_line 'export UOR_POD_PROVIDER=vast' "$LAUNCHER"
+require_line 'export UOR_POD_PROVIDERS=vast' "$LAUNCHER"
 require_line 'if ! listings=$("$STORE" ls "$STORE_TOPIC"); then' "$LAUNCHER"
 grep -Fq 'cannot verify the store topic $STORE_TOPIC; no pod will be rented' "$LAUNCHER" ||
   fail "$LAUNCHER does not fail closed when the store preflight cannot be read"

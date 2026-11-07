@@ -99,6 +99,8 @@ fi
 "$POD_TOOL" status | tee "$CONTROLLER/status-before.txt"
 export UOR_POD_MAX_PODS=4
 export UOR_POD_MAX_RATE=8.00
+export UOR_POD_PROVIDER=vast
+export UOR_POD_PROVIDERS=vast
 
 POD=
 RESOLVED=0

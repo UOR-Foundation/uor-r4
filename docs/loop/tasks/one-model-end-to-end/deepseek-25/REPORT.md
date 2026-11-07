@@ -82,7 +82,8 @@ spend.
 - Base export and every checkpoint export now pass both raw served-snapshot
   flags, and the base artifact must reproduce `9a370566…`.
 - Run IDs are lowercased before the uor-pod session is formed. The global caps
-  are pinned to four pods and $8/hour, while the launch remains one RTX 5090.
+  are pinned to four pods and $8/hour, the provider is pinned to Vast, and the
+  launch remains one RTX 5090.
 - The exact pin must be contained in freshly fetched `origin/main`.
 - Launch records free space, force-reads memory state, and authenticates or
   records absence of `model-time.json` and the storage receipt before rental.
@@ -119,7 +120,7 @@ now seals under 100 MiB and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- `gate.sh`: 119 checks passed.
+- `gate.sh`: 121 checks passed.
 - `test-mutants.sh`: 41 of 41 semantic mutations caught.
 - Full `uor-r4-float-train` library suite: 307 passed, including
   `checkpoint_ready_marker_records_completion`.
