@@ -29,8 +29,8 @@
     "cap_stopped": 16,
     "exact_reference": 0,
     "reference_reachable": 13,
-    "distinct_non_empty": 16,
-    "repeated_4gram": 0,
+    "distinct_non_empty": 11,
+    "repeated_4gram": 10,
     "audit": {
       "positions": 192,
       "query_coordinates": 49152,
@@ -56,8 +56,8 @@
     "cap_stopped": 16,
     "exact_reference": 0,
     "reference_reachable": 13,
-    "distinct_non_empty": 16,
-    "repeated_4gram": 0,
+    "distinct_non_empty": 14,
+    "repeated_4gram": 8,
     "audit": {
       "positions": 192,
       "query_coordinates": 49152,
@@ -75,7 +75,7 @@
     "seed_2_snapshot_sha256": "a80c406da9ace065d90d78aeaf9115b4c937b182f5b72b11fe900368b31f8f6d"
   },
   "deterministic_replay": {
-    "normalized_report_sha256": "e185d84117250d04a66ef3a8f8dcf8f2f5bd42f5e6092a8f7bded5d58f4c94b0",
+    "normalized_report_sha256": "98d0b7a8a362c28d58d5c925b7f605767e8512f34ad0eb146af0eda44821803e",
     "matched": true
   },
   "limitations": [

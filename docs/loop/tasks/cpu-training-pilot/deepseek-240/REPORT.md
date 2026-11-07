@@ -14,9 +14,14 @@ supporting
   reproduced both accepted artifact hashes.
 - The bounded complete-reply arm did not demonstrate useful conversation. All
   32 generated replies, 16 per artifact, hit the token cap; none emitted BOS and
-  none matched its exact reference. All 32 were non-empty, each artifact had 16
-  distinct complete sequences and no reply repeated a 4-gram. This remains a
-  readiness negative rather than a new model result.
+  none matched its exact reference. All 32 were non-empty, but the artifacts had
+  only 11 and 14 distinct complete sequences and 10 and 8 replies repeated a
+  4-gram. This remains a readiness negative rather than a new model result.
+- Fresh-context review found that the shared reply generator always used the
+  writer head. On nearest-serving b64L artifacts that generated non-served
+  replies. The generator now selects the artifact's declared head, and a
+  regression requires nearest and writer choices to differ while the complete
+  reply follows nearest.
 - Nearest-readout artifacts have no public top-8/target-admission API matching
   the native writer's. This report therefore records top-1 for nearest and all
   four readings only for native-writer artifacts.
@@ -67,8 +72,8 @@ The full run selected all 4,900 eligible rows and 16 complete conversations:
 
 | Seed | top-1 | Distinct non-empty | BOS complete | Cap stopped | Exact reference |
 |---:|---:|---:|---:|---:|---:|
-| 1 | 1,036 / 4,900 | 16 / 16 | 0 / 16 | 16 / 16 | 0 / 16 |
-| 2 | 1,110 / 4,900 | 16 / 16 | 0 / 16 | 16 / 16 | 0 / 16 |
+| 1 | 1,036 / 4,900 | 11 / 16 | 0 / 16 | 16 / 16 | 0 / 16 |
+| 2 | 1,110 / 4,900 | 14 / 16 | 0 / 16 | 16 / 16 | 0 / 16 |
 
 Seed 2 against seed 1 on the identical rows:
 
@@ -102,7 +107,7 @@ benchmark.
 
 After removing wall and rate fields, the two full seed-1 reports both normalized
 to SHA-256
-`e185d84117250d04a66ef3a8f8dcf8f2f5bd42f5e6092a8f7bded5d58f4c94b0`.
+`98d0b7a8a362c28d58d5c925b7f605767e8512f34ad0eb146af0eda44821803e`.
 Their selected reply inputs had fingerprint
 `7da9a28e3ea6cca22d3bf570764454d700bfabcce7df03cb450033b85214c196`.
 
@@ -115,7 +120,7 @@ Raw reports and ignore-only exported artifacts are under
 
 - `cargo test --release --locked -p uor-r4-cpu-train --no-fail-fast`:
   **all library, binary and doc tests passed**; the library ran
-  **458 passed, 4 ignored, 0 failed**.
+  **459 passed, 4 ignored, 0 failed**.
 - focused checkpoint-grade tests: **3 passed**.
 - focused corpus sampling test: **1 passed**.
 - CLI argument tests: **3 passed**.
