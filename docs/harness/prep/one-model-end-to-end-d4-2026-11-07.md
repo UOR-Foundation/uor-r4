@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-306. The one track is Casey's, 6 Nov: "Yes, one track" (#2028 6675163438). Every claude unit works to make the trunk's no-memory top-1 beat its TRAIN's unigram and T2 on the human held-out panel, beyond the paired band, at every seed.
 
-TEST FITNESS: PENDING.
+TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 7 Nov). It found no blockers. Its three majors are applied: the unseen lever decides, the outcome map covers every row, and I-r checks every field. Its six minors are applied too.
 
 **Why.**
 - **claude-301 (#3800) met the bar** with (b64L) on TRAIN D3, "met; unseen ahead". Its tokens lever at batch 64 read `ahead`.
@@ -69,6 +69,10 @@ At seeds 1 and 2:
   - b = claude-301's sealed grades of (b64L-D3), graded on D3, at `local/claude/claude-301/grade/b64L-s{1,2}`.
   - The pair uses no table, and `clean=` D4's seen set.
   - `pair` lets two cells differ in TRAIN. It refuses if a cell's own two seeds differ in TRAIN, and it refuses a `clean=` whose TRAIN is not a1's.
+  - **The unseen section decides the lever** (FIT round 1). That is `pair`'s `unseen` block: rows whose context is in neither TRAIN, since D3 is inside D4.
+    - D4 sees 282,585 − 227,312 = 55,273 more panel rows than D3. That is about 5× the expected band, so the all-rows lever favours D4 by what it holds, not by what it learned.
+    - The all-rows lever is recorded beside the unseen one. An all-rows `ahead` with the unseen lever not `ahead` reads "the gain is on contexts D4 holds".
+    - The sub-panels are read the same way, unseen first.
 - **The oasst2 sub-panel, read on its own,** for both the bar and the lever. Its share of TRAIN falls 2.6×, so this caveat is named before any reading: if the lever is behind on oasst2 and ahead on the wiki sub-panels, that reads as a change in the mix share, not as "more text hurts".
 - **T2's share:** `model_hits − b` over T2's hits, from the T2 pair.
 - **The loss** at the last step, read within the arm only.
@@ -89,14 +93,22 @@ Verdict words are `scale-probe pair`'s, at both seeds. Mixed reads "not distingu
 
 ## What each outcome unlocks
 
-- **The bar is met and the lever is `ahead`:** distinct text moves the trunk at equal positions. D4 replaces D3 as the trunk's TRAIN. The next unit adds human text again (a D5, with more wiki shards and the OASST2 share restored), at width 256.
-- **The bar is met and the lever is `inside`:** at 201.3M positions, 7.2 passes of D3 cost nothing measurable against 2.72 passes of D4. Text is not the limit at this budget. The next unit is the tokens lever on D4: (b64L) at 32,768 steps, under its own sheet. claude-301's tokens lever read `ahead`.
-- **The lever is `behind`:** first, the grade and the I-r control are checked. If they hold, the oasst2 sub-panel decides:
-  - behind on oasst2 only: the mix share, as named above. The next unit is D4 with OASST2's share restored.
-  - behind everywhere: D4 is a worse TRAIN for this recipe. The trunk keeps D3, and the next unit is the tokens lever on D3.
-- **The lever is `mixed`:** not distinguishable at two seeds. The sub-panel levers and the spread pick the next unit, recorded as a decision review in the REPORT.
-- **The bar is not met on D4:** this holds for this configuration only. claude-301's D3 result stands, and the lever says which way to move.
-- **A seed is NOT_RUN:** the missing seed reruns under this sheet, at a new seal root, before any reading.
+"The lever" below is the unseen lever (Readings). "Wiki" means all three wiki sub-panels, by their own unseen verdicts.
+
+| bar on D4 | unseen lever | the next unit |
+|---|---|---|
+| met | `ahead` | **Distinct text moves the trunk at equal positions.** D4 replaces D3 as the trunk's TRAIN. Next: more human text again (a D5: more wiki shards, the OASST2 share restored), at width 256. |
+| met | `inside` | **At 201.3M positions, 7.2 passes of D3 cost nothing measurable against 2.72 of D4.** Text is not the limit at this budget. D4 replaces D3, since it holds D3 and loses nothing. Next: the tokens lever on D4, (b64L) at 32,768 steps under its own sheet. claude-301's tokens lever read `ahead`. |
+| met | `mixed` | **Not distinguishable at two seeds.** The trunk keeps D3. The sub-panel levers and the spreads pick the next unit, as a decision review in the REPORT. |
+| any | `behind` | First the grade and I-r are checked. If they hold, the sub-panels decide, unseen verdicts: |
+| | — behind on oasst2, not on wiki | The mix share, as named in Readings. Next: D4 with OASST2's share restored to D3's 13.5%. |
+| | — behind on wiki (oasst2 either way) | **D4 is a worse TRAIN for this recipe.** The trunk keeps D3. Next: the tokens lever on D3, (b64L) at 32,768 steps. |
+| ahead of T2, not of the unigram | any | **Not met.** The grade is checked against claude-305's tables. If it holds, this is a result about D4: the trunk keeps D3, and the next unit is a decision review on the unigram gap. |
+| mixed or inside (not distinguishable from T2) | `ahead` or `inside` | **Not met on D4 at these seeds** (configuration only, §4.1). The trunk keeps D3. Next: the tokens lever on D3, since claude-301's met the bar there with room. |
+| behind T2 | not `behind` | **Not met,** configuration only. The trunk keeps D3. Next: a decision review recorded in the REPORT, before any further unit on D4. |
+| any | `mixed`, bar not met | As the row above for the bar's verdict. |
+
+**A seed that is NOT_RUN** reruns under this sheet at a new seal root (`runs-2/`) before any reading, under the Stop rule's limits. No reading is made on one seed.
 
 ## Instrument checks
 
@@ -108,29 +120,32 @@ These are registered here, before any pod goes up.
   - **D4:** the seal's `SHA256SUMS` must have this sheet's sha, its three `./mix/` lines must check OK, and each mix file must match the shas above.
   - **The panel:** the four held-out folders and the DEV files must match claude-301's pins.
   - **Each run's `config.json`:** must name D4's tokens and mask shas, width 256, read 4, batch 64, micro-batch 16, 16,384 steps (128 for the smoke), the pod's seed, and the recipe's flags, with no turn memory.
-- **I-p, the pin:** the source the pod builds is a clean checkout at exactly the pin. A pod at any other source exits before building (exit 3).
+- **I-p, the pin (carried over from claude-301's job):** the job refuses any SHA argument but the pin (exit 2). The source it builds must be a clean checkout at exactly the pin, or it exits before building (exit 3). The new part is Step 3's `--ref` on `uor-pod up`, since `up` defaults to `main` (claude-304's third pod). The laptop gate test mutates both exits.
 - **I-1, the smoke:** a 128-step run at `--eval-every 32` on D4, at the pod's seed, exits 0 with a finite loss.
 - **I-m, from the smoke:** the largest `mem.log` sample inside the smoke's window is below 90% of the card. Otherwise the arm is NOT_RUN at that seed.
-  - claude-301's (b64L) peaked at 27,179 / 27,276 of 32,607 MiB, which is 83.4% / 83.7%.
+  - claude-301's (b64L) smokes read 27,083 / 26,988 of 32,607 MiB at I-m (83.1% / 82.8%). Its full runs peaked at 27,179 / 27,276.
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB. Otherwise the arm is NOT_RUN at that seed.
   - What it cannot see, as in claude-301's sheet: growth slower than about 16 MiB a step passes I-f. The backstop is the run's own out-of-memory stop.
 - **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64, from the smoke. The projected wall is W = used + 1.05 × r × 16,384 + 1,800 s, written to `it.txt`.
   - No gate acts on W.
-  - If W exceeds 21,000 s, the watcher's limits are extended under the charter's extend rule, and the REPORT says so.
+  - If W exceeds 18,000 s, the 5 h a pod that the cap assumes, the watcher's limits are extended under the charter's extend rule, and the REPORT says so.
 - **I-4:** every graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
 - **I-5:** each scored checkpoint's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes, as in claude-301's job.
 - **I-s:** D4's seen set names D4's `tokens_sha256` and the panel identity. `pair` refuses otherwise.
-- **I-r, run on the laptop before any lever is read:** claude-301's (b64L-D3) grades, re-paired against D3's T2 with `clean=` D3's seen set (`local/claude/claude-295/seen/d3`), must reproduce claude-301's d +75,038 / +85,590 exactly.
-  - If they do not, the data lever is not read. (b64L-D4)'s bar still stands.
+- **I-r, run on the laptop before any lever is read** (widened in FIT round 1):
+  - claude-301's (b64L-D3) grades are re-paired against D3's T2, with `clean=` D3's seen set (`local/claude/claude-295/seen/d3`). The `scale-probe` build used is the one that grades D4, and its binary sha is recorded.
+  - Every `d`, `band`, `spread` and `verdict` field of the result must equal claude-301's `pair/b64L-vs-t2.json`. That covers the whole panel (+75,038 / +85,590, band 10,552), the unseen rows (+56,353 / +64,841, band 8,488) and every sub-panel, so a wrong or stale exclusion path fails it.
+  - If it fails, the data lever is not read. (b64L-D4)'s bar still stands.
 - **Not repeated: claude-301's I-e.** It is the equivalence check of accumulation against the whole batch on the real recipe.
-  - It passed at this pin, recipe and binary, on both seeds' hosts (worst gap 1.3 × 10⁻⁷), and again at claude-303's pin on an RTX PRO 6000 (claude-304).
-  - It tests the trainer's arithmetic, which this unit does not change, so it adds nothing to this unit's question.
+  - It passed at this pin, recipe and binary, on both of claude-301's hosts: worst gap 1.3 × 10⁻⁷, control 6.8 × 10⁻⁵ / 1.85 × 10⁻⁵.
+  - It tests the trainer's arithmetic, which this unit does not change. I-0 still runs claude-300's three micro-batch tests by name.
+  - claude-304's I-e ran at another pin, and its control was underpowered there, so it is not cited here.
 
 ## Steps
 
 1. The ORDER; this sheet's FIT; the D67 pre-run review of the job, chain, seal and watch scripts.
 2. On the laptop: the job's gate tests, with mutations, and `bash -n` on every script.
-3. `uor-pod status`. Then two Vast pods with one RTX 5090 each, one per seed, at most $1.15/h each. Each is leased and watched, and is brought up with `--count 1 --ref ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f`. Vast machines 48282 and 48276 are avoided (claude-304: driver 580.95.05, no SSH).
+3. `uor-pod status`, recorded. The cross-lab caps hold with these two pods included: at most 4 pods and at most $8/h. Otherwise wait for room. Then two Vast pods with one RTX 5090 each, one per seed, at most $1.15/h each. Each is leased and watched, and is brought up with `--count 1 --ref ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f`. Vast machines 48282 and 48276 are avoided (claude-304: driver 580.95.05, no SSH).
 4. On each pod, in order:
    1. I-p, I-0, the build, the inputs and I-3.
    2. The smoke with I-m and I-f, then I-t (recorded only).
@@ -149,15 +164,15 @@ These are registered here, before any pod goes up.
 - **claude-301's (b64L) on D3:**
   - Against D3's T2, d was +75,038 / +85,590 with a band of 10,552. That band is all spread, so the bar here has about 7× headroom.
   - On the oasst2 sub-panel alone, the band was 1,515 against d +13,342 / +14,857.
-- **The data lever** inherits both cells' spreads, so it can read `ahead` or `behind` only on a move larger than either arm's own spread: about 10,600 rows if D4's spread is like D3's.
+- **The data lever** pairs D4's seed s with D3's seed s. That pairing is arbitrary, since the order of the data differs with TRAIN. Its spread |d₁ − d₂| can therefore run from near the McNemar floor to about the sum of both arms' own spreads: about 8,500 + 8,500 = 17,000 unseen rows if D4's spread is like D3's.
   - The McNemar floor, 2·√(b+c), is about 1,100 rows over the whole panel.
-  - So an `inside` on the lever means "within the seed spread", not "no effect".
+  - So an `inside` on the lever means "within that band", not "no effect".
 
 ## Cost
 
 - **claude-301's measured (b64L) runs:** 10,924 s and 12,008 s of training on RTX 5090s at $0.986 and $1.00/h, about $2.99 and $3.34.
   - Its run-2 pods billed $4.84 and $5.48, with (b64S) at 5,444 / 6,035 s.
-  - Taking those two pods' totals, less (b64S)'s training, leaves about 0.4 h a pod for setup, I-e, the smokes and both scorings.
+  - Taking those two pods' totals, less both arms' training, leaves about 0.4 h a pod for setup, I-e, the smokes and both scorings.
 - **Here:**
   - Setup, the inputs, the smoke and the scoring: about 0.5 h.
   - Training: about 3.0–3.4 h.
@@ -169,7 +184,7 @@ These are registered here, before any pod goes up.
 - **I-p, I-0, I-3 or an input fetch fails:** the pod trains nothing. Fix the instrument and rerun at a new root.
 - **The smoke, I-m or I-f fails:** the arm is NOT_RUN at that seed, by the outcome map.
 - **An out-of-memory error, divergence (a non-finite loss) or a trainer exit other than 0:** the arm is NOT_RUN at that seed. Each is classified as an instrument fault or a mechanism result before it is called anything (§4.2). A divergence on D4 at a recipe that trained on D3 is read as a result about D4 and recorded.
-- **A pod never reaches SSH within 1,800 s:** it is deleted, and one retry runs on another machine. After two failures for a seed, the seed waits for a new unit; it is not forced.
+- **A pod never reaches SSH within 1,800 s:** it is deleted, and one retry runs on another machine. After two failures for a seed, that seed waits for a new RTX 5090 offer inside $1.15/h, and then reruns under this sheet, as the outcome map says. No reading is made on one seed meanwhile.
 - **Always:** the job seals on every exit, and the watcher takes the pod down after `seal=0`.
 
 ## Changes from claude-301's sheet
@@ -177,6 +192,11 @@ These are registered here, before any pod goes up.
 1. **TRAIN:** D4 in place of D3, with its seal, shas, tables and seen set. The bar is read against D4's tables.
 2. **One arm,** (b64L), at a fixed 16,384 steps. (b64S) and its levers are dropped.
 3. **I-t records only.** No gate cuts steps, because the lever needs claude-301's step count.
-4. **I-e is not repeated** (reason under Instrument checks). **I-p** and **I-r** are new.
+4. **I-e is not repeated** (reason under Instrument checks). **I-r** is new. **I-p** is claude-301's pin check, named, with `--ref` added on `up`.
 5. **The readings:** the data lever against claude-301's sealed grades, and the oasst2 sub-panel read on its own, with the mix-share caveat named in advance.
 6. **The seal path** is `results/claude/one-model-end-to-end-d4-train-2026-11-07/runs/s{1,2}/`.
+7. **FIT round 1:**
+   - the unseen lever decides;
+   - the outcome map is a table that covers every combination;
+   - I-r checks every field;
+   - the stop rule and the outcome map agree on a failed seed.
