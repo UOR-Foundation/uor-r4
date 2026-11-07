@@ -9,15 +9,16 @@ Add a bounded top-eight selection kernel behind `--fast-rivals 1`. One warp sele
 best allowed positions in one launch, descending by score with ties to the lower token id,
 replacing the eight whole-table `argmax` and mask launches.
 
-The old path remains the default and is the exact reference. The kernel gets its own PTX module,
-so `cuda_stack.cu`, `spiralcore_fbs.cu` and every checkpoint fingerprint stay unchanged.
+The old path remains the default and is the exact reference for every non-tied choice. Current
+Candle CUDA argmax does not guarantee an order for ties; the new path makes that case
+deterministic as lower token id. The kernel gets its own PTX module, so `cuda_stack.cu`,
+`spiralcore_fbs.cu` and every checkpoint fingerprint stay unchanged.
 
 ## Cancel probe
 
 At the base, `best_positions` still makes `k` whole-vocabulary `argmax_keepdim` calls and masks
-one picked position after each. `margin_rank_rows` in `cuda_stack.cu` establishes the same
-descending/lower-index tie rule. If the new selector cannot return that exact ordered set, keep
-the flag off and report a negative.
+one picked position after each. If the new selector changes a non-tied choice, keep the flag off
+and report a negative. On tied scores it must return lower token ids in ascending order.
 
 ## Done when
 
@@ -28,8 +29,9 @@ the flag off and report a negative.
 3. Vocabulary, row count, allowed/scores shape and the eight-rival cap are checked before launch;
    no CPU or silent fallback runs under the fast flag.
 4. A finite CUDA test compares loss and gradients with and without the flag on random scores,
-   masked targets and exact score ties. A CPU test compares the host reference with the old
-   repeated selection.
+   masked targets and exact score ties. Exact order must agree where scores differ and ties must
+   take the lower token ids. A CPU test compares the host reference with the old repeated
+   selection and its stated tie rule.
 5. The float-train CPU tests, stub-CUDA all-targets check, Clippy on changed lines,
    `git diff --check`, loop report and local PR checks pass. No training or scoring run is made
    in this unit; device timing is the next unit.

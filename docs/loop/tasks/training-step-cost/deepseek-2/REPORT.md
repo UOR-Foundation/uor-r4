@@ -13,6 +13,10 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
   selection; the established differentiable rival and target path is unchanged.
 - **The first draft changed the claim to a fast nearest loss and referenced the wrong kernels.**
   The delivered form is a selector, not a new loss, and it uses its own CUDA module.
+- **Candle CUDA argmax is not deterministic on tied scores.** The first device parity run made
+  an all-equal row and returned `[0,8,4,2,10,6,1,9]`; the new selector returns
+  `[0,1,2,3,4,5,6,7]`. Non-tied rows agree. The flag is therefore an intentional deterministic
+  tie mode, not a bit-identical drop-in on ties, and remains off by default.
 - **The selector expands the item's scope.** Its own module needs `build.rs`, `lib.rs`,
   `cuda_stack_kernels.rs` and two new source files. The item file records that scope in this
   branch; the policy checker reports it as an advisory because it reads the pre-change scope at
@@ -35,8 +39,8 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
   `cuda_stack.cu` and `spiralcore_fbs.cu` are byte-unchanged, so checkpoint fingerprints do not
   move.
 - **Tests:** a CPU test compares the host model of the warp merge with repeated argmax, with ties,
-  masks and fewer than eight allowed entries. A CUDA test compares the old and new selector on
-  random-like, tied and masked rows.
+  masks and fewer than eight allowed entries. A CUDA test checks exact agreement on non-tied rows
+  and the lower-id rule on a fully tied row.
 
 Size: 9 files, 450 insertions, 31 deletions in the code commit.
 
