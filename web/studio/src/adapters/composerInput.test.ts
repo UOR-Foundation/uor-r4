@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-// @ts-expect-error The plain-JavaScript controller has no declaration file.
-import { createComposerInput, readTextFiles } from '../../assets/js/composer_input.js';
+import { createComposerInput, readTextFiles } from './composerInput.js';
 
 function key(textarea: HTMLTextAreaElement, key: string, init: { shiftKey?: boolean; isComposing?: boolean; keyCode?: number } = {}) {
     const event = new KeyboardEvent('keydown', { key, shiftKey: init.shiftKey, bubbles: true, cancelable: true });

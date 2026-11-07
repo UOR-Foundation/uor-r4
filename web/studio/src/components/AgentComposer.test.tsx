@@ -278,3 +278,124 @@ describe('AgentComposer', () => {
         expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('Unsent current draft');
     });
 });
+
+function pressKey(textarea: HTMLTextAreaElement, key: string, init: { shiftKey?: boolean; isComposing?: boolean; keyCode?: number } = {}) {
+    const event = new KeyboardEvent('keydown', { key, shiftKey: init.shiftKey, bubbles: true, cancelable: true });
+    Object.defineProperties(event, {
+        isComposing: { value: Boolean(init.isComposing) },
+        keyCode: { value: init.keyCode || 0 },
+    });
+    textarea.dispatchEvent(event);
+    return event;
+}
+
+describe('composer interactions', () => {
+    it('submits on Enter, recalls submitted prompts, restores the draft, and refuses IME confirmation', () => {
+        const { store, generation } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        prompt('first\nline');
+        pressKey(textarea, 'Enter');
+        expect(generation.send).toHaveBeenCalledWith('first\nline');
+        prompt('second');
+        pressKey(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('first\nline');
+        pressKey(textarea, 'ArrowDown');
+        expect(textarea.value).toBe('second');
+        prompt('in progress');
+        pressKey(textarea, 'Enter', { isComposing: true });
+        pressKey(textarea, 'Enter', { keyCode: 229 });
+        expect(generation.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('exposes the six build-task commands with accessible keyboard and mouse selection', () => {
+        const { store, generation } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        prompt('/');
+        let menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Build task commands"]')!;
+        expect(menu).not.toBeNull();
+        expect(textarea.getAttribute('aria-expanded')).toBe('true');
+        expect(textarea.getAttribute('aria-controls')).toBe(menu.id);
+        let options = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]'));
+        expect(options).toHaveLength(6);
+        expect(options[0].getAttribute('aria-selected')).toBe('true');
+        expect(textarea.getAttribute('aria-activedescendant')).toBe(options[0].id);
+        expect(document.activeElement).toBe(textarea);
+        pressKey(textarea, 'ArrowDown');
+        pressKey(textarea, 'End');
+        options = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]'));
+        expect(textarea.getAttribute('aria-activedescendant')).toBe(options[5].id);
+        expect(options[5].getAttribute('aria-selected')).toBe('true');
+        pressKey(textarea, 'Enter');
+        expect(textarea.value).toBe('Prompt for test');
+        expect(generation.send).not.toHaveBeenCalled();
+        prompt('/rep');
+        menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Build task commands"]')!;
+        const report = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.dataset.template === 'report')!;
+        act(() => { report.click(); });
+        expect(textarea.value).toBe('Prompt for report');
+        expect(host.querySelector('[role="listbox"][aria-label="Build task commands"]')).toBeNull();
+        expect(generation.send).not.toHaveBeenCalled();
+    });
+
+    it('preserves normal Enter submission for unmatched slash and mention tokens', () => {
+        const { store, generation } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        prompt('/unknown');
+        expect(host.querySelector('[role="listbox"]')).toBeNull();
+        pressKey(textarea, 'Enter');
+        expect(generation.send).toHaveBeenCalledWith('/unknown');
+        prompt('@unknown');
+        expect(host.querySelector('[role="listbox"]')).toBeNull();
+        pressKey(textarea, 'Enter');
+        expect(generation.send).toHaveBeenCalledWith('@unknown');
+    });
+
+    it('inserts active-file and existing attachment mentions without duplicating attachments', () => {
+        const { store, generation, uiApi } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        uiApi.attachments.push({ name: 'external.txt', content: 'external context', source: 'workspace' });
+        prompt('@no');
+        let menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Attachment mentions"]')!;
+        expect(menu).not.toBeNull();
+        const activeFile = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.textContent?.includes('notes.md'))!;
+        expect(activeFile.getAttribute('aria-selected')).toBe('true');
+        pressKey(textarea, 'Enter');
+        expect(textarea.value).toBe('@notes.md');
+        expect(uiApi.api.addAttachment).toHaveBeenCalledTimes(1);
+        expect(uiApi.api.addAttachment).toHaveBeenCalledWith({ name: 'notes.md', content: 'context text', source: 'editor' });
+        expect(generation.send).not.toHaveBeenCalled();
+        prompt('@no');
+        menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Attachment mentions"]')!;
+        const again = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.textContent?.includes('notes.md'))!;
+        act(() => { again.click(); });
+        expect(uiApi.api.addAttachment).toHaveBeenCalledTimes(1);
+        prompt('@ext');
+        menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Attachment mentions"]')!;
+        const existing = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.textContent?.includes('external.txt'))!;
+        act(() => { existing.click(); });
+        expect(textarea.value).toBe('@external.txt');
+        expect(uiApi.api.addAttachment).not.toHaveBeenCalledWith({ name: 'external.txt', content: 'external context', source: 'workspace' });
+        prompt('@no');
+        pressKey(textarea, 'Escape');
+        expect(host.querySelector('[role="listbox"]')).toBeNull();
+        expect(document.activeElement).toBe(textarea);
+        expect(generation.send).not.toHaveBeenCalled();
+    });
+
+    it('passes picked files through the typed composer controller', async () => {
+        const { uiApi } = mount();
+        const picker = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+        const file = new File(['contents'], 'note.txt', { type: 'text/plain' });
+        Object.defineProperty(picker, 'files', { value: [file], configurable: true });
+        await act(async () => {
+            picker.dispatchEvent(new Event('change', { bubbles: true }));
+            await vi.waitFor(() => {
+                expect(uiApi.api.addAttachment).toHaveBeenCalledWith({ name: 'note.txt', kind: 'text', content: 'contents', source: 'file', size: 8 });
+            });
+        });
+    });
+});
