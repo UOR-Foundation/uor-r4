@@ -74,7 +74,10 @@ replace any M6 qualification run.
 - `cargo clippy --locked -p uor-r4-harness --all-targets -- -D warnings`:
   passed.
 - `cargo fmt -p uor-r4-harness -- --check`: passed.
-- harness checks, ratchets and claim-wording gates: pending final run.
+- `uor-harness check`: passed; only repository-wide advisory warnings unrelated
+  to this change remained.
+- D23, D25 and D32 ratchets: passed.
+- claim-wording gate: passed.
 
 ## Skills used
 
