@@ -14632,13 +14632,16 @@ mod tests {
     #[test]
     fn the_fused_nearest_selector_matches_the_old_search_on_untied_rows() {
         let device = Device::new_cuda(0).unwrap();
-        let (rows, vocabulary, width) = (4usize, 16usize, 8usize);
-        let query_values: Vec<f32> = (0..rows * width)
-            .map(|i| ((i * 31 + 7) % 101) as f32 / 101.0)
-            .collect();
-        let table_values: Vec<f32> = (0..vocabulary * width)
-            .map(|i| ((i * 43 + 11) % 97) as f32 / 97.0)
-            .collect();
+        let (rows, vocabulary, width) = (4usize, 16usize, 32usize);
+        let mut state = 0xD1B5_4A32_D192_ED03u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((state >> 11) as f64 / (1u64 << 53) as f64) as f32
+        };
+        let query_values: Vec<f32> = (0..rows * width).map(|_| next()).collect();
+        let table_values: Vec<f32> = (0..vocabulary * width).map(|_| next()).collect();
         let query = Tensor::from_vec(query_values, (rows, width), &device).unwrap();
         let table = Tensor::from_vec(table_values, (vocabulary, width), &device).unwrap();
         let targets = [0u32, 3, 7, 11];
