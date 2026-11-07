@@ -31,8 +31,8 @@ gradient in the existing CUDA equivalence test, revert it and report a negative.
 4. `cargo fmt`, the float-train library tests, Clippy for the crate, the stub-CUDA check,
    `git diff --check`, loop report and local PR checks pass. No model, pod or GPU run occurs in
    this unit.
-5. A REPORT and notebook row state the code change and make no speed claim without a device
-   measurement.
+5. A REPORT states the code change and makes no speed claim without a device measurement. The
+   notebook row belongs to that later measurement unit, because no research run occurs here.
 
 ## Stop and ask if
 
