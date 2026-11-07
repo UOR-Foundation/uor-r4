@@ -97,12 +97,14 @@ function menuTrigger(textarea: HTMLTextAreaElement): Omit<ComposerMenu, 'activeI
 
 export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange }: AgentComposerProps) {
     const state = useLifecycle(store);
-    const [draftState, setDraftState] = useState('');
     const [pastedState, setPastedState] = useState('');
-    const draft = controlledDraft ?? draftState;
     const pasted = controlledPasted ?? pastedState;
-    const setDraft = (value: string) => { setDraftState(value); onDraftChange?.(value); };
     const setPasted = (value: string) => { setPastedState(value); onPastedChange?.(value); };
+    const [visibleDraft, setVisibleDraft] = useState(controlledDraft ?? '');
+    const initialDraftRef = useRef(controlledDraft ?? '');
+    const previousControlledDraft = useRef(controlledDraft);
+    const ownControlledDraft = useRef<string | null>(null);
+    const submittedHistoryRef = useRef<string[]>([]);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
     const [menu, setMenu] = useState<ComposerMenu | null>(null);
@@ -114,8 +116,20 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const menuKeyHandlerRef = useRef<(event: KeyboardEvent) => boolean>(() => false);
     const selectOptionRef = useRef<(option: ComposerOption) => void>(() => {});
     const sendRef = useRef<(prompt: string) => void>(() => {});
-    const draftChangeRef = useRef(setDraft);
+    const draftChangeRef = useRef(notifyDraftChange);
     const fileHandlerRef = useRef<(files: File[]) => Promise<void>>(async () => {});
+
+    function notifyDraftChange(value: string) {
+        ownControlledDraft.current = value;
+        onDraftChange?.(value);
+    }
+
+    function setDraft(value: string) {
+        if (controllerRef.current) controllerRef.current.reset(value);
+        else if (textareaRef.current) textareaRef.current.value = value;
+        setVisibleDraft(value);
+        notifyDraftChange(value);
+    }
 
     useEffect(() => {
         const changed = () => refresh();
@@ -161,7 +175,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     function send(prompt: string) {
         if (generation.send(prompt)) {
             if (controllerRef.current) controllerRef.current.recordSubmitted(prompt);
-            else setDraft('');
+            else notifyDraftChange('');
+            if (textareaRef.current) textareaRef.current.value = '';
+            setVisibleDraft('');
             setMenu(null);
             refresh();
         }
@@ -182,7 +198,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 const currentMenu = menuRef.current;
                 if (!currentMenu || !textarea) return;
                 const mention = `@${option.attachment.name}`;
-                setDraft(`${draft.slice(0, currentMenu.start)}${mention}${draft.slice(currentMenu.end)}`);
+                const visiblePrompt = textarea.value;
+                setDraft(`${visiblePrompt.slice(0, currentMenu.start)}${mention}${visiblePrompt.slice(currentMenu.end)}`);
                 if (option.add && !ui.getAttachments().some((attachment) => attachment.name === option.attachment.name)) {
                     ui.addAttachment(option.attachment);
                     refresh();
@@ -236,7 +253,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     menuKeyHandlerRef.current = interceptMenuKey;
     selectOptionRef.current = selectOption;
     sendRef.current = send;
-    draftChangeRef.current = setDraft;
+    draftChangeRef.current = notifyDraftChange;
     fileHandlerRef.current = handleFiles;
 
     useEffect(() => {
@@ -245,7 +262,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         const controller = createComposerInput({
             textarea,
             picker: pickerRef.current,
-            initialDraft: draft,
+            initialDraft: initialDraftRef.current,
+            getHistory: () => submittedHistoryRef.current,
+            onHistoryChange: (history) => { submittedHistoryRef.current = history; },
             onSend: () => {
                 if (textareaRef.current) sendRef.current(textareaRef.current.value);
             },
@@ -259,6 +278,18 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             controller.destroy();
         };
     }, []);
+
+    useEffect(() => {
+        if (controlledDraft === undefined || controlledDraft === previousControlledDraft.current) return;
+        previousControlledDraft.current = controlledDraft;
+        if (ownControlledDraft.current === controlledDraft) {
+            ownControlledDraft.current = null;
+            return;
+        }
+        setVisibleDraft(controlledDraft);
+        if (controllerRef.current) controllerRef.current.reset(controlledDraft);
+        else if (textareaRef.current) textareaRef.current.value = controlledDraft;
+    }, [controlledDraft]);
 
     return (
         <section aria-label="Agent composer">
@@ -324,8 +355,11 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 aria-expanded={menuOpen ? 'true' : 'false'}
                 aria-controls={menuOpen ? menuId : undefined}
                 aria-activedescendant={menuOpen ? options[activeIndex].id : undefined}
-                value={draft}
-                onInput={(event) => updateMenu(event.currentTarget)}
+                defaultValue={initialDraftRef.current}
+                onInput={(event) => {
+                    flushSync(() => setVisibleDraft(event.currentTarget.value));
+                    updateMenu(event.currentTarget);
+                }}
             /></label>
             {menuOpen && menu && (
                 <div id={menuId} role="listbox" aria-label={menu.kind === 'commands' ? 'Build task commands' : 'Attachment mentions'}>
@@ -342,7 +376,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                     ))}
                 </div>
             )}
-            <button type="button" disabled={!draft.trim() || !store.canRun()} onClick={() => send(draft)}>{predictionMode ? 'Predict next tokens' : 'Send'}</button>
+            <button type="button" disabled={!visibleDraft.trim() || !store.canRun()} onClick={() => send(textareaRef.current?.value ?? visibleDraft)}>{predictionMode ? 'Predict next tokens' : 'Send'}</button>
             <button type="button" disabled={!generating || activeGeneration?.canStop === false} onClick={() => { generation.stop(); refresh(); }}>Stop</button>
         </section>
     );

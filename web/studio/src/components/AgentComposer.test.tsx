@@ -1,4 +1,5 @@
 import { render } from 'preact';
+import { useState } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
@@ -44,7 +45,27 @@ function ui() {
     };
 }
 
-function mount(overrides: { onDraftChange?(value: string): void } = {}) {
+interface MountOverrides {
+    controlled?: boolean;
+    initialDraft?: string;
+    initialPasted?: string;
+    onDraftChange?(value: string): void;
+    onPastedChange?(value: string): void;
+}
+
+function ControlledAgentComposer(props: Parameters<typeof AgentComposer>[0]) {
+    const [draft, setDraft] = useState(props.draft ?? '');
+    const [pasted, setPasted] = useState(props.pasted ?? '');
+    return <AgentComposer
+        {...props}
+        draft={draft}
+        pasted={pasted}
+        onDraftChange={(value) => { props.onDraftChange?.(value); setDraft(value); }}
+        onPastedChange={(value) => { props.onPastedChange?.(value); setPasted(value); }}
+    />;
+}
+
+function mount(overrides: MountOverrides = {}) {
     const store = new LifecycleStore();
     const sessionApi = sessions();
     const fileApi = workspace();
@@ -60,8 +81,22 @@ function mount(overrides: { onDraftChange?(value: string): void } = {}) {
     };
     const copy = vi.fn(async () => undefined);
     const download = vi.fn();
-    act(() => { render(<AgentComposer store={store} sessions={sessionApi} files={fileApi} ui={uiApi.api} generation={generation} copy={copy} download={download} onDraftChange={overrides.onDraftChange} />, host); });
-    return { store, sessionApi, fileApi, uiApi, generation, copy, download };
+    let props = {
+        store, sessions: sessionApi, files: fileApi, ui: uiApi.api, generation, copy, download,
+        draft: overrides.initialDraft, pasted: overrides.initialPasted,
+        onDraftChange: overrides.onDraftChange, onPastedChange: overrides.onPastedChange,
+    };
+    const renderComposer = () => {
+        render(overrides.controlled ? <ControlledAgentComposer {...props} /> : <AgentComposer {...props} />, host);
+    };
+    act(renderComposer);
+    return {
+        store, sessionApi, fileApi, uiApi, generation, copy, download,
+        update(next: { draft?: string; pasted?: string }) {
+            props = { ...props, ...next };
+            act(renderComposer);
+        },
+    };
 }
 
 function button(label: string): HTMLButtonElement {
@@ -72,7 +107,11 @@ function button(label: string): HTMLButtonElement {
 
 function prompt(value: string) {
     const input = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
-    act(() => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); });
+    act(() => {
+        input.value = value;
+        input.setSelectionRange(value.length, value.length);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
 }
 
 describe('AgentComposer', () => {
@@ -339,7 +378,9 @@ describe('composer interactions', () => {
         prompt('/rep');
         menu = host.querySelector<HTMLElement>('[role="listbox"][aria-label="Build task commands"]')!;
         const report = Array.from(menu.querySelectorAll<HTMLElement>('[role="option"]')).find((option) => option.dataset.template === 'report')!;
-        act(() => { report.click(); });
+        const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+        act(() => { report.dispatchEvent(mouseDown); report.click(); });
+        expect(mouseDown.defaultPrevented).toBe(true);
         expect(textarea.value).toBe('Prompt for report');
         expect(document.activeElement).toBe(textarea);
         expect(host.querySelector('[role="listbox"][aria-label="Build task commands"]')).toBeNull();
@@ -457,6 +498,81 @@ describe('composer interactions', () => {
         expect(onDraftChange).not.toHaveBeenCalled();
         pressKey(textarea, 'ArrowUp');
         expect(textarea.value).toBe('keep me');
+    });
+
+    it('uses the visible recalled prompt for mouse Send with controlled draft and pasted props', () => {
+        const onDraftChange = vi.fn();
+        const onPastedChange = vi.fn();
+        const { store, generation } = mount({ controlled: true, initialDraft: 'saved', initialPasted: 'saved paste', onDraftChange, onPastedChange });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        const pasted = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!;
+        expect(textarea.value).toBe('saved');
+        expect(pasted.value).toBe('saved paste');
+        act(() => { pasted.value = 'edited paste'; pasted.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(pasted.value).toBe('edited paste');
+        expect(onPastedChange).toHaveBeenCalledOnce();
+        expect(onPastedChange).toHaveBeenCalledWith('edited paste');
+        prompt('first');
+        expect(onDraftChange).toHaveBeenCalledWith('first');
+        pressKey(textarea, 'Enter');
+        expect(generation.send).toHaveBeenCalledWith('first');
+        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 }); });
+        expect(textarea.value).toBe('');
+        pressKey(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('first');
+        expect(button('Send').disabled).toBe(false);
+        act(() => { button('Send').click(); });
+        expect(generation.send).toHaveBeenCalledTimes(2);
+        expect(generation.send).toHaveBeenLastCalledWith('first');
+        expect(textarea.value).toBe('');
+    });
+
+    it('applies external controlled draft and pasted replacements without retention callbacks', () => {
+        const onDraftChange = vi.fn();
+        const onPastedChange = vi.fn();
+        const { update } = mount({ initialDraft: 'saved', initialPasted: 'saved paste', onDraftChange, onPastedChange });
+        update({ draft: 'external draft', pasted: 'external paste' });
+        expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!.value).toBe('external draft');
+        expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!.value).toBe('external paste');
+        expect(onDraftChange).not.toHaveBeenCalled();
+        expect(onPastedChange).not.toHaveBeenCalled();
+    });
+
+    it('splices mentions into the visible recalled prompt without losing surrounding text', () => {
+        const { store, generation } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        prompt('old');
+        pressKey(textarea, 'Enter');
+        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 }); });
+        pressKey(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('old');
+        prompt('old @');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        expect(option).not.toBeNull();
+        act(() => { option.click(); });
+        expect(textarea.value).toBe('old @notes.md');
+        expect(generation.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('resets history navigation on programmatic template changes without erasing history', () => {
+        const { store, generation } = mount();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        prompt('old');
+        pressKey(textarea, 'Enter');
+        act(() => { store.dispatch({ type: 'generation/finished', outcome: 'complete', generationId: 1 }); });
+        prompt('in progress');
+        pressKey(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('old');
+        act(() => { button('Write a verification plan').click(); });
+        expect(textarea.value).toBe('Prompt for test');
+        pressKey(textarea, 'ArrowDown');
+        expect(textarea.value).toBe('Prompt for test');
+        pressKey(textarea, 'ArrowUp');
+        expect(textarea.value).toBe('old');
+        expect(generation.send).toHaveBeenCalledTimes(1);
     });
 
     it('passes picked files through the typed composer controller', async () => {
