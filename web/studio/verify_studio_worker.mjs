@@ -884,6 +884,11 @@ for (const [index, [prompt, expected]] of [
     ['What is 12 -25?', 'underflow'],
     ['2026-11-05 -1', 'exact arithmetic'],
     ['2026-11-05, -1', 'exact arithmetic'],
+    ['2026-11-05,-1', 'exact arithmetic'],
+    ['2026-11-05,- 1', 'exact arithmetic'],
+    ['2026-11-05 , -1', 'exact arithmetic'],
+    ['2026-11-05T17:25Z,-1', 'exact arithmetic'],
+    ['2026-11-05T17:25-01:00,-1', 'exact arithmetic'],
     ['2026-11-05T17:25+01:00, -1', 'exact arithmetic'],
     ['2026-11-05 +1', 'exact arithmetic'],
     ['17/25 of 3', 'exact arithmetic'],
@@ -909,7 +914,7 @@ for (const [index, [prompt, expected]] of [
     assert(closed.action === 'session_reset', `compact subtraction conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['3/4 of the students passed', '5-10 minutes', '50-12 minutes', '2026-11-05 - 2026-11-10', '12:00 - 1, then lunch', '5:00 - 6', '12 - 1:00', '5 - 6:00', '3/4 of the 20 students passed', '5-10 minutes, 3 times', '2026-11-05 - 2026-11-10, 3 days'].entries()) {
+for (const [index, prompt] of ['3/4 of the students passed', '5-10 minutes', '50-12 minutes', '2026-11-05 - 2026-11-10', '12:00 - 1, then lunch', '5:00 - 6', '12 - 1:00', '5 - 6:00', '3/4 of the 20 students passed', '5-10 minutes, 3 times', '5-10 km', '5-10 cm', '5-10 min', '5-10 students', '5-10 dollars', '2026-11-05 - 2026-11-10, 3 days'].entries()) {
     const id = `gen_review29_range_${index}`;
     const conversationId = `conv_review29_range_${index}`;
     await sendToWorker({

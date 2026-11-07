@@ -1146,6 +1146,11 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         "5 - 6:00",
         "3/4 of the 20 students passed",
         "5-10 minutes, 3 times",
+        "5-10 km",
+        "5-10 cm",
+        "5-10 min",
+        "5-10 students",
+        "5-10 dollars",
         "2026-11-05 - 2026-11-10, 3 days",
     ] {
         let response = dispatch_rpc_command(
@@ -1161,6 +1166,11 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         "What is 12 -25?",
         "2026-11-05 -1",
         "2026-11-05, -1",
+        "2026-11-05,-1",
+        "2026-11-05,- 1",
+        "2026-11-05 , -1",
+        "2026-11-05T17:25Z,-1",
+        "2026-11-05T17:25-01:00,-1",
         "2026-11-05T17:25+01:00, -1",
         "2026-11-05 +1",
         "17/25 of 3",

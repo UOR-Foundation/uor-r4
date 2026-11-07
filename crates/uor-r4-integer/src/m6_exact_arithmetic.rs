@@ -1089,7 +1089,7 @@ fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
         if c == '-' {
             let previous = rest[..index].chars().next_back();
             let next = rest[index + 1..].chars().next();
-            if previous.is_some_and(char::is_whitespace)
+            if (previous.is_some_and(char::is_whitespace) || previous == Some(','))
                 && (next.is_none()
                     || next.is_some_and(|next| next.is_ascii_digit())
                     || (next.is_some_and(char::is_whitespace)
@@ -1513,7 +1513,7 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
             continue;
         }
         let head = &rest[..index];
-        let tail = rest[index + 1..].trim_start();
+        let tail = rest[index + 1..].trim_start_matches(|c| matches!(c, ',' | ' ' | '\t'));
         if exact_tool_is_iso_date_time_core(head) {
             if exact_tool_is_time_range(tail) {
                 return true;
@@ -1619,6 +1619,17 @@ fn exact_tool_ratio_suffix_allowed(text: &str) -> bool {
         "g",
         "kg",
         "mg",
+        "km",
+        "kilometer",
+        "kilometers",
+        "cm",
+        "centimeter",
+        "centimeters",
+        "min",
+        "student",
+        "students",
+        "dollar",
+        "dollars",
         "oz",
         "lb",
         "lbs",
@@ -2824,6 +2835,11 @@ mod tests {
             "What is 12 -25?",
             "2026-11-05 -1",
             "2026-11-05, -1",
+            "2026-11-05,-1",
+            "2026-11-05,- 1",
+            "2026-11-05 , -1",
+            "2026-11-05T17:25Z,-1",
+            "2026-11-05T17:25-01:00,-1",
             "2026-11-05T17:25+01:00, -1",
             "2026-11-05 +1",
         ] {
@@ -2847,6 +2863,11 @@ mod tests {
             "5 - 6:00",
             "3/4 of the 20 students passed",
             "5-10 minutes, 3 times",
+            "5-10 km",
+            "5-10 cm",
+            "5-10 min",
+            "5-10 students",
+            "5-10 dollars",
             "2026-11-05 - 2026-11-10, 3 days",
         ] {
             assert!(
