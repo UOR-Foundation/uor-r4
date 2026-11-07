@@ -284,10 +284,15 @@ check_progress() {
   jq -e -s '(map(select(.step == 0)) | length) == 1 and
     ([.[] | select(.step > 0)] | length) > 0 and
     all(.[];
-      if .step == 0 then true
-      else ((.train_loss_mean | type) == "number" and
-        (.train_loss_mean | isfinite))
-      end)' \
+      ((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and
+      ((.dev_token_margin | type) == "number" and
+        (.dev_token_margin | isfinite)) and
+      ((.dev_address_margin | type) == "number" and
+        (.dev_address_margin | isfinite)) and
+      (if .step == 0 then true
+       else ((.train_loss_mean | type) == "number" and
+         (.train_loss_mean | isfinite))
+       end))' \
     "$progress" >/dev/null || die "progress has a non-finite loss"
 }
 

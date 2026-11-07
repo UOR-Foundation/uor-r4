@@ -172,6 +172,7 @@ require_line 'train_and_score 8 attempt-2 "$RUN/run-mb8"' "$JOB"
 require_line '[ "$TRAIN_FAILURE" -eq 0 ] ||' "$JOB"
 require_line "jq -e -s '(map(select(.step == 0)) | length) == 1 and" "$JOB"
 require_line 'all(.[];' "$JOB"
+require_line '((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and' "$JOB"
 grep -Fq 'CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' "$JOB" ||
   fail "$JOB does not classify the registered OOM retry"
 checks=$((checks + 1))

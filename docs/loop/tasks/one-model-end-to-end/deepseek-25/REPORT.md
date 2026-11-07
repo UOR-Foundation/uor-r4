@@ -56,6 +56,9 @@ spend.
   lose the pod ID during rental or job submission, the base continuation grade
   did not assert the registered sample fingerprint, and the sheet still carried
   a path-dependent overlap hash plus a stale M2 bar.
+- **The final D67 review found one missing finite check.** The per-checkpoint
+  predicate covered training loss but not the DEV loss and margins serialized
+  in the same progress row.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -134,7 +137,8 @@ spend.
   artifact, grade, panel, scored-marker and reading roots.
 - Every checkpoint and the base continuation grade must use the registered
   512-row sample fingerprint. Finiteness is checked at each scored checkpoint,
-  so a non-finite loss stops the seed before later checkpoints are exported.
+  including DEV loss and both DEV margins, so a non-finite loss stops the seed
+  before later checkpoints are exported.
 - The launcher builds the Vast provider adapter from the reviewed checkout
   before calling `uor-pod status` or `uor-pod up`.
 - Failure cleanup forces a nonzero status for every non-sealed run, including
@@ -167,8 +171,8 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   reviewed-runtime `c002be99e926614eb98a8ad83e94e75e6c5e79f7f65da74af2ea7854b157c88d`,
   reviewer session `01a1b82d-2533-7a43-8e2c-6e7d82ba1b47`. No remaining FIT
   blockers.
-- `gate.sh`: 167 checks passed.
-- `test-mutants.sh`: 55 of 55 semantic mutations caught.
+- `gate.sh`: 168 checks passed.
+- `test-mutants.sh`: 56 of 56 semantic mutations caught.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
   --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.
 - The bare suite invocation omitted `CARGO_TARGET_DIR`; the existing save/load

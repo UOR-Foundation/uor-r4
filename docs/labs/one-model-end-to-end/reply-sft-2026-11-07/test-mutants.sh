@@ -141,6 +141,9 @@ mutate missing-seal-cap "$JOB" \
   'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' \
   'if false; then'
 mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
+mutate unchecked-dev-loss "$JOB" \
+  '((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and' \
+  '(.dev_loss != null) and'
 mutate checkpoint-progress-unchecked "$JOB" \
   'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
 mutate base-sample-unchecked "$JOB" \
