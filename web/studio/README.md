@@ -109,6 +109,8 @@ Narrow live-page bridge corrections correlate chat completion, include attachmen
 
 `StudioApp` now exposes Agent, Workspace, Changes, Terminal, Models, and Guide through navigation and the command palette. `ChangesPanel` refreshes bounded Git status/diff through the existing native adapter and copies the exact raw diff. `TerminalPanel` requires app-session enablement and retains per-command native approval. Unavailable hosts, failures, cancellation, and stale async results are explicit; repository/terminal output is inert. These are typed component/adapter fixtures, not real repository, command, or packaged-GUI acceptance.
 
+The Models view also includes `McpConnections` through the existing `connectRemote` contract. Explicit Connect lists tools, a tool button parses one JSON object and calls once, and **Attach result** adds exact result JSON through the existing attachment API with a sanitized `mcp-<tool>.json` name. Existing `@` options include the attachment. Credentials are memory-only and cleared after connection/unmount; replacement and stale-candidate cleanup are covered. No autonomous loop, second protocol client, stdio expansion, real endpoint, or packaged-GUI claim is made. Future cutover must also avoid the legacy MCP auto-boot mounting beside this component.
+
 Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` in this directory. The library
 build emits uncommitted `dist/` output; `src/studio.css` does not alter the legacy `index.css`.
 Native progress and dialog elements preserve unknown totals and indeterminate finalization; dialogs
