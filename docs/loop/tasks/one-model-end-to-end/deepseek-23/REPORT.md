@@ -37,6 +37,8 @@ training, pod or spend yet.
 - Added `run-s1.sh`. It checks the launch pin, creates only one DeepSeek session
   pod, uploads the exact job by hash, renews the lease, watches through a
   terminal state, verifies the store's `READBACK`, and releases/downs the pod.
+- Added `gate.sh` and `test-mutants.sh` for the registered stop, hash, lease,
+  readback and teardown rules.
 - Amended the prep sheet's grade command to `--max-replies 1
   --reply-tokens 1` and recorded why.
 
@@ -54,8 +56,9 @@ The score roots are new per controller run:
 
 ## Checks run at the head
 
-- `bash -n` on both scripts: passed.
-- `shellcheck` on both scripts: passed.
+- `gate.sh`: 20 checks passed.
+- `test-mutants.sh`: 9 of 9 mutations caught.
+- `bash -n` and `shellcheck` on the operational scripts: passed.
 - The job was reviewed against the actual `uor-store`, `uor-pod`,
   `train-in-space`, `cpu-checkpoint-grade` and `served-reply-panel` command
   interfaces.
