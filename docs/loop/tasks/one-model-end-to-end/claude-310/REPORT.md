@@ -4,10 +4,9 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## What did not work, first
 
-- **(b64L) almost never saw EOS as a training target.** D3 scores 27,416,554 targets, and 20,729 of them are EOS: 756 per million. DEV, the conversations its replies are judged on, has 85,812 per million, about 113 times more. This fits claude-309's reading, where the served model stopped on 0 of 256 panel replies and the float model emitted EOS on 0 of 16 DEV prompts. It does not prove the cause: no training run here varied the EOS share.
-- **Most of D3's EOS mark the end of a Wikipedia article, not a reply.** Each wiki document carries one scored EOS: 12,945 of the 20,729. Between consecutive scored EOS, the median run is 510 scored targets over all of D3. In DEV it is 11 (max 50).
-- **D3's mask is not a reply mask.** It scores 98% of D3's positions: everything except BOS. In oasst2 it scores 3,234,805 of 3,773,419 tokens, so user turns are training targets too. 1,599 of oasst2's 9,383 EOS fall in unscored spans. DEV scores 33% of its positions, the replies alone. So (b64L) learned to continue text, of which only about 14% is dialogue, rather than to answer and stop.
-- **oasst2 alone is still sparse:** 7,784 scored EOS in 3,234,805 scored targets, 2,406 per million. The median run between them is 349.
+- **EOS was a rare training target for (b64L): 756 per million of its scored targets.** D3 scores 27,416,554 targets, and 20,729 of them are EOS, about one every 1,320. DEV, the conversations its replies are judged on, has 85,812 per million, about one every 12 scored reply tokens, about 113 times more often. This is consistent with claude-309's reading (the served model stopped on 0 of 256 panel replies, and the float model emitted EOS on 0 of 16 DEV prompts). No run here varied the EOS share, so it does not test the cause.
+- **Most of D3's scored targets, and most of its EOS, are Wikipedia.** The wiki roots are scored in full (every non-BOS token) and hold 24,181,749 of the 27,416,554 scored targets (88%). Each wiki article ends in one scored EOS: 12,945 of the 20,729. Between consecutive scored EOS, the median run is 510 scored targets over all of D3. In DEV it is 11 (max 50).
+- **In oasst2 the mask is a reply mask, but the replies are long.** It leaves 533,543 non-BOS tokens unscored, the user turns. This matches the encoder, which gives mask 1 only to assistant content and its EOS (`crates/uor-r4-tokenizer/src/dialogue.rs:11-14`). The 1,599 unscored EOS are the terminators of documents that end on a user turn. oasst2 has 7,784 scored EOS in 3,234,805 scored targets, 2,406 per million: the median reply runs 349 scored targets and the mean about 416. DEV scores 33% of its positions, and its replies are short.
 
 ## What changed
 
@@ -16,6 +15,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - :1868 describes "scoring each eligible target position (`p > doc_start && tokens[p] != bos_id && mask[p] == 1`)".
   - :1903–1905 pushes `tokens[p]` as the target, and :1902 reads its input at `p - 1`. Context never crosses a BOS (:1894).
   - The sliding variant (:1967, :2020) and `in_space_long.rs` (:845, :2682) use the same rule.
+- **Review round 1 (code):** each root's `scored_taken` must now equal the trainer-scored count; the looser match on raw mask ones is gone. Each root must also start at a BOS, so no document spans two roots. A test pins each check; with the BOS check disabled, two tests fail. The D3 output is byte-identical after the change (`e6534537…`).
 - **Per root and in total, it reports:** positions, scored targets, EOS, scored EOS, BOS, and the runs of scored targets that end at each scored EOS (count, median, max). Runs reset at each BOS.
 
 ## Measurements
@@ -25,13 +25,13 @@ D3 (`tokens.u16` `ed8f2537…`, `response_mask.u8` `ec6e520c…`, its manifest) 
 | root | positions | scored | EOS | EOS scored | scored EOS per million | median run |
 |---|---|---|---|---|---|---|
 | oasst2 | 3,773,419 | 3,234,805 | 9,383 | 7,784 | 2,406 | 349 |
-| wiki-00000 | 8,011,538 | 8,010,674 | 864 | 864 | 108 | 6,546 |
+| wiki-00000 | 8,011,538 | 8,010,674 | 864 | 864 | 107 | 6,546 |
 | wiki-00020 | 8,255,877 | 8,247,907 | 7,970 | 7,970 | 966 | 466 |
-| wiki-00040 | 7,927,279 | 7,923,168 | 4,111 | 4,111 | 519 | 1,223 |
+| wiki-00040 | 7,927,279 | 7,923,168 | 4,111 | 4,111 | 518 | 1,223 |
 | **D3** | 27,968,113 | 27,416,554 | 22,328 | 20,729 | 756 | 510 (max 96,128) |
 | **DEV** | 42,856 | 14,287 | 1,226 | 1,226 | 85,812 | 11 (max 50) |
 
-The per-root rates are computed from the counts, as integer parts per million. The bin's output records the total's rate. Outputs: `out/d3.json` `e6534537f2c2baf285d474da7de47aaa580e0fdea7f77d8abb1508cc25d06ede`, `out/dev.json` `19225cd3fbcad73111d600e2ef0252d3721c5bed9a299fa0ab32179140d1c18a`. Every root's scored count matched its manifest `scored_taken`, and 0 scored targets were left without a closing EOS.
+The rates are integer parts per million (integer part), as the bin records them per root and in total. The cancel probe passed: no open PR or claim counted D3's EOS targets, and D3's two arrays hashed to the pinned `ed8f2537…` and `ec6e520c…`. Outputs: `out/d3.json` `e6534537f2c2baf285d474da7de47aaa580e0fdea7f77d8abb1508cc25d06ede`, `out/dev.json` `19225cd3fbcad73111d600e2ef0252d3721c5bed9a299fa0ab32179140d1c18a`. Every root's scored count matched its manifest `scored_taken`, and 0 scored targets were left without a closing EOS.
 
 ## Checks run at the head
 
@@ -46,9 +46,9 @@ None beyond the loop's own steps.
 
 ## Still open
 
-- **The lever this points to:** train on dialogue whose mask scores only the replies, so that EOS is near DEV's rate, or weight the EOS target. Each would be judged by claude-309's `served-reply-panel`: whether replies stop, then whether they are right. That run needs its own prep sheet and pre-run review.
+- **The lever this points to:** more dialogue with short replies in TRAIN, so that EOS is nearer DEV's rate, or weight the EOS target. Each would be judged by claude-309's `served-reply-panel`: whether replies stop, then whether they are right. That run needs its own prep sheet and pre-run review.
 - **Not measured:** the trained model's EOS rank at the end of a reference reply. That would show whether EOS is nearly chosen or nowhere close.
 
 ## Plain summary
 
-The model we serve never stops talking. This unit counted why that might be. In the text it trained on, an "end of reply" mark comes about once every 1,300 tokens, mostly at the end of Wikipedia articles. In the conversations it is tested on, one comes about every 12 tokens. The training also scored the user's half of each conversation as text to predict. So the model learned to keep writing, not to answer and stop. The next training change to try is a corpus of conversations where only the replies are scored, judged by whether the served replies stop and are right.
+The model we serve never stops talking. This unit counted one possible reason. Among the tokens the model was trained to predict, an "end of reply" mark comes about once every 1,320, mostly at the end of Wikipedia articles: 88% of what it learned to predict was Wikipedia. In the conversations it is tested on, one comes about every 12 reply tokens. That is consistent with a model that keeps writing rather than stops, but nothing here tests it. The next training change to try is more short-reply dialogue, or extra weight on the end mark, judged by whether the served replies stop and are right.

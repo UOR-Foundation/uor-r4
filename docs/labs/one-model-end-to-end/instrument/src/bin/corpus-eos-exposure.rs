@@ -194,11 +194,25 @@ fn decode_tokens(bytes: &[u8], mask: &[u8]) -> Result<(Vec<u16>, &'static str)> 
     Ok((payload.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])).collect(), format))
 }
 
-/// Checks the manifest's roots against the file and the counts; returns each root's match name.
-fn check_roots(roots: &[ManifestRoot], counts: &[Counts], positions: usize) -> Result<Vec<&'static str>> {
+/// Checks the manifest's roots against the file and the counts: the roots sum to the file, each
+/// starts at a BOS (so no document spans two roots), and each root's `scored_taken` equals the
+/// trainer-scored count. Returns each root's match name.
+fn check_roots(
+    roots: &[ManifestRoot],
+    counts: &[Counts],
+    tokens: &[u16],
+    bos: u16,
+) -> Result<Vec<&'static str>> {
     let sum: usize = roots.iter().map(|r| r.tokens_taken).sum();
-    if sum != positions {
-        return Err(format!("the roots' tokens_taken sum to {sum}, the file holds {positions}"));
+    if sum != tokens.len() {
+        return Err(format!("the roots' tokens_taken sum to {sum}, the file holds {}", tokens.len()));
+    }
+    let mut start = 0usize;
+    for r in roots {
+        if r.tokens_taken > 0 && tokens[start] != bos {
+            return Err(format!("root {} does not start at a BOS (position {start})", r.name));
+        }
+        start += r.tokens_taken;
     }
     roots
         .iter()
@@ -206,11 +220,9 @@ fn check_roots(roots: &[ManifestRoot], counts: &[Counts], positions: usize) -> R
         .map(|(r, c)| {
             if r.scored_taken == c.scored_targets {
                 Ok("trainer-scored")
-            } else if r.scored_taken == c.mask_ones {
-                Ok("mask-ones")
             } else {
                 Err(format!(
-                    "root {}: scored_taken {} matches neither the trainer-scored count {} nor the mask-one count {}",
+                    "root {}: scored_taken {} differs from the trainer-scored count {} (mask ones {})",
                     r.name, r.scored_taken, c.scored_targets, c.mask_ones
                 ))
             }
@@ -236,7 +248,7 @@ fn run() -> Result<()> {
     let (root_counts, total) = count(&tokens, &mask, &lengths, eos, bos);
     let mut roots = Vec::new();
     if let Some(manifest) = &manifest {
-        let matches = check_roots(&manifest.roots, &root_counts, tokens.len())?;
+        let matches = check_roots(&manifest.roots, &root_counts, &tokens, bos)?;
         for ((r, counts), matched) in manifest.roots.iter().zip(root_counts).zip(matches) {
             roots.push(RootCounts {
                 name: r.name.clone(),
@@ -365,18 +377,31 @@ mod tests {
                 ManifestRoot { name: "b".into(), tokens_taken: b, scored_taken: sb },
             ]
         };
-        assert_eq!(check_roots(&manifest(3, 6, 2, 4), &roots, 9).unwrap(), ["trainer-scored", "trainer-scored"]);
-        assert!(check_roots(&manifest(3, 5, 2, 4), &roots, 9).unwrap_err().contains("sum to 8"));
-        assert!(check_roots(&manifest(3, 6, 2, 9), &roots, 9).unwrap_err().contains("root b"));
+        assert_eq!(
+            check_roots(&manifest(3, 6, 2, 4), &roots, &tokens, BOS).unwrap(),
+            ["trainer-scored", "trainer-scored"]
+        );
+        assert!(check_roots(&manifest(3, 6, 2, 9), &roots, &tokens, BOS).unwrap_err().contains("root b"));
+        assert!(check_roots(&manifest(3, 5, 2, 4), &roots, &tokens, BOS).unwrap_err().contains("sum to 8"));
+        // A split inside a document: root b would start at position 2, an EOS, not a BOS.
+        let (split, _) = count(&tokens, &mask, &[2, 7], EOS, BOS);
+        assert!(check_roots(&manifest(2, 7, 1, 5), &split, &tokens, BOS).unwrap_err().contains("root b does not start"));
     }
 
     #[test]
-    fn scored_taken_may_match_the_mask_ones_instead() {
+    fn scored_taken_must_equal_the_trainer_count_not_the_mask_ones() {
         let tokens = [7, BOS, 5, EOS];
         let mask = [1, 0, 1, 1];
         let (roots, _) = count(&tokens, &mask, &[4], EOS, BOS);
         let root = [ManifestRoot { name: "r".into(), tokens_taken: 4, scored_taken: 3 }];
-        assert_eq!(check_roots(&root, &roots, 4).unwrap(), ["mask-ones"]);
+        // 7 precedes the first BOS, so the root does not start at a BOS.
+        assert!(check_roots(&root, &roots, &tokens, BOS).unwrap_err().contains("does not start"));
+        let tokens = [BOS, 5, EOS, 9];
+        let mask = [1, 1, 1, 0];
+        let (roots, _) = count(&tokens, &mask, &[4], EOS, BOS);
+        // Mask ones are 3 (the BOS included), the trainer scores 2.
+        let root = [ManifestRoot { name: "r".into(), tokens_taken: 4, scored_taken: 3 }];
+        assert!(check_roots(&root, &roots, &tokens, BOS).unwrap_err().contains("differs from the trainer-scored count 2"));
     }
 
     #[test]
