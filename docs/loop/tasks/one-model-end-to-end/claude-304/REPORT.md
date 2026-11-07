@@ -5,9 +5,9 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## What did not work, first
 
 - **There is no width-1,024 reading, and this unit will not produce one.** I stopped seed 1's training at step 2,048 of 16,384, by a decision review (below), after Casey asked whether the run's up-to-$88 cost would carry forward. This is a stop by decision, not a measurement: it closes nothing about width (§4.1, L-007).
-- **Seed 2 never started.** Three RTX PRO 6000 pods, `vast-59497270`, `-59499851` and `-59502786`, never reached SSH, in 1,800, 1,800 and 1,200 s. Each was deleted. The last one was on Vast machine 48282, and the other two were most likely on the same host's driver-580.95.05 machines.
+- **Seed 2 never started.** Three RTX PRO 6000 pods, `vast-59497270`, `-59499851` and `-59502786`, never reached SSH, in 1,800, 1,800 and 1,200 s. Each was deleted. They were on Vast's Texas machines 48282 and 48276 (driver 580.95.05); seed 1's working machine, 56389, ran driver 590.48.01.
   - `uor-pod`'s circuit breaker refused a fourth try, and `--force-retry` with a 0.99 reliability filter picked the same host again.
-  - `uor-pod up` defaults to `--ref main`, which had moved past the job's pin. A later pod would have needed `--ref 2578cd6b…`.
+  - `uor-pod up` defaults to `--ref main`, which had moved past the job's pin. The third seed-2 pod (`vast-59502786`) booted at `195c2177…`, not the pin, so its run would have been off-pin even had SSH come up. A later pod needs `--ref 2578cd6b4d10d2d2beae24dcdc6692424d56e1f0`.
 - **Micro-batch 64 does not fit.** The whole batch of 64 in one forward ran out of memory on the 97,887 MiB card.
 - **Micro-batch 32 is barely faster than 16:** 3.516 against 3.641 s a step, about 3.4%. Halving the forwards a step saves little, so the step time is not mostly per-forward overhead.
 
@@ -16,7 +16,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 I read the chain before deciding: claude-302's question and outcome map, claude-301's result, and claude-295's width reading. Casey can reverse this.
 
 - **The one-track bar is already met.** claude-301's (b64L) met it at width 256 ("met; unseen ahead"). This run could not add to that.
-- **Four of five outcomes lead back to width 256.** In claude-302's outcome map, only "ahead" changes the next unit. `inside`, `mixed`, `behind` and NOT_RUN all lead to "more human text at width 256".
+- **Only one outcome moves the trunk off width 256.** In claude-302's outcome map, only "(w1024) meets the bar and the width lever is `ahead`" makes the next unit width 1,024. A lever `inside` or `mixed`, a `behind` reading, and (w1024) `mixed` or `inside` against T2 each name "more human text at width 256". The fifth case, ahead of T2 but not of the unigram, is a grade check with no outcome drawn. A NOT_RUN changes nothing.
 - **The evidence leans toward data, not width.**
   - claude-295's one width reading, 512 against 256, was `inside`, while its data lever (D3 against D1) was `ahead`.
   - claude-301's tokens lever was `ahead`.
@@ -51,12 +51,12 @@ Seed 1, `vast-59497268`, RTX PRO 6000 (97,887 MiB), pin `2578cd6b4d10d2d2beae24d
 | Check | Result |
 |---|---|
 | I-0 | passed |
-| I-e | PASS. Micro 4 and micro 2 within 9.74 × 10⁻⁸ of whole at batch 16. Memory: whole 36,957, micro4 29,661, micro2 29,629, read0 11,581 MiB |
+| I-e | PASS against 1e-5. Micro 4 and micro 2 within 1.76 × 10⁻⁷ of whole at batch 16 (step 2, micro4). The read-off control moved 1.07 × 10⁻⁶ at step 4, UNDERPOWERED (recorded, not gated). Memory: whole 36,957, micro4 29,661, micro2 29,629, read0 11,581 MiB |
 | Smoke m64 | out of memory |
 | Smoke m32 | I-1 PASS; I-m 76,125 of 97,887 MiB (under 80%); I-f 76,125 then 76,061; 3.515759 s a step |
 | Smoke m16 | 3.640717 s a step (passed) |
 | I-t | micro 32; used 2,165 s; projected wall 66,247 s (bound 72,000) |
-| Training | stopped at step 2,048 (exit 143). `train_loss_mean` 1.00014 at step 1,024 and 0.98842 at step 2,048. `dev_top1_hits` 218 and 213 |
+| Training | stopped at step 2,048 by PID, after 7,857 s: the trainer exited 143 (`not-run.txt`: "training failed (exit 143, ok)"), and the job exited 6 (run incomplete). `train_loss_mean` 1.00014 at step 1,024 and 0.98842 at step 2,048. `dev_top1_hits` 218 and 213 |
 
 **Seal:** `results/claude/one-model-end-to-end-w1024-speed-2026-11-07/runs/s1/`
 - `w1024s-s1.tar.gz` `78cf4a1f61ff81eb6b0b03c15ce7d78a824c55b5028b8a0ac2de767961299a79`, 249.9 MB;
@@ -72,7 +72,8 @@ Seed 1, `vast-59497268`, RTX PRO 6000 (97,887 MiB), pin `2578cd6b4d10d2d2beae24d
 - The job's laptop gate tests: 81 ok, 0 FAIL. Six mutations were each caught (exit 1).
 - `bash -n` on every script.
 - `preprules::` on the sheet: 17 passed.
-- `loop report --check` on this REPORT (below).
+- `loop report --check` on this REPORT: PASS.
+- Every number in Measurements was checked against the sealed tarball, fetched back from the store and re-hashed to `78cf4a1f…` (`ie.txt`, `ie-mem.txt`, `im.txt`, `if.txt`, `it.txt`, `micro.txt`, `not-run.txt`, `EXIT`, `w1024-s1/progress.jsonl`).
 
 ## Skills used
 
