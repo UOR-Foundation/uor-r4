@@ -14109,6 +14109,26 @@ mod tests {
     }
 
     #[test]
+    fn packet_reader_loads_the_exact_geometric_checkpoint_shape() {
+        let device = Device::Cpu;
+        let root = init_test_dir("packet-reader");
+        let source = checkpoint_path(&root);
+        let mut model = build_fbs_model_at(FbsArm::OneAtomActive, 1, 32, &device).unwrap();
+        model.set_context(64).unwrap();
+        model.save(&source).unwrap();
+        let run = source.parent().and_then(Path::parent).unwrap();
+        fs::write(
+            run.join("config.json"),
+            br#"{"steps":8,"objective":"nearest","retain_rates":false,"fold_scores":false,"reflect_floor":false,"fix_input_table":false,"train_as_served":false}"#,
+        )
+        .unwrap();
+        let reader = PacketCheckpoint::load(&source, &device).unwrap();
+        assert_eq!(reader.context(), 64);
+        assert_eq!(reader.objective, PointObjective::Nearest);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn a_config_without_checkpoint_initialization_writes_no_init_key() {
         let json = String::from_utf8(serde_json::to_vec_pretty(&config(0, None)).unwrap()).unwrap();
         assert!(!json.contains("init_from"), "{json}");

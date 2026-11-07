@@ -45,6 +45,7 @@ SFT pod chain after both dependency PRs merge.
 ## Checks run at the head
 
 - `cargo check --offline --locked -p uor-r4-float-train --lib`: passed.
+- `packet_reader_loads_the_exact_geometric_checkpoint_shape`: passed on CPU.
 - Stub-CUDA `cargo check -p uor-r4-float-train --features packet-parity
   --bin packet-parity`: passed.
 - `packet-parity` pure tests: 2 passed.
