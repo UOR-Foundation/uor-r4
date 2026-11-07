@@ -148,7 +148,7 @@ struct CpuFbsSessionShape {
     context: usize,
     raw_gates: bool,
     raw_transition: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     retention: bool,
     hamming: bool,
     memory: bool,
@@ -2927,6 +2927,10 @@ mod tests {
         let restored = CpuFbsForward::resume(&checkpoint, &artifact).unwrap();
         assert_eq!(restored.checkpoint_bytes().unwrap(), checkpoint);
         let value: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+        assert!(
+            value["payload"]["shape"].get("retention").is_none(),
+            "a decay-rate session keeps the prior /2 checkpoint shape"
+        );
         let resealed = |value: &mut serde_json::Value| {
             let state = serde_json::to_vec(&value["payload"]).unwrap();
             value["state_sha256"] = serde_json::json!(uor_r4_discrete::corpus::sha256(&state));
@@ -3092,6 +3096,8 @@ mod tests {
             assert_eq!(actual.kept_cells, expected.kept_cells);
         }
         let checkpoint = cpu.checkpoint_bytes().unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&checkpoint).unwrap();
+        assert_eq!(value["payload"]["shape"]["retention"], true);
         let resumed = CpuFbsForward::resume(&checkpoint, &bytes).unwrap();
         assert_eq!(resumed.checkpoint_bytes().unwrap(), checkpoint);
     }

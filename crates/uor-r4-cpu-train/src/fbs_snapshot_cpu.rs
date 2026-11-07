@@ -419,6 +419,7 @@ struct ModelConfig {
     pattern: String,
     read: String,
     rotation: bool,
+    seed: u64,
     #[serde(default)]
     rotation_group: Option<String>,
     memory: Option<Value>,
@@ -903,6 +904,9 @@ fn validate_run_config(
     if object.get("width").and_then(Value::as_u64) != Some(config.width as u64) {
         return Err(invalid("run config width differs from the checkpoint"));
     }
+    if object.get("seed").and_then(Value::as_u64) != Some(config.seed) {
+        return Err(invalid("run config seed differs from the checkpoint"));
+    }
     if object.get("hamming_read").and_then(Value::as_u64) != Some(config.heads as u64) {
         return Err(invalid(
             "run config Hamming read count differs from the checkpoint",
@@ -1308,6 +1312,11 @@ mod tests {
         extra["foreign"] = json!(true);
         let error = parse_model_config(&serde_json::to_vec(&extra).unwrap()).unwrap_err();
         assert!(error.contains("extra=[\"foreign\"]"), "{error}");
+
+        let mut malformed_seed = model_config_value();
+        malformed_seed["seed"] = json!("1");
+        let error = parse_model_config(&serde_json::to_vec(&malformed_seed).unwrap()).unwrap_err();
+        assert!(error.contains("model config"), "{error}");
     }
 
     #[test]
@@ -1417,7 +1426,7 @@ mod tests {
             ("fold_scores", json!("false")),
             ("reflect_floor", json!(null)),
         ] {
-            let mut run = json!({"width": 32, "hamming_read": 2});
+            let mut run = json!({"width": 32, "seed": 1, "hamming_read": 2});
             run[field] = value;
             let error = validate_run_config(
                 &serde_json::to_string(&run).unwrap(),
@@ -1427,6 +1436,13 @@ mod tests {
             .unwrap_err();
             assert!(error.contains(&format!("{field} is not a bool")), "{error}");
         }
+        let error = validate_run_config(
+            r#"{"width":32,"seed":2,"hamming_read":2}"#,
+            &config,
+            FbsExportSnaps::SNAPPED,
+        )
+        .unwrap_err();
+        assert!(error.contains("run config seed differs"), "{error}");
     }
 
     #[test]
