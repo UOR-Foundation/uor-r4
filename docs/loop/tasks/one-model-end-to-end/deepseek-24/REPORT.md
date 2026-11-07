@@ -33,9 +33,14 @@ training or model evaluation yet.
 - The report records chosen-token mismatches, exact rank mismatches, float and
   integer top-1 counts, EOS rank for every row, the number of EOS rank
   disagreements and the largest rank delta.
-- The output binds the checkpoint's model/config/Hamming files, artifact,
-  tokenizer, panel inputs, labels, plan and manifest hashes and refuses case or
-  target misalignment.
+- The output binds the checkpoint's model/config files, the source run config
+  that carries its forward flags, its Hamming sidecar when present, the
+  artifact, tokenizer, panel inputs, labels, plan and manifest hashes, and
+  refuses case or target misalignment.
+- Review round 1 found that the first identity block omitted the run-level
+  forward config and treated the optional Hamming sidecar as mandatory. Both
+  are fixed: the source run config is always hashed, while Hamming is included
+  only when the checkpoint contains it.
 
 ## Measurements
 

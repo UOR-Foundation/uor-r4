@@ -183,11 +183,18 @@ fn run() -> Result<()> {
         let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
         Ok(sha256(&bytes))
     };
-    let checkpoint_hashes = serde_json::json!({
+    let mut checkpoint_hashes = serde_json::json!({
         "model.safetensors": file_sha("model.safetensors")?,
         "config.json": file_sha("config.json")?,
-        "hamming_read.safetensors": file_sha("hamming_read.safetensors")?,
     });
+    if checkpoint.join("hamming_read.safetensors").is_file() {
+        checkpoint_hashes["hamming_read.safetensors"] =
+            serde_json::Value::String(file_sha("hamming_read.safetensors")?);
+    }
+    let run_config = find_run_config(&checkpoint)?;
+    let run_config_bytes =
+        fs::read(&run_config).map_err(|error| format!("{}: {error}", run_config.display()))?;
+    let run_config_sha = sha256(&run_config_bytes);
     let artifact = fs::read(flag("artifact")?).map_err(|error| format!("artifact: {error}"))?;
     let artifact_sha = sha256(&artifact);
     let device = Device::new_cuda(0).map_err(|error| format!("CUDA device: {error}"))?;
@@ -218,6 +225,7 @@ fn run() -> Result<()> {
         "schema": SCHEMA,
         "inputs": {
             "checkpoint_files": checkpoint_hashes,
+            "source_run_config_sha256": run_config_sha,
             "artifact_sha256": artifact_sha,
             "tokenizer_sha256": tokenizer_sha,
             "inputs_sha256": inputs_sha,
@@ -430,6 +438,29 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, Str
 
 fn parse_json<T: for<'de> Deserialize<'de>>(name: &str, bytes: &[u8]) -> Result<T> {
     serde_json::from_slice(bytes).map_err(|error| format!("{name}: {error}"))
+}
+
+fn find_run_config(checkpoint: &Path) -> Result<PathBuf> {
+    let checkpoint = checkpoint
+        .canonicalize()
+        .map_err(|error| format!("--checkpoint: {error}"))?;
+    let mut candidates = vec![checkpoint.join("config.json")];
+    if let Some(run) = checkpoint.parent().and_then(Path::parent) {
+        candidates.push(run.join("config.json"));
+    }
+    for path in candidates {
+        if !path.is_file() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(
+            &fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?,
+        )
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+        if value.get("steps").is_some() {
+            return Ok(path);
+        }
+    }
+    Err("--checkpoint requires its source run config beside it or two levels above it".to_owned())
 }
 
 fn sha256(bytes: &[u8]) -> String {
