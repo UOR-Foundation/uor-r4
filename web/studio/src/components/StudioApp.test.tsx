@@ -26,7 +26,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 describe('StudioApp', () => {
-    it('composes all four destinations with one status source and on-demand inspector', () => {
+    it('composes all six destinations with one status source and on-demand inspector', () => {
         const store = new LifecycleStore();
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
@@ -41,6 +41,13 @@ describe('StudioApp', () => {
         act(() => { destination('Guide').click(); });
         expect(host.textContent).toContain('next-token prediction');
         expect(host.textContent).toContain('not a conversational assistant');
+        act(() => { button('Command palette').click(); });
+        const paletteInput = host.querySelector<HTMLInputElement>('input[aria-label="Search commands"]')!;
+        act(() => { paletteInput.value = 'Go to Changes'; paletteInput.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { paletteInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        expect(host.textContent).toContain('Native Git is available in the desktop build.');
+        act(() => { destination('Terminal').click(); });
+        expect(host.textContent).toContain('Guarded terminal actions are unavailable in this browser build.');
         act(() => { destination('Agent').click(); });
         expect(host.textContent).toContain('No messages yet');
         act(() => { button('Inspector').click(); });
