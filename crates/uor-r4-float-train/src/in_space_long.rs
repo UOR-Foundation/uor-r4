@@ -856,7 +856,6 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
         ("retain_rates", config.retain_rates),
         ("fold_scores", config.fold_scores),
         ("reflect_floor", config.reflect_floor),
-        ("fix_input_table", config.fix_input_table),
         ("train_as_served", config.train_as_served),
     ] {
         let declared = source_config_bool(&source, name, &source_path)?;
