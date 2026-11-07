@@ -2,7 +2,11 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-307. The one track is Casey's, 6 Nov: "Yes, one track" (#2028 6675163438). Every claude unit works to make the trunk's no-memory top-1 beat its TRAIN's unigram and T2 on the human held-out panel, beyond the paired band, at every seed.
 
-TEST FITNESS: not yet reviewed.
+TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 7 Nov). It found no blockers. Its four majors and six minors are applied:
+- the outcome map covers a seed NOT_RUN after its rerun, and a lever that is not read;
+- I-t's scoring margin and extend line match the measured figures;
+- I-s pins the lever's b side to claude-301's (b64L) grades;
+- row 6 is split, the McNemar floor and the cost are taken from the raw files, I-r compares every per-seed field, the rerun root is plain, and the smoke shows the checkpoint naming.
 
 **Why.**
 - **claude-301 (#3800) met the bar** with (b64L) on TRAIN D3 at 16,384 steps: "met; unseen ahead". Its tokens lever at batch 64, 8,192 → 16,384 steps, read `ahead` (d +94,130 / +59,512, band 34,618).
@@ -83,14 +87,18 @@ Verdict words are `scale-probe pair`'s, at both seeds. Mixed reads "not distingu
 
 | # | bar at 32,768 | lever | the next unit |
 |---|---|---|---|
+| 0a | a seed NOT_RUN after its rerun, for an instrument fault (a gate, out of memory, setup) | — | **`blocked`.** No reading is made on one seed, and nothing is called a negative (§4.2). Next: repair the instrument, then rerun the seed under this sheet. |
+| 0b | a seed NOT_RUN after its rerun, for a cause classed as a mechanism result (a divergence at a recipe that trained at 16,384) | — | **`diagnostic stop`,** recorded as a result about 32,768 steps at this recipe. The trunk keeps 16,384 steps. Next: a decision review in the REPORT. |
 | 1 | not met (ahead of T2 only, not distinguishable, or behind T2) | any | **Not met at 32,768 steps,** configuration only. The grade is checked first. The trunk keeps 16,384 steps, where claude-301 met the bar. Next: a decision review in the REPORT. |
+| 1b | met | not read (I-r or I-s failed) | **The bar stands; the lever waits on the laptop.** Repair the grade or pair instrument and re-read from the sealed checkpoints, with no pod. The trunk's steps stay undecided until then. |
 | 2 | met | `ahead`, and the unseen lever `ahead` | **More passes move the trunk, on contexts TRAIN does not hold.** The trunk trains 32,768 steps. Next: the tokens lever again, 65,536 steps on D3, under its own sheet. Its cost (about $14 at today's prices) is put to Casey before any pod, since it is past this approval. |
 | 3 | met | `ahead`, the unseen lever not `ahead` | **More passes move the trunk on contexts D3 holds only.** The trunk trains 32,768 steps. Next: D4 at 32,768 steps (about 5.4 passes of D4), under its own sheet, since more distinct text is where unseen contexts come from. |
 | 4 | met | `inside` | **Twice the steps buy nothing measurable** within the lever's band. The trunk keeps 16,384 steps, at half the cost. Next: (b64L) at width 512, 16,384 steps on D3, under its own sheet with I-m. |
 | 5 | met | `mixed` | **Not distinguishable at two seeds.** The trunk keeps 16,384 steps. Next: a decision review in the REPORT, using the mid-run reading and the DEV curves. |
-| 6 | met | `behind` | First the grade and I-r are checked. If they hold: **longer training hurts on D3 at this recipe.** The trunk keeps 16,384 steps. Next: D4 at 32,768 steps under its own sheet if the unseen lever is `behind` too (14.4 passes over-fit D3's text); otherwise a decision review in the REPORT. |
+| 6a | met | `behind`, and the unseen lever `behind` | First the grade and I-r are checked. If they hold: **14.4 passes over-fit D3's text at this recipe.** The trunk keeps 16,384 steps. Next: D4 at 32,768 steps, under its own sheet. |
+| 6b | met | `behind`, the unseen lever not `behind` | First the grade and I-r are checked. If they hold: **longer training hurts on contexts D3 holds.** The trunk keeps 16,384 steps. Next: a decision review in the REPORT. |
 
-**A seed that is NOT_RUN** reruns once under this sheet, at the seal root `runs-2/`, before any reading. If the rerun is NOT_RUN for the same class of cause (out of memory, divergence, a gate), that is recorded as the result, and the table is read as row 1. No reading is made on one seed.
+**A seed that is NOT_RUN** reruns once under this sheet, before any reading. The first attempt seals to `runs/s{1,2}/`; the rerun seals to the new root `runs-2/s{1,2}/` (L-002), and Step 5's empty-root check applies to both. A rerun that is NOT_RUN again, for the same cause or another, makes no third attempt: rows 0a and 0b read it, by the class of its last cause. No reading is made on one seed.
 
 ## Instrument checks
 
@@ -104,21 +112,26 @@ These are registered here, before any pod goes up.
   - **Each run's `config.json`:** must name D3's tokens and mask shas, width 256, read 4, batch 64, micro-batch 16, 32,768 steps (128 for the smoke), the pod's seed, and the recipe's flags, with no turn memory.
 - **I-p, the pin:** the job refuses any SHA argument but the pin (exit 2). The source it builds must be a clean checkout at exactly the pin, or it exits before building (exit 3). Every `uor-pod up` passes `--ref` with the pin. The laptop gate test mutates both exits.
 - **I-1, the smoke:** a 128-step run at `--eval-every 32` on D3, at the pod's seed, exits 0 with a finite loss.
+  - **Recorded with it:** the smoke wrote `models/step-000064`, which shows the trainer saves at every eval under the name the mid-run reading scores (`models/step-016384`). claude-306's seal lists `models/step-001024`, `step-002048` and on at every eval. If the smoke's folder is missing, the mid-run reading is marked lost before the long run starts.
 - **I-m, from the smoke:** the largest `mem.log` sample inside the smoke's window is below 90% of the card. Otherwise the arm is NOT_RUN at that seed.
   - claude-306's (b64L) on D4 peaked at 26,832 / 26,928 of 32,607 MiB. Doubling the steps changes no tensor size.
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB. Otherwise the arm is NOT_RUN at that seed.
   - What it cannot see: growth slower than about 16 MiB a step passes I-f. The backstop is the run's own out-of-memory stop, and over 32,768 steps the watcher's memory line.
-- **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64, from the smoke. The projected wall is W = used + 1.05 × r × 32,768 + 2,400 s (two scorings), written to `it.txt`.
-  - No gate acts on W.
-  - If W exceeds 24,000 s, the watcher's limit is extended to W + 3,600 s under the charter's extend rule, and the REPORT says so.
+- **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64, from the smoke. The projected wall is W = used + 1.05 × r × 32,768 + 600 s, written to `it.txt`. The 600 s is two scorings at about 240 s each, plus a margin.
+  - No gate acts on W. At claude-306's r of 0.632–0.636 s a step, W is about 22,700–22,800 s.
+  - **The watcher enforces two limits:** MAXSEC, 25,200 s (7 h) from the pod's start, and a budget of PRICE × 7 h.
+  - If W exceeds 25,200 s, both are extended under the charter's extend rule: MAXSEC to W + 1,800 s, and the budget to PRICE × (W + 1,800) / 3,600. The REPORT says so. If that puts the two pods past $9.80, Casey gets one [claude, for Casey] note on #2028, and the healthy run goes on.
 - **I-4:** every graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
 - **I-5:** each scored checkpoint's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes, as in claude-301's job. That holds for both the step-16,384 and the step-32,768 checkpoints.
 - **I-r, run on the laptop before the lever is read:**
   - claude-301's (b64L-16k) grades are re-paired against D3's T2, with `clean=` D3's seen set. The `scale-probe` build used is the one that grades this unit, and its binary sha is recorded.
-  - Every `d`, `band`, `spread` and `verdict` field of the result must equal claude-301's `pair/b64L-vs-t2.json`. That covers the whole panel (+75,038 / +85,590, band 10,552), the unseen rows (+56,353 / +64,841, band 8,488) and every sub-panel.
+  - Every `b`, `c`, `d`, `band`, `position`, `spread` and `verdict` field of the result must equal claude-301's `pair/b64L-vs-t2.json`. That covers the whole panel (+75,038 / +85,590, band 10,552), the unseen rows (+56,353 / +64,841, band 8,488) and every sub-panel.
   - Its `inputs_grade_sha256` must also equal the reference's: `a1`, `a2`, `table`, and `clean_seen_sha256` `53000ba1…`.
   - If it fails, the lever and the mid-run pairs are not read. (b64L-32k)'s bar still stands.
-- **I-s, on the lever:** the lever's `inputs_grade_sha256.clean_seen_sha256` must be the sha256 of D3's `seen.json` (`53000ba1…`), and that file's `excluded_sha256` must be `94f6335f…`. Otherwise the lever is not read.
+- **I-s, on the lever:** three checks, or the lever is not read (row 1b):
+  - the lever's `inputs_grade_sha256.clean_seen_sha256` is the sha256 of D3's `seen.json` (`53000ba1…`);
+  - that file's `excluded_sha256` is `94f6335f…`;
+  - the lever's `b1` and `b2` are claude-301's (b64L) grades, `e17a13548d09304d901a93683cadb6c7695200261e86770e319003bfc976523a` and `3170c779def7ef376fdc11c96232f3f6ddb2809c436855121fd24be8ed7ab5a1`. These are the `a1` and `a2` of claude-301's `pair/b64L-vs-t2.json`, which I-r re-derives. So the b side cannot be (b64S), whose grades sit in the same folder.
 - **Not repeated: claude-301's I-e** (accumulation against the whole batch). It passed at this pin, recipe and binary on both of claude-301's hosts, and this unit does not change the trainer's arithmetic. I-0 still runs claude-300's three micro-batch tests by name.
 
 ## Steps
@@ -144,17 +157,21 @@ These are registered here, before any pod goes up.
 - **The bar:** claude-301's (b64L-16k) against D3's T2 read d +75,038 / +85,590, band 10,552 (all spread). The bar here has about 7× headroom if (b64L-32k) is no worse.
 - **The tokens lever** pairs seed s with seed s. At the pin, each epoch's order is `epoch_order(n, seed, epoch)` (`in_space_long.rs:2363`), which does not depend on `--steps`. So both runs see the same batches for their first 16,384 steps, and the pairing is not arbitrary, as claude-306's was. The two runs differ in their learning rate from step 1, and in the second run's last 16,384 steps.
   - claude-301's own tokens lever (8,192 → 16,384) had a band of 34,618, all spread. A like spread here means an `inside` covers gains up to about 35,000 rows, about 10% of (b64L-16k)'s 331,698 / 342,250 top-1.
-  - The McNemar floor, 2·√(b+c), is about 1,100 rows over the whole panel.
+  - The McNemar floor, 2·√(b+c), was 817 and 674 rows on that lever (b + c of 166,980 and 113,460).
   - So an `inside` means "within that band", not "no effect".
+  - When the band is the two-seed spread, `ahead` needs the smaller d to exceed |d₁ − d₂|. A real gain whose seeds differ by more than 2× reads `mixed`, so row 5 is a likely outcome.
 
 ## Cost
 
-- **claude-306's measured (b64L) runs on D4:** 0.632 / 0.636 s a step, 10,409 / 10,489 s of training, on RTX 5090s at $0.563/h. Each pod billed $1.81, so about 1,200 s a pod went to setup, the smoke, one scoring and the seal. One scoring took about 240 s.
+- **claude-306's measured (b64L) runs on D4,** on RTX 5090s at $0.563/h:
+  - 0.632 / 0.636 s a training step, from the smoke (`it.txt`);
+  - 10,641 / 10,727 s of trainer wall time (`b64L-s{1,2}.train.seconds`), about 0.65 s a step with the DEV evals;
+  - $1.81 billed a pod, so about 930 s a pod went to setup, the smoke, one scoring and the seal. One scoring took about 240 s.
 - **Here:**
-  - Training: 32,768 × 0.636 s ≈ 20,840 s, about 5.8 h.
-  - Setup, the inputs, the smoke, two scorings and the seal: about 0.4 h.
-  - So about 6.2 h a pod: $3.50 at $0.563/h, and $4.35 at the ceiling of $0.70/h. For both: $7.00–8.70. Casey approved about $9.
-- **The cap:** 2 pods × 7 h × $0.70 = $9.80. Each watcher's budget is PRICE × 7 h, with no rounding up. The charter's extend rule holds: a healthy run is never cancelled for a self-set budget.
+  - Training: 2 × claude-306's wall, about 21,370 s or 5.9 h.
+  - Setup, the inputs, the smoke, two scorings and the seal: about 1,170 s.
+  - So about 6.3 h a pod: $3.53 at $0.563/h, and $4.38 at the ceiling of $0.70/h. For both: $7.05–8.77.
+- **The cap:** 2 pods × 7 h × $0.70 = $9.80. That is above Casey's "about $9", and is reached only at the price ceiling with both pods running their full 7 h. Each watcher's budget is PRICE × 7 h, with no rounding up. The charter's extend rule holds: a healthy run is never cancelled for a self-set budget.
 
 ## Stop rule
 
@@ -172,5 +189,11 @@ These are registered here, before any pod goes up.
 3. **The lever:** the tokens lever against claude-301's sealed (b64L-16k) grades, decided on all rows, since both arms share TRAIN.
 4. **The mid-run reading** is new: the step-16,384 checkpoint is scored and paired, descriptive only.
 5. **The price ceiling** is $0.70/h, in place of $1.15/h, so the cap stays near Casey's approval.
-6. **I-t's** projection adds two scorings, and its extend line moves to 24,000 s.
-7. **The seal path** is `results/claude/one-model-end-to-end-d3-tokens-2026-11-07/runs/s{1,2}/`.
+6. **I-t's** projection adds two scorings (600 s), and its extend line is the watcher's own limit, 25,200 s.
+7. **The seal path** is `results/claude/one-model-end-to-end-d3-tokens-2026-11-07/runs/s{1,2}/`, and `runs-2/` for a rerun.
+8. **FIT round 1:**
+   - rows 0a and 0b read a seed NOT_RUN after its rerun as `blocked` or `diagnostic stop`, never as row 1;
+   - row 1b covers a met bar with a lever that is not read;
+   - row 6 is split into 6a and 6b;
+   - I-t's margin and extend line, I-s's b-side shas, and I-r's full field list;
+   - the cost, from claude-306's raw wall times.
