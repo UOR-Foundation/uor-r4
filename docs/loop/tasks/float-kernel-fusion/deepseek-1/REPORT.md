@@ -1,7 +1,8 @@
 # REPORT: float-kernel-fusion, deepseek-1 (the deferred fused-cost experiment)
 
 Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kernel-fusion.md)
-(#3678). [ORDER](./ORDER.md). Base: `f66f023d1`. Head: `820a1103b`.
+(#3678). [ORDER](./ORDER.md). Base: `f66f023d1`. Plan/FIT head: `820a1103b`; the final
+delivery head is bound by the PR's exact-head review.
 
 ## What did not work, first
 
@@ -36,7 +37,7 @@ Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kerne
 
 - **No model or device measurement ran.** The only result is the documentation and readiness
   verdict: FIT at `820a1103b`, with compute held for the current project direction.
-- **Host verification:** 295 float-train library tests passed; every-target CPU `cargo check`
+- **Host verification:** 297 float-train library tests passed; every-target CPU `cargo check`
   passed; Clippy reported only the pre-existing crate and vendor warnings.
 - **No default changed:** `--fused-quantize` still defaults off. A later pre-run review and the
   registered short/long-context run are required before the training default can change.
@@ -44,7 +45,7 @@ Lab: deepseek. Item: [float-kernel-fusion](../../../../roadmap/items/float-kerne
 ## Checks run at the head
 
 - `cargo test --release --locked -p uor-r4-float-train --lib`, with
-  `CARGO_TARGET_DIR=local/deepseek/fusion-target`: **295 passed, 0 failed**.
+  `CARGO_TARGET_DIR=local/deepseek/fusion-target`: **297 passed, 0 failed**.
 - `cargo check --offline --locked -p uor-r4-float-train --all-targets`, with
   `CARGO_TARGET_DIR=local/deepseek/fusion-check`: **passed**.
 - `cargo clippy --offline --locked -p uor-r4-float-train --lib --no-deps`: completed with only
