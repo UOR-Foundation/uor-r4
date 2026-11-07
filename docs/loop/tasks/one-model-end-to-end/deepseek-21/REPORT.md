@@ -48,10 +48,18 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   post-memory served token. The sequence helper consumes every target exactly once and
   allows an unfed final target at the context boundary. Generation and rank timing are now
   reported separately.
-- Added eleven focused tests covering the unchanged one-user render, explicit turns,
+- **The latest review found two remaining faults.** The first diagnostic ranked only the
+  raw L1 order, so a point-key opening could be served at rank 1 but reported far below it.
+  The CPU-train files also were not named in scope. The diagnostic now
+  reports `rank` in the actual served order and `raw_rank`, names `raw_nearest_token`, and
+  marks `point_key_override`; a point-key opening therefore holds rank 1 even when its raw
+  score would not. A fixture pins that case. The item and ORDER now name the two CPU-train
+  files explicitly; this records the owner-approved scope widening for the public
+  diagnostic required by this ORDER and changes no serving or training behavior.
+- Added twelve focused tests covering the unchanged one-user render, explicit turns,
   malformed/empty turns, EOS/reference alignment, acceptance, stop order, rank-tail
-  aggregation, switch parsing, nearest ties, teacher-forced target alignment and
-  nearest rank/order.
+  aggregation, switch parsing, nearest ties, the point-key override, teacher-forced target
+  alignment and nearest rank/order.
 
 ## Measurements
 
@@ -81,10 +89,12 @@ Outputs:
 
 ## Checks run at the head
 
-- `cargo test --offline --locked -p uor-r4-cpu-train fbs::tests`: 48 passed,
-  including nearest ties and exact teacher-forced target alignment.
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 460 passed, 4 ignored.
+- `cargo test --offline --locked -p uor-r4-cpu-train fbs::tests`: 49 passed,
+  including nearest ties, the point-key override and exact teacher-forced target
+  alignment.
 - `UOR_PANEL_TOKENIZER=<pinned tokenizer> cargo test --offline --locked
-  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 11 passed, 0 failed.
+  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 12 passed, 0 failed.
 - `cargo run --release --offline --locked --features cpu-parity --bin
   served-reply-panel` on the regenerated panel in both renderings: exit 0.
 - The one-user generation-only run reproduces claude-309's published totals:

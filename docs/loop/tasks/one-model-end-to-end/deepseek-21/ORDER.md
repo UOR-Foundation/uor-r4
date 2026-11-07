@@ -45,6 +45,9 @@ is absent:
 - `docs/labs/one-model-end-to-end/instrument/**`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-21/**`
 - `docs/research/notebook/float-training.md`
+- `docs/roadmap/items/one-model-end-to-end.md`
+- `crates/uor-r4-cpu-train/src/fbs.rs`
+- `crates/uor-r4-cpu-train/src/lib.rs`
 
 ## Done when
 

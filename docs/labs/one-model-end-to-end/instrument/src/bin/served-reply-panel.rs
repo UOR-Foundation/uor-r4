@@ -516,10 +516,18 @@ fn teacher_forced_row(
     let diagnostics = forward
         .teacher_forced_nearest_ranks(&prompt, &reference_ids)
         .map_err(|e| e.to_string())?;
+    if diagnostics.len() != reference_ids.len() {
+        return Err(format!(
+            "{}: {} reference targets yielded {} ranks",
+            case.id,
+            reference_ids.len(),
+            diagnostics.len()
+        ));
+    }
     let mut target_ranks = Vec::with_capacity(reference_ids.len());
     let mut eos_rank = None;
     let mut candidate_count = 0;
-    for (target, diagnostic) in reference_ids.iter().zip(diagnostics) {
+    for (target, diagnostic) in reference_ids.iter().zip(&diagnostics) {
         candidate_count = diagnostic.candidate_count;
         target_ranks.push(diagnostic.rank);
         if *target == EOS {
@@ -538,14 +546,17 @@ fn teacher_forced_row(
 }
 
 fn teacher_forced_report(rows: Vec<TeacherForcedRow>) -> Result<serde_json::Value> {
+    if rows
+        .iter()
+        .any(|row| row.reference_ids.len() != row.target_ranks.len())
+    {
+        return Err("teacher-forced target count differs from its rank count".to_owned());
+    }
     let targets: Vec<usize> = rows
         .iter()
         .flat_map(|row| row.target_ranks.iter().copied())
         .collect();
     let eos: Vec<usize> = rows.iter().filter_map(|row| row.eos_rank).collect();
-    if targets.len() != rows.iter().map(|row| row.target_ranks.len()).sum::<usize>() {
-        return Err("teacher-forced target count differs".to_owned());
-    }
     if eos.len() != rows.len() {
         return Err("teacher-forced rows do not each hold one EOS rank".to_owned());
     }

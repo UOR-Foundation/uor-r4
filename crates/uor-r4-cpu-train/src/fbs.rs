@@ -97,10 +97,17 @@ pub struct WriterTokenDiagnostic {
 #[serde(deny_unknown_fields)]
 pub struct NearestTokenDiagnostic {
     pub target_token: u32,
+    /// The target's rank in the actual served decision. A point-key opening
+    /// override occupies rank 1 even when its raw nearest score would not.
     pub rank: usize,
+    /// The target's rank before the point-key opening override, if any.
+    pub raw_rank: usize,
     pub candidate_count: usize,
     pub target_distance: i64,
     pub chosen_token: u32,
+    /// The nearest token by raw L1 score, before the point-key override.
+    pub raw_nearest_token: u32,
+    pub point_key_override: bool,
     pub chosen_distance: i64,
     pub target_minus_chosen_distance: i64,
 }
@@ -903,22 +910,48 @@ impl CpuFbsForward {
         let target = target_token as usize;
         let target_score = score(target);
         let chosen_score = score(served_token as usize);
-        let mut rank = 1;
+        let mut raw_rank = 1;
+        let mut raw_nearest_token = 0u32;
+        let mut raw_nearest_score = i64::MIN;
         for token in 0..self.vocab {
-            if token == target {
-                continue;
-            }
             let candidate = score(token);
-            if candidate > target_score || (candidate == target_score && token < target) {
-                rank += 1;
+            if candidate > raw_nearest_score
+                || (candidate == raw_nearest_score && token < raw_nearest_token as usize)
+            {
+                raw_nearest_score = candidate;
+                raw_nearest_token = token as u32;
+            }
+            if token != target
+                && (candidate > target_score
+                    || (candidate == target_score && token < target))
+            {
+                raw_rank += 1;
             }
         }
+        let point_key_override = served_token != raw_nearest_token;
+        let rank = if !point_key_override {
+            raw_rank
+        } else if target_token == served_token {
+            1
+        } else {
+            2 + (0..self.vocab)
+                .filter(|&token| token != target && token as u32 != served_token)
+                .filter(|&token| {
+                    let candidate = score(token);
+                    candidate > target_score
+                        || (candidate == target_score && token < target)
+                })
+                .count()
+        };
         Ok(NearestTokenDiagnostic {
             target_token,
             rank,
+            raw_rank,
             candidate_count: self.vocab,
             target_distance: -target_score,
             chosen_token: served_token,
+            raw_nearest_token,
+            point_key_override,
             chosen_distance: -chosen_score,
             target_minus_chosen_distance: chosen_score.wrapping_sub(target_score),
         })
@@ -2664,7 +2697,10 @@ mod tests {
             .nearest_token_diagnostic(&step.query_q12, step.token, step.token)
             .unwrap();
         assert_eq!(chosen.rank, 1);
+        assert_eq!(chosen.raw_rank, 1);
         assert_eq!(chosen.chosen_token, step.token);
+        assert_eq!(chosen.raw_nearest_token, step.token);
+        assert!(!chosen.point_key_override);
         assert_eq!(chosen.target_distance, chosen.chosen_distance);
         assert_eq!(chosen.target_minus_chosen_distance, 0);
         assert_eq!(chosen.candidate_count, cpu.vocab);
@@ -2693,6 +2729,9 @@ mod tests {
             .count()
             + 1;
         assert_eq!(diagnostic.rank, manual);
+        assert_eq!(diagnostic.raw_rank, manual);
+        assert_eq!(diagnostic.raw_nearest_token, step.token);
+        assert!(!diagnostic.point_key_override);
         assert!((1..=diagnostic.candidate_count).contains(&diagnostic.rank));
     }
 
@@ -2704,6 +2743,26 @@ mod tests {
         let diagnostic = cpu.nearest_token_diagnostic(&query, 1, 0).unwrap();
         assert_eq!(diagnostic.chosen_token, 0);
         assert_eq!(diagnostic.rank, 2);
+        assert_eq!(diagnostic.raw_rank, 2);
+    }
+
+    #[test]
+    fn nearest_diagnostic_ranks_the_point_key_override_as_served() {
+        let (_model, mut cpu) =
+            memory_fixture_with(83, CpuFbsHead::Nearest, false, false, 1.0, Some(vec![99]));
+        cpu.step(0, CpuFbsHead::Nearest).unwrap();
+        cpu.step(7, CpuFbsHead::Nearest).unwrap();
+        cpu.mark_reply_start();
+        let opening = cpu.step(11, CpuFbsHead::Nearest).unwrap();
+        assert_eq!(opening.token, 99);
+
+        let diagnostic = cpu
+            .nearest_token_diagnostic(&opening.query_q12, opening.token, opening.token)
+            .unwrap();
+        assert!(diagnostic.point_key_override);
+        assert_eq!(diagnostic.rank, 1);
+        assert!(diagnostic.raw_rank > 1);
+        assert_ne!(diagnostic.raw_nearest_token, opening.token);
     }
 
     #[test]
