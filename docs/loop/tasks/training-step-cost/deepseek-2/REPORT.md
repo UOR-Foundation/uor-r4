@@ -17,6 +17,10 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
   an all-equal row and returned `[0,8,4,2,10,6,1,9]`; the new selector returns
   `[0,1,2,3,4,5,6,7]`. Non-tied rows agree. The flag is therefore an intentional deterministic
   tie mode, not a bit-identical drop-in on ties, and remains off by default.
+- **The one-step model test is not gradient-identical.** Its loss is bit-equal with and without
+  the flag, but `embedding.weight` moves by 0.000052805 at scale 0.007034846 (0.75% relative) on
+  the synthetic nearest-objective step. Tied rival choices explain the difference; it is a
+  negative for exact behavioral preservation, not floating noise.
 - **The selector expands the item's scope.** Its own module needs `build.rs`, `lib.rs`,
   `cuda_stack_kernels.rs` and two new source files. The item file records that scope in this
   branch; the policy checker reports it as an advisory because it reads the pre-change scope at

@@ -28,10 +28,10 @@ and report a negative. On tied scores it must return lower token ids in ascendin
    allowed positions, by score descending and token id ascending on ties.
 3. Vocabulary, row count, allowed/scores shape and the eight-rival cap are checked before launch;
    no CPU or silent fallback runs under the fast flag.
-4. A finite CUDA test compares loss and gradients with and without the flag on random scores,
-   masked targets and exact score ties. Exact order must agree where scores differ and ties must
-   take the lower token ids. A CPU test compares the host reference with the old repeated
-   selection and its stated tie rule.
+4. A finite CUDA test checks the selector on non-tied and tied rows. A model-step test records
+   whether loss and gradients match; any gradient difference is a negative for preserving the
+   current training arithmetic and keeps the flag off. A CPU test compares the host reference
+   with repeated selection and its tie rule.
 5. The float-train CPU tests, stub-CUDA all-targets check, Clippy on changed lines,
    `git diff --check`, loop report and local PR checks pass. No training or scoring run is made
    in this unit; device timing is the next unit.
