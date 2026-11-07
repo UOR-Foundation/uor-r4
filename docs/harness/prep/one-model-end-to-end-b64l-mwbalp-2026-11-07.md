@@ -67,7 +67,7 @@ At seeds 1 and 2, from `served-reply-panel` on (b64L-mw)'s exported `step-016384
 - **Reply length:** the median of `rows[].reply_ids` lengths.
 
 Recorded beside them, descriptive only:
-- **The DEV curve:** `progress.jsonl`'s `dev_nearest.hits` at every 1,024 steps, against claude-301's (b64L-D3). A peak followed by a fall reads as over-fitting at 26.8 passes.
+- **The DEV curve:** `progress.jsonl`'s `dev_nearest.hits` at every 1,024 steps, against claude-301's (b64L-D3). A peak followed by a fall reads as over-fitting at 10.6 to 17.5 passes.
 - **The no-memory panel:** `scale-probe grade` with `train=` `mw-balp/train`, which builds that corpus's T2 and unigram. Two pairs, with no `clean=`, on all rows:
   - (b64L-mw) against (b64L-D3)'s sealed grades (claude-301's `e17a1354…`, `3170c779…`): the cost of the swap on human held-out text;
   - (b64L-mw) against `mw-balp`'s own T2 and unigram.
@@ -173,3 +173,29 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 4. **I-c and I-x** are new: two scorer controls, one with no stops and one with 242, and the export check.
 5. **The watcher** has MAXSEC 14,400 s and a budget of PRICE × 4 h, for one 16,384-step run and one scoring.
 6. **The seal path** is `results/claude/one-model-end-to-end-b64l-mwbalp-2026-11-07/runs/s{1,2}/`, and `runs-2/` for a rerun.
+7. **D67 review** (a fresh pre-run review of the scripts, 7 Nov: GO WITH CHANGES, no blockers). Applied:
+   - passing MAXSEC or BUDGET logs one NOTICE and the watcher keeps watching, so `seal=0` still takes a pod down after 4 h. Before, the watcher exited and a healthy run that finished late would bill idle (L-004). A hung run is still caught by the stall stop;
+   - the watcher refuses a PRICE above $0.70/h, the sheet's ceiling, in place of claude-306's $1.15/h;
+   - `trained_ok` requires the checkpoint, `models/step-000064` for the smoke and `models/step-016384` for the run, with a gate test and a mutation.
+
+## Pre-run review
+
+**GO**, for the run unit, on these scripts in `local/claude/claude-312/`:
+- `job-312.sh` `fcbaae10ae5e504996ac561cb4da7c7d464aa85d9c20926b886d7c7605b395dd`
+- `chain-312.sh` `9fcef8ef53f86d0b0ee223d5aa33c31fc68e06a07469f532c7353cb0e8a42fd1`
+- `seal-312.sh` `3653c9bf29dcfe16d8cb993296c2e20b3735640fa63db876d5a456f9174c94d5`
+- `watch-312.sh` `8d77c59c0e3228ea3b6aa0481346052764f86598d0890c3b3374ff61b7ed59aa`
+
+**The chain, end to end:**
+1. The pin's trainer loads `mw-balp/train` through `--train-split` (`load_named_split`, `in_space_long.rs:11214`), which re-checks both shas. It is also the pin's default TRAIN.
+2. The job fetches TRAIN into the folder it trains from.
+3. The seal is refused into a non-empty root.
+4. Export, serving and scoring are laptop tools already merged, with both I-c controls passing.
+
+**Laptop gates at these hashes:**
+- `gt/test-gates.sh`: 24 ok, 0 FAIL;
+- `gt/mutate.sh`: 8 of 8 mutations caught;
+- `gt/test-seal.sh`: 7 ok;
+- `bash -n` ok on every script.
+
+**What each result unlocks** is the outcome map above. **The lease:** 2 pods at ≤ $0.70/h inside the 4-pod, $8/h caps, checked with `uor-pod status` at launch.
