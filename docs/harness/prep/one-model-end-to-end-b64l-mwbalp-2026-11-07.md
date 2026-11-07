@@ -2,7 +2,11 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-312. The step is Casey's "Yes, pipeline first" (#2028 6709947526): the next training run is judged by the served-reply score.
 
-TEST FITNESS: not yet reviewed.
+TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 7 Nov). It found no blockers. Its three majors and six minors are applied:
+- collapse is counted among EOS-stopped rows only, with (b64L-D3)'s figure on the same measure, since (b64L-D3) seed 1 already repeats one looped reply 76 times;
+- I-c gains a positive control, claude-259's (b) seed 1, which stops on EOS;
+- repetition is counted in the trainer's document windows, not in positions;
+- I-t's W, claude-306's wall figures, the job's I-3 lines, row 4's floor, row 5's suspects and the layout inference are corrected.
 
 **Why.**
 - **(b64L) on D3 never stops.** claude-309 (#3828) scored claude-301's sealed (b64L) at 16,384 steps, exported to the integer artifact, on `m2-fresh256`: 0 of 256 rows complete, and every reply ran to the 64-token cap (0 EOS stops) at both seeds.
@@ -30,14 +34,20 @@ At (b64L)'s recipe and pin, with only TRAIN changed from D3 to `mw-balp/train`, 
   - `tokens.u16` `3dee858f84b750f507ceb3dc3f393711741950954735efaaf61bf704c017a4c8`, 15,025,658 bytes: 7,512,797 tokens after the 64-byte header;
   - `response_mask.u8` `b5e7352d67d6883a833155a5fd397a03f6d4f1b2649e3d4ec3e2ea7d95b949e3`, 7,512,797 bytes;
   - 2,425,925 scored targets, 212,968 of them EOS (claude-311's `mwbalp.json`, `d7179a4b…`).
-  - This is the corpus claude-259's (b) and (h) trained on. Their served artifacts stop under `served-reply-panel`'s rendering, so the corpus's dialogue layout matches the panel's.
+  - The store folder holds these two files only, with no `manifest.json`. The job's I-3 checks the two shas directly. `scale-probe grade` loads TRAIN with `need_manifest = false` (`lib.rs:555`).
+  - 60,000 documents (60,000 BOS tokens).
+  - This is the corpus claude-259's (b) and (h) trained on. Their served artifacts stop under `served-reply-panel`'s rendering. That the corpus's dialogue layout matches the panel's is an inference from this, not a check of the corpus's encoder.
 - **DEV in-run evaluation:** claude-261's `ft/dev`, at the pins claude-306's job checks.
 - **The no-memory panel:** claude-295's four held-out folders, at claude-306's per-folder pins: 1,460,697 rows, identity `5f88a5b3…`.
 - **The served panel:** `m2-fresh256`, inputs `1de2fc28…`, labels `3b5c5477…`, plan `0ed1ab98…`, tokenizer `d36d3e87…`, checked by the bin against its manifest.
 
 ## Repetition
 
-16,384 steps × 64 × 192 = 201,326,592 positions, about **26.8 passes** over `mw-balp/train`'s tokens. D3 at the same steps was about 7.2 passes. A model can memorise a corpus seen 27 times, so a stock-line reply is a likely outcome. The sheet does not count it against the stopping bar, since stopping is what this lever reads. It is recorded as its own reading (collapse, below) and decides the next unit through the outcome map.
+The trainer reads document windows, not a flat stream. At the pin, `build_document_windows` (`hamilton_sheet.rs:1888-1896`) cuts each document into chunks of at most 192 targets, never crosses a document start, and pads a short window with BOS.
+- **The window count:** at least the 60,000 documents, and at most 60,000 + 7,512,797 / 192 ≈ 99,130. The run's own count is recorded from the trainer's log.
+- **Passes:** 16,384 steps × 64 = 1,048,576 windows seen, so about **10.6 to 17.5 passes** over `mw-balp/train`'s windows. D3 at the same steps was about 7.2.
+- **Scored targets per step are far fewer than on D3.** The mean document is about 125 tokens, so most windows are one short, padded document, and about a third of each document's targets are scored.
+- **A stock-line reply is a likely outcome** at this many passes. It is not counted against the stopping bar, since stopping is what this lever reads. It is recorded as its own reading (collapse, below), and it decides the next unit through the outcome map.
 
 ## Arms
 
@@ -53,7 +63,7 @@ One arm to train, at two seeds, one pod per seed. The steps are fixed: no gate c
 At seeds 1 and 2, from `served-reply-panel` on (b64L-mw)'s exported `step-016384`:
 - **Stops:** EOS, BOS, cap and context counts, of 256.
 - **The panel's own measures:** rows complete (of 256) and pairs both complete and distinct (of 128).
-- **Collapse:** the number of distinct reply texts, and the count of the most common reply, by `jq` over `rows[].reply_text`, as in claude-311.
+- **Collapse:** among the EOS-stopped rows only, the count of the most common reply text, by `jq` over `rows[]` where the stop is EOS. Also recorded: the distinct reply texts over all 256 rows, and the most common reply over all rows, as in claude-311. (b64L-D3)'s and claude-259's figures are recomputed from their outputs on the same measures.
 - **Reply length:** the median of `rows[].reply_ids` lengths.
 
 Recorded beside them, descriptive only:
@@ -68,7 +78,8 @@ Recorded beside them, descriptive only:
 Fixed before any run.
 - **Stopping:** "the corpus makes (b64L) stop" holds if (b64L-mw) stops on EOS on **at least 128 of 256** rows at **both** seeds. (b64L-D3) stopped on 0 of 256 at both.
 - **The panel's bar:** at least 104 rows complete and at least 52 pairs, at both seeds. Reported; it decides row 1 only.
-- **Collapse:** a seed is collapsed if its most common reply covers **at least 64 of 256** rows. claude-259's six artifacts each had 128–152.
+- **Collapse:** a seed is collapsed if, among its EOS-stopped rows, one reply text covers **at least 64**. The count is over EOS-stopped rows, because (b64L-D3) seed 1 already repeats one looped, capped reply 76 times (claude-309). A count over all rows would read a capped loop as the corpus's collapse.
+  - **Reference figures on this measure,** computed from the existing outputs: claude-259's (b) seeds 1–3 have 129 / 128 / 128, and its (h) seeds have 152 / 146 / 128. (b64L-D3) has 0 / 0, against 76 / 36 over all rows.
 
 ## What each outcome unlocks
 
@@ -81,9 +92,9 @@ Read top to bottom; the first row that matches decides.
 | 0c | I-c fails, or an export or score fails on the laptop with both seals present | **`blocked`, no pod.** Repair the export or scorer and re-read from the seals. |
 | 1 | the panel's bar met at both seeds | **The served model answers.** Next: the trunk trains on `mw-balp/train` (or a D3 mix) under its own sheet, with the no-memory cost read from this unit. |
 | 2 | stopping met, neither seed collapsed | **The corpus makes (b64L) stop, and its replies vary.** Recall is the remaining gap. Next: a D3 + `mw-balp` mix at (b64L)'s recipe, so the trunk keeps D3's held-out gains, under its own sheet. |
-| 3 | stopping met, a seed collapsed | **The corpus makes (b64L) stop, and it collapses at this recipe too.** Collapse then comes with the corpus (about 27 passes), not with claude-259's recipe. Next: a decision review in the REPORT on a larger dialogue corpus or the mix. |
-| 4 | at least one EOS stop at some seed, stopping not met | **The corpus raises stopping, not to the bar.** Next: a decision review using the stop counts and the DEV curve. |
-| 5 | 0 EOS stops at both seeds | **The corpus alone does not make (b64L) stop,** configuration only (§4.1). claude-259's recipe differences (objective `cell`, turn memory) are the next suspects. Next: a decision review in the REPORT. |
+| 3 | stopping met, a seed collapsed | **The corpus makes (b64L) stop, and its stopped replies collapse at this recipe too,** as claude-259's did at theirs. Next: a decision review in the REPORT on a larger dialogue corpus or the mix. |
+| 4 | at least 8 EOS stops at some seed, stopping not met (a seed split such as 256 / 0 lands here) | **The corpus raises stopping, not to the bar.** Next: a decision review using the stop counts and the DEV curve. |
+| 5 | fewer than 8 EOS stops at each seed | **The corpus alone does not make (b64L) stop,** configuration only (§4.1). claude-259's other differences are the next suspects: objective `cell`, turn memory 8, batch 16, 8,192 steps, and whatever makes its served artifacts 51,310,784 bytes against (b64L)'s 2,156,416 at the same width 256. Next: a decision review in the REPORT. |
 
 A seed that is NOT_RUN reruns once, sealing to the new root `runs-2/s{1,2}/` (L-002). A second NOT_RUN reads by row 0a or 0b, by the class of its last cause.
 
@@ -99,19 +110,24 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 - **I-1, the smoke:** 128 steps at `--eval-every 32` on `mw-balp/train`, at the pod's seed, exits 0 with a finite loss and writes `models/step-000064`.
 - **I-m, from the smoke:** the largest `mem.log` sample inside the smoke's window is below 90% of the card. claude-306's (b64L) peaked at 26,832 / 26,928 of 32,607 MiB; TRAIN's size changes no tensor.
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB.
-- **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64. W = used + 1.05 × r × 16,384 + 300 s, written to `it.txt`. At claude-306's r of 0.632–0.636 s, W is about 11,200 s.
+- **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64. W = used + 1.05 × r × 16,384 + 300 s, written to `it.txt`. claude-306's own projections were 12,967 / 13,054 s, so W is about 13,000 s. At claude-301's slowest rate, 0.698 s a step, W is about 14,100 s.
   - **The watcher:** MAXSEC 14,400 s (4 h) from the pod's start, and a budget of PRICE × 4 h.
-  - If W exceeds MAXSEC less the pod's setup time (`up-sS.epoch`), both are extended under the charter's extend rule, and the REPORT says so.
+  - If W exceeds MAXSEC less the pod's setup time (`up-sS.epoch`), both are extended under the charter's extend rule, and the REPORT says so. On a slow card that is plausible, and the spend can then pass $5.60, still near the ORDER's "about $6".
 - **I-5:** the no-memory scoring's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes, as in claude-306's job.
 - **I-4:** each graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
-- **I-c, the scorer control, on the laptop before any (b64L-mw) reading:** `served-reply-panel` at `be3d4cb0…` re-scores claude-308's seed-1 (b64L-D3) artifact (`9a370566…`). Its `rows` must equal those of claude-309's seed-1 output `d02ec432…`, field by field except timing: 0 EOS stops, 256 cap stops.
+- **I-c, the scorer controls, on the laptop before any (b64L-mw) reading,** with `served-reply-panel` at `be3d4cb0…`. Each control's `rows` must equal the reference output's, field by field (the rows carry no timing):
+  - **Negative:** claude-308's seed-1 (b64L-D3) artifact (`9a370566…`) against claude-309's seed-1 output `d02ec432…`: 0 EOS stops, 256 cap stops.
+  - **Positive:** claude-259's (b) seed-1 artifact against claude-311's output `19849a18…`: 242 EOS stops, 14 cap stops. A scorer that never saw EOS would fail this one.
 - **I-x, the export:** each exported artifact's sha256 is recorded, and `served-reply-panel` accepts it (it refuses an artifact that serves the writer head).
 
 ## Steps
 
 1. The ORDER; this sheet's FIT; the D67 pre-run review of the job, chain, seal and watch scripts.
 2. On the laptop:
-   1. The job is claude-306's `job-306.sh`, with TRAIN swapped to `mw-balp/train`, the seal root and the watcher limits changed.
+   1. The job is claude-306's `job-306.sh`, with TRAIN swapped to `mw-balp/train`, and the seal root and watcher limits changed. The I-3 lines that change:
+      - `check_d4` (`job-306.sh:106-112`), which checks D4's root `SHA256SUMS`, its three `./mix/` lines and a `manifest.json`, becomes a check of the two `mw-balp/train` shas;
+      - the two D4 fetches (`:250-251`) become fetches of the two files under `w2-inputs/2026-10-25/driver-data/mw-balp/train/`;
+      - `--train-split` and the two train shas (`:141`), and the config check (`:168`), name `mw-balp/train`.
    2. Its gate tests and mutations.
    3. `bash -n` on every script.
    4. I-c.
@@ -136,8 +152,8 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 
 ## Cost
 
-- **claude-306's measured (b64L) runs,** on RTX 5090s at $0.563/h: 10,641 / 10,727 s of trainer wall, and $1.81 billed a pod, including about 930 s of setup, the smoke, one scoring and the seal. TRAIN's size does not change the step time: each step reads 64 × 192 positions.
-- **Here:** about 11,600 s a pod, 3.2 h. That is $1.81 at $0.563/h and $2.26 at the ceiling of $0.70/h; $3.6–4.5 for both.
+- **claude-306's measured (b64L) runs,** on RTX 5090s at $0.563/h: 10,409 / 10,489 s of training (its REPORT's table), and $1.81 billed a pod for the whole pod. The step time does not depend on TRAIN: each step reads 64 windows padded to 192.
+- **Here:** about $1.81 a pod at $0.563/h and $2.26 at the ceiling of $0.70/h; $3.6–4.5 for both.
 - **The cap:** 2 pods × 4 h × $0.70 = $5.60, inside the ORDER's "about $6". The charter's extend rule holds: a healthy run is never cancelled for a self-set budget.
 
 ## Stop rule
@@ -154,6 +170,6 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 1. **TRAIN:** `mw-balp/train` in place of D4, at the store path and shas above.
 2. **The deciding reading:** the served artifact's stops on `m2-fresh256`, read on the laptop, in place of the no-memory bar against T2.
 3. **The no-memory panel** is graded with `train=` `mw-balp/train` and read descriptively, with no seen set.
-4. **I-c and I-x** are new: a scorer control on claude-308's artifact, and the export check.
+4. **I-c and I-x** are new: two scorer controls, one with no stops and one with 242, and the export check.
 5. **The watcher** has MAXSEC 14,400 s and a budget of PRICE × 4 h, for one 16,384-step run and one scoring.
 6. **The seal path** is `results/claude/one-model-end-to-end-b64l-mwbalp-2026-11-07/runs/s{1,2}/`, and `runs-2/` for a rerun.
