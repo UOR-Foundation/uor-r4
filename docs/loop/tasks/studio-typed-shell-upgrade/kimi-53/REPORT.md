@@ -19,9 +19,9 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 ## Measurements
 
 - Focused bootstrap/main checks: **6/6 tests pass** (four bootstrap plus two main).
-- Complete typed suite: **383/383 tests across 46 files**.
+- Complete typed suite: **384/384 tests across 46 files**.
 - Plain-JS suite: **112/112 tests pass**.
-- TypeScript and application build: PASS; main JS **284.80 kB** (gzip **86.38 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
+- TypeScript and application build: PASS; main JS **284.83 kB** (gzip **86.39 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
 - Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **7 requests, zero external**.
 - Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
 - At the final committed repair state, harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks pass.

@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { foundation } from './main.js';
 
+const legacyWindow = window as unknown as {
+    __studioUi?: unknown;
+    __studioFiles?: unknown;
+    __studioApp?: unknown;
+};
+
 describe('foundation public entry', () => {
     beforeEach(() => {
         vi.resetModules();
         window.history.replaceState(null, '', '');
-        delete window.__studioUi;
-        delete window.__studioFiles;
-        delete window.__studioApp;
+        delete legacyWindow.__studioUi;
+        delete legacyWindow.__studioFiles;
+        delete legacyWindow.__studioApp;
     });
 
     afterEach(() => {
