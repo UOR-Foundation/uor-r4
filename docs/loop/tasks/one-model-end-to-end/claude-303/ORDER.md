@@ -40,7 +40,7 @@ Result: GO.
 
 ## Done when
 
-1. A host test shows that a GradStore from `backward()` holds a gradient for a detached input, and that the fix keeps exactly the variables' gradients with bit-equal values. The test fails with the fix set aside.
+1. A CUDA test, run on the pod in I-0, shows that a GradStore from `backward()` holds a gradient for a detached input, and that the fix keeps exactly the variables' gradients with bit-equal values. The test fails with the fix set aside. It is CUDA-only because the crate refuses model compute on the CPU (D24/D29).
 2. The crate's library tests pass at the head, on the laptop, and the CUDA tests pass on the pod, including `micro_batches_weighted_by_their_scored_rows_give_the_whole_batchs_step`.
 3. On one pod, under a one-page sheet with a non-author FIT and a D67 review, peak memory at width 1,024 is measured for batch 16 whole, micro4 and micro2, with the read on and off. It is sealed with a SHA256SUMS that was read back, and the pod is down.
 4. A REPORT with the negatives first, one row in `docs/research/notebook/float-training.md`, and `References #3407`.
