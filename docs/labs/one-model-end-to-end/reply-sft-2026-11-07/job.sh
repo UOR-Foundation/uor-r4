@@ -278,6 +278,19 @@ done
 sha256sum "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN" "$OVERLAP_BIN" \
   > "$RUN/binaries.sha256"
 
+check_progress() {
+  local progress=$1
+  [ -s "$progress" ] || die "training wrote no progress"
+  jq -e -s '(map(select(.step == 0)) | length) == 1 and
+    ([.[] | select(.step > 0)] | length) > 0 and
+    all(.[];
+      if .step == 0 then true
+      else ((.train_loss_mean | type) == "number" and
+        (.train_loss_mean | isfinite))
+      end)' \
+    "$progress" >/dev/null || die "progress has a non-finite loss"
+}
+
 grade_checkpoint() {
   local step=$1 checkpoint=$2 grade_dir artifact_dir snapshot
   grade_dir="$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step")"
@@ -330,6 +343,7 @@ score_checkpoint() {
   [ ! -e "$marker" ] || return 0
   [ -d "$checkpoint" ] || die "checkpoint $step is missing"
   install -d "$RUN/scores/$ATTEMPT"
+  check_progress "$TRAIN_RUN/progress.jsonl"
   grade_checkpoint "$step" "$checkpoint" ||
     die "checkpoint $step export and grade failed"
   artifact="$RUN/artifacts/$ATTEMPT/step-$(printf '%06d' "$step")/model.uorlut"
@@ -412,6 +426,11 @@ run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 0 base-one-user-generated >/dev/nu
   --manifest "$RUN/inputs/oasst2-heldout/manifest.json" \
   --max-evaluation 512 --max-replies 1 --reply-tokens 1 \
   --out "$RUN/control/base-grade.json"
+jq -e '.evaluation.samples == 512 and
+  .evaluation.sample_fingerprint ==
+    "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
+  "$RUN/control/base-grade.json" >/dev/null ||
+  die "base continuation grade did not use the registered 512-row sample"
 base_totals() {
   jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
     die "base $2 control differs from its registered reading"
@@ -507,15 +526,7 @@ train_and_score() {
     fi
     next=$((next + 256))
   done
-  [ -s "$run_dir/progress.jsonl" ] || die "training wrote no progress"
-  jq -e -s '(map(select(.step == 0)) | length) == 1 and
-    ([.[] | select(.step > 0)] | length) > 0 and
-    all(.[];
-      if .step == 0 then true
-      else ((.train_loss_mean | type) == "number" and
-        (.train_loss_mean | isfinite))
-      end)' \
-    "$run_dir/progress.jsonl" >/dev/null || die "progress has a non-finite loss"
+  check_progress "$run_dir/progress.jsonl"
   if [ -f "$RUN/checkpoint-readings-$label.jsonl" ]; then
     cp "$RUN/checkpoint-readings-$label.jsonl" "$RUN/checkpoint-readings.jsonl" ||
       die "could not publish checkpoint readings from $label"

@@ -141,6 +141,11 @@ mutate missing-seal-cap "$JOB" \
   'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' \
   'if false; then'
 mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
+mutate checkpoint-progress-unchecked "$JOB" \
+  'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
+mutate base-sample-unchecked "$JOB" \
+  'die "base continuation grade did not use the registered 512-row sample"' \
+  'true'
 mutate overlap-accepted "$JOB" \
   '.counts.exact_accepted_assistant_reply == 0 and' \
   '.counts.exact_accepted_assistant_reply >= 0 and'
@@ -156,6 +161,8 @@ mutate dirty-launch "$LAUNCHER" \
   'true ||'
 mutate unmerged-pin "$LAUNCHER" \
   'git merge-base --is-ancestor "$PIN" origin/main ||' 'true ||'
+mutate reviewed-tree-unchecked "$LAUNCHER" \
+  '[ "$(git rev-parse "$PIN^{tree}")" = "$REVIEWED_TREE" ] ||' 'true ||'
 mutate weak-global-cap "$LAUNCHER" \
   'export UOR_POD_MAX_RATE=8.00' 'export UOR_POD_MAX_RATE=80.00'
 mutate store-preflight-fail-open "$LAUNCHER" \
@@ -171,8 +178,13 @@ mutate missing-job-log "$LAUNCHER" \
   '*) ;;'
 mutate no-renew "$LAUNCHER" 'if ! "$POD_TOOL" renew "$POD"' 'if ! true'
 mutate no-stall-stop "$LAUNCHER" \
-  'if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then' \
+  'if [ $((remote_now - last_progress)) -ge "$STALL_SEC" ]; then' \
   'if false; then'
+mutate epoch-zero-stall "$LAUNCHER" 'last_progress=$started' 'last_progress=0'
+mutate unreachable-as-stopped "$LAUNCHER" \
+  '*) failures=0; unreachable=$((unreachable + 1)) ;;' \
+  '*) failures=$((failures + 1)); unreachable=0 ;;'
+mutate no-rental-discovery "$LAUNCHER" 'discover_owned_pod' 'true'
 mutate no-active-stop "$LAUNCHER" 'stop_remote_job || rc=1' 'true || rc=1'
 mutate signal-cleanup-success "$LAUNCHER" \
   '[ "$STATUS" = SEALED ] || rc=1' \

@@ -2,7 +2,8 @@
 # Launch the reviewed seed-1 reply-SFT job on one DeepSeek-owned RTX 5090.
 #
 # UOR_SFT_PIN must be the exact merge commit that contains this script and the
-# reviewed trainer/diagnostic dependencies.
+# reviewed trainer/diagnostic dependencies. UOR_SFT_REVIEWED_TREE must be that
+# commit's reviewed tree SHA.
 set -euo pipefail
 
 PIN=${UOR_SFT_PIN:?UOR_SFT_PIN must name the reviewed 40-hex merge commit}
@@ -10,11 +11,18 @@ case "$PIN" in
   *[!0-9a-f]*|'') echo "UOR_SFT_PIN is not lowercase 40-hex" >&2; exit 2 ;;
 esac
 [ "${#PIN}" -eq 40 ] || { echo "UOR_SFT_PIN is not 40 hex characters" >&2; exit 2; }
+REVIEWED_TREE=${UOR_SFT_REVIEWED_TREE:?UOR_SFT_REVIEWED_TREE must name the reviewed 40-hex tree}
+case "$REVIEWED_TREE" in
+  *[!0-9a-f]*|'') echo "UOR_SFT_REVIEWED_TREE is not lowercase 40-hex" >&2; exit 2 ;;
+esac
+[ "${#REVIEWED_TREE}" -eq 40 ] ||
+  { echo "UOR_SFT_REVIEWED_TREE is not 40 hex characters" >&2; exit 2; }
 
 ROOT=$(git rev-parse --show-toplevel)
 POD_TOOL="$ROOT/scripts/pod/uor-pod"
 STORE="$ROOT/scripts/pod/uor-store"
 JOB="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"
+POD_STATE=${UOR_POD_STATE:-$HOME/.local/share/uor-r4/compute}
 RUN_ID=$(date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]')-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 SESSION="deepseek-sft-$RUN_ID"
 RUN="/workspace/uor-r4/runs/deepseek-sft-s1-$RUN_ID"
@@ -43,6 +51,8 @@ git cat-file -e "$PIN^{commit}" || { echo "local repository does not contain $PI
 git fetch --quiet origin main || { echo "could not refresh origin/main" >&2; exit 2; }
 git merge-base --is-ancestor "$PIN" origin/main ||
   { echo "$PIN is not merged on origin/main" >&2; exit 2; }
+[ "$(git rev-parse "$PIN^{tree}")" = "$REVIEWED_TREE" ] ||
+  { echo "$PIN does not hold the reviewed tree $REVIEWED_TREE" >&2; exit 2; }
 
 install -d "$CONTROLLER"
 free_kib=$(df -Pk "$ROOT" | awk 'NR == 2 { print $4 }')
@@ -81,6 +91,7 @@ JOB_SHA256=$(sha256sum "$JOB" | cut -d' ' -f1)
 printf '%s  %s\n' "$JOB_SHA256" "$JOB" > "$CONTROLLER/job.sha256"
 {
   printf 'export UOR_SFT_PIN=%q\n' "$PIN"
+  printf 'export UOR_SFT_REVIEWED_TREE=%q\n' "$REVIEWED_TREE"
   printf 'export UOR_SFT_RUN=%q\n' "$RUN"
   printf 'export UOR_SFT_OUT_STORE=%q\n' "$OUT_STORE"
   printf 'export UOR_SFT_SESSION=%q\n' "$SESSION"
@@ -127,7 +138,33 @@ RESOLVED=0
 STATUS=FAILED
 JOB_LOG=
 JOB_SCRIPT=
+discover_owned_pod() {
+  [ -z "$POD" ] || return 0
+  if [ -f "$CONTROLLER/up.log" ]; then
+    POD=$(awk '$1 == "Pod" && $3 == "created;" { print $2 }' \
+      "$CONTROLLER/up.log" | tail -1)
+  fi
+  [ -z "$POD" ] || return 0
+  local lease
+  for lease in "$POD_STATE"/leases/*/"deepseek-$SESSION.json"; do
+    [ -f "$lease" ] || continue
+    POD=$(basename "$(dirname "$lease")")
+  done
+}
+discover_submitted_job() {
+  [ -z "$JOB_SCRIPT" ] && [ -f "$CONTROLLER/run.out" ] || return 0
+  JOB_LOG=$(awk '/Log: / {
+    for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }
+  }' "$CONTROLLER/run.out")
+  case "$JOB_LOG" in
+    /workspace/uor-r4/jobs/*.log) ;;
+    *) JOB_LOG=; return 0 ;;
+  esac
+  JOB_SCRIPT="${JOB_LOG%.log}.sh"
+  printf '%s\n' "$JOB_LOG" > "$CONTROLLER/job-log.path"
+}
 stop_remote_job() {
+  discover_submitted_job
   [ -n "$POD" ] && [ -n "$JOB_SCRIPT" ] || return 0
   "$POD_TOOL" ssh "$POD" \
     "line=\$(ps -eo pid=,pgid=,args= |
@@ -153,6 +190,8 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM
   printf 'status=%s\n' "$STATUS" > "$CONTROLLER/status.txt"
+  discover_owned_pod
+  discover_submitted_job
   if [ -n "$POD" ] && [ "$RESOLVED" -ne 1 ]; then
     RESOLVED=1
     if [ "$STATUS" = SEALED ]; then
@@ -208,7 +247,9 @@ case "$JOB_SCRIPT" in
 esac
 printf '%s\n' "$JOB_LOG" > "$CONTROLLER/job-log.path"
 last_renew=$started
+last_progress=$started
 failures=0
+unreachable=0
 
 while :; do
   probe=$("$POD_TOOL" ssh "$POD" \
@@ -218,8 +259,9 @@ while :; do
      else printf 'stopped\\n'; fi") || probe=unreachable
   case "$probe" in
     'exit '*) job_exit=${probe#exit }; break ;;
-    running) failures=0 ;;
-    *) failures=$((failures + 1)) ;;
+    running) failures=0; unreachable=0 ;;
+    stopped) failures=$((failures + 1)); unreachable=0 ;;
+    *) failures=0; unreachable=$((unreachable + 1)) ;;
   esac
   now=$(date +%s)
   progress_line=$("$POD_TOOL" ssh "$POD" \
@@ -230,7 +272,10 @@ while :; do
   case "$remote_now:$latest_progress" in
     *[!0-9:]*|:*) ;;
     *)
-      if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then
+      if [ "$latest_progress" -ne 0 ]; then
+        last_progress=$latest_progress
+      fi
+      if [ $((remote_now - last_progress)) -ge "$STALL_SEC" ]; then
         echo "$POD has made no file progress for at least $STALL_SEC seconds" >&2
         exit 1
       fi
@@ -250,11 +295,23 @@ while :; do
     last_renew=$now
   fi
   if [ "$failures" -ge 3 ]; then
+    if [ $((now - started)) -lt 300 ]; then
+      sleep 20
+      continue
+    fi
     if ! "$POD_TOOL" status 2>/dev/null | grep -Eq "^$POD .* RUNNING "; then
       echo "$POD disappeared before writing its terminal exit" >&2
       exit 1
     fi
     echo "$POD is running, but GPU 0 has no live job and $JOB_LOG has no terminal exit" >&2
+    exit 1
+  fi
+  if [ "$unreachable" -ge 15 ]; then
+    if ! "$POD_TOOL" status 2>/dev/null | grep -Eq "^$POD .* RUNNING "; then
+      echo "$POD disappeared during repeated SSH failures" >&2
+    else
+      echo "$POD remained unreachable for 15 probes; its job state is unknown" >&2
+    fi
     exit 1
   fi
   sleep 20

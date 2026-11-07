@@ -127,9 +127,12 @@ responses against all 96 M2 strings:
 | document sharing a panel word 6-gram | 0 |
 | assistant response sharing a panel word 6-gram | 0 |
 
-Audit SHA: `34a9646195cd2dd929d5ffcc779bbcbfe5157f55554f9894981ee225ba20f053`.
-This supports the M2 exclusion claim for this store. A positive still unlocks a
-matched-data control before the gain is attributed to M-World or the reply mask.
+The historical audit file hash is `34a96461…`. Because its JSON embeds input
+paths, that file hash changes with the run root; the launch check therefore binds
+the full input hashes and the four exact counts above, not that path-dependent
+file hash. This supports the M2 exclusion claim for this store. A positive still
+unlocks a matched-data control before the gain is attributed to M-World or the
+reply mask.
 
 The human continuation guard uses OASST2 held-out, not DEV:
 
@@ -208,8 +211,10 @@ run config, Hamming read and output `UORLUT01` hash.
 
 ## Bar and outcome map
 
-This is a staged development run, not a milestone bar. The M2 acceptance bar
-remains 104/256 complete rows and 52/128 pairs.
+This is a staged development run, not a milestone bar. The current M2 bar is
+>= 256/512 saved questions plus >= 40% (104/256) of genuinely fresh questions,
+with the existing graders unchanged. `m2-reply512` remains unavailable, so this
+unit cannot claim an M2 pass.
 
 The first-match outcome map is:
 
@@ -233,8 +238,8 @@ OASST2-only continuation on the same base and steps.
   optimizer/schedule.
 - The mixed store and OASST2 held-out files match every full hash and sample
   fingerprint in this sheet before the first forward.
-- `corpus-panel-overlap` reproduces the four zero overlap counts and output SHA
-  above.
+- `corpus-panel-overlap` reproduces the four zero overlap counts and the input
+  identities above; the path-bearing audit file hash is descriptive only.
 - Each checkpoint reloads and exports; `cpu-checkpoint-grade` exports and grades
   the same bytes. The required raw snapshot is transient and stays outside the
   seal; the retained artifact is the graded artifact.
@@ -262,11 +267,12 @@ The executable review units are deepseek-23 and deepseek-25:
 ## Steps
 
 1. Record the fresh FIT and D67 review of the merged code, this sheet, job chain,
-   exact input packet and seal paths.
+   exact input packet and seal paths, including the reviewed commit and tree.
 2. `uor-pod status`; acquire one RTX 5090 32 GiB pod under a DeepSeek-lab lease
    inside the four-pod/$8h caps. Never touch Claude's pods.
-3. Build the exact merged pin, fetch and hash every input, run the training-unit
-   CPU tests, and reproduce the base rank/free/continuation controls.
+3. Build the exact merged pin with `UOR_SFT_PIN` and `UOR_SFT_REVIEWED_TREE` set
+   from step 1, fetch and hash every input, run the training-unit CPU tests, and
+   reproduce the base rank/free/continuation controls.
 4. Submit the 1,024-step training job through the detached remote runner and
    wait on its terminal footer. At each 256-step checkpoint, export and score
    before proceeding. At step 512, apply row 2 of the outcome map and stop the

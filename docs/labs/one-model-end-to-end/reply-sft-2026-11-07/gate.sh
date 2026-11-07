@@ -131,6 +131,8 @@ require_line 'run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/d
 require_line 'run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||' "$JOB"
 require_line 'touch "$marker" || die "could not mark checkpoint $step scored"' "$JOB"
 require_line '--reply-tokens 64 --out "$out" || return 1' "$JOB"
+require_line 'check_progress "$TRAIN_RUN/progress.jsonl"' "$JOB"
+require_line 'check_progress "$run_dir/progress.jsonl"' "$JOB"
 require_line 'run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null' "$JOB"
 require_line '.eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and' "$JOB"
 require_line '.eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and' "$JOB"
@@ -140,6 +142,9 @@ per_turn_free_lines=$(grep -Fc "' base-per-turn-generated" "$JOB")
   fail "$JOB does not reproduce the per-turn free-generation control"
 checks=$((checks + 1))
 require_line '[ "$base_guard" -eq 132 ] ||' "$JOB"
+grep -Fq 'die "base continuation grade did not use the registered 512-row sample"' "$JOB" ||
+  fail "$JOB does not pin the base-grade sample fingerprint"
+checks=$((checks + 1))
 grep -Fq '.evaluation.samples == 512 and' "$JOB" ||
   fail "$JOB does not require the registered 512-row sample count"
 checks=$((checks + 1))
@@ -203,6 +208,8 @@ require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu
 require_line '[ "$(git rev-parse HEAD)" = "$PIN" ] ||' "$LAUNCHER"
 require_line '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' "$LAUNCHER"
 require_line 'git merge-base --is-ancestor "$PIN" origin/main ||' "$LAUNCHER"
+require_line 'REVIEWED_TREE=${UOR_SFT_REVIEWED_TREE:?UOR_SFT_REVIEWED_TREE must name the reviewed 40-hex tree}' "$LAUNCHER"
+require_line '[ "$(git rev-parse "$PIN^{tree}")" = "$REVIEWED_TREE" ] ||' "$LAUNCHER"
 require_line 'model_time_state=absent' "$LAUNCHER"
 require_line '[ "$free_kib" -ge "$MIN_FREE_KIB" ] ||' "$LAUNCHER"
 require_line 'export UOR_POD_MAX_PODS=4' "$LAUNCHER"
@@ -237,7 +244,13 @@ grep -Fq 'elif ! flock -n /root/gpu0.lock true; then printf '"'"'running\\n'"'"'
   "$LAUNCHER" || fail "$LAUNCHER does not distinguish a live GPU job from a stopped one"
 checks=$((checks + 1))
 require_line 'echo "$POD is running, but GPU 0 has no live job and $JOB_LOG has no terminal exit" >&2' "$LAUNCHER"
-require_line 'if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then' "$LAUNCHER"
+require_line 'if [ $((remote_now - last_progress)) -ge "$STALL_SEC" ]; then' "$LAUNCHER"
+require_line 'last_progress=$started' "$LAUNCHER"
+require_line 'if [ "$latest_progress" -ne 0 ]; then' "$LAUNCHER"
+require_line 'stopped) failures=$((failures + 1)); unreachable=0 ;;' "$LAUNCHER"
+require_line '*) failures=0; unreachable=$((unreachable + 1)) ;;' "$LAUNCHER"
+require_line 'if [ $((now - started)) -lt 300 ]; then' "$LAUNCHER"
+require_line 'if [ "$unreachable" -ge 15 ]; then' "$LAUNCHER"
 require_line 'stop_remote_job || rc=1' "$LAUNCHER"
 if grep -Fq 'WRAPPER_PID' "$LAUNCHER"; then
   fail "$LAUNCHER still waits on the detached-job submission wrapper"
@@ -251,6 +264,9 @@ require_line '[ "$(cat "$CONTROLLER/readback/$OUT_STORE/EXIT")" = 0 ] || {' "$LA
 require_line '--confirm-archived || rc=1' "$LAUNCHER"
 require_line 'STATUS=SEALED' "$LAUNCHER"
 require_line '[ "$STATUS" = SEALED ] || rc=1' "$LAUNCHER"
+require_line 'discover_owned_pod' "$LAUNCHER"
+require_line 'for lease in "$POD_STATE"/leases/*/"deepseek-$SESSION.json"; do' "$LAUNCHER"
+require_line 'discover_submitted_job' "$LAUNCHER"
 if grep -Fq 'tee -a "$RUN/job.log"' "$JOB"; then
   fail "$JOB still uses an asynchronous tee for the sealed job log"
 fi

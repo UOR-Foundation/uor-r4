@@ -48,6 +48,14 @@ spend.
   snapshots, while the packet promised an under-100-MiB seal.
 - **An interrupt could archive a failed run while returning success.** The
   signal trap preserved a zero status when failure cleanup itself succeeded.
+- **The fresh FIT review found four more launch-path defects.** A missing run
+  root was treated as a stall from epoch zero; unreachable SSH was counted as a
+  stopped job; non-finite loss was checked only after the full schedule; and the
+  merged pin was not tied to the reviewed tree.
+- **The fresh D67 review found three evidence defects.** Signal cleanup could
+  lose the pod ID during rental or job submission, the base continuation grade
+  did not assert the registered sample fingerprint, and the sheet still carried
+  a path-dependent overlap hash plus a stale M2 bar.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -99,11 +107,20 @@ spend.
   are pinned to four pods and $8/hour, the provider is pinned to Vast, and the
   launch remains one RTX 5090.
 - The exact pin must be contained in freshly fetched `origin/main`.
+- The launcher also requires `UOR_SFT_REVIEWED_TREE`; `PIN^{tree}` must equal the
+  tree recorded by review.
 - Launch records free space, force-reads memory state, and authenticates or
   records absence of `model-time.json` and the storage receipt before rental.
 - The controller fails after 30 minutes without a newer file under the run
   root. Failure cleanup terminates the exact remote process group, waits for
   GPU 0's lock to clear, then seals the pod through `down --to-store`.
+- Progress is measured from submission time until the first run file appears;
+  epoch zero is never a valid last-progress timestamp. Confirmed stopped jobs and
+  SSH-transport failures have separate thresholds, so a locked startup or a
+  short network fault cannot masquerade as a dead job.
+- Cleanup discovers the owned pod from the live lease and partial `up.log`, and
+  discovers the submitted job path from `run.out`, when a signal arrives before
+  the normal assignments complete.
 - The base archive is extracted only for the checkpoint and run config; the
   archive and temporary download root are removed before training. The panel
   build uses `/workspace/uor-r4/build`, outside the sealed run.
@@ -113,6 +130,9 @@ spend.
 - The first trainer attempt is micro-batch 16. Only a classified OOM permits
   one fresh micro-batch-8 attempt; both attempts keep separate trainer,
   artifact, grade, panel, scored-marker and reading roots.
+- Every checkpoint and the base continuation grade must use the registered
+  512-row sample fingerprint. Finiteness is checked at each scored checkpoint,
+  so a non-finite loss stops the seed before later checkpoints are exported.
 - The launcher builds the Vast provider adapter from the reviewed checkout
   before calling `uor-pod status` or `uor-pod up`.
 - Failure cleanup forces a nonzero status for every non-sealed run, including
@@ -141,8 +161,8 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- `gate.sh`: 148 checks passed.
-- `test-mutants.sh`: 49 of 49 semantic mutations caught.
+- `gate.sh`: 162 checks passed.
+- `test-mutants.sh`: 55 of 55 semantic mutations caught.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
   --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.
 - The bare suite invocation omitted `CARGO_TARGET_DIR`; the existing save/load
