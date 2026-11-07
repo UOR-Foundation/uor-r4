@@ -63,7 +63,9 @@ The score roots are new per controller run:
   were then caught, including disabled/weakened stops, seed 2, hidden input-hash
   changes, a forged hash comparison, directory-only or true-valued readback and
   omitting the `SIGCONT` that delivers termination to a frozen trainer or
-  pointing the panel binary away from the actual build target.
+  pointing the panel binary away from the actual build target. The unmodified
+  job also rejected seed 2 with the registered message before touching the
+  store or filesystem.
 - `bash -n` and `shellcheck` on the operational scripts: passed.
 - The job was reviewed against the actual `uor-store`, `uor-pod`,
   `train-in-space`, `cpu-checkpoint-grade` and `served-reply-panel` command

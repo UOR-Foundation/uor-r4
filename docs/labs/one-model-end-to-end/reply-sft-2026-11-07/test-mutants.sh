@@ -11,6 +11,15 @@ caught=0
 attempted=0
 
 "$HERE/gate.sh" >/dev/null
+zero_pin=$(printf '0%.0s' {1..40})
+if UOR_SFT_PIN="$zero_pin" bash "$JOB" 2 >"$TMP/seed-two.out" 2>&1; then
+  echo "unmodified job accepted seed 2" >&2
+  exit 1
+fi
+grep -Fq 'seed 2 is conditional and is not launched by this script' "$TMP/seed-two.out" || {
+  echo "unmodified job refused seed 2 for the wrong reason" >&2
+  exit 1
+}
 
 mutate() {
   local name=$1 file=$2 search=$3 replacement=$4
