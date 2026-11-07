@@ -5,7 +5,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## What did not work, first
 
 - **There is no width-1,024 reading, and this unit will not produce one.** I stopped seed 1's training at step 2,048 of 16,384, by a decision review (below), after Casey asked whether the run's up-to-$88 cost would carry forward. This is a stop by decision, not a measurement: it closes nothing about width (§4.1, L-007).
-- **Seed 2 never started.** Three RTX PRO 6000 pods, `vast-59497270`, `-59499851` and `-59502786`, never reached SSH, in 1,800, 1,800 and 1,200 s. Each was deleted. They were on Vast's Texas machines 48282 and 48276 (driver 580.95.05); seed 1's working machine, 56389, ran driver 590.48.01.
+- **Seed 2 never started.** Three RTX PRO 6000 pods, `vast-59497270`, `-59499851` and `-59502786`, never reached SSH, in 1,800, 1,800 and 1,200 s. Each was deleted. The pods' machine ids were read from Vast's live instance listing at the time, which no saved log keeps. Machine 48282 (driver 580.95.05) is recorded in `local/claude/FRICTION.md`. The later offer watcher's log shows the same driver on machine 48276. Treat the driver-580.95.05 pattern as a lead, not a finding.
   - `uor-pod`'s circuit breaker refused a fourth try, and `--force-retry` with a 0.99 reliability filter picked the same host again.
   - `uor-pod up` defaults to `--ref main`, which had moved past the job's pin. The third seed-2 pod (`vast-59502786`) booted at `195c2177…`, not the pin, so its run would have been off-pin even had SSH come up. A later pod needs `--ref 2578cd6b4d10d2d2beae24dcdc6692424d56e1f0`.
 - **Micro-batch 64 does not fit.** The whole batch of 64 in one forward ran out of memory on the 97,887 MiB card.
@@ -16,7 +16,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 I read the chain before deciding: claude-302's question and outcome map, claude-301's result, and claude-295's width reading. Casey can reverse this.
 
 - **The one-track bar is already met.** claude-301's (b64L) met it at width 256 ("met; unseen ahead"). This run could not add to that.
-- **Only one outcome moves the trunk off width 256.** In claude-302's outcome map, only "(w1024) meets the bar and the width lever is `ahead`" makes the next unit width 1,024. A lever `inside` or `mixed`, a `behind` reading, and (w1024) `mixed` or `inside` against T2 each name "more human text at width 256". The fifth case, ahead of T2 but not of the unigram, is a grade check with no outcome drawn. A NOT_RUN changes nothing.
+- **Only one outcome moves the trunk off width 256.** In claude-302's outcome map, only "(w1024) meets the bar and the width lever is `ahead`" makes the next unit width 1,024. A lever `inside` or `mixed`, a `behind` reading, and (w1024) `mixed` or `inside` against T2 each name "more human text at width 256". The fifth case, ahead of T2 but not of the unigram, is a grade check with no outcome drawn. The map's "anything else" case lets the lever and the spreads pick the next unit. For a NOT_RUN, the map reruns each missing seed under the sheet. This unit is a NOT_RUN at both seeds, and this decision review declines that rerun, for the reasons here; Casey can reverse it.
 - **The evidence leans toward data, not width.**
   - claude-295's one width reading, 512 against 256, was `inside`, while its data lever (D3 against D1) was `ahead`.
   - claude-301's tokens lever was `ahead`.
