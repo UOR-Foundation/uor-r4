@@ -275,8 +275,9 @@ The executable review units are deepseek-23 and deepseek-25:
 3. Build the exact merged pin with `UOR_SFT_PIN` and
    `UOR_SFT_REVIEWED_RUNTIME` set from step 1, fetch and hash every input, run
    the training-unit CPU tests, and reproduce the base rank/free/continuation
-   controls. The runtime identity covers Cargo identity, the trainer, launcher,
-   job, CPU/panel instruments, pod tools, gate and mutation test.
+   controls. The runtime identity covers every tracked build/runtime file, this
+   sheet with only its two verdict lines normalized, and excludes only the
+   deepseek-25 report that records review evidence.
 4. Submit the 1,024-step training job through the detached remote runner and
    wait on its terminal footer. At each 256-step checkpoint, export and score
    before proceeding. At step 512, apply row 2 of the outcome map and stop the

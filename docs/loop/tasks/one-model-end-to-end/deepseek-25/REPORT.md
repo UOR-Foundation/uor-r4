@@ -108,9 +108,9 @@ spend.
   launch remains one RTX 5090.
 - The exact pin must be contained in freshly fetched `origin/main`.
 - The launcher also requires `UOR_SFT_REVIEWED_RUNTIME`; the SHA-256 of the
-  reviewed Cargo/toolchain, workspace crates, third-party build sources, pod
-  tools, panel instrument and reply-SFT scripts at `PIN` must equal the identity
-  recorded by review.
+  reviewed tracked build/runtime tree at `PIN`, with only the FIT sheet's two
+  verdict lines normalized and this report excluded as review evidence, must
+  equal the identity recorded by review.
 - Launch records free space, force-reads memory state, and authenticates or
   records absence of `model-time.json` and the storage receipt before rental.
 - The controller fails after 30 minutes without a newer file under the run
@@ -163,7 +163,7 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- `gate.sh`: 163 checks passed.
+- `gate.sh`: 167 checks passed.
 - `test-mutants.sh`: 55 of 55 semantic mutations caught.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
   --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.

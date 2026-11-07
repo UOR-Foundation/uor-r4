@@ -22,17 +22,8 @@ ROOT=$(git rev-parse --show-toplevel)
 POD_TOOL="$ROOT/scripts/pod/uor-pod"
 STORE="$ROOT/scripts/pod/uor-store"
 JOB="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"
-RUNTIME_PATHS=(
-  .cargo/config.toml
-  Cargo.lock
-  Cargo.toml
-  rust-toolchain.toml
-  crates
-  docs/labs/one-model-end-to-end/instrument
-  docs/labs/one-model-end-to-end/reply-sft-2026-11-07
-  scripts
-  third_party
-)
+RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md
+RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md
 POD_STATE=${UOR_POD_STATE:-$HOME/.local/share/uor-r4/compute}
 RUN_ID=$(date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]')-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 SESSION="deepseek-sft-$RUN_ID"
@@ -63,7 +54,19 @@ git fetch --quiet origin main || { echo "could not refresh origin/main" >&2; exi
 git merge-base --is-ancestor "$PIN" origin/main ||
   { echo "$PIN is not merged on origin/main" >&2; exit 2; }
 runtime_sha=$(
-  git ls-tree -r "$PIN" -- "${RUNTIME_PATHS[@]}" | sha256sum | cut -d' ' -f1
+  {
+    git ls-tree -r "$PIN" |
+      awk -v fit="$RUNTIME_EXCLUDE_FIT" -v report="$RUNTIME_EXCLUDE_REPORT" '
+        { path = $0; sub(/^[^\t]*\t/, "", path) }
+        path != fit && path != report'
+    printf '%s\n' "$RUNTIME_EXCLUDE_FIT"
+    git show "$PIN:$RUNTIME_EXCLUDE_FIT" |
+      awk '
+        /^TEST FITNESS:/ { print "TEST FITNESS: RECORDED"; next }
+        /^PRE-RUN:/ { print "PRE-RUN: RECORDED"; next }
+        { print }'
+  } |
+    sha256sum | cut -d' ' -f1
 )
 [ "$runtime_sha" = "$REVIEWED_RUNTIME" ] ||
   { echo "$PIN has runtime identity $runtime_sha, not $REVIEWED_RUNTIME" >&2; exit 2; }
