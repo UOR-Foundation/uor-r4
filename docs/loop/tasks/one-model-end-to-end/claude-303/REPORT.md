@@ -88,3 +88,7 @@ None.
 - What holds the roughly 17,000 MiB above (read0) that micro-batching does not reduce. The next diagnosis reads the allocator's own counters.
 - The per-variable comparison asked for by FIT Finding 4, as a CUDA test. The end-to-end loss match above covers four steps, not a weighted step's gradients.
 - Seed 1's (whole) peak, 8,594 MiB above seed 2's.
+
+## Plain summary
+
+The width-1,024 model could not train because a library kept gradients nobody used, and memory ran out. This unit drops those gradients after every backward pass, and peak memory at the test batch fell from about 66,400 MiB to between 29,600 and 38,400 MiB. The training losses of the first four steps did not change. Training now fits on one card at micro-batch 16. It is too slow, though: at about 3.6 s a step the run would take about 18.5 hours, past its 16-hour limit. So no model was trained, and the next unit tries larger micro-batches to make each step faster. The run cost about $2.12.
