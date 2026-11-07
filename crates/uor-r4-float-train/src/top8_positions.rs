@@ -130,14 +130,14 @@ mod cuda {
 
     fn f32_view<'a>(storage: &'a CudaStorage, layout: &Layout) -> CResult<CudaView<'a, f32>> {
         if storage.dtype() != DType::F32 {
-            candle_core::bail!("the exact rival selector needs f32 scores");
+            candle_core::bail!("the exact rival selector needs an f32 input");
         }
         let Some((start, end)) = layout.contiguous_offsets() else {
-            candle_core::bail!("the exact rival selector needs contiguous scores");
+            candle_core::bail!("the exact rival selector needs a contiguous f32 input");
         };
         match storage.as_cuda_slice::<f32>()?.try_slice(start..end) {
             Some(view) => Ok(view),
-            None => candle_core::bail!("the exact rival selector's scores exceed their buffer"),
+            None => candle_core::bail!("the exact rival selector's input exceeds its buffer"),
         }
     }
 

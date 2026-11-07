@@ -1173,11 +1173,32 @@ fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32], cell: bool)
     nearest_loss_on(&table(model)?, query, targets, cell)
 }
 
+/// The fused nearest search excludes each row's target in the kernel, so target ids must be
+/// checked against the table before launch.
+fn check_fused_targets(targets: &[u32], rows: usize, vocabulary: usize) -> Result<()> {
+    if targets.len() != rows {
+        return Err(invalid(format!(
+            "the fused rival search has {} targets for {rows} rows",
+            targets.len()
+        )));
+    }
+    if let Some(&target) = targets
+        .iter()
+        .find(|&&target| target as usize >= vocabulary)
+    {
+        return Err(invalid(format!(
+            "the fused rival search's target {target} is outside {vocabulary} table rows"
+        )));
+    }
+    Ok(())
+}
+
 /// [`nearest_loss`] against the shared vector table `table`.
 fn nearest_loss_on(table: &Tensor, query: &Tensor, targets: &[u32], cell: bool) -> Result<Tensor> {
     let (rows, width) = query.dims2()?;
     let device = query.device();
     let (rivals, target_ids) = if FAST_RIVALS.with(|on| on.get()) && !cell {
+        check_fused_targets(targets, rows, table.dim(0)?)?;
         let target_ids = Tensor::from_vec(targets.to_vec(), rows, device)?;
         let rivals = crate::top8_positions::nearest_positions(
             query,
@@ -14662,6 +14683,27 @@ mod tests {
             old.to_vec2::<u32>().unwrap(),
             fused.to_vec2::<u32>().unwrap()
         );
+
+        // The target is the nearest table row, so it must be excluded explicitly.
+        let query = table.narrow(0, 4, 1).unwrap();
+        let target = Tensor::from_vec(vec![4u32], 1, &device).unwrap();
+        let target_matrix = target.reshape((1, 1)).unwrap();
+        let scores = nearest_scores(&query, &table).unwrap();
+        let allowed = Tensor::arange(0u32, vocabulary as u32, &device)
+            .unwrap()
+            .unsqueeze(0)
+            .unwrap()
+            .broadcast_as(scores.shape())
+            .unwrap()
+            .broadcast_ne(&target_matrix)
+            .unwrap();
+        let old = with_fast_rivals(false, || best_positions(&scores, &allowed, 8)).unwrap();
+        let fused = crate::top8_positions::nearest_positions(&query, &table, &target, 8).unwrap();
+        assert_eq!(
+            old.to_vec2::<u32>().unwrap(),
+            fused.to_vec2::<u32>().unwrap()
+        );
+        assert!(!fused.to_vec2::<u32>().unwrap()[0].contains(&4));
     }
 
     #[cfg(feature = "cuda")]
@@ -15004,6 +15046,16 @@ mod tests {
         }));
         assert!(panicked.is_err());
         assert!(!FAST_RIVALS.with(|on| on.get()));
+    }
+
+    #[test]
+    fn fused_targets_are_one_per_row_and_inside_the_table() {
+        assert!(check_fused_targets(&[0, 3, 7], 3, 8).is_ok());
+        assert!(check_fused_targets(&[0, 3], 3, 8).is_err());
+        let error = check_fused_targets(&[0, 8, 7], 3, 8)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("target 8 is outside 8 table rows"), "{error}");
     }
 
     #[cfg(feature = "cuda")]
