@@ -20,6 +20,11 @@ supporting
   including float-trainer sources. The complete diff confirmed those changes
   were formatting-only; every path was restored to `HEAD` before delivery and
   final formatting checks were scoped to changed Rust files.
+- Fresh exact-head review found three fail-open config cases. The first version
+  checked only the native writer's schema and dimensions, not its source,
+  geometry, query-port, scoring and identity binding; it did not enforce the
+  float Hamming readout's six-layer contract; and its boolean reader treated
+  malformed values as false. The exporter now rejects all three classes.
 - CPU/serving parity did not imply float/integer equivalence. Across 16 fixed
   oasst2 prompts and 32-token replies, seed 1 had 0/16 first-token differences
   but 9/16 complete-reply differences, first diverging at offsets 2-9. Seed 2
@@ -38,8 +43,9 @@ supporting
   the run config and `hamming_read.safetensors` without CUDA.
 - The exporter reconstructs the SpiralCore/FBS route plans, checks all five
   projection fingerprints against the trained model config, validates the
-  served recipe, exact tensor names and shapes, finite F32 values, Hamming
-  inventory and head count, and refuses existing output paths before reading.
+  served recipe, exact tensor names and shapes, finite F32 values, the complete
+  native-writer binding, Hamming inventory, head count and six-layer readout
+  depth, and refuses existing output paths before reading.
 - It decodes learned route queries, applies the run's served contract, writes
   the existing snapshot and `UORLUT01` formats, and reparses the artifact before
   success.
@@ -49,9 +55,10 @@ supporting
 - Updated `cpu-served-forward-audit` to name the retention-rate recurrence in
   its manifest and prove it through parity rather than refusing it.
 - Added focused tests for malformed, missing and extra model-config fields; a
-  foreign served contract; projection-binding drift; missing and extra trunk
-  and Hamming tensors; a mismatched Hamming head count; non-finite values; and
-  existing-output refusal.
+  foreign served contract and native-writer bindings; projection-binding
+  drift; missing and extra trunk and Hamming tensors; mismatched Hamming head
+  and layer counts; non-boolean run flags; non-finite values; and existing
+  output refusal.
 
 The implementation stayed inside `crates/uor-r4-cpu-train/**` and the CPU
 pilot's documentation scope. No CUDA source, pod, trainer or Claude-owned
@@ -113,9 +120,9 @@ A fresh download matched that hash; `uor-store ls` lists the 17.7 MB object.
 
 ## Checks run at the head
 
-- `cargo test --release --locked -p uor-r4-cpu-train --lib`: 447 passed,
+- `cargo test --release --locked -p uor-r4-cpu-train --lib`: 450 passed,
   4 ignored, 0 failed.
-- focused exporter tests: 10 passed.
+- focused exporter tests: 13 passed.
 - focused retained-rate CPU/serving, audit and checkpoint tests: 3 passed.
 - scoped Clippy passed after allowing only the crate's four pre-existing lint
   categories (`type_complexity`, `needless_borrow`,

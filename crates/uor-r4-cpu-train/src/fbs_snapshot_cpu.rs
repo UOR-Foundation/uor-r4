@@ -34,9 +34,15 @@ const ABSENT: u32 = u32::MAX;
 const CONVOLUTION_WIDTH: usize = 4;
 const RMS_EPSILON: f64 = 1e-5;
 const HAMMING_DEPTHS: [usize; 2] = [2, 6];
+const HAMMING_READOUT_DEPTH: usize = HAMMING_DEPTHS[1];
 const FBS_PROJECTIONS: [&str; 6] = [
     "rec.in", "rec.gate", "rec.out", "mlp.gate", "mlp.up", "mlp.down",
 ];
+const NATIVE_VECTOR_SCHEMA: &str = "uor-r4.shared-native-vector-writer/1";
+const NATIVE_VECTOR_IDENTITY_PARTITION: &str = "token-id-modulo-256; quotient is collision slot";
+const NATIVE_VECTOR_QUERY_PORTS: &str = "first-and-last-whole-8D-block; alias at width8";
+const NATIVE_VECTOR_SCORE: &str = "negative-mean-L1-displacement; raw";
+const NATIVE_VECTOR_ADDRESS_CREDIT: &str = "target-cell-versus-admitted-cell-margin; surrogate";
 
 fn invalid(message: impl Into<String>) -> String {
     message.into()
@@ -374,12 +380,20 @@ impl RoutePlan {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NativeVectorHead {
     schema: String,
     spec: WriterSpec,
+    source_sha256: String,
+    geometry: String,
+    identity_partition: String,
+    query_ports: String,
+    score: String,
+    address_credit: String,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WriterSpec {
     kept_cells: usize,
     vocabulary: usize,
@@ -387,6 +401,7 @@ struct WriterSpec {
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ProjectionBinding {
     schema: String,
     fbs_source_sha256: String,
@@ -503,14 +518,35 @@ fn parse_model_config(bytes: &[u8]) -> Result<ModelConfig, String> {
             "model config dimensions are not a served FBS trunk",
         ));
     }
-    if config.native_vector_head.schema != "uor-r4.shared-native-vector-writer/1"
-        || config.native_vector_head.spec.vocabulary != config.vocab_size
-        || config.native_vector_head.spec.width != config.width
-        || !(1..=16).contains(&config.native_vector_head.spec.kept_cells)
+    validate_native_vector_binding(&config)?;
+    Ok(config)
+}
+
+fn validate_native_vector_binding(config: &ModelConfig) -> Result<(), String> {
+    let head = &config.native_vector_head;
+    let spec = &head.spec;
+    let native_writer_sha256 = sha256_hex(include_bytes!(
+        "../../uor-r4-float-train/src/native_vector_writer.rs"
+    ));
+    let native_writer_geometry = RoutePlan::new(8, 8)?.fingerprint;
+    if head.schema != NATIVE_VECTOR_SCHEMA
+        || head.source_sha256 != native_writer_sha256
+        || head.geometry != native_writer_geometry
+        || head.identity_partition != NATIVE_VECTOR_IDENTITY_PARTITION
+        || head.query_ports != NATIVE_VECTOR_QUERY_PORTS
+        || head.score != NATIVE_VECTOR_SCORE
+        || head.address_credit != NATIVE_VECTOR_ADDRESS_CREDIT
+        || spec.vocabulary != config.vocab_size
+        || spec.width != config.width
+        || !(256..=8192).contains(&spec.vocabulary)
+        || spec.width == 0
+        || !spec.width.is_multiple_of(8)
+        || spec.width > 1024
+        || !(1..=16).contains(&spec.kept_cells)
     {
         return Err(invalid("model config native vector head binding differs"));
     }
-    Ok(config)
+    Ok(())
 }
 
 fn projection_widths(part: &str, width: usize, mlp: usize) -> (usize, usize) {
@@ -732,7 +768,13 @@ fn parse_hamming(
     bytes: &[u8],
     width: usize,
     expected_heads: usize,
+    layers: usize,
 ) -> Result<FbsHammingSnapshot, String> {
+    if layers != HAMMING_READOUT_DEPTH {
+        return Err(invalid(format!(
+            "Hamming readout runs at depth {HAMMING_READOUT_DEPTH}, but the trunk has {layers} layers"
+        )));
+    }
     let tensors = SafeTensors::deserialize(bytes)
         .map_err(|error| invalid(format!("Hamming read: {error}")))?;
     let heads = *u32_tensor(&tensors, "heads", &[1])?
@@ -851,7 +893,13 @@ fn validate_run_config(
     let object = value
         .as_object()
         .ok_or_else(|| invalid("run config root is not an object"))?;
-    let field_bool = |name: &str| object.get(name).and_then(Value::as_bool).unwrap_or(false);
+    let field_bool = |name: &str| -> Result<bool, String> {
+        match object.get(name) {
+            None => Ok(false),
+            Some(Value::Bool(value)) => Ok(*value),
+            Some(_) => Err(invalid(format!("run config {name} is not a bool"))),
+        }
+    };
     if object.get("width").and_then(Value::as_u64) != Some(config.width as u64) {
         return Err(invalid("run config width differs from the checkpoint"));
     }
@@ -860,18 +908,18 @@ fn validate_run_config(
             "run config Hamming read count differs from the checkpoint",
         ));
     }
-    if field_bool("fold_scores") || field_bool("reflect_floor") {
+    if field_bool("fold_scores")? || field_bool("reflect_floor")? {
         return Err(invalid(
             "run config uses a rate transform the integer exporter does not serve",
         ));
     }
-    if field_bool("train_as_served") && (snaps.gates || snaps.transition) {
+    if field_bool("train_as_served")? && (snaps.gates || snaps.transition) {
         return Err(invalid(
             "train-as-served checkpoints require both --raw-gates and --raw-transition",
         ));
     }
     let nearest = run_readout_nearest(text)?;
-    Ok((field_bool("retain_rates"), nearest))
+    Ok((field_bool("retain_rates")?, nearest))
 }
 
 /// Convert a saved FBS checkpoint without opening CUDA.
@@ -971,7 +1019,12 @@ pub fn snapshot_from_saved_checkpoint(
         embed: f32_tensor(&tensors, "embedding.weight", &[config.vocab_size, width])?,
         final_norm: f32_tensor(&tensors, "final_norm.weight", &[width])?,
         layers,
-        hamming: Some(parse_hamming(&hamming_bytes, width, config.heads)?),
+        hamming: Some(parse_hamming(
+            &hamming_bytes,
+            width,
+            config.heads,
+            config.pattern.len(),
+        )?),
         memory: None,
         retain_rates,
         readout_nearest,
@@ -1066,6 +1119,10 @@ mod tests {
                 RoutePlan::new(input, output).unwrap().fingerprint,
             );
         }
+        let native_writer_sha256 = sha256_hex(include_bytes!(
+            "../../uor-r4-float-train/src/native_vector_writer.rs"
+        ));
+        let native_writer_geometry = RoutePlan::new(8, 8).unwrap().fingerprint;
         json!({
             "arch": "geometric",
             "context": 32,
@@ -1074,12 +1131,18 @@ mod tests {
             "heads": 2,
             "mlp_hidden": 32,
             "native_vector_head": {
-                "schema": "uor-r4.shared-native-vector-writer/1",
+                "schema": NATIVE_VECTOR_SCHEMA,
                 "spec": {
                     "kept_cells": 1,
-                    "vocabulary": 8,
+                    "vocabulary": 256,
                     "width": 32
-                }
+                },
+                "source_sha256": native_writer_sha256,
+                "geometry": native_writer_geometry,
+                "identity_partition": NATIVE_VECTOR_IDENTITY_PARTITION,
+                "query_ports": NATIVE_VECTOR_QUERY_PORTS,
+                "score": NATIVE_VECTOR_SCORE,
+                "address_credit": NATIVE_VECTOR_ADDRESS_CREDIT
             },
             "objective": {"margin_hinge": {"rivals": 2}},
             "pattern": "rr",
@@ -1093,7 +1156,7 @@ mod tests {
                 "fbs_source_sha256": FBS_SOURCE_SHA256,
                 "plans": plans
             },
-            "vocab_size": 8,
+            "vocab_size": 256,
             "width": 32
         })
     }
@@ -1213,6 +1276,10 @@ mod tests {
                 fingerprint
             );
         }
+        assert_eq!(
+            RoutePlan::new(8, 8).unwrap().fingerprint,
+            "32a15af2d48680e331d5c1823dbb128dd23e01c4a9cf2f98d8bd0ef0c1a2937c"
+        );
     }
 
     #[test]
@@ -1255,6 +1322,23 @@ mod tests {
     }
 
     #[test]
+    fn model_config_rejects_a_foreign_native_vector_binding() {
+        for (field, value) in [
+            ("geometry", json!("0".repeat(64))),
+            ("source_sha256", json!("0".repeat(64))),
+            ("query_ports", json!("foreign-port-contract")),
+        ] {
+            let mut foreign = model_config_value();
+            foreign["native_vector_head"][field] = value;
+            let error = parse_model_config(&serde_json::to_vec(&foreign).unwrap()).unwrap_err();
+            assert!(
+                error.contains("native vector head binding differs"),
+                "{field}: {error}"
+            );
+        }
+    }
+
+    #[test]
     fn projection_binding_rejects_a_wrong_fingerprint_set() {
         let config =
             parse_model_config(&serde_json::to_vec(&model_config_value()).unwrap()).unwrap();
@@ -1290,27 +1374,59 @@ mod tests {
     #[test]
     fn hamming_inventory_rejects_missing_and_extra_tensors() {
         let complete = tensor_file(hamming_tensor_map(32, 2, false));
-        parse_hamming(&complete, 32, 2).unwrap();
+        parse_hamming(&complete, 32, 2, 6).unwrap();
 
         let mut missing = hamming_tensor_map(32, 2, false);
         missing.retain(|(name, ..)| *name != "d6.weight");
         let missing = tensor_file(missing);
-        let error = parse_hamming(&missing, 32, 2).unwrap_err();
+        let error = parse_hamming(&missing, 32, 2, 6).unwrap_err();
         assert!(error.contains("d6.weight"), "{error}");
 
         let extra = tensor_file(hamming_tensor_map(32, 2, true));
-        let error = parse_hamming(&extra, 32, 2).unwrap_err();
+        let error = parse_hamming(&extra, 32, 2, 6).unwrap_err();
         assert!(error.contains("extra=[\"foreign\"]"), "{error}");
     }
 
     #[test]
     fn hamming_read_rejects_a_head_count_that_differs_from_the_checkpoint() {
         let bytes = tensor_file(hamming_tensor_map(32, 4, false));
-        let error = parse_hamming(&bytes, 32, 2).unwrap_err();
+        let error = parse_hamming(&bytes, 32, 2, 6).unwrap_err();
         assert!(
             error.contains("Hamming head count 4 differs from checkpoint head count 2"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn hamming_read_rejects_a_trunk_that_is_not_the_six_layer_readout_shape() {
+        let bytes = tensor_file(hamming_tensor_map(32, 2, false));
+        let error = parse_hamming(&bytes, 32, 2, 7).unwrap_err();
+        assert!(
+            error.contains("Hamming readout runs at depth 6, but the trunk has 7 layers"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn run_config_rejects_non_boolean_contract_flags() {
+        let config =
+            parse_model_config(&serde_json::to_vec(&model_config_value()).unwrap()).unwrap();
+        for (field, value) in [
+            ("train_as_served", json!("true")),
+            ("retain_rates", json!(1)),
+            ("fold_scores", json!("false")),
+            ("reflect_floor", json!(null)),
+        ] {
+            let mut run = json!({"width": 32, "hamming_read": 2});
+            run[field] = value;
+            let error = validate_run_config(
+                &serde_json::to_string(&run).unwrap(),
+                &config,
+                FbsExportSnaps::SNAPPED,
+            )
+            .unwrap_err();
+            assert!(error.contains(&format!("{field} is not a bool")), "{error}");
+        }
     }
 
     #[test]
