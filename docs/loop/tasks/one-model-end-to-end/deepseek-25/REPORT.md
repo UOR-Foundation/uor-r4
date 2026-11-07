@@ -163,6 +163,10 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
+- Fresh non-author FIT: **GO** at `348a7cda7556a4be641c36824022b873ad146c1f`,
+  reviewed-runtime `c002be99e926614eb98a8ad83e94e75e6c5e79f7f65da74af2ea7854b157c88d`,
+  reviewer session `01a1b82d-2533-7a43-8e2c-6e7d82ba1b47`. No remaining FIT
+  blockers.
 - `gate.sh`: 167 checks passed.
 - `test-mutants.sh`: 55 of 55 semantic mutations caught.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
@@ -183,7 +187,7 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh FIT and D67 reviews of the exact merged repair, then the seed-1 run.
+- Fresh D67 review of the exact runtime, then the seed-1 run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary
