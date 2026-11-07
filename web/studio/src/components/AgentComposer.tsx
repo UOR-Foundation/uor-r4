@@ -160,8 +160,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     function send(prompt: string) {
         if (generation.send(prompt)) {
-            controllerRef.current?.recordSubmitted(prompt);
-            setDraft('');
+            if (controllerRef.current) controllerRef.current.recordSubmitted(prompt);
+            else setDraft('');
             setMenu(null);
             refresh();
         }
@@ -221,7 +221,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }
 
     function handleFiles(selectedFiles: File[]) {
-        return readTextFiles(selectedFiles, { existingAttachments: ui.getAttachments() }).then((result: { attachments: Attachment[]; errors: string[] }) => {
+        const existingAttachments = ui.getAttachments().filter((attachment) => attachment.kind !== 'image');
+        return readTextFiles(selectedFiles, { existingAttachments }).then((result: { attachments: Attachment[]; errors: string[] }) => {
             for (const attachment of result.attachments) ui.addAttachment(attachment);
             for (const error of result.errors) ui.toast(error, 'error');
             if (result.attachments.length) refresh();
@@ -324,7 +325,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 aria-controls={menuOpen ? menuId : undefined}
                 aria-activedescendant={menuOpen ? options[activeIndex].id : undefined}
                 value={draft}
-                onInput={(event) => { setDraft(event.currentTarget.value); updateMenu(event.currentTarget); }}
+                onInput={(event) => updateMenu(event.currentTarget)}
             /></label>
             {menuOpen && menu && (
                 <div id={menuId} role="listbox" aria-label={menu.kind === 'commands' ? 'Build task commands' : 'Attachment mentions'}>

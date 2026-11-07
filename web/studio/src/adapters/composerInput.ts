@@ -31,7 +31,7 @@ export function createComposerInput({
     onDraftChange,
     initialDraft = '',
     interceptKeyDown,
-}: ComposerInputOptions): ComposerInputController {
+}: ComposerInputOptions = {} as ComposerInputOptions): ComposerInputController {
     if (!textarea) throw new Error('A composer textarea is required.');
     const send = typeof onSend === 'function' ? onSend : () => {};
     const filesCallback = typeof onFiles === 'function' ? onFiles : () => {};

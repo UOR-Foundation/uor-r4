@@ -33,6 +33,10 @@ function setup(history: string[] = [], initialDraft = '') {
 }
 
 describe('conversational composer keyboard and history', () => {
+    it('keeps the explicit missing-textarea error when options are omitted', () => {
+        expect(() => createComposerInput()).toThrow('A composer textarea is required.');
+    });
+
     it('sends on Enter, keeps Shift+Enter native, and never sends during IME composition', () => {
         const { textarea, onSend } = setup();
         textarea.value = 'hello';
