@@ -1,81 +1,39 @@
 # ORDER: one-model-end-to-end, claude-311
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `b80933c4b`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `b80933c4b`.
 
 ## Goal
 
-The item's done-when reads:
+**Does a served model trained on a corpus with DEV's EOS rate stop its replies?** claude-310 (#3829) found (b64L)'s TRAIN D3 scores EOS at 756 per million, against DEV's 85,812. claude-309 (#3828) found (b64L) served stops on 0 of 256 `m2-fresh256` rows. `mw-balp/train` (`3dee858f…`), the earlier pinned TRAIN, scores EOS at 87,788 per million with a median reply of 11 (`corpus-eos-exposure`, this unit's first count). claude-259 (#3558) trained width-256 arms on it for 8,192 steps, and its seal holds six served `UORLUT01` artifacts: (b) and (h) at seeds 1–3.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+This unit scores those six with `served-reply-panel`, unchanged, on `m2-fresh256`. Laptop only, no training, no spend.
+
+Claim check: (a) the step is "pipeline first" (#2028, 6709947526): every training choice is judged by this score. (b) It changes no model. It says, before any spend, whether a DEV-rate corpus is enough for a served model to stop.
+
+**Scope of the reading:** descriptive. The arms differ from (b64L) in more than the corpus (claude-259's recipe), so a difference cannot be credited to the corpus alone.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. No open PR or claim scores claude-259's served artifacts on `m2-fresh256`.
+2. The six artifacts hash to the seal's `served/SHA256SUMS`, and the panel files to claude-309's shas.
+
+## The reading, pinned before any score
+
+- **Per artifact:** stops by kind (EOS, BOS, cap, context), rows complete, pairs both complete and distinct, tokens per second, and the output sha. The bar stays the manifest's: 104 rows, 52 pairs.
+- **The question's answer:** the share of rows stopped on EOS, per arm and seed, against (b64L)'s 0 of 256.
+- **If the bin refuses an artifact** (for example, turn memory it does not drive), that is an instrument result, recorded as such, not a reading.
 
 ## Files in scope
 
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
-- `docs/loop/tasks/one-model-end-to-end/**`
+- `docs/loop/tasks/one-model-end-to-end/claude-311/**`
 - `docs/research/notebook/float-training.md`
-- `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
-- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
-- `crates/uor-r4-training/Cargo.toml`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-training/src/milestone_world_v2.rs`
 
 ## Done when
 
-To fill in.
+1. The six artifacts are scored, or each refusal is recorded with its message, and the outputs and their shas are recorded.
+2. The mw-balp EOS count is recorded with its output sha.
+3. The REPORT, negatives first, and one notebook row.
 
 ## Stop and ask if
 
-To fill in.
+Nothing waits on Casey (§5.1). Laptop only, no spend. Bound: one unit.
