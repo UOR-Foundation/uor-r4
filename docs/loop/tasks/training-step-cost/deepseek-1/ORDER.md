@@ -28,9 +28,10 @@ gradient in the existing CUDA equivalence test, revert it and report a negative.
 2. Each detached scalar's share and the final reduction use the same values and order as before.
 3. CPU tests pin the weighted f64 sum and the non-finite refusal; the existing CUDA test still
    pins split versus whole-batch loss and gradients.
-4. `cargo fmt`, the float-train library tests, Clippy for the crate, the stub-CUDA check,
-   `git diff --check`, loop report and local PR checks pass. No model, pod or GPU run occurs in
-   this unit.
+4. The float-train library tests, Clippy for the crate, the stub-CUDA check, `git diff --check`,
+   loop report and local PR checks pass. The base carries rustfmt drift in `in_space_long.rs`;
+   this unit preserves that baseline and runs no whole-file formatter, so it makes no formatting
+   claim. No model, pod or GPU run occurs in this unit.
 5. A REPORT states the code change and makes no speed claim without a device measurement. The
    notebook row belongs to that later measurement unit, because no research run occurs here.
 

@@ -27,7 +27,11 @@ Order: [ORDER.md](ORDER.md). Base: `f66f023d1`.
   device-to-host read.
 - **The arithmetic order is unchanged.** The host receives the same f32 values, converts each to
   f64, multiplies by the same forward's scored-row share, and sums in the same forward order.
-- **The finite-loss refusal is unchanged.** It runs after the one read and names the step.
+- **The finite-loss refusal returns the same error, at a different failure point.** It now runs
+  after every scheduled backward and the one read, rather than before each backward. A non-finite
+  forward can therefore spend the remaining micro-batches' work before it is refused. The CPU test
+  pins the deferred helper's error text; it does not exercise this failure path inside a full
+  model step.
 - **The gradient order is unchanged.** Each forward still contributes its scaled loss to a
   `GradStore`, and `add_grads` accumulates those stores in micro-batch order.
 - **A CPU test pins exact weighted-sum bits and the non-finite refusal.** The existing CUDA test,
@@ -46,7 +50,8 @@ Size: the code commit is 73 insertions and 19 deletions in `in_space_long.rs` pl
 
 ## Checks run at the head
 
-Code head: `93294106a`.
+Code head: `93294106a`. The only later head at review is REPORT/ORDER text; this section separates
+the code checks from the final documentation checks.
 
 - `cargo test --release --locked -p uor-r4-float-train --lib`: 295 passed, 0 failed.
 - The focused test
