@@ -227,13 +227,14 @@ log "building pinned binaries"
 )
 (
   cd "$REPO/docs/labs/one-model-end-to-end/instrument"
-  cargo build --release --locked --features cpu-parity --bin served-reply-panel
+  CARGO_TARGET_DIR="$RUN/panel-target" \
+    cargo build --release --locked --features cpu-parity --bin served-reply-panel
 )
 
 TRAIN_BIN="$TARGET/release/train-in-space"
 GRADE_BIN="$TARGET/release/cpu-checkpoint-grade"
 EXPORT_BIN="$TARGET/release/cpu-fbs-export"
-PANEL_BIN="$REPO/docs/labs/one-model-end-to-end/instrument/target/release/served-reply-panel"
+PANEL_BIN="$RUN/panel-target/release/served-reply-panel"
 for binary in "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN"; do
   [ -x "$binary" ] || die "build did not produce $binary"
 done

@@ -45,6 +45,9 @@ mutate wrong-seed "$JOB" '--seed 1 \' '--seed 2 \'
 mutate seed-two-enabled "$JOB" '2) echo "seed 2 is conditional and is not launched by this script" >&2; exit 2 ;;' '2) ;;'
 mutate zero-replies "$JOB" '--max-replies 1 --reply-tokens 1' \
   '--max-replies 0 --reply-tokens 1'
+mutate wrong-panel-target "$JOB" \
+  'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' \
+  'PANEL_BIN="$REPO/docs/labs/one-model-end-to-end/instrument/target/release/served-reply-panel"'
 mutate mixed-hash "$JOB" \
   3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
   0000000000000000000000000000000000000000000000000000000000000000

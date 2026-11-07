@@ -103,6 +103,8 @@ require_line '--train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac7
 require_line '--train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \' "$JOB"
 require_line '--batch 64 --micro-batch 16 --steps 1024 \' "$JOB"
 require_line '--eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \' "$JOB"
+require_line 'CARGO_TARGET_DIR="$RUN/panel-target" \' "$JOB"
+require_line 'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' "$JOB"
 require_line 'READBACK_STATUS=verified' "$JOB"
 
 require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu 5090 \' "$LAUNCHER"
