@@ -76,7 +76,6 @@ pub mod statusdelivery;
 pub mod statusrules;
 pub mod statusrules_heartbeat;
 pub mod team;
-pub mod verify_code_tasks;
 pub mod version;
 
 pub use briefing::{assemble, human_tokens, ContextPack};

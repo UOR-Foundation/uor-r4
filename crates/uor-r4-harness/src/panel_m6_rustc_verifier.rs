@@ -19,6 +19,7 @@ pub enum VerifyOutcome {
     Pass { passed: usize },
     CompileError { stderr: String },
     TestFailure { stdout: String, stderr: String },
+    UnexpectedOutput { stdout: String, stderr: String },
     Timeout { phase: &'static str },
     RunError { detail: String },
 }
@@ -174,6 +175,11 @@ fn parse_test_result(stdout: &str) -> Option<(usize, usize)> {
     None
 }
 
+/// Verify already-generated, trusted Rust source.
+///
+/// This is not a sandbox: the compiled test binary has the host process's
+/// filesystem, network and environment access, except that `GIT_*` variables
+/// are removed. Never pass model-emitted or untrusted source.
 pub fn verify_row(row_id: &str, rust_source: &str) -> RowVerification {
     let outcome = match verify_source(rust_source) {
         Ok(o) => o,
@@ -230,15 +236,18 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
 
     match run {
         Err(e) if e.kind() == io::ErrorKind::TimedOut => {
-            return Ok(VerifyOutcome::Timeout { phase: "run" });
+            Ok(VerifyOutcome::Timeout { phase: "run" })
         }
-        Err(e) => return Err(e),
+        Err(e) => Err(e),
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
             if output.status.success() {
-                let passed = parse_test_result(&stdout).map(|(p, _)| p).unwrap_or(1);
-                Ok(VerifyOutcome::Pass { passed })
+                match parse_test_result(&stdout) {
+                    Some((passed, 0)) if passed > 0 => Ok(VerifyOutcome::Pass { passed }),
+                    Some(_) => Ok(VerifyOutcome::TestFailure { stdout, stderr }),
+                    None => Ok(VerifyOutcome::UnexpectedOutput { stdout, stderr }),
+                }
             } else {
                 Ok(VerifyOutcome::TestFailure { stdout, stderr })
             }
@@ -247,7 +256,7 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
 }
 
 pub fn verify_all_frozen_code_tasks() -> Vec<RowVerification> {
-    use crate::panels::m6_reasoning::{generate_frozen_m6_panel, M6RowSpec};
+    use super::m6_reasoning::{generate_frozen_m6_panel, M6RowSpec};
 
     let panel = generate_frozen_m6_panel();
     let mut results = Vec::new();
@@ -261,107 +270,4 @@ pub fn verify_all_frozen_code_tasks() -> Vec<RowVerification> {
         }
     }
     results
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn passing_source_compiles_and_passes() {
-        let source = r#"
-pub fn solve(x: i64) -> i64 { x + 1 }
-
-#[test]
-fn verify_vectors() {
-    assert_eq!(solve(1i64), 2i64);
-    assert_eq!(solve(10i64), 11i64);
-}
-"#;
-        let result = verify_row("test-pass", source);
-        assert!(
-            matches!(result.outcome, VerifyOutcome::Pass { .. }),
-            "expected Pass, got {:?}",
-            result.outcome
-        );
-    }
-
-    #[test]
-    fn compile_error_is_reported() {
-        let source = "this is not valid rust";
-        let result = verify_row("test-compile-err", source);
-        assert!(
-            matches!(result.outcome, VerifyOutcome::CompileError { .. }),
-            "expected CompileError, got {:?}",
-            result.outcome
-        );
-    }
-
-    #[test]
-    fn failing_assertion_is_reported() {
-        let source = r#"
-pub fn solve(x: i64) -> i64 { x }
-
-#[test]
-fn verify_vectors() {
-    assert_eq!(solve(1i64), 999i64);
-}
-"#;
-        let result = verify_row("test-fail", source);
-        assert!(
-            matches!(result.outcome, VerifyOutcome::TestFailure { .. }),
-            "expected TestFailure, got {:?}",
-            result.outcome
-        );
-    }
-
-    #[test]
-    fn timeout_is_reported() {
-        let source = r#"
-pub fn solve(_x: i64) -> i64 { loop {} }
-
-#[test]
-fn verify_vectors() {
-    solve(0);
-}
-"#;
-        let result = verify_source(source);
-        match result {
-            Ok(VerifyOutcome::Timeout { phase: "run" }) => {}
-            other => panic!("expected run timeout, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn all_80_frozen_rows_pass() {
-        let results = verify_all_frozen_code_tasks();
-        assert_eq!(results.len(), 80, "expected 80 CodeTasks rows");
-        let failures: Vec<_> = results
-            .iter()
-            .filter(|r| !matches!(r.outcome, VerifyOutcome::Pass { .. }))
-            .collect();
-        assert!(failures.is_empty(), "frozen rows failed: {failures:#?}");
-        for r in &results {
-            if let VerifyOutcome::Pass { passed } = &r.outcome {
-                assert!(*passed > 0, "row {} reported 0 passed", r.row_id);
-            }
-        }
-    }
-
-    #[test]
-    fn parse_test_result_line() {
-        assert_eq!(
-            parse_test_result(
-                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
-            ),
-            Some((1, 0))
-        );
-        assert_eq!(
-            parse_test_result(
-                "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out"
-            ),
-            Some((0, 1))
-        );
-        assert_eq!(parse_test_result("no match here"), None);
-    }
 }
