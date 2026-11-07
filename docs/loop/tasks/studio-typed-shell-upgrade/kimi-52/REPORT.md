@@ -14,7 +14,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 - `src/main.ts` invokes `mountTypedStudio` only for `?typed=1`; default `index.html` retains the legacy application. `src/bootstrap.ts` waits for workflow methods, creates the lifecycle store/model adapter, reuses the existing `window.__studioApp.worker` when present, and mounts `StudioApp` through Preact.
 - Vite builds `index.html` as an application with relative asset URLs. `src/stage-dist.mjs` copies generated artifacts to `dist/pkg` without adding dependencies or committing binaries.
-- The preview removes the legacy mount element before the shared MCP module loads, so only the typed MCP panel mounts and no request is made by the legacy mount. The shared `mcp_client.js` implementation is unchanged.
+- A narrow preview-only guard in `mcp_client.js` suppresses legacy auto-boot when `?typed=1`, so only the typed MCP panel mounts and no request is made by the legacy mount. The shared client otherwise retains its behavior.
 - Additive browser checks prove a visible typed shell, hidden legacy shell, zero legacy MCP mounts, one typed MCP panel, bundled model readiness, and zero external requests. Existing default-page checks are unchanged and green.
 
 ## Measurements
