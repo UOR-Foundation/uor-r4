@@ -51,7 +51,7 @@ Why these two kernels first:
 ## Done when
 
 1. **The kernel list is generated.**
-   - `build.rs` scans each `MODULES` entry's combined `sources` (`build.rs:26-54`) for `extern "C" __global__ void <name>` on every build, CPU builds included. It writes one list per PTX module, which `lib.rs` includes. The arms module is built from three files, `spiralcore_fbs_arms_prelude.cu`, `spiralcore_fbs.cu` and `spiralcore_fbs_arms.cu` (`:44-53`). So its list is the 4 FBS kernels plus `spiralcore_fbs_arm_fwd` and `spiralcore_fbs_arm_bwd`.
+   - `build.rs` scans each `MODULES` entry's combined `sources` (`build.rs:34-74`) for `extern "C" __global__ void <name>` on every build, CPU builds included. It writes one list per PTX module, which `lib.rs` includes. The arms module is built from three files, `spiralcore_fbs_arms_prelude.cu`, `spiralcore_fbs.cu` and `spiralcore_fbs_arms.cu` (`:52-61`). So its list is the 4 FBS kernels plus `spiralcore_fbs_arm_fwd` and `spiralcore_fbs_arm_bwd`.
    - The dispatch refuses a name not in its own module's list. The arms kernels, launched through `launch_prebuilt` (`geometric_stack_native_cuda.rs:798-805`), must pass that check, not fail it.
    - No literal kernel count is left in code, tests or their doc comments: `lib.rs:3-4, :33-35`, `tests/no_training_crate_dep.rs:3-4`, and the messages at `:83` and `:104`.
    - The test re-scans the sources itself and compares with the generated lists. The banned-token scan stays.
@@ -71,8 +71,8 @@ Why these two kernels first:
 ## How to start
 
 - **Measure before fusing.** Done-when 1 needs no measurement. Before done-when 2 or 3, time a training step at P2b's recipe with `--train-as-served 1`, chain by chain: the two quantizer chains against the rest of the step (`train-in-space --profile N` and `nsys` where the machine has it). If the cancel rule fires, report it, and the fusion does not start.
-- The list's two copies: `src/lib.rs:3-4, :33-36` and `tests/no_training_crate_dep.rs:9, :81-108`. `build.rs` names the three PTX modules at `:26-54` and builds them with nvcc at `:76-95`. The scan must run before the early return at `:68-70`, so CPU builds get the list too.
-- The chains and their CPU twins: `hamilton_sheet.rs:646-780` (`q16_residual_ste_scalar :675`, `activation_scale_scalar :691`, `activation_quantize16_ste_scalar :705`). Kernels load at `cuda_stack_kernels.rs:376`; the PTX is embedded at `:85-86`.
+- The generated-list implementation is `src/lib.rs:36-55`, tested by `tests/no_training_crate_dep.rs:91-127`. `build.rs` declares the five PTX modules at `:34-74`; the scan runs before the CPU-only early return at `:92-94`, so CPU builds get the lists too.
+- The chains and their CPU twins: `hamilton_sheet.rs:657-783` (`q16_residual_ste_scalar :693`, `activation_scale_scalar :709`, `activation_quantize16_ste_scalar :723`). Kernels load through `cuda_stack_kernels.rs:373-394`; the PTX is embedded at `:132-133`.
 - Stale "24" text to correct on the way: `tests/twenty_four_kernel_controls.rs:1-5` and the crate's `Cargo.toml` description.
 - **Where the kernels go** (claude-284's cancel probe). `cuda_stack.cu`'s SHA-256 is pinned as earlier sheets' source identity (`spiralcore_fbs_sheet.rs:54`, tested at `:4156`), so the fused kernels get their own source, `src/fused_quantize.cu`, built by `build.rs` as their own PTX module, as the SpiralCore arms were. The one-step gate needs the served model parts and the step's loss, which only `in_space_long.rs`'s `tests` module reaches; the unit changes no line outside it.
 - **Where it runs.** Kernel development may use Casey's local RTX 4090 (Linux) once it is up. The gates that count, done-when 2 to 4, run on an RTX 5090 pod. That is Casey's call 1 of 4 Nov (#2028 6638209391): qualification stays on 5090 pods until the 4090 bring-up's step 4 shows the cards agree. A 4090 needs its own PTX target (it cannot load `compute_120`).
