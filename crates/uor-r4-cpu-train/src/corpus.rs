@@ -227,7 +227,9 @@ impl CpuMaskedCorpus {
     /// would exceed the model context.
     pub fn conversation_examples(&self) -> Result<Vec<CpuConversationSample>> {
         let mut examples = Vec::new();
-        self.for_each_conversation_example(|example| examples.push(example))?;
+        self.for_each_conversation_span(|ordinal, prompt_start, start, end| {
+            examples.push(self.conversation_example_at(ordinal, prompt_start, start, end));
+        })?;
         if examples.is_empty() {
             return Err(invalid(
                 "corpus has no complete assistant response examples",
@@ -246,7 +248,7 @@ impl CpuMaskedCorpus {
             return Err(invalid("conversation example cap must be positive"));
         }
         let mut total = 0usize;
-        self.for_each_conversation_example(|_| total += 1)?;
+        self.for_each_conversation_span(|_, _, _, _| total += 1)?;
         if total == 0 {
             return Err(invalid(
                 "corpus has no complete assistant response examples",
@@ -256,9 +258,9 @@ impl CpuMaskedCorpus {
         let mut observed = 0usize;
         let mut next = 0usize;
         let mut examples = Vec::with_capacity(selected);
-        self.for_each_conversation_example(|example| {
+        self.for_each_conversation_span(|ordinal, prompt_start, start, end| {
             if next < selected && observed == next * total / selected {
-                examples.push(example);
+                examples.push(self.conversation_example_at(ordinal, prompt_start, start, end));
                 next += 1;
             }
             observed += 1;
@@ -269,9 +271,9 @@ impl CpuMaskedCorpus {
         Ok(examples)
     }
 
-    fn for_each_conversation_example(
+    fn for_each_conversation_span(
         &self,
-        mut visit: impl FnMut(CpuConversationSample),
+        mut visit: impl FnMut(usize, usize, usize, usize),
     ) -> Result<()> {
         if self.bos != 0 {
             return Err(invalid(
@@ -291,8 +293,7 @@ impl CpuMaskedCorpus {
                 while end < document.end && self.mask[end] == 1 {
                     end += 1;
                 }
-                let reply = self.tokens[start..end].to_vec();
-                if reply.len() >= self.context {
+                if end - start >= self.context {
                     start = end;
                     continue;
                 }
@@ -303,15 +304,8 @@ impl CpuMaskedCorpus {
                         break;
                     }
                 }
-                let prompt = &self.tokens[prompt_start..start];
-                if !prompt.is_empty() {
-                    let budget = self.context - reply.len();
-                    let prompt = &prompt[prompt.len().saturating_sub(budget)..];
-                    visit(CpuConversationSample {
-                        document_ordinal: ordinal,
-                        prompt: prompt.to_vec(),
-                        reply,
-                    });
+                if prompt_start < start {
+                    visit(ordinal, prompt_start, start, end);
                 }
                 start = end;
             }
@@ -319,10 +313,29 @@ impl CpuMaskedCorpus {
         Ok(())
     }
 
+    fn conversation_example_at(
+        &self,
+        document_ordinal: usize,
+        prompt_start: usize,
+        reply_start: usize,
+        reply_end: usize,
+    ) -> CpuConversationSample {
+        let reply = &self.tokens[reply_start..reply_end];
+        let budget = self.context - reply.len();
+        let prompt = &self.tokens[prompt_start..reply_start];
+        CpuConversationSample {
+            document_ordinal,
+            prompt: prompt[prompt.len().saturating_sub(budget)..].to_vec(),
+            reply: reply.to_vec(),
+        }
+    }
+
     /// Every masked reply target with its complete causal prefix.
     pub fn causal_samples(&self) -> Result<Vec<RankMarginSample>> {
         let mut samples = Vec::new();
-        self.for_each_causal_sample(|sample| samples.push(sample))?;
+        self.for_each_causal_position(|position, document_start| {
+            samples.push(self.causal_sample_at(position, document_start));
+        });
         if samples.is_empty() {
             return Err(invalid("corpus has no causal response targets"));
         }
@@ -335,8 +348,7 @@ impl CpuMaskedCorpus {
         if maximum == 0 {
             return Err(invalid("causal sample cap must be positive"));
         }
-        let mut total = 0usize;
-        self.for_each_causal_sample(|_| total += 1)?;
+        let total = self.causal_target_count();
         if total == 0 {
             return Err(invalid("corpus has no causal response targets"));
         }
@@ -344,13 +356,13 @@ impl CpuMaskedCorpus {
         let mut observed = 0usize;
         let mut next = 0usize;
         let mut samples = Vec::with_capacity(selected);
-        self.for_each_causal_sample(|sample| {
+        self.for_each_causal_position(|position, document_start| {
             if next < selected && observed == next * total / selected {
-                samples.push(sample);
+                samples.push(self.causal_sample_at(position, document_start));
                 next += 1;
             }
             observed += 1;
-        })?;
+        });
         if samples.len() != selected {
             return Err(invalid("causal sample sampling lost a selected row"));
         }
@@ -363,39 +375,31 @@ impl CpuMaskedCorpus {
             .iter()
             .map(|document| {
                 (document.start + 1..document.end)
-                    .filter(|&position| {
-                        self.mask[position] == 1 && self.tokens[position] != self.bos
-                    })
+                    .filter(|&position| self.mask[position] == 1)
                     .count()
             })
             .sum()
     }
 
-    fn for_each_causal_sample(
-        &self,
-        mut visit: impl FnMut(RankMarginSample),
-    ) -> Result<()> {
+    fn for_each_causal_position(&self, mut visit: impl FnMut(usize, usize)) {
         for document in &self.documents {
             for target_position in document.start + 1..document.end {
                 if self.mask[target_position] != 1 {
                     continue;
                 }
-                let prefix_start = target_position
-                    .saturating_sub(self.context)
-                    .max(document.start);
-                let input = self.tokens[prefix_start..target_position].to_vec();
-                if input.is_empty() || input.len() > self.context {
-                    return Err(invalid(
-                        "corpus causal prefix length is outside the model context",
-                    ));
-                }
-                visit(RankMarginSample {
-                    input,
-                    target: self.tokens[target_position],
-                });
+                visit(target_position, document.start);
             }
         }
-        Ok(())
+    }
+
+    fn causal_sample_at(&self, target_position: usize, document_start: usize) -> RankMarginSample {
+        let prefix_start = target_position
+            .saturating_sub(self.context)
+            .max(document_start);
+        RankMarginSample {
+            input: self.tokens[prefix_start..target_position].to_vec(),
+            target: self.tokens[target_position],
+        }
     }
 
     fn document_samples(&self, document: &Range<usize>) -> Result<Vec<RankMarginSample>> {
