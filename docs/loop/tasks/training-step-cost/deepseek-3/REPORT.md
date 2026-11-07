@@ -45,6 +45,10 @@ The synthetic nearest-objective step, 16 windows × 192 tokens in four micro-bat
 `1.0039109885692596`. `embedding.weight`'s largest relative gradient move is **1.14%**; the test
 does not localize the cause, with tied rival selection the leading hypothesis.
 
+This is not a b64L or production-speed claim. The step uses `FbsArm::OneAtomActive`,
+`served=false`, no Hamming read and no optimizer update. Served-mode timing and parity are
+unverified in this unit.
+
 ## Checks run at the head
 
 Result-producing code head: `d429eb7b9`. Later commits change records only.
@@ -53,7 +57,8 @@ Result-producing code head: `d429eb7b9`. Later commits change records only.
   tests, 9 trainer tests, 2 dependency/kernel-scan tests and 12 finite controls passed; 0 failed.
 - The pod's real nvcc 12.8 build compiled the CUDA-enabled library, binaries and tests before
   running the named device tests.
-- RTX 5090 `the_fused_nearest_selector_matches_the_old_search_on_untied_rows`: passed.
+- RTX 5090 `the_fused_nearest_selector_matches_the_old_search_on_untied_rows`: passed, including
+  a case where the target is the nearest table row and must be excluded explicitly.
 - RTX 5090 `time_the_fused_nearest_search`: passed and produced the search table above.
 - RTX 5090 `the_fast_rival_selector_keeps_the_loss_and_measures_tie_gradient_delta`: passed,
   now through the fused path, with the measurements above.
@@ -61,8 +66,9 @@ Result-producing code head: `d429eb7b9`. Later commits change records only.
   line.
 - `git diff --check`: passed.
 
-Spend about $0.08 on one RTX 5090; the job logs are archived at
-`vast-archive/vast-59603424/uor-r4/jobs`.
+Spend about $0.12 across two short RTX 5090 runs; timing logs are archived at
+`vast-archive/vast-59603424/uor-r4/jobs` and the final target-exclusion check at
+`vast-archive/vast-59604710/uor-r4/jobs`.
 
 ## Skills used
 
