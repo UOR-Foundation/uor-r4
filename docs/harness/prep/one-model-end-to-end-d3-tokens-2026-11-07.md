@@ -90,6 +90,7 @@ Verdict words are `scale-probe pair`'s, at both seeds. Mixed reads "not distingu
 | 0a | a seed NOT_RUN after its rerun, for an instrument fault (a gate, out of memory, setup) | — | **`blocked`.** No reading is made on one seed, and nothing is called a negative (§4.2). Next: repair the instrument, then rerun the seed under this sheet. |
 | 0b | a seed NOT_RUN after its rerun, for a cause classed as a mechanism result (a divergence at a recipe that trained at 16,384) | — | **`diagnostic stop`,** recorded as a result about 32,768 steps at this recipe. The trunk keeps 16,384 steps. Next: a decision review in the REPORT. |
 | 1 | not met (ahead of T2 only, not distinguishable, or behind T2) | any | **Not met at 32,768 steps,** configuration only. The grade is checked first. The trunk keeps 16,384 steps, where claude-301 met the bar. Next: a decision review in the REPORT. |
+| 1a | not read (a seed's grade or pair fails on the laptop, with both seals present) | — | **`blocked`, with no pod.** Repair the grade or pair instrument and re-read from the sealed checkpoints. Nothing is called a result until the bar is read. |
 | 1b | met | not read (I-r or I-s failed) | **The bar stands; the lever waits on the laptop.** Repair the grade or pair instrument and re-read from the sealed checkpoints, with no pod. The trunk's steps stay undecided until then. |
 | 2 | met | `ahead`, and the unseen lever `ahead` | **More passes move the trunk, on contexts TRAIN does not hold.** The trunk trains 32,768 steps. Next: the tokens lever again, 65,536 steps on D3, under its own sheet. Its cost (about $14 at today's prices) is put to Casey before any pod, since it is past this approval. |
 | 3 | met | `ahead`, the unseen lever not `ahead` | **More passes move the trunk on contexts D3 holds only.** The trunk trains 32,768 steps. Next: D4 at 32,768 steps (about 5.4 passes of D4), under its own sheet, since more distinct text is where unseen contexts come from. |
@@ -119,7 +120,8 @@ These are registered here, before any pod goes up.
   - What it cannot see: growth slower than about 16 MiB a step passes I-f. The backstop is the run's own out-of-memory stop, and over 32,768 steps the watcher's memory line.
 - **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64, from the smoke. The projected wall is W = used + 1.05 × r × 32,768 + 600 s, written to `it.txt`. The 600 s is two scorings at about 240 s each, plus a margin.
   - No gate acts on W. At claude-306's r of 0.632–0.636 s a step, W is about 22,700–22,800 s.
-  - **The watcher enforces two limits:** MAXSEC, 25,200 s (7 h) from the pod's start, and a budget of PRICE × 7 h.
+  - **The watcher enforces two limits:** MAXSEC, 25,200 s (7 h) from the pod's start, and a budget of PRICE × 7 h. W is measured from the job's start, which comes a few minutes after the pod's, so W is compared with MAXSEC less the pod's setup time read from `up-sS.epoch`.
+  - A TIME or spend stop leaves the pod up. The session re-arms the watcher with the extension below if the run is healthy, and records it on #3407.
   - If W exceeds 25,200 s, both are extended under the charter's extend rule: MAXSEC to W + 1,800 s, and the budget to PRICE × (W + 1,800) / 3,600. The REPORT says so. If that puts the two pods past $9.80, Casey gets one [claude, for Casey] note on #2028, and the healthy run goes on.
 - **I-4:** every graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
 - **I-5:** each scored checkpoint's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes, as in claude-301's job. That holds for both the step-16,384 and the step-32,768 checkpoints.
@@ -179,6 +181,7 @@ These are registered here, before any pod goes up.
 - **The smoke, I-m or I-f fails:** the arm is NOT_RUN at that seed, by the outcome map.
 - **An out-of-memory error, divergence (a non-finite loss) or a trainer exit other than 0:** the arm is NOT_RUN at that seed. Each is classified as an instrument fault or a mechanism result before it is called anything (§4.2).
 - **The step-16,384 checkpoint fails to score or I-5:** only the mid-run reading is lost; the bar and the lever stand on the step-32,768 checkpoint.
+- **A pod lost mid-run** (the host goes away, or SSH and the seal cannot be reached): an instrument NOT_RUN at that seed, rerun once under the rerun rule, and read by row 0a if it fails again.
 - **A pod never reaches SSH within 1,800 s:** it is deleted, and one retry runs on another machine. After two failures for a seed, that seed waits for a new RTX 5090 offer inside $0.70/h, and then reruns under this sheet. No reading is made on one seed meanwhile.
 - **Always:** the job seals on every exit, and the watcher takes the pod down after `seal=0`.
 
@@ -197,3 +200,9 @@ These are registered here, before any pod goes up.
    - row 6 is split into 6a and 6b;
    - I-t's margin and extend line, I-s's b-side shas, and I-r's full field list;
    - the cost, from claude-306's raw wall times.
+9. **D67 review:**
+   - the job skips the mid-run scoring when I-1 recorded no step-64 checkpoint, and the gate tests check that the mid-run block never declares a cell NOT_RUN (two new mutations);
+   - the laptop's grade step requires the pod's score exit 0 and `same` on every I-5 line;
+   - row 1a covers a bar that cannot be read on the laptop, re-read from the seals with no pod;
+   - a pod lost mid-run is an instrument NOT_RUN;
+   - I-t says W runs from the job's start and MAXSEC from the pod's, and that the session re-arms the watcher after a time stop.
