@@ -212,9 +212,10 @@ run config, Hamming read and output `UORLUT01` hash.
 ## Bar and outcome map
 
 This is a staged development run, not a milestone bar. The current M2 bar is
->= 256/512 saved questions plus >= 40% (104/256) of genuinely fresh questions,
-with the existing graders unchanged. `m2-reply512` remains unavailable, so this
-unit cannot claim an M2 pass.
+>= 256/512 saved questions, plus >= 52/128 pairs that are both complete and
+distinct and >= 104/256 single-row-complete questions on the genuinely fresh
+panel, with the existing graders unchanged. `m2-reply512` remains unavailable,
+so this unit cannot claim an M2 pass.
 
 The first-match outcome map is:
 

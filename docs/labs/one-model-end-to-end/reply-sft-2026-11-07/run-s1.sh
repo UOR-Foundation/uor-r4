@@ -23,34 +23,15 @@ POD_TOOL="$ROOT/scripts/pod/uor-pod"
 STORE="$ROOT/scripts/pod/uor-store"
 JOB="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"
 RUNTIME_PATHS=(
+  .cargo/config.toml
   Cargo.lock
   Cargo.toml
-  crates/uor-r4-cpu-train/Cargo.toml
-  crates/uor-r4-cpu-train/src/bin/cpu-checkpoint-grade.rs
-  crates/uor-r4-cpu-train/src/bin/cpu-fbs-export.rs
-  crates/uor-r4-cpu-train/src/checkpoint_grade.rs
-  crates/uor-r4-cpu-train/src/fbs.rs
-  crates/uor-r4-cpu-train/src/fbs_snapshot_cpu.rs
-  crates/uor-r4-cpu-train/src/lib.rs
-  crates/uor-r4-float-train/src/in_space_long.rs
-  crates/uor-r4-float-train/src/bin/train-in-space.rs
-  crates/uor-r4-pod-provider/Cargo.toml
-  crates/uor-r4-pod-provider/src/lib.rs
-  crates/uor-r4-pod-provider/src/main.rs
-  docs/labs/one-model-end-to-end/instrument/Cargo.lock
-  docs/labs/one-model-end-to-end/instrument/Cargo.toml
-  docs/labs/one-model-end-to-end/instrument/src/bin/corpus-panel-overlap.rs
-  docs/labs/one-model-end-to-end/instrument/src/bin/served-reply-panel.rs
-  docs/labs/one-model-end-to-end/instrument/src/evidence.rs
-  docs/labs/one-model-end-to-end/instrument/src/main.rs
-  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/gate.sh
-  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh
-  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh
-  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/test-mutants.sh
-  scripts/pod/uor-pod
-  scripts/pod/uor-pod-bootstrap.sh
-  scripts/pod/uor-reaper.sh
-  scripts/pod/uor-store
+  rust-toolchain.toml
+  crates
+  docs/labs/one-model-end-to-end/instrument
+  docs/labs/one-model-end-to-end/reply-sft-2026-11-07
+  scripts
+  third_party
 )
 POD_STATE=${UOR_POD_STATE:-$HOME/.local/share/uor-r4/compute}
 RUN_ID=$(date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]')-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')

@@ -108,8 +108,8 @@ spend.
   launch remains one RTX 5090.
 - The exact pin must be contained in freshly fetched `origin/main`.
 - The launcher also requires `UOR_SFT_REVIEWED_RUNTIME`; the SHA-256 of the
-  reviewed Cargo, trainer, CPU instrument, panel instrument, pod tool, launcher,
-  job, gate and mutation-test tree entries at `PIN` must equal the identity
+  reviewed Cargo/toolchain, workspace crates, third-party build sources, pod
+  tools, panel instrument and reply-SFT scripts at `PIN` must equal the identity
   recorded by review.
 - Launch records free space, force-reads memory state, and authenticates or
   records absence of `model-time.json` and the storage receipt before rental.
