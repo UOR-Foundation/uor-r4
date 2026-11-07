@@ -102,7 +102,9 @@ benchmark.
 
 After removing wall and rate fields, the two full seed-1 reports both normalized
 to SHA-256
-`7df7c78c10a35f465f47cc54a9c73c77aadb52a045af30d54268f13f946a7967`.
+`e185d84117250d04a66ef3a8f8dcf8f2f5bd42f5e6092a8f7bded5d58f4c94b0`.
+Their selected reply inputs had fingerprint
+`7da9a28e3ea6cca22d3bf570764454d700bfabcce7df03cb450033b85214c196`.
 
 The compact bound result is
 [result.json](./evidence/result.json).

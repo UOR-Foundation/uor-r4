@@ -23,6 +23,7 @@
     "rows": 4900,
     "top1_correct": 1036,
     "sample_fingerprint": "e885b20a2ec994945920e25f97d953a12c2edcc36e24f5d8da6246fc3f3f6863",
+    "reply_sample_fingerprint": "7da9a28e3ea6cca22d3bf570764454d700bfabcce7df03cb450033b85214c196",
     "replies": 16,
     "bos_complete": 0,
     "cap_stopped": 16,
@@ -46,6 +47,7 @@
     "head": "nearest",
     "rows": 4900,
     "top1_correct": 1110,
+    "reply_sample_fingerprint": "7da9a28e3ea6cca22d3bf570764454d700bfabcce7df03cb450033b85214c196",
     "top1_delta": 74,
     "top1_only_candidate": 181,
     "top1_only_baseline": 107,
@@ -73,7 +75,7 @@
     "seed_2_snapshot_sha256": "a80c406da9ace065d90d78aeaf9115b4c937b182f5b72b11fe900368b31f8f6d"
   },
   "deterministic_replay": {
-    "normalized_report_sha256": "7df7c78c10a35f465f47cc54a9c73c77aadb52a045af30d54268f13f946a7967",
+    "normalized_report_sha256": "e185d84117250d04a66ef3a8f8dcf8f2f5bd42f5e6092a8f7bded5d58f4c94b0",
     "matched": true
   },
   "limitations": [
