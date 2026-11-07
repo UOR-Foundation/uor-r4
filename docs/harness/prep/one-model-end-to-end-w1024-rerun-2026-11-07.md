@@ -40,6 +40,38 @@ TEST FITNESS: FIT WITH CHANGES by a fresh non-author review on 7 Nov, at sheet h
 5. **The seal path** is `results/claude/one-model-end-to-end-w1024-rerun-2026-11-07/runs/s{1,2}/`. claude-302's seals are not touched (L-002).
 6. **The cost:** claude-302's, with a cap of $70 for this unit, and watcher stops at 17 h and $34 a pod.
 
+## The required blocks, as amended
+
+Each block below is claude-302's, word for word, except for the changes it names. Nothing in this section is new: it maps the changes above onto the sheet's required blocks.
+
+### Base artifact
+
+claude-302's, with the trainer built at this sheet's pin (Change 1).
+
+### Data split
+
+claude-302's, unchanged.
+
+### Steps
+
+claude-302's, with three additions: I-0 runs the new test (Change 2), I-e's pass is set by Change 3, and each I-e run's peak memory is recorded (Change 4). Seals go to Change 5's path.
+
+### Minimum test power
+
+claude-302's, unchanged.
+
+### Bar
+
+claude-302's, unchanged.
+
+### Stop rule
+
+claude-302's, unchanged. I-e fails only under Change 3's tolerance.
+
+### Cost
+
+Change 6: claude-302's prices, with a cap of $70 for this unit and watcher stops at 17 h and $34 a pod.
+
 ## What a pass and a fail unlock
 
 - **I-m passes and the arm trains at both seeds:** claude-302's Readings, Bar and outcome map decide the next unit, word for word.
