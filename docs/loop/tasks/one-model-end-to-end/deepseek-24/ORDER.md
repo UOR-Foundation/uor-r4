@@ -24,6 +24,8 @@ EOS-rank differences.
 ## Files in scope
 
 - `crates/uor-r4-float-train/src/in_space_long.rs`
+- `crates/uor-r4-float-train/Cargo.toml`
+- `crates/uor-r4-float-train/src/bin/packet-parity.rs`
 - `crates/uor-r4-cpu-train/src/fbs.rs`
 - `crates/uor-r4-cpu-train/src/lib.rs`
 - `docs/labs/one-model-end-to-end/instrument/**`

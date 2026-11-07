@@ -25,7 +25,8 @@ training or model evaluation yet.
   checkpoint and reads, restores the run's geometric flags, requires the native
   nearest objective, and exposes teacher-forced token ranks plus greedy packet
   replies.
-- Added `packet-parity`, a GPU instrument with feature `cuda-parity`. It uses the
+- Added `packet-parity` in the D37 float-training crate with feature
+  `packet-parity`. It uses the
   same `m2-fresh256` renderer and reference-answer rule as
   `served-reply-panel`, then compares the float and `CpuFbsForward` decisions
   row by row.
@@ -43,7 +44,8 @@ SFT pod chain after both dependency PRs merge.
 ## Checks run at the head
 
 - `cargo check --offline --locked -p uor-r4-float-train --lib`: passed.
-- Stub-CUDA `cargo check ... --features cuda-parity --all-targets`: passed.
+- Stub-CUDA `cargo check -p uor-r4-float-train --features packet-parity
+  --bin packet-parity`: passed.
 - `packet-parity` pure tests: 2 passed.
 - `served-reply-panel` CPU tests: 11 passed.
 - `rustfmt --check` on the new binary: passed.
