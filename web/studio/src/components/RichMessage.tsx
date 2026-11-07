@@ -5,9 +5,9 @@ interface RichMessageProps {
     content: string;
 }
 
-const inlineToken = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\))/g;
-const markdownLink = /^\[([^\]\n]+)\]\(([^)\s]+)\)$/;
-const fenceStart = /^```([a-zA-Z0-9_-]*)\s*$/;
+const inlineToken = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\((?:[^()\s]|\([^()\s]*\))+\))/g;
+const markdownLink = /^\[([^\]\n]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)$/;
+const fenceStart = /^```([^`]*)$/;
 const headingStart = /^(#{1,6})\s+(.+)$/;
 const unorderedStart = /^\s*[-+*]\s+/;
 const orderedStart = /^\s*\d+[.)]\s+/;
@@ -22,6 +22,13 @@ function httpDestination(raw: string): string | null {
     } catch {
         return null;
     }
+}
+
+function languageClass(info: string): string | undefined {
+    const identifier = (info.trim().split(/\s+/)[0] || '')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return identifier ? `language-${identifier}` : undefined;
 }
 
 function renderInline(text: string, prefix: string): ComponentChild[] {
@@ -70,7 +77,7 @@ export function RichMessage({ content }: RichMessageProps) {
         const key = `block-${sequence++}`;
         const fence = fenceStart.exec(lines[index]);
         if (fence) {
-            const language = fence[1];
+            const language = languageClass(fence[1]);
             const body: string[] = [];
             index += 1;
             while (index < lines.length && !/^```\s*$/.test(lines[index])) {
@@ -78,7 +85,7 @@ export function RichMessage({ content }: RichMessageProps) {
                 index += 1;
             }
             if (index < lines.length) index += 1;
-            blocks.push(<pre key={key}><code className={language ? `language-${language}` : undefined}>{body.join('\n')}</code></pre>);
+            blocks.push(<pre key={key}><code className={language}>{body.join('\n')}</code></pre>);
             continue;
         }
 

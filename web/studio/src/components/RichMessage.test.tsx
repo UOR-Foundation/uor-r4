@@ -23,6 +23,18 @@ describe('RichMessage', () => {
         expect(code.textContent).toBe('fn main() {}');
     });
 
+    it('renders punctuation and spaced fence tags as code with sanitized language classes', () => {
+        show('```c++\n# code heading\n```\n\nvisible after\n\n``` rust\nfn main() {}\n```');
+        expect(host.querySelector('h1')).toBeNull();
+        const codes = Array.from(host.querySelectorAll('pre code'));
+        expect(codes).toHaveLength(2);
+        expect(codes[0].className).toBe('language-c');
+        expect(codes[0].textContent).toBe('# code heading');
+        expect(codes[1].className).toBe('language-rust');
+        expect(codes[1].textContent).toBe('fn main() {}');
+        expect(host.querySelector('p')?.textContent).toBe('visible after');
+    });
+
     it('renders inline formatting and HTTP(S) links without fetching', () => {
         const fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
@@ -38,8 +50,15 @@ describe('RichMessage', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it('preserves a complete balanced parenthesized link destination', () => {
+        show('[wiki](https://en.wikipedia.org/wiki/Function_(mathematics))');
+        const link = host.querySelector('a')!;
+        expect(link.getAttribute('href')).toBe('https://en.wikipedia.org/wiki/Function_(mathematics)');
+        expect(link.rel).toBe('noopener noreferrer');
+    });
+
     it('keeps raw HTML and unsafe or relative destinations inert', () => {
-        show('<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n[bad](javascript:alert(1))\n[data](data:text/html,hi)\n[vb](vbscript:msgbox(1))\n[proto](//evil.example)\n[relative](/guide)');
+        show('<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n[bad](javascript:alert(1))\n[data](data:text/html,hi)\n[vb](vbscript:msgbox(1))\n[proto](//evil.example)\n[relative](/guide)\n[x](https://example.com/a(b)');
         expect(host.querySelector('script, img, a')).toBeNull();
         expect(host.textContent).toContain('<script>alert(1)</script>');
         expect(host.textContent).toContain('<img src=x onerror=alert(1)>');
@@ -48,6 +67,7 @@ describe('RichMessage', () => {
         expect(host.textContent).toContain('[vb](vbscript:msgbox(1))');
         expect(host.textContent).toContain('[proto](//evil.example)');
         expect(host.textContent).toContain('[relative](/guide)');
+        expect(host.textContent).toContain('[x](https://example.com/a(b)');
     });
 
     it('keeps unmatched inline markup and unclosed fences safe', () => {
