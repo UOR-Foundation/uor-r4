@@ -42,9 +42,29 @@ The item's done-when reads:
 >    - the read-by-meaning arms: the Flock read, and the type spin.
 > 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
 
+**Claim check.**
+- **(a) The step:** the one track (Casey, #2028 6675163438), which is this item's done-when 3 training run on human text.
+  - claude-304's decision review set the next unit to more human text at width 256, and claude-305 built that text (TRAIN D4).
+  - This unit trains on it. Casey approved it in this chat on 7 Nov: "Please proceed as recommended". The recommendation was (b64L) unchanged on D4, at two seeds, on RTX 5090s, after its own sheet, a non-author FIT and a D67 review.
+- **(b) What it changes in the model:** the trunk's TRAIN. If the data lever reads `ahead`, D4 replaces D3 as the trunk's training text, so the model that ships trains on it.
+
+**The sheet:** [`one-model-end-to-end-d4-2026-11-07.md`](../../../../harness/prep/one-model-end-to-end-d4-2026-11-07.md).
+
 ## Cancel probe (run first)
 
-To fill in.
+Every check passes, or the unit is cancelled:
+1. `uor-store ls results/claude/one-model-end-to-end-d4-train-2026-11-07` holds nothing, so no run of this sheet exists.
+2. `results/claude/one-model-end-to-end-d4-2026-11-07/SHA256SUMS` is in the store at `51ae9b9d…`, so the inputs exist.
+3. The pin `ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f` is an ancestor of `origin/main`, so it is pushed and buildable.
+4. No open PR or claim by another lab trains on D4.
+5. `uor-pod status` leaves room for two pods inside the caps (4 pods, $8/h).
+
+**Result (7 Nov): every check passes. The unit goes ahead.**
+1. `uor-store ls` returns a 404, so the path holds nothing.
+2. The D4 seal is listed, `SHA256SUMS` included.
+3. The pin is an ancestor of `origin/main`.
+4. The only open PR on this item is this unit's draft, #3814.
+5. 0 pods are running, at $0/h. There are 15 RTX 5090 offers, the cheapest $0.563/h. `uor-pod status` showed no Vast pods until the Rust Vast adapter was rebuilt (`cargo build -p uor-r4-pod-provider` into `local/claude/pp-target`, passed as `UOR_POD_VAST_BIN`), because the disk cleanup had removed it.
 
 ## Files in scope
 
@@ -74,8 +94,19 @@ To fill in.
 
 ## Done when
 
-To fill in.
+1. **The sheet is committed,** with a non-author FIT posted on #3407, and a D67 pre-run review of the job, chain, seal and watch scripts posted on #3407. Each one's findings are applied.
+2. **The job's laptop gate tests pass,** and each mutation is caught.
+3. **Both seeds of (b64L-D4) are trained, scored and sealed** to `results/claude/one-model-end-to-end-d4-train-2026-11-07/runs/s{1,2}/`, and read back. Every pod is down. A seed that cannot run is recorded as NOT_RUN under the sheet's Stop rule.
+4. **The REPORT reads, negatives first:**
+   - I-r;
+   - the bar against D4's T2 and unigram, on all rows and on unseen rows, by sub-panel;
+   - the data lever against claude-301's (b64L-D3), with the oasst2 sub-panel on its own;
+   - the outcome the sheet's map names, and the spend.
+5. **One notebook row** in `docs/research/notebook/float-training.md`.
 
 ## Stop and ask if
 
-To fill in.
+Nothing in this unit waits on Casey (§5.1). These go to a decision review, recorded in the REPORT:
+- **The spend passes the sheet's $11.50 cap:** extend the cap only for a healthy run (the charter's extend rule), and send Casey one [claude, for Casey] note on #2028.
+- **The two seeds' pods cannot be had on RTX 5090s inside $1.15/h:** wait for an offer, and use no other card class without an amended sheet.
+- **A change to the bar, the outcome map or the stop rule after any reading:** this needs an amended sheet and a fresh FIT round, never a quiet edit.
