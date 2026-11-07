@@ -904,6 +904,34 @@ fn exact_tool_operand_start(rest: &str) -> bool {
     })
 }
 
+fn exact_tool_compact_subtraction_shape(expression: &str) -> bool {
+    let mut fields = expression.split('-');
+    let (Some(left), Some(right), None) = (fields.next(), fields.next(), fields.next()) else {
+        return false;
+    };
+    let left = left.trim();
+    let right = right.trim();
+    if left.is_empty()
+        || right.is_empty()
+        || !left.chars().all(|c| c.is_ascii_digit())
+        || !right.chars().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    let no_space_date_pair = if left.len() == 4 && right.len() == 2 {
+        right
+            .parse::<u8>()
+            .is_ok_and(|month| (1..=12).contains(&month))
+    } else if left.len() == 2 && right.len() == 2 {
+        left.parse::<u8>()
+            .is_ok_and(|month| (1..=12).contains(&month))
+            && right.parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
+    } else {
+        false
+    };
+    !no_space_date_pair
+}
+
 fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     let rest = rest.trim_start();
     let signed_literal = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
@@ -1711,7 +1739,10 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         .contains(&normalized_suffix.as_str());
     if prompt.len() > MAX_EXACT_TOOL_PROMPT_BYTES {
         let trailing_operator = expression.trim_end().ends_with(|c| matches!(c, '+' | '-'));
-        if exact_tool_arithmetic_shaped(rest) || (!unsupported_suffix && trailing_operator) {
+        if exact_tool_arithmetic_shaped(rest)
+            || exact_tool_compact_subtraction_shape(expression)
+            || (!unsupported_suffix && trailing_operator)
+        {
             return Err(invalid(
                 "exact arithmetic prompt exceeds the 160-byte tool bound",
             ));
@@ -1719,7 +1750,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         return Ok(None);
     }
     if unsupported_suffix {
-        if exact_tool_arithmetic_shaped(rest) {
+        if exact_tool_arithmetic_shaped(rest) || exact_tool_compact_subtraction_shape(expression) {
             return Err(invalid(
                 "exact arithmetic supports only one unsigned decimal + or - expression",
             ));
@@ -1764,7 +1795,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
                     || (next.is_some_and(char::is_whitespace)
                         && exact_tool_operand_start(&expression[index + 1..])))
         });
-        if !has_spaced_subtraction {
+        if !has_spaced_subtraction && !exact_tool_compact_subtraction_shape(expression) {
             let digits_and_hyphens = expression.chars().all(|c| c.is_ascii_digit() || c == '-');
             if !digits_and_hyphens {
                 return Ok(None);
@@ -2258,8 +2289,21 @@ mod tests {
         assert!(exact_arithmetic_tool("2026-11-05 17").is_none());
         assert!(exact_arithmetic_tool("What is 11-05?").is_none());
         assert!(exact_arithmetic_tool("What is 2026-11?").is_none());
-        assert!(exact_arithmetic_tool("50-12").is_none());
-        assert!(exact_arithmetic_tool("What is 50-12?").is_none());
+        for prompt in ["50-12", "What is 50-12?"] {
+            let compact = exact_arithmetic_tool(prompt)
+                .expect("compact subtraction should be recognized")
+                .expect("compact subtraction should be exact");
+            assert_eq!(compact.result, "38", "wrong compact result: {prompt}");
+        }
+        let compact_underflow = exact_arithmetic_tool("What is 17-25?")
+            .expect("compact underflow should be recognized")
+            .expect_err("compact underflow should be an explicit error");
+        assert!(compact_underflow.to_string().contains("underflow"));
+        let compact_over_limit = format!("{}50-12", " ".repeat(200));
+        let compact_over_limit_error = exact_arithmetic_tool(&compact_over_limit)
+            .expect("overlong compact subtraction should be recognized")
+            .expect_err("overlong compact subtraction should be an explicit error");
+        assert!(compact_over_limit_error.to_string().contains("160-byte"));
         let no_space_subtraction = exact_arithmetic_tool("What is 50 - 12?")
             .expect("prefixed spaced subtraction should be recognized")
             .expect("prefixed spaced subtraction should be exact");
@@ -2377,8 +2421,15 @@ mod tests {
             );
         }
         assert!(exact_arithmetic_tool(&"a".repeat(161)).is_none());
-        assert!(exact_arithmetic_tool("What is 50 -12?").is_none());
-        assert!(exact_arithmetic_tool("What is 50- 12?").is_none());
+        for prompt in ["50 -12", "50- 12", "What is 50 -12?", "What is 50- 12?"] {
+            let compact = exact_arithmetic_tool(prompt)
+                .expect("one-sided-space subtraction should be recognized")
+                .expect("one-sided-space subtraction should be exact");
+            assert_eq!(
+                compact.result, "38",
+                "wrong one-sided-space result: {prompt}"
+            );
+        }
         assert!(exact_arithmetic_tool("What is +42?").is_none());
         assert!(exact_arithmetic_tool("What is -42?").is_none());
         for prompt in [
@@ -2595,7 +2646,6 @@ mod tests {
         for prompt in [
             "24/7 support",
             "1/2 cup",
-            "50-12",
             "11-05-2026",
             "05-11-2026",
             "1-800-555-0100",

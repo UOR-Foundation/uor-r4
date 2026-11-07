@@ -223,6 +223,25 @@ test('missing or throwing storage keeps the synthetic default and permits bundle
     }
 });
 
+async function pageAnonymousFunction(marker, context) {
+    const { readFileSync } = await import('node:fs');
+    const { default: vm } = await import('node:vm');
+    const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+    const markerIndex = html.indexOf(marker);
+    if (markerIndex === -1) throw new Error(`missing anonymous page function: ${marker}`);
+    const start = html.indexOf('function', markerIndex);
+    const open = html.indexOf('{', start);
+    let depth = 0;
+    for (let index = open; index < html.length; index += 1) {
+        if (html[index] === '{') depth += 1;
+        if (html[index] === '}') {
+            depth -= 1;
+            if (depth === 0) return vm.runInNewContext(`(${html.slice(start, index + 1)})`, context);
+        }
+    }
+    throw new Error(`unterminated anonymous page function: ${marker}`);
+}
+
 async function applyPageOperationGuard(api, toast = () => {}, app = { generating: false }) {
     const { readFileSync } = await import('node:fs');
     const { default: vm } = await import('node:vm');
@@ -774,6 +793,33 @@ test('a rejected panel bundled load toasts without an unhandled rejection', asyn
         assert.deepEqual(notices, [{ text: 'bundled artifact missing', tone: 'error' }]);
     } finally {
         process.off('unhandledRejection', onUnhandled);
+    }
+});
+
+test('boot and quick demo failures each toast once through the real page wrapper', async () => {
+    for (const kind of ['boot', 'quick']) {
+        const { api } = await fresh(async () => { throw new Error('bundled artifact missing'); });
+        const notices = [];
+        const toast = (text, tone) => notices.push({ text, tone });
+        await applyPageOperationGuard(api, toast);
+        if (kind === 'boot') {
+            const onError = await pageAnonymousFunction(
+                "ModelSources.loadBundled({ operationId: 1, sourceId: 'bundled-demo' }).catch(",
+                { toast },
+            );
+            await api.loadBundled({ operationId: 1, sourceId: 'bundled-demo' }).catch(onError);
+        } else {
+            const quick = await pageAnonymousFunction("quickButton('Try offline demo',", {
+                window: { UORModelSources: api },
+                ModelSources: api,
+                toast,
+            });
+            quick();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        assert.equal(notices.length, 1, `${kind} produced duplicate error toasts: ${JSON.stringify(notices)}`);
+        assert.equal(notices[0].tone, 'error');
+        assert.ok(notices[0].text.includes('bundled artifact missing'));
     }
 });
 

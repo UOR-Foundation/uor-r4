@@ -940,7 +940,7 @@
                     : (typeof ModelSources !== 'undefined' ? ModelSources.loadBundled() : null);
                 if (loading && typeof loading.catch === 'function') {
                     loading.catch(function (error) {
-                        if (!error || error.uorStale !== true) toast(String(error && error.message || error), 'error');
+                        if (!error || (error.uorStale !== true && error.uorReported !== true)) toast(String(error && error.message || error), 'error');
                     });
                 }
             }, true);
@@ -1981,6 +1981,7 @@
                             if (current.operationId < latestOperationId) {
                                 if (error && typeof error === 'object') error.uorStale = true;
                             } else {
+                                if (error && typeof error === 'object') error.uorReported = true;
                                 toast(String(error && error.message || error), 'error');
                             }
                             throw error;
@@ -2499,7 +2500,7 @@
             startWorker();
             if (active.kind === 'wasm' && active.id === 'bundled-demo' && !app.caps) {
                 ModelSources.loadBundled({ operationId: 1, sourceId: 'bundled-demo' }).catch(function (error) {
-                    if (!error || error.uorStale !== true) toast('The offline demo could not load: ' + String(error && error.message || error), 'error');
+                    if (!error || (error.uorStale !== true && error.uorReported !== true)) toast('The offline demo could not load: ' + String(error && error.message || error), 'error');
                 });
             }
             updateComposerState();

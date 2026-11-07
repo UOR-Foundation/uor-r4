@@ -868,7 +868,37 @@ for (const [index, prompt] of ['17-', 'What is 17-?', '17--25', '2026-11-05 - 1 
     assert(closed.action === 'session_reset', `review27 boundary conversation did not close: ${JSON.stringify(closed)}`);
 }
 
-for (const [index, prompt] of ['24/7 support', '1/2 cup', '1/2 cup sugar', '50-12', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {
+for (const [index, [prompt, expected]] of [
+    ['50-12', '38'],
+    ['What is 50-12?', '38'],
+    ['50 -12', '38'],
+    ['50- 12', '38'],
+    ['What is 50 -12?', '38'],
+    ['What is 50- 12?', '38'],
+    ['17-25', 'underflow'],
+    ['What is 17-25?', 'underflow'],
+    [`${' '.repeat(200)}50-12`, '160-byte'],
+].entries()) {
+    const id = `gen_review28_compact_${index}`;
+    const conversationId = `conv_review28_compact_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const result = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    if (expected === '38') {
+        assert(result.action === 'generate_complete' && result.fullText.startsWith('38\n') && result.tokenCount === 0, `compact subtraction must compute exactly (${prompt}): ${JSON.stringify(result)}`);
+    } else {
+        assert(result.action === 'generate_error' && result.error.includes(expected), `compact subtraction must fail explicitly (${prompt}): ${JSON.stringify(result)}`);
+    }
+    assert(!emittedMessages.some((m) => m.id === id && m.action === 'generate_chunk'), `compact subtraction emitted model chunks (${prompt})`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `compact subtraction conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of ['24/7 support', '1/2 cup', '1/2 cup sugar', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {
     const id = `gen_review27_ordinary_${index}`;
     const conversationId = `conv_review27_ordinary_${index}`;
     await sendToWorker({
