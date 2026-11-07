@@ -10,6 +10,8 @@ trap 'rm -rf "$TMP"' EXIT
 caught=0
 attempted=0
 
+"$HERE/gate.sh" >/dev/null
+
 mutate() {
   local name=$1 file=$2 search=$3 replacement=$4
   attempted=$((attempted + 1))
@@ -32,15 +34,32 @@ mutate() {
 }
 
 mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
+mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
 mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
 mutate weak-guard "$JOB" '[ "$guard" -lt 93 ]' '[ "$guard" -lt 0 ]'
+mutate weak-base-guard "$JOB" '[ "$base_guard" -ge 93 ]' '[ "$base_guard" -ge 0 ]'
 mutate no-freeze "$JOB" 'kill -STOP "$TRAIN_PID"' 'kill -CONT "$TRAIN_PID"'
-mutate wrong-eval "$JOB" '--eval-every 256' '--eval-every 128'
+mutate wrong-eval "$JOB" '--eval-every 256' '--eval-every 2560'
+mutate wrong-seed "$JOB" '--seed 1 \' '--seed 2 \'
+mutate seed-two-enabled "$JOB" '2) echo "seed 2 is conditional and is not launched by this script" >&2; exit 2 ;;' '2) ;;'
 mutate zero-replies "$JOB" '--max-replies 1 --reply-tokens 1' \
   '--max-replies 0 --reply-tokens 1'
+mutate mixed-hash "$JOB" \
+  3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
+  0000000000000000000000000000000000000000000000000000000000000000
+mutate forge-hash "$JOB" \
+  'got=$(sha256sum "$path" | cut -d'"'"' '"'"' -f1)' \
+  'got=$want'
 mutate no-readback "$JOB" 'READBACK_STATUS=verified' 'READBACK_STATUS=unknown'
+mutate directory-readback "$JOB" \
+  '[ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS)' \
+  '[ -d "$sealed" ]'
 mutate two-gpus "$LAUNCHER" '--count 1 --hours 2' '--count 2 --hours 2'
-mutate no-renew "$LAUNCHER" '"$POD_TOOL" renew "$POD"' 'true'
+mutate no-renew "$LAUNCHER" 'if ! "$POD_TOOL" renew "$POD"' 'if ! true'
+mutate launcher-readback-true "$LAUNCHER" \
+  '[ "$(cat "$READBACK_FILE")" = verified ]' 'true'
+mutate launcher-exit-true "$LAUNCHER" \
+  '[ "$(cat "$CONTROLLER/readback/$OUT_STORE/EXIT")" = 0 ]' 'true'
 
 [ "$caught" -eq "$attempted" ]
 echo "$caught of $attempted mutations caught"

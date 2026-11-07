@@ -56,8 +56,12 @@ The score roots are new per controller run:
 
 ## Checks run at the head
 
-- `gate.sh`: 20 checks passed.
-- `test-mutants.sh`: 9 of 9 mutations caught.
+- `gate.sh`: 65 complete-line checks passed. Hash, stop, seed, lease,
+  readback, upload and teardown predicates are pinned as whole lines rather
+  than substrings.
+- `test-mutants.sh`: unmutated gate passed first; 18 of 18 semantic mutations
+  were then caught, including disabled/weakened stops, seed 2, hidden input-hash
+  changes, a forged hash comparison and directory-only or true-valued readback.
 - `bash -n` and `shellcheck` on the operational scripts: passed.
 - The job was reviewed against the actual `uor-store`, `uor-pod`,
   `train-in-space`, `cpu-checkpoint-grade` and `served-reply-panel` command
