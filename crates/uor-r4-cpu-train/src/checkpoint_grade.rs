@@ -71,6 +71,14 @@ pub struct CheckpointGradeCorpus {
     pub response_targets: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct CheckpointGradeSettings {
+    pub max_evaluation_rows: usize,
+    pub max_reply_examples: usize,
+    pub reply_tokens: usize,
+    pub margin_q12: i32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CheckpointGradeEvaluation {
     pub head: String,
@@ -120,6 +128,7 @@ pub struct CheckpointGradeReport {
     pub vocab: usize,
     pub context: usize,
     pub corpus: CheckpointGradeCorpus,
+    pub settings: CheckpointGradeSettings,
     pub evaluation: CheckpointGradeEvaluation,
     pub replies: TimedReplyReading,
     pub audit: CheckpointGradeAudit,
@@ -383,6 +392,12 @@ pub fn grade_checkpoint_artifact(
             tokens: identity.tokens,
             response_targets: identity.response_targets,
         },
+        settings: CheckpointGradeSettings {
+            max_evaluation_rows: config.max_evaluation_rows,
+            max_reply_examples: config.max_reply_examples,
+            reply_tokens: config.reply_tokens,
+            margin_q12: config.margin_q12,
+        },
         evaluation: graded.evaluation,
         replies,
         audit: CheckpointGradeAudit {
@@ -496,6 +511,15 @@ mod tests {
         assert_eq!(first.evaluation.head, "nearest");
         assert_eq!(first.evaluation.samples, 3);
         assert_eq!(first.evaluation.selected_from, 6);
+        assert_eq!(
+            first.settings,
+            CheckpointGradeSettings {
+                max_evaluation_rows: 3,
+                max_reply_examples: 2,
+                reply_tokens: 2,
+                margin_q12: CheckpointGradeConfig::default().margin_q12,
+            }
+        );
         assert_eq!(first.evaluation.top8_correct, None);
         assert_eq!(first.audit.query_coordinate_mismatches, 0);
         assert_eq!(first.audit.token_mismatches, 0);

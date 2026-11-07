@@ -70,8 +70,8 @@ pub use content_readout::{
 };
 pub use checkpoint_grade::{
     grade_checkpoint_artifact, CheckpointGradeAudit, CheckpointGradeBaseline,
-    CheckpointGradeConfig, CheckpointGradeCorpus, CheckpointGradeEvaluation,
-    CheckpointGradeReport, CHECKPOINT_GRADE_SCHEMA,
+    CheckpointGradeConfig, CheckpointGradeCorpus, CheckpointGradeEvaluation, CheckpointGradeReport,
+    CheckpointGradeSettings, CHECKPOINT_GRADE_SCHEMA,
 };
 pub use continuation_closure::{
     changed_closure_rows, compare_continuation_closure_rows, continuation_closure_changes,
