@@ -29,7 +29,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Red and pre-commit green logs are under `local/kimi/studio-mcp-connections/superpowers/checks/kimi-56-red/`; these are not represented as exact-head results. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate and built-browser logs will be preserved in a head-specific sibling directory after commit. The intentional `mcp_client.js` and `typed_entry.js` D76 scope advisories are disclosed; shared notebook/FILEMAP advisories remain disclosed. The roadmap item's canonical scope was not changed.
+Red and pre-commit green logs are under `local/kimi/studio-mcp-connections/superpowers/checks/kimi-56-red/`; these are not represented as exact-head results. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate and built-browser logs are preserved in the head-specific sibling directory named by the reviewed commit. The intentional `mcp_client.js` and `typed_entry.js` D76 scope advisories are disclosed; shared notebook/FILEMAP advisories and the 4,785-byte ORDER read-path advisory remain disclosed. The roadmap item's canonical scope was not changed.
 
 Agent-34 returned CHANGES for the mocked initialization failure, incomplete readiness, advisory/notebook inconsistencies, and weaker browser/test evidence. The follow-up fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
 
