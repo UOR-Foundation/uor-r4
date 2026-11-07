@@ -25,6 +25,7 @@ async function waitForWorkflowApis(timeoutMs: number): Promise<LegacyWorkflowApi
 }
 
 export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?: number } = {}) {
+    root.hidden = false;
     const apis = await waitForWorkflowApis(options.timeoutMs ?? 5000);
     const store = new LifecycleStore();
     const legacyWorker = (window as LegacyAppWindow).__studioApp?.worker || null;
@@ -52,6 +53,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
             worker.removeEventListener('message', forwardMessage);
             if (!legacyWorker) worker.terminate();
             root.dataset.active = 'false';
+            root.hidden = true;
             render(null, root);
         },
     };

@@ -17,7 +17,7 @@ DeepSeek's v2 Studio is published and its integer engine, worker, tokenizer, and
 
 ## What is missing
 
-The typed tree now mounts `StudioApp` through a real Vite application build behind `?typed=1`, reusing the existing worker and legacy workflow adapters. The built preview loads the bundled model and suppresses legacy MCP auto-boot. The default public page and production publish are unchanged. Complete real-browser parity, one-time browser-data migration, final lifecycle ownership, native/shared packaging, desktop acceptance, and publication remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
+The typed tree now mounts `StudioApp` through a real Vite application build behind `?typed=1`, reusing the existing worker and legacy workflow adapters. The built preview loads the bundled model and suppresses legacy MCP auto-boot. The default source UI remains legacy and no production publish has run; the current runtime allowlist still needs a later `dist` packaging unit before any typed publication. Complete real-browser parity, one-time browser-data migration, final lifecycle ownership, native/shared packaging, desktop acceptance, and publication remain. The migration must preserve every current feature and browser-data key, use real download-byte progress without inventing later load stages, and leave the live page untouched until all legacy/new checks pass.
 
 ## Done when
 

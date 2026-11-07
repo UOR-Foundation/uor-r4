@@ -44,6 +44,7 @@ describe('typed Studio bootstrap', () => {
         const mounted = await mountTypedStudio(root);
         expect(render).toHaveBeenCalledOnce();
         expect(render).toHaveBeenCalledWith(expect.anything(), root);
+        expect(root.hidden).toBe(false);
         expect(mounted.store).toBeInstanceOf(LifecycleStore);
         expect(mounted.worker).toBeInstanceOf(FakeWorker);
         expect(mounted.worker.addEventListener).toHaveBeenCalledWith('message', expect.any(Function));
@@ -51,21 +52,26 @@ describe('typed Studio bootstrap', () => {
         expect(mounted.sessions).toBe(legacyWindow.__studioUi);
         expect(mounted.ui).toBe(legacyWindow.__studioUi);
         mounted.dispose();
+        expect(root.hidden).toBe(true);
     });
 
     it('reuses an existing model worker instead of starting another engine', async () => {
+        const root = document.createElement('div');
         const existing = new FakeWorker();
         legacyWindow.__studioApp = { worker: existing };
-        const mounted = await mountTypedStudio(document.createElement('div'));
+        const mounted = await mountTypedStudio(root);
         expect(mounted.worker).toBe(existing);
         expect(mounted.worker.addEventListener).toHaveBeenCalledWith('message', expect.any(Function));
         mounted.dispose();
         expect(existing.terminate).not.toHaveBeenCalled();
+        expect(root.hidden).toBe(true);
     });
 
     it('refuses to mount before the workflow methods initialize', async () => {
+        const root = document.createElement('div');
         legacyWindow.__studioUi = {};
-        await expect(mountTypedStudio(document.createElement('div'), { timeoutMs: 10 })).rejects.toThrow('did not initialize');
+        await expect(mountTypedStudio(root, { timeoutMs: 10 })).rejects.toThrow('did not initialize');
         expect(render).not.toHaveBeenCalled();
+        expect(root.hidden).toBe(false);
     });
 });

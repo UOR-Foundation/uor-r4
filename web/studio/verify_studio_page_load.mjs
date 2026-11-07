@@ -232,6 +232,8 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                     legacyMcp: document.querySelectorAll('#app #mcpConnections').length,
                     typedMcp,
                     artifactReady,
+                    visible: getComputedStyle(root).display !== 'none',
+                    typedText: root.innerText.includes('Agent'),
                     bodyText: document.body.innerText.slice(0, 500),
                     rootText: document.getElementById('studio-typed-root')?.textContent?.slice(0, 500),
                     legacyReady: Boolean(window.__studioUi && window.__studioFiles),
@@ -280,6 +282,7 @@ async function main() {
             assert(typedPreview.typed.legacyMcp === 0, 'legacy MCP auto-boot mounted in typed preview');
             assert(typedPreview.typed.typedMcp === 1, 'typed MCP panel missing or duplicated: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.artifactReady, 'typed bundled demo did not reach Artifact: ready: ' + JSON.stringify(typedPreview.typed));
+            assert(typedPreview.typed.visible && typedPreview.typed.typedText, 'typed shell is not computed-visible with typed text: ' + JSON.stringify(typedPreview.typed));
         }
         const router = await trapPageLoad(cdp, origin, '/studio/geometric_prime_router_webapp.html');
         const report = {

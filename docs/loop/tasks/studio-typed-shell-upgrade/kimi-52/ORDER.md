@@ -1,6 +1,6 @@
 # ORDER: mount the real typed Studio application, kimi-52
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Base: `ab4a5b328`. Owner-approved two-phase Studio goal: Phase A delivers the mounted shared web/desktop harness; Phase B follows only afterward.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Base: `e9bfd7751e3eb31736178d23289e8d99480bb0d0` (original branch base `ab4a5b328`). Owner-approved two-phase Studio goal: Phase A delivers the mounted shared web/desktop harness; Phase B follows only afterward.
 
 ## Goal
 

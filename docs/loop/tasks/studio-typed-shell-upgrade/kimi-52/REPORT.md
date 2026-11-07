@@ -1,6 +1,6 @@
 # REPORT: mount the real typed Studio application, kimi-52
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `ab4a5b328`. The exact delivery head/tree and logs will be recorded on PR #3835 after protected delivery; before push they are local evidence.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Order: [ORDER.md](ORDER.md). Base: `e9bfd7751e3eb31736178d23289e8d99480bb0d0` (original branch base `ab4a5b328`). The exact delivery head/tree and logs will be recorded on PR #3835 after protected delivery; before push they are local evidence.
 
 ## What did not work
 
@@ -19,17 +19,17 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Measurements
 
-- Bootstrap/config checks: **5/5 tests pass** (four bootstrap plus one Vite config).
-- Complete typed suite: **382/382 tests across 46 files**.
+- Bootstrap/config checks: **7/7 tests pass** (four bootstrap, two main, one Vite config).
+- Complete typed suite: **383/383 tests across 46 files**.
 - Plain-JS suite: **112/112 tests pass**.
-- TypeScript and application build: PASS; main JS **284.77 kB** (gzip **86.37 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
-- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, **7 requests, zero external**.
+- TypeScript and application build: PASS; main JS **284.80 kB** (gzip **86.38 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
+- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **7 requests, zero external**.
 - Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
-- Harness build, `loop report --check`, `loop pr-check --local`, and `loop gates --full`: **NOT_RUN** until the evidence commit.
+- At the final committed repair state, harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks pass.
 
 ## Checks run at the head
 
-Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, and 404 failures. `kimi-52-precheck/` contains green pre-commit evidence. The intentional `mcp_client.js` D76 scope advisory is disclosed; the shared notebook/plan advisories are unchanged. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
+Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, 404, and computed-visibility failures. `kimi-52-precheck/` contains green pre-commit evidence. The intentional `mcp_client.js` D76 scope advisory is disclosed; the shared notebook/FILEMAP advisories are unchanged. Agent-31 returned CHANGES for hidden-root visibility, stale evidence, base identity, and publication wording; the follow-up fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
 
 ## Skills used
 
@@ -37,8 +37,8 @@ Working discipline, scope guard, solution integrity, red-first TDD, systematic b
 
 ## Still open
 
-This is a mounted development preview, not final lifecycle migration, production publication, desktop acceptance, or an autonomous/model capability claim. Legacy workflow services remain temporarily bridged during the preview. Later Phase A units replace those owners, finish native/shared packaging and acceptance, and publish only after review.
+This is a mounted development preview, not final lifecycle migration, production publication, desktop acceptance, or an autonomous/model capability claim. Legacy workflow services remain temporarily bridged during the preview. Later Phase A units replace those owners, finish native/shared packaging and acceptance, and publish only after review. The current runtime allowlist must stage `dist` before any typed publication.
 
 ## Plain summary
 
-The typed Studio is now a real Vite application that can mount and load the bundled UOR demo. The default public page and production publish remain untouched in this unit. All declared product checks pass; no real endpoint, final migration, packaged-GUI, useful-chat, M7/M8, or accessibility-certification claim is made.
+The typed Studio now mounts visibly and loads the bundled UOR demo. The default source UI remains legacy and no production publish has run. All declared product checks pass; no real endpoint, final migration, packaged-GUI, useful-chat, M7/M8, or accessibility-certification claim is made.
