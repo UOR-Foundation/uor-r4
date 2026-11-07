@@ -22,8 +22,9 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
   tie mode, not a bit-identical drop-in on ties, and remains off by default.
 - **The one-step model test is not gradient-identical.** Its loss is bit-equal with and without
   the flag, but `embedding.weight` moves by 0.000052805 at scale 0.007034846 (0.75% relative) on
-  the synthetic nearest-objective step. Tied rival choices explain the difference; it is a
-  negative for exact behavioral preservation, not floating noise.
+  the synthetic nearest-objective step. The test does not localize the cause; tied rival choices
+  are the leading hypothesis. It is a negative for exact behavioral preservation, not floating
+  noise.
 - **The selector expands the item's scope.** Its own module needs `build.rs`, `lib.rs`,
   `cuda_stack_kernels.rs` and two new source files. The item file records that scope in this
   branch; the policy checker reports it as an advisory because it reads the pre-change scope at
@@ -72,10 +73,9 @@ hypothesis, not a measured cause.
 
 Result-producing code head: `a6a74a7f1`. Later commits change comments, tests and records only.
 
-- `cargo test --release --offline --locked -p uor-r4-float-train`: 296 library tests, 7 snapshot
+- `cargo test --release --offline --locked -p uor-r4-float-train`: 297 library tests, 7 snapshot
   tests, 9 trainer tests, 2 dependency/kernel-scan tests and 12 finite controls passed; 0 failed.
-- `fast_rivals_restore_their_prior_state_after_an_error_or_panic`: passed; it adds a 297th
-  library test at the final head.
+- `fast_rivals_restore_their_prior_state_after_an_error_or_panic`: passed.
 - Stub-nvcc CUDA all-targets check: passed with `CUDARC_CUDA_VERSION=12080` and
   `UOR_NVCC_ARCH=compute_120`.
 - RTX 5090 `the_one_pass_rival_selector_keeps_non_ties_and_makes_ties_deterministic`: passed,
