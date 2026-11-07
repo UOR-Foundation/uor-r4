@@ -217,6 +217,11 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `4125e86c9b99915e9f932140e228f3890a14f5644f034bcb897f91776f586894`,
   reviewer session `01a1b85e-a292-7363-b1bb-019a0ab91bfd`, because the
   micro-batch-8 retry reused attempt 1's initialization approval.
+- Fresh non-author FIT: **GO** at
+  `0ae6a64113dc2e81c25bbfc6cf5d7b027cba68a8`, reviewed-runtime
+  `b1ac030988746b155a36007ef32e79649a0beaaf2d6932f9250124bb59b4bfbe`,
+  reviewer session `01a1b864-d9e9-74b2-b224-de022d5d9de4`. No FIT blockers
+  remained.
 - `gate.sh`: 188 checks passed after adding the submission fallback, registered
   stop point, exactly-one-step-0 mutation and per-attempt initialization
   handshake.
@@ -244,7 +249,7 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh FIT and D67 reviews of the exact repaired runtime, then the seed-1 run.
+- Fresh D67 review of the exact repaired runtime, then the seed-1 run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary
