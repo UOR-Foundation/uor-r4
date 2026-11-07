@@ -79,7 +79,7 @@ None beyond the loop's own steps.
 
 - **The training run on D4** is the next unit, under its own sheet: (b64L) unchanged, on RTX 5090s, at two seeds.
   - At 16,384 steps × 64 × 192 it sees about 2.7 passes of D4, against 7.2 of D3. Two things change with the data: the amount of distinct text, and the mix (OASST2 falls from 13.5% to 5.1%). The sheet must read the oasst2 sub-panel on its own for that reason.
-  - claude-301's (b64L) cost about $2.84 and $3.18 of training time at the two seeds. Its pods billed $4.84 and $5.48 in all, which covers a second arm and scoring.
+  - claude-301's (b64L) trained for 10,924 and 12,008 s, about $2.99 and $3.34 at its pods' rates. Its run-2 pods billed $4.84 and $5.48, which covers a second arm and scoring.
   - Its bar is against D4's T2 (256,443) and unigram (37,421), with `clean=` this seen set, and a data lever of (b64L)-on-D4 against (b64L)-on-D3.
 - **The census** is not built (see above).
 
