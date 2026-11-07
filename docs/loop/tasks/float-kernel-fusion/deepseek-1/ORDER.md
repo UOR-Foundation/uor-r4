@@ -80,8 +80,8 @@ No kernel source, model objective, data, checkpoint or serving artifact changes.
 5. At each shape and mode, one 1-step and one 32-step smoke run with the same two mandatory
    checkpoint evaluations. Their difference gives 31 training steps without evaluation. The
    count difference and, where present, the `nsys` launch difference provide the observed launch
-   counts and call counts per training step. If `nsys` is absent, the source-derived tensor-op
-   figure is labelled a lower-bound estimate, never an observed launch count.
+   counts and call counts per training step. If `nsys` is absent, report the source tensor-op
+   counts as implementation counts and mark total kernel launches UNAVAILABLE.
 6. If both shapes have `gain > 2 x noise`, `train-in-space` defaults served training on the
    qualified CUDA path to fused quantizers; an explicit `0` still selects the chain. If either
    shape has a non-positive gain, or a gain no larger than its noise, the default stays `0`. If

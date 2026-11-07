@@ -18,6 +18,9 @@ delivery head is bound by the PR's exact-head review.
 
 ## What changed
 
+- **Size:** 5 files, +505/-11: docs 4 files +498/-11; other 1 registry file +7/-0.
+  Tests, code and generated files are 0. The ORDER estimated no numeric line count, so the ratio is
+  UNAVAILABLE.
 - **The sheet is launch-ready but compute-gated.** Every default-on, default-off and one-extension
   outcome now has a finite result. Extension runs are named `A2, B2, B3, A3`; their model trees
   and normalized progress join the exactness gate; gain and noise are pooled over twelve windows

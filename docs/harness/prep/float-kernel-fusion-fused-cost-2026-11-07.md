@@ -10,9 +10,9 @@ conditions are in the Verdict section. Compute remains deferred by the execution
 
 Claude's one-model path trains as served. Two rounding chains run throughout its forward:
 
-- `activation_quantize16`, with its straight-through bridge, is about 49 tensor operations a
-  call;
-- `q16_residual`, with its bridge, is about 13.
+- `activation_quantize16`, with its straight-through bridge, is 49 tensor operations a call,
+  excluding its `.detach()` bookkeeping;
+- `q16_residual`, with its bridge, is 13 tensor operations, with the same exclusion.
 
 claude-283 measured removal of both chains at 7.51% of a step at 192 x 16 and 2.58% at
 2,048 x 4. claude-285 then built one fused forward and backward kernel for each chain and showed
@@ -160,12 +160,12 @@ windows without evaluation time.
   - If `nsys` exists, profile both smokes under
     `nsys profile --trace=cuda --sample=none --stats=true` and use the difference between their
     total kernel launches, divided by 31, as launches per training step. Retain both reports.
-  - If `nsys` is absent, report the isolated per-training-step calls for both paths. Report the
-    source's 49 activation-chain and 13 residual-chain tensor operations as a **forward-only
-    lower bound**. Do not multiply those figures by two: the straight-through backward graph
-    does not repeat the forward operation chain. Report ON as two fused launches per call only
-    after I-0 confirms its backward kernel. If total launches are required, record them as
-    UNAVAILABLE rather than inventing a count.
+  - If `nsys` is absent, report the isolated per-training-step calls for both paths, plus the
+    source's 49 activation-chain and 13 residual-chain tensor-operation counts as forward-only
+    implementation counts. These are not kernel-launch counts. Do not multiply them by two: the
+    straight-through backward graph does not repeat the forward operation chain. Report ON as two
+    fused launches per call only after I-0 confirms its backward kernel. If total launches are
+    required, record them as UNAVAILABLE rather than inventing a count.
 
 ## Bar
 
@@ -272,8 +272,8 @@ checkpoints per run.
 
 - On a failed I-0, input hash, I-3 or run exit, seal evidence and do not read speed.
 - On an R4 mismatch, stop the timing read and classify it before another run.
-- On an absent `nsys`, continue the trainer-clock decision and label the launch count as a
-  source-derived lower bound.
+- On an absent `nsys`, continue the trainer-clock decision, report calls and source tensor-op
+  counts separately, and mark the kernel-launch count UNAVAILABLE.
 - Never touch Claude's pods. If no own pod can be created under the caps, leave compute NOT_RUN
   and do not substitute the laptop CPU.
 
