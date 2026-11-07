@@ -44,6 +44,15 @@ use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
 use crate::spiralcore_fbs_sheet::{build_fbs_model_at, panel_loss};
 use crate::{invalid, sha256_bytes, Result};
 
+/// Written only after every checkpoint tensor and sidecar is closed. A controller may freeze
+/// and copy a checkpoint once this file exists; directory appearance alone can be mid-save.
+const CHECKPOINT_READY_FILE: &str = ".checkpoint-ready";
+
+fn mark_checkpoint_ready(directory: &Path) -> Result<()> {
+    fs::write(directory.join(CHECKPOINT_READY_FILE), b"ready\n")?;
+    Ok(())
+}
+
 /// What the trunk's predicted point is trained against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -12945,6 +12954,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if let Some(served) = served {
             served.restore()?;
         }
+        mark_checkpoint_ready(&directory)?;
         Ok(())
     };
 
@@ -14100,6 +14110,16 @@ mod tests {
 
     fn checkpoint_path(root: &Path) -> PathBuf {
         root.join("run/models/step-000008")
+    }
+
+    #[test]
+    fn checkpoint_ready_marker_records_completion() {
+        let root = init_test_dir("checkpoint-ready");
+        mark_checkpoint_ready(&root).unwrap();
+        assert_eq!(
+            fs::read(root.join(CHECKPOINT_READY_FILE)).unwrap(),
+            b"ready\n"
+        );
     }
 
     fn write_source_run_config(checkpoint: &Path) {

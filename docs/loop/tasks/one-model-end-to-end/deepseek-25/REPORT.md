@@ -13,6 +13,9 @@ spend.
 - **The first parser expected the wrong output shape.** `uor-pod` puts
   `Log: PATH` at the end of its one-line “Started on…” message, not on a
   separate line.
+- **Directory appearance was not checkpoint completion.** The trainer creates
+  `step-N/` before writing its tensor and sidecar files. Freezing on the
+  directory could copy a partial checkpoint and fail or seal invalid evidence.
 
 ## What changed
 
@@ -27,6 +30,11 @@ spend.
 - `test-mutants.sh` exercises the actual `uor-pod` log-line shape and proves
   submission-only waiting, ignored remote exits and missing log paths are
   rejected.
+- The trainer now writes `.checkpoint-ready` only after the model, sidecars and
+  served restore complete. The job waits for that marker before freezing and
+  refuses an unmarked checkpoint after trainer exit.
+- `gate.sh` pins both sides of the completion protocol and its mutation suite
+  rejects a return to directory-only checkpoint detection.
 
 ## Measurements
 
@@ -36,8 +44,9 @@ seed-1 envelope.
 
 ## Checks run at the head
 
-- `gate.sh`: 74 checks passed.
-- `test-mutants.sh`: 24 of 24 semantic mutations caught.
+- `gate.sh`: 77 checks passed.
+- `test-mutants.sh`: 25 of 25 semantic mutations caught.
+- `checkpoint_ready_marker_records_completion`: passed.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.
 

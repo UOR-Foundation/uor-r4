@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 JOB=${1:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"}
 LAUNCHER=${2:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh"}
+TRAINER="$ROOT/crates/uor-r4-float-train/src/in_space_long.rs"
 checks=0
 
 fail() {
@@ -95,6 +96,11 @@ grade_flag_lines=$(
   fail "$JOB does not pin both checkpoint and base-control grade flags"
 checks=$((checks + 1))
 require_line 'kill -STOP "$TRAIN_PID" 2>/dev/null || true' "$JOB"
+require_line 'if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then' "$JOB"
+require_line '[ -f "$checkpoint/.checkpoint-ready" ] ||' "$JOB"
+grep -Fq 'mark_checkpoint_ready(&directory)?;' "$TRAINER" ||
+  fail "$TRAINER does not mark a checkpoint complete after saving it"
+checks=$((checks + 1))
 termination_count=$(
   awk '
   {

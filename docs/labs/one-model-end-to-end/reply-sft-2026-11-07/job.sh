@@ -345,7 +345,7 @@ next=256
 while kill -0 "$TRAIN_PID" 2>/dev/null; do
   if [ "$next" -le 1024 ]; then
     checkpoint="$RUN/run/models/step-$(printf '%06d' "$next")"
-    if [ -d "$checkpoint" ]; then
+    if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then
       kill -STOP "$TRAIN_PID" 2>/dev/null || true
       score_checkpoint "$next" "$checkpoint"
       if [ -z "$STOP_REASON" ]; then
@@ -365,7 +365,11 @@ TRAIN_PID=
 
 while [ "$next" -le 1024 ]; do
   checkpoint="$RUN/run/models/step-$(printf '%06d' "$next")"
-  [ ! -d "$checkpoint" ] || score_checkpoint "$next" "$checkpoint"
+  if [ -d "$checkpoint" ]; then
+    [ -f "$checkpoint/.checkpoint-ready" ] ||
+      die "checkpoint $next has no completion marker"
+    score_checkpoint "$next" "$checkpoint"
+  fi
   next=$((next + 256))
 done
 
