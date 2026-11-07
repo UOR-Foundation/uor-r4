@@ -29,7 +29,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, and 404 failures. `kimi-52-precheck/` contains green pre-commit evidence. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
+Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, and 404 failures. `kimi-52-precheck/` contains green pre-commit evidence. The intentional `mcp_client.js` D76 scope advisory is disclosed; the shared notebook/plan advisories are unchanged. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
 
 ## Skills used
 

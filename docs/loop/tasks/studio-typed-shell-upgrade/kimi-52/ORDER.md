@@ -14,6 +14,7 @@ Before implementation, run the new mount/bootstrap tests and typed page-load sce
 
 - `web/studio/src/main.ts`, `src/bootstrap.ts`, `src/main.test.ts`, `src/bootstrap.test.ts`, and other `web/studio/src/**` files strictly required by the mount.
 - `web/studio/index.html`, `web/studio/index.css`, `web/studio/vite.config.ts`, `web/studio/package.json`, and `web/studio/package-lock.json` only if an existing pin needs adjustment; no new dependency.
+- `web/studio/assets/js/mcp_client.js` only to suppress legacy auto-boot during the typed preview; its D76 scope advisory is intentional and disclosed.
 - `web/studio/verify_studio_page.mjs` and `verify_studio_page_load.mjs` only for an additive typed scenario; no weakened legacy assertion.
 - `web/studio/README.md`, `docs/products/web-client.md`, `docs/research/notebook/m4-serving.md`, and `docs/roadmap/items/studio-typed-shell-upgrade.md` for actual behavior/scope.
 - This task folder, including `PLAN.md`.
