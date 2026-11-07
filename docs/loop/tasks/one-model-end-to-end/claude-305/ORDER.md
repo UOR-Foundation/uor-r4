@@ -1,50 +1,49 @@
 # ORDER: one-model-end-to-end, claude-305
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `5388788e4`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `5388788e4` (`origin/main`, 7 Nov 2026; claude-304 merged).
 
 ## Goal
 
-The item's done-when reads:
+This serves Casey's one track (#2028 6675163438, "Yes, one track"). claude-301's (b64L) met the bar at width 256 on TRAIN D3 (27,968,113 tokens), "met; unseen ahead". claude-304's decision review stopped width 1,024 and named the outcome map's default as the next step: more human text at width 256.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+claude-301's tokens lever was `ahead`, but those were more positions over the same text. (b64L)'s 201.3M positions are about 7.2 passes over D3. More distinct text has not been tested.
+
+This unit builds **TRAIN D4**, about 2–3× D3, and the tables the bar needs, on the laptop, at no cost. A later unit trains (b64L) on it under its own sheet. Splitting the work keeps the GPU spend in a unit whose data is already known to be sound.
+
+How D4 is built (scout, from claude-292/293's REPORTs and the scale-probe sheet):
+- `prepare-real-text` again, on the same three wiki shards already in the store: `wikimedia/wikipedia` 20231101.en, shards 00000, 00020 and 00040.
+- The same tokenizer, protocol, `heldout_per_mille=50`, `max_tokens` and panels as claude-293. Only `max_docs` grows, about 3× each.
+- OASST2 in full, unchanged.
+- The split hashes each document's id. A larger `max_docs` therefore keeps every old document on its old side, and the held-out panel stays claude-293's four `heldout/` folders (1,460,697 rows).
+- T2, the unigram and the seen set depend on TRAIN, so they are rebuilt on D4.
+
+## Claim check
+
+- **(a) The step:** Casey's one track, the outcome map's default, "more human text at width 256" (claude-302's sheet, and claude-304's decision review).
+- **(b) What it changes in the model:** the training data. This unit makes the TRAIN the next (b64L) run trains on, and the baselines it is scored against.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. The kill switch is off.
+2. No pod of mine is running.
+3. The three raw shards and OASST2 are in the store under `results/claude/real-text-corpus-2026-11-05/raw/`, with `SHA256SUMS`.
+4. The laptop has at least 25 GiB free.
+5. **Determinism:** rebuild `wiki-00020` at claude-293's own settings. It must reproduce the stored `train/` and `heldout/` files byte for byte. If it does not, the old panel cannot be reused, and this unit stops as an instrument finding.
+
+## Done when
+
+1. Every D4 root is built, and each old `heldout/` folder is byte-identical to claude-293's. Each new root's documents form a superset of the old root's, on the same sides.
+2. D4's mix, T2, unigram and seen set are built with the scale-probe instrument at `e052abf41`, and their counts on the panel are recorded. The census is run per root if the laptop's 16 GB requires it.
+3. D4 and its tables are sealed in the store with a `SHA256SUMS` read back.
+4. A REPORT with the negatives first, one row in `docs/research/notebook/float-training.md`, and `References #3407`. The REPORT names the next unit's TRAIN by sha.
+
+## Stop and ask if
+
+"Ask" means decide, record it here and in the REPORT, and go on; nothing waits.
+- The determinism check fails. That is an instrument finding: record it, and do not build D4 on a different panel.
+- A build or the census exceeds the laptop's memory. Split it per root, or smaller. Moving any of it to a pod needs its own cost line.
+- The laptop's free disk falls under 10 GiB.
+- Casey says "hold".
 
 ## Files in scope
 
@@ -72,10 +71,4 @@ To fill in.
 - `crates/uor-r4-integer/src/bin/fbs-toks.rs`
 - `crates/uor-r4-training/src/milestone_world_v2.rs`
 
-## Done when
-
-To fill in.
-
-## Stop and ask if
-
-To fill in.
+Run, not edited: `crates/uor-r4-training/src/bin/prepare-real-text.rs` and `docs/labs/scale-probe/instrument` (at `e052abf41`). Outputs go to `local/claude/claude-305/` and the store.
