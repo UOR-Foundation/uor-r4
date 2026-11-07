@@ -30,6 +30,13 @@ How D4 is built (scout, from claude-292/293's REPORTs and the scale-probe sheet)
 4. The laptop has at least 25 GiB free.
 5. **Determinism:** rebuild `wiki-00020` at claude-293's own settings. It must reproduce the stored `train/` and `heldout/` files byte for byte. If it does not, the old panel cannot be reused, and this unit stops as an instrument finding.
 
+**Result, 7 Nov, before any D4 work. Class: instrument. GO.**
+1. The kill switch is off; `loop next` gives no hold.
+2. 0 pods of mine are running; claude-304's pod is down.
+3. The raw shards are in the store, and `SHA256SUMS` checks OK for train-00020.
+4. The laptop has 39 GiB free.
+5. The rebuild of `wiki-00020` (max_docs 8400, tokenizer `d36d3e87…`, `prepare-real-text` at `5388788e4`) is byte-identical on train and held-out `tokens.u16`, `response_mask.u8` and `excluded.jsonl`. Both manifests differ only in their `path` strings, the input and panel paths on this laptop, with 0 other differing lines. It ran in 3.1 s at a peak of 97 MB.
+
 ## Done when
 
 1. Every D4 root is built, and each old `heldout/` folder is byte-identical to claude-293's. Each new root's documents form a superset of the old root's, on the same sides.
