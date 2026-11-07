@@ -878,6 +878,9 @@ for (const [index, [prompt, expected]] of [
     ['17-25', 'underflow'],
     ['What is 17-25?', 'underflow'],
     [`${' '.repeat(200)}50-12`, '160-byte'],
+    ['17/25 of 3', 'exact arithmetic'],
+    ['5-10 minutes + 3', 'exact arithmetic'],
+    ['2026-11-05 - 2026-11-10 + 3', 'exact arithmetic'],
 ].entries()) {
     const id = `gen_review28_compact_${index}`;
     const conversationId = `conv_review28_compact_${index}`;
@@ -896,6 +899,21 @@ for (const [index, [prompt, expected]] of [
     await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
     const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
     assert(closed.action === 'session_reset', `compact subtraction conversation did not close: ${JSON.stringify(closed)}`);
+}
+
+for (const [index, prompt] of ['3/4 of the students passed', '5-10 minutes', '50-12 minutes', '2026-11-05 - 2026-11-10'].entries()) {
+    const id = `gen_review29_range_${index}`;
+    const conversationId = `conv_review29_range_${index}`;
+    await sendToWorker({
+        action: 'generate',
+        id,
+        payload: { conversationId, messages: [{ role: 'user', content: prompt }], options: { max_new_tokens: 32 } },
+    });
+    const ordinary = await waitForMessage((m) => (m.action === 'generate_complete' || m.action === 'generate_error') && m.id === id);
+    assert(ordinary.action === 'generate_complete' && ordinary.tokenCount === 32, `ordinary ratio/range prose must use the ordinary model path: ${JSON.stringify(ordinary)}`);
+    await sendToWorker({ action: 'close_session', id: `close_${id}`, payload: { conversationId } });
+    const closed = await waitForMessage((m) => (m.action === 'session_reset' || m.action === 'operation_error') && m.id === `close_${id}`);
+    assert(closed.action === 'session_reset', `review29 range conversation did not close: ${JSON.stringify(closed)}`);
 }
 
 for (const [index, prompt] of ['24/7 support', '1/2 cup', '1/2 cup sugar', '11-05-2026', '05-11-2026', '1-800-555-0100', '123-45-6789'].entries()) {

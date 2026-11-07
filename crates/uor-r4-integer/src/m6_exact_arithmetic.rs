@@ -932,6 +932,36 @@ fn exact_tool_compact_subtraction_shape(expression: &str) -> bool {
     !no_space_date_pair
 }
 
+fn exact_tool_compact_range_prose(expression: &str, suffix: &str) -> bool {
+    if !exact_tool_compact_subtraction_shape(expression) || suffix.is_empty() {
+        return false;
+    }
+    if suffix.chars().any(|c| {
+        c.is_ascii_digit()
+            || matches!(
+                c,
+                '+' | '-'
+                    | '*'
+                    | '/'
+                    | '%'
+                    | '^'
+                    | '&'
+                    | '|'
+                    | '='
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '−'
+                    | '('
+                    | '{'
+                    | '['
+            )
+    }) {
+        return false;
+    }
+    exact_tool_ratio_suffix_allowed(&suffix.to_ascii_lowercase())
+}
+
 fn exact_tool_arithmetic_shaped(rest: &str) -> bool {
     let rest = rest.trim_start();
     let signed_literal = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
@@ -1432,6 +1462,14 @@ fn exact_tool_is_iso_date_time(rest: &str) -> bool {
     false
 }
 
+fn exact_tool_is_iso_date_range(rest: &str) -> bool {
+    let rest = rest.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ',' | ' ' | '\t'));
+    let Some((left, right)) = rest.split_once(" - ") else {
+        return false;
+    };
+    exact_tool_is_iso_date_time_core(left.trim()) && exact_tool_is_iso_date_time_core(right.trim())
+}
+
 fn exact_tool_leading_operator_minus(expression: &str) -> bool {
     let expression = expression.trim_end_matches(|c| matches!(c, '?' | '.' | '!' | ' ' | '\t'));
     if !expression.starts_with('-') || expression.chars().any(char::is_alphabetic) {
@@ -1478,6 +1516,7 @@ fn exact_tool_ratio_unit_prefix(text: &str, unit: &str) -> bool {
 fn exact_tool_ratio_suffix_allowed(text: &str) -> bool {
     [
         "support",
+        "of",
         "cup",
         "cups",
         "gallon",
@@ -1675,7 +1714,7 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
     if exact_tool_is_time_range(rest) {
         return Ok(None);
     }
-    if exact_tool_is_iso_date_time(rest) {
+    if exact_tool_is_iso_date_time(rest) || exact_tool_is_iso_date_range(rest) {
         return Ok(None);
     }
     if exact_tool_is_ratio_prose(rest) {
@@ -1750,6 +1789,9 @@ fn exact_tool_expression(prompt: &str) -> Result<Option<(u64, ExactToolOperator,
         return Ok(None);
     }
     if unsupported_suffix {
+        if exact_tool_compact_range_prose(expression, suffix) {
+            return Ok(None);
+        }
         if exact_tool_arithmetic_shaped(rest) || exact_tool_compact_subtraction_shape(expression) {
             return Err(invalid(
                 "exact arithmetic supports only one unsigned decimal + or - expression",
@@ -2656,6 +2698,41 @@ mod tests {
                 "ordinary ratio/date/telephone prose was intercepted: {prompt}"
             );
         }
+    }
+
+    #[test]
+    fn exact_arithmetic_tool_review29_prose_and_range_regressions() {
+        for prompt in [
+            "3/4 of the students passed",
+            "5-10 minutes",
+            "50-12 minutes",
+            "2026-11-05 - 2026-11-10",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt).is_none(),
+                "ordinary ratio/range prose was intercepted: {prompt}"
+            );
+        }
+        for prompt in [
+            "17/25 of 3",
+            "5-10 minutes + 3",
+            "2026-11-05 - 2026-11-10 + 3",
+            "17/25 in decimal",
+        ] {
+            assert!(
+                exact_arithmetic_tool(prompt)
+                    .expect("review29 arithmetic boundary should be recognized")
+                    .is_err(),
+                "review29 arithmetic boundary fell through: {prompt}"
+            );
+        }
+        let compact = exact_arithmetic_tool("50-12")
+            .expect("compact subtraction should still be recognized")
+            .expect("compact subtraction should still compute exactly");
+        assert_eq!(compact.result, "38");
+        assert!(exact_arithmetic_tool("17-25")
+            .expect("compact underflow should still be recognized")
+            .is_err());
     }
 
     #[test]

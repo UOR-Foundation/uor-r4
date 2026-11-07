@@ -1122,14 +1122,35 @@ fn native_exact_arithmetic_review28_compact_subtraction() {
         "05-11-2026",
         "1-800-555-0100",
         "123-45-6789",
+        "3/4 of the students passed",
+        "5-10 minutes",
+        "50-12 minutes",
+        "2026-11-05 - 2026-11-10",
     ] {
         let response = dispatch_rpc_command(
             &mut backend,
             "native_exact_arithmetic",
             &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
         )
-        .expect("ordinary compact date/telephone RPC should succeed");
+        .expect("ordinary compact date/telephone/range RPC should succeed");
         assert_eq!(response["handled"], json!(false), "intercepted: {prompt}");
+    }
+    for prompt in [
+        "17/25 of 3",
+        "5-10 minutes + 3",
+        "2026-11-05 - 2026-11-10 + 3",
+        "17/25 in decimal",
+    ] {
+        let response = dispatch_rpc_command(
+            &mut backend,
+            "native_exact_arithmetic",
+            &json!({"model":"uor-chat","messages":[{"role":"user","content":prompt}]}),
+        )
+        .expect("continued arithmetic RPC should succeed");
+        assert_eq!(response["handled"], json!(true), "fell through: {prompt}");
+        assert!(response["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty()));
     }
 }
 
