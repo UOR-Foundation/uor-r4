@@ -1,8 +1,7 @@
 # ORDER: m6-code-task-rustc-verifier, deepseek-1
 
-Lab: deepseek. Item:
-[m6-code-task-rustc-verifier](../../../../roadmap/items/m6-code-task-rustc-verifier.md)
-(#3432). Base: `596bf74532beefc8d307936e8bbb35af03a7cb94`.
+Lab: deepseek. Item: [m6-code-task-rustc-verifier](../../../../roadmap/items/m6-code-task-rustc-verifier.md) (#3432).
+Base: `596bf74532beefc8d307936e8bbb35af03a7cb94`.
 
 ## Goal
 
