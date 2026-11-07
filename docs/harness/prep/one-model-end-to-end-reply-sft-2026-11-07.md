@@ -186,7 +186,10 @@ At checkpoints 256, 512, 768 and 1,024, export and score:
 1. `cpu-checkpoint-grade --checkpoint STEP --run-config $SEAL/run/config.json
    --snapshot-out ... --artifact-out ... --tokens OASST2_HELDOUT/tokens.u16
    --mask OASST2_HELDOUT/response_mask.u8 --manifest OASST2_HELDOUT/manifest.json
-   --max-evaluation 512 --max-replies 0 --out ...`.
+   --max-evaluation 512 --max-replies 1 --reply-tokens 1 --out ...`.
+   `cpu-checkpoint-grade` refuses `--max-replies 0`; one one-token reply
+   exercises the export path while the continuation gate reads the 512-row
+   nearest grade.
    Record nearest top-1, its pass/fail against 93, and the export hashes.
 2. `served-reply-panel --artifact ... --rendering per-turn/v1
    --teacher-forced 1 ...`. Record EOS top-1/top-8/top-32, median rank,
@@ -239,6 +242,13 @@ OASST2-only continuation on the same base and steps.
   and `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`.
 - Seed-1 base free-generation and rank controls reproduce the recorded counts.
 - Every output root is new and every seal is read back.
+
+The executable review unit is deepseek-23:
+
+- `docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh` is the pod-side
+  input, training, checkpoint, stop, seal and readback chain;
+- `docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh` is the
+  one-pod controller and lease watcher.
 
 ## Steps
 
