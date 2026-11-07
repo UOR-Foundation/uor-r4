@@ -13,6 +13,14 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   the archive, checkpoint, file paths and hashes in `case $SEED`; the CPU instruction had
   a second hand-substituted copy. That made a target change an opportunity for the two
   consumers to drift.
+- **The first stop-rule wording treated the b64L archive's training trace as a fault.**
+  Each archive legitimately contains many earlier b64L checkpoints and the b64S arm. The
+  stop rule now rejects a missing, duplicated or inconsistent selected step 16,384, while
+  allowing the reviewed archive to contain the other sealed checkpoints it was built with.
+- **The cost text described a per-pod ceiling that the controller does not enforce.**
+  `UOR_POD_MAX_RATE=4.50` is a combined running-rate cap in `uor-pod`; the chosen provider
+  offers may be higher than the $1.15/h projection. The sheet now distinguishes the
+  projection from the enforced cap and leaves actual lease rates to the D67 review.
 - **The normal claim command saw a preserved, already-merged worktree.** DeepSeek-16's
   `.worktrees/deepseek-centroid-cache` still holds ignored local evidence. `loop claim`
   therefore refused this item even though PR #3804 was merged. The worktree was preserved;
@@ -29,12 +37,20 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 - The capture job now requires `UOR_CENTROID_SPEC`, validates the schema and safe paths,
   extracts exactly the paths named there, checks every file against both the specification
   and the archive's inner `SHA256SUMS.files`, verifies the b64L run/model configs, and
-  records the specification hash and checkpoint path in `status.json`.
+  records the specification hash, checkpoint path and run config hash in `status.json`.
+- Both the capture and CPU restore now reject cache archives whose members leave
+  `cache/`, contain parent traversal or carry links or special files before extraction.
+- Failure evidence has a required base set, adds the capture files once scoring starts,
+  and no longer claims a pod is retained when its persistent `KEEP` mark cannot be written.
 - The controller copies and hash-checks both the job and the specification on each pod.
   It derives the source pin from the specification instead of carrying another literal.
 - The CPU restore now processes both seeds from the same specification in one loop. It has
   no hand-substituted seed table and checks the captured status and CPU reports against the
   same input identity.
+- The fixed evaluator's `n3s-registered-v1` string is declared as a frozen evaluation
+  protocol identifier rather than a checkpoint name. The specification names
+  `b64l-centroid-v1` as the target, the CPU checks both values, and it writes a
+  result-identity sidecar for later result publication.
 - The sheet now names the current b64L checkpoint and archives, while retaining
   DeepSeek-16 through DeepSeek-18 as the historical n3S records.
 
@@ -50,14 +66,17 @@ package change, with no runtime Rust or model arithmetic.
   width 256, Hamming read 4, batch 64, micro-batch 16 and 16,384 steps.
 - Both model configs name width 256, context 192, the six-recurrence pattern, four heads,
   Hamilton gate, SpiralCore/FBS product head and geometric architecture.
+- Those two model-config files are byte-identical to the older n3S configuration files, so
+  their hashes intentionally match; the b64L archives' own manifests verify those values.
+  The selected run configs, model weights and Hamming-read files differ.
 - All eight selected files matched both the input specification and the archive's inner
   `SHA256SUMS.files`.
 - No model, cache, pod, GPU, CPU evaluator or training process ran.
 
 The final job hash is
-`ec2244b6a2f5aee8fb58e48205cac73603c8ece71f46ba27c17ac957b38ca33f`;
+`e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e`;
 the input-specification hash is
-`3bfd689fa2d454027392e523ca4ba93af45e1d8856e42ffdc1a2f193dc536910`.
+`865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71`.
 
 ## Checks run at the head
 
@@ -65,6 +84,8 @@ the input-specification hash is
 - `--check-spec` for seeds 1 and 2: passed.
 - Local archive, inner-manifest, checkpoint-file and run/model-config verification for both
   seeds: passed.
+- Cache archive safety test: a regular `cache/` tree was accepted and a symbolic-link
+  member was rejected.
 - `bash -n` and `shellcheck` on the sheet's controller block: passed.
 - `bash -n` and `shellcheck` on the combined CPU restore, evaluation and aggregate blocks:
   passed.

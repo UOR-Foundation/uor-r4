@@ -60,6 +60,27 @@ need_readback_room() {
   [ "$available_kib" -ge "$required_kib" ] ||
     die "/workspace has $((available_kib / 1048576)) GiB free; readback needs $((required_kib / 1048576)) GiB (archive plus reserve)"
 }
+check_cache_archive() {
+  local archive=$1 members=$2 member relative
+  tar --zstd -tf "$archive" > "$members"
+  [ -s "$members" ] || die "cache archive is empty"
+  while IFS= read -r member; do
+    relative=${member%/}
+    case "/$relative/" in
+      *//*|*/../*) die "cache archive path is not safely relative: $member" ;;
+    esac
+    case $relative in
+      cache|cache/*) ;;
+      *) die "cache archive path is outside cache/: $member" ;;
+    esac
+  done < "$members"
+  tar --zstd -tvf "$archive" |
+    awk 'substr($0, 1, 1) != "-" && substr($0, 1, 1) != "d" {
+      print "cache archive contains a non-regular entry: " $0 > "/dev/stderr";
+      bad = 1
+    } END { exit bad }' ||
+    die "cache archive contains a link or special file"
+}
 log() {
   printf '%s\n' "$*"
 }
@@ -79,6 +100,9 @@ esac
 jq -e --arg seed "$SEED" '
   .schema == "uor-r4.centroid-checkpoint-inputs/1" and
   (.source_pin | test("^[0-9a-f]{40}$")) and
+  .evaluation.profile == "n3s-registered-v1" and
+  .evaluation.profile_role == "frozen-evaluation-protocol" and
+  (.evaluation.target_id | test("^[A-Za-z0-9._-]+$")) and
   (.expected.run.objective | type == "string") and
   (.expected.run.train_as_served | type == "boolean") and
   (.expected.run.width | type == "number" and . > 0 and floor == .) and
@@ -125,6 +149,7 @@ cp "$SPEC_INPUT" "$RUN/checkpoint-inputs.json"
 SPEC="$RUN/checkpoint-inputs.json"
 exec >> "$RUN/job.log" 2>&1
 OUTPUT_CLAIMED=0
+CAPTURE_STARTED=0
 on_exit() {
   local rc=$?
   if [ "$rc" -ne 0 ]; then
@@ -148,6 +173,14 @@ on_exit() {
       done
     else
       failure_complete=0
+    fi
+    for file in job.log checkpoint-inputs.json exit.code; do
+      [ -f "$RUN/$file" ] || failure_complete=0
+    done
+    if [ "$CAPTURE_STARTED" = 1 ]; then
+      for file in capture.stdout.jsonl capture.stderr binaries.sha256 gpu.txt; do
+        [ -f "$RUN/$file" ] || failure_complete=0
+      done
     fi
     if [ "$failure_complete" != 1 ]; then
       printf 'failure diagnostics were not fully uploaded and read back\n' \
@@ -327,6 +360,7 @@ case $gpu_name in
   *) die "expected a visible RTX 5090, found: $gpu_name" ;;
 esac
 started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+CAPTURE_STARTED=1
 set +e
 /usr/bin/time -v "$CARGO_TARGET_DIR/release/train-in-space" \
   --data-root "$DATA" \
@@ -413,6 +447,7 @@ tar -I 'zstd -3 -T0' -cf "$RUN/results/cache.tar.zst" -C "$RUN/results" cache
 zstd -q -t "$RUN/results/cache.tar.zst"
 (cd "$RUN/results" && sha256sum cache.tar.zst) \
   > "$RUN/results/cache.tar.zst.sha256"
+check_cache_archive "$RUN/results/cache.tar.zst" "$RUN/results/cache.members.txt"
 need_readback_room "$RUN/results/cache.tar.zst" "$RUN/results/normal-outputs.tar.zst"
 
 log "[6/6] upload and read back sealed evidence"
@@ -437,8 +472,8 @@ readback_sha=$(sha256sum "$RUN/readback/$OUT_STORE/results/cache.tar.zst" | cut 
 touch "$RUN/CACHE_TRANSFER_VERIFIED"
 
 normal_sha=$(cut -d' ' -f1 "$RUN/results/normal-outputs.tar.zst.sha256")
-printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","checkpoint":"%s","checkpoint_inputs_sha256":"%s","started":"%s","finished":"%s","cache_manifest_sha256":"%s","cache_tar_sha256":"%s","normal_outputs_tar_sha256":"%s","capture_binary_sha256":"%s"}\n' \
-  "$SEED" "$RUN_ID" "$PIN" "$CHECKPOINT_REL" "$SPEC_SHA256" \
+printf '{"seed":%s,"run_id":"%s","status":"CAPTURED","source_pin":"%s","checkpoint":"%s","checkpoint_inputs_sha256":"%s","run_config_sha256":"%s","started":"%s","finished":"%s","cache_manifest_sha256":"%s","cache_tar_sha256":"%s","normal_outputs_tar_sha256":"%s","capture_binary_sha256":"%s"}\n' \
+  "$SEED" "$RUN_ID" "$PIN" "$CHECKPOINT_REL" "$SPEC_SHA256" "$RUN_CONFIG_SHA256" \
   "$started" "$finished" \
   "$(sha256sum "$RUN/results/cache/manifest.json" | cut -d' ' -f1)" \
   "$(cut -d' ' -f1 "$RUN/results/cache.tar.zst.sha256")" \

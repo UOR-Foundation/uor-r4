@@ -1,6 +1,11 @@
 {
   "schema": "uor-r4.centroid-checkpoint-inputs/1",
   "source_pin": "3f41847a30eb8a6020109620e525047b89c279ea",
+  "evaluation": {
+    "profile": "n3s-registered-v1",
+    "profile_role": "frozen-evaluation-protocol",
+    "target_id": "b64l-centroid-v1"
+  },
   "expected": {
     "run": {
       "objective": "nearest",

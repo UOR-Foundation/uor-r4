@@ -90,6 +90,12 @@ The run and model configs together name D3, seed 1 or 2, objective `nearest`,
 256, six layers, four Hamming heads and context 192. An archive with a different selected
 checkpoint or config is a stop.
 
+The fixed D84 evaluator reports the historical profile identifier
+`n3s-registered-v1`. The input specification explicitly defines that string as a frozen
+evaluation-protocol identifier, not as the checkpoint name, and binds the current target
+as `b64l-centroid-v1`. The CPU result block checks the evaluator profile and writes a
+result-identity sidecar carrying both the protocol identifier and target identifier.
+
 ## Steps
 
 The reviewed pod script is run once per seed on a fresh DeepSeek-owned RTX 5090. Check
@@ -99,8 +105,8 @@ Two fresh one-card pods keep the run parallel and at most four total:
 ```sh
 set -euo pipefail
 export UOR_POD_MAX_RATE=4.50
-JOB_SHA256=ec2244b6a2f5aee8fb58e48205cac73603c8ece71f46ba27c17ac957b38ca33f
-SPEC_SHA256=3bfd689fa2d454027392e523ca4ba93af45e1d8856e42ffdc1a2f193dc536910
+JOB_SHA256=e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e
+SPEC_SHA256=865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71
 [ "$(sha256sum docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/job.sh |
   cut -d' ' -f1)" = "$JOB_SHA256" ] || {
   echo "local capture script does not match the reviewed hash" >&2
@@ -151,8 +157,11 @@ retain_pod() {
   echo "retaining $pod: $reason" >&2
   echo "inspect it, preserve unique evidence, then unkeep and down it explicitly" >&2
   scripts/pod/uor-pod renew "$pod" --lab deepseek --session "$session" --hours 7 || true
-  scripts/pod/uor-pod keep "$pod" --lab deepseek \
-    --purpose "centroid failure retained: $reason" || true
+  if ! scripts/pod/uor-pod keep "$pod" --lab deepseek \
+      --purpose "centroid failure retained: $reason"; then
+    echo "ERROR: could not mark $pod KEEP; its evidence is protected only until the current lease expires" >&2
+    return 1
+  fi
 }
 
 resolve_pod() {
@@ -166,7 +175,8 @@ resolve_pod() {
     return 0
   fi
   if [ "${FINISHED[$i]}" != 1 ]; then
-    retain_pod "$pod" "${SESSIONS[$i]}" "job did not reach a verified terminal state"
+    retain_pod "$pod" "${SESSIONS[$i]}" \
+      "job did not reach a verified terminal state" || return 1
     RESOLVED[i]=1
     return 0
   fi
@@ -179,7 +189,8 @@ resolve_pod() {
      f=0; test -e '${RUN_DIRS[$i]}/status.json' && f=1; \
      n=0; test -e '${RUN_DIRS[$i]}/results/normal-outputs.tar.zst.sha256' && n=1; \
      printf '%s %s %s %s %s %s\n' \"\$s\" \"\$e\" \"\$c\" \"\$v\" \"\$f\" \"\$n\""); then
-    retain_pod "$pod" "${SESSIONS[$i]}" "terminal evidence could not be read"
+    retain_pod "$pod" "${SESSIONS[$i]}" "terminal evidence could not be read" ||
+      return 1
     RESOLVED[i]=1
     return 0
   fi
@@ -193,17 +204,18 @@ resolve_pod() {
         teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
       else
         retain_pod "$pod" "${SESSIONS[$i]}" \
-          "successful EXIT lacks verified cache, status or normal-output evidence"
+          "successful EXIT lacks verified cache, status or normal-output evidence" ||
+          return 1
       fi
       ;;
     ''|*[!0-9]*)
-      retain_pod "$pod" "${SESSIONS[$i]}" "EXIT is missing or malformed"
+      retain_pod "$pod" "${SESSIONS[$i]}" "EXIT is missing or malformed" || return 1
       ;;
     *)
       if [ "$incomplete" = 1 ]; then
-        retain_pod "$pod" "${SESSIONS[$i]}" "failure evidence is incomplete"
+        retain_pod "$pod" "${SESSIONS[$i]}" "failure evidence is incomplete" || return 1
       elif [ "$cache_present" = 1 ] && [ "$cache_verified" != 1 ]; then
-        retain_pod "$pod" "${SESSIONS[$i]}" "cache transfer was not verified"
+        retain_pod "$pod" "${SESSIONS[$i]}" "cache transfer was not verified" || return 1
       else
         teardown_pod "$pod" "${SESSIONS[$i]}" || return 1
       fi
@@ -486,11 +498,13 @@ set -euo pipefail
 CPU_RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 ROOT=local/deepseek/centroid-cache/2026-11-06/$CPU_RUN_ID
 SPEC=docs/labs/one-model-end-to-end/centroid-cache-2026-11-06/checkpoint-inputs.json
-CAPTURE_JOB_SHA256=ec2244b6a2f5aee8fb58e48205cac73603c8ece71f46ba27c17ac957b38ca33f
-CAPTURE_SPEC_SHA256=3bfd689fa2d454027392e523ca4ba93af45e1d8856e42ffdc1a2f193dc536910
+CAPTURE_JOB_SHA256=e6d4bf0b17496ee5e0642002b5d4bd6b09e0d74fbdf4a91aa50a6ebf61b4d73e
+CAPTURE_SPEC_SHA256=865497d8702d34d75182e592c16de247f3d653ad5bf52a8c9d4aa1822ad6cf71
 [ "$(sha256sum "$SPEC" | cut -d' ' -f1)" = "$CAPTURE_SPEC_SHA256" ]
 SOURCE_PIN=$(jq -er .source_pin "$SPEC")
 EXPECTED=$(jq -c '.expected' "$SPEC")
+EVAL_PROFILE=$(jq -er .evaluation.profile "$SPEC")
+TARGET_ID=$(jq -er .evaluation.target_id "$SPEC")
 mkdir -p "$(dirname "$ROOT")"
 mkdir "$ROOT"
 printf 'cpu_run_root=%s\n' "$ROOT"
@@ -594,8 +608,29 @@ for seed in 1 2; do
   ARCHIVE_ROOT="$CACHE_DOWN/$OUT_STORE"
   CACHE_ARCHIVE_ROOT="$ARCHIVE_ROOT/results"
   (cd "$CACHE_ARCHIVE_ROOT" && sha256sum -c cache.tar.zst.sha256)
+  CACHE_TAR="$CACHE_ARCHIVE_ROOT/cache.tar.zst"
+  CACHE_MEMBERS="$SEED_ROOT/cache-members.txt"
+  tar --zstd -tf "$CACHE_TAR" > "$CACHE_MEMBERS"
+  [ -s "$CACHE_MEMBERS" ]
+  while IFS= read -r member; do
+    relative=${member%/}
+    case "/$relative/" in
+      *//*|*/../*) echo "unsafe cache path: $member" >&2; exit 1 ;;
+    esac
+    case $relative in
+      cache|cache/*) ;;
+      *) echo "cache path escapes cache/: $member" >&2; exit 1 ;;
+    esac
+  done < "$CACHE_MEMBERS"
+  tar --zstd -tvf "$CACHE_TAR" |
+    awk 'substr($0, 1, 1) != "-" && substr($0, 1, 1) != "d" {
+      print "cache archive contains a non-regular entry: " $0 > "/dev/stderr";
+      bad = 1
+    } END { exit bad }' ||
+    { echo "cache archive contains a link or special file" >&2; exit 1; }
   mkdir -p "$SEED_ROOT/cache-extracted"
-  tar --zstd -xf "$CACHE_ARCHIVE_ROOT/cache.tar.zst" -C "$SEED_ROOT/cache-extracted"
+  tar --zstd --no-same-owner --no-same-permissions \
+    -xf "$CACHE_TAR" -C "$SEED_ROOT/cache-extracted"
   (cd "$SEED_ROOT/cache-extracted" &&
     sha256sum -c "$CACHE_ARCHIVE_ROOT/cache.SHA256SUMS")
   STATUS="$ARCHIVE_ROOT/status.json"
@@ -604,11 +639,12 @@ for seed in 1 2; do
   grep -Fxq "spec_sha256=$CAPTURE_SPEC_SHA256" "$ARCHIVE_ROOT/job.log"
   jq -e --arg binary "$BINARY_SHA" --arg spec "$CAPTURE_SPEC_SHA256" \
     --arg checkpoint "$CHECKPOINT_REL" --arg source "$SOURCE_PIN" \
-    --argjson seed "$seed" '
+    --arg run_config "$RUN_CONFIG_SHA256" --argjson seed "$seed" '
       .seed == $seed and .status == "CAPTURED" and
       .source_pin == $source and
       .checkpoint == $checkpoint and
       .checkpoint_inputs_sha256 == $spec and
+      .run_config_sha256 == $run_config and
       .capture_binary_sha256 == $binary
     ' "$STATUS"
   TAR_SHA=$(cut -d' ' -f1 "$CACHE_ARCHIVE_ROOT/cache.tar.zst.sha256")
@@ -642,6 +678,8 @@ for seed in 1 2; do
     --expect-rows 1460697 \
     --expect-identity 5f88a5b3295ba5d684a8c75206787642fd65a2377d2dbb268992ec5c71a621eb \
     --out "$ROOT/centroid-s$seed.json"
+  jq -e --arg profile "$EVAL_PROFILE" \
+    '.evaluation_profile == $profile' "$ROOT/centroid-s$seed.json"
 done
 ```
 
@@ -654,17 +692,33 @@ checkpoint files:
 ```sh
 for seed in 1 2; do
   manifest=$(cat "$ROOT/s$seed/manifest.sha256")
+  run_config_sha=$(jq -er --arg seed "$seed" \
+    '.seeds[$seed].run_config.sha256' "$SPEC")
   jq -e --arg manifest "$manifest" \
     '.cache.manifest_sha256 == $manifest' "$ROOT/centroid-s$seed.json"
-  jq -e --slurpfile spec "$SPEC" --arg seed "$seed" '
-    .cache.checkpoint_files ==
-      ($spec[0].seeds[$seed].checkpoint_files |
-        with_entries(.value = .value.sha256))
+  jq -e --slurpfile spec "$SPEC" --arg seed "$seed" \
+    --arg run_config "$run_config_sha" --arg profile "$EVAL_PROFILE" '
+      .cache.checkpoint_files ==
+        ($spec[0].seeds[$seed].checkpoint_files |
+          with_entries(.value = .value.sha256)) and
+      .cache.run_config_sha256 == $run_config and
+      .evaluation_profile == $profile
   ' "$ROOT/centroid-s$seed.json"
 done
 /usr/bin/time -v -o "$ROOT/aggregate.time.txt" \
   "$CARGO_TARGET_DIR/release/cpu-query-cache-aggregate" \
   "$ROOT/centroid-s1.json" "$ROOT/centroid-s2.json" --out "$ROOT/final.json"
+FINAL_SHA=$(sha256sum "$ROOT/final.json" | cut -d' ' -f1)
+jq -n --arg spec_sha "$CAPTURE_SPEC_SHA256" --arg profile "$EVAL_PROFILE" \
+  --arg target "$TARGET_ID" --arg final_sha "$FINAL_SHA" '
+    {
+      schema: "uor-r4.centroid-result-identity/1",
+      input_spec_sha256: $spec_sha,
+      evaluation_profile: $profile,
+      target_id: $target,
+      final_sha256: $final_sha
+    }
+  ' > "$ROOT/result-identity.json"
 ```
 
 ## Instrument checks
@@ -676,7 +730,9 @@ done
   query space and table hash, and contains exactly five no-memory splits: TRAIN plus the
   four panels.
 - **I-3b:** the CPU report's `cache.manifest_sha256` and every checkpoint-file hash equal
-  the uploaded status and the pre-registered seed table above.
+  the uploaded status and the pre-registered seed table above. Its fixed
+  `n3s-registered-v1` field is read as the frozen protocol identifier and paired with the
+  `b64l-centroid-v1` target in `result-identity.json`.
 - **I-4:** the CPU original table reproduces the frozen nearest decision at every panel
   row. Any difference is `CONTROL_FAULT`.
 - **I-5:** the evaluator computes each split identity and the registered pooled identity
@@ -716,8 +772,10 @@ the serving path.
 
 - Two parallel one-card captures, each reading 27.42M TRAIN rows and 1.46M panel rows.
 - Estimate: 2-4 hours on each pod. The watcher renews each healthy lease; estimates are
-  not cancellation rules. At a $1.15/h ceiling a four-hour run on each of two leases costs
-  about $9.20, and the system cap remains four pods and $8/h globally.
+  not cancellation rules. At the observed $1.15/h per card, a four-hour run on each of
+  two leases projects about $9.20. The controller exports a **combined** running-rate cap
+  of `$4.50/h`, not a `$1.15/h` per-pod cap; the D67 review must record the actual leases
+  and rates before launch.
 - The raw cache is 28.02 GiB. The job requires 128 GiB at admission and again requires
   118 GiB after downloads and build but before capture; that second gate covers three
   raw-size-equivalent copies plus the 31 GiB reserve. It retains the actual post-capture,

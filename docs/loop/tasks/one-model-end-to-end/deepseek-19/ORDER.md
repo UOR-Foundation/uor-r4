@@ -18,7 +18,7 @@ It does not run the capture, evaluation, a GPU job or a training job.
 
 Class: execution-package repair. Claude-302's width-1,024 diagnostic is merged and did
 not produce a competing checkpoint; the report explicitly keeps (b64L) at width 256 as
-the current human-text recipe. Its two new archives are sealed in
+the current human-text recipe. Claude-301's two b64L archives are sealed in
 `results/claude/one-model-end-to-end-d3-accum-2026-11-06/runs-2/s{1,2}/`.
 
 The ordinary claim command is blocked by the preserved local worktree
@@ -33,7 +33,8 @@ deleting the preserved worktree.
 1. A separate machine-readable input specification names each seed's sealed archive,
    archive hash, run case, checkpoint step, run config and three checkpoint files.
 2. The values in that specification are computed from the two (b64L) archives and checked
-   against their inner `SHA256SUMS.files`; no n3S hash is reused for (b64L).
+   against their inner `SHA256SUMS.files`. Byte-identical model-config files may share the
+   old hash, but no selected value is accepted without matching the b64L archive.
 3. The capture job requires the specification, validates its schema and selected seed,
    and uses it for archive download, extraction, hash checks and configuration checks.
 4. The controller copies and hashes the specification beside the job, and the CPU restore
@@ -47,7 +48,9 @@ deleting the preserved worktree.
 
 Ask means decide, record and continue.
 
-- A (b64L) archive contains any checkpoint other than the registered step 16,384.
+- The selected step-16,384 checkpoint is absent, duplicated, or disagrees with its
+  registered config or file hashes. The archive also contains the training trace's earlier
+  checkpoints and the b64S arm; selecting step 16,384 from b64L is intended.
 - Its run or model config differs from width 256, context 192, six layers, four Hamming
   heads, objective `nearest`, or `train_as_served: true`.
 - The same checkpoint file hashes unlike its inner manifest.
