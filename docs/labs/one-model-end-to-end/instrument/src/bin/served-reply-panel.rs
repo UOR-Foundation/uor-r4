@@ -217,7 +217,7 @@ fn run() -> Result<()> {
             complete,
         });
     }
-    let wall_seconds = started.elapsed().as_secs_f64();
+    let wall_milliseconds = started.elapsed().as_millis().max(1);
 
     let mut per_stratum: BTreeMap<String, Tally> = BTreeMap::new();
     for row in &rows {
@@ -262,8 +262,8 @@ fn run() -> Result<()> {
         },
         "per_stratum": per_stratum,
         "reply_tokens": reply_tokens,
-        "wall_seconds": wall_seconds,
-        "tokens_per_second": reply_tokens as f64 / wall_seconds,
+        "wall_milliseconds": wall_milliseconds,
+        "tokens_per_second": reply_tokens as u128 * 1000 / wall_milliseconds,
         "rows": rows,
     });
     let mut text = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
@@ -353,16 +353,20 @@ fn score(stop: Stop, bytes: &[u8], answers: &FrozenAnswers, protocol: &DialogueP
 fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, usize, usize)>> {
     let mut groups: BTreeMap<&str, Vec<&(String, String, bool, String)>> = BTreeMap::new();
     for row in rows {
-        groups.entry(row.0.as_str()).or_default().push(row);
+        let (pair, _, _, _) = row;
+        groups.entry(pair.as_str()).or_default().push(row);
     }
     let mut tallies: BTreeMap<String, (usize, usize)> = BTreeMap::new();
     for (pair, arms) in groups {
-        if arms.len() != 2 || arms[0].1 != arms[1].1 {
+        let [(_, stratum_a, complete_a, text_a), (_, stratum_b, complete_b, text_b)] = arms[..] else {
+            return Err(format!("pair {pair} does not hold two rows of one stratum"));
+        };
+        if stratum_a != stratum_b {
             return Err(format!("pair {pair} does not hold two rows of one stratum"));
         }
-        let tally = tallies.entry(arms[0].1.clone()).or_default();
-        tally.0 += 1;
-        tally.1 += usize::from(arms[0].2 && arms[1].2 && arms[0].3 != arms[1].3);
+        let (pairs, distinct) = tallies.entry(stratum_a.clone()).or_default();
+        *pairs += 1;
+        *distinct += usize::from(*complete_a && *complete_b && text_a != text_b);
     }
     Ok(tallies.into_iter().map(|(s, (p, d))| (s, p, d)).collect())
 }
@@ -477,10 +481,10 @@ mod tests {
         let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).unwrap();
         let accepted = answers("basalt loggia.");
         assert_eq!(score(Stop::Eos, b" basalt loggia.", &accepted, &protocol), (" basalt loggia.".to_owned(), true));
-        assert!(!score(Stop::Cap, b" basalt loggia.", &accepted, &protocol).1);
-        assert!(!score(Stop::Eos, b"  basalt loggia.", &accepted, &protocol).1);
-        assert!(!score(Stop::Eos, b" basalt loggia. ", &accepted, &protocol).1);
-        assert!(!score(Stop::Eos, b" basalt \xff", &answers("basalt \u{fffd}"), &protocol).1);
+        assert!(matches!(score(Stop::Cap, b" basalt loggia.", &accepted, &protocol), (_, false)));
+        assert!(matches!(score(Stop::Eos, b"  basalt loggia.", &accepted, &protocol), (_, false)));
+        assert!(matches!(score(Stop::Eos, b" basalt loggia. ", &accepted, &protocol), (_, false)));
+        assert!(matches!(score(Stop::Eos, b" basalt \xff", &answers("basalt \u{fffd}"), &protocol), (_, false)));
     }
 
     #[test]

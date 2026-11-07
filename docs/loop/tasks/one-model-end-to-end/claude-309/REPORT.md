@@ -31,18 +31,19 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - Distinctness compares stripped reply text.
   - The tests read the tokenizer from `UOR_PANEL_TOKENIZER` and pass with a note when it is unset, instead of panicking on a laptop path.
   - Re-scored with the fixed bin, both seeds' rows are identical to the first run's.
+- **Queue fix (D32, no float in an instrument's compiled code):** the queue's banned-presence check counted 12 float sites in the bin. One was the `f64` tokens-per-second; the other 11 were tuple indexes after `]` or `)` (`arms[0].1`), which its lexer reads as float literals. Timing is now integer milliseconds, and the tuples are destructured. A third run's rows are identical to the second's on both seeds.
 - **The harness exception, as recorded in the ORDER:** `loop claim` refused on deepseek's `hamilton_sheet.rs` overlap, so the ORDER was written by hand. The builder subagent then got a `loop suborder` scoped to the instrument crate.
 
 ## Measurements
 
-Panel `m2-fresh256` (inputs `1de2fc28…`, labels `3b5c5477…`, plan `0ed1ab98…`, tokenizer `d36d3e87…`). Artifacts as in claude-308. The table is the re-run with the reviewed bin, `38d53fb6…`. The first run, with bin `424bd917…`, gave identical rows (outputs `0d6dec9a…` and `066dc827…`; the shas differ only by timing).
+Panel `m2-fresh256` (inputs `1de2fc28…`, labels `3b5c5477…`, plan `0ed1ab98…`, tokenizer `d36d3e87…`). Artifacts as in claude-308. The table is the third run, with the float-free bin `be3d4cb0…` (see What changed). The first run (bin `424bd917…`, outputs `0d6dec9a…`, `066dc827…`) and the second (bin `38d53fb6…`, outputs `a6adc15b…`, `f0088f6c…`, 912.9 and 914.8 tok/s) gave identical rows; the output shas differ only by timing.
 
 | Seed | Rows complete | Pairs both complete, distinct | EOS / BOS / cap / context stops | Full answer anywhere in reply | Tokens/s | Output sha256 |
 |---|---|---|---|---|---|---|
-| 1 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 912.9 | `a6adc15bebf9185b0891b20f2965e6bffaee8179eb3c26caaea7f844662fa0df` |
-| 2 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 914.8 | `f0088f6cd210354b1520ec5b0ddeec2c4cf205e136e2c92975404a5f8ae9a935` |
+| 1 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 779 | `d02ec432c52dfbe5c858b12e03e7f047da639c8f0fbc8a184dee3c5901bfac25` |
+| 2 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 892 | `8eef4db1fb33fdf21087d14de8a9ef7b8266729a8bc2a4be8c0ef2ab8f92497b` |
 
-Each seed generated 16,384 reply tokens in about 18 s. The timer starts after the inputs are checked, and it includes each row's artifact parse and prompt steps.
+Each seed generated 16,384 reply tokens in 18 to 21 s (seed 1 ran while another build shared the laptop). Tokens per second is now an integer: tokens × 1000 / milliseconds. The timer starts after the inputs are checked, and it includes each row's artifact parse and prompt steps.
 
 ## Checks run at the head
 
@@ -66,13 +67,13 @@ None beyond the loop's own steps.
 
 ## Still open
 
-- **The model does not end a reply or recall a stated fact.** Both are training problems, not pipeline problems. The pipeline is now measured end to end: train, export, serve, then score whole replies on a held-out M2 panel, laptop-only, about 18 s per seed. The next training decision can be judged by this score. A run is worth its spend only if it moves this score off 0, or at least gets the model emitting EOS on its own corpus.
+- **The model does not end a reply or recall a stated fact.** Both are training problems, not pipeline problems. The pipeline is now measured end to end: train, export, serve, then score whole replies on a held-out M2 panel, laptop-only, about 20 s per seed. The next training decision can be judged by this score. A run is worth its spend only if it moves this score off 0, or at least gets the model emitting EOS on its own corpus.
 - **`m2-reply512` is not scored.** Its `inputs.json` and `labels.json` are not located in the store. Only their hashes are recorded (`b9661606…`, `84991e0…`).
 - **The per-turn rendering is unread.**
 - **claude-308's one-scorer parity** (served against trained on the same scorer) is still open.
 
 ## Plain summary
 
-There is now a tool that asks the question that matters: given a short conversation that states some facts, does the served model answer a question about them correctly, and stop? It runs the shipped integer model on the laptop at about 910 tokens per second and scores all 256 held-out questions in about 18 seconds.
+There is now a tool that asks the question that matters: given a short conversation that states some facts, does the served model answer a question about them correctly, and stop? It runs the shipped integer model on the laptop at roughly 800 to 900 tokens per second and scores all 256 held-out questions in about 20 seconds.
 
 The current best model gets 0 of 256 on both seeds. No reply contains the right answer, though some echo bits of the stated facts whatever the question. And it never stops talking: it runs into a string of 9s or a repeated letter or phrase. The trained model, before export, also fails to stop where its reference replies stop, so this is a training problem, not a serving problem. With the path from training to serving to scoring now working end to end, the next training run can be judged by whether it moves this number.
