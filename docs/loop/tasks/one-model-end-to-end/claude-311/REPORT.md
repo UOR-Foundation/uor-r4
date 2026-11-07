@@ -6,7 +6,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **No model answers the panel: 0 of 256 rows complete and 0 of 128 pairs, for all six artifacts.** The bar is 104 rows and 52 pairs. These are claude-259's (b) and (h) arms at seeds 1–3, trained 8,192 steps on `mw-balp/train`.
 - **The replies collapse onto one canned line.** At every seed, 128 to 152 of the 256 replies are the same text: " I'm sorry you feel nervous. I hope it gets better soon." Each artifact gives only 7 to 24 distinct replies across 256 prompts. The replies stop, but they are not about the prompt.
-- **Tokens per second is not comparable to (b64L)'s.** Each run took 202 to 211 s against about 18 s for (b64L). These artifacts are 51,310,784 bytes against (b64L)'s 2,156,416, and the replies are short (median 14 tokens), so prompt steps fill almost all the wall time. The bin's tokens-per-second counts reply tokens only, so its 15 to 23 here measures the prompt load, not decode speed.
+- **Tokens per second is not comparable to (b64L)'s.** Each run took 195 to 236 s, against 18 to 21 s for (b64L) (claude-309). These artifacts are 51,310,784 bytes against (b64L)'s 2,156,416. The bin's timer re-parses the artifact for every row (`served-reply-panel.rs:204`). The runs step 14,004 prompt tokens and 3,261–4,871 reply tokens: about 14 s at claude-259's served decode of about 1,300 tok/s for (b). Most of the wall time is most likely the 256 parses of a 51 MB artifact. The bin's 15 to 23 tok/s reflects the timer's scope, not decode speed.
 - **This does not show that the corpus is what makes a model stop.** The arms differ from (b64L) in recipe as well as corpus (claude-259's sheet), so the ORDER pinned the reading as descriptive.
 
 ## What changed
@@ -46,6 +46,7 @@ None beyond the loop's own steps.
 ## Still open
 
 - **Stopping and answering are separate problems.** Both corpora fail on recall. D3's model never stops; the `mw-balp` models stop after about 14 tokens, but with a stock line. A run that moves this score needs both: a corpus with a reply-length EOS rate, and replies that depend on the prompt's facts.
+- **`served-reply-panel`'s timer includes a parse of the artifact per row.** Its tokens-per-second is a decode figure only for a small artifact. Parsing once outside the timer would make it one for any artifact (an instrument change for a later unit).
 - **Not separated:** corpus against recipe. A run that changes only the corpus, (b64L)'s recipe on a dialogue corpus with DEV's EOS rate, is the clean test. It needs its own prep sheet and pre-run review.
 
 ## Plain summary
