@@ -161,8 +161,8 @@ mutate dirty-launch "$LAUNCHER" \
   'true ||'
 mutate unmerged-pin "$LAUNCHER" \
   'git merge-base --is-ancestor "$PIN" origin/main ||' 'true ||'
-mutate reviewed-tree-unchecked "$LAUNCHER" \
-  '[ "$(git rev-parse "$PIN^{tree}")" = "$REVIEWED_TREE" ] ||' 'true ||'
+mutate reviewed-runtime-unchecked "$LAUNCHER" \
+  '[ "$runtime_sha" = "$REVIEWED_RUNTIME" ] ||' 'true ||'
 mutate weak-global-cap "$LAUNCHER" \
   'export UOR_POD_MAX_RATE=8.00' 'export UOR_POD_MAX_RATE=80.00'
 mutate store-preflight-fail-open "$LAUNCHER" \

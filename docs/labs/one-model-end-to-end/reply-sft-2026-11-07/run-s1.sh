@@ -2,8 +2,8 @@
 # Launch the reviewed seed-1 reply-SFT job on one DeepSeek-owned RTX 5090.
 #
 # UOR_SFT_PIN must be the exact merge commit that contains this script and the
-# reviewed trainer/diagnostic dependencies. UOR_SFT_REVIEWED_TREE must be that
-# commit's reviewed tree SHA.
+# reviewed trainer/diagnostic dependencies. UOR_SFT_REVIEWED_RUNTIME must be the
+# reviewed SHA-256 identity of the runtime paths checked below.
 set -euo pipefail
 
 PIN=${UOR_SFT_PIN:?UOR_SFT_PIN must name the reviewed 40-hex merge commit}
@@ -11,17 +11,47 @@ case "$PIN" in
   *[!0-9a-f]*|'') echo "UOR_SFT_PIN is not lowercase 40-hex" >&2; exit 2 ;;
 esac
 [ "${#PIN}" -eq 40 ] || { echo "UOR_SFT_PIN is not 40 hex characters" >&2; exit 2; }
-REVIEWED_TREE=${UOR_SFT_REVIEWED_TREE:?UOR_SFT_REVIEWED_TREE must name the reviewed 40-hex tree}
-case "$REVIEWED_TREE" in
-  *[!0-9a-f]*|'') echo "UOR_SFT_REVIEWED_TREE is not lowercase 40-hex" >&2; exit 2 ;;
+REVIEWED_RUNTIME=${UOR_SFT_REVIEWED_RUNTIME:?UOR_SFT_REVIEWED_RUNTIME must name the reviewed runtime identity}
+case "$REVIEWED_RUNTIME" in
+  *[!0-9a-f]*|'') echo "UOR_SFT_REVIEWED_RUNTIME is not lowercase 64-hex" >&2; exit 2 ;;
 esac
-[ "${#REVIEWED_TREE}" -eq 40 ] ||
-  { echo "UOR_SFT_REVIEWED_TREE is not 40 hex characters" >&2; exit 2; }
+[ "${#REVIEWED_RUNTIME}" -eq 64 ] ||
+  { echo "UOR_SFT_REVIEWED_RUNTIME is not 64 hex characters" >&2; exit 2; }
 
 ROOT=$(git rev-parse --show-toplevel)
 POD_TOOL="$ROOT/scripts/pod/uor-pod"
 STORE="$ROOT/scripts/pod/uor-store"
 JOB="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"
+RUNTIME_PATHS=(
+  Cargo.lock
+  Cargo.toml
+  crates/uor-r4-cpu-train/Cargo.toml
+  crates/uor-r4-cpu-train/src/bin/cpu-checkpoint-grade.rs
+  crates/uor-r4-cpu-train/src/bin/cpu-fbs-export.rs
+  crates/uor-r4-cpu-train/src/checkpoint_grade.rs
+  crates/uor-r4-cpu-train/src/fbs.rs
+  crates/uor-r4-cpu-train/src/fbs_snapshot_cpu.rs
+  crates/uor-r4-cpu-train/src/lib.rs
+  crates/uor-r4-float-train/src/in_space_long.rs
+  crates/uor-r4-float-train/src/bin/train-in-space.rs
+  crates/uor-r4-pod-provider/Cargo.toml
+  crates/uor-r4-pod-provider/src/lib.rs
+  crates/uor-r4-pod-provider/src/main.rs
+  docs/labs/one-model-end-to-end/instrument/Cargo.lock
+  docs/labs/one-model-end-to-end/instrument/Cargo.toml
+  docs/labs/one-model-end-to-end/instrument/src/bin/corpus-panel-overlap.rs
+  docs/labs/one-model-end-to-end/instrument/src/bin/served-reply-panel.rs
+  docs/labs/one-model-end-to-end/instrument/src/evidence.rs
+  docs/labs/one-model-end-to-end/instrument/src/main.rs
+  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/gate.sh
+  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh
+  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh
+  docs/labs/one-model-end-to-end/reply-sft-2026-11-07/test-mutants.sh
+  scripts/pod/uor-pod
+  scripts/pod/uor-pod-bootstrap.sh
+  scripts/pod/uor-reaper.sh
+  scripts/pod/uor-store
+)
 POD_STATE=${UOR_POD_STATE:-$HOME/.local/share/uor-r4/compute}
 RUN_ID=$(date -u +%Y%m%dT%H%M%SZ | tr '[:upper:]' '[:lower:]')-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')
 SESSION="deepseek-sft-$RUN_ID"
@@ -51,8 +81,11 @@ git cat-file -e "$PIN^{commit}" || { echo "local repository does not contain $PI
 git fetch --quiet origin main || { echo "could not refresh origin/main" >&2; exit 2; }
 git merge-base --is-ancestor "$PIN" origin/main ||
   { echo "$PIN is not merged on origin/main" >&2; exit 2; }
-[ "$(git rev-parse "$PIN^{tree}")" = "$REVIEWED_TREE" ] ||
-  { echo "$PIN does not hold the reviewed tree $REVIEWED_TREE" >&2; exit 2; }
+runtime_sha=$(
+  git ls-tree -r "$PIN" -- "${RUNTIME_PATHS[@]}" | sha256sum | cut -d' ' -f1
+)
+[ "$runtime_sha" = "$REVIEWED_RUNTIME" ] ||
+  { echo "$PIN has runtime identity $runtime_sha, not $REVIEWED_RUNTIME" >&2; exit 2; }
 
 install -d "$CONTROLLER"
 free_kib=$(df -Pk "$ROOT" | awk 'NR == 2 { print $4 }')
@@ -91,7 +124,7 @@ JOB_SHA256=$(sha256sum "$JOB" | cut -d' ' -f1)
 printf '%s  %s\n' "$JOB_SHA256" "$JOB" > "$CONTROLLER/job.sha256"
 {
   printf 'export UOR_SFT_PIN=%q\n' "$PIN"
-  printf 'export UOR_SFT_REVIEWED_TREE=%q\n' "$REVIEWED_TREE"
+  printf 'export UOR_SFT_REVIEWED_RUNTIME=%q\n' "$REVIEWED_RUNTIME"
   printf 'export UOR_SFT_RUN=%q\n' "$RUN"
   printf 'export UOR_SFT_OUT_STORE=%q\n' "$OUT_STORE"
   printf 'export UOR_SFT_SESSION=%q\n' "$SESSION"

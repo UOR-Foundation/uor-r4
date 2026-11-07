@@ -267,12 +267,15 @@ The executable review units are deepseek-23 and deepseek-25:
 ## Steps
 
 1. Record the fresh FIT and D67 review of the merged code, this sheet, job chain,
-   exact input packet and seal paths, including the reviewed commit and tree.
+   exact input packet and seal paths, including the reviewed commit and runtime
+   identity.
 2. `uor-pod status`; acquire one RTX 5090 32 GiB pod under a DeepSeek-lab lease
    inside the four-pod/$8h caps. Never touch Claude's pods.
-3. Build the exact merged pin with `UOR_SFT_PIN` and `UOR_SFT_REVIEWED_TREE` set
-   from step 1, fetch and hash every input, run the training-unit CPU tests, and
-   reproduce the base rank/free/continuation controls.
+3. Build the exact merged pin with `UOR_SFT_PIN` and
+   `UOR_SFT_REVIEWED_RUNTIME` set from step 1, fetch and hash every input, run
+   the training-unit CPU tests, and reproduce the base rank/free/continuation
+   controls. The runtime identity covers Cargo identity, the trainer, launcher,
+   job, CPU/panel instruments, pod tools, gate and mutation test.
 4. Submit the 1,024-step training job through the detached remote runner and
    wait on its terminal footer. At each 256-step checkpoint, export and score
    before proceeding. At step 512, apply row 2 of the outcome map and stop the
