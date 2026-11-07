@@ -15,7 +15,7 @@ use candle_core::Device;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uor_r4_core::answer_oracle::FrozenAnswers;
-use uor_r4_cpu_train::{CpuFbsForward, CpuFbsHead};
+use uor_r4_cpu_train::CpuFbsForward;
 use uor_r4_float_train::in_space_long::{FloatTokenRank, PacketCheckpoint};
 use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message, SCHEMA_V2};
 use uor_r4_tokenizer::ByteBpeTokenizer;
@@ -102,10 +102,17 @@ struct RowParity {
 
 fn run() -> Result<()> {
     let args = parse_args(std::env::args().skip(1))?;
-    let flag = |name: &str| args.get(name).cloned().ok_or(format!("--{name} is required"));
+    let flag = |name: &str| {
+        args.get(name)
+            .cloned()
+            .ok_or(format!("--{name} is required"))
+    };
     let out = PathBuf::from(flag("out")?);
     if out.exists() {
-        return Err(format!("{} exists; reports are never replaced", out.display()));
+        return Err(format!(
+            "{} exists; reports are never replaced",
+            out.display()
+        ));
     }
     let rendering = args
         .get("rendering")
@@ -117,12 +124,13 @@ fn run() -> Result<()> {
     let read = |name: &str| -> Result<(Vec<u8>, String)> {
         let path = PathBuf::from(flag(name)?);
         let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
-        Ok((bytes, sha256(&bytes)))
+        let sha = sha256(&bytes);
+        Ok((bytes, sha))
     };
     let (tokenizer_bytes, tokenizer_sha) = read("tokenizer")?;
     let (inputs_bytes, inputs_sha) = read("inputs")?;
     let (labels_bytes, labels_sha) = read("labels")?;
-    let (plan_bytes, plan_sha) = read("plan")?;
+    let (_, plan_sha) = read("plan")?;
     let (manifest_bytes, manifest_sha) = read("manifest")?;
     let manifest: Manifest = parse_json("manifest", &manifest_bytes)?;
     for (file, actual) in [
@@ -132,7 +140,9 @@ fn run() -> Result<()> {
     ] {
         let pinned = manifest.files.get(file).map(|entry| &entry.sha256);
         if pinned != Some(actual) {
-            return Err(format!("manifest files.{file}.sha256 differs from the file read"));
+            return Err(format!(
+                "manifest files.{file}.sha256 differs from the file read"
+            ));
         }
     }
     if manifest.tokenizer_sha256 != tokenizer_sha {
@@ -146,10 +156,16 @@ fn run() -> Result<()> {
     let inputs: Inputs = parse_json("inputs", &inputs_bytes)?;
     let labels: Labels = parse_json("labels", &labels_bytes)?;
     if labels.protocol != SCHEMA_V2 {
-        return Err(format!("labels protocol {} is not {SCHEMA_V2}", labels.protocol));
+        return Err(format!(
+            "labels protocol {} is not {SCHEMA_V2}",
+            labels.protocol
+        ));
     }
-    let by_id: BTreeMap<&str, &InputCase> =
-        inputs.cases.iter().map(|case| (case.id.as_str(), case)).collect();
+    let by_id: BTreeMap<&str, &InputCase> = inputs
+        .cases
+        .iter()
+        .map(|case| (case.id.as_str(), case))
+        .collect();
     if by_id.len() != inputs.cases.len() {
         return Err("inputs repeat a case id".to_owned());
     }
@@ -162,8 +178,7 @@ fn run() -> Result<()> {
     }
 
     let checkpoint = PathBuf::from(flag("checkpoint")?);
-    let artifact = fs::read(flag("artifact")?)
-        .map_err(|error| format!("artifact: {error}"))?;
+    let artifact = fs::read(flag("artifact")?).map_err(|error| format!("artifact: {error}"))?;
     let artifact_sha = sha256(&artifact);
     let device = Device::new_cuda(0).map_err(|error| format!("CUDA device: {error}"))?;
     let float = PacketCheckpoint::load(&checkpoint, &device).map_err(|e| e.to_string())?;
@@ -471,14 +486,8 @@ mod tests {
 
     #[test]
     fn target_misalignment_fails_closed() {
-        let error = compare_row(
-            "bad",
-            &[0],
-            &[4],
-            &[float(4, 4, 1)],
-            &[integer(5, 4, 1)],
-        )
-        .unwrap_err();
+        let error =
+            compare_row("bad", &[0], &[4], &[float(4, 4, 1)], &[integer(5, 4, 1)]).unwrap_err();
         assert!(error.contains("target misalignment"));
     }
 }

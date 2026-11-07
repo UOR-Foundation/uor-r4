@@ -13,7 +13,7 @@ resolver = "2"
 [features]
 panel-writer = ["dep:uor-r4-training", "dep:uor-r4-core"]
 cpu-parity = ["dep:uor-r4-integer", "dep:uor-r4-cpu-train", "dep:uor-r4-core"]
-cuda-parity = ["cpu-parity", "dep:uor-r4-float-train"]
+cuda-parity = ["cpu-parity", "dep:candle-core", "dep:uor-r4-float-train"]
 
 [[bin]]
 name = "heldout-panel"
@@ -49,6 +49,7 @@ path = "src/bin/packet-parity.rs"
 required-features = ["cuda-parity"]
 
 [dependencies]
+candle-core = { path = "../../../../third_party/candle-core-0.9.2", features = ["cuda"], optional = true }
 uor-r4-training = { path = "../../../../crates/uor-r4-training", optional = true }
 uor-r4-core = { path = "../../../../crates/uor-r4-core", optional = true }
 uor-r4-tokenizer = { path = "../../../../crates/uor-r4-tokenizer" }
@@ -62,3 +63,9 @@ hex = "0.4.3"
 
 [dev-dependencies]
 uor-r4-integer = { path = "../../../../crates/uor-r4-integer", features = ["fbs-synthetic", "serving-wasm"] }
+
+[patch.crates-io]
+candle-core = { path = "../../../../third_party/candle-core-0.9.2" }
+candle-kernels = { path = "../../../../third_party/candle-kernels-0.9.2" }
+cudarc = { path = "../../../../third_party/cudarc-0.19.10" }
+float8 = { path = "../../../../third_party/float8-0.6.1" }
