@@ -760,6 +760,31 @@ fn source_run_config(checkpoint: &Path) -> Result<PathBuf> {
     )))
 }
 
+/// A non-negative integer in a run config, with an omitted key read as zero.
+fn source_config_usize(value: &serde_json::Value, name: &str, path: &Path) -> Result<usize> {
+    let Some(raw) = value.get(name) else {
+        return Ok(0);
+    };
+    raw.as_u64()
+        .and_then(|number| usize::try_from(number).ok())
+        .ok_or_else(|| {
+            invalid(format!(
+                "{}: {name} must be a non-negative integer",
+                path.display()
+            ))
+        })
+}
+
+/// A boolean in a run config, with an omitted key read as false.
+fn source_config_bool(value: &serde_json::Value, name: &str, path: &Path) -> Result<bool> {
+    match value.get(name) {
+        None => Ok(false),
+        Some(raw) => raw.as_bool().ok_or_else(|| {
+            invalid(format!("{}: {name} must be a boolean", path.display()))
+        }),
+    }
+}
+
 /// Refuse selections that this checkpoint-initialized path cannot reproduce exactly. The current
 /// `(b64L)` target has one trunk and the Hamming read; creating another read from fresh parameters
 /// would silently change the model being fine-tuned.
@@ -773,7 +798,9 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
             checkpoint.display()
         )));
     }
-    source_run_config(checkpoint)?;
+    let source_path = source_run_config(checkpoint)?;
+    let source: serde_json::Value = serde_json::from_slice(&fs::read(&source_path)?)
+        .map_err(|error| invalid(format!("{}: {error}", source_path.display())))?;
     check_run_arm(checkpoint, FbsArm::OneAtomActive)?;
     if config.fbs_arm != FbsArm::OneAtomActive {
         return Err(invalid(
@@ -795,6 +822,35 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
         return Err(invalid(
             "--init-from currently loads the trunk and Hamming read only; Flock, content, opening, prompt-register and turn-memory reads are not resumed or recreated",
         ));
+    }
+    for name in [
+        "flock_read",
+        "content_read",
+        "opening_read",
+        "prompt_register",
+        "turn_memory",
+    ] {
+        let declared = source_config_usize(&source, name, &source_path)?;
+        if declared > 0 {
+            return Err(invalid(format!(
+                "--init-from source run config {} declares {name}={declared}, but this path cannot resume or recreate that read",
+                source_path.display()
+            )));
+        }
+    }
+    if source_config_bool(&source, "turn_memory_reply", &source_path)? {
+        return Err(invalid(format!(
+            "--init-from source run config {} declares turn_memory_reply, but this path cannot resume or recreate the reply memory",
+            source_path.display()
+        )));
+    }
+    let source_hamming = source_config_usize(&source, "hamming_read", &source_path)?;
+    if source_hamming != config.hamming_read {
+        return Err(invalid(format!(
+            "--init-from source run config {} declares hamming_read={source_hamming}, but this run names --hamming-read {}",
+            source_path.display(),
+            config.hamming_read
+        )));
     }
     for sidecar in UNSUPPORTED_INIT_SIDECARS {
         let path = checkpoint.join(sidecar);
@@ -914,7 +970,7 @@ fn checkpoint_hamming(
     if config.hamming_read == 0 {
         if sidecar.exists() {
             return Err(invalid(format!(
-                "--init-from checkpoint has {}, but --hamming-read is 0; select the saved read with --hamming-read 4",
+                "--init-from checkpoint has {}, but --hamming-read is 0; select the saved read with its head count",
                 sidecar.display()
             )));
         }
@@ -14040,6 +14096,60 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("trained with") && error.contains("not Fbs_1Atom_Active"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn checkpoint_initialization_honors_source_read_declarations() {
+        let device = Device::Cpu;
+        let root = init_test_dir("source-reads");
+        let source = checkpoint_path(&root);
+        build_fbs_model_at(FbsArm::OneAtomActive, 1, 32, &device)
+            .unwrap()
+            .save(&source)
+            .unwrap();
+        let run = source.parent().and_then(Path::parent).unwrap();
+        fs::create_dir_all(run).unwrap();
+        let run_config = run.join("config.json");
+
+        fs::write(&run_config, br#"{"steps":8,"hamming_read":4}"#).unwrap();
+        let missing_hamming = LongConfig {
+            width: 32,
+            init_from: Some(source.clone()),
+            ..config(0, None)
+        };
+        let error = validate_checkpoint_selection(&missing_hamming)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("declares hamming_read=4") && error.contains("names --hamming-read 0"),
+            "{error}"
+        );
+
+        fs::write(&run_config, br#"{"steps":8,"turn_memory":8}"#).unwrap();
+        let memory = LongConfig {
+            width: 32,
+            init_from: Some(source.clone()),
+            ..config(0, None)
+        };
+        let error = validate_checkpoint_selection(&memory)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("declares turn_memory=8") && error.contains("cannot resume"),
+            "{error}"
+        );
+
+        fs::write(&run_config, br#"{"steps":8,"hamming_read":0}"#).unwrap();
+        fs::write(source.join(HAMMING_SIDECAR), b"present").unwrap();
+        let error = checkpoint_hamming(&memory, &source, &device)
+            .err()
+            .expect("an unexplained Hamming sidecar is refused")
+            .to_string();
+        assert!(
+            error.contains("head count") && !error.contains("--hamming-read 4"),
+            "{error}"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

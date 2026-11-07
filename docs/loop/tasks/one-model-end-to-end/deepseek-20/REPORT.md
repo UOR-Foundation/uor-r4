@@ -23,6 +23,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   identity-transport control checkpoint could load under the active one-atom arm because the
   source run config's `fbs_arm` was neither checked nor bound, and a partially spun Hamming
   sidecar could pass the boolean check. Both now fail closed.
+- **The final fresh review found a source-config omission.** A checkpoint copied without a
+  declared read sidecar could still pass when the command's read flag was zero. The
+  initialization path now parses the source run config, refuses every unsupported nonzero
+  read declaration and reply memory, and requires its declared Hamming head count to equal
+  the command. A count-free refusal replaces the old hard-coded four-head hint.
 
 ## What changed
 
@@ -44,7 +49,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   the no-flag output tree is unchanged. It records the canonical checkpoint path, source run
   config and SHA-256 of `model.safetensors`, model `config.json` and each loaded sidecar, with
   `optimizer: fresh` and `schedule: fresh`.
-- Added five focused library tests and one CLI mode test. Size: 589 added source/test lines and 4
+- Added six focused library tests and one CLI mode test. Size: about 700 added source/test lines and 4
   changed lines across the three Rust files, plus this task record and its claim.
 
 ## Measurements
@@ -66,7 +71,7 @@ configuration compatibility but does not retain or compare all source values acr
 ## Checks run at the head
 
 - `CARGO_TARGET_DIR=/dev/shm/deepseek-train-init-target cargo test -p uor-r4-float-train
-  --lib --offline`: 304 passed, 0 failed.
+  --lib --offline --locked`: 305 passed, 0 failed.
 - `... cargo test -p uor-r4-float-train --offline initialization`: focused library and binary tests
   passed; the five library tests cover absent-flag serialization, exact trunk load and context,
   exact Hamming load and provenance, missing sidecar, unsupported read/sidecar, shape mismatch and
