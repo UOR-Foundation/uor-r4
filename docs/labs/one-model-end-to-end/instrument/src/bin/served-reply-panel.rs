@@ -205,7 +205,7 @@ fn run() -> Result<()> {
         let (reply_ids, stop) = generate(&mut forward, &prompt, cap)?;
         let bytes = tokenizer.decode_bytes(&reply_ids);
         let (reply_text, complete) = score(stop, &bytes, &label.answers, &protocol);
-        pair_rows.push((label.pair_id.clone(), stratum.clone(), complete, reply_text.clone()));
+        pair_rows.push((label.pair_id.clone(), stratum.clone(), complete, protocol.reply_text(&reply_text).to_owned()));
         rows.push(Row {
             id: label.id.clone(),
             stratum: stratum.clone(),
@@ -302,7 +302,7 @@ fn stop_for(token: u32, kept: usize, prompt: usize, cap: usize, context: usize) 
     let kept = kept + 1;
     if kept >= cap {
         Some(Stop::Cap)
-    } else if prompt + kept + 1 >= context {
+    } else if prompt + kept >= context {
         Some(Stop::Context)
     } else {
         None
@@ -314,7 +314,7 @@ fn generate(forward: &mut CpuFbsForward, prompt: &[u32], cap: usize) -> Result<(
     if prompt.is_empty() {
         return Err("empty prompt".to_owned());
     }
-    if prompt.len() >= context {
+    if prompt.len() > context {
         return Ok((Vec::new(), Stop::Context));
     }
     let mut next = 0;
@@ -402,10 +402,14 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 mod tests {
     use super::*;
 
-    const TOKENIZER: &str = "/Users/casey.allard/uor-r4/.uor-models/research/issue-1019/tokenizer/tokenizer.json";
-
-    fn tokenizer() -> ByteBpeTokenizer {
-        ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(TOKENIZER).unwrap()).unwrap()
+    /// The pinned tokenizer (`d36d3e87…`) lives outside the repository: name it in
+    /// `UOR_PANEL_TOKENIZER`. Without it, the tests that need it say so and pass.
+    fn tokenizer() -> Option<ByteBpeTokenizer> {
+        let Ok(path) = std::env::var("UOR_PANEL_TOKENIZER") else {
+            eprintln!("skipped: set UOR_PANEL_TOKENIZER to the pinned tokenizer.json");
+            return None;
+        };
+        Some(ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(path).unwrap()).unwrap())
     }
 
     fn answers(accepted: &str) -> FrozenAnswers {
@@ -414,7 +418,7 @@ mod tests {
 
     #[test]
     fn renders_two_contexts_in_event_order_without_source() {
-        let tokenizer = tokenizer();
+        let Some(tokenizer) = tokenizer() else { return };
         let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).unwrap();
         let encoder = protocol.bind(&tokenizer).unwrap();
         let segment = |kind: &str, event, text: &str| Segment {
@@ -445,14 +449,31 @@ mod tests {
         assert_eq!(stop_for(EOS, 63, 10, 64, 192), Some(Stop::Eos));
         assert_eq!(stop_for(BOS, 63, 10, 64, 192), Some(Stop::Bos));
         assert_eq!(stop_for(7, 63, 190, 64, 192), Some(Stop::Cap));
-        assert_eq!(stop_for(7, 3, 187, 64, 192), Some(Stop::Context));
-        assert_eq!(stop_for(7, 3, 186, 64, 192), None);
+        assert_eq!(stop_for(7, 3, 188, 64, 192), Some(Stop::Context));
+        assert_eq!(stop_for(7, 3, 187, 64, 192), None);
         assert_eq!(stop_for(7, 0, 10, 64, 192), None);
+    }
+
+    /// Past EOS and BOS, the cap and context stops are the served path's own rule.
+    #[test]
+    fn cap_and_context_stops_match_the_served_rule() {
+        use uor_r4_integer::stack::{reply_stop, ReplyEnd};
+        for prompt in 1..=192 {
+            for kept in 0..64 {
+                let served = match reply_stop(7, kept, prompt, 64, 192) {
+                    Some(ReplyEnd::Length) => Some(Stop::Cap),
+                    Some(ReplyEnd::Context) => Some(Stop::Context),
+                    Some(ReplyEnd::Bos) => Some(Stop::Bos),
+                    None => None,
+                };
+                assert_eq!(stop_for(7, kept, prompt, 64, 192), served, "prompt {prompt}, kept {kept}");
+            }
+        }
     }
 
     #[test]
     fn known_answer_needs_eos_and_strips_leading_space() {
-        let tokenizer = tokenizer();
+        let Some(tokenizer) = tokenizer() else { return };
         let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).unwrap();
         let accepted = answers("basalt loggia.");
         assert_eq!(score(Stop::Eos, b" basalt loggia.", &accepted, &protocol), (" basalt loggia.".to_owned(), true));

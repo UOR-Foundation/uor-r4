@@ -6,10 +6,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **(b64L) answers none of `m2-fresh256`: 0 of 256 rows complete, 0 of 128 pairs, on both seeds.** The bar is 104 rows and 52 pairs. Every reply ran to the 64-token cap: 0 EOS stops, 0 BOS stops, 0 context stops. Every stratum is 0 (length2, length4, length8, reassert, update).
 - **The miss is the model's, not the scorer's or the serving path's.** Three controls:
-  - **Loose match:** I dropped the EOS condition and looked for each row's accepted answer (lower-cased, final period dropped) anywhere in the reply text. 0 of 256 on each seed. So the model does not recall the fact even before it fails to stop.
-  - **The float model never stops either:** across the trained float model's 32-token greedy replies on its own oasst2 prompts in the seal (`samples-oasst2-greedy-memory.json`, seed 1), the EOS id 1 occurs 0 times. The served replies on the same prompts (claude-308's seed-1 `i3/`, DEV and oasst2) also never emit it. So not ending a reply is a property of the trained model, not of export or serving.
+  - **Loose match:** I dropped the EOS condition and looked for each row's accepted answer (lower-cased, final period dropped) anywhere in the reply text. 0 of 256 on each seed: no reply contains a full accepted answer. Some replies copy part of a stated fact (33 rows on seed 1 and 29 on seed 2 hold a 4+-letter word from the answer), but they give the same reply for the job question and the home question. That is copying, not recall.
+  - **The float model does not stop where its references stop:** the trained float model's 32-token greedy replies on DEV are in the seal (`samples-memory.json`). All 16 references end within 25 tokens (EOS at offsets 6 to 25). The float model emits EOS id 1 on 0 of 16 prompts, on both seeds. On oasst2 (`samples-oasst2-greedy-memory.json`, seed 1), 2 of the 16 references end within 32 tokens, and the float model stops on neither. The served replies on the same prompts (claude-308's seed-1 `i3/`) never emit EOS either. Not ending a reply is the trained model's behaviour, not a product of export or serving.
   - **The scorer can pass a row:** the known-answer test scores an accepted answer followed by EOS as complete. The same reply without EOS scores incomplete. With the EOS condition set aside, that test fails, and it passes again once the condition is restored.
-- **The replies are loops, not answers.** On seed 1, 76 of the 256 replies are the same text: " My curopeans (1999…9". Seed 2's most common reply is " My currently live in the 1999…9" (36 rows). The served model copies the prompt's opening words, then repeats a digit.
+- **The replies are loops, not answers.** On seed 1, 76 of the 256 replies are the same text: " My curopeans (1999…9". Seed 2's most common reply is " My currently live in the 1999…9" (36 rows). The served model copies words from the prompt, then repeats a digit, a letter or a prompt phrase (seed 1's second most common reply, 53 rows, is " Indians (dddd…").
 - **This closes the configuration, not the mechanism (§4.1).** It covers (b64L) at 16,384 steps on D3, under the `one-user-turn/v1` rendering. The other rendering named in the ORDER, with facts in separate turns, is unread. The loose-match control shows recall is absent under this rendering, so a different layout alone is not expected to change the reading.
 
 ## What changed
@@ -21,24 +21,42 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   4. **Scoring:** it drops the reply's leading protocol-2 space and applies `FrozenAnswers::accepts`. A row is complete only when it stopped on EOS, decodes as UTF-8, and is accepted. `pairs_both_complete_distinct` compares reply texts within each `pair_id`. Strata come from `plan.json` and are checked against the manifest's `strata_rows`.
   5. **Output:** a JSON file with totals, per-stratum counts and every row.
 - **`Cargo.toml`:** the bin, and `dep:uor-r4-core` added to `cpu-parity`. `Cargo.lock` gains 4 dependency lines under `uor-r4-cpu-train` (it was behind that crate's own dependencies). No new crates.
+- **Departures from the ORDER's pinned text, both decided before any reading.**
+  - The ORDER names `encode_document`. The bin uses the same encoder's `encode_assistant_prefix`, which shares its encoding code and ends on the open `Assistant:` marker, where `encode_document` would close the turn.
+  - The stop rule adds a BOS stop, as the served path has, ahead of the cap and the context limit.
+  - Neither changed a reading: 0 BOS stops on both seeds.
+- **Review round 1 fixes (code):**
+  - The context stop now equals the served `reply_stop` (`point_key.rs:305`) for every prompt length from 1 to 192 and every kept count from 0 to 63. A test pins this; with the old, one-token-early rule, the test fails.
+  - A prompt exactly the context's length is no longer refused.
+  - Distinctness compares stripped reply text.
+  - The tests read the tokenizer from `UOR_PANEL_TOKENIZER` and pass with a note when it is unset, instead of panicking on a laptop path.
+  - Re-scored with the fixed bin, both seeds' rows are identical to the first run's.
 - **The harness exception, as recorded in the ORDER:** `loop claim` refused on deepseek's `hamilton_sheet.rs` overlap, so the ORDER was written by hand. The builder subagent then got a `loop suborder` scoped to the instrument crate.
 
 ## Measurements
 
-Panel `m2-fresh256` (inputs `1de2fc28…`, labels `3b5c5477…`, plan `0ed1ab98…`, tokenizer `d36d3e87…`). Bin `424bd917…`. Artifacts as in claude-308.
+Panel `m2-fresh256` (inputs `1de2fc28…`, labels `3b5c5477…`, plan `0ed1ab98…`, tokenizer `d36d3e87…`). Artifacts as in claude-308. The table is the re-run with the reviewed bin, `38d53fb6…`. The first run, with bin `424bd917…`, gave identical rows (outputs `0d6dec9a…` and `066dc827…`; the shas differ only by timing).
 
-| Seed | Rows complete | Pairs both complete, distinct | EOS / BOS / cap / context stops | Answer anywhere in reply | Tokens/s | Output sha256 |
+| Seed | Rows complete | Pairs both complete, distinct | EOS / BOS / cap / context stops | Full answer anywhere in reply | Tokens/s | Output sha256 |
 |---|---|---|---|---|---|---|
-| 1 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 914.5 | `0d6dec9a63e1cb61fb33ce40c859bf8f8790db88f3c868b16ade9679f16c3856` |
-| 2 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 905.1 | `066dc827a58c676e755fa74f49b1e10c046df1422138a8c854a9cbd47488f280` |
+| 1 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 912.9 | `a6adc15bebf9185b0891b20f2965e6bffaee8179eb3c26caaea7f844662fa0df` |
+| 2 | 0 of 256 | 0 of 128 | 0 / 0 / 256 / 0 | 0 | 914.8 | `f0088f6cd210354b1520ec5b0ddeec2c4cf205e136e2c92975404a5f8ae9a935` |
 
-Each seed generated 16,384 reply tokens in about 18 s. The tokens per second include the artifact parse and each row's prompt read.
+Each seed generated 16,384 reply tokens in about 18 s. The timer starts after the inputs are checked, and it includes each row's artifact parse and prompt steps.
 
 ## Checks run at the head
 
 - `cargo build --release --offline --locked --features cpu-parity --bin served-reply-panel`: exit 0.
-- `cargo test --offline --locked --features cpu-parity --bin served-reply-panel --no-fail-fast`: 4 passed, 0 failed. The tests cover the rendering of a two-context packet with a `Source` between them, the order of the stop rules, acceptance (including the leading-space strip and a non-UTF-8 reply), and the pair metric.
-- **Negative gate (the builder's run):** with the EOS condition taken out of `complete`, `known_answer_needs_eos_and_strips_leading_space` failed (exit 101). After the restore and rebuild, all tests pass.
+- `UOR_PANEL_TOKENIZER=<pinned tokenizer.json> cargo test --offline --locked --features cpu-parity --bin served-reply-panel --no-fail-fast`: 5 passed, 0 failed. The tests cover:
+  - the rendering of a two-context packet with a `Source` between them;
+  - the order of the stop rules;
+  - cap and context parity with the served `reply_stop`;
+  - acceptance, including the leading-space strip and a non-UTF-8 reply;
+  - the pair metric.
+- **Negative gates:**
+  - With the EOS condition taken out of `complete`, `known_answer_needs_eos_and_strips_leading_space` failed (exit 101; the builder's run).
+  - With the context stop put back one token early, `cap_and_context_stops_match_the_served_rule` failed (my run).
+  - Both pass after the restore and a rebuild.
 - **Banned literals:** no hit in `git diff f5adca314 -- docs/labs`.
 - `loop report --check` on this REPORT.
 
@@ -57,4 +75,4 @@ None beyond the loop's own steps.
 
 There is now a tool that asks the question that matters: given a short conversation that states some facts, does the served model answer a question about them correctly, and stop? It runs the shipped integer model on the laptop at about 910 tokens per second and scores all 256 held-out questions in about 18 seconds.
 
-The current best model gets 0 of 256 on both seeds. It never names the fact anywhere in its reply, and it never stops talking: it repeats the prompt's first words and then a string of 9s. The trained model, before export, also never stops, so this is a training problem, not a serving problem. With the path from training to serving to scoring now working end to end, the next training run can be judged by whether it moves this number.
+The current best model gets 0 of 256 on both seeds. No reply contains the right answer, though some echo bits of the stated facts whatever the question. And it never stops talking: it runs into a string of 9s or a repeated letter or phrase. The trained model, before export, also fails to stop where its reference replies stop, so this is a training problem, not a serving problem. With the path from training to serving to scoring now working end to end, the next training run can be judged by whether it moves this number.
