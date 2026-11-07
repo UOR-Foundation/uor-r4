@@ -230,9 +230,9 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
 
     match run {
         Err(e) if e.kind() == io::ErrorKind::TimedOut => {
-            return Ok(VerifyOutcome::Timeout { phase: "run" });
+            Ok(VerifyOutcome::Timeout { phase: "run" })
         }
-        Err(e) => return Err(e),
+        Err(e) => Err(e),
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
