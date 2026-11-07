@@ -28,7 +28,7 @@ No production source, publisher, deployment, Tauri, engine, worker, tokenizer, `
 
 - The no-default test evaluates `main.ts` with a pre-existing root and proves no mount/mutation without `typed=1`.
 - The error test evaluates `main.ts` with incomplete workflow methods and proves computed-visible error text, `data-active=true`, and no runtime exception. The built typed scenario refuses any runtime exception or console error.
-- The notebook and all other records use 383/383. ORDER/REPORT explicitly say exact final HEAD/tree are captured in `identity.log` and posted on PR after push rather than embedded self-referentially.
+- The notebook and all other records use 384/384. ORDER/REPORT explicitly say exact final HEAD/tree are captured in `identity.log` and posted on PR after push rather than embedded self-referentially.
 - Focused/full Studio checks, plain-JS, all four legacy checks, report/local-PR checks, and full gates pass at the new exact head. Fresh exact-head review approves before ready/queue.
 - PR keeps `References #3500`; no production publish, final migration, Tauri acceptance, or model-capability claim.
 

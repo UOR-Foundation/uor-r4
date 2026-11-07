@@ -10,18 +10,18 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## What changed
 
-- The no-default test now creates the root before dynamically importing `main.ts`, then proves no mount or mutation without `typed=1`.
-- `showMountError` is exported from `main.ts` and used by the real catch. Its direct test verifies `hidden=false`, `data-active=true`, initialization error text, and computed display.
-- The typed built-browser scenario now refuses any runtime exception or console error in addition to computed visibility, typed text, model readiness, and zero external requests.
-- The notebook uses 383/383. ORDER/REPORT explicitly make final HEAD/tree an `identity.log` and PR-metadata concern rather than embedding a self-referential hash.
+- The no-default test now creates the root before dynamically importing `main.ts`, then proves no mount or mutation without `typed=1`. Duplicate preview roots are cleaned between tests.
+- The real catch now executes with incomplete workflow methods and proves computed-visible initialization error text and `data-active=true` through the exported `showMountError` helper.
+- `assets/js/typed_entry.js` is a staged plain-JavaScript entry that loads typed code only for `?typed=1`; the default source path does not request raw TypeScript. Default and typed page-load checks both refuse runtime exceptions or console errors.
+- The notebook uses 384/384. ORDER/REPORT explicitly make final HEAD/tree an `identity.log` and PR-metadata concern rather than embedding a self-referential hash.
 
 ## Measurements
 
-- Entry tests: **3/3 tests pass** (API object, no-default entry, visible error helper).
+- Entry tests: **3/3 tests pass** (API object, no-default entry, real initialization catch).
 - Complete typed suite: **384/384 tests across 46 files**.
 - Plain-JS suite: **112/112 tests pass**.
-- TypeScript and application build: PASS; main JS **284.83 kB** (gzip **86.39 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.
-- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **7 requests, zero external, zero runtime exceptions/console errors**.
+- TypeScript and application build: PASS; hashed code-split JS/CSS assets and generated WASM, all uncommitted.
+- Typed built-browser preview: `shell=true`, `active=true`, `legacyHidden=true`, `legacyMcp=0`, `typedMcp=1`, `artifactReady=true`, `visible=true`, `typedText=true`, **zero external requests and zero runtime exceptions/console errors on both default and typed pages**.
 - Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
 - At the final committed repair state, harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks pass.
 

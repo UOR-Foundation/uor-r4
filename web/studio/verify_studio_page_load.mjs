@@ -246,9 +246,9 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
         }, sessionId);
         typed = evaluation.result.value;
     }
-    const runtimeErrors = options.typed ? cdp.events.slice(before)
+    const runtimeErrors = cdp.events.slice(before)
         .filter((event) => event.method === 'Runtime.exceptionThrown' || event.method === 'Runtime.consoleAPICalled')
-        .map((event) => event.params) : [];
+        .map((event) => event.params);
     await cdp.send('Target.closeTarget', { targetId: target.targetId });
     return { path: path, loaded: loaded, requested: requested.length, external: external, typed: typed, runtimeErrors: runtimeErrors };
 }
@@ -270,6 +270,7 @@ async function main() {
         const index = await trapPageLoad(cdp, origin, '/studio/index.html');
         assert(index.loaded, 'index.html never fired loadEventFired');
         assert(index.external.length === 0, 'index.html made external load requests: ' + JSON.stringify(index.external));
+        assert(index.runtimeErrors.length === 0, 'index.html emitted runtime errors: ' + JSON.stringify(index.runtimeErrors));
         const typedPreview = process.env.UOR_STUDIO_TYPED === '1'
             ? await trapPageLoad(cdp, origin, '/studio/dist/index.html?typed=1', { typed: true })
             : null;
@@ -290,11 +291,11 @@ async function main() {
             verdict: 'RUNTIME PAGE-LOAD TRAP PASSED',
             trapSelfTest: { plantedExternalDetected: true, channels: ['inline', 'blob-worker', 'late'] },
             pages: {
-                'index.html': { loaded: index.loaded, requests: index.requested, external: index.external },
-                'geometric_prime_router_webapp.html': { loaded: router.loaded, requests: router.requested, external: router.external },
+                'index.html': { loaded: index.loaded, requests: index.requested, external: index.external, runtimeErrors: index.runtimeErrors.length },
+                'geometric_prime_router_webapp.html': { loaded: router.loaded, requests: router.requested, external: router.external, runtimeErrors: router.runtimeErrors.length },
             },
         };
-        if (typedPreview) report.pages['typed=1'] = { loaded: typedPreview.loaded, requests: typedPreview.requested, external: typedPreview.external, checks: typedPreview.typed };
+        if (typedPreview) report.pages['typed=1'] = { loaded: typedPreview.loaded, requests: typedPreview.requested, external: typedPreview.external, runtimeErrors: typedPreview.runtimeErrors.length, checks: typedPreview.typed };
         if (router.external.length > 0) {
             if (strictRouter) {
                 report.verdict = 'RUNTIME PAGE-LOAD TRAP FAILED';

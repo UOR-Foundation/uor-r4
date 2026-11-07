@@ -18,7 +18,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Measurements
 
-- Focused bootstrap/main checks: **6/6 tests pass** (four bootstrap plus two main).
+- Focused bootstrap/main checks at that stage: **6/6 tests pass** (four bootstrap plus two main). The final cumulative suite is **384/384 tests across 46 files**.
 - Complete typed suite: **384/384 tests across 46 files**.
 - Plain-JS suite: **112/112 tests pass**.
 - TypeScript and application build: PASS; main JS **284.83 kB** (gzip **86.39 kB**), CSS **118.84 kB** (gzip **20.47 kB**), worker **27.70 kB**, generated WASM **794.67 kB**, uncommitted.

@@ -94,7 +94,7 @@ Image attachments show previews, names/sizes, removal, and `R4 patch input — e
 
 The `src/` tree contains the lifecycle store and all eight approved core components:
 AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings.
-`StudioApp` now mounts through a real Vite application build only when `?typed=1` is present; the default `index.html` path remains the legacy application. The bootstrap reuses the existing model worker and workflow adapters, waits for their methods, and suppresses legacy MCP auto-boot in the preview. AgentComposer, WorkspaceEditor, ModelPicker, SessionList, and Inspector subscribe to one store; AppShell, Guide, and Settings are coordinated through props and callbacks.
+`StudioApp` now mounts through a real Vite application build only when `?typed=1` is requested by the staged `assets/js/typed_entry.js`; the default source path remains the legacy application and does not request raw TypeScript. The bootstrap reuses the existing model worker and workflow adapters, waits for their methods, and suppresses legacy MCP auto-boot in the preview. The real initialization catch renders errors visibly through `showMountError`, with default and typed page-load checks both asserting zero runtime exceptions. AgentComposer, WorkspaceEditor, ModelPicker, SessionList, and Inspector subscribe to one store; AppShell, Guide, and Settings are coordinated through props and callbacks.
 The components call the existing file/session/UI/model-source APIs through typed bridges. Small public
 hooks forward editor content, generation completion, settings, and attachment changes; the engine,
 worker, tokenizer, and `studio_api.js` remain unchanged. Existing provider credentials are not

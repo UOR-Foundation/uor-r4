@@ -37,6 +37,6 @@ export function showMountError(root: HTMLElement, error: unknown): void {
 if (typedPreviewRequested(window.location.search)) {
     const root = document.getElementById('studio-typed-root');
     if (root) {
-        void mountTypedStudio(root).catch((error) => showMountError(root, error));
+        await mountTypedStudio(root).catch((error) => showMountError(root, error));
     }
 }
