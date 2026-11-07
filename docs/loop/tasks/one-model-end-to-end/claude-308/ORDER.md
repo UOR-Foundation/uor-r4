@@ -34,7 +34,8 @@ Every check passes, or the unit is cancelled:
 
 1. **Both seeds' artifacts are exported** with `cpu-fbs-export` from the sealed checkpoints, and their shas equal deepseek-239's.
 2. **The I-3 reading, per seed:** the integer artifact's greedy replies against the float model's `samples-memory.json` on DEV's 310 prompts, and on each sub-panel's greedy samples in the seal. It reports first tokens, whole replies and order mismatches, and splits whole-reply differences into the 192-token context cap against real divergences, as claude-266 did.
-3. **The first divergence is localized** for at least one real divergence, by comparing a trace of the two sides at the first differing position. The trace names the layer, the operation and the size of the difference. Where the float side needs a GPU trace that the seal does not hold, the REPORT says so and names the smallest GPU job that would supply it.
+3. **Quality parity, not a trace (amended 7 Nov, before any reading).** The served artifact's nearest top-1 on all 184,542 oasst2 held-out rows, read with deepseek-240's `cpu-checkpoint-grade`, against the float model's top-1 on the same rows from the seal (seed 1: 44,210). This is integer-nearest-readout's Q1–Q4 reading (claude-246), applied to (b64L).
+   - **Why not a trace:** a trace of each divergence is that item's Q5. Casey stopped Q5 on 2 Nov ("This whole Q track seems like an enormous waste of time and a derailment of our project"; then "Stop Q5 now (Recommended)", claude-257). Q5's smoke had already placed the first clear flips in the export's rounding of one layer-0 rate entry. So this unit does not trace divergences, and runs no GPU job.
 4. **The REPORT, negatives first,** with tokens per second, and one notebook row.
 
 ## Stop and ask if
