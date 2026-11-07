@@ -59,6 +59,9 @@ spend.
 - **The final D67 review found one missing finite check.** The per-checkpoint
   predicate covered training loss but not the DEV loss and margins serialized
   in the same progress row.
+- **The post-repair FIT review found the step-0 exception was unconditional.**
+  After the DEV checks were added, the predicate still accepted any step-0
+  training-loss value instead of only the null value emitted before training.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -138,7 +141,8 @@ spend.
 - Every checkpoint and the base continuation grade must use the registered
   512-row sample fingerprint. Finiteness is checked at each scored checkpoint,
   including DEV loss and both DEV margins, so a non-finite loss stops the seed
-  before later checkpoints are exported.
+  before later checkpoints are exported. Step 0 must have a null training loss;
+  every positive step must have a finite numeric training loss.
 - The launcher builds the Vast provider adapter from the reviewed checkout
   before calling `uor-pod status` or `uor-pod up`.
 - Failure cleanup forces a nonzero status for every non-sealed run, including
@@ -167,12 +171,16 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- Fresh non-author FIT: **GO** at `348a7cda7556a4be641c36824022b873ad146c1f`,
-  reviewed-runtime `c002be99e926614eb98a8ad83e94e75e6c5e79f7f65da74af2ea7854b157c88d`,
-  reviewer session `01a1b82d-2533-7a43-8e2c-6e7d82ba1b47`. No remaining FIT
-  blockers.
-- `gate.sh`: 168 checks passed.
-- `test-mutants.sh`: 56 of 56 semantic mutations caught.
+- Post-repair FIT review: **NO-GO** at
+  `3d7b0130b670574f5468d3396b806e9a3fbea059`, reviewer session
+  `01a1b83b-0416-7ba0-85bb-d8371645cd69`, because step-0 training loss was
+  still accepted without validation.
+- `gate.sh`: 173 checks passed after the step-0 and both-margin pins.
+- `test-mutants.sh`: 59 of 59 semantic mutations caught.
+- Direct evaluation of the progress predicate accepted null and absent step-0
+  training loss; it rejected finite, infinite and string step-0 training loss,
+  non-finite positive-step training loss, and null or non-finite DEV loss,
+  token margin and address margin.
 - `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
   --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.
 - The bare suite invocation omitted `CARGO_TARGET_DIR`; the existing save/load

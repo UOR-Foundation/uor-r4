@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-22](../loop/tasks/one-model-end-to-end/deepseek-22/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `348a7cda7556a4be641c36824022b873ad146c1f`, reviewed-runtime `c002be99e926614eb98a8ad83e94e75e6c5e79f7f65da74af2ea7854b157c88d`, reviewer session `01a1b82d-2533-7a43-8e2c-6e7d82ba1b47`.
+TEST FITNESS: FIT - pending fresh non-author review of the repaired progress predicate.
 
 PRE-RUN: PENDING (fresh D67 review required).
 

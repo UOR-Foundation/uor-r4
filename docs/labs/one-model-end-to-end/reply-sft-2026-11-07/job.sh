@@ -289,7 +289,7 @@ check_progress() {
         (.dev_token_margin | isfinite)) and
       ((.dev_address_margin | type) == "number" and
         (.dev_address_margin | isfinite)) and
-      (if .step == 0 then true
+      (if .step == 0 then .train_loss_mean == null
        else ((.train_loss_mean | type) == "number" and
          (.train_loss_mean | isfinite))
        end))' \

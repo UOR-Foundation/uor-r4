@@ -144,6 +144,12 @@ mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
 mutate unchecked-dev-loss "$JOB" \
   '((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and' \
   '(.dev_loss != null) and'
+mutate unchecked-dev-token-margin "$JOB" \
+  '(.dev_token_margin | isfinite)' 'true'
+mutate unchecked-dev-address-margin "$JOB" \
+  '(.dev_address_margin | isfinite)' 'true'
+mutate unchecked-step-zero-train-loss "$JOB" \
+  'then .train_loss_mean == null' 'then true'
 mutate checkpoint-progress-unchecked "$JOB" \
   'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
 mutate base-sample-unchecked "$JOB" \

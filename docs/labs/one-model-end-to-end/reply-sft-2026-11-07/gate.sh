@@ -173,6 +173,11 @@ require_line '[ "$TRAIN_FAILURE" -eq 0 ] ||' "$JOB"
 require_line "jq -e -s '(map(select(.step == 0)) | length) == 1 and" "$JOB"
 require_line 'all(.[];' "$JOB"
 require_line '((.dev_loss | type) == "number" and (.dev_loss | isfinite)) and' "$JOB"
+require_line '((.dev_token_margin | type) == "number" and' "$JOB"
+require_line '(.dev_token_margin | isfinite)) and' "$JOB"
+require_line '((.dev_address_margin | type) == "number" and' "$JOB"
+require_line '(.dev_address_margin | isfinite)) and' "$JOB"
+require_line '(if .step == 0 then .train_loss_mean == null' "$JOB"
 grep -Fq 'CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' "$JOB" ||
   fail "$JOB does not classify the registered OOM retry"
 checks=$((checks + 1))
