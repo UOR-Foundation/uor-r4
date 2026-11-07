@@ -130,6 +130,7 @@ pub struct CheckpointGradeReport {
     pub corpus: CheckpointGradeCorpus,
     pub settings: CheckpointGradeSettings,
     pub evaluation: CheckpointGradeEvaluation,
+    pub reply_sample_fingerprint: String,
     pub replies: TimedReplyReading,
     pub audit: CheckpointGradeAudit,
     pub baseline: Option<CheckpointGradeBaseline>,
@@ -151,6 +152,23 @@ fn sample_fingerprint(samples: &[RankMarginSample]) -> String {
             hash.update(&token.to_le_bytes());
         }
         hash.update(&sample.target.to_le_bytes());
+    }
+    hex::encode(hash.finalize().as_bytes())
+}
+
+fn reply_sample_fingerprint(samples: &[MemoryWeightSample]) -> String {
+    let mut hash = blake3::Hasher::new();
+    hash.update(b"uor-r4.cpu-checkpoint-grade-replies/1\0");
+    hash.update(&(samples.len() as u64).to_le_bytes());
+    for sample in samples {
+        hash.update(&(sample.prompt.len() as u64).to_le_bytes());
+        for token in &sample.prompt {
+            hash.update(&token.to_le_bytes());
+        }
+        hash.update(&(sample.reply.len() as u64).to_le_bytes());
+        for token in &sample.reply {
+            hash.update(&token.to_le_bytes());
+        }
     }
     hex::encode(hash.finalize().as_bytes())
 }
@@ -309,6 +327,7 @@ pub fn grade_checkpoint_artifact(
     }
 
     let (replies, reply_samples) = grade_replies(artifact, &corpus, config)?;
+    let reply_sample_fingerprint = reply_sample_fingerprint(&reply_samples);
     let comparison = if let Some(bytes) = baseline {
         let baseline_model = IntegerStackModel::parse(bytes)
             .map_err(|error| invalid(format!("baseline artifact: {error}")))?;
@@ -399,6 +418,7 @@ pub fn grade_checkpoint_artifact(
             margin_q12: config.margin_q12,
         },
         evaluation: graded.evaluation,
+        reply_sample_fingerprint,
         replies,
         audit: CheckpointGradeAudit {
             positions_checked: audit.parity.positions_checked,
@@ -532,6 +552,10 @@ mod tests {
         assert_eq!(baseline.target_admitted_delta, None);
         assert_eq!(first.replies.reading, second.replies.reading);
         assert_eq!(first.replies.reply_sha256, second.replies.reply_sha256);
+        assert_eq!(
+            first.reply_sample_fingerprint,
+            second.reply_sample_fingerprint
+        );
         assert_eq!(first.evaluation, second.evaluation);
     }
 

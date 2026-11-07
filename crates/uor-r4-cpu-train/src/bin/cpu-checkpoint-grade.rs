@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 
+use serde::Serialize;
 use uor_r4_cpu_train::{
     export_saved_checkpoint, grade_checkpoint_artifact, validate_corpus_manifest,
     CheckpointGradeConfig,
@@ -28,6 +29,18 @@ struct Config {
     out: Option<PathBuf>,
     grade: CheckpointGradeConfig,
     snaps: FbsExportSnaps,
+}
+
+#[derive(Debug)]
+struct ResolvedArtifact {
+    bytes: Vec<u8>,
+    export: Option<CheckpointExport>,
+}
+
+#[derive(Debug, Serialize)]
+struct CheckpointExport {
+    snapshot_sha256: String,
+    artifact_sha256: String,
 }
 
 fn main() {
@@ -58,7 +71,7 @@ fn run() -> Result<(), String> {
     }
     let artifact = resolve_artifact(&config)?;
     let report = grade_checkpoint_artifact(
-        &artifact,
+        &artifact.bytes,
         baseline.as_deref(),
         &tokens,
         &mask,
@@ -66,6 +79,13 @@ fn run() -> Result<(), String> {
         config.grade,
     )
     .map_err(|error| error.to_string())?;
+    let mut report = serde_json::to_value(report).map_err(|error| error.to_string())?;
+    if let Some(export) = artifact.export {
+        if report["artifact_sha256"].as_str() != Some(export.artifact_sha256.as_str()) {
+            return Err("checkpoint export artifact identity differs from grading".to_owned());
+        }
+        report["export"] = serde_json::to_value(export).map_err(|error| error.to_string())?;
+    }
     let bytes = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
     if let Some(path) = config.out {
         write_new_file(&path, &bytes).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -78,7 +98,7 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_artifact(config: &Config) -> Result<Vec<u8>, String> {
+fn resolve_artifact(config: &Config) -> Result<ResolvedArtifact, String> {
     match (&config.artifact, &config.checkpoint) {
         (Some(path), None) => {
             if config.run_config.is_some()
@@ -91,7 +111,11 @@ fn resolve_artifact(config: &Config) -> Result<Vec<u8>, String> {
                     "--artifact cannot be combined with checkpoint export arguments".to_owned(),
                 );
             }
-            std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()))
+            Ok(ResolvedArtifact {
+                bytes: std::fs::read(path)
+                    .map_err(|error| format!("{}: {error}", path.display()))?,
+                export: None,
+            })
         }
         (None, Some(checkpoint)) => {
             let run_config = config
@@ -106,7 +130,7 @@ fn resolve_artifact(config: &Config) -> Result<Vec<u8>, String> {
                 .artifact_out
                 .as_ref()
                 .ok_or_else(|| "--checkpoint needs --artifact-out".to_owned())?;
-            export_saved_checkpoint(
+            let (snapshot_sha256, artifact_sha256) = export_saved_checkpoint(
                 checkpoint,
                 run_config,
                 snapshot_out,
@@ -114,8 +138,14 @@ fn resolve_artifact(config: &Config) -> Result<Vec<u8>, String> {
                 config.snaps,
             )
             .map_err(|error| format!("checkpoint export: {error}"))?;
-            std::fs::read(artifact_out)
-                .map_err(|error| format!("{}: {error}", artifact_out.display()))
+            Ok(ResolvedArtifact {
+                bytes: std::fs::read(artifact_out)
+                    .map_err(|error| format!("{}: {error}", artifact_out.display()))?,
+                export: Some(CheckpointExport {
+                    snapshot_sha256,
+                    artifact_sha256,
+                }),
+            })
         }
         _ => Err("choose exactly one of --artifact or --checkpoint".to_owned()),
     }
