@@ -33,8 +33,8 @@ and report a negative. On tied scores it must return lower token ids in ascendin
    current training arithmetic and keeps the flag off. A CPU test compares the host reference
    with repeated selection and its tie rule.
 5. The float-train CPU tests, stub-CUDA all-targets check, Clippy on changed lines,
-   `git diff --check`, loop report and local PR checks pass. No training or scoring run is made
-   in this unit; device timing is the next unit.
+   `git diff --check`, loop report and local PR checks pass. A finite synthetic model step is
+   timed; no recipe training or scoring run is made.
 
 ## Stop and ask if
 

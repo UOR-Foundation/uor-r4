@@ -1075,7 +1075,8 @@ fn hinge(rival: &Tensor, target: &Tensor, margin: f64) -> Result<Tensor> {
 }
 
 /// The `k` best positions of each row of `scores` among those `allowed` (u8, same shape) keeps,
-/// as (rows, k), by repeated argmax on a detached copy.
+/// as (rows, k). The default is repeated argmax on a detached copy; `--fast-rivals` replaces it
+/// with one deterministic CUDA pass.
 fn best_positions(scores: &Tensor, allowed: &Tensor, k: usize) -> Result<Tensor> {
     if FAST_RIVALS.with(|on| on.get()) {
         if !scores.device().is_cuda() {
@@ -14869,6 +14870,24 @@ mod tests {
             error.contains("non-finite training loss at step 10"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn fast_rivals_restore_their_prior_state_after_an_error_or_panic() {
+        assert!(!FAST_RIVALS.with(|on| on.get()));
+        let error = with_fast_rivals(true, || -> Result<()> {
+            assert!(FAST_RIVALS.with(|on| on.get()));
+            Err(invalid("test error"))
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains("test error"));
+        assert!(!FAST_RIVALS.with(|on| on.get()));
+
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _: Result<()> = with_fast_rivals(true, || panic!("test panic"));
+        }));
+        assert!(panicked.is_err());
+        assert!(!FAST_RIVALS.with(|on| on.get()));
     }
 
     #[cfg(feature = "cuda")]

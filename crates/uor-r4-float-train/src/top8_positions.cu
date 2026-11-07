@@ -1,6 +1,7 @@
 // Exact bounded rival selection for the training objective. One warp owns a row; every lane
 // scans a strided subset into a sorted top-k, and lane 0 merges the warp's candidates. The order
-// is score descending and token id ascending on ties, matching `best_positions`' repeated argmax.
+// is score descending and token id ascending on ties. Non-tied choices match repeated argmax;
+// ties are deterministic here where the old CUDA reduction does not define their order.
 //
 // This module is separate from `cuda_stack.cu`, whose SHA-256 is part of checkpoint fingerprints.
 

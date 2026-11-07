@@ -2,9 +2,9 @@
 //!
 //! `in_space_long::best_positions` made `k` whole-vocabulary `argmax` calls and masked one result
 //! after each. The selector here performs one scan into a warp-local top-k, then merges the 32
-//! lane lists. Its order is score descending and token id ascending on ties, the repeated argmax
-//! order. It lives in its own CUDA module so the pinned stack sources and checkpoint fingerprints
-//! stay unchanged.
+//! lane lists. Its order is score descending and token id ascending on ties. Non-tied choices
+//! match repeated argmax; ties are made deterministic. It lives in its own CUDA module so the
+//! pinned stack sources and checkpoint fingerprints stay unchanged.
 
 use candle_core::{CpuStorage, CustomOp2, Layout, Shape, Tensor};
 

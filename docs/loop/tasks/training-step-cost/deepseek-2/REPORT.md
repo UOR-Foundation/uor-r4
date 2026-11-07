@@ -6,9 +6,10 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
 ## What did not work, first
 
 - **The fast selector is not a drop-in training replacement.** It keeps the synthetic step's
-  loss bit for bit, but tied rivals change `embedding.weight`'s gradient by 0.75% in the first
-  device run and 1.14% in the measured run. The flag stays off; a controlled training comparison
-  is required before it can become a default.
+  loss bit for bit, but `embedding.weight`'s gradient moved by 0.75% in the first device run and
+  1.14% in the measured run. The cause is not localized; changed rival choices on tied scores are
+  the leading hypothesis. The flag stays off; a controlled training comparison is required
+  before it can become a default.
 - **The first design would not have preserved gradients.** Replacing the nearest objective with
   the existing row-loss kernel acted on a deliberately detached score table, so the loss would
   have carried no gradient to the query or table. The unit now replaces only the exact position
@@ -37,8 +38,8 @@ Order: [ORDER.md](ORDER.md). Base: `11dd0b623` (after PR #3823).
   mask, checks shape and the eight-rival cap, and launches one 32-thread block a row. It refuses
   the CPU and performs no fallback.
 - **`in_space_long.rs`:** `--fast-rivals` is a thread-local flag read by `best_positions`. Off,
-  the old repeated argmax code runs unchanged. On, the new selector returns the same ordered
-  position tensor.
+  the old repeated argmax code runs unchanged. On, the new selector returns the same positions
+  where scores differ and deterministic lower-id positions on ties.
 - **`train-in-space.rs`:** `--fast-rivals 1` applies only to `--out` training with a nearest-style
   objective. It is absent from `config.json` when off.
 - **The build:** `top8_positions_f32.ptx` is its own ahead-of-time module. The pinned
@@ -64,14 +65,17 @@ The selector is fast enough to matter, but its share of one training step is sma
 nearest-objective step over 16 windows of 192 tokens, four micro-batches of four, measured
 147.255 ms old against 145.676 ms fast: **1.07%**. Its loss was
 `1.0039109885692596` in both paths, bit for bit. The largest relative gradient move was **1.14%**
-(`embedding.weight`), a tie-mode change, not floating reduction noise.
+(`embedding.weight`). The test does not localize the cause; tied rival selection is the leading
+hypothesis, not a measured cause.
 
 ## Checks run at the head
 
-Code head: `a6a74a7f1`.
+Result-producing code head: `a6a74a7f1`. Later commits change comments, tests and records only.
 
 - `cargo test --release --offline --locked -p uor-r4-float-train`: 296 library tests, 7 snapshot
   tests, 9 trainer tests, 2 dependency/kernel-scan tests and 12 finite controls passed; 0 failed.
+- `fast_rivals_restore_their_prior_state_after_an_error_or_panic`: passed; it adds a 297th
+  library test at the final head.
 - Stub-nvcc CUDA all-targets check: passed with `CUDARC_CUDA_VERSION=12080` and
   `UOR_NVCC_ARCH=compute_120`.
 - RTX 5090 `the_one_pass_rival_selector_keeps_non_ties_and_makes_ties_deterministic`: passed,
