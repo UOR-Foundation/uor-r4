@@ -33,7 +33,7 @@ No dependency, legacy JavaScript/HTML, `mcp_client.js`, native MCP host, engine,
 
 ## Checks run at the head
 
-Red-first evidence is preserved under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the original `red-mcp-repairs.log` and the resumed focused failure. Green evidence includes focused/full Vitest, typecheck, build, plain-JS, and four legacy checks on the uncommitted repair tree before the WIP commit. Harness `loop report --check`, `loop pr-check --local`, `loop gates --full`, the exact-head rerun, fresh exact-head review, PR push/update, GitHub checks, queue/merge, and fresh-main verification are **NOT_RUN**. The session was closed at the user's request; the next session must run these at the new head before protected delivery. The PR uses `References #3500`; the issue remains open.
+Red-first evidence is preserved under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the original `red-mcp-repairs.log` and the resumed focused failure. At the final committed repair state, focused/full Vitest, typecheck, build, plain-JS, all four legacy checks, harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks pass. The desktop check streamed 32 tokens with 38 invoked commands and zero remote requests; the worker check passed 32 expected tokens with bit-identical save/restore and zero remote requests. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The exact delivery HEAD/tree and final logs are recorded on PR #3820 and in the evidence directory. The PR uses `References #3500`; the issue remains open.
 
 ## Skills used
 
