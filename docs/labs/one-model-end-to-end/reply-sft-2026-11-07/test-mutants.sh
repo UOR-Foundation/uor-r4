@@ -78,7 +78,8 @@ mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
 mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
 mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
 mutate weak-guard "$JOB" '[ "$guard" -lt 93 ]' '[ "$guard" -lt 0 ]'
-mutate weak-base-guard "$JOB" '[ "$base_guard" -ge 93 ]' '[ "$base_guard" -ge 0 ]'
+mutate weak-base-guard "$JOB" '[ "$base_guard" -eq 132 ]' '[ "$base_guard" -ge 0 ]'
+mutate wrong-base-rank "$JOB" '.eos_rank_min == 5' '.eos_rank_min == 0'
 mutate no-freeze "$JOB" 'kill -STOP "$TRAIN_PID"' 'kill -CONT "$TRAIN_PID"'
 mutate partial-checkpoint "$JOB" \
   'if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then' \

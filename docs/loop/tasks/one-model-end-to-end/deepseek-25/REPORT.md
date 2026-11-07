@@ -35,6 +35,10 @@ spend.
   refuses an unmarked checkpoint after trainer exit.
 - `gate.sh` pins both sides of the completion protocol and its mutation suite
   rejects a return to directory-only checkpoint detection.
+- The base control now runs teacher-forced ranks under both renderings and
+  checks the registered one-user 18/138/873, per-turn 5/7/13, per-turn top-8
+  198/256, free-generation 0/256, and continuation 132/512 readings exactly
+  before training.
 
 ## Measurements
 
@@ -44,8 +48,8 @@ seed-1 envelope.
 
 ## Checks run at the head
 
-- `gate.sh`: 77 checks passed.
-- `test-mutants.sh`: 25 of 25 semantic mutations caught.
+- `gate.sh`: 81 checks passed.
+- `test-mutants.sh`: 26 of 26 semantic mutations caught.
 - `checkpoint_ready_marker_records_completion`: passed.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.

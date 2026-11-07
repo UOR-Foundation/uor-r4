@@ -119,7 +119,11 @@ termination_count=$(
 checks=$((checks + 1))
 require_line 'if [ "$guard" -lt 93 ]; then' "$JOB"
 require_line 'elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"
-require_line '[ "$base_guard" -ge 93 ] || die "base continuation guard is $base_guard, below 93"' "$JOB"
+require_line 'run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null' "$JOB"
+require_line '.eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and' "$JOB"
+require_line '.eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and' "$JOB"
+require_line '.complete == 0 and .eos_stops == 0 and .bos_stops == 0 and' "$JOB"
+require_line '[ "$base_guard" -eq 132 ] ||' "$JOB"
 require_line '--init-from "$B64L" \' "$JOB"
 require_line '--train-split "$RUN/inputs/mix" \' "$JOB"
 require_line '--train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \' "$JOB"

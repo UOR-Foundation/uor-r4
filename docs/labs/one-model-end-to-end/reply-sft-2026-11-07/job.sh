@@ -315,6 +315,7 @@ BASE_ARTIFACT="$RUN/control/b64L-s1.uorlut"
   --snapshot-out "$RUN/control/b64L-s1.snapshot" --out "$BASE_ARTIFACT"
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 1 base-per-turn-teacher >/dev/null
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 0 base-per-turn-generated >/dev/null
+run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null
 run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 0 base-one-user-generated >/dev/null
 "$GRADE_BIN" --artifact "$BASE_ARTIFACT" \
   --tokens "$RUN/inputs/oasst2-heldout/tokens.u16" \
@@ -322,8 +323,22 @@ run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 0 base-one-user-generated >/dev/nu
   --manifest "$RUN/inputs/oasst2-heldout/manifest.json" \
   --max-evaluation 512 --max-replies 1 --reply-tokens 1 \
   --out "$RUN/control/base-grade.json"
+base_totals() {
+  jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
+    die "base $2 control differs from its registered reading"
+}
+base_totals '.teacher_forced.totals |
+  .eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and
+  .eos_top1 == 0 and .eos_top8 == 198' base-per-turn-teacher
+base_totals '.teacher_forced.totals |
+  .eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and
+  .eos_top1 == 0 and .eos_top8 == 0' base-one-user-teacher
+base_totals '.totals |
+  .complete == 0 and .eos_stops == 0 and .bos_stops == 0 and
+  .context_stops == 0 and .cap_stops == 256' base-one-user-generated
 base_guard=$(jq -r '.evaluation.top1_correct' "$RUN/control/base-grade.json")
-[ "$base_guard" -ge 93 ] || die "base continuation guard is $base_guard, below 93"
+[ "$base_guard" -eq 132 ] ||
+  die "base continuation guard is $base_guard, not the registered 132/512"
 
 log "training"
 "$TRAIN_BIN" \
