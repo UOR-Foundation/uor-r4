@@ -108,9 +108,16 @@ last_renew=$started
 failures=0
 
 while :; do
-  job_exit=$("$POD_TOOL" ssh "$POD" \
-    "sed -n 's/^# exit=\\([0-9][0-9]*\\) .*/\\1/p' '$JOB_LOG' 2>/dev/null | tail -1") || job_exit=
-  [ -z "$job_exit" ] || break
+  probe=$("$POD_TOOL" ssh "$POD" \
+    "exit=\$(sed -n 's/^# exit=\\([0-9][0-9]*\\) .*/\\1/p' '$JOB_LOG' 2>/dev/null | tail -1)
+     if [ -n \"\$exit\" ]; then printf 'exit %s\\n' \"\$exit\"
+     elif ! flock -n /root/gpu0.lock true; then printf 'running\\n'
+     else printf 'stopped\\n'; fi") || probe=unreachable
+  case "$probe" in
+    'exit '*) job_exit=${probe#exit }; break ;;
+    running) failures=0 ;;
+    *) failures=$((failures + 1)) ;;
+  esac
   now=$(date +%s)
   if [ $((now - started)) -gt "$MAXSEC" ]; then
     echo "watcher time limit reached; the healthy job is not cancelled" |
@@ -125,18 +132,13 @@ while :; do
     fi
     last_renew=$now
   fi
-  if "$POD_TOOL" ssh "$POD" "test -f '$JOB_LOG'" >/dev/null 2>&1; then
-    failures=0
-  else
-    failures=$((failures + 1))
-    if [ "$failures" -ge 3 ]; then
-      if ! "$POD_TOOL" status 2>/dev/null | grep -Eq "^$POD .* RUNNING "; then
-        echo "$POD disappeared before writing its job log" >&2
-        exit 1
-      fi
-      echo "the running pod has no job log at $JOB_LOG; the job did not start" >&2
+  if [ "$failures" -ge 3 ]; then
+    if ! "$POD_TOOL" status 2>/dev/null | grep -Eq "^$POD .* RUNNING "; then
+      echo "$POD disappeared before writing its terminal exit" >&2
       exit 1
     fi
+    echo "$POD is running, but GPU 0 has no live job and $JOB_LOG has no terminal exit" >&2
+    exit 1
   fi
   sleep 20
 done

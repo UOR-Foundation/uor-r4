@@ -146,8 +146,14 @@ grep -Fq 'for (i = 1; i <= NF; i++) if ($i == "Log:") { print $(i + 1); exit }' 
   "$LAUNCHER" || fail "$LAUNCHER does not parse the log path from uor-pod's one-line success message"
 checks=$((checks + 1))
 require_line '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' "$LAUNCHER"
-require_line '[ -z "$job_exit" ] || break' "$LAUNCHER"
+grep -Fq 'job_exit=${probe#exit }; break ;;' "$LAUNCHER" ||
+  fail "$LAUNCHER does not stop on the terminal remote exit"
+checks=$((checks + 1))
 require_line '[ "$job_exit" -eq 0 ] || {' "$LAUNCHER"
+grep -Fq 'elif ! flock -n /root/gpu0.lock true; then printf '"'"'running\\n'"'"'' \
+  "$LAUNCHER" || fail "$LAUNCHER does not distinguish a live GPU job from a stopped one"
+checks=$((checks + 1))
+require_line 'echo "$POD is running, but GPU 0 has no live job and $JOB_LOG has no terminal exit" >&2' "$LAUNCHER"
 if grep -Fq 'WRAPPER_PID' "$LAUNCHER"; then
   fail "$LAUNCHER still waits on the detached-job submission wrapper"
 fi

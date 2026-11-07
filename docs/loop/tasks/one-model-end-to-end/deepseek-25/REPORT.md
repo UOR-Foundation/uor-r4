@@ -19,6 +19,9 @@ spend.
 - **An existing pin was not a launch-pin check.** The controller could upload a
   job from a different or dirty local checkout while the remote source still
   checked out the named pin.
+- **A log file alone did not prove the job was alive.** If the remote wrapper
+  died without writing `# exit=N`, polling the existing log could continue
+  indefinitely while the pod billed.
 
 ## What changed
 
@@ -44,6 +47,9 @@ spend.
   before training.
 - The launcher now requires local `HEAD == UOR_SFT_PIN` and no tracked
   modifications before it may upload the controller or rent a pod.
+- The remote probe reports the terminal exit when present, the GPU lock while
+  the job runs, or a stopped state when the log exists but the job no longer
+  holds its lock. Three consecutive stopped probes fail the controller.
 
 ## Measurements
 
@@ -53,8 +59,8 @@ seed-1 envelope.
 
 ## Checks run at the head
 
-- `gate.sh`: 83 checks passed.
-- `test-mutants.sh`: 27 of 27 semantic mutations caught.
+- `gate.sh`: 85 checks passed.
+- `test-mutants.sh`: 28 of 28 semantic mutations caught.
 - `checkpoint_ready_marker_records_completion`: passed.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.

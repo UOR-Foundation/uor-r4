@@ -111,7 +111,10 @@ mutate dirty-launch "$LAUNCHER" \
   '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' \
   'true ||'
 mutate submit-only-wait "$LAUNCHER" \
-  '[ -z "$job_exit" ] || break' 'break'
+  "'exit '*) job_exit=\${probe#exit }; break ;;" '*) break ;;'
+mutate dead-job-ignored "$LAUNCHER" \
+  'elif ! flock -n /root/gpu0.lock true; then printf '"'"'running\\n'"'"'' \
+  'elif false; then printf '"'"'running\\n'"'"''
 mutate ignored-remote-exit "$LAUNCHER" '[ "$job_exit" -eq 0 ] || {' 'true || {'
 mutate missing-job-log "$LAUNCHER" \
   '*) cat "$CONTROLLER/run.out" >&2; echo "uor-pod did not report a job log" >&2; exit 1 ;;' \
