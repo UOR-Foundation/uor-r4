@@ -42,20 +42,18 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
   frozen accepted answer plus EOS, and records each target's rank from the same integer
   nearest reader generation uses. It reports top-1/top-8/top-32, min/p50/p90/p95/max,
   per-stratum totals and per-row EOS ranks. The default report gains no new key.
-- Added `CpuFbsForward::nearest_token_diagnostic` and
-  `teacher_forced_nearest_ranks`, and re-exported `NearestTokenDiagnostic`. Ranking follows
-  serving order (larger score first, lower token id on a tie) while recording the actual
-  post-memory served token. The sequence helper consumes every target exactly once and
-  allows an unfed final target at the context boundary. Generation and rank timing are now
-  reported separately.
+- Added packet-local nearest-rank helpers in `served-reply-panel`. They use
+  `CpuFbsForward`'s public query state and shared table, follow serving order
+  (larger score first, lower token id on a tie), record the actual served token
+  and keep the diagnostic inside this item's scope. The sequence helper consumes
+  every target exactly once and allows an unfed final target at the context
+  boundary. Generation and rank timing are now reported separately.
 - **The latest review found two remaining faults.** The first diagnostic ranked only the
   raw L1 order, so a point-key opening could be served at rank 1 but reported far below it.
-  The CPU-train files also were not named in scope. The diagnostic now
+  The diagnostic had also been placed outside this item's scope. The packet-local helper now
   reports `rank` in the actual served order and `raw_rank`, names `raw_nearest_token`, and
   marks `point_key_override`; a point-key opening therefore holds rank 1 even when its raw
-  score would not. A fixture pins that case. The item and ORDER now name the two CPU-train
-  files explicitly; this records the owner-approved scope widening for the public
-  diagnostic required by this ORDER and changes no serving or training behavior.
+  score would not. A fixture pins that case, and no CPU-train file changes.
 - Added twelve focused tests covering the unchanged one-user render, explicit turns,
   malformed/empty turns, EOS/reference alignment, acceptance, stop order, rank-tail
   aggregation, switch parsing, nearest ties, the point-key override, teacher-forced target
@@ -89,12 +87,9 @@ Outputs:
 
 ## Checks run at the head
 
-- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 460 passed, 4 ignored.
-- `cargo test --offline --locked -p uor-r4-cpu-train fbs::tests`: 49 passed,
-  including nearest ties, the point-key override and exact teacher-forced target
-  alignment.
 - `UOR_PANEL_TOKENIZER=<pinned tokenizer> cargo test --offline --locked
-  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 12 passed, 0 failed.
+  --features cpu-parity --bin served-reply-panel --no-fail-fast`: 12 passed, 0 failed,
+  including nearest ties, the point-key override and teacher-forced alignment.
 - `cargo run --release --offline --locked --features cpu-parity --bin
   served-reply-panel` on the regenerated panel in both renderings: exit 0.
 - The one-user generation-only run reproduces claude-309's published totals:

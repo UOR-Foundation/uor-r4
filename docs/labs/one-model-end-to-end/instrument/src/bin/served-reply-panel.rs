@@ -163,6 +163,17 @@ struct RankTally {
     eos_rank_max: Option<usize>,
 }
 
+#[derive(Debug)]
+struct NearestRank {
+    target_token: u32,
+    chosen_token: u32,
+    rank: usize,
+    raw_rank: usize,
+    raw_nearest_token: u32,
+    point_key_override: bool,
+    candidate_count: usize,
+}
+
 #[derive(Default, Serialize)]
 struct Tally {
     rows: usize,
@@ -488,6 +499,111 @@ fn reference_ids(
     Ok((answer.clone(), ids))
 }
 
+fn nearest_rank(
+    query: &[i32],
+    table: &[i16],
+    width: usize,
+    target_token: u32,
+    served_token: u32,
+) -> Result<NearestRank> {
+    if width == 0 || table.len() % width != 0 {
+        return Err("nearest-rank table shape differs".to_owned());
+    }
+    let vocabulary = table.len() / width;
+    if query.len() != width
+        || target_token as usize >= vocabulary
+        || served_token as usize >= vocabulary
+    {
+        return Err("nearest-rank query or target differs".to_owned());
+    }
+    let score = |token: usize| {
+        query
+            .iter()
+            .zip(&table[token * width..(token + 1) * width])
+            .fold(0i64, |sum, (&left, &right)| {
+                sum.wrapping_add(i64::from(left.abs_diff(i32::from(right))))
+            })
+            .wrapping_neg()
+    };
+    let target = target_token as usize;
+    let target_score = score(target);
+    let mut raw_rank = 1;
+    let mut raw_nearest = 0u32;
+    let mut raw_nearest_score = i64::MIN;
+    for token in 0..vocabulary {
+        let candidate = score(token);
+        if candidate > raw_nearest_score
+            || (candidate == raw_nearest_score && token < raw_nearest as usize)
+        {
+            raw_nearest_score = candidate;
+            raw_nearest = token as u32;
+        }
+        if token != target
+            && (candidate > target_score
+                || (candidate == target_score && token < target))
+        {
+            raw_rank += 1;
+        }
+    }
+    let point_key_override = served_token != raw_nearest;
+    let rank = if !point_key_override {
+        raw_rank
+    } else if target_token == served_token {
+        1
+    } else {
+        2 + (0..vocabulary)
+            .filter(|&token| token != target && token as u32 != served_token)
+            .filter(|&token| {
+                let candidate = score(token);
+                candidate > target_score
+                    || (candidate == target_score && token < target)
+            })
+            .count()
+    };
+    Ok(NearestRank {
+        target_token,
+        chosen_token: served_token,
+        rank,
+        raw_rank,
+        raw_nearest_token: raw_nearest,
+        point_key_override,
+        candidate_count: vocabulary,
+    })
+}
+
+fn teacher_forced_nearest_ranks(
+    forward: &mut CpuFbsForward,
+    prompt: &[u32],
+    targets: &[u32],
+) -> Result<Vec<NearestRank>> {
+    if prompt.is_empty() {
+        return Err("teacher-forced ranking needs a nonempty prompt".to_owned());
+    }
+    if prompt.len().saturating_add(targets.len().saturating_sub(1))
+        > forward.context_length()
+    {
+        return Err("teacher-forced sequence passes the context".to_owned());
+    }
+    forward.reset();
+    let mut next = prime_prompt(forward, prompt)?;
+    let mut rows = Vec::with_capacity(targets.len());
+    for (index, &target) in targets.iter().enumerate() {
+        rows.push(nearest_rank(
+            &next.query_q12,
+            forward.shared_table(),
+            forward.width(),
+            target,
+            next.token,
+        )?);
+        if index + 1 < targets.len() {
+            next = forward
+                .step(target, CpuFbsHead::Nearest)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(rows)
+}
+
 fn teacher_forced_row(
     tokenizer: &ByteBpeTokenizer,
     encoder: &DialogueEncoder<'_>,
@@ -513,8 +629,7 @@ fn teacher_forced_row(
             forward.context_length()
         ));
     }
-    let diagnostics = forward
-        .teacher_forced_nearest_ranks(&prompt, &reference_ids)
+    let diagnostics = teacher_forced_nearest_ranks(&mut forward, &prompt, &reference_ids)
         .map_err(|e| e.to_string())?;
     if diagnostics.len() != reference_ids.len() {
         return Err(format!(
@@ -528,6 +643,9 @@ fn teacher_forced_row(
     let mut eos_rank = None;
     let mut candidate_count = 0;
     for (target, diagnostic) in reference_ids.iter().zip(&diagnostics) {
+        if diagnostic.target_token != *target {
+            return Err(format!("{}: teacher-forced target misalignment", case.id));
+        }
         candidate_count = diagnostic.candidate_count;
         target_ranks.push(diagnostic.rank);
         if *target == EOS {
@@ -916,6 +1034,21 @@ mod tests {
         assert_eq!(tally.eos_top8, 2);
         assert_eq!(tally.eos_rank_p50, Some(7));
         assert_eq!(tally.eos_rank_max, Some(40));
+    }
+
+    #[test]
+    fn nearest_rank_uses_ties_and_the_served_point_override() {
+        let table = [0i16, 0, 0, 0, 1, 1];
+        let tied = nearest_rank(&[0, 0], &table, 2, 1, 0).unwrap();
+        assert_eq!(tied.chosen_token, 0);
+        assert_eq!(tied.rank, 2);
+
+        let overridden = nearest_rank(&[0, 0], &table, 2, 1, 1).unwrap();
+        assert_eq!(overridden.chosen_token, 1);
+        assert_eq!(overridden.rank, 1);
+        assert_eq!(overridden.raw_rank, 2);
+        assert_eq!(overridden.raw_nearest_token, 0);
+        assert!(overridden.point_key_override);
     }
 
     #[test]

@@ -118,9 +118,8 @@ pub use discrete_route::{
     CpuDiscreteTrunkDecision, CpuDiscreteTrunkReader, CPU_DISCRETE_CHECKPOINT_SCHEMA,
 };
 pub use fbs::{
-    CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError, NearestTokenDiagnostic,
-    WriterPortAnchorAudit, WriterPortMismatch, WriterTokenDiagnostic,
-    CPU_FBS_SESSION_CHECKPOINT_SCHEMA,
+    CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError, WriterPortAnchorAudit,
+    WriterPortMismatch, WriterTokenDiagnostic, CPU_FBS_SESSION_CHECKPOINT_SCHEMA,
 };
 pub use fbs_snapshot_cpu::{export_saved_checkpoint, snapshot_from_saved_checkpoint};
 pub use full_sequence_boundary::{
