@@ -1177,14 +1177,27 @@ fn nearest_loss(model: &StackModel, query: &Tensor, targets: &[u32], cell: bool)
 fn nearest_loss_on(table: &Tensor, query: &Tensor, targets: &[u32], cell: bool) -> Result<Tensor> {
     let (rows, width) = query.dims2()?;
     let device = query.device();
-    let scores = nearest_scores(query, &table)?;
-    let target_ids = Tensor::from_vec(targets.to_vec(), (rows, 1), device)?;
-    let allowed = Tensor::arange(0u32, table.dim(0)? as u32, device)?
-        .unsqueeze(0)?
-        .broadcast_as(scores.shape())?
-        .broadcast_ne(&target_ids)?;
-    let rivals = best_positions(&scores, &allowed, hs::SHEET_RIVALS)?;
-    stage_clock::mark("objective.table_search");
+    let (rivals, target_ids) = if FAST_RIVALS.with(|on| on.get()) && !cell {
+        let target_ids = Tensor::from_vec(targets.to_vec(), rows, device)?;
+        let rivals = crate::top8_positions::nearest_positions(
+            query,
+            table,
+            &target_ids,
+            hs::SHEET_RIVALS,
+        )?;
+        stage_clock::mark("objective.table_search");
+        (rivals, target_ids)
+    } else {
+        let scores = nearest_scores(query, table)?;
+        let target_ids = Tensor::from_vec(targets.to_vec(), (rows, 1), device)?;
+        let allowed = Tensor::arange(0u32, table.dim(0)? as u32, device)?
+            .unsqueeze(0)?
+            .broadcast_as(scores.shape())?
+            .broadcast_ne(&target_ids)?;
+        let rivals = best_positions(&scores, &allowed, hs::SHEET_RIVALS)?;
+        stage_clock::mark("objective.table_search");
+        (rivals, target_ids)
+    };
     let rival_vectors =
         table
             .index_select(&rivals.flatten_all()?, 0)?
@@ -14617,6 +14630,39 @@ mod tests {
 
     #[cfg(feature = "cuda")]
     #[test]
+    fn the_fused_nearest_selector_matches_the_old_search_on_untied_rows() {
+        let device = Device::new_cuda(0).unwrap();
+        let (rows, vocabulary, width) = (4usize, 16usize, 8usize);
+        let query_values: Vec<f32> = (0..rows * width)
+            .map(|i| ((i * 31 + 7) % 101) as f32 / 101.0)
+            .collect();
+        let table_values: Vec<f32> = (0..vocabulary * width)
+            .map(|i| ((i * 43 + 11) % 97) as f32 / 97.0)
+            .collect();
+        let query = Tensor::from_vec(query_values, (rows, width), &device).unwrap();
+        let table = Tensor::from_vec(table_values, (vocabulary, width), &device).unwrap();
+        let targets = [0u32, 3, 7, 11];
+        let target_ids = Tensor::from_vec(targets.to_vec(), (rows, 1), &device).unwrap();
+        let scores = nearest_scores(&query, &table).unwrap();
+        let allowed = Tensor::arange(0u32, vocabulary as u32, &device)
+            .unwrap()
+            .unsqueeze(0)
+            .unwrap()
+            .broadcast_as(scores.shape())
+            .unwrap()
+            .broadcast_ne(&target_ids)
+            .unwrap();
+        let old = with_fast_rivals(false, || best_positions(&scores, &allowed, 8)).unwrap();
+        let target_ids = Tensor::from_vec(targets.to_vec(), rows, &device).unwrap();
+        let fused = crate::top8_positions::nearest_positions(&query, &table, &target_ids, 8).unwrap();
+        assert_eq!(
+            old.to_vec2::<u32>().unwrap(),
+            fused.to_vec2::<u32>().unwrap()
+        );
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
     #[ignore = "needs a CUDA device; run on the pod"]
     fn time_the_one_pass_rival_selector() {
         let device = Device::new_cuda(0).unwrap();
@@ -14661,6 +14707,73 @@ mod tests {
                     "vocabulary": vocabulary,
                     "old_ms": old[old.len() / 2],
                     "fast_ms": fast[fast.len() / 2],
+                })
+            );
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn time_the_fused_nearest_search() {
+        let device = Device::new_cuda(0).unwrap();
+        let vocabulary = 4_096usize;
+        let width = 256usize;
+        let table_values: Vec<f32> = (0..vocabulary * width)
+            .map(|i| ((i * 43 + 11) % 1_000_003) as f32 / 1_000_003.0)
+            .collect();
+        let table = Tensor::from_vec(table_values, (vocabulary, width), &device).unwrap();
+        for rows in [256usize, 2_048, 4_096] {
+            let query_values: Vec<f32> = (0..rows * width)
+                .map(|i| ((i * 31 + 7) % 999_983) as f32 / 999_983.0)
+                .collect();
+            let query = Tensor::from_vec(query_values, (rows, width), &device).unwrap();
+            let targets: Vec<u32> = (0..rows).map(|r| (r % vocabulary) as u32).collect();
+            let target_matrix =
+                Tensor::from_vec(targets.clone(), (rows, 1), &device).unwrap();
+            let target_rows = Tensor::from_vec(targets, rows, &device).unwrap();
+            let old = || {
+                let scores = nearest_scores(&query, &table).unwrap();
+                let allowed = Tensor::arange(0u32, vocabulary as u32, &device)
+                    .unwrap()
+                    .unsqueeze(0)
+                    .unwrap()
+                    .broadcast_as(scores.shape())
+                    .unwrap()
+                    .broadcast_ne(&target_matrix)
+                    .unwrap();
+                with_fast_rivals(false, || best_positions(&scores, &allowed, 8)).unwrap()
+            };
+            let fused =
+                || crate::top8_positions::nearest_positions(&query, &table, &target_rows, 8).unwrap();
+            for _ in 0..2 {
+                let _ = old();
+                let _ = fused();
+            }
+            device.synchronize().unwrap();
+            let mut old_ms = Vec::with_capacity(10);
+            let mut fused_ms = Vec::with_capacity(10);
+            for _ in 0..10 {
+                let started = Instant::now();
+                let _ = old();
+                device.synchronize().unwrap();
+                old_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+
+                let started = Instant::now();
+                let _ = fused();
+                device.synchronize().unwrap();
+                fused_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+            }
+            old_ms.sort_by(f64::total_cmp);
+            fused_ms.sort_by(f64::total_cmp);
+            println!(
+                "{}",
+                serde_json::json!({
+                    "rows": rows,
+                    "vocabulary": vocabulary,
+                    "width": width,
+                    "old_ms": old_ms[old_ms.len() / 2],
+                    "fused_ms": fused_ms[fused_ms.len() / 2],
                 })
             );
         }
