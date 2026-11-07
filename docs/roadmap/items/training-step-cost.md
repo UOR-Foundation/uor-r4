@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [fbs-cost-profile]
 notebook: docs/research/notebook/float-training.md
-scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/native_vector_writer.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/training-step-cost*, docs/loop/tasks/training-step-cost/**, docs/research/notebook/float-training.md, docs/roadmap/items/training-step-cost.md]
+scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/top8_positions.rs, crates/uor-r4-float-train/src/top8_positions.cu, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/native_vector_writer.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/training-step-cost*, docs/loop/tasks/training-step-cost/**, docs/research/notebook/float-training.md, docs/roadmap/items/training-step-cost.md]
 ---
 
 ## Why it matters
