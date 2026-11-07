@@ -28,6 +28,10 @@ case "$MAXSEC" in ''|*[!0-9]*) echo "UOR_SFT_MAXSEC must be an integer" >&2; exi
 [ -x "$STORE" ] || { echo "missing $STORE" >&2; exit 2; }
 [ -f "$JOB" ] || { echo "missing $JOB" >&2; exit 2; }
 git cat-file -e "$PIN^{commit}" || { echo "local repository does not contain $PIN" >&2; exit 2; }
+[ "$(git rev-parse HEAD)" = "$PIN" ] ||
+  { echo "local HEAD is not the reviewed pin $PIN" >&2; exit 2; }
+[ -z "$(git status --porcelain --untracked-files=no)" ] ||
+  { echo "tracked files differ from the reviewed pin $PIN" >&2; exit 2; }
 
 install -d "$CONTROLLER"
 JOB_SHA256=$(sha256sum "$JOB" | cut -d' ' -f1)

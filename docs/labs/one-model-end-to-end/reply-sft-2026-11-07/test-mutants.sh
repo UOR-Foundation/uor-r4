@@ -107,6 +107,9 @@ mutate directory-readback "$JOB" \
   '[ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS)' \
   '[ -d "$sealed" ]'
 mutate two-gpus "$LAUNCHER" '--count 1 --hours 2' '--count 2 --hours 2'
+mutate dirty-launch "$LAUNCHER" \
+  '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' \
+  'true ||'
 mutate submit-only-wait "$LAUNCHER" \
   '[ -z "$job_exit" ] || break' 'break'
 mutate ignored-remote-exit "$LAUNCHER" '[ "$job_exit" -eq 0 ] || {' 'true || {'

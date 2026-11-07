@@ -135,6 +135,8 @@ require_line 'PANEL_BIN="$RUN/panel-target/release/served-reply-panel"' "$JOB"
 require_line 'READBACK_STATUS=verified' "$JOB"
 
 require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu 5090 \' "$LAUNCHER"
+require_line '[ "$(git rev-parse HEAD)" = "$PIN" ] ||' "$LAUNCHER"
+require_line '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' "$LAUNCHER"
 require_line '--count 1 --hours 2 --ref "$PIN" \' "$LAUNCHER"
 require_line 'if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \' "$LAUNCHER"
 grep -Fqx "JOB_LOG=\$(awk '/Log: / {" "$LAUNCHER" ||

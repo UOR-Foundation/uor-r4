@@ -16,6 +16,9 @@ spend.
 - **Directory appearance was not checkpoint completion.** The trainer creates
   `step-N/` before writing its tensor and sidecar files. Freezing on the
   directory could copy a partial checkpoint and fail or seal invalid evidence.
+- **An existing pin was not a launch-pin check.** The controller could upload a
+  job from a different or dirty local checkout while the remote source still
+  checked out the named pin.
 
 ## What changed
 
@@ -39,6 +42,8 @@ spend.
   checks the registered one-user 18/138/873, per-turn 5/7/13, per-turn top-8
   198/256, free-generation 0/256, and continuation 132/512 readings exactly
   before training.
+- The launcher now requires local `HEAD == UOR_SFT_PIN` and no tracked
+  modifications before it may upload the controller or rent a pod.
 
 ## Measurements
 
@@ -48,8 +53,8 @@ seed-1 envelope.
 
 ## Checks run at the head
 
-- `gate.sh`: 81 checks passed.
-- `test-mutants.sh`: 26 of 26 semantic mutations caught.
+- `gate.sh`: 83 checks passed.
+- `test-mutants.sh`: 27 of 27 semantic mutations caught.
 - `checkpoint_ready_marker_records_completion`: passed.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.
