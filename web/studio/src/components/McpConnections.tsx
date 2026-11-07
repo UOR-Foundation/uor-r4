@@ -54,7 +54,7 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
     }, []);
 
     async function connect() {
-        if (connectingRef.current) return;
+        if (connectingRef.current || callingRef.current) return;
         connectingRef.current = true;
         setConnecting(true);
         const token = ++operation.current;
@@ -80,6 +80,12 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
             if (previous && previous !== candidate) cleanup = await release(previous);
             if (token !== operation.current) {
                 await release(candidate);
+                return;
+            }
+            if (cleanup) {
+                await release(candidate);
+                setSession(previous);
+                setStatus(`Previous session cleanup failed: ${cleanup}. Replacement was not completed.`);
                 return;
             }
             setSession(candidate);
@@ -143,9 +149,25 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
     function attachResult() {
         if (!resultJson || attachedName) return;
         const name = attachmentName(resultTool);
-        ui.addAttachment({ name, kind: 'text', content: resultJson, source: 'mcp' });
-        setAttachedName(name);
-        ui.toast('MCP result attached.', 'success');
+        try {
+            ui.addAttachment({ name, kind: 'text', content: resultJson, source: 'mcp' });
+            const retained = ui.getAttachments().some((entry) =>
+                entry.name === name
+                && entry.kind === 'text'
+                && entry.content === resultJson
+                && entry.source === 'mcp'
+            );
+            if (!retained) {
+                setAttachedName('');
+                ui.toast('MCP result could not be attached: the attachment limit was reached.', 'error');
+                return;
+            }
+            setAttachedName(name);
+            ui.toast('MCP result attached.', 'success');
+        } catch (error) {
+            setAttachedName('');
+            ui.toast(`MCP result could not be attached: ${errorText(error)}`, 'error');
+        }
     }
 
     return (
@@ -154,7 +176,7 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
             <p>Remote Streamable HTTP. Credentials stay in memory and are cleared after connection and on unmount.</p>
             <label>MCP server URL<input id="mcpUrlInput" aria-label="MCP server URL" type="url" value={url} onInput={(event) => setUrl(event.currentTarget.value)} placeholder="http://127.0.0.1:9000/mcp" /></label>
             <label>MCP credential<input id="mcpCredentialInput" aria-label="MCP credential" type="password" value={credential} onInput={(event) => setCredential(event.currentTarget.value)} placeholder="Optional credential (memory only)" autocomplete="off" /></label>
-            <button id="mcpConnectButton" type="button" disabled={connecting || !url.trim()} onClick={() => void connect()}>{connecting ? 'Connecting…' : 'Connect'}</button>
+            <button id="mcpConnectButton" type="button" disabled={connecting || calling || !url.trim()} onClick={() => void connect()}>{connecting ? 'Connecting…' : 'Connect'}</button>
             <p id="mcpConnectionStatus">{status}</p>
             <div id="mcpToolsList" className="mcp-tool-list">
                 {tools.map((tool) => (

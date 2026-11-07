@@ -7,7 +7,7 @@ import { McpConnections } from './McpConnections.js';
 
 let host: HTMLDivElement;
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); });
-afterEach(() => { render(null, host); host.remove(); window.localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { render(null, host); host.remove(); window.localStorage.clear(); window.sessionStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 function ui() {
     const attachments: Attachment[] = [];
@@ -55,9 +55,10 @@ describe('McpConnections', () => {
         expect(session.listTools).toHaveBeenCalledOnce();
         expect((document.getElementById('mcpCredentialInput') as HTMLInputElement).value).toBe('');
         expect(document.querySelector('.mcp-tool-button img')).toBeNull();
+        args('{"path":"notes.md","depth":2}');
         await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
         await vi.waitFor(() => expect(document.getElementById('mcpResultOutput')?.textContent).toContain('<img'));
-        expect(session.callTool).toHaveBeenCalledWith('read_file', {});
+        expect(session.callTool).toHaveBeenCalledWith('read_file', { path: 'notes.md', depth: 2 });
         expect(document.querySelector('#mcpResultOutput img')).toBeNull();
         expect((window as unknown as { __mcpMarkupExecuted?: boolean }).__mcpMarkupExecuted).toBeUndefined();
         await act(async () => { button('Attach result').click(); await Promise.resolve(); });
@@ -74,6 +75,9 @@ describe('McpConnections', () => {
         args('[]');
         await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
         expect(document.getElementById('mcpResultOutput')?.textContent).toContain('Tool arguments must be a JSON object.');
+        args('{bad');
+        await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
+        expect(document.getElementById('mcpResultOutput')?.textContent).toContain('JSON');
         expect(session.callTool).not.toHaveBeenCalled();
         expect(api.addAttachment).not.toHaveBeenCalled();
         expect(button('Attach result').disabled).toBe(true);
@@ -136,5 +140,165 @@ describe('McpConnections', () => {
         await vi.waitFor(() => expect(document.getElementById('mcpConnectionStatus')?.textContent).toContain('cancelled'));
         expect(document.querySelector('.mcp-tool-button')).toBeNull();
         expect(button('Attach result').disabled).toBe(true);
+    });
+
+    it('disables Connect during a tool call and restores it afterward', async () => {
+        let resolveCall!: () => void;
+        const result = { content: [{ type: 'text', text: 'done' }] };
+        const session = {
+            listTools: vi.fn(async () => [{ name: 'slow_tool', description: 'Slow' }]),
+            callTool: vi.fn(() => new Promise<typeof result>((resolve) => { resolveCall = () => resolve(result); })),
+            disconnect: vi.fn(async () => undefined),
+        };
+        const { api } = ui();
+        act(() => { render(<McpConnections ui={api} connectRemote={vi.fn(async () => session)} />, host); });
+        input('MCP server URL', 'http://slow.invalid/mcp');
+        await act(async () => { button('Connect').click(); await Promise.resolve(); });
+        await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
+        expect(button('Connect').disabled).toBe(true);
+        await act(async () => { resolveCall(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('mcpResultOutput')?.textContent).toContain('done'));
+        expect(button('Connect').disabled).toBe(false);
+    });
+
+    it('reports attachment refusal instead of claiming success', async () => {
+        const result = { content: [{ type: 'text', text: 'x'.repeat(1_000_000) }] };
+        const session = {
+            listTools: vi.fn(async () => [{ name: 'large_tool', description: 'Large' }]),
+            callTool: vi.fn(async () => result),
+            disconnect: vi.fn(async () => undefined),
+        };
+        const { api, attachments } = ui();
+        attachments.push({ name: 'existing.txt', content: 'retained', kind: 'text', source: 'file', size: 3_500_000 });
+        api.addAttachment = vi.fn();
+        act(() => { render(<McpConnections ui={api} connectRemote={vi.fn(async () => session)} />, host); });
+        input('MCP server URL', 'http://large.invalid/mcp');
+        await act(async () => { button('Connect').click(); await Promise.resolve(); });
+        await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('mcpResultOutput')?.textContent).toContain('xxx'));
+        await act(async () => { button('Attach result').click(); await Promise.resolve(); });
+        expect(api.toast).toHaveBeenCalledWith(expect.stringContaining('could not be attached'), 'error');
+        expect(button('Attach result').textContent).toBe('Attach result');
+        expect(attachments.some((entry) => entry.name === 'mcp-large_tool.json')).toBe(false);
+    });
+
+    it('preserves the previous session when its cleanup fails and releases the candidate', async () => {
+        const first = {
+            listTools: vi.fn(async () => [{ name: 'first', description: 'First' }]),
+            callTool: vi.fn(),
+            disconnect: vi.fn(async () => { throw new Error('cleanup failed'); }),
+        };
+        const second = { listTools: vi.fn(async () => [{ name: 'second', description: 'Second' }]), callTool: vi.fn(), disconnect: vi.fn(async () => undefined) };
+        const connectRemote = vi.fn()
+            .mockImplementationOnce(async () => first)
+            .mockImplementationOnce(async () => second);
+        const { api } = ui();
+        act(() => { render(<McpConnections ui={api} connectRemote={connectRemote} />, host); });
+        input('MCP server URL', 'http://first.invalid/mcp');
+        await act(async () => { button('Connect').click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.querySelector('.mcp-tool-button')).not.toBeNull());
+        input('MCP server URL', 'http://second.invalid/mcp');
+        await act(async () => { button('Connect').click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('mcpConnectionStatus')?.textContent).toContain('cleanup failed'));
+        expect(document.querySelector('.mcp-tool-button')?.textContent).toContain('first');
+        expect(second.disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('uses the actual remote factory through loopback HTTP JSON-RPC', async () => {
+        const result = { content: [{ type: 'text', text: 'remote result' }] };
+        const methods: string[] = [];
+        const { createServer } = await vi.importActual<{
+            createServer: (
+                handler: (
+                    req: AsyncIterable<{ toString(): string }>,
+                    res: {
+                        setHeader(name: string, value: string): void;
+                        writeHead(status: number): void;
+                        end(body?: string): void;
+                    },
+                ) => void) => {
+                    listen(port: number, hostname: string): void;
+                    once(event: 'listening', listener: () => void): void;
+                    address(): { port: number } | string | null;
+                    closeAllConnections(): void;
+                    close(callback: () => void): void;
+                };
+        }>('node:http');
+        const server = createServer((req, res) => {
+            void (async () => {
+                let raw = '';
+                for await (const chunk of req) raw += chunk;
+                const message = JSON.parse(raw || '{}') as { method: string };
+                methods.push(message.method);
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Mcp-Session-Id', 'session-1');
+                if (message.method === 'notifications/initialized') {
+                    res.writeHead(202);
+                    res.end();
+                    return;
+                }
+                const payload = message.method === 'initialize' ? { result: {} }
+                    : message.method === 'tools/list' ? { result: { tools: [{ name: 'remote_tool', description: 'Remote' }] } }
+                    : message.method === 'tools/call' ? { result } : { error: { message: 'unexpected method' } };
+                res.end(JSON.stringify(payload));
+            })().catch((error) => {
+                res.writeHead(500);
+                res.end(String(error));
+            });
+        });
+        server.listen(0, '127.0.0.1');
+        await new Promise<void>((resolve) => server.once('listening', resolve));
+        const address = server.address();
+        if (!address || typeof address === 'string') throw new Error('Missing fixture address');
+        const { api } = ui();
+        try {
+            act(() => { render(<McpConnections ui={api} />, host); });
+            input('MCP server URL', `http://127.0.0.1:${address.port}/mcp`);
+            await act(async () => { button('Connect').click(); await Promise.resolve(); });
+            await vi.waitFor(() => expect(document.querySelector('.mcp-tool-button')).not.toBeNull());
+            await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
+            await vi.waitFor(() => expect(document.getElementById('mcpResultOutput')?.textContent).toContain('remote result'));
+            await act(async () => { button('Attach result').click(); await Promise.resolve(); });
+            expect(methods).toEqual(['initialize', 'notifications/initialized', 'tools/list', 'tools/call']);
+            expect(api.addAttachment).toHaveBeenCalledWith({ name: 'mcp-remote_tool.json', kind: 'text', content: JSON.stringify(result, null, 2), source: 'mcp' });
+        } finally {
+            server.closeAllConnections();
+            await new Promise<void>((resolve) => server.close(() => resolve()));
+        }
+    });
+
+    it('sanitizes hostile tool names before attaching', async () => {
+        const result = { content: [{ type: 'text', text: 'safe' }] };
+        const session = {
+            listTools: vi.fn(async () => [{ name: '../../etc/passwd', description: 'Hostile' }]),
+            callTool: vi.fn(async () => result),
+            disconnect: vi.fn(async () => undefined),
+        };
+        const { api } = ui();
+        act(() => { render(<McpConnections ui={api} connectRemote={vi.fn(async () => session)} />, host); });
+        input('MCP server URL', 'http://names.invalid/mcp');
+        await act(async () => { button('Connect').click(); await Promise.resolve(); });
+        await act(async () => { (document.querySelector('.mcp-tool-button') as HTMLButtonElement).click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('mcpResultOutput')?.textContent).toContain('safe'));
+        await act(async () => { button('Attach result').click(); await Promise.resolve(); });
+        expect(api.addAttachment).toHaveBeenCalledWith({ name: 'mcp-etc-passwd.json', kind: 'text', content: JSON.stringify(result, null, 2), source: 'mcp' });
+    });
+
+    it('does not expose credentials through storage, cookies, or console on unmount', () => {
+        const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
+        const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { api } = ui();
+        act(() => { render(<McpConnections ui={api} connectRemote={vi.fn()} />, host); });
+        input('MCP credential', 'secret-sentinel');
+        act(() => { render(null, host); });
+        expect(window.localStorage.getItem('uor.studio.mcp.credential')).toBeNull();
+        expect(window.sessionStorage.getItem('uor.studio.mcp.credential')).toBeNull();
+        expect(document.cookie).not.toContain('secret-sentinel');
+        for (const spy of [consoleLog, consoleInfo, consoleWarn, consoleError]) {
+            expect(spy.mock.calls.some((call) => call.some((value) => String(value).includes('secret-sentinel')))).toBe(false);
+        }
     });
 });
