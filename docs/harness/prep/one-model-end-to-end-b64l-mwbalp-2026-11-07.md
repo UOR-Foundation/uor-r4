@@ -45,7 +45,7 @@ At (b64L)'s recipe and pin, with only TRAIN changed from D3 to `mw-balp/train`, 
 
 The trainer reads document windows, not a flat stream. At the pin, `build_document_windows` (`hamilton_sheet.rs:1888-1896`) cuts each document into chunks of at most 192 targets, never crosses a document start, and pads a short window with BOS.
 - **The window count:** at least the 60,000 documents, and at most 60,000 + 7,512,797 / 192 ≈ 99,130. The run's own count is recorded from the trainer's log.
-- **Passes:** 16,384 steps × 64 = 1,048,576 windows seen, so about **10.6 to 17.5 passes** over `mw-balp/train`'s windows. D3 at the same steps was about 7.2.
+- **Passes:** 16,384 steps × 64 = 1,048,576 windows seen, so about **10.6 to 17.5 passes** over `mw-balp/train`'s windows. D3 at the same steps was about 7.2 (claude-307's sheet, `one-model-end-to-end-d3-tokens-2026-11-07.md`).
 - **Scored targets per step are far fewer than on D3.** The mean document is about 125 tokens, so most windows are one short, padded document, and about a third of each document's targets are scored.
 - **A stock-line reply is a likely outcome** at this many passes. It is not counted against the stopping bar, since stopping is what this lever reads. It is recorded as its own reading (collapse, below), and it decides the next unit through the outcome map.
 
@@ -102,7 +102,7 @@ A seed that is NOT_RUN reruns once, sealing to the new root `runs-2/s{1,2}/` (L-
 
 Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 - **I-0:** `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` passes on each pod at the pin, with at least one test run and none failed, and claude-300's three micro-batch tests passing by name.
-- **I-p, the pin:** the job refuses any SHA argument but the pin (exit 2), and a source that is not a clean checkout at the pin (exit 3). The laptop gate test mutates both exits.
+- **I-p, the pin:** the job refuses any SHA argument but the pin (exit 2), and a source that is not a clean checkout at the pin (exit 3, `end 3` after `fetch_src` at `job-312.sh:230`). The laptop gate test checks both: the pin refusal by running the job, with a mutation (`pin-other`), and `fetch_src` as a function on a clean, another-commit and a dirty checkout, with no mutation.
 - **I-3:**
   - the two `mw-balp/train` files match the shas above;
   - the panel folders and the DEV files match claude-306's pins;
@@ -112,7 +112,8 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB.
 - **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64. W = used + 1.05 × r × 16,384 + 300 s, written to `it.txt`. claude-306's own projections were 12,967 / 13,054 s, so W is about 13,000 s. At claude-301's slowest rate, 0.698 s a step, W is about 14,100 s.
   - **The watcher:** MAXSEC 14,400 s (4 h) from the pod's start, and a budget of PRICE × 4 h.
-  - If W exceeds MAXSEC less the pod's setup time (`up-sS.epoch`), both are extended under the charter's extend rule, and the REPORT says so. On a slow card that is plausible, and the spend can then pass $5.60, still near the ORDER's "about $6".
+  - **Neither limit stops anything** (D67 review). Past MAXSEC or BUDGET the watcher logs one NOTICE and keeps watching. It keeps renewing the lease every 25 minutes, so `seal=0` still takes the pod down. The REPORT records any NOTICE.
+  - If W exceeds MAXSEC less the pod's setup time (`up-sS.epoch`), a NOTICE is likely. On a slow card that is plausible, and the spend can then pass $5.60, still near the ORDER's "about $6".
 - **I-5:** the no-memory scoring's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes, as in claude-306's job.
 - **I-4:** each graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
 - **I-c, the scorer controls, on the laptop before any (b64L-mw) reading,** with `served-reply-panel` at `be3d4cb0…`. Each control's `rows` must equal the reference output's, field by field (the rows carry no timing):
@@ -131,7 +132,7 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
    2. Its gate tests and mutations.
    3. `bash -n` on every script.
    4. I-c.
-3. `uor-pod status`, recorded. The cross-lab caps must hold with these two pods included: at most 4 pods and $8/h. Then two Vast pods with one RTX 5090 each, one per seed, at most $0.70/h each, leased and watched, brought up with `--count 1 --ref` at the pin. Vast machines 48282 and 48276 are avoided.
+3. `uor-pod status`, recorded. The cross-lab caps must hold with these two pods included: at most 4 pods and $8/h. Then two Vast pods with one RTX 5090 each, one per seed, at most $0.70/h each, leased and watched, brought up with `--count 1 --ref` at the pin. Vast machines 48282 and 48276 are avoided, as in claude-307's sheet.
 4. On each pod, in order:
    1. I-p, I-0, the build, the inputs and I-3.
    2. The smoke with I-m and I-f, then I-t.
@@ -154,7 +155,7 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 
 - **claude-306's measured (b64L) runs,** on RTX 5090s at $0.563/h: 10,409 / 10,489 s of training (its REPORT's table), and $1.81 billed a pod for the whole pod. The step time does not depend on TRAIN: each step reads 64 windows padded to 192.
 - **Here:** about $1.81 a pod at $0.563/h and $2.26 at the ceiling of $0.70/h; $3.6–4.5 for both.
-- **The cap:** 2 pods × 4 h × $0.70 = $5.60, inside the ORDER's "about $6". The charter's extend rule holds: a healthy run is never cancelled for a self-set budget.
+- **The budget notice, not a cap:** 2 pods × 4 h × $0.70 = $5.60, inside the ORDER's "about $6". Past it, the watcher logs a NOTICE and keeps watching. The charter's extend rule holds: a healthy run is never cancelled for a self-set budget. So a slow card can bill past $5.60, and the REPORT then says by how much.
 
 ## Stop rule
 
@@ -175,7 +176,7 @@ Registered before any pod goes up. They are claude-306's, with TRAIN swapped:
 6. **The seal path** is `results/claude/one-model-end-to-end-b64l-mwbalp-2026-11-07/runs/s{1,2}/`, and `runs-2/` for a rerun.
 7. **D67 review** (a fresh pre-run review of the scripts, 7 Nov: GO WITH CHANGES, no blockers). Applied:
    - passing MAXSEC or BUDGET logs one NOTICE and the watcher keeps watching, so `seal=0` still takes a pod down after 4 h. Before, the watcher exited and a healthy run that finished late would bill idle (L-004). A hung run is still caught by the stall stop;
-   - the watcher refuses a PRICE above $0.70/h, the sheet's ceiling, in place of claude-306's $1.15/h;
+   - the watcher refuses a PRICE above $0.70/h, the sheet's ceiling, in place of claude-306's $1.15/h (`watch-306.sh:26`);
    - `trained_ok` requires the checkpoint, `models/step-000064` for the smoke and `models/step-016384` for the run, with a gate test and a mutation.
 
 ## Pre-run review

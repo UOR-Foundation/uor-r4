@@ -9,7 +9,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - **Its collapse bar could not tell the corpus from the recipe.** It counted the most common reply over all 256 rows. (b64L-D3) seed 1 already repeats one looped, capped reply 76 times (claude-309), so a D3-like model would have read as collapsed.
   - **Its scorer control could pass a broken scorer.** It replayed a reading of 0 EOS stops, which a scorer that never sees EOS would also produce.
   - **Its repetition figure was wrong.** It counted positions and gave 26.8 passes. The trainer reads padded document windows, one or more per document, which gives about 10.6 to 17.5 passes.
-- **The first draft of the scripts would have billed idle.** A fresh D67 review found it (GO WITH CHANGES, no blockers). claude-306's watcher exits at its time or spend limit. After that, nothing takes the pod down when the run seals. Here those limits are 4 h, close to the run's own length (about 13,000 s projected), so a healthy run that ran late would have left a pod billing (L-004). Its price ceiling was also still claude-306's $1.15/h, not this sheet's $0.70/h.
+- **The first draft of the scripts would have billed idle.** A fresh D67 review found it (GO WITH CHANGES, no blockers). claude-306's watcher exits at its time or spend limit. After that, nothing takes the pod down when the run seals. Here those limits are 4 h, close to the run's own length (about 13,000 s projected), so a healthy run that ran late would have left a pod billing (L-004). Its price ceiling was also still claude-306's $1.15/h (`watch-306.sh:26`), not this sheet's $0.70/h.
 - **Not checked:** that the corpus's dialogue layout matches the panel's rendering. The sheet calls this an inference: claude-259's models trained on this corpus stop under the same rendering.
 
 ## What changed
@@ -22,7 +22,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
     - **collapse:** at least 64 identical replies among EOS-stopped rows.
   - **The outcome map** has nine rows, each with one next unit.
   - **I-c,** two scorer controls, and **I-x,** the export check.
-  - **The cost:** $3.6–4.5, with a cap of $5.60.
+  - **The cost:** $3.6–4.5, with a budget notice at $5.60. It is not a cap: a healthy run is never cancelled.
   - **FIT round 1** and the **D67 review**, both applied, and the **pre-run review: GO.**
 - **Run scripts,** in `local/claude/claude-312/` (not committed, as for claude-301 and claude-306): `job-312.sh`, `chain-312.sh`, `seal-312.sh`, `watch-312.sh` and `gt/`. They are claude-306's scripts with these changes:
   - TRAIN swapped, and its I-3 block reduced to the two sha checks (the store folder has no `SHA256SUMS` or manifest);
