@@ -38,6 +38,16 @@ spend.
 - **A live hung job could renew forever, and cleanup could not delete it while
   its GPU lock remained held.** There was no file-progress watchdog or active
   process-group termination.
+- **A failed panel or copy could be reported as a completed checkpoint.** The
+  training function ran in a negated conditional, which suppresses Bash
+  `errexit`; panel failures were hidden by the function's final `printf`, and
+  the checkpoint could get its scored marker anyway.
+- **The seal could race its own asynchronous `tee`.** The log writer was not
+  joined before the hash manifest was made.
+- **The seal budget was false.** It retained duplicate checkpoints and raw
+  snapshots, while the packet promised an under-100-MiB seal.
+- **An interrupt could archive a failed run while returning success.** The
+  signal trap preserved a zero status when failure cleanup itself succeeded.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -58,6 +68,10 @@ spend.
 - The trainer now writes `.checkpoint-ready` only after the model, sidecars and
   served restore complete. The job waits for that marker before freezing and
   refuses an unmarked checkpoint after trainer exit.
+- `train_and_score` is no longer called in a negated conditional. It records a
+  failed trainer in `TRAIN_FAILURE`; every panel, export, grade and reading is
+  explicitly checked, and a checkpoint is marked scored only after all of them
+  succeed.
 - `gate.sh` pins both sides of the completion protocol and its mutation suite
   rejects a return to directory-only checkpoint detection.
 - The base control now runs teacher-forced ranks under both renderings and
@@ -93,9 +107,16 @@ spend.
 - The base archive is extracted only for the checkpoint and run config; the
   archive and temporary download root are removed before training. The panel
   build uses `/workspace/uor-r4/build`, outside the sealed run.
+- The sealed job log is written directly, not through asynchronous `tee`.
+  Duplicate checkpoint copies and raw snapshot files are outside or removed,
+  and the job fails before upload if the completed seal exceeds 100 MiB.
 - The first trainer attempt is micro-batch 16. Only a classified OOM permits
-  one fresh micro-batch-8 attempt; both attempts keep separate checkpoint,
-  artifact, grade, panel and reading roots.
+  one fresh micro-batch-8 attempt; both attempts keep separate trainer,
+  artifact, grade, panel, scored-marker and reading roots.
+- The launcher builds the Vast provider adapter from the reviewed checkout
+  before calling `uor-pod status` or `uor-pod up`.
+- Failure cleanup forces a nonzero status for every non-sealed run, including
+  SIGINT and SIGTERM paths, after attempting the archive and teardown.
 - The outcome map's partial-movement row now covers every guard-passing case
   with any EOS/generation/content movement that does not meet rows 3–5,
   removing the prior logical gap before the catch-all.
@@ -116,14 +137,18 @@ ranks were 5/7/13 with top-8 198; one-user ranks were 18/138/873 with top-8 0.
 
 The repair leaves the planned workload unchanged: one RTX 5090, 36–39 minutes
 normally, with the registered one-retry projection at about $1.50. The launch
-now seals under 100 MiB and keeps the panel build outside that seal.
+now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
 
 ## Checks run at the head
 
-- `gate.sh`: 121 checks passed.
-- `test-mutants.sh`: 41 of 41 semantic mutations caught.
-- Full `uor-r4-float-train` library suite: 307 passed, including
-  `checkpoint_ready_marker_records_completion`.
+- `gate.sh`: 148 checks passed.
+- `test-mutants.sh`: 49 of 49 semantic mutations caught.
+- `CARGO_TARGET_DIR=target cargo test --offline --locked -p uor-r4-float-train
+  --lib`: 307 passed, including `checkpoint_ready_marker_records_completion`.
+- The bare suite invocation omitted `CARGO_TARGET_DIR`; the existing save/load
+  test requires an owned artifact directory and failed that precondition. The
+  environment-qualified run above passed. The pod job exports the same target
+  variable before building and testing.
 - `bash -n` and ShellCheck on `job.sh` and `run-s1.sh`: passed.
 - `git diff --check`: passed.
 

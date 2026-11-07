@@ -236,7 +236,13 @@ OASST2-only continuation on the same base and steps.
 - `corpus-panel-overlap` reproduces the four zero overlap counts and output SHA
   above.
 - Each checkpoint reloads and exports; `cpu-checkpoint-grade` exports and grades
-  the same bytes.
+  the same bytes. The required raw snapshot is transient and stays outside the
+  seal; the retained artifact is the graded artifact.
+- A checkpoint is marked scored only after its export, all three panels and the
+  numeric reading extraction succeed. Any timeout, probe, panel or copy failure
+  stops the seed and leaves the pod for its failure archive.
+- The job log is written directly; sealing waits for no asynchronous log writer.
+  The completed seal must be at most 100 MiB or the job fails before upload.
 - The panel inputs, labels, plan, manifest and tokenizer equal full hashes
   `1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a`,
   `3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be`,
@@ -246,7 +252,7 @@ OASST2-only continuation on the same base and steps.
 - Seed-1 base free-generation and rank controls reproduce the recorded counts.
 - Every output root is new and every seal is read back.
 
-The executable review unit is deepseek-23:
+The executable review units are deepseek-23 and deepseek-25:
 
 - `docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh` is the pod-side
   input, training, checkpoint, stop, seal and readback chain;
@@ -261,9 +267,10 @@ The executable review unit is deepseek-23:
    inside the four-pod/$8h caps. Never touch Claude's pods.
 3. Build the exact merged pin, fetch and hash every input, run the training-unit
    CPU tests, and reproduce the base rank/free/continuation controls.
-4. Run the 1,024-step training job in the foreground. At each 256-step
-   checkpoint, export and score before proceeding. At step 512, apply row 2 of
-   the outcome map and stop the process if it matches.
+4. Submit the 1,024-step training job through the detached remote runner and
+   wait on its terminal footer. At each 256-step checkpoint, export and score
+   before proceeding. At step 512, apply row 2 of the outcome map and stop the
+   process if it matches.
 5. At completion or stop, seal checkpoints, exports, panel outputs, grades and
    logs under
    `results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1-<run-id>/`,
@@ -282,13 +289,15 @@ Resource projection:
 - one RTX 5090 32 GiB; base micro-batch-16 peak about 27 GiB;
 - 1,024 steps at 0.63-0.70 s/step: about 11-12 minutes;
 - setup/build/input verification: 10 minutes; base controls: 2 minutes;
-- five exports/grades and 15 panel passes: 8-10 minutes; seal/readback: 5 min;
+- five exports/grades and 16 panel passes: 8-10 minutes; seal/readback: 5 min;
 - planned wall: 36-39 minutes. One full retry projection: 78 minutes;
 - spend at $1.15/h: $0.69-0.75 planned, $1.50 with one retry;
-- lease/watcher limit: 1.5 h, with healthy-run extension recorded if needed;
+- two-hour lease renewed every 25 minutes; healthy runs are not cancelled by a
+  self-set timer;
 - local CPU: at most 8 Rayon threads for instruments; no local model training;
 - local RAM: 16 GiB envelope; panel/grader run one at a time;
-- sealed input, checkpoint, export, grade and panel evidence: under 100 MiB;
+- sealed input, checkpoint, export, grade and panel evidence: at most 100 MiB;
+  trainer checkpoints are scored in place and raw snapshots are transient;
   pod panel build outside the seal: under 20 GiB; local build/scratch: under
   10 GiB;
 - current free space measured at review: 163,126,048 KiB, above the project's

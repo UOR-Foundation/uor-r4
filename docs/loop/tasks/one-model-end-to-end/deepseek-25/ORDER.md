@@ -22,7 +22,9 @@ store readback.
 
 - `docs/labs/one-model-end-to-end/reply-sft-2026-11-07/**`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-25/**`
+- `docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md`
 - `docs/harness/claims.json`
+- `crates/uor-r4-float-train/src/in_space_long.rs`
 
 ## Done when
 

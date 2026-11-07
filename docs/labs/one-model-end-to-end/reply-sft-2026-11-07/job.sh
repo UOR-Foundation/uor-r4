@@ -32,7 +32,10 @@ STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07
 STORE=/root/uor-store
 REPO=${UOR_REPO:-/root/uor-sft-src-$PIN}
 TARGET=${CARGO_TARGET_DIR:-/workspace/uor-r4/target-deepseek-sft}
-PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID/panel-target}
+BUILD_ROOT=${UOR_SFT_BUILD_ROOT:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID}
+PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-$BUILD_ROOT/panel-target}
+SNAPSHOT_ROOT=${UOR_SFT_SNAPSHOT_ROOT:-$BUILD_ROOT/snapshots}
+SEAL_LIMIT_BYTES=104857600
 export RAYON_NUM_THREADS=${UOR_SFT_CPU_THREADS:-8}
 export CARGO_TARGET_DIR=$TARGET
 
@@ -78,17 +81,19 @@ if printf '%s\n' "$store_listing" |
   die "refusing a nonempty store output: $OUT_STORE"
 fi
 
-install -d "$RUN/inputs" "$RUN/control" "$RUN/checkpoints" "$RUN/artifacts" \
-  "$RUN/grades" "$RUN/panel" "$RUN/download" "$RUN/logs"
-exec > >(tee -a "$RUN/job.log") 2>&1
+install -d "$RUN/inputs" "$RUN/control" "$RUN/artifacts" \
+  "$RUN/grades" "$RUN/panel" "$RUN/scores" "$RUN/download" "$RUN/logs"
+exec >> "$RUN/job.log" 2>&1
 
 TRAIN_PID=
 STOP_REASON=
 TRAIN_RUN=
 ATTEMPT=
+TRAIN_FAILURE=0
 on_exit() {
   local rc=$?
-  # Detach the seal from RUN/job.log, whose bytes are about to be hashed.
+  # Detach the seal from RUN/job.log, whose bytes are about to be hashed. The job log
+  # is written directly rather than through an asynchronous process substitution.
   exec >> "$RUN.seal.log" 2>&1
   if [ -n "$TRAIN_PID" ] && kill -0 "$TRAIN_PID" 2>/dev/null; then
     kill -TERM "$TRAIN_PID" 2>/dev/null || true
@@ -97,6 +102,14 @@ on_exit() {
   fi
   printf '%s\n' "$rc" > "$RUN/EXIT"
   printf '%s\n' "${STOP_REASON:-natural-or-failure}" > "$RUN/STOP_REASON"
+  local seal_bytes actual_seal_bytes
+  if ! seal_bytes=$(find "$RUN" -type f ! -name 'SHA256SUMS*' -printf '%s\n' |
+    awk '{ total += $1 } END { print total + 0 }'); then
+    echo "could not measure the seal" >&2
+    rc=1
+    seal_bytes=0
+  fi
+  printf '%s\n' "$seal_bytes" > "$RUN/BYTES"
   (
     cd "$RUN"
     find . -type f ! -name 'SHA256SUMS*' -print0 |
@@ -104,6 +117,16 @@ on_exit() {
     mv SHA256SUMS.next SHA256SUMS
     sha256sum -c SHA256SUMS
   ) || rc=1
+  if ! actual_seal_bytes=$(find "$RUN" -type f -printf '%s\n' |
+    awk '{ total += $1 } END { print total + 0 }'); then
+    echo "could not measure the completed seal" >&2
+    rc=1
+    actual_seal_bytes=$SEAL_LIMIT_BYTES
+  fi
+  if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then
+    echo "seal is $actual_seal_bytes bytes, over the $SEAL_LIMIT_BYTES-byte limit" >&2
+    rc=1
+  fi
   READBACK_STATUS=failed
   if [ "$rc" -eq 0 ]; then
     READBACK_STATUS=not-attempted
@@ -256,21 +279,24 @@ sha256sum "$TRAIN_BIN" "$GRADE_BIN" "$EXPORT_BIN" "$PANEL_BIN" "$OVERLAP_BIN" \
   > "$RUN/binaries.sha256"
 
 grade_checkpoint() {
-  local step=$1 checkpoint=$2 grade_dir artifact_dir
+  local step=$1 checkpoint=$2 grade_dir artifact_dir snapshot
   grade_dir="$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step")"
   artifact_dir="$RUN/artifacts/$ATTEMPT/step-$(printf '%06d' "$step")"
+  snapshot="$SNAPSHOT_ROOT/$ATTEMPT/step-$(printf '%06d' "$step").snapshot"
   install -d "$artifact_dir"
+  install -d "$(dirname "$snapshot")"
   "$GRADE_BIN" \
     --checkpoint "$checkpoint" \
     --run-config "$TRAIN_RUN/config.json" \
-    --snapshot-out "$artifact_dir/model.snapshot" \
+    --snapshot-out "$snapshot" \
     --artifact-out "$artifact_dir/model.uorlut" \
     --tokens "$RUN/inputs/oasst2-heldout/tokens.u16" \
     --mask "$RUN/inputs/oasst2-heldout/response_mask.u8" \
     --manifest "$RUN/inputs/oasst2-heldout/manifest.json" \
     --max-evaluation 512 --max-replies 1 --reply-tokens 1 \
     --raw-gates --raw-transition \
-    --out "$grade_dir.json"
+    --out "$grade_dir.json" ||
+    die "checkpoint $step did not export and grade"
   jq -e '.evaluation.top1_correct >= 0' "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade has no top-1 count"
   jq -e '.evaluation.samples == 512 and
@@ -278,6 +304,7 @@ grade_checkpoint() {
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
     "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade did not use the registered 512-row sample"
+  rm -f "$snapshot" || die "could not remove transient snapshot for checkpoint $step"
 }
 
 run_panel() {
@@ -292,35 +319,42 @@ run_panel() {
     --plan "$RUN/inputs/m2-fresh256/plan.json" \
     --manifest "$RUN/inputs/m2-fresh256/manifest.json" \
     --rendering "$rendering" --teacher-forced "$teacher" \
-    --reply-tokens 64 --out "$out"
+    --reply-tokens 64 --out "$out" || return 1
   printf '%s\n' "$out"
 }
 
 score_checkpoint() {
   local step=$1 checkpoint=$2
   local marker artifact
-  marker="$RUN/checkpoints/$ATTEMPT/step-$(printf '%06d' "$step").scored"
+  marker="$RUN/scores/$ATTEMPT/step-$(printf '%06d' "$step").scored"
   [ ! -e "$marker" ] || return 0
   [ -d "$checkpoint" ] || die "checkpoint $step is missing"
-  install -d "$RUN/checkpoints/$ATTEMPT"
-  cp -a "$checkpoint" "$RUN/checkpoints/$ATTEMPT/step-$(printf '%06d' "$step")"
-  grade_checkpoint "$step" "$checkpoint"
+  install -d "$RUN/scores/$ATTEMPT"
+  grade_checkpoint "$step" "$checkpoint" ||
+    die "checkpoint $step export and grade failed"
   artifact="$RUN/artifacts/$ATTEMPT/step-$(printf '%06d' "$step")/model.uorlut"
-  run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null
-  run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/dev/null
-  run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null
-  touch "$marker"
+  run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null ||
+    die "checkpoint $step per-turn teacher panel failed"
+  run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/dev/null ||
+    die "checkpoint $step per-turn generation panel failed"
+  run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||
+    die "checkpoint $step one-user panel failed"
 
   local guard eos_top1 eos_p50
-  guard=$(jq -r '.evaluation.top1_correct' "$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step").json")
-  eos_top1=$(jq -r '.teacher_forced.totals.eos_top1' \
-    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json")
-  eos_p50=$(jq -r '.teacher_forced.totals.eos_rank_p50' \
-    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json")
+  guard=$(jq -er '.evaluation.top1_correct | numbers' \
+    "$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step").json") ||
+    die "checkpoint $step grade has no numeric top-1 reading"
+  eos_top1=$(jq -er '.teacher_forced.totals.eos_top1 | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
+    die "checkpoint $step teacher panel has no numeric EOS top-1 reading"
+  eos_p50=$(jq -er '.teacher_forced.totals.eos_rank_p50 | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
+    die "checkpoint $step teacher panel has no numeric EOS median reading"
   jq -n --argjson step "$step" --argjson guard "$guard" \
     --argjson eos_top1 "$eos_top1" --argjson eos_p50 "$eos_p50" \
     '{step:$step, guard_top1:$guard, eos_top1:$eos_top1, eos_rank_p50:$eos_p50}' \
-    >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl"
+    >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl" ||
+    die "could not record checkpoint $step readings"
   if [ "$guard" -lt 93 ]; then
     STOP_REASON="continuation-failure-step-$step"
     kill "$TRAIN_PID" 2>/dev/null || true
@@ -328,6 +362,7 @@ score_checkpoint() {
     STOP_REASON="no-ranking-movement-step-512"
     kill "$TRAIN_PID" 2>/dev/null || true
   fi
+  touch "$marker" || die "could not mark checkpoint $step scored"
 }
 
 log "panel-overlap control"
@@ -359,11 +394,14 @@ jq -e '.pass == true and
 
 log "base controls"
 BASE_ARTIFACT="$RUN/control/b64L-s1.uorlut"
+BASE_SNAPSHOT="$SNAPSHOT_ROOT/base/b64L-s1.snapshot"
+install -d "$(dirname "$BASE_SNAPSHOT")"
 "$EXPORT_BIN" --checkpoint "$B64L" --run-config "$B64L_CONFIG" \
-  --snapshot-out "$RUN/control/b64L-s1.snapshot" --out "$BASE_ARTIFACT" \
+  --snapshot-out "$BASE_SNAPSHOT" --out "$BASE_ARTIFACT" \
   --raw-gates --raw-transition
 check_file 9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9 \
   "$BASE_ARTIFACT"
+rm -f "$BASE_SNAPSHOT" || die "could not remove the transient base snapshot"
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 1 base-per-turn-teacher >/dev/null
 run_panel 0 "$BASE_ARTIFACT" per-turn/v1 0 base-per-turn-generated >/dev/null
 run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null
@@ -417,7 +455,7 @@ train_and_score() {
   ATTEMPT=$label
   TRAIN_RUN=$run_dir
   install -d "$RUN/grades/$label" "$RUN/artifacts/$label" \
-    "$RUN/checkpoints/$label" "$RUN/panel/$label"
+    "$RUN/scores/$label" "$RUN/panel/$label"
   "$TRAIN_BIN" \
     --data-root "$RUN/inputs/data" \
     --init-from "$B64L" \
@@ -454,7 +492,8 @@ train_and_score() {
   TRAIN_PID=
 
   if [ "$train_rc" -ne 0 ] && [ -z "$STOP_REASON" ]; then
-    return 1
+    TRAIN_FAILURE=$train_rc
+    return 0
   fi
   check_initialization "$run_dir"
   while [ "$next" -le 1024 ]; do
@@ -469,21 +508,32 @@ train_and_score() {
     next=$((next + 256))
   done
   [ -s "$run_dir/progress.jsonl" ] || die "training wrote no progress"
-  jq -e 'select(.step == 0 or (.train_loss_mean | numbers | isfinite))' \
+  jq -e -s '(map(select(.step == 0)) | length) == 1 and
+    ([.[] | select(.step > 0)] | length) > 0 and
+    all(.[];
+      if .step == 0 then true
+      else ((.train_loss_mean | type) == "number" and
+        (.train_loss_mean | isfinite))
+      end)' \
     "$run_dir/progress.jsonl" >/dev/null || die "progress has a non-finite loss"
   if [ -f "$RUN/checkpoint-readings-$label.jsonl" ]; then
-    cp "$RUN/checkpoint-readings-$label.jsonl" "$RUN/checkpoint-readings.jsonl"
+    cp "$RUN/checkpoint-readings-$label.jsonl" "$RUN/checkpoint-readings.jsonl" ||
+      die "could not publish checkpoint readings from $label"
   fi
   return 0
 }
 
 log "training"
-if ! train_and_score 16 attempt-1 "$RUN/run"; then
+TRAIN_FAILURE=0
+train_and_score 16 attempt-1 "$RUN/run"
+if [ "$TRAIN_FAILURE" -ne 0 ]; then
   if grep -Eiq 'out of memory|CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' \
     "$RUN/logs/train-attempt-1.log"; then
     log "micro-batch 16 ran out of memory; retrying once at micro-batch 8"
     STOP_REASON=
-    train_and_score 8 attempt-2 "$RUN/run-mb8" ||
+    TRAIN_FAILURE=0
+    train_and_score 8 attempt-2 "$RUN/run-mb8"
+    [ "$TRAIN_FAILURE" -eq 0 ] ||
       die "trainer failed after the registered micro-batch-8 retry"
   else
     die "trainer failed before a registered stop"

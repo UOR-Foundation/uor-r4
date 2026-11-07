@@ -124,9 +124,23 @@ mutate wrong-sample "$JOB" \
   b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4 \
   0000000000000000000000000000000000000000000000000000000000000000
 mutate missing-init-check "$JOB" '[ -f "$run/init.json" ] ||' 'true ||'
-mutate missing-oom-retry "$JOB" \
-  'if ! train_and_score 16 attempt-1 "$RUN/run"; then' \
+mutate missing-oom-retry "$JOB" 'TRAIN_FAILURE=$train_rc' 'TRAIN_FAILURE=0'
+mutate masked-panel-exit "$JOB" \
+  '--reply-tokens 64 --out "$out" || return 1' \
+  '--reply-tokens 64 --out "$out"'
+mutate ignored-panel-exit "$JOB" \
+  'run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null ||' \
+  'run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null'
+mutate async-seal-log "$JOB" \
+  'exec >> "$RUN/job.log" 2>&1' \
+  'exec > >(tee -a "$RUN/job.log") 2>&1'
+mutate duplicate-checkpoints "$JOB" \
+  'install -d "$RUN/scores/$ATTEMPT"' \
+  'install -d "$RUN/scores/$ATTEMPT"; cp -a "$checkpoint" "$RUN/scores/$ATTEMPT/copy"'
+mutate missing-seal-cap "$JOB" \
+  'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' \
   'if false; then'
+mutate weak-progress-finite "$JOB" 'all(.[];' 'any(.[];'
 mutate overlap-accepted "$JOB" \
   '.counts.exact_accepted_assistant_reply == 0 and' \
   '.counts.exact_accepted_assistant_reply >= 0 and'
@@ -160,6 +174,12 @@ mutate no-stall-stop "$LAUNCHER" \
   'if [ $((remote_now - latest_progress)) -ge "$STALL_SEC" ]; then' \
   'if false; then'
 mutate no-active-stop "$LAUNCHER" 'stop_remote_job || rc=1' 'true || rc=1'
+mutate signal-cleanup-success "$LAUNCHER" \
+  '[ "$STATUS" = SEALED ] || rc=1' \
+  '[ "$STATUS" = SEALED ] || true'
+mutate missing-provider-build "$LAUNCHER" \
+  'VAST_ADAPTER="$CONTROLLER/provider-target/debug/uor-r4-pod-provider"' \
+  'VAST_ADAPTER=/missing/uor-r4-pod-provider'
 mutate launcher-readback-true "$LAUNCHER" \
   '[ "$(cat "$READBACK_FILE")" = verified ]' 'true'
 mutate launcher-exit-true "$LAUNCHER" \

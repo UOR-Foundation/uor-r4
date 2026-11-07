@@ -126,6 +126,11 @@ termination_count=$(
 checks=$((checks + 1))
 require_line 'if [ "$guard" -lt 93 ]; then' "$JOB"
 require_line 'elif [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then' "$JOB"
+require_line 'run_panel "$step" "$artifact" per-turn/v1 1 per-turn-teacher >/dev/null ||' "$JOB"
+require_line 'run_panel "$step" "$artifact" per-turn/v1 0 per-turn-generated >/dev/null ||' "$JOB"
+require_line 'run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||' "$JOB"
+require_line 'touch "$marker" || die "could not mark checkpoint $step scored"' "$JOB"
+require_line '--reply-tokens 64 --out "$out" || return 1' "$JOB"
 require_line 'run_panel 0 "$BASE_ARTIFACT" one-user-turn/v1 1 base-one-user-teacher >/dev/null' "$JOB"
 require_line '.eos_rank_min == 5 and .eos_rank_p50 == 7 and .eos_rank_max == 13 and' "$JOB"
 require_line '.eos_rank_min == 18 and .eos_rank_p50 == 138 and .eos_rank_max == 873 and' "$JOB"
@@ -155,10 +160,19 @@ grep -Fq '.counts.assistant_replies_with_panel_6gram == 0' "$JOB" ||
 checks=$((checks + 1))
 require_line 'die "corpus-panel overlap audit differs from the registered reading"' "$JOB"
 require_line 'die "checkpoint $next is missing without a registered stop"' "$JOB"
-require_line 'if ! train_and_score 16 attempt-1 "$RUN/run"; then' "$JOB"
-require_line 'train_and_score 8 attempt-2 "$RUN/run-mb8" ||' "$JOB"
+require_line 'train_and_score 16 attempt-1 "$RUN/run"' "$JOB"
+require_line 'if [ "$TRAIN_FAILURE" -ne 0 ]; then' "$JOB"
+require_line 'TRAIN_FAILURE=$train_rc' "$JOB"
+require_line 'train_and_score 8 attempt-2 "$RUN/run-mb8"' "$JOB"
+require_line '[ "$TRAIN_FAILURE" -eq 0 ] ||' "$JOB"
+require_line "jq -e -s '(map(select(.step == 0)) | length) == 1 and" "$JOB"
+require_line 'all(.[];' "$JOB"
 grep -Fq 'CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' "$JOB" ||
   fail "$JOB does not classify the registered OOM retry"
+checks=$((checks + 1))
+if grep -Fq 'if ! train_and_score' "$JOB"; then
+  fail "$JOB runs train_and_score in a negated context"
+fi
 checks=$((checks + 1))
 require_line '--init-from "$B64L" \' "$JOB"
 require_line '--train-split "$RUN/inputs/mix" \' "$JOB"
@@ -166,13 +180,24 @@ require_line '--train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac7
 require_line '--train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \' "$JOB"
 require_line '--batch 64 --micro-batch "$micro" --steps 1024 \' "$JOB"
 require_line '--eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \' "$JOB"
-require_line 'PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID/panel-target}' "$JOB"
+require_line 'BUILD_ROOT=${UOR_SFT_BUILD_ROOT:-/workspace/uor-r4/build/deepseek-sft-$RUN_ID}' "$JOB"
+require_line 'PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-$BUILD_ROOT/panel-target}' "$JOB"
+require_line 'SNAPSHOT_ROOT=${UOR_SFT_SNAPSHOT_ROOT:-$BUILD_ROOT/snapshots}' "$JOB"
+require_line 'SEAL_LIMIT_BYTES=104857600' "$JOB"
+require_line 'exec >> "$RUN/job.log" 2>&1' "$JOB"
 require_line 'CARGO_TARGET_DIR="$PANEL_TARGET" \' "$JOB"
 require_line 'PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"' "$JOB"
 require_line 'oh/run/b64L-s1/models/step-016384 oh/run/b64L-s1/config.json' "$JOB"
 require_line 'rm -rf "$RUN/download"' "$JOB"
 require_line 'rm -f "$RUN/inputs/d3-accum-s1.tar.gz"' "$JOB"
+require_line '--snapshot-out "$snapshot" \' "$JOB"
+require_line '--snapshot-out "$BASE_SNAPSHOT" --out "$BASE_ARTIFACT" \' "$JOB"
+require_line 'rm -f "$BASE_SNAPSHOT" || die "could not remove the transient base snapshot"' "$JOB"
 require_line 'READBACK_STATUS=verified' "$JOB"
+grep -Fq "printf '%s\\n' \"\$seal_bytes\" > \"\$RUN/BYTES\"" "$JOB" ||
+  fail "$JOB does not record the seal size"
+checks=$((checks + 1))
+require_line 'if [ "$actual_seal_bytes" -gt "$SEAL_LIMIT_BYTES" ]; then' "$JOB"
 
 require_line 'created=$("$POD_TOOL" up --lab deepseek --session "$SESSION" --gpu 5090 \' "$LAUNCHER"
 require_line '[ "$(git rev-parse HEAD)" = "$PIN" ] ||' "$LAUNCHER"
@@ -184,6 +209,10 @@ require_line 'export UOR_POD_MAX_PODS=4' "$LAUNCHER"
 require_line 'export UOR_POD_MAX_RATE=8.00' "$LAUNCHER"
 require_line 'export UOR_POD_PROVIDER=vast' "$LAUNCHER"
 require_line 'export UOR_POD_PROVIDERS=vast' "$LAUNCHER"
+require_line 'VAST_ADAPTER="$CONTROLLER/provider-target/debug/uor-r4-pod-provider"' "$LAUNCHER"
+require_line 'cargo build --offline --locked -p uor-r4-pod-provider' "$LAUNCHER"
+require_line 'export UOR_POD_VAST_BIN="$VAST_ADAPTER"' "$LAUNCHER"
+require_line 'sha256sum "$VAST_ADAPTER" > "$CONTROLLER/provider.sha256"' "$LAUNCHER"
 require_line 'if ! listings=$("$STORE" ls "$STORE_TOPIC"); then' "$LAUNCHER"
 grep -Fq 'cannot verify the store topic $STORE_TOPIC; no pod will be rented' "$LAUNCHER" ||
   fail "$LAUNCHER does not fail closed when the store preflight cannot be read"
@@ -221,5 +250,15 @@ require_line '[ "$(cat "$READBACK_FILE")" = verified ] || {' "$LAUNCHER"
 require_line '[ "$(cat "$CONTROLLER/readback/$OUT_STORE/EXIT")" = 0 ] || {' "$LAUNCHER"
 require_line '--confirm-archived || rc=1' "$LAUNCHER"
 require_line 'STATUS=SEALED' "$LAUNCHER"
+require_line '[ "$STATUS" = SEALED ] || rc=1' "$LAUNCHER"
+if grep -Fq 'tee -a "$RUN/job.log"' "$JOB"; then
+  fail "$JOB still uses an asynchronous tee for the sealed job log"
+fi
+checks=$((checks + 1))
+if grep -Fq 'cp -a "$checkpoint"' "$JOB" ||
+  grep -Fq '"$RUN/checkpoints"' "$JOB"; then
+  fail "$JOB duplicates immutable trainer checkpoints inside the seal"
+fi
+checks=$((checks + 1))
 
 echo "$checks checks passed"

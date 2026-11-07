@@ -96,11 +96,31 @@ if printf '%s\n' "$listings" |
   exit 1
 fi
 
-"$POD_TOOL" status | tee "$CONTROLLER/status-before.txt"
+VAST_ADAPTER="$CONTROLLER/provider-target/debug/uor-r4-pod-provider"
+if [ ! -x "$VAST_ADAPTER" ]; then
+  command -v cargo >/dev/null ||
+    { echo "cargo is required to build the Vast adapter" >&2; exit 2; }
+  if ! (
+    cd "$ROOT"
+    CARGO_TARGET_DIR="$CONTROLLER/provider-target" \
+      cargo build --offline --locked -p uor-r4-pod-provider
+  ) > "$CONTROLLER/provider-build.log" 2>&1; then
+    cat "$CONTROLLER/provider-build.log" >&2
+    echo "could not build the Vast adapter for this checkout" >&2
+    exit 2
+  fi
+fi
+[ -x "$VAST_ADAPTER" ] ||
+  { echo "Vast adapter was not built at $VAST_ADAPTER" >&2; exit 2; }
+export UOR_POD_VAST_BIN="$VAST_ADAPTER"
+printf 'export UOR_POD_VAST_BIN=%q\n' "$VAST_ADAPTER" >> "$CONTROLLER/controller.env"
+sha256sum "$VAST_ADAPTER" > "$CONTROLLER/provider.sha256"
+
 export UOR_POD_MAX_PODS=4
 export UOR_POD_MAX_RATE=8.00
 export UOR_POD_PROVIDER=vast
 export UOR_POD_PROVIDERS=vast
+"$POD_TOOL" status | tee "$CONTROLLER/status-before.txt"
 
 POD=
 RESOLVED=0
@@ -145,6 +165,7 @@ cleanup() {
       "$POD_TOOL" down "$POD" --lab deepseek --session "$SESSION" --to-store || rc=1
     fi
   fi
+  [ "$STATUS" = SEALED ] || rc=1
   exit "$rc"
 }
 trap cleanup EXIT INT TERM
@@ -239,7 +260,8 @@ while :; do
   sleep 20
 done
 
-"$POD_TOOL" ssh "$POD" "tail -n 200 '$JOB_LOG'" |
+"$POD_TOOL" ssh "$POD" \
+  "tail -n 200 '$RUN/job.log' 2>/dev/null || tail -n 200 '$JOB_LOG'" |
   tee "$CONTROLLER/job-tail.log"
 [ "$job_exit" -eq 0 ] || {
   echo "remote SFT job exited $job_exit; the pod is retained for its failure seal" >&2
