@@ -68,13 +68,18 @@ No kernel source, model objective, data, checkpoint or serving artifact changes.
 4. Every `models/step-*` directory at steps 0, 64, 128, 192 and 256 is byte-identical across the
    four runs of a shape, and full `progress.jsonl` records are equal after removing only the two
    timing fields. Any difference fails the correctness gate before a speed result is read.
-5. Launch counts are measured with `nsys` for a no-evaluation 32-step smoke at each shape if the
-   pod has `nsys`. If absent, the two smoke runs still report their fused and chain call counts
-   separately from the 256-step runs and the source-derived tensor-op count is labelled a
-   lower-bound estimate, never an observed launch count.
-6. If both shapes improve beyond noise as defined in the sheet, `train-in-space` defaults
-   served training to fused quantizers; an explicit `0` still selects the chain. If either shape
-   does not improve, the default stays `0`.
+5. At each shape and mode, one 1-step and one 32-step smoke run with the same two mandatory
+   checkpoint evaluations. Their difference gives 31 training steps without evaluation. The
+   count difference and, where present, the `nsys` launch difference provide the observed launch
+   counts and call counts per training step. If `nsys` is absent, the source-derived tensor-op
+   figure is labelled a lower-bound estimate, never an observed launch count.
+6. If both shapes have `gain > 2 x noise`, `train-in-space` defaults served training on the
+   qualified CUDA path to fused quantizers; an explicit `0` still selects the chain. If either
+   shape has a non-positive gain, or a gain no larger than its noise, the default stays `0`. If
+   either shape remains between noise and `2 x noise`, one complete additional
+   `OFF, ON, ON, OFF` block is run for that shape. After all windows are pooled, both shapes
+   must have `gain > 2 x noise` to turn the default on; otherwise it stays `0` and the result is
+   recorded as inconclusive.
 7. The RTX 5090 run is sealed and read back, the pod is down, and one notebook row and a
    negatives-first REPORT record the result. The item remains open for its cached-decode cost.
 
@@ -84,8 +89,8 @@ Ask means decide, record and continue.
 
 - **Checkpoint or loss mismatch:** stop the speed reading. Classify instrument or kernel, keep
   the default off unless the exact cause is repaired and the run repeats.
-- **Fewer than three usable 128-step intervals:** add one balanced block on the same pod.
-- **Cost or pod cap:** one RTX 5090, planned for $3 and 40 minutes at no more than $1.15/h.
+- **Fewer than three usable 64-step windows:** add one complete balanced block on the same pod.
+- **Cost or pod cap:** one RTX 5090, planned for $3 and 60 minutes at no more than $1.15/h.
   A healthy run is not cancelled for a self-set budget; extend, renew and record instead, within
   the owner's four-pod and $8/h caps.
 - **Other lab's pod:** never lease, reuse or inspect its GPUs. Create our own within the shared

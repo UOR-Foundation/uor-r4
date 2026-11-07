@@ -43,13 +43,13 @@ do all saved training artifacts remain identical?
 
 ## Data split
 
-The pod stages these exact paths under `/workspace/fusion/data`:
+The pod stages these exact inputs at the destinations below:
 
-| Input | Store path | SHA-256 |
-|---|---|---|
-| TRAIN D3 | `results/claude/scale-probe-2026-11-05/inputs/d3` | `tokens.u16` `ed8f25374e99bd65cd509b5cfcdffb6a8476401a973ea02aaaaa0ea76e35ee52`; `response_mask.u8` `ec6e520c7a67aaf6efc7aaf42bf7513b3e697239fb18b73a1e89f130eacd4875` |
-| DEV, in-run checkpoint evaluation | `w2-inputs/2026-10-25/driver-data/ft/dev` | `tokens.u16` `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`; `response_mask.u8` `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
-| tokenizer | `w2-inputs/2026-10-25/driver-data` | `tokenizer.json` `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89` |
+| Input | Store path | Pod destination | SHA-256 |
+|---|---|---|---|
+| TRAIN D3 | `results/claude/scale-probe-2026-11-05/inputs/d3` | `/workspace/fusion/data/train/d3/` | `tokens.u16` `ed8f25374e99bd65cd509b5cfcdffb6a8476401a973ea02aaaaa0ea76e35ee52`; `response_mask.u8` `ec6e520c7a67aaf6efc7aaf42bf7513b3e697239fb18b73a1e89f130eacd4875` |
+| DEV, in-run checkpoint evaluation | `w2-inputs/2026-10-25/driver-data/ft/dev` | `/workspace/fusion/data/ft/dev/` | `tokens.u16` `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b`; `response_mask.u8` `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
+| tokenizer | `w2-inputs/2026-10-25/driver-data` | `/workspace/fusion/data/tokenizer.json` | `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89` |
 
 The trainer checks D3's two hashes through `--train-sha256` and
 `--train-mask-sha256`, and DEV and the tokenizer through its pinned source constants. No
@@ -78,7 +78,9 @@ Both shapes use TRAIN D3, seed 1, the same objective and 256 steps:
 --samples 0
 ```
 
-**(S)** adds `--context 192 --batch 64 --micro-batch 16`.
+**(S)** adds `--context 192 --batch 64 --micro-batch 16`, which is four micro-batches of 16 and
+12,288 positions an optimizer step. This is the current b64L shape, not claude-283's
+192 x 16 batch.
 
 **(L)** adds `--context 2048 --batch 4 --micro-batch 0`.
 
@@ -110,8 +112,10 @@ windows without evaluation time.
 - **R1, per-window rate.** For each run and for each interval `64 -> 128`, `128 -> 192` and
   `192 -> 256`, compute `64 / delta_train_seconds`. The first 64 steps are warm-up and are not
   retained.
-- **R2, gain.** Per shape, pool the six OFF window rates and six ON window rates from the two
-  runs of each mode. Let `off` and `on` be their medians, and `gain = (off - on) / off`.
+- **R2, gain and absolute cost.** Per shape, pool the six OFF window rates and six ON window
+  rates from the two runs of each mode. Let `off` and `on` be their medians, and
+  `gain = (off - on) / off`. Report `1 / off` and `1 / on` as seconds per optimizer step, and
+  `off x batch x context` and `on x batch x context` as training context tokens/s.
 - **R3, noise.** Per shape, take the largest of:
   - the three-window mean for A0 against A1;
   - the three-window mean for B0 against B1;
@@ -124,19 +128,25 @@ windows without evaluation time.
     `model.safetensors`, `hamming_read.safetensors`, and every JSON or learned table saved there.
   - Each run's `progress.jsonl` is serialized with only `train_seconds` and
     `train_context_tokens_per_second` removed. The four normalized files must be byte-identical.
+  - Each run root's `config.json` is byte-identical across the four mode runs, and any
+    `samples.md` or `samples.jsonl` the run creates is byte-identical. This is the complete
+    deterministic run output apart from `progress.jsonl`'s two timing fields and the expected
+    `fused-quantize.json`.
   - The ON runs must report nonzero fused activation and residual calls; the OFF runs must
     report nonzero chain calls for each. The expected modes are also read from each
     `fused-quantize.json`.
 - **R5, launches.**
-  - On the full runs, report the mode and four call counts from `fused-quantize.json`, with the
-    explicit caveat that the counters include checkpoint evaluations.
-  - If `nsys` exists, run one 32-step smoke per shape and mode under
-    `nsys profile --trace=cuda --sample=none --stats=true`, retain the report, and report its
-    total kernel launches. The final checkpoint evaluation is included in the smoke and named
-    as such.
-  - If `nsys` is absent, report `2 x (activation_calls x 49 + residual_calls x 13)` for OFF and
-    `2 x (activation_calls + residual_calls)` for ON as a source-derived lower bound, never as
-    an observed launch count.
+  - At each shape and mode, run a 1-step and a 32-step count smoke with `--eval-every 64`,
+    `--samples 0`, and all other flags unchanged. Each smoke has exactly two checkpoint
+    evaluations, at step 0 and at its final step. The difference between the 32-step and 1-step
+    `fused-quantize.json` counts isolates 31 training steps.
+  - If `nsys` exists, profile both smokes under
+    `nsys profile --trace=cuda --sample=none --stats=true` and use the difference between their
+    total kernel launches, divided by 31, as launches per training step. Retain both reports.
+  - If `nsys` is absent, convert the isolated 31-step calls to calls per training step and use
+    `2 x (activation_calls x 49 + residual_calls x 13)` for OFF and
+    `2 x (activation_calls + residual_calls)` for ON. Label this a source-derived lower-bound
+    estimate, never an observed launch count.
 
 ## Bar
 
@@ -145,23 +155,26 @@ Every row requires R4. The first matching row decides:
 | Order | Reading | Result |
 |---|---|---|
 | 1 | R4 fails | No speed reading. Classify and repair the instrument or kernel; default stays off. |
-| 2 | Either shape has a negative gain, or a gain no larger than its noise | Keep the default off and record the measured boundary. |
+| 2 | Either shape has a non-positive gain, or a gain no larger than its noise | Keep the default off and record the measured boundary. |
 | 3 | Both shapes have `gain > 2 x noise` | Default served training to fused quantizers; explicit `0` remains the reference. |
-| 4 | Otherwise | Inconclusive. Add one complete `OFF, ON, ON, OFF` block for each unresolved shape on the same pod, within the owner caps, and re-read with all windows. |
+| 4 | Otherwise | Run one complete `OFF, ON, ON, OFF` block for each unresolved shape on the same pod, within the owner caps, and re-read with all windows. |
+| 5 | After the additional block, both shapes have `gain > 2 x noise` | Default served training to fused quantizers. |
+| 6 | After the additional block, either shape remains at or below `2 x noise` | Keep the default off and record the result as inconclusive after the registered extension. |
 
-The bar is about cost and output equality, not model quality. A positive result licenses a
-training default on the qualified RTX 5090 path only; it is not a serving or cached-decode
-result.
+The bar is about cost and output equality, not model quality. A positive result licenses changing
+the source default for CUDA served training, with the RTX 5090 as its qualified performance
+evidence and other cards remaining unqualified. It is not a serving or cached-decode result.
 
 ## Instrument checks
 
 - **I-0:** on the pod, with `UOR_NVCC_ARCH=compute_120` and `--test-threads=1`, run:
   - the CUDA library suite;
-  - `one_step_as_served_is_bit_equal_with_the_fused_quantizers`;
-  - `g1_the_activation_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
-  - `g1_the_residual_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
-  - `g3_the_ptx_rounds_every_float_op_to_nearest_and_flushes_nothing`.
-  The four `#[ignore]` tests use `--ignored --exact`.
+  - `in_space_long::tests::one_step_as_served_is_bit_equal_with_the_fused_quantizers`;
+  - `fused_quantize::tests::gpu::g1_the_activation_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
+  - `fused_quantize::tests::gpu::g1_the_residual_kernels_equal_the_chain_and_the_twin_bit_for_bit`;
+  - `fused_quantize::tests::gpu::g3_the_ptx_rounds_every_float_op_to_nearest_and_flushes_nothing`.
+  Each of the four `#[ignore]` commands uses `--ignored --exact` and must report exactly
+  `1 passed; 0 failed`; zero selected tests is a failure.
 - **I-1:** every run exits 0 and has progress rows at steps 64, 128, 192 and 256.
 - **I-2:** D3's two configured hashes and the hard-coded DEV/tokenizer hashes match the table.
   `fused-quantize.json`, not `config.json`, records the requested path.
@@ -182,7 +195,8 @@ result.
    `UOR_NVCC_ARCH` and GPU identity; run I-0.
 4. Stage the inputs and verify every hash above.
 5. Run `S-A0, S-B0, S-B1, S-A1, L-A0, L-B0, L-B1, L-A1`, each into a new root.
-6. Run the two `nsys` smokes if available.
+6. Run the eight 1-step/32-step count smokes, each with `--eval-every 64 --samples 0`; wrap
+   both members of each pair with `nsys` if available.
 7. Seal with `SHA256SUMS.files`, `DONE` and `EXIT`; upload, list and read back before taking
    the pod down.
 8. Grade R1-R5 and I-1 to I-5 from the read-back copy. Apply the bar, change the default only
@@ -194,20 +208,24 @@ Six post-warm-up 64-step windows per mode at each shape, from two process runs i
 `OFF, ON, ON, OFF` order. The rate uses the trainer's synchronized whole-step clock. The
 registered noise includes both cross-process and within-run variation. A result that does not
 clear twice that noise adds a complete balanced block rather than adopting a small point
-estimate.
+estimate. The comparison is structural and output-exact, so the two seed rule is replaced by
+two independent process runs, six time windows per process arm, and five exact checkpoints;
+the chart's lead quantity is throughput, not model quality.
 
 ## Cost
 
 - **Preparation and build:** about 8 minutes.
 - **I-0:** about 4 minutes.
 - **Training:** eight runs x 256 steps, at about 0.63-0.70 s a step, about 24 minutes.
-- **Optional `nsys` and checkpoint overhead:** about 8 minutes.
+- **Eight count smokes and optional `nsys`:** about 8 minutes.
 - **Seal and read-back:** about 5 minutes.
-- Planned total: about 49 minutes, with a $3 planning bound at no more than $1.15/h.
+- Planned total: about 50 minutes, with an optional balanced extension adding about 24 minutes,
+  a $3 planning bound, and no more than $1.15/h.
 - **Storage:** inputs about 0.1 GiB; eight output roots and five checkpoints each, about 4-6
-  GiB temporary; retained seal about 2 GiB. The pre-run records current free space, requires the
-  project's 30 GiB + 128 MiB floor, and records the absent/present model ledger rather than
-  inventing a balance.
+  GiB temporary; eight count-smoke roots about 2 GiB; build target about 12 GiB; retained seal
+  about 2 GiB. The extension adds its own roots within the same estimates. The pre-run records
+  current free space, requires the project's 30 GiB + 128 MiB floor, and records the
+  absent/present model ledger rather than inventing a balance.
 - **Hard limits:** the owner's four-pod and $8/h shared caps, the disk floor, and a failed or
   diverged run. A healthy overrun is extended and recorded, not cancelled.
 
