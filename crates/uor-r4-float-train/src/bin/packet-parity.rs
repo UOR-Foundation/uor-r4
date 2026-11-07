@@ -15,7 +15,7 @@ use candle_core::Device;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uor_r4_core::answer_oracle::FrozenAnswers;
-use uor_r4_cpu_train::CpuFbsForward;
+use uor_r4_cpu_train::{CpuFbsForward, CpuFbsHead};
 use uor_r4_float_train::in_space_long::{FloatTokenRank, PacketCheckpoint};
 use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message, SCHEMA_V2};
 use uor_r4_tokenizer::ByteBpeTokenizer;
@@ -98,6 +98,13 @@ struct RowParity {
     float_eos_rank: usize,
     integer_eos_rank: usize,
     max_rank_delta: usize,
+}
+
+#[derive(Debug)]
+struct IntegerTokenRank {
+    target_token: u32,
+    chosen_token: u32,
+    rank: usize,
 }
 
 fn run() -> Result<()> {
@@ -210,8 +217,7 @@ fn run() -> Result<()> {
         let (_, reference) = reference_ids(&encoder, &label.answers)?;
         let mut integer = CpuFbsForward::from_artifact(&artifact)
             .map_err(|error| format!("{}: {error}", label.id))?;
-        let integer_ranks = integer
-            .teacher_forced_nearest_ranks(&prompt, &reference)
+        let integer_ranks = teacher_forced_nearest_ranks(&mut integer, &prompt, &reference)
             .map_err(|error| format!("{}: {error}", label.id))?;
         let float_ranks = float
             .teacher_forced_ranks(&prompt, &reference)
@@ -289,7 +295,7 @@ fn compare_row(
     prompt: &[u32],
     reference: &[u32],
     float: &[FloatTokenRank],
-    integer: &[uor_r4_cpu_train::NearestTokenDiagnostic],
+    integer: &[IntegerTokenRank],
 ) -> Result<RowParity> {
     if float.len() != reference.len() || integer.len() != reference.len() {
         return Err(format!("{id}: rank counts differ from reference targets"));
@@ -331,6 +337,121 @@ fn compare_row(
         integer_eos_rank: integer_eos_rank.ok_or_else(|| format!("{id}: no integer EOS rank"))?,
         max_rank_delta,
     })
+}
+
+fn nearest_rank(
+    query: &[i32],
+    table: &[i16],
+    width: usize,
+    target_token: u32,
+    served_token: u32,
+) -> Result<IntegerTokenRank> {
+    if width == 0 || !table.len().is_multiple_of(width) {
+        return Err("nearest-rank table shape differs".to_owned());
+    }
+    let vocabulary = table.len() / width;
+    if query.len() != width
+        || target_token as usize >= vocabulary
+        || served_token as usize >= vocabulary
+    {
+        return Err("nearest-rank query or target differs".to_owned());
+    }
+    let score = |token: usize| {
+        query
+            .iter()
+            .zip(&table[token * width..(token + 1) * width])
+            .fold(0i64, |sum, (&left, &right)| {
+                sum.wrapping_add(i64::from(left.abs_diff(i32::from(right))))
+            })
+            .wrapping_neg()
+    };
+    let target = target_token as usize;
+    let target_score = score(target);
+    let mut raw_rank = 1;
+    let mut raw_nearest = 0u32;
+    let mut raw_nearest_score = i64::MIN;
+    for token in 0..vocabulary {
+        let candidate = score(token);
+        if candidate > raw_nearest_score
+            || (candidate == raw_nearest_score && token < raw_nearest as usize)
+        {
+            raw_nearest_score = candidate;
+            raw_nearest = token as u32;
+        }
+        if token != target
+            && (candidate > target_score || (candidate == target_score && token < target))
+        {
+            raw_rank += 1;
+        }
+    }
+    let point_key_override = served_token != raw_nearest;
+    let rank = if !point_key_override {
+        raw_rank
+    } else if target_token == served_token {
+        1
+    } else {
+        2 + (0..vocabulary)
+            .filter(|&token| token != target && token as u32 != served_token)
+            .filter(|&token| {
+                let candidate = score(token);
+                candidate > target_score || (candidate == target_score && token < target)
+            })
+            .count()
+    };
+    Ok(IntegerTokenRank {
+        target_token,
+        chosen_token: served_token,
+        rank,
+    })
+}
+
+fn teacher_forced_nearest_ranks(
+    forward: &mut CpuFbsForward,
+    prompt: &[u32],
+    targets: &[u32],
+) -> Result<Vec<IntegerTokenRank>> {
+    if prompt.is_empty() {
+        return Err("teacher-forced ranking needs a nonempty prompt".to_owned());
+    }
+    if prompt.len().saturating_add(targets.len().saturating_sub(1)) > forward.context_length() {
+        return Err("teacher-forced sequence passes the context".to_owned());
+    }
+    forward.reset();
+    let mut next = prime_prompt(forward, prompt)?;
+    let mut rows = Vec::with_capacity(targets.len());
+    for (index, &target) in targets.iter().enumerate() {
+        rows.push(nearest_rank(
+            &next.query_q12,
+            forward.shared_table(),
+            forward.width(),
+            target,
+            next.token,
+        )?);
+        if index + 1 < targets.len() {
+            next = forward
+                .step(target, CpuFbsHead::Nearest)
+                .map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(rows)
+}
+
+fn prime_prompt(
+    forward: &mut CpuFbsForward,
+    prompt: &[u32],
+) -> Result<uor_r4_cpu_train::CpuFbsStep> {
+    let mut step = None;
+    for (index, &token) in prompt.iter().enumerate() {
+        if index + 1 == prompt.len() {
+            forward.mark_reply_start();
+        }
+        step = Some(
+            forward
+                .step(token, CpuFbsHead::Nearest)
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    step.ok_or_else(|| "empty prompt".to_owned())
 }
 
 fn render(
@@ -492,18 +613,11 @@ mod tests {
         }
     }
 
-    fn integer(target: u32, chosen: u32, rank: usize) -> uor_r4_cpu_train::NearestTokenDiagnostic {
-        uor_r4_cpu_train::NearestTokenDiagnostic {
+    fn integer(target: u32, chosen: u32, rank: usize) -> IntegerTokenRank {
+        IntegerTokenRank {
             target_token: target,
             rank,
-            raw_rank: rank,
-            candidate_count: 4096,
-            target_distance: 1,
             chosen_token: chosen,
-            raw_nearest_token: chosen,
-            point_key_override: false,
-            chosen_distance: 0,
-            target_minus_chosen_distance: -1,
         }
     }
 

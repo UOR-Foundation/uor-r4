@@ -30,6 +30,9 @@ training or model evaluation yet.
   same `m2-fresh256` renderer and reference-answer rule as
   `served-reply-panel`, then compares the float and `CpuFbsForward` decisions
   row by row.
+- The integer side uses `CpuFbsForward`'s public serving interfaces and the
+  reviewed panel's raw-nearest plus point-key tie/override order. It does not
+  depend on the diagnostic API from the earlier draft that #3833 did not land.
 - The report records chosen-token mismatches, exact rank mismatches, float and
   integer top-1 counts, EOS rank for every row, the number of EOS rank
   disagreements and the largest rank delta.
@@ -54,6 +57,9 @@ SFT pod chain after both dependency PRs merge.
 - Stub-CUDA `cargo check -p uor-r4-float-train --features packet-parity
   --bin packet-parity`: passed.
 - `packet-parity` pure tests: 2 passed.
+- Stub-CUDA `cargo clippy -p uor-r4-float-train --features packet-parity
+  --bin packet-parity --no-deps -- -D warnings`: passed with the crate's four
+  pre-existing lint families allowed by name.
 - `served-reply-panel` CPU tests: 11 passed.
 - `rustfmt --check` on the new binary: passed.
 - `git diff --check`: passed.
