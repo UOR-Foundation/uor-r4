@@ -74,6 +74,9 @@ spend.
   Attempt 1's approval marker remained present when the OOM retry launched,
   allowing attempt 2's trainer to pass the handshake before its own record was
   validated.
+- **D67 found the pre-registration still ambiguous.** The deepseek-23 ORDER
+  retained the retired early continuation stop, and neither it nor the sheet
+  defined how "best checkpoint" would be selected before the results.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -167,6 +170,12 @@ spend.
   run. Only row 2's registered no-ranking-movement stop fires during training;
   row 1 is applied after all checkpoints through 1,024, when the best checkpoint
   can be selected.
+- The best checkpoint is now selected mechanically: guard-safe checkpoints are
+  preferred when any exist, then teacher-forced EOS top-1, free EOS stops,
+  complete accepted rows, EOS median rank, continuation guard and earlier step
+  break ties. The job writes the ranked list and selection to
+  `best-checkpoint.json`. The decision and reversal are recorded in
+  `DECISION.md`.
 - The trainer publishes `.init-ready` only after writing `init.json`, then waits
   for the controller's approval file before optimization. The controller
   validates the exact initialization record and releases that wait; an invalid
@@ -222,10 +231,14 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `b1ac030988746b155a36007ef32e79649a0beaaf2d6932f9250124bb59b4bfbe`,
   reviewer session `01a1b864-d9e9-74b2-b224-de022d5d9de4`. No FIT blockers
   remained.
-- `gate.sh`: 188 checks passed after adding the submission fallback, registered
-  stop point, exactly-one-step-0 mutation and per-attempt initialization
-  handshake.
-- `test-mutants.sh`: 66 of 66 semantic mutations caught.
+- D67 pre-run review: **NO-GO** at
+  `5cf410bed630d926023181b9f7875bd8963a71cd`, reviewed-runtime
+  `b1ac030988746b155a36007ef32e79649a0beaaf2d6932f9250124bb59b4bfbe`,
+  reviewer session `01a1b86a-98d9-7483-9a6f-7da2d0da013c`, because the order
+  retained the retired early guard stop and "best checkpoint" was undefined.
+- `gate.sh`: 197 checks passed after adding the deterministic best-checkpoint
+  selector and its ordering pins.
+- `test-mutants.sh`: 71 of 71 semantic mutations caught.
 - Direct evaluation of the progress predicate accepted null and absent step-0
   training loss; it rejected finite, infinite and string step-0 training loss,
   non-finite positive-step training loss, and null or non-finite DEV loss,
@@ -249,7 +262,7 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh D67 review of the exact repaired runtime, then the seed-1 run.
+- Fresh FIT and D67 reviews of the reconciled exact runtime, then the seed-1 run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary

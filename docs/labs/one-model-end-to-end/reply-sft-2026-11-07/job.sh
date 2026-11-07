@@ -359,7 +359,7 @@ score_checkpoint() {
   run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||
     die "checkpoint $step one-user panel failed"
 
-  local guard eos_top1 eos_p50
+  local guard eos_top1 eos_p50 free_complete free_eos free_pairs
   guard=$(jq -er '.evaluation.top1_correct | numbers' \
     "$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step").json") ||
     die "checkpoint $step grade has no numeric top-1 reading"
@@ -369,9 +369,22 @@ score_checkpoint() {
   eos_p50=$(jq -er '.teacher_forced.totals.eos_rank_p50 | numbers' \
     "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
     die "checkpoint $step teacher panel has no numeric EOS median reading"
+  free_complete=$(jq -er '.totals.complete | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-generated.json") ||
+    die "checkpoint $step free panel has no numeric complete-row reading"
+  free_eos=$(jq -er '.totals.eos_stops | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-generated.json") ||
+    die "checkpoint $step free panel has no numeric EOS-stop reading"
+  free_pairs=$(jq -er '.totals.pairs_both_complete_distinct | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-generated.json") ||
+    die "checkpoint $step free panel has no numeric complete-pair reading"
   jq -n --argjson step "$step" --argjson guard "$guard" \
     --argjson eos_top1 "$eos_top1" --argjson eos_p50 "$eos_p50" \
-    '{step:$step, guard_top1:$guard, eos_top1:$eos_top1, eos_rank_p50:$eos_p50}' \
+    --argjson free_complete "$free_complete" --argjson free_eos "$free_eos" \
+    --argjson free_pairs "$free_pairs" \
+    '{step:$step, guard_top1:$guard, eos_top1:$eos_top1,
+      eos_rank_p50:$eos_p50, free_complete_rows:$free_complete,
+      free_eos_stops:$free_eos, free_complete_pairs:$free_pairs}' \
     >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl" ||
     die "could not record checkpoint $step readings"
   if [ "$step" -eq 512 ] && [ "$eos_top1" -eq 0 ] && [ "$eos_p50" -ge 7 ]; then
@@ -379,6 +392,29 @@ score_checkpoint() {
     kill "$TRAIN_PID" 2>/dev/null || true
   fi
   touch "$marker" || die "could not mark checkpoint $step scored"
+}
+
+select_best_checkpoint() {
+  local readings=$1
+  jq -e -s '
+    . as $rows
+    | ($rows | any(.[]; .guard_top1 >= 93)) as $guard_safe
+    | ([$rows[] | select(($guard_safe | not) or .guard_top1 >= 93)]
+       | sort_by([
+           (if $guard_safe then 0 else -(.guard_top1) end),
+           -(.eos_top1),
+           -(.free_eos_stops),
+           -(.free_complete_rows),
+           .eos_rank_p50,
+           -(.guard_top1),
+           .step
+         ])) as $ranked
+    | {schema:"uor-r4.reply-sft-best-checkpoint/1",
+       guard_safe_candidates:$guard_safe,
+       selected:$ranked[0],
+       ranked:$ranked}' \
+    "$readings" > "$RUN/best-checkpoint.json" ||
+    die "could not select the registered best checkpoint"
 }
 
 log "panel-overlap control"
@@ -553,6 +589,7 @@ train_and_score() {
     next=$((next + 256))
   done
   check_progress "$run_dir/progress.jsonl"
+  select_best_checkpoint "$RUN/checkpoint-readings-$label.jsonl"
   if [ -f "$RUN/checkpoint-readings-$label.jsonl" ]; then
     cp "$RUN/checkpoint-readings-$label.jsonl" "$RUN/checkpoint-readings.jsonl" ||
       die "could not publish checkpoint readings from $label"

@@ -89,6 +89,15 @@ mutate_first() {
 mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
 mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
 mutate weak-eos-p50 "$JOB" '[ "$eos_p50" -ge 7 ]' '[ "$eos_p50" -ge 0 ]'
+mutate wrong-best-no-guard "$JOB" \
+  '(if $guard_safe then 0 else -(.guard_top1) end),' \
+  '(if $guard_safe then 0 else $rows end),'
+mutate weak-best-eos-top1 "$JOB" '-(.eos_top1),' '(.eos_top1),'
+mutate weak-best-free-eos "$JOB" '-(.free_eos_stops),' '(.free_eos_stops),'
+mutate weak-best-complete "$JOB" \
+  '-(.free_complete_rows),' '(.free_complete_rows),'
+mutate missing-free-complete "$JOB" \
+  '.totals.complete | numbers' '.totals.complete | null'
 mutate early-guard-stop "$JOB" \
   'touch "$marker" || die "could not mark checkpoint $step scored"' \
   'if [ "$guard" -lt 93 ]; then STOP_REASON="continuation-failure-step-$step"; kill "$TRAIN_PID" 2>/dev/null || true; fi

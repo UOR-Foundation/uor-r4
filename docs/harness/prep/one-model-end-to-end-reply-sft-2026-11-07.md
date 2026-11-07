@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-22](../loop/tasks/one-model-end-to-end/deepseek-22/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `0ae6a64113dc2e81c25bbfc6cf5d7b027cba68a8`, reviewed-runtime `b1ac030988746b155a36007ef32e79649a0beaaf2d6932f9250124bb59b4bfbe`, reviewer session `01a1b864-d9e9-74b2-b224-de022d5d9de4`.
+TEST FITNESS: FIT - pending fresh review after the D67 outcome-map reconciliation.
 
 PRE-RUN: PENDING (fresh D67 review required).
 
@@ -216,6 +216,24 @@ This is a staged development run, not a milestone bar. The current M2 bar is
 distinct and >= 104/256 single-row-complete questions on the genuinely fresh
 panel, with the existing graders unchanged. `m2-reply512` remains unavailable,
 so this unit cannot claim an M2 pass.
+
+## Best-checkpoint selection
+
+The selected checkpoint is fixed by these rules, in order:
+
+1. If any checkpoint has `guard_top1 >= 93`, only those guard-safe checkpoints
+   are candidates. If none are guard-safe, every checkpoint is a candidate and
+   guard top-1 descending is the first ordering key.
+2. Order candidates by teacher-forced EOS top-1 descending.
+3. Break ties by free EOS stops descending.
+4. Break ties by complete accepted rows descending.
+5. Break ties by EOS median rank ascending.
+6. Break ties by continuation guard top-1 descending.
+7. Break ties by step ascending, selecting the earlier checkpoint.
+
+The first candidate is the best checkpoint. The job writes the complete ranked
+list and the selected row to `best-checkpoint.json`; after that mechanical
+selection, the outcome map below is applied in its listed order.
 
 The first-match outcome map is:
 
