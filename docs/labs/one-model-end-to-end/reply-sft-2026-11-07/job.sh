@@ -472,12 +472,15 @@ check_initialization() {
 
 train_and_score() {
   local micro=$1 label=$2 run_dir=$3
-  local next=256 train_rc=0 checkpoint
+  local next=256 train_rc=0 checkpoint init_wait=0 init_approval
   ATTEMPT=$label
   TRAIN_RUN=$run_dir
+  init_approval="$RUN/control/init-approved-$label"
+  [ ! -e "$init_approval" ] ||
+    die "initialization approval for $label already exists"
   install -d "$RUN/grades/$label" "$RUN/artifacts/$label" \
     "$RUN/scores/$label" "$RUN/panel/$label"
-  UOR_TRAIN_INIT_APPROVAL="$RUN/control/init-approved" \
+  UOR_TRAIN_INIT_APPROVAL="$init_approval" \
   "$TRAIN_BIN" \
     --data-root "$RUN/inputs/data" \
     --init-from "$B64L" \
@@ -493,7 +496,6 @@ train_and_score() {
     > "$RUN/logs/train-$label.log" 2>&1 &
   TRAIN_PID=$!
 
-  local init_wait=0
   while [ ! -f "$run_dir/.init-ready" ]; do
     if ! kill -0 "$TRAIN_PID" 2>/dev/null; then
       wait "$TRAIN_PID" || train_rc=$?
@@ -512,7 +514,7 @@ train_and_score() {
     init_wait=$((init_wait + 1))
   done
   check_initialization "$run_dir"
-  touch "$RUN/control/init-approved" ||
+  touch "$init_approval" ||
     die "could not approve the validated initialization"
 
   while kill -0 "$TRAIN_PID" 2>/dev/null; do

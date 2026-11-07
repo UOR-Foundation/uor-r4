@@ -127,6 +127,9 @@ mutate wrong-sample "$JOB" \
   b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4 \
   0000000000000000000000000000000000000000000000000000000000000000
 mutate missing-init-check "$JOB" '[ -f "$run/init.json" ] ||' 'true ||'
+mutate shared-init-approval "$JOB" \
+  'init_approval="$RUN/control/init-approved-$label"' \
+  'init_approval="$RUN/control/init-approved"'
 mutate missing-oom-retry "$JOB" 'TRAIN_FAILURE=$train_rc' 'TRAIN_FAILURE=0'
 mutate masked-panel-exit "$JOB" \
   '--reply-tokens 64 --out "$out" || return 1' \

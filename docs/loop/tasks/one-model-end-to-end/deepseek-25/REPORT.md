@@ -70,6 +70,10 @@ spend.
   continuation guard stopped before the registered best-checkpoint outcome,
   the exactly-one-step-0 clause had no mutation, and initialization was checked
   only after training.
+- **The next FIT review found the retry reused an initialization approval.**
+  Attempt 1's approval marker remained present when the OOM retry launched,
+  allowing attempt 2's trainer to pass the handshake before its own record was
+  validated.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -166,7 +170,8 @@ spend.
 - The trainer publishes `.init-ready` only after writing `init.json`, then waits
   for the controller's approval file before optimization. The controller
   validates the exact initialization record and releases that wait; an invalid
-  record stops the trainer while it is still blocked at initialization.
+  record stops the trainer while it is still blocked at initialization. Each
+  micro-batch attempt has its own approval marker and refuses a pre-existing one.
 - The outcome map's partial-movement row now covers every guard-passing case
   with any EOS/generation/content movement that does not meet rows 3–5,
   removing the prior logical gap before the catch-all.
@@ -207,9 +212,15 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   reviewer session `01a1b854-3cf8-7781-9a8d-658b19fffd58`, because detached
   submission could lose its job identity, the guard stopped early, one progress
   mutation was missing, and initialization was validated after training.
-- `gate.sh`: 186 checks passed after adding the submission fallback, registered
-  stop point, exactly-one-step-0 mutation and initialization handshake.
-- `test-mutants.sh`: 65 of 65 semantic mutations caught.
+- Next FIT review: **NO-GO** at
+  `1f280b4cbb73784b7be06db35512e62bc4295a5d`, reviewed-runtime
+  `4125e86c9b99915e9f932140e228f3890a14f5644f034bcb897f91776f586894`,
+  reviewer session `01a1b85e-a292-7363-b1bb-019a0ab91bfd`, because the
+  micro-batch-8 retry reused attempt 1's initialization approval.
+- `gate.sh`: 188 checks passed after adding the submission fallback, registered
+  stop point, exactly-one-step-0 mutation and per-attempt initialization
+  handshake.
+- `test-mutants.sh`: 66 of 66 semantic mutations caught.
 - Direct evaluation of the progress predicate accepted null and absent step-0
   training loss; it rejected finite, infinite and string step-0 training loss,
   non-finite positive-step training loss, and null or non-finite DEV loss,
