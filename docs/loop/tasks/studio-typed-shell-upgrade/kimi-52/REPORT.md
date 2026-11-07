@@ -27,9 +27,15 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Default static page, runtime page-load, desktop-client, and worker checks: all PASS; worker save/restore is bit-identical and desktop/worker remote request counts are zero.
 - Harness build, `loop report --check`, `loop pr-check --local`, and `loop gates --full`: **NOT_RUN** until the evidence commit.
 
-## Checks and limits
+## Checks run at the head
 
 Red evidence is retained under `local/kimi/studio-mcp-connections/superpowers/checks/`, including the missing bootstrap, readiness, base-path, and 404 failures. `kimi-52-precheck/` contains green pre-commit evidence. Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open.
+
+## Skills used
+
+Working discipline, scope guard, solution integrity, red-first TDD, systematic bootstrap/build diagnosis, modern web application guidance, and verification before completion. A fresh independent exact-head delivery review follows the committed repair. No model compute, paid resource, credential, real user data, MCP endpoint, or production publish was used.
+
+## Still open
 
 This is a mounted development preview, not final lifecycle migration, production publication, desktop acceptance, or an autonomous/model capability claim. Legacy workflow services remain temporarily bridged during the preview. Later Phase A units replace those owners, finish native/shared packaging and acceptance, and publish only after review.
 
