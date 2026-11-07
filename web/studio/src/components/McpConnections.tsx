@@ -24,8 +24,17 @@ async function release(session: McpSession | null): Promise<string> {
 }
 
 function attachmentName(toolName: string): string {
-    const safe = toolName.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+    const safe = typeof toolName === 'string' ? toolName.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') : '';
     return `mcp-${safe || 'tool-result'}.json`;
+}
+
+function validTools(tools: McpTool[]): McpTool[] {
+    return (Array.isArray(tools) ? tools : []).filter((tool): tool is McpTool => Boolean(
+        tool
+        && typeof tool.name === 'string'
+        && tool.name.trim()
+        && (tool.description === undefined || typeof tool.description === 'string')
+    ));
 }
 
 export function McpConnections({ ui, connectRemote = defaultConnectRemote }: McpConnectionsProps) {
@@ -71,7 +80,7 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
                 setStatus(`Connection approval was cancelled; nothing started.${previous ? ' Previous connection is still active.' : ''}`);
                 return;
             }
-            const listed = await candidate.listTools();
+            const listed = validTools(await candidate.listTools());
             if (token !== operation.current) {
                 await release(candidate);
                 return;
@@ -83,9 +92,9 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
                 return;
             }
             if (cleanup) {
-                await release(candidate);
+                const candidateCleanup = await release(candidate);
                 setSession(previous);
-                setStatus(`Previous session cleanup failed: ${cleanup}. Replacement was not completed.`);
+                setStatus(`Previous session cleanup failed: ${cleanup}.${candidateCleanup ? ` Candidate cleanup failed: ${candidateCleanup}.` : ''} Replacement was not completed.`);
                 return;
             }
             setSession(candidate);
@@ -111,7 +120,7 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
     }
 
     async function call(tool: McpTool) {
-        if (callingRef.current || !sessionRef.current) return;
+        if (callingRef.current || connectingRef.current || !sessionRef.current) return;
         let parsed: Record<string, unknown>;
         try {
             const value = JSON.parse(args || '{}');
@@ -148,8 +157,8 @@ export function McpConnections({ ui, connectRemote = defaultConnectRemote }: Mcp
 
     function attachResult() {
         if (!resultJson || attachedName) return;
-        const name = attachmentName(resultTool);
         try {
+            const name = attachmentName(resultTool);
             ui.addAttachment({ name, kind: 'text', content: resultJson, source: 'mcp' });
             const retained = ui.getAttachments().some((entry) =>
                 entry.name === name
