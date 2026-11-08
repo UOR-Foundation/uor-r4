@@ -135,7 +135,9 @@ The D84 CPU-development grader must identify its host before the first grade.
 The job writes `cpu.json` and `cpu.txt`; both enter the seal. Every base and
 checkpoint grade must report substrate `cpu-development-research` and
 qualification `gpu-required`. A missing CPU identity or an unlabelled grade
-stops the dose before a result can be read.
+stops the dose before a result can be read. Each grade also gets a sidecar that
+binds the grade's SHA-256 to the captured CPU model, architecture and logical
+processor count.
 
 ## Minimum test power and cost
 
@@ -143,4 +145,7 @@ One seed is an exploratory dose reading. Seed 2 remains conditional on row 3 and
 a fresh decision. The 1,024 run took 721 seconds of training and 1,457 seconds
 of pod uptime. Eight checkpoints and 24 minutes of training project to 45-50
 minutes and roughly $0.45-$0.55 at $0.563/hour. One OOM retry projects to under
-$1.30. The launcher remains inside four pods and $8/hour.
+$1.30. Before an OOM retry starts, bulky checkpoints, exports, panels and scores
+from the failed attempt are replaced by a sealed SHA-256 file manifest; logs,
+progress and attempt records remain. This keeps the final seal below 100 MiB.
+The launcher remains inside four pods and $8/hour.

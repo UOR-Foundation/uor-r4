@@ -69,6 +69,55 @@ check_path_absent() {
   local path=$1
   [ ! -e "$path" ] || die "refusing an existing output: $path"
 }
+bind_grade_hardware() {
+  local grade=$1 relative grade_sha
+  relative=${grade#"$RUN/"}
+  grade_sha=$(sha256sum "$grade" | cut -d' ' -f1)
+  jq -n \
+    --arg path "$relative" --arg grade_sha "$grade_sha" \
+    --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
+    '{schema:"uor-r4.cpu-grade-hardware/1",
+      grade:{path:$path,sha256:$grade_sha},
+      hardware:{model:$model,architecture:$arch,logical_cpus:$logical}}' \
+    > "$grade.hardware.json"
+  jq -e \
+    --arg path "$relative" --arg grade_sha "$grade_sha" \
+    --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
+    '.grade.path == $path and .grade.sha256 == $grade_sha and
+     .hardware.model == $model and .hardware.architecture == $arch and
+     .hardware.logical_cpus == $logical' "$grade.hardware.json" >/dev/null ||
+    die "grade $relative is not bound to the recorded CPU hardware"
+}
+compact_failed_attempt() {
+  local label=$1 run_dir=$2 manifest path files bytes
+  local -a paths
+  manifest="$RUN/control/$label-partial-SHA256SUMS"
+  paths=("${run_dir#"$RUN/"}/models" "artifacts/$label" "grades/$label" \
+    "panel/$label" "scores/$label")
+  (
+    cd "$RUN"
+    for path in "${paths[@]}"; do
+      [ ! -d "$path" ] || find "$path" -type f -print0
+    done | sort -z | xargs -0 -r sha256sum > "$manifest"
+  ) || die "could not hash compacted $label evidence"
+  files=$(wc -l < "$manifest")
+  bytes=$(
+    cd "$RUN"
+    for path in "${paths[@]}"; do
+      [ ! -d "$path" ] || find "$path" -type f -printf '%s\n'
+    done | awk '{ total += $1 } END { print total + 0 }'
+  )
+  jq -n --arg label "$label" --arg reason "oom-retry" \
+    --arg manifest "$(basename "$manifest")" --argjson files "$files" \
+    --argjson bytes "$bytes" \
+    '{schema:"uor-r4.compacted-attempt/1",label:$label,reason:$reason,
+      file_manifest:$manifest,files:$files,bytes:$bytes}' \
+    > "$RUN/control/$label-partial.json"
+  for path in "${paths[@]}"; do
+    [ ! -e "$RUN/$path" ] || find "$RUN/$path" -depth -delete
+  done
+  log "compacted $label bulky evidence: $files files, $bytes bytes retained as hashes"
+}
 fail() {
   die "$*"
 }
@@ -350,6 +399,7 @@ grade_checkpoint() {
   jq -e '.substrate == "cpu-development-research" and
     .qualification == "gpu-required"' "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade is not labelled D84 CPU development evidence"
+  bind_grade_hardware "$grade_dir.json"
   rm -f "$snapshot" || die "could not remove transient snapshot for checkpoint $step"
 }
 
@@ -501,6 +551,7 @@ jq -e '.evaluation.samples == 512 and
 jq -e '.substrate == "cpu-development-research" and
   .qualification == "gpu-required"' "$RUN/control/base-grade.json" >/dev/null ||
   die "base grade is not labelled D84 CPU development evidence"
+bind_grade_hardware "$RUN/control/base-grade.json"
 base_totals() {
   jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
     die "base $2 control differs from its registered reading"
@@ -636,6 +687,7 @@ if [ "$TRAIN_FAILURE" -ne 0 ]; then
   if grep -Eiq 'out of memory|CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' \
     "$RUN/logs/train-attempt-1.log"; then
     log "micro-batch 16 ran out of memory; retrying once at micro-batch 8"
+    compact_failed_attempt attempt-1 "$TRAIN_RUN"
     STOP_REASON=
     TRAIN_FAILURE=0
     train_and_score 8 attempt-2 "$RUN/run-mb8"

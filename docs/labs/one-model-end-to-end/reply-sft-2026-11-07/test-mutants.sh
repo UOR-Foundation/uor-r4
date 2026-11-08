@@ -200,6 +200,18 @@ mutate missing-cpu-hardware-id "$JOB" \
 mutate unchecked-cpu-hardware "$JOB" \
   'die "base grade is not labelled D84 CPU development evidence"' \
   'true'
+mutate unchecked-checkpoint-cpu-hardware "$JOB" \
+  'die "checkpoint $step grade is not labelled D84 CPU development evidence"' \
+  'true'
+mutate missing-checkpoint-hardware-binding "$JOB" \
+  'bind_grade_hardware "$grade_dir.json"' 'true'
+mutate missing-base-hardware-binding "$JOB" \
+  'bind_grade_hardware "$RUN/control/base-grade.json"' 'true'
+mutate cpu-hardware-excluded-from-seal "$JOB" \
+  "find . -type f ! -name 'SHA256SUMS*' -print0 |" \
+  "find . -type f ! -name 'SHA256SUMS*' ! -name 'cpu.*' -print0 |"
+mutate uncompacted-oom-retry "$JOB" \
+  'compact_failed_attempt attempt-1 "$TRAIN_RUN"' 'true'
 mutate checkpoint-progress-unchecked "$JOB" \
   'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
 mutate base-sample-unchecked "$JOB" \

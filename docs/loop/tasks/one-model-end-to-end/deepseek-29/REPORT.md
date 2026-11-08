@@ -19,7 +19,12 @@ or spend.
 - The job now records `cpu.json` and `cpu.txt` before model work and requires
   each grade to carry the D84 CPU-development substrate and GPU-required
   qualification labels.
-- Gate and mutation coverage require the CPU identity and its grade binding.
+- Every base and checkpoint grade gets a sidecar binding its exact bytes to the
+  recorded CPU model, architecture and logical processor count.
+- OOM retry compacts bulky partial-attempt checkpoints, exports, panels and
+  scores into a sealed hash manifest while retaining logs and progress.
+- Gate and mutation coverage require both CPU labels, both grade bindings,
+  CPU-file seal inclusion and retry compaction.
 - The 2,048-step sheet and its merged runtime are awaiting fresh FIT and D67
   reviews after these changes.
 
@@ -31,12 +36,15 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 
 ## Checks run at the head
 
-- `gate.sh`: 226 checks passed.
-- `test-mutants.sh`: 86 of 86 semantic mutations caught.
+- `gate.sh`: 231 checks passed.
+- `test-mutants.sh`: 91 of 91 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
 - The target sheet has no prep-shape error and remains `PENDING` for review.
 - The job records the CPU model, architecture and logical processor count before
   grading and rejects a base grade whose D84 substrate labels are absent.
+- A targeted shell-function check confirmed that a grade sidecar binds the exact
+  grade SHA-256 to the captured CPU and that retry compaction retains four
+  bulky files plus the grade and its sidecar as six manifest entries.
 
 Not run: pod creation, remote build, training, export, panel scoring, store
 write or seal readback.

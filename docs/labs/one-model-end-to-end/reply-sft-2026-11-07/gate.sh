@@ -184,6 +184,7 @@ grep -Fq 'die "base continuation grade did not use the registered 512-row sample
   fail "$JOB does not pin the base-grade sample fingerprint"
 checks=$((checks + 1))
 require_line 'die "base grade is not labelled D84 CPU development evidence"' "$JOB"
+require_line 'bind_grade_hardware "$RUN/control/base-grade.json"' "$JOB"
 grep -Fq '.evaluation.samples == 512 and' "$JOB" ||
   fail "$JOB does not require the registered 512-row sample count"
 checks=$((checks + 1))
@@ -204,9 +205,12 @@ grep -Fq '.counts.assistant_replies_with_panel_6gram == 0' "$JOB" ||
 checks=$((checks + 1))
 require_line 'die "corpus-panel overlap audit differs from the registered reading"' "$JOB"
 require_line 'die "checkpoint $next is missing without a registered stop"' "$JOB"
+require_line 'die "checkpoint $step grade is not labelled D84 CPU development evidence"' "$JOB"
+require_line 'bind_grade_hardware "$grade_dir.json"' "$JOB"
 require_line 'train_and_score 16 attempt-1 "$RUN/run"' "$JOB"
 require_line 'if [ "$TRAIN_FAILURE" -ne 0 ]; then' "$JOB"
 require_line 'TRAIN_FAILURE=$train_rc' "$JOB"
+require_line 'compact_failed_attempt attempt-1 "$TRAIN_RUN"' "$JOB"
 require_line 'train_and_score 8 attempt-2 "$RUN/run-mb8"' "$JOB"
 require_line '[ "$TRAIN_FAILURE" -eq 0 ] ||' "$JOB"
 require_line "jq -e -s '(map(select(.step == 0)) | length) == 1 and" "$JOB"
@@ -247,6 +251,7 @@ require_line 'cpu_model=$(sed -n '"'"'s/^model name[[:space:]]*:[[:space:]]*//p'
 require_line '[ -n "$cpu_model" ] || die "could not identify the CPU hardware for D84 evaluation"' "$JOB"
 require_line '> "$RUN/cpu.json"' "$JOB"
 require_line '} > "$RUN/cpu.txt"' "$JOB"
+require_line "find . -type f ! -name 'SHA256SUMS*' -print0 |" "$JOB"
 require_line 'CARGO_TARGET_DIR="$PANEL_TARGET" \' "$JOB"
 require_line 'PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"' "$JOB"
 require_line 'oh/run/b64L-s1/models/step-016384 oh/run/b64L-s1/config.json' "$JOB"
