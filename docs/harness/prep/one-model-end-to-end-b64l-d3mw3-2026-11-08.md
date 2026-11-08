@@ -2,7 +2,13 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-318. The step is Casey's "Yes, pipeline first" (#2028 6709947526): the next training run is judged by the served-reply score.
 
-TEST FITNESS: not yet reviewed.
+TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 8 Nov). It found no blockers and recomputed every figure. Its two majors and four minors are applied:
+- a run that misses stopping but collapses no longer points at a higher ratio (rows 6a and 6b);
+- fewer stops than × 1 at both seeds is classed as instrument or mechanism before any review, and no higher ratio is offered (row 5);
+- a smoke window count other than 357,907 refuses the full run, read as row 0a;
+- the collapse band no longer contradicts itself;
+- the descriptive pair against (b64L-d3mw) names its confound;
+- the deciding verdict is defined when the two seeds disagree (`mixed`).
 
 **Why.**
 - **(b64L) on D3 alone never stops.** claude-309 (#3828): 0 of 256 EOS stops at both seeds.
@@ -100,9 +106,12 @@ At seeds 1 and 2, from `served-reply-panel` on (b64L-d3mw3)'s exported `step-016
 
 **The held-out pairs:**
 - `scale-probe grade` with `train=` the mix, on all 1,460,697 rows, with no `clean=`.
-- **Deciding:** `scale-probe pair`, (b64L-d3mw3) against claude-301's sealed (b64L-D3) grades `e17a13548d09304d901a93683cadb6c7695200261e86770e319003bfc976523a` and `3170c779def7ef376fdc11c96232f3f6ddb2809c436855121fd24be8ed7ab5a1`. The pooled verdict over the four held-out splits is `behind`, `inside` or `ahead`, at the pair's band, max(2·√(b+c), the two-seed spread).
+- **Deciding:** `scale-probe pair`, (b64L-d3mw3) against claude-301's sealed (b64L-D3) grades `e17a13548d09304d901a93683cadb6c7695200261e86770e319003bfc976523a` and `3170c779def7ef376fdc11c96232f3f6ddb2809c436855121fd24be8ed7ab5a1`.
+  - Each seed's position is `behind`, `inside` or `ahead` at the pair's band, max(⌈2·√(b+c)⌉, the two-seed spread).
+  - The tool's single pooled verdict over both seeds is that position when the seeds agree, and `mixed` when they do not (`assess` in `docs/labs/scale-probe/instrument/src/lib.rs`).
+  - **"Behind" in the outcome map** means the pooled verdict `behind`, or `mixed` with at least one seed `behind`. Every other verdict is "not behind". Both seeds' positions are recorded.
 - **Deciding between rows 3a and 3b:** the **mean pooled d** over the two seeds of that same pair, against the cost ceiling below.
-- **Descriptive:** the pair against claude-315's (b64L-d3mw) grades, `e4714275acf1fe01063b04e63aff73436614a586a6bb8e5cfa9b55bda45bad85` and `b9160b63e4f3b03892245a3b6027098c5b5eb8a9696915b4e2548fbae158d2c2`. It reads what the two added copies cost beyond the first.
+- **Descriptive:** the pair against claude-315's (b64L-d3mw) grades, `e4714275acf1fe01063b04e63aff73436614a586a6bb8e5cfa9b55bda45bad85` and `b9160b63e4f3b03892245a3b6027098c5b5eb8a9696915b4e2548fbae158d2c2`. It reads what the two added copies cost beyond the first. It carries the same confound as the deciding pair: D3's passes also fall, from 4.73 to 2.93.
 - As in claude-314's sheet, `train=` builds only the T2 and unigram baselines. It does not change which rows are graded or what counts as a nearest hit; I-4 pins the row set.
 
 Recorded beside them, descriptive only:
@@ -135,8 +144,9 @@ Read top to bottom; the first row that matches decides.
 | 3a | stopping met, neither seed collapsed, the pair is `behind`, and the mean d is at or above −58,212 | **The ratio stops and varies, at a cost inside the ceiling.** Next: a decision review on the recall lever, with this TRAIN as the base. The REPORT says the cost cannot be split between fewer D3 passes (2.93) and mw-balp's content. |
 | 3b | stopping met, neither seed collapsed, the pair is `behind`, and the mean d is below −58,212 | **The ratio stops and varies, at a cost past the ceiling.** Next: a decision review between a lower ratio (× 2) and a decode-time lever. |
 | 4 | stopping met, a seed collapsed | **More copies stop the model, but its stopped replies collapse.** Next: a decision review on a larger or more varied dialogue corpus. |
-| 5 | at least 8 EOS stops at some seed, stopping not met | **Tripling mw-balp does not lift both seeds past the bar.** The REPORT sets the stops at × 0, × 1, × 3 and mw-balp alone side by side. Next: a decision review between a higher ratio and the fine-tuning lever (deepseek-26, deepseek-28). |
-| 6 | fewer than 8 EOS stops at each seed | **Fewer stops than × 1, against the direction claude-315 measured.** First the REPORT classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Then a decision review. |
+| 5 | stopping not met, and both seeds below 122 EOS stops (× 1's lower seed) | **Fewer stops than × 1 at both seeds, against the direction claude-315 measured.** First the REPORT classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Then a decision review. A higher ratio is not offered. |
+| 6a | stopping not met, a seed at 122 or more, and neither seed collapsed | **Tripling mw-balp does not lift both seeds past the bar.** The REPORT sets the stops at × 0, × 1, × 3 and mw-balp alone side by side. Next: a decision review between a higher ratio and the fine-tuning lever (deepseek-26, deepseek-28). |
+| 6b | stopping not met, a seed at 122 or more, and a seed collapsed | **More copies do not lift both seeds, and the stopped replies collapse.** Next: row 4's decision review, a larger or more varied dialogue corpus, or the fine-tuning lever. A higher ratio is not offered, since repeating mw-balp repeats its stock replies. |
 
 A seed that is NOT_RUN reruns once, sealing to the new root `runs-2/s{1,2}/` (L-002). A second NOT_RUN reads by row 0a or 0b, by the class of its last cause.
 
@@ -151,7 +161,7 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
   - the mix's three files match the shas above;
   - the panel folders and the DEV files match claude-306's pins;
   - each run's `config.json` names the mix's tokens and mask shas, width 256, read 4, batch 64, micro-batch 16, 16,384 steps (128 for the smoke), the pod's seed and the recipe's flags, with no turn memory;
-  - the trainer's "usable TRAIN windows" line reads **357,907**. Any other count is recorded and classed before any reading.
+  - the trainer's "usable TRAIN windows" line in the smoke reads **357,907**. Any other count, or none, makes the arm NOT_RUN at that seed before the 16,384-step run: the job refuses it, and it reads as row 0a, an instrument fault, since it means the window rule or the mix is not what this sheet assumed.
 - **I-1, the smoke:** 128 steps at `--eval-every 32` on the mix, at the pod's seed. It exits 0 with a finite loss and writes `models/step-000064`.
 - **I-m, from the smoke:** the largest `mem.log` sample inside the smoke's window is below 90% of the card. claude-315's smoke on its 35.5M-token mix peaked at 26,864 and 26,800 of 32,607 MiB; claude-306's (b64L) on D4's 74.0M tokens at 26,832 and 26,928. This mix has 50.5M.
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB.
@@ -197,7 +207,7 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 - **Stopping** is a count. At × 1 the seeds read 177 and 122, a spread of 55. A spread of that size about 128 is expected here too.
   - That more copies lift both seeds is an **inference** from two points: 1.06 EOS per window stopped 177 and 122; 3.12 stopped 253 and 244. This run's 1.84 sits between them.
   - A seed within 32 of 128 (96 to 160) is reported as "near the bar". The row still follows the bar.
-- **Collapse** is a count over EOS-stopped rows. The seed spreads so far are 33 (b64L-mw) and 13 (b64L-d3mw) about the bar of 64. A reading within 16 of 64 is reported as "near the bar" and is not decisive. The row still follows the bar.
+- **Collapse** is a count over EOS-stopped rows. The seed spreads so far are 33 (b64L-mw) and 13 (b64L-d3mw) about the bar of 64. A reading within 16 of 64 (48 to 80) is reported as "near the bar". The row still follows the bar.
 - **The held-out pair** uses `scale-probe pair`'s band. claude-315's was 8,858, its two-seed spread, against d of −14,975 and −23,833.
   - **The scorer is not bit-reproducible across pod instances.** claude-317's I-q found 33 of 14,287 DEV nearest picks differ between two pods scoring the same checkpoint, a DEV hit difference of 3 of 3,188.
   - Each seed here is scored on its own pod, so that noise is inside the two-seed spread, and the band includes the spread. That it is small against the band is an inference from DEV's 0.1%.
@@ -212,7 +222,7 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 ## Stop rule
 
 - **I-p, I-0, I-3 or an input fetch fails:** the pod trains nothing. Fix the instrument and rerun at a new root.
-- **The smoke, I-m or I-f fails:** the arm is NOT_RUN at that seed.
+- **The smoke, I-m, I-f or I-3's window count fails:** the arm is NOT_RUN at that seed.
 - **An out-of-memory error, a non-finite loss, or a trainer exit other than 0:** NOT_RUN at that seed, classified as instrument or mechanism before it is called anything (§4.2).
 - **A pod lost mid-run, or one that never reaches SSH within 1,800 s:** an instrument NOT_RUN. It is deleted, and one retry runs on another machine.
 - **The no-memory scoring fails or I-5 fails:** the served readings stand. Rows 2, 3a and 3b then cannot be told apart; the REPORT reads row "2 or 3" and re-scores from the seal.
@@ -223,8 +233,8 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 1. **TRAIN:** D3 + `mw-balp/train` × 3, at the store path and shas above, in place of × 1.
 2. **The held-out pairs:** a descriptive pair against (b64L-d3mw), and the cost ceiling, which splits row 3 into 3a and 3b.
 3. **The role-header count** is recorded, descriptive only (claude-315's decision review, point 4).
-4. **I-3's window count** is 357,907. **I-m** names claude-315's smoke peaks.
-5. **The outcome map:** rows 5 and 6 are rewritten for a ratio already at × 3, and row 3 is split.
+4. **I-3's window count** is 357,907, and it now gates the full run (it was recorded only). **I-m** names claude-315's smoke peaks.
+5. **The outcome map:** row 3 is split by the cost ceiling; row 5 classes a drop below × 1; row 6 is split by collapse. "Behind" is defined for a `mixed` verdict.
 6. **The job** carries claude-317's signal trap, and the watchers start in `screen`.
 7. **Minimum test power** names claude-317's cross-pod scorer finding.
 8. **The seal path** is `results/claude/one-model-end-to-end-b64l-d3mw3-2026-11-08/runs/s{1,2}/`, and `runs-2/` for a rerun.
