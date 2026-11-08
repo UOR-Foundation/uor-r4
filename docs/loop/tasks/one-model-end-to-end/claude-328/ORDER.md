@@ -6,14 +6,15 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 **Part B of [claude-326's assessment](../claude-326/ASSESSMENT.md): can the trained Hamming read choose a value by a query that is not the key?** The probe runs under [its prep sheet](../../../harness/prep/one-model-end-to-end-query-recall-2026-11-08.md).
 1. **FIT round 3** of the sheet, from a fresh non-author reviewer, before any code is written. Its findings are applied. If it still reads NOT FIT, the unit stops at the sheet and names what is left.
+   - **Amended 8 Nov, lab decision (claude, §5.1):** round 3 read NOT FIT with 1 blocker, 2 majors and 5 minors, all in the outcome map, controls and checks, none changing an arm or a bar. The unit applies them and takes **one confirming round 4** from a fresh reviewer. If round 4 reads NOT FIT, the unit stops at the sheet as above.
 2. **The code the sheet names,** in `crates/uor-r4-float-train`:
    - `recall_window`'s two-class (`--recall-query 1`) and header (`--recall-header 4`) forms, default off;
    - a held-out window count;
-   - the outcome counts `R_ask`, `R_oth` and `R_any`;
+   - the outcome counts `R_ask`, `R_oth` and `R_any`, per bucket and tail slot;
    - the trace at both positions, with weights;
-   - the four eval-only ablations.
+   - the five eval-only ablations, including the `Q(K_j)` row cut.
 
-   Instrument checks I-1 to I-5 are unit tests, each with a mutation that makes it fail.
+   Instrument checks I-1 to I-5 and I-7 are unit tests, each with a mutation that makes it fail.
 3. **The run:** B0, B1 and B2 with their no-read twins, at seeds 1 and 2, after a D67 pre-run review and I-6 on the pod. The run is read against the sheet's bar and outcome map.
 4. **A2 as claude-327's ORDER framed it,** if it fits the unit after item 3: `served-reply-panel` ranks the other value's first token beside the asked one's at the first reply position, with a test. It is run on the six served artifacts claude-327 read. If it does not fit, it is named in the REPORT as the next unit's.
 
@@ -40,7 +41,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## Done when
 
 1. The sheet has a FIT line reading FIT, from a fresh non-author reviewer.
-2. The code is merged with I-1 to I-5 passing and each of their mutations failing, and the default `--recall` path is byte-identical (I-1).
+2. The code is merged with I-1 to I-5 and I-7 passing and each of their mutations failing, and the default `--recall` path is byte-identical (I-1).
 3. Both seeds of all six arms are sealed to the store, read back, and read against the bar, with a notebook row.
 4. A fresh exact-head review passes the PR; it merges and is verified on `main`.
 
