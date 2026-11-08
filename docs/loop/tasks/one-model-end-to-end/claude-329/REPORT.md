@@ -42,8 +42,8 @@ None. This unit ran no training or evaluation. The facts the sheet rests on were
 
 ## Checks run at the head
 
-- The banned-token scan of the sheet (the §3.2 and §3.3 names): 0 hits.
-- `uor-harness loop report --check --order docs/loop/tasks/one-model-end-to-end/claude-329/ORDER.md`.
+- The banned-token scan of all three files (the sheet, the ORDER and this REPORT; the §3.2 and §3.3 names): 0 hits, after the ORDER's one hit was reworded at the review's request.
+- `uor-harness loop report --check --order docs/loop/tasks/one-model-end-to-end/claude-329/ORDER.md`: PASS.
 - No cargo check was needed: the diff is docs only.
 
 ## Skills used
@@ -53,7 +53,7 @@ None beyond the loop's own steps. The two FIT reviews ran as fresh read-only rev
 ## Still open
 
 - **claude-330:** a fresh non-author FIT of the sheet as fixed after round 2. If it is FIT, the code follows behind `--hamming-ask`, `--hamming-attract` and `--hamming-attract-at`, default off, with I-1 and I-A1 to I-A5 as unit tests with mutations. Then the D67 pre-run review and the two-seed run.
-- **The build map is already read.** It is in claude-330's ORDER:
+- **The build map is already read.** It is carried into claude-330's ORDER, which is a local draft until that unit commits it:
   - The ask query depends only on the token point and `a`, so the pull can be computed from `ids` and the table outside the forward pass.
   - The recall training loop calls `batch_loss` at `in_space_long.rs:12741`, where the pull term is added.
   - `RecallQuery` carries `query_pos` and `ask_value` for B2-aq.

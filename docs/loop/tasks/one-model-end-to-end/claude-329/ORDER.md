@@ -9,7 +9,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 The sheet's next step: "lever (b) of the assessment, a question-keyed read, under its own sheet. It must pass B2 here before any language run."
 
 1. **A prep sheet** for the question-keyed read. It covers:
-   - the mechanism: how the question's code keys the fact match, built from the project's geometry (§3.1), with hard Hamming picks and no squashing (§3.2) and no dense matmul (§3.3);
+   - the mechanism: how the question's code keys the fact match, built from the project's geometry (§3.1), with hard Hamming picks and no squashing (§3.2) and no dense matrix multiplication (§3.3);
    - why it can learn where the type heads did not (the training signal, named);
    - its arms on claude-328's B0, B1 and B2 forms, with no-read twins and claude-328's read as the comparison;
    - its bar, outcome map, instrument checks and cost.
