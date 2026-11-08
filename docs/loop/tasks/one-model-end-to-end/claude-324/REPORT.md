@@ -14,7 +14,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **The ORDER's disjointness from "any word of the sealed dev512 inputs" was not checked.** The dev512 inputs file (sha `b9661606…`) is not in the repository; only its audit summaries are, under `archive/labs/m2-fresh-437-2026-10-10/`. The check covers what is on disk:
   - the `m2-fresh256` panel's own literals (`FRESH256_*`), the panel this item is read on;
   - `HISTORICAL_EXPOSED_LITERALS`;
-  - the repository's loaded historical literals. That loader (`load_historical_exposed_literals_from_repo`) checks the opened-fresh128 audit's input sha and that every literal of its frozen banks is in the set. So opened-fresh128 is covered, but only through its literals, not every word of its inputs.
+  - the repository's loaded historical literals (74). That loader (`load_historical_exposed_literals_from_repo`, `lib.rs:1356-1381`) binds the opened-fresh128 audit's input and tokenizer shas, and checks the 4 literals of the 2 banks the audit lists in literal support.
+  - **opened-fresh128 is only partly covered.** Its audit counts 12 frozen banks and 15 fresh full literals but holds no text for the other 10 banks or the 15, so nothing on disk checks them against this corpus.
 - **The mix was built with `scale-probe mix`, not `mix-chat-corpus`, and no `mix-chat-corpus` round trip was run.** The store test reads back every field both tools check, and the trainer's own loader reads the mix in claude-325.
 - **The first disjointness test caught only a trailing `s`, and the overlap test asserted `≥ 256` panel messages.** After the fresh review it also checks `-es` and `-y`/`-ies` both ways (no new clash), and it pins the count at exactly 320. Only tests changed; the corpus and mix bytes are as sealed.
 - **One curriculum template reads badly:** "I am a {v} by trade." gives "I am a opera …" for vowel-initial values. It is noise in the user text, not in the scored reply.
@@ -72,7 +73,7 @@ Assistant: bowl mall round teacup turtle snowy.<|eos|>
 ## Checks run at the head
 
 - `cargo test --offline --manifest-path docs/labs/one-model-end-to-end/current-state-corpus/Cargo.toml`: 6 passed, 0 failed.
-- Negative gates: with `basalt` in the value list, the disjointness test fails; with a one-word minimum, the store test fails on `under_4`.
+- Negative gates: with `basalt`, or the plural `basalts` (caught only by the round-2 stem forms), in the value list, the disjointness test fails; with a one-word minimum, the store test fails on `under_4`.
 - The crate is outside the workspace, so the workspace's own builds and suites are unchanged.
 
 ## Decision (for the next unit)
