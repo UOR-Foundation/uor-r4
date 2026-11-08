@@ -11879,6 +11879,191 @@ pub fn recall_window(
     Ok((window, rows.iter().map(|r| r.2).collect()))
 }
 
+/// claude-328: the two-class task's relation tokens, carved from the key range.
+pub const RECALL_RELATIONS: std::ops::Range<u32> = 16..32;
+/// The query tokens: relation `k` is asked by `Q(k) = k + RECALL_QUERY_SHIFT`, a fixed bijection
+/// onto `32..48`, the same in every window and seed.
+pub const RECALL_QUERY_SHIFT: u32 = 16;
+/// The header's four fixed tokens, `H1 … H4`, from their own range.
+pub const RECALL_HEADER: [u32; 4] = [48, 49, 50, 51];
+/// The two-class task's buckets, the far two of [`RECALL_BUCKETS`]: bucket 0 is 33–96, bucket 1
+/// is 97–180.
+pub const RECALL_QUERY_BUCKETS: [(usize, usize); 2] = [(33, 96), (97, 180)];
+/// Episodes per two-class window, one per tail slot.
+pub const RECALL_QUERY_EPISODES: usize = 4;
+
+/// One scored query of a two-class window ([`recall_query_window`]), with every position the
+/// readings need.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct RecallQuery {
+    /// The tail slot, 0–3 in position order.
+    pub slot: usize,
+    /// The asked fact's bucket in [`RECALL_QUERY_BUCKETS`]; the other fact's is the same.
+    pub bucket: usize,
+    /// Which of the episode's two relations is asked, 0 or 1.
+    pub j: usize,
+    /// The query token `Q(K_j)`'s position.
+    pub query_pos: usize,
+    /// The scored position: `query_pos` without a header, `H4`'s (`query_pos + 4`) with one.
+    pub scored_offset: usize,
+    pub ask_relation: u32,
+    pub other_relation: u32,
+    pub ask_value: u32,
+    pub other_value: u32,
+    /// The facts' value positions `p`; each relation sits at `p − 1`.
+    pub ask_value_pos: usize,
+    pub other_value_pos: usize,
+    /// `query_pos − p` for each fact.
+    pub ask_distance: usize,
+    pub other_distance: usize,
+    pub ask_nearer: bool,
+    pub ask_first: bool,
+    /// The window's 8 values, episode by episode.
+    pub values: Vec<u32>,
+}
+
+/// claude-328: one window of the two-class recall task (the Part B sheet,
+/// `docs/harness/prep/one-model-end-to-end-query-recall-2026-11-08.md`), and its 4 queries.
+///
+/// The window is `context` tokens, BOS first. It ends with 4 tail slots, one per episode: `Q(K_j)
+/// v` with `header` 0, the value predicted at the query's own position; `Q(K_j) H1 H2 H3 H4 v`
+/// with `header` 4, the value predicted at `H4`'s. Each episode holds two relations, each written
+/// once as `K v` before the first tail slot, and asks one of them, `j`, uniformly. The window's 8
+/// relations and 8 values are distinct. Each slot draws its bucket from a uniform assignment of
+/// two 33–96 and two 97–180 buckets; both facts' distances are drawn uniformly over the bucket
+/// clipped at the slot's largest distance, `query_pos − 2` (position 0 is BOS), and a draw that
+/// collides is redrawn. A window that cannot hold every fact is an error.
+pub fn recall_query_window(
+    seed: u64,
+    index: u64,
+    context: usize,
+    header: usize,
+) -> Result<(CausalWindow, Vec<RecallQuery>)> {
+    if header != 0 && header != RECALL_HEADER.len() {
+        return Err(invalid(format!(
+            "a two-class header is 0 or {} tokens, not {header}",
+            RECALL_HEADER.len()
+        )));
+    }
+    let tail = header + 2;
+    let first_tail = context
+        .checked_sub(RECALL_QUERY_EPISODES * tail)
+        .filter(|&f| f > RECALL_QUERY_BUCKETS[0].0 + 2)
+        .ok_or_else(|| invalid(format!("a {context}-token window cannot hold the two-class tails")))?;
+    // Its own stream, apart from `recall_window`'s for the same `(seed, index)`.
+    let mut state = (seed ^ 0x51C2_8A3D_0F6B_E7C9)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(index.wrapping_mul(0xD1B5_4A32_D192_ED03))
+        | 1;
+    let mut next = move || {
+        state ^= state >> 12;
+        state ^= state << 25;
+        state ^= state >> 27;
+        state.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    };
+    let below = |n: usize, x: u64| (x % n as u64) as usize;
+    let mut ids: Vec<u32> = (0..context)
+        .map(|_| RECALL_FILLER.start + (next() % u64::from(RECALL_FILLER.end - RECALL_FILLER.start)) as u32)
+        .collect();
+    ids[0] = hs::SHEET_BOS_ID;
+    let mut taken = vec![false; context];
+    taken[0] = true;
+    taken[first_tail..].iter_mut().for_each(|t| *t = true);
+    // 8 distinct relations of the 16, a partial shuffle.
+    let mut relations: Vec<u32> = RECALL_RELATIONS.collect();
+    for i in 0..2 * RECALL_QUERY_EPISODES {
+        let k = i + below(relations.len() - i, next());
+        relations.swap(i, k);
+    }
+    let mut values: Vec<u32> = Vec::with_capacity(2 * RECALL_QUERY_EPISODES);
+    while values.len() < 2 * RECALL_QUERY_EPISODES {
+        let v = RECALL_VALUES.start + (next() % u64::from(RECALL_VALUES.end - RECALL_VALUES.start)) as u32;
+        if !values.contains(&v) {
+            values.push(v);
+        }
+    }
+    // A uniform assignment of the bucket multiset to the slots.
+    let mut buckets = [0usize, 0, 1, 1];
+    for i in (1..buckets.len()).rev() {
+        buckets.swap(i, below(i + 1, next()));
+    }
+    let js: Vec<usize> = (0..RECALL_QUERY_EPISODES).map(|_| below(2, next())).collect();
+    let mut positions = [[0usize; 2]; RECALL_QUERY_EPISODES];
+    // The far bucket's slots first, while the window is emptiest.
+    let mut order: Vec<usize> = (0..RECALL_QUERY_EPISODES).collect();
+    order.sort_by_key(|&slot| std::cmp::Reverse(buckets[slot]));
+    for slot in order {
+        let q = first_tail + slot * tail;
+        let (low, high) = RECALL_QUERY_BUCKETS[buckets[slot]];
+        let high = high.min(q - 2);
+        if low > high {
+            return Err(invalid(format!(
+                "slot {slot} at {q} cannot reach bucket {low}-{}",
+                RECALL_QUERY_BUCKETS[buckets[slot]].1
+            )));
+        }
+        for fact in 0..2 {
+            let mut placed = false;
+            for _ in 0..10_000 {
+                let d = low + below(high - low + 1, next());
+                let p = q - d;
+                if p < 2 || p >= first_tail || taken[p - 1] || taken[p] {
+                    continue;
+                }
+                taken[p - 1] = true;
+                taken[p] = true;
+                let e = 2 * slot + fact;
+                (ids[p - 1], ids[p]) = (relations[e], values[e]);
+                positions[slot][fact] = p;
+                placed = true;
+                break;
+            }
+            if !placed {
+                return Err(invalid(format!(
+                    "a {context}-token two-class window could not place slot {slot}'s fact {fact}"
+                )));
+            }
+        }
+    }
+    let mut queries = Vec::with_capacity(RECALL_QUERY_EPISODES);
+    for slot in 0..RECALL_QUERY_EPISODES {
+        let q = first_tail + slot * tail;
+        let (j, o) = (js[slot], 1 - js[slot]);
+        let (ask, other) = (2 * slot + j, 2 * slot + o);
+        ids[q] = relations[ask] + RECALL_QUERY_SHIFT;
+        ids[q + 1..q + 1 + header].copy_from_slice(&RECALL_HEADER[..header]);
+        ids[q + 1 + header] = values[ask];
+        let (pa, po) = (positions[slot][j], positions[slot][o]);
+        queries.push(RecallQuery {
+            slot,
+            bucket: buckets[slot],
+            j,
+            query_pos: q,
+            scored_offset: q + header,
+            ask_relation: relations[ask],
+            other_relation: relations[other],
+            ask_value: values[ask],
+            other_value: values[other],
+            ask_value_pos: pa,
+            other_value_pos: po,
+            ask_distance: q - pa,
+            other_distance: q - po,
+            ask_nearer: q - pa < q - po,
+            ask_first: pa < po,
+            values: values.clone(),
+        });
+    }
+    let base = index as usize * context;
+    let window = CausalWindow {
+        doc_id: index as usize,
+        input_ids: ids,
+        scored_offsets: queries.iter().map(|q| q.scored_offset).collect(),
+        scored_targets: queries.iter().map(|q| q.ask_value).collect(),
+        scored_corpus_positions: queries.iter().map(|q| base + q.scored_offset + 1).collect(),
+    };
+    Ok((window, queries))
+}
+
 /// One recall checkpoint's reading, one line of `recall.jsonl` ([`run_recall`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct RecallReading {
@@ -13938,6 +14123,133 @@ mod tests {
         ];
         let got: Vec<String> = seeds.iter().map(|&s| digest(s)).collect();
         assert_eq!(got, expected);
+    }
+
+    /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
+    /// bijection, one write per relation, the target, 4 targets, the ranges, the distances and
+    /// the tails.
+    #[test]
+    fn recall_query_windows_hold_the_task() {
+        let in_range = |r: &std::ops::Range<u32>, t: u32| r.contains(&t);
+        let queries = RECALL_RELATIONS.start + RECALL_QUERY_SHIFT..RECALL_RELATIONS.end + RECALL_QUERY_SHIFT;
+        // The ranges are disjoint and clear of BOS.
+        let header = RECALL_HEADER[0]..RECALL_HEADER[3] + 1;
+        let ranges = [&RECALL_RELATIONS, &queries, &header, &RECALL_VALUES, &RECALL_FILLER];
+        for (a, ra) in ranges.iter().enumerate() {
+            assert!(!ra.contains(&hs::SHEET_BOS_ID));
+            for rb in &ranges[a + 1..] {
+                assert!(ra.end <= rb.start || rb.end <= ra.start, "{ra:?} meets {rb:?}");
+            }
+        }
+        assert!(RECALL_KEYS.start <= RECALL_RELATIONS.start && header.end <= RECALL_KEYS.end);
+        for head in [0usize, 4] {
+            let tail = head + 2;
+            let first_tail = SHEET_CONTEXT - RECALL_QUERY_EPISODES * tail;
+            for seed in [1u64, 2] {
+                for index in 0..300 {
+                    let (w, qs) = recall_query_window(seed, index, SHEET_CONTEXT, head).unwrap();
+                    let ids = &w.input_ids;
+                    assert_eq!(ids.len(), SHEET_CONTEXT);
+                    assert_eq!(ids[0], hs::SHEET_BOS_ID);
+                    // Exactly 4 scored targets, one per slot, in position order.
+                    assert_eq!(qs.len(), 4);
+                    assert_eq!(w.scored_offsets.len(), 4);
+                    assert_eq!(w.scored_targets.len(), 4);
+                    // Each relation written once, 8 in all; each query token once, at its slot.
+                    let relations: Vec<u32> = ids.iter().copied().filter(|&t| in_range(&RECALL_RELATIONS, t)).collect();
+                    let mut distinct = relations.clone();
+                    distinct.sort_unstable();
+                    distinct.dedup();
+                    assert_eq!((relations.len(), distinct.len()), (8, 8));
+                    let query_at: Vec<usize> = (0..ids.len()).filter(|&i| in_range(&queries, ids[i])).collect();
+                    assert_eq!(query_at, qs.iter().map(|q| q.query_pos).collect::<Vec<_>>());
+                    for (slot, q) in qs.iter().enumerate() {
+                        assert_eq!(q.slot, slot);
+                        assert_eq!(q.query_pos, first_tail + slot * tail);
+                        // The query is the bijection's image of the asked relation, never a relation.
+                        assert_eq!(ids[q.query_pos], q.ask_relation + RECALL_QUERY_SHIFT);
+                        assert!(!in_range(&RECALL_RELATIONS, ids[q.query_pos]));
+                        assert_ne!(q.ask_relation, q.other_relation);
+                        // The facts: `K v` at `p − 1, p`, both before the first tail slot.
+                        for (k, v, p) in [
+                            (q.ask_relation, q.ask_value, q.ask_value_pos),
+                            (q.other_relation, q.other_value, q.other_value_pos),
+                        ] {
+                            assert!(p >= 2 && p < first_tail);
+                            assert_eq!((ids[p - 1], ids[p]), (k, v));
+                        }
+                        // Both distances inside the asked bucket, clipped at `query_pos − 2`.
+                        let (low, high) = RECALL_QUERY_BUCKETS[q.bucket];
+                        let high = high.min(q.query_pos - 2);
+                        for d in [q.ask_distance, q.other_distance] {
+                            assert!((low..=high).contains(&d), "distance {d} outside {low}-{high}");
+                        }
+                        assert_eq!(q.ask_distance, q.query_pos - q.ask_value_pos);
+                        assert_eq!(q.other_distance, q.query_pos - q.other_value_pos);
+                        // The target is the asked relation's value, at the scored position, and
+                        // the value follows in the input (I-3: 5 after the query with a header).
+                        assert_eq!(q.scored_offset, q.query_pos + head);
+                        assert_eq!(w.scored_offsets[slot], q.scored_offset);
+                        assert_eq!(w.scored_targets[slot], q.ask_value);
+                        assert_eq!(ids[q.query_pos + head + 1], q.ask_value);
+                        assert_eq!(&ids[q.query_pos + 1..q.query_pos + 1 + head], &RECALL_HEADER[..head]);
+                    }
+                    // I-3: the tails fill the window's last `4 · tail` positions; everything else
+                    // after BOS is a fact or filler.
+                    assert_eq!(qs[3].scored_offset + 1, SHEET_CONTEXT - 1);
+                    let facts: Vec<usize> = qs
+                        .iter()
+                        .flat_map(|q| [q.ask_value_pos, q.ask_value_pos - 1, q.other_value_pos, q.other_value_pos - 1])
+                        .collect();
+                    for (i, &t) in ids.iter().enumerate().take(first_tail).skip(1) {
+                        if facts.contains(&i) {
+                            assert!(in_range(&RECALL_RELATIONS, t) || in_range(&RECALL_VALUES, t));
+                        } else {
+                            assert!(in_range(&RECALL_FILLER, t), "position {i} holds {t}");
+                        }
+                    }
+                }
+            }
+        }
+        assert!(recall_query_window(1, 0, SHEET_CONTEXT, 3).is_err());
+    }
+
+    /// claude-328's I-2 balance over 10,000 windows of each form. In each bucket × slot cell (about
+    /// 5,000 queries) the asked fact is the nearer one, and relation 0 is asked, each 0.5 ± 0.02;
+    /// each slot receives a 33–96 bucket in 0.5 ± 0.02 of windows. "Written first" is not a
+    /// separate count: both facts are measured to the same query, so the asked fact is written
+    /// first exactly when it is the farther one.
+    #[test]
+    fn recall_query_windows_balance_the_choice() {
+        for head in [0usize, 4] {
+            let (mut rows, mut nearer, mut zero) = ([[0usize; 4]; 2], [[0usize; 4]; 2], [[0usize; 4]; 2]);
+            let mut near_bucket = [0usize; 4];
+            let windows = 10_000u64;
+            for index in 0..windows {
+                let (_, qs) = recall_query_window(5, index, SHEET_CONTEXT, head).unwrap();
+                for q in qs {
+                    assert_eq!(q.ask_first, !q.ask_nearer);
+                    rows[q.bucket][q.slot] += 1;
+                    nearer[q.bucket][q.slot] += usize::from(q.ask_nearer);
+                    zero[q.bucket][q.slot] += usize::from(q.j == 0);
+                    near_bucket[q.slot] += usize::from(q.bucket == 0);
+                }
+            }
+            for b in 0..2 {
+                for s in 0..4 {
+                    let n = rows[b][s] as f64;
+                    assert!(n > 4_500.0, "cell {b},{s} has {n} queries");
+                    for (name, k) in [("nearer", nearer[b][s]), ("j = 0", zero[b][s])] {
+                        let rate = k as f64 / n;
+                        assert!((rate - 0.5).abs() <= 0.02, "header {head} cell {b},{s}: {name} {rate:.4}");
+                    }
+                }
+            }
+            for (s, &k) in near_bucket.iter().enumerate() {
+                let rate = k as f64 / windows as f64;
+                assert!((rate - 0.5).abs() <= 0.02, "header {head} slot {s}: 33-96 in {rate:.4}");
+            }
+        }
     }
 
     #[test]
