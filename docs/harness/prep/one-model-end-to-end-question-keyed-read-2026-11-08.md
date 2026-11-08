@@ -5,6 +5,15 @@ TEST FITNESS: NOT_FIT after two rounds, by fresh non-author reviewers (claude-32
 - **Round 2, at `59b69fad4`:** every round 1 finding is confirmed fixed. One blocker remains: I-R gated hits against `rows` at every checkpoint, which step 0 fails. There are also two minors. The reviewer called the sheet "fit" apart from that wording. All three are applied below.
 - **Owed:** a fresh FIT of this text, in the next unit (claude-330), before any code.
 
+TEST FITNESS: FIT, by a fresh non-author reviewer in claude-330, at `e4b2977e6` (this text as merged by claude-329), before any code. No blocker and no major; six minors, all applied below. The reviewer's one negative gate for the orchestrator (detach `a` in the pull path; I-A2's gradient-reaches-`a` assertion must fail) is in claude-330's mutation script as `ia2-detach-ask`. The verdict is recorded in `local/claude/claude-330/fit-report.md` and in claude-330's REPORT.
+- **Minor 1:** I-R's loss tolerance had no evidence behind it. `train_loss_mean` is now reported, with the sealed step-3,584 to step-4,096 change beside it for scale, and not gated. I-R gates on `rows` and hits.
+- **Minor 2:** outcome 4's first branch is a configuration result for `λ` when I-A2 and I-A3 pass.
+- **Minor 3:** B2-a and B2-aq differ in the pull's placement (at the `Q` row and not at `H4`), not only in a signal at `Q`. Outcome 3 says so.
+- **Minor 4:** diagnosis point 2 now names the true limit: the shared lane-wise rotation and the margin gating. The residual is not detached.
+- **Minor 5:** `a` is one table per depth.
+- **Minor 6:** outcome 2's attribution names an ask head at `Q(K_j)` at either depth.
+- **Deviation, recorded:** I-1's "fixture hashed from `main` at the pin" is built as a printed digest. The test `i1_digest::ask_default_forward_digest`, between the `// I1-DIGEST BEGIN` and `// I1-DIGEST END` markers, prints `I1-DIGEST <hex>`. The pod appends that block to the base commit's `flock_read_hamming.rs` and to the head's, runs both, and requires the two lines to be equal. No hash is committed, so the fixture cannot drift from the base it names.
+
 ## The question
 
 [claude-328](../../loop/tasks/one-model-end-to-end/claude-328/REPORT.md) read outcome 4 of [its sheet](one-model-end-to-end-query-recall-2026-11-08.md), a query failure, on both seeds:
@@ -15,7 +24,7 @@ TEST FITNESS: NOT_FIT after two rounds, by fresh non-author reviewers (claude-32
 
 **Why the type heads could not learn it** (read from the code at `308e25aad`, `crates/uor-r4-float-train/src/flock_read_hamming.rs`):
 1. **The choice carries no gradient.** `choose_sorted` takes `query.detach()` and `key.detach()` (`:1720–1721`). A position is pulled closer only if it is already among the 16 kept picks and inside the margin, through `relu(m − d) / max(m, 1)` (`:1370–1374`). In B1 the asked position is among the picks about `16 / (t − 1)` of the time, about 0.09, which is the chance rate claude-328's trace measured.
-2. **The query cannot name a token.** A type head's query is `rotate(query_rotation, residual_t)` (`:1181`): one lane-wise rotation, the same for every token. Asking for `K_j` from `Q(K_j)` needs the residual at `t` to carry `K_j`'s direction already. The table is detached in the read (`:1163`), so the read cannot align it either.
+2. **The query cannot name a token.** A type head's query is `rotate(query_rotation, residual_t)` (`:1181`): one lane-wise rotation, the same for every token. Asking for `K_j` from `Q(K_j)` needs the residual at `t` to carry `K_j`'s direction already. The residual is not detached (`:1157`), so a gradient can reach the embedding, but only through candidates already kept and inside the margin. The limit is the shared lane-wise rotation together with that margin gating, not the table's detach in the read (`:1163`).
 3. **The signal is scaled by a weight that starts at 0.** Every gradient to the type heads passes through `w_y` (`:1044`), which reached only 0.075–0.104.
 4. **The payload is the form that failed before.** A type head brings back `v_s`, the rotated residual. The module doc (`:50–52`) records that this form "failed the recall probe".
 
@@ -24,7 +33,7 @@ TEST FITNESS: NOT_FIT after two rounds, by fresh non-author reviewers (claude-32
 Under `--hamming-ask 1`, each read's **type heads become ask heads**. Everything else in the read is unchanged, the copy heads included.
 - **Query:** `rotate(key_rotation, point(x_t) + a[x_t])`, then the sign code.
   - `point` is the shared table's point, detached, as the copy heads use it.
-  - `a` is a new learned table of per-token **ask offsets**, one point per token, starting at 0.
+  - `a` is a new learned table of per-token **ask offsets**, one point per token, starting at 0. There is one table per depth (saved as `d{depth}.ask`), not one shared by both depths.
   - At step 0 an ask head's query equals a copy head's query bit for bit. So the read starts as an exact-match read and learns where to look by moving `a`.
 - **Key:** the copy heads' key, `rotate(key_rotation, point(x_{s−1}))`.
 - **Payload:** the copy payload, the table point of the token at the kept position `s`.
@@ -84,7 +93,7 @@ The rules are claude-328's, applied to the ask arms:
 | Arm | Passes when |
 |---|---|
 | **B0 (instrument)** | `R(B0-a) ≥ 0.95` and `R(B0-n) ≤ 0.02`. Otherwise nothing else is read |
-| **I-R (instrument)** | B0-h's `recall.jsonl` is compared, line by line, with claude-328's sealed `runs/s{1,2}/…/B0-h-s{seed}/recall.jsonl` (in the store, checked 8 Nov). The timing fields `train_seconds` and `train_context_tokens_per_second` are ignored. Passes when, **at the step-4,096 line only**: `rows` are equal to the sealed line's; each bucket's `hits` is within `0.02 · rows` of the sealed line's `hits`, so `|hits − sealed hits| ≤ 0.02 · rows`; and `train_loss_mean` is within 1% relative of the sealed line's. The earlier checkpoints are compared and reported but not gated, since hits still rise fast between 512 and 2,048 steps and two runs that are not bit-identical can differ there. A broken default path fails it plainly: claude-328's `−c` reading drops B0-h to 0 / 0, against sealed hits of 0.98–0.996. Otherwise the build moved the default path, and nothing else is read. Byte identity across pods is not assumed: the CUDA kernels are not shown to be deterministic. I-1 is the bit-exact check, on the laptop |
+| **I-R (instrument)** | B0-h's `recall.jsonl` is compared, line by line, with claude-328's sealed `runs/s{1,2}/…/B0-h-s{seed}/recall.jsonl` (in the store, checked 8 Nov). The timing fields `train_seconds` and `train_context_tokens_per_second` are ignored. Passes when, **at the step-4,096 line only**: `rows` are equal to the sealed line's; and each bucket's `hits` is within `0.02 · rows` of the sealed line's `hits`, so `|hits − sealed hits| ≤ 0.02 · rows`. `train_loss_mean` is reported beside the sealed line's, with the sealed step-3,584 to step-4,096 change for scale, and is not gated: no repeat run measures its run-to-run drift. The earlier checkpoints are compared and reported but not gated, since hits still rise fast between 512 and 2,048 steps and two runs that are not bit-identical can differ there. A broken default path fails it plainly: claude-328's `−c` reading drops B0-h to 0 / 0, against sealed hits of 0.98–0.996. Otherwise the build moved the default path, and nothing else is read. Byte identity across pods is not assumed: the CUDA kernels are not shown to be deterministic. I-1 is the bit-exact check, on the laptop |
 | **B1 (choice)** | `R_ask(B1-a) ≥ 0.50`, `R_ask(B1-a) ≥ R_oth(B1-a) + 0.25`, and `R_ask(B1-a) ≥ R_ask(B1-n) + 0.10` |
 | **B2 (carry)** | the B1 rule for B2-a against B2-n |
 | **B2-aq** | the B1 rule for B2-aq against B2-n; it decides only the outcome 3 split |
@@ -97,16 +106,16 @@ The rules are claude-328's, applied to the ask arms:
 0. **B0-a fails, or I-R fails:** an instrument fault. Repair it and rerun; nothing else is read.
 1. **Undertrained:** an arm's `R_ask` still rises by more than 0.05 between its last two checkpoints and misses its bar. Extend it to 16,384 steps under this sheet.
 2. **B2-a passes:** the question-keyed read chooses, and the value reaches the scored position, with no pull at the question. Attribute it from the trace and `R^{−aQ}`:
-   - a depth-2 ask head kept at `Q(K_j)`, with `R^{−aQ}` failing the B2 bar, means a fetch at the question plus a carry by the trunk;
+   - an ask head at either depth kept at `Q(K_j)`, with `R^{−aQ}` failing the B2 bar, means a fetch at the question plus a carry by the trunk; the trace names the depth;
    - any other pattern is named from the trace.
 
    **Next:** a language run with ask heads on claude-325's bare-answer recipe, under its own sheet.
 3. **B1-a passes, B2-a fails.** B1-a0 is read alongside: if it passes too, the task loss alone trains the offsets; if it fails, the pull is the working signal. Then split on B2-aq, first match wins:
-   - **B2-aq passes:** the choice at the question can be made, and the trunk carries its value, once a signal reaches the `Q` row. B2-a failed for want of that signal, which is a property of the recall task's unscored question row. **Next:** an ask-head language run on claude-325's recipe, under its own sheet, since every language row is scored. The carry lever is not needed yet.
+   - **B2-aq passes:** the choice at the question can be made, and the trunk carries its value, once a signal reaches the `Q` row. B2-a failed for want of the pull's placement at the `Q` row (B2-aq pulls at `Q` and not at `H4`; B2-a pulls at `H4` only), which is a property of the recall task's unscored question row. Language rows carry the pull at every row, so both placements are present there. **Next:** an ask-head language run on claude-325's recipe, under its own sheet, since every language row is scored. The carry lever is not needed yet.
    - **B2-aq fails, and an ask head is kept at `Q(K_j)` in B2-aq's trace:** the read chooses at the question, and either its write to the stream (`w_y ⊙ y` at the `Q` row) or the trunk's four-token carry fails. This sheet does not separate the two: B1 can pass through the readout move alone, so B1-a passing does not show the stream write works. **Next:** the carry lever (claude-326, Q4), tested on B2 first, under a sheet that adds an ask-stream cut to split the stream write from the carry.
    - **B2-aq fails, and no ask head is kept at `Q(K_j)`:** the choice fails under B2's form even with the pull there. Read the header-interference rule (claude-328's, with `−c2`/`−c6` on B2-aq) first; otherwise name it from the trace and the pull distance at `Q`, under outcome 4's first two branches as instrument checks.
 4. **B1-a fails,** split by the readings, first match wins:
-   - **The pull distance at step 4,096 is above 0.25 of its step-0 value** (about 0.5 at `a = 0`): the signal does not reach the offsets. That is an instrument-side fault in the gradient path. Repair it and rerun; it is not a mechanism result.
+   - **The pull distance at step 4,096 is above 0.25 of its step-0 value** (about 0.5 at `a = 0`): the signal does not move the offsets far enough. If I-A2 or I-A3 failed, that is an instrument-side fault in the gradient path: repair it and rerun; it is not a mechanism result. If both passed, it is a configuration result for `λ = 1` (too weak against an `lr` that decays to 0, or the task loss moving the shared `key_rotation` under the codes). **Next:** a `λ` step under its own sheet.
    - **The distance falls, and no ask head keeps the asked position:** the picks do not follow the codes, a fault in the choice or key path, also instrument-side. Repair it and rerun.
    - **An ask head keeps the asked position, and `R_ask` fails:** a payload or combine failure, mechanism-side for this configuration (§4.1, §4.2). **Next:** the combine, tested on B1 first.
 
