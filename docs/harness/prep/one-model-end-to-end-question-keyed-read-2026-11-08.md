@@ -1,6 +1,6 @@
 # Prep sheet: a question-keyed read (one-model-end-to-end, claude-329, 8 Nov 2026)
 
-TEST FITNESS: NOT FIT after two rounds, by fresh non-author reviewers (claude-329's stop rule applies; no code or run under this unit).
+TEST FITNESS: NOT_FIT after two rounds, by fresh non-author reviewers (claude-329's stop rule applies; no code or run under this unit).
 - **Round 1, at `3c7a10f9a`:** one blocker, the byte-identical I-R; one major, no pull at B2's question row; four minors. All six are applied.
 - **Round 2, at `59b69fad4`:** every round 1 finding is confirmed fixed. One blocker remains: I-R gated hits against `rows` at every checkpoint, which step 0 fails. There are also two minors. The reviewer called the sheet "fit" apart from that wording. All three are applied below.
 - **Owed:** a fresh FIT of this text, in the next unit (claude-330), before any code.
