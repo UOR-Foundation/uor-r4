@@ -428,6 +428,9 @@ mutate_first missing-opening-bar "$OPENING_SHEET" '## Bar' '## Removed bar'
 mutate_first missing-opening-split "$OPENING_SHEET" '## Data split' '## Removed split'
 mutate_first missing-opening-recipe "$OPENING_SHEET" '## Recipe' '## Removed recipe'
 mutate_first missing-opening-stop "$OPENING_SHEET" '## Stop rule' '## Removed stop'
+mutate_first missing-opening-first-match "$OPENING_SHEET" \
+  'Apply this first-match map to the selected checkpoint:' \
+  'Apply these rows in any order:'
 
 [ "$caught" -eq "$attempted" ]
 echo "$caught of $attempted mutations caught"

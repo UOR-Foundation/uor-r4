@@ -93,14 +93,22 @@ ordering does not change.
 
 ## Outcome
 
-Apply the original outcome rows first, then the opening-specific row above:
+Apply this first-match map to the selected checkpoint:
 
-- Row 1: continuation failure; close without seed 2.
-- Positive content: unlock seed 2 and a longer opening-weighted run.
-- Opening movement without complete content: diagnose the remaining suffix or
-  EOS gap before another dose.
-- Partial movement: close this weight/data/dose configuration.
-- No movement: close this objective configuration and do not try a weight sweep.
+1. Continuation `< 93/512`: continuation failure; close without seed 2.
+2. Every positive-content threshold is met: unlock seed 2 and a longer
+   opening-weighted run.
+3. First-target top-1 `>= 8/256` and top-8 `>= 32/256`, but positive content is
+   not met: opening moved; diagnose the remaining suffix, EOS or free-generation
+   gap before another dose.
+4. First-target top-1 `> 0` or top-8 `>= 16/256`: partial opening movement;
+   close this weight/data/dose configuration.
+5. Otherwise: no opening movement; close this objective configuration and do
+   not try a weight sweep.
+
+The original EOS, free-stop and complete-row readings are recorded alongside
+the opening row so the content gap can be classified, but they do not preempt
+this opening-specific first-match map.
 
 This is one fixed weight, not a hyperparameter sweep.
 

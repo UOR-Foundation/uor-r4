@@ -42,8 +42,8 @@ Pending the reviewed run.
   `spiralcore_fbs_sheet::tests::a_saved_trunk_loads_back_exactly`
   (`owned artifact directory required`); the same failure reproduces on clean
   `main` and is unrelated to this change.
-- Reply-SFT gate: 318 checks passed.
-- Mutation suite: 134 of 134 mutations caught.
+- Reply-SFT gate: 320 checks passed.
+- Mutation suite: 135 of 135 mutations caught.
 - `bash -n`, ShellCheck and `git diff --check`: passed.
 - `loop report --check`: passed.
 
