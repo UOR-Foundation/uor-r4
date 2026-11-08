@@ -61,7 +61,7 @@ chmod 755 "$runtime_home/binaries/$binary_name"
     npm run build
 )
 "$repo_root/scripts/studio/runtime-files.sh" copy "$repo_root/web/studio/dist" "$runtime_home/runtime/studio" --typed
-tar -xzf "$runtime_home/runtime/$archive_name" -C "$runtime_home/runtime" 'studio/pkg' 'studio/models.json'
+tar -xzf "$runtime_home/runtime/$archive_name" -C "$runtime_home/runtime" 'studio/models.json'
 verify_hash "$runtime_home/runtime/studio/pkg/synthetic-stack.lut" "$stack_sha"
 verify_hash "$runtime_home/runtime/studio/pkg/tokenizer.json" "$tokenizer_sha"
 verify_hash "$runtime_home/runtime/studio/models.json" "$catalog_sha"
