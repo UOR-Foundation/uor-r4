@@ -12085,6 +12085,96 @@ pub struct RecallReading {
     /// The Hamming reads' margins in bits, read by read and head by head: a margin below every
     /// distance weighs nothing and gets no gradient back.
     pub hamming_margins: Option<Vec<f64>>,
+    /// The two-class task's outcome counts (claude-328), when the run has that task; then `rows`
+    /// and `hits` hold its queries and asked-value hits at the far buckets' places (2 and 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<QueryCounts>,
+}
+
+/// claude-328: which recall task a run trains and scores. The default is `--recall` as before.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct RecallForm {
+    /// The two-class task ([`recall_query_window`]) in place of the key-again task.
+    pub query: bool,
+    /// The two-class task's header length, 0 or 4.
+    pub header: usize,
+    /// Held-out windows scored at each checkpoint.
+    pub eval_windows: u64,
+}
+
+impl Default for RecallForm {
+    fn default() -> Self {
+        Self { query: false, header: 0, eval_windows: RECALL_EVAL_WINDOWS }
+    }
+}
+
+/// The two-class task's held-out outcomes, by bucket ([`RECALL_QUERY_BUCKETS`]) and tail slot: each
+/// query's nearest token is the asked value (`ask`), the paired relation's (`oth`), another of the
+/// window's values (`any`), or none of them.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct QueryCounts {
+    pub rows: [[usize; 4]; 2],
+    pub ask: [[usize; 4]; 2],
+    pub oth: [[usize; 4]; 2],
+    pub any: [[usize; 4]; 2],
+}
+
+/// Count `picks`, one per query of `windows` in order, into [`QueryCounts`].
+pub fn count_queries(windows: &[(CausalWindow, Vec<RecallQuery>)], picks: &[u32]) -> Result<QueryCounts> {
+    let queries: Vec<&RecallQuery> = windows.iter().flat_map(|(_, qs)| qs).collect();
+    if queries.len() != picks.len() {
+        return Err(invalid(format!(
+            "{} picks for {} two-class queries",
+            picks.len(),
+            queries.len()
+        )));
+    }
+    let mut counts = QueryCounts::default();
+    for (q, &pick) in queries.iter().zip(picks) {
+        let (b, s) = (q.bucket, q.slot);
+        counts.rows[b][s] += 1;
+        if pick == q.ask_value {
+            counts.ask[b][s] += 1;
+        } else if pick == q.other_value {
+            counts.oth[b][s] += 1;
+        } else if q.values.contains(&pick) {
+            counts.any[b][s] += 1;
+        }
+    }
+    Ok(counts)
+}
+
+/// The realized distances of `windows`' queries, per bucket and slot, for the asked and the other
+/// fact: `distances[b][s]` maps each distance to how many queries had it.
+fn query_distances(windows: &[(CausalWindow, Vec<RecallQuery>)]) -> serde_json::Value {
+    use std::collections::BTreeMap;
+    let mut ask = vec![vec![BTreeMap::<usize, usize>::new(); 4]; 2];
+    let mut other = ask.clone();
+    for q in windows.iter().flat_map(|(_, qs)| qs) {
+        *ask[q.bucket][q.slot].entry(q.ask_distance).or_default() += 1;
+        *other[q.bucket][q.slot].entry(q.other_distance).or_default() += 1;
+    }
+    serde_json::json!({ "ask": ask, "other": other })
+}
+
+/// The whole table's nearest token to the predicted point at every scored row of `windows`, in
+/// order, as [`recall_hits`] decodes them.
+fn recall_picks(model: &StackModel, windows: &[&CausalWindow], seed: u64) -> Result<Vec<u32>> {
+    let table = table(model)?;
+    let mut all = Vec::new();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        for chunk in windows.chunks(16) {
+            let (ids, scored, targets) = assemble(chunk);
+            let hidden = crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT)?;
+            let idx = Tensor::from_vec(scored, targets.len(), model.device())?;
+            let picks = nearest_scores(&hidden.index_select(&idx, 0)?, &table)?
+                .argmax(1)?
+                .to_vec1::<u32>()?;
+            all.extend(picks);
+        }
+        Ok(())
+    })?;
+    Ok(all)
 }
 
 /// Recall hits per bucket on the held-out `windows`, decoded as the whole table's nearest token.
@@ -12122,6 +12212,7 @@ pub fn run_recall(
     out: &Path,
     config: &LongConfig,
     pairs_per_bucket: usize,
+    form: RecallForm,
     device: &Device,
 ) -> Result<()> {
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 || pairs_per_bucket == 0 {
@@ -12129,17 +12220,48 @@ pub fn run_recall(
             "steps, batch, eval-every and pairs must be positive",
         ));
     }
+    if form.eval_windows == 0 {
+        return Err(invalid("a recall run scores at least one held-out window"));
+    }
+    if form.query && pairs_per_bucket != RECALL_QUERY_EPISODES {
+        return Err(invalid(format!(
+            "the two-class task holds {RECALL_QUERY_EPISODES} episodes a window, not {pairs_per_bucket}"
+        )));
+    }
+    if !form.query && form.header != 0 {
+        return Err(invalid("a recall header needs the two-class task"));
+    }
     if out.exists() {
         return Err(invalid(format!(
             "{} exists; a run never writes over one",
             out.display()
         )));
     }
+    // The held-out windows, from the held-out seed: the key-again task's, or the two-class task's.
+    let held_seed = config.seed ^ RECALL_EVAL_SEED;
+    let (held_out, held_queries) = if form.query {
+        let windows = (0..form.eval_windows)
+            .map(|i| recall_query_window(held_seed, i, SHEET_CONTEXT, form.header))
+            .collect::<Result<Vec<_>>>()?;
+        (Vec::new(), windows)
+    } else {
+        let windows = (0..form.eval_windows)
+            .map(|i| recall_window(held_seed, i, SHEET_CONTEXT, pairs_per_bucket))
+            .collect::<Result<Vec<_>>>()?;
+        (windows, Vec::new())
+    };
     fs::create_dir_all(out)?;
     fs::write(out.join("config.json"), serde_json::to_vec_pretty(config)?)?;
-    // The task itself, for the record: `config.json` holds only the runner's settings.
-    let task =
+    // The task itself, for the record: `config.json` holds only the runner's settings. The
+    // default form writes what it wrote before claude-328.
+    let mut task =
         serde_json::json!({ "pairs_per_bucket": pairs_per_bucket, "context": SHEET_CONTEXT });
+    if form != RecallForm::default() {
+        task["form"] = serde_json::to_value(form)?;
+    }
+    if form.query {
+        task["held_out_distances"] = query_distances(&held_queries);
+    }
     fs::write(out.join("recall.json"), serde_json::to_vec_pretty(&task)?)?;
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(config.retain_rates);
@@ -12180,20 +12302,23 @@ pub fn run_recall(
     let mut register = start_register(config, device)?;
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
-    let held_out: Vec<(CausalWindow, Vec<usize>)> = (0..RECALL_EVAL_WINDOWS)
-        .map(|i| {
-            recall_window(
-                config.seed ^ RECALL_EVAL_SEED,
-                i,
-                SHEET_CONTEXT,
-                pairs_per_bucket,
-            )
-        })
-        .collect::<Result<_>>()?;
     let log = out.join("recall.jsonl");
     let (mut train_seconds, mut loss_sum, mut loss_steps) = (0.0f64, 0.0f64, 0usize);
     let reading = |step: usize, loss: Option<f64>, seconds: f64| -> Result<()> {
-        let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
+        let (rows, hits, query) = if form.query {
+            let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
+            let picks = recall_picks(&model, &refs, config.seed)?;
+            let counts = count_queries(&held_queries, &picks)?;
+            let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
+            for b in 0..2 {
+                rows[2 + b] = counts.rows[b].iter().sum();
+                hits[2 + b] = counts.ask[b].iter().sum();
+            }
+            (rows, hits, Some(counts))
+        } else {
+            let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
+            (rows, hits, None)
+        };
         let context_tokens = (step * config.batch * SHEET_CONTEXT) as f64;
         let scalar = |t: Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
         let line = RecallReading {
@@ -12227,6 +12352,7 @@ pub fn run_recall(
                 Some(reads) => Some(reads.margins()?),
                 None => None,
             },
+            query,
         };
         println!(
             "[recall] step {step} hits {:?} of {:?} train {seconds:.0}s",
@@ -12238,13 +12364,14 @@ pub fn run_recall(
     for step in 0..config.steps {
         let windows: Vec<CausalWindow> = (0..config.batch)
             .map(|b| {
-                recall_window(
-                    config.seed,
-                    (step * config.batch + b) as u64,
-                    SHEET_CONTEXT,
-                    pairs_per_bucket,
-                )
-                .map(|(window, _)| window)
+                let index = (step * config.batch + b) as u64;
+                if form.query {
+                    recall_query_window(config.seed, index, SHEET_CONTEXT, form.header)
+                        .map(|(window, _)| window)
+                } else {
+                    recall_window(config.seed, index, SHEET_CONTEXT, pairs_per_bucket)
+                        .map(|(window, _)| window)
+                }
             })
             .collect::<Result<_>>()?;
         let refs: Vec<&CausalWindow> = windows.iter().collect();
@@ -14212,6 +14339,35 @@ mod tests {
             }
         }
         assert!(recall_query_window(1, 0, SHEET_CONTEXT, 3).is_err());
+    }
+
+    /// claude-328: each pick counts once, as the asked value, the paired value, another of the
+    /// window's values, or none, in its bucket and slot; a pick count that does not match the
+    /// queries is refused.
+    #[test]
+    fn two_class_picks_count_by_outcome_bucket_and_slot() {
+        let windows: Vec<(CausalWindow, Vec<RecallQuery>)> =
+            (0..2).map(|i| recall_query_window(9, i, SHEET_CONTEXT, 4).unwrap()).collect();
+        let qs: Vec<&RecallQuery> = windows.iter().flat_map(|(_, q)| q).collect();
+        // Another of query 2's window's values, neither its asked nor its paired one.
+        let stranger = qs[2]
+            .values
+            .iter()
+            .copied()
+            .find(|v| *v != qs[2].ask_value && *v != qs[2].other_value)
+            .unwrap();
+        // Query 0 asked, 1 paired, 2 another value, 3 filler; the second window all asked.
+        let mut picks = vec![qs[0].ask_value, qs[1].other_value, stranger, RECALL_FILLER.start];
+        picks.extend(qs[4..].iter().map(|q| q.ask_value));
+        let c = count_queries(&windows, &picks).unwrap();
+        let total = |m: &[[usize; 4]; 2]| m.iter().flatten().sum::<usize>();
+        assert_eq!((total(&c.rows), total(&c.ask), total(&c.oth), total(&c.any)), (8, 5, 1, 1));
+        assert_eq!(c.oth[qs[1].bucket][1], 1);
+        assert_eq!(c.any[qs[2].bucket][2], 1);
+        // Query 3's filler pick counts as a row and nothing else.
+        let slot3 = |m: &[[usize; 4]; 2]| m[qs[3].bucket][3] - usize::from(qs[7].bucket == qs[3].bucket);
+        assert_eq!((slot3(&c.ask), c.oth[qs[3].bucket][3], c.any[qs[3].bucket][3]), (0, 0, 0));
+        assert!(count_queries(&windows, &picks[..7]).is_err());
     }
 
     /// claude-328's I-2 balance over 10,000 windows of each form. In each bucket × slot cell (about
