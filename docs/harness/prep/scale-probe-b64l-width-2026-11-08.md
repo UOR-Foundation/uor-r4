@@ -2,7 +2,7 @@
 
 Lab: claude. Item: scale-probe (#3472). Order: claude-317. Track B of Casey's 8 Nov decision, "Both in parallel" (#2028 6715318106).
 
-TEST FITNESS: round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2 FIT WITH CHANGES (a second fresh review, 8 Nov): no blockers, two majors, six minors, all applied below; "Changes from round 2" lists each.
+TEST FITNESS: round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2 FIT WITH CHANGES (a second fresh review, 8 Nov): no blockers, two majors, six minors, all applied below; "Changes from round 2" lists each. D67 pre-run review GO WITH CHANGES (8 Nov): one blocker and three minors, all applied; the section at the end lists each, with the scripts' hashes.
 
 ## Question
 
@@ -208,3 +208,26 @@ claude-301's, with these changes:
 - **6:** any stop seals and downs the pod at once, and pod C trains its three cells whatever I-q reads.
 - **7:** the micro-batch-4 restart's possible overrun past $30 is noted as expected.
 - **8:** the shared window order is named as resting on reading the code, with the crossed pairing as its guard.
+
+## D67 pre-run review (8 Nov)
+
+A fresh-context pre-run review read the whole chain, the trainer source at the pin (micro-batch, heads and checkpoint naming), the store and the five scripts against this sheet. Verdict: GO WITH CHANGES. It found one blocker and three minors; all are applied:
+
+- **1 (blocker):** `up-317.sh` had no cap guard. It now refuses unless the running pods plus one per letter are at most 4, and the running $/h plus $1.15/h per letter is at most $8.00/h. The pods go up only once claude-315's two are down (Step 2).
+- **2:** the job had no signal trap, so a killed job wrote no EXIT and the chain's seal refused. A TERM, INT or HUP now ends the job through `end 9`, which writes the seal list and EXIT.
+- **3:** the watcher's lost-pod and stall stops left a live pod without a watcher. Both are now one NOTICE line, and the watch goes on.
+- **4:** a pod priced above $1.15/h would be left up unwatched. `up-317.sh` now reads each pod's price from its up log and takes a pod above it down at once.
+
+Gates after the fixes: `gt/test-gates.sh` 79 ok, exit 0 (3 new checks for the signal path), and `gt/mutate.sh` 33 of 33 mutations caught (one new: removing the trap).
+
+The scripts as run (SHA-256). `launch-317.sh` checks the first three on each pod before starting the chain:
+
+| Script | SHA-256 |
+|---|---|
+| `job-317.sh` | `ab2ccaaff1a051807fd344a3cca78dbb844b36533e9d9106c8c3bad79126d86e` |
+| `chain-317.sh` | `b284d152bcc7bb08a5704b72d89f4fc00e7d3f04c2dc16672acfd3c1ee3abbf1` |
+| `seal-317.sh` | `67ff449798b9fd5e447a8f0d5968b7b0e8c942ea4dcce77a8fcd1a3846902359` |
+| `watch-317.sh` | `6dc3313002481448febce4cc5ca7bf79840b020abc58fe2c4fc87644fd79d11b` |
+| `up-317.sh` | `b70a8296f8f1dde9b6a469f6084e4c734c978e76bf0c26e88b147f97e9ebb1c9` |
+
+Left unverified by the review, each resting on claude-301's or claude-314's runs at this pin: the trainer's out-of-memory message text (the job's grep), the store's path layout on the pod, the trainer's CLI flag spellings and the `--hamming-read 0` branch.
