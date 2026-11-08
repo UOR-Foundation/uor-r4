@@ -9,18 +9,20 @@ margin weights do not favor the asked role.** Across 1,024 first-reply
 decisions, the chosen token was neither value's first token in
 **1,024/1,024** rows. The four type heads gave nonzero weight to both value
 spans in **873-992/1,024** rows and their pooled asked/other weights differed
-by only **-0.51%**. The copy heads were much more selective: two carried no
-asked or other weight at all. This is an attribution result, not a causal
-selection or capability result.
+by only **-0.51%**. The copy heads were much more selective: neither copy head 1
+weighted both values in the same row, and depth-6 copy head 1 weighted neither.
+This is an attribution result, not a causal selection or capability result.
 
 ## What did not work, first
 
 - **Retaining a position is not weighting it.** Of **131,072** kept positions,
   **40,476 (30.89%)** received zero Q31 margin weight.
-- **Two copy heads retained both values but weighted neither.** Depth-2 copy
-  head 1 kept both spans in 906/1,024 rows but weighted both in 0; depth-6 copy
-  head 1 kept both in 973/1,024 and weighted both in 0. Their mean distances
-  (17.37 and 17.39 bits) exceeded their margins (14.52 and 9.14 bits).
+- **Neither copy head 1 weighted both values in the same row.**
+  Depth-2 copy head 1 kept both spans in 906/1,024 rows but weighted both in
+  0; it weighted asked and other separately in 48 rows each. Depth-6 copy head
+  1 kept both in 973/1,024 and weighted neither from either span. Their mean
+  distances (17.37 and 17.39 bits) exceeded their margins (14.52 and 9.14
+  bits).
 - **The remaining copy heads were only partly active.** Depth-2 copy head 0
   weighted both spans in 486/897 retained-both rows; depth-6 copy head 0
   weighted both in 480/978. Mean distance was 12.89 and 13.03 bits against
@@ -60,7 +62,7 @@ Artifacts: Claude-322 seed 1
 and seed 2
 `8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae`.
 The final executable is
-`4c20319d4c94ce52533ecac743e45d3fbd4213a7aa44dfbdb5c6542cddec1df3`.
+`1a5671362e86c74036ce2ccdd9d5e7e7662556d7905f3e1acbe849501d75230f`.
 
 Each command was the built `cpu-first-reply-hamming-trace` with
 `RAYON_NUM_THREADS=32`, the pinned tokenizer and panel files, and all six
@@ -84,8 +86,8 @@ is 40,476. Asked and other total weights are 7,588,764,088,077 and
 counts are in [`per-stratum.json`](./evidence/per-stratum.json); run hashes,
 semantics and totals are in [`summary.json`](./evidence/summary.json).
 
-The final four seed/rendering reports took **3.566 s**; the separate repeat
-took 0.977 s. All 15 retained reports consumed 13.677 s of measured probe time,
+The final four seed/rendering reports took **3.539 s**; the separate repeat
+took 0.981 s. All 20 retained reports consumed 18.197 s of measured probe time,
 with 157,560 KiB maximum peak RSS. The trace adds a second CPU Hamming selection
 pass, so it is slower than deepseek-242's position-only trace but remains
 sub-second per full panel.
@@ -98,7 +100,7 @@ The previous admitted total 100,367.677487699 seconds plus this unit's
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-first-reply-hamming-trace`: 7 passed.
+  cpu-first-reply-hamming-trace`: 8 passed.
 - The binary tests cover schema-2 tallies, exact renderer parity, ambiguity
   refusal, EOS exclusion, trace isolation and fail-closed metadata hashes.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib
@@ -138,8 +140,10 @@ the resulting integer weight. Some retained positions have zero weight and
 therefore contribute nothing through that head.
 
 The result is mixed but clear. Two copy heads barely clear their thresholds,
-and one copy head at each depth contributes nothing from either value. The type
-heads weight both the asked and other values almost everywhere, with nearly
-equal total weights. So the model is not failing merely because value positions
-are absent or unweighted. It still fails to turn that balanced value evidence
-into a role-correct first token.
+and neither depth-level copy head 1 weights both values together. The deep copy
+head contributes nothing from either value; the depth-2 head contributes only
+sparsely and never to both together. The type heads weight both the asked and
+other values almost everywhere, with nearly equal total weights. So the model
+is not failing merely because value positions are absent or unweighted. It
+still fails to turn that balanced value evidence into a role-correct first
+token.

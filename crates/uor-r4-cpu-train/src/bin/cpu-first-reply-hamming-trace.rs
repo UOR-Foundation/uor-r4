@@ -768,6 +768,46 @@ fn trace_first_reply_weights(
     Ok((decision.token, reads))
 }
 
+fn validate_cpu_trace_alignment(
+    reads: &[HammingStepRead],
+    cpu_reads: &[CpuHammingReadTrace],
+    copy_heads: usize,
+) -> Result<()> {
+    if cpu_reads.len() != reads.len() {
+        return Err("CPU and integer Hamming read counts differ".to_owned());
+    }
+    for (integer, cpu) in reads.iter().zip(cpu_reads) {
+        if integer.depth != cpu.depth || integer.heads.len() != cpu.heads.len() {
+            return Err(format!(
+                "CPU and integer Hamming trace shape differs at depth {}",
+                integer.depth
+            ));
+        }
+        for (head, (integer_head, cpu_head)) in integer.heads.iter().zip(&cpu.heads).enumerate() {
+            let expected_kind = if head < copy_heads {
+                CpuHammingHeadKind::Copy
+            } else {
+                CpuHammingHeadKind::Type
+            };
+            let positions = cpu_head
+                .kept
+                .iter()
+                .map(|position| position.position)
+                .collect::<Vec<_>>();
+            if cpu_head.head != head
+                || cpu_head.kind != expected_kind
+                || integer_head.kept != positions
+            {
+                return Err(format!(
+                    "CPU and integer Hamming choices differ at depth {} head {}",
+                    integer.depth, head
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn trace_case(
     model: &IntegerStackModel,
     forward: &CpuFbsForward,
@@ -790,41 +830,8 @@ fn trace_case(
             case.id
         ));
     }
-    if cpu_reads.len() != reads.len() {
-        return Err(format!(
-            "{}: CPU and integer Hamming read counts differ",
-            case.id
-        ));
-    }
-    for (integer, cpu) in reads.iter().zip(&cpu_reads) {
-        if integer.depth != cpu.depth || integer.heads.len() != cpu.heads.len() {
-            return Err(format!(
-                "{}: CPU and integer Hamming trace shape differs",
-                case.id
-            ));
-        }
-        for (head, (integer_head, cpu_head)) in integer.heads.iter().zip(&cpu.heads).enumerate() {
-            let expected_kind = if head < copy_heads {
-                CpuHammingHeadKind::Copy
-            } else {
-                CpuHammingHeadKind::Type
-            };
-            let positions = cpu_head
-                .kept
-                .iter()
-                .map(|position| position.position)
-                .collect::<Vec<_>>();
-            if cpu_head.head != head
-                || cpu_head.kind != expected_kind
-                || integer_head.kept != positions
-            {
-                return Err(format!(
-                    "{}: CPU and integer Hamming choices differ at depth {} head {}",
-                    case.id, integer.depth, head
-                ));
-            }
-        }
-    }
+    validate_cpu_trace_alignment(&reads, &cpu_reads, copy_heads)
+        .map_err(|error| format!("{}: {error}", case.id))?;
     let target_first = *case
         .target
         .content_ids
@@ -1514,5 +1521,59 @@ mod tests {
             Ok(_) => panic!("equal-shortest answers should be ambiguous"),
         };
         assert!(error.contains("ambiguous"), "{error}");
+    }
+
+    #[test]
+    fn cpu_trace_alignment_fails_closed_and_schema_is_v2() {
+        use uor_r4_cpu_train::{CpuHammingHeadTrace, CpuHammingPositionTrace};
+        use uor_r4_integer::stack::HammingStepHead;
+
+        assert_eq!(SCHEMA, "uor-r4.cpu-first-reply-hamming-trace/2");
+        let position = |position| CpuHammingPositionTrace {
+            position,
+            distance: 3,
+            weight_q31: 7,
+        };
+        let cpu_head = |head, kind, kept: Vec<u32>| CpuHammingHeadTrace {
+            head,
+            kind,
+            margin_q16: 4 << 16,
+            kept: kept.into_iter().map(position).collect(),
+        };
+        let integer_head = |kept: Vec<u32>| HammingStepHead {
+            query: 1,
+            key: 2,
+            kept,
+        };
+        let integer = vec![HammingStepRead {
+            depth: 2,
+            heads: vec![integer_head(vec![1, 2]), integer_head(vec![3])],
+        }];
+        let matching = vec![CpuHammingReadTrace {
+            depth: 2,
+            heads: vec![
+                cpu_head(0, CpuHammingHeadKind::Copy, vec![1, 2]),
+                cpu_head(1, CpuHammingHeadKind::Type, vec![3]),
+            ],
+        }];
+        validate_cpu_trace_alignment(&integer, &matching, 1).unwrap();
+
+        let error = validate_cpu_trace_alignment(&integer, &[], 1).unwrap_err();
+        assert!(error.contains("read counts"), "{error}");
+
+        let mut wrong_depth = matching.clone();
+        wrong_depth[0].depth = 3;
+        let error = validate_cpu_trace_alignment(&integer, &wrong_depth, 1).unwrap_err();
+        assert!(error.contains("shape"), "{error}");
+
+        let mut wrong_head_count = matching.clone();
+        wrong_head_count[0].heads.pop();
+        let error = validate_cpu_trace_alignment(&integer, &wrong_head_count, 1).unwrap_err();
+        assert!(error.contains("shape"), "{error}");
+
+        let mut wrong_kept = matching;
+        wrong_kept[0].heads[0].kept[1].position = 4;
+        let error = validate_cpu_trace_alignment(&integer, &wrong_kept, 1).unwrap_err();
+        assert!(error.contains("choices"), "{error}");
     }
 }
