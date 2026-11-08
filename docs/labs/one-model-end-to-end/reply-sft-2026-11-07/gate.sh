@@ -9,6 +9,7 @@ TRAINER="$ROOT/crates/uor-r4-float-train/src/in_space_long.rs"
 SHEET=${3:-"$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"}
 EXTENSION_SHEET=${4:-"$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md"}
 HARDWARE_LIB=${5:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/hardware-evidence.sh"}
+CONTENT_SHEET=${6:-"$ROOT/docs/harness/prep/one-model-end-to-end-content-ratio-2026-11-08.md"}
 HARDWARE_TEST="$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/test-hardware-evidence.sh"
 checks=0
 
@@ -47,16 +48,28 @@ require_line '2) echo "seed 2 is conditional and is not launched by this script"
 require_line '*) echo "SEED must be 1; seed 2 is a later decision" >&2; exit 2 ;;' "$JOB"
 require_line 'got=$(sha256sum "$path" | cut -d'"'"' '"'"' -f1)' "$JOB"
 require_line '[ "$got" = "$want" ] || die "$path hashes to $got, not $want"' "$JOB"
-require_line 'OUT_STORE=${UOR_SFT_OUT_STORE:-results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1}' "$JOB"
+require_line 'RECIPE=${UOR_SFT_RECIPE:-legacy}' "$JOB"
+require_line 'case "$RECIPE:$STEPS:$RUN_LABEL" in' "$JOB"
+require_line 'legacy:1024:s1|legacy:2048:s1-2048|content-ratio:2048:s1-content-ratio) ;;' "$JOB"
+require_line '*) echo "recipe, steps and run label do not form a registered SFT pair" >&2; exit 2 ;;' "$JOB"
+for forbidden_override in UOR_SFT_OUT_STORE UOR_SFT_PREP_SHEET UOR_SFT_REPORT UOR_SFT_TRAIN_ROOT UOR_SFT_TRAIN_SHA; do
+  if grep -Fq "$forbidden_override" "$JOB" "$LAUNCHER"; then
+    fail "runtime exposes unregistered recipe override $forbidden_override"
+  fi
+  checks=$((checks + 1))
+done
+require_line 'STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07' "$JOB"
+require_line 'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08' "$JOB"
+require_line 'OUT_STORE="$STORE_TOPIC/runs/$RUN_LABEL-$RUN_ID"' "$JOB"
 require_line 'store_listing=$("$STORE" ls "$STORE_TOPIC") ||' "$JOB"
 require_line 'die "cannot verify the store topic before training: $STORE_TOPIC"' "$JOB"
 require_line 'if [ -d "$sealed" ] && (cd "$sealed" && sha256sum -c SHA256SUMS); then' "$JOB"
 require_line 'if "$STORE" put "$RUN" "$OUT_STORE"; then' "$JOB"
 require_line '"$STORE" put "$RUN.readback-status" "$OUT_STORE/READBACK" ||' "$JOB"
 
-require_line 'fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/tokens.u16" \' "$JOB"
-require_line 'fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/response_mask.u8" \' "$JOB"
-require_line 'fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/manifest.json" \' "$JOB"
+require_line 'fetch_file "$STORE_TOPIC/inputs/tokens.u16" "$RUN/inputs/mix/tokens.u16"' "$JOB"
+require_line 'fetch_file "$STORE_TOPIC/inputs/response_mask.u8" "$RUN/inputs/mix/response_mask.u8"' "$JOB"
+require_line 'fetch_file "$STORE_TOPIC/inputs/manifest.json" "$RUN/inputs/mix/manifest.json"' "$JOB"
 require_line 'fetch_file "results/claude/real-text-corpus-2026-11-05/oasst2/heldout/tokens.u16" \' "$JOB"
 require_line 'fetch_file "results/claude/real-text-corpus-2026-11-05/oasst2/heldout/response_mask.u8" \' "$JOB"
 require_line 'fetch_file "results/claude/real-text-corpus-2026-11-05/oasst2/heldout/manifest.json" \' "$JOB"
@@ -69,10 +82,25 @@ require_line 'fetch_file "w2-inputs/2026-10-25/driver-data/tokenizer.json" "$RUN
 require_line 'fetch_file "w2-inputs/2026-10-25/driver-data/ft/dev/tokens.u16" \' "$JOB"
 require_line 'fetch_file "w2-inputs/2026-10-25/driver-data/ft/dev/response_mask.u8" \' "$JOB"
 
+require_line 'TRAIN_TOKENS_SHA=3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3' "$JOB"
+require_line 'TRAIN_MASK_SHA=67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b' "$JOB"
+require_line 'TRAIN_MANIFEST_SHA=1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe' "$JOB"
+require_line 'TRAIN_DOCUMENTS=25071' "$JOB"
+require_line 'TRAIN_ASSISTANT_REPLIES=79679' "$JOB"
+require_line 'TRAIN_TOKENS_SHA=3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34' "$JOB"
+require_line 'TRAIN_MASK_SHA=83911dc7488c13475469fa743e0b6fbca15fcd20e76fc2fee33cb89877673baf' "$JOB"
+require_line 'TRAIN_MANIFEST_SHA=8b43ff038133a7dc9744bee71dd8aa7e3f6c5e59a664d19690b991a69f0be9fd' "$JOB"
+require_line 'TRAIN_DOCUMENTS=65071' "$JOB"
+require_line 'TRAIN_ASSISTANT_REPLIES=223469' "$JOB"
+require_line 'check_file "$TRAIN_TOKENS_SHA" "$RUN/inputs/mix/tokens.u16"' "$JOB"
+require_line 'check_file "$TRAIN_MASK_SHA" "$RUN/inputs/mix/response_mask.u8"' "$JOB"
+require_line 'check_file "$TRAIN_MANIFEST_SHA" "$RUN/inputs/mix/manifest.json"' "$JOB"
+require_line '.rows_used == 65071 and .tokens == 11786293 and' "$JOB"
+require_line '.response_tokens == 5710018 and' "$JOB"
+require_line '["oasst2-reply", "mworld-repeat-1", "mworld-repeat-2", "mworld-repeat-3"]'"'"' \' "$JOB"
+require_line 'die "content-ratio corpus manifest differs from the registered split"' "$JOB"
+
 for hash in \
-  3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
-  67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \
-  1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe \
   02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e \
   9c5bb6567c6a4cded2dfb2280ae4acdc798e283a3beae8aaebc695656e1b4833 \
   7474ba9331f242148dd9833d5cb085307c8e0d86314d13f285a0ab1c42b8b081 \
@@ -166,6 +194,13 @@ require_line '## Bar' "$EXTENSION_SHEET"
 require_line '## Data split' "$EXTENSION_SHEET"
 require_line '## Steps' "$EXTENSION_SHEET"
 require_line '## Stop rule' "$EXTENSION_SHEET"
+require_line '## Bar' "$CONTENT_SHEET"
+require_line '## Data split' "$CONTENT_SHEET"
+require_line '## Recipe' "$CONTENT_SHEET"
+require_line '## Stop rule' "$CONTENT_SHEET"
+require_line '| `tokens.u16` | `3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34` |' "$CONTENT_SHEET"
+require_line '| `response_mask.u8` | `83911dc7488c13475469fa743e0b6fbca15fcd20e76fc2fee33cb89877673baf` |' "$CONTENT_SHEET"
+require_line '| `manifest.json` | `8b43ff038133a7dc9744bee71dd8aa7e3f6c5e59a664d19690b991a69f0be9fd` |' "$CONTENT_SHEET"
 require_line 'init_approval="$RUN/control/init-approved-$label"' "$JOB"
 require_line '[ ! -e "$init_approval" ] ||' "$JOB"
 require_line 'UOR_TRAIN_INIT_APPROVAL="$init_approval" \' "$JOB"
@@ -203,7 +238,9 @@ require_line '.run_config.sha256 ==' "$JOB"
 require_line '.files["model.safetensors"].sha256 ==' "$JOB"
 require_line '[ -f "$run/init.json" ] ||' "$JOB"
 require_line 'check_file 9a370566cd9da163191c0196763c68ddb395927fcf61fdecc1736b04941a4bd9 \' "$JOB"
-require_line '.counts.documents == 25071 and .counts.assistant_replies == 79679 and' "$JOB"
+require_line '.counts.documents == $documents and .counts.assistant_replies == $replies and' "$JOB"
+require_line '--argjson documents "$TRAIN_DOCUMENTS" \' "$JOB"
+require_line '--argjson replies "$TRAIN_ASSISTANT_REPLIES" '"'"'' "$JOB"
 grep -Fq '.counts.exact_accepted_assistant_reply == 0 and' "$JOB" ||
   fail "$JOB does not reject accepted-answer overlap"
 checks=$((checks + 1))
@@ -240,10 +277,9 @@ fi
 checks=$((checks + 1))
 require_line '--init-from "$B64L" \' "$JOB"
 require_line '--train-split "$RUN/inputs/mix" \' "$JOB"
-require_line '--train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \' "$JOB"
-require_line '--train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \' "$JOB"
+require_line '--train-sha256 "$TRAIN_TOKENS_SHA" \' "$JOB"
+require_line '--train-mask-sha256 "$TRAIN_MASK_SHA" \' "$JOB"
 require_line 'STEPS=${UOR_SFT_STEPS:-1024}' "$JOB"
-require_line '1024|2048) ;;' "$JOB"
 require_line '--batch 64 --micro-batch "$micro" --steps "$STEPS" \' "$JOB"
 require_line 'if [ "$next" -le "$STEPS" ]; then' "$JOB"
 require_line 'while [ "$next" -le "$STEPS" ]; do' "$JOB"
@@ -279,12 +315,20 @@ require_line '[ "$(git rev-parse HEAD)" = "$PIN" ] ||' "$LAUNCHER"
 require_line '[ -z "$(git status --porcelain --untracked-files=no)" ] ||' "$LAUNCHER"
 require_line 'git merge-base --is-ancestor "$PIN" origin/main ||' "$LAUNCHER"
 require_line 'REVIEWED_RUNTIME=${UOR_SFT_REVIEWED_RUNTIME:?UOR_SFT_REVIEWED_RUNTIME must name the reviewed runtime identity}' "$LAUNCHER"
-require_line 'RUNTIME_EXCLUDE_FIT=${UOR_SFT_PREP_SHEET:-docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md}' "$LAUNCHER"
-require_line 'RUNTIME_EXCLUDE_REPORT=${UOR_SFT_REPORT:-docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md}' "$LAUNCHER"
+require_line 'RECIPE=${UOR_SFT_RECIPE:-legacy}' "$LAUNCHER"
 require_line 'STEPS=${UOR_SFT_STEPS:-1024}' "$LAUNCHER"
-require_line '1024:s1|2048:s1-2048) ;;' "$LAUNCHER"
-require_line '1024:docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md) ;;' "$LAUNCHER"
-require_line '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-29/REPORT.md) ;;' "$LAUNCHER"
+require_line 'case "$RECIPE:$STEPS:$RUN_LABEL" in' "$LAUNCHER"
+require_line 'legacy:1024:s1)' "$LAUNCHER"
+require_line 'legacy:2048:s1-2048)' "$LAUNCHER"
+require_line 'content-ratio:2048:s1-content-ratio)' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-29/REPORT.md' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-content-ratio-2026-11-08.md' "$LAUNCHER"
+require_line 'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-31/REPORT.md' "$LAUNCHER"
+require_line 'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08' "$LAUNCHER"
+require_line 'OUT_STORE="$STORE_TOPIC/runs/$RUN_LABEL-$RUN_ID"' "$LAUNCHER"
 require_line 'git ls-tree -r "$PIN" |' "$LAUNCHER"
 require_line "path != fit && path != report'" "$LAUNCHER"
 require_line 'git show "$PIN:$RUNTIME_EXCLUDE_FIT" |' "$LAUNCHER"
@@ -307,7 +351,7 @@ grep -Fq 'cannot verify the store topic $STORE_TOPIC; no pod will be rented' "$L
 checks=$((checks + 1))
 require_line '--count 1 --hours 2 --ref "$PIN" \' "$LAUNCHER"
 require_line 'if ! "$POD_TOOL" run "$POD" --lab deepseek --session "$SESSION" --gpu 0 -- \' "$LAUNCHER"
-require_line 'UOR_SFT_OUT_STORE="$OUT_STORE" UOR_SFT_STEPS="$STEPS" \' "$LAUNCHER"
+require_line 'UOR_SFT_RECIPE="$RECIPE" UOR_SFT_STEPS="$STEPS" \' "$LAUNCHER"
 grep -Fqx "JOB_LOG=\$(awk '/Log: / {" "$LAUNCHER" ||
   fail "$LAUNCHER does not begin parsing uor-pod's job-log path"
 checks=$((checks + 1))

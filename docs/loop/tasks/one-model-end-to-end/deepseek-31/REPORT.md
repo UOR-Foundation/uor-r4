@@ -23,8 +23,15 @@ or spend.
   EOS with median reply length 11.
 - The panel-overlap audit is zero for exact prompts, accepted answers and shared
   six-grams.
-- Preparing a closed `content-ratio` runner pair while retaining the legacy
-  1,024 default.
+- Added a closed `content-ratio/2048/s1-content-ratio` recipe to the job and
+  launcher. Legacy 1,024 and the registered legacy 2,048 extension remain
+  unchanged, and arbitrary data-root, hash, sheet, report or output overrides
+  are refused.
+- The job now selects the new input root and hashes only for `content-ratio`,
+  validates the four-source manifest and compares the overlap audit against the
+  registered document and assistant-reply counts.
+- Added static-gate and mutation coverage for the recipe pair, corpus hashes,
+  split counts, label, reviewed sheet/report paths and output root.
 
 ## Measurements
 
@@ -40,10 +47,15 @@ The projected run cost remains about $0.50 at the observed $0.563/hour rate.
 
 ## Checks run at the head
 
-Pending parameterization, static gates, fresh FIT and D67.
+- `gate.sh`: 276 checks passed.
+- `test-mutants.sh`: 118 of 118 mutations caught.
+- `test-hardware-evidence.sh`: passed.
+- ShellCheck over the job, launcher and hardware helpers: passed.
+- `bash -n` and `git diff --check`: passed.
+- `loop report --check` and `loop pr-check --local`: passed.
 
-Not run: pod creation, training, export, panel scoring, store write or seal
-readback.
+Fresh FIT and D67 review remain required. Not run: pod creation, training,
+export, panel scoring, store write or seal readback.
 
 ## Skills used
 
@@ -52,7 +64,9 @@ and delivery rules were used directly.
 
 ## Still open
 
-- Review and run the content-ratio intervention.
+- Obtain fresh exact-head FIT and D67 approval, merge through the queue and
+  verify the landed runtime.
+- Run the content-ratio intervention only from that merged pin.
 - No seed 2 unless row 3 is reached. No second ratio extension.
 
 ## Plain summary
