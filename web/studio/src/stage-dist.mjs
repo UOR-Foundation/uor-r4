@@ -1,4 +1,4 @@
-import { cpSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { writeStudioCatalog } from '../../../scripts/studio/catalog.mjs';
 
@@ -10,7 +10,9 @@ if (!existsSync(artifacts)) {
 }
 
 mkdirSync(destination, { recursive: true });
-cpSync(artifacts, destination, { recursive: true });
+for (const name of ['uor_r4_integer.js', 'uor_r4_integer_bg.wasm', 'synthetic-stack.lut', 'tokenizer.json']) {
+    copyFileSync(new URL(`../pkg/${name}`, import.meta.url), new URL(`../dist/pkg/${name}`, import.meta.url));
+}
 
 const migrationRuntime = new URL('../assets/js/lifecycle_persistence.js', import.meta.url);
 const migrationDestination = new URL('../dist/assets/js/lifecycle_persistence.js', import.meta.url);
