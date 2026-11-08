@@ -3,12 +3,13 @@
 #
 # Usage:
 #   UOR_SFT_PIN=<40-hex-merge-pin> UOR_SFT_RUN=/workspace/uor-r4/runs/sft-s1 \
+#     UOR_SFT_RECIPE=legacy UOR_SFT_STEPS=1024 UOR_SFT_RUN_LABEL=s1 \
 #     bash /workspace/one-model-reply-sft-job.sh 1
 #
 # The caller owns the pod, GPU lease and teardown. This script fetches every input,
-# runs the base controls, trains once with checkpoints every 256 steps, exports and
-# scores each checkpoint, applies the registered 512-step stop, then seals and reads
-# the evidence back through uor-store.
+# runs the base controls, trains the registered 1,024- or 2,048-step dose with
+# checkpoints every 256 steps, exports and scores each checkpoint, applies the
+# registered 512-step stop, then seals and reads the evidence back through uor-store.
 set -euo pipefail
 
 SEED=${1:?usage: job.sh SEED}
@@ -18,6 +19,13 @@ case "$SEED" in
   *) echo "SEED must be 1; seed 2 is a later decision" >&2; exit 2 ;;
 esac
 [ "$#" -eq 1 ] || { echo "usage: job.sh 1" >&2; exit 2; }
+RECIPE=${UOR_SFT_RECIPE:-legacy}
+STEPS=${UOR_SFT_STEPS:-1024}
+RUN_LABEL=${UOR_SFT_RUN_LABEL:-s1}
+case "$RECIPE:$STEPS:$RUN_LABEL" in
+  legacy:1024:s1|legacy:2048:s1-2048|content-ratio:2048:s1-content-ratio|opening-weight:1024:s1-opening-weight) ;;
+  *) echo "recipe, steps and run label do not form a registered SFT pair" >&2; exit 2 ;;
+esac
 
 PIN=${UOR_SFT_PIN:?UOR_SFT_PIN must name the reviewed 40-hex merge commit}
 case "$PIN" in
@@ -27,8 +35,35 @@ esac
 
 RUN_ID=${UOR_SFT_RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')}
 RUN=${UOR_SFT_RUN:-/workspace/uor-r4/runs/deepseek-sft-s$SEED}
-OUT_STORE=${UOR_SFT_OUT_STORE:-results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1}
-STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07
+TRAIN_FLAGS=()
+case "$RECIPE" in
+  legacy)
+    STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07
+    TRAIN_TOKENS_SHA=3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3
+    TRAIN_MASK_SHA=67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b
+    TRAIN_MANIFEST_SHA=1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe
+    TRAIN_DOCUMENTS=25071
+    TRAIN_ASSISTANT_REPLIES=79679
+    ;;
+  content-ratio)
+    STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08
+    TRAIN_TOKENS_SHA=3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34
+    TRAIN_MASK_SHA=83911dc7488c13475469fa743e0b6fbca15fcd20e76fc2fee33cb89877673baf
+    TRAIN_MANIFEST_SHA=8b43ff038133a7dc9744bee71dd8aa7e3f6c5e59a664d19690b991a69f0be9fd
+    TRAIN_DOCUMENTS=65071
+    TRAIN_ASSISTANT_REPLIES=223469
+    ;;
+  opening-weight)
+    STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07
+    TRAIN_TOKENS_SHA=3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3
+    TRAIN_MASK_SHA=67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b
+    TRAIN_MANIFEST_SHA=1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe
+    TRAIN_DOCUMENTS=25071
+    TRAIN_ASSISTANT_REPLIES=79679
+    TRAIN_FLAGS=(--opening-weight 8)
+    ;;
+esac
+OUT_STORE="$STORE_TOPIC/runs/$RUN_LABEL-$RUN_ID"
 STORE=/root/uor-store
 REPO=${UOR_REPO:-/root/uor-sft-src-$PIN}
 TARGET=${CARGO_TARGET_DIR:-/workspace/uor-r4/target-deepseek-sft}
@@ -100,11 +135,17 @@ on_exit() {
     kill -CONT "$TRAIN_PID" 2>/dev/null || true
     wait "$TRAIN_PID" 2>/dev/null || true
   fi
+  if [ "$rc" -eq 0 ]; then
+    compact_successful_inputs "$RUN" ||
+      { echo "could not compact the used training inputs for sealing" >&2; rc=1; }
+  fi
+  if declare -F verify_grade_hardware_bindings >/dev/null; then
+    verify_grade_hardware_bindings "$RUN" || rc=1
+  fi
   printf '%s\n' "$rc" > "$RUN/EXIT"
   printf '%s\n' "${STOP_REASON:-natural-or-failure}" > "$RUN/STOP_REASON"
   local seal_bytes actual_seal_bytes
-  if ! seal_bytes=$(find "$RUN" -type f ! -name 'SHA256SUMS*' -printf '%s\n' |
-    awk '{ total += $1 } END { print total + 0 }'); then
+  if ! seal_bytes=$(measure_seal_bytes "$RUN"); then
     echo "could not measure the seal" >&2
     rc=1
     seal_bytes=0
@@ -112,13 +153,9 @@ on_exit() {
   printf '%s\n' "$seal_bytes" > "$RUN/BYTES"
   (
     cd "$RUN"
-    find . -type f ! -name 'SHA256SUMS*' -print0 |
-      sort -z | xargs -0 sha256sum > SHA256SUMS.next
-    mv SHA256SUMS.next SHA256SUMS
-    sha256sum -c SHA256SUMS
+    write_seal_manifest "$RUN"
   ) || rc=1
-  if ! actual_seal_bytes=$(find "$RUN" -type f -printf '%s\n' |
-    awk '{ total += $1 } END { print total + 0 }'); then
+  if ! actual_seal_bytes=$(measure_all_bytes "$RUN"); then
     echo "could not measure the completed seal" >&2
     rc=1
     actual_seal_bytes=$SEAL_LIMIT_BYTES
@@ -177,13 +214,16 @@ git -C "$REPO" checkout --quiet --detach FETCH_HEAD || die "could not checkout $
 actual=$(git -C "$REPO" rev-parse HEAD)
 [ "$actual" = "$PIN" ] || die "source is $actual, not $PIN"
 [ -z "$(git -C "$REPO" status --porcelain)" ] || die "source checkout is dirty"
+HARDWARE_LIB="$REPO/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/hardware-evidence.sh"
+[ -f "$HARDWARE_LIB" ] || die "missing pinned hardware-evidence library"
+# shellcheck disable=SC1091
+# shellcheck source=hardware-evidence.sh
+source "$HARDWARE_LIB"
+capture_cpu_hardware "$RUN"
 
-fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/tokens.u16" \
-  "$RUN/inputs/mix/tokens.u16"
-fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/response_mask.u8" \
-  "$RUN/inputs/mix/response_mask.u8"
-fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/manifest.json" \
-  "$RUN/inputs/mix/manifest.json"
+fetch_file "$STORE_TOPIC/inputs/tokens.u16" "$RUN/inputs/mix/tokens.u16"
+fetch_file "$STORE_TOPIC/inputs/response_mask.u8" "$RUN/inputs/mix/response_mask.u8"
+fetch_file "$STORE_TOPIC/inputs/manifest.json" "$RUN/inputs/mix/manifest.json"
 fetch_file "results/claude/real-text-corpus-2026-11-05/oasst2/heldout/tokens.u16" \
   "$RUN/inputs/oasst2-heldout/tokens.u16"
 fetch_file "results/claude/real-text-corpus-2026-11-05/oasst2/heldout/response_mask.u8" \
@@ -202,12 +242,20 @@ fetch_file "w2-inputs/2026-10-25/driver-data/ft/dev/tokens.u16" \
 fetch_file "w2-inputs/2026-10-25/driver-data/ft/dev/response_mask.u8" \
   "$RUN/inputs/data/ft/dev/response_mask.u8"
 
-check_file 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
-  "$RUN/inputs/mix/tokens.u16"
-check_file 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \
-  "$RUN/inputs/mix/response_mask.u8"
-check_file 1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe \
-  "$RUN/inputs/mix/manifest.json"
+check_file "$TRAIN_TOKENS_SHA" "$RUN/inputs/mix/tokens.u16"
+check_file "$TRAIN_MASK_SHA" "$RUN/inputs/mix/response_mask.u8"
+check_file "$TRAIN_MANIFEST_SHA" "$RUN/inputs/mix/manifest.json"
+if [ "$RECIPE" = content-ratio ]; then
+  jq -e --arg tokens "$TRAIN_TOKENS_SHA" --arg mask "$TRAIN_MASK_SHA" '
+    .tokens_sha256 == $tokens and
+    .mask_sha256 == $mask and
+    .rows_used == 65071 and .tokens == 11786293 and
+    .response_tokens == 5710018 and
+    (.files | map(.label)) ==
+      ["oasst2-reply", "mworld-repeat-1", "mworld-repeat-2", "mworld-repeat-3"]' \
+    "$RUN/inputs/mix/manifest.json" >/dev/null ||
+    die "content-ratio corpus manifest differs from the registered split"
+fi
 check_file 02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e \
   "$RUN/inputs/oasst2-heldout/tokens.u16"
 check_file 9c5bb6567c6a4cded2dfb2280ae4acdc798e283a3beae8aaebc695656e1b4833 \
@@ -259,6 +307,8 @@ log "building pinned binaries"
     in_space_long::tests::checkpoint_initialization
   cargo test --release --locked -p uor-r4-float-train --features cuda --lib \
     in_space_long::tests::a_step_saved_as_served
+  cargo test --release --locked -p uor-r4-float-train --features cuda --lib \
+    opening_weighted_micro_batches_match_the_whole_batch_step
 )
 (
   cd "$REPO/docs/labs/one-model-end-to-end/instrument"
@@ -322,6 +372,8 @@ grade_checkpoint() {
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
     "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade did not use the registered 512-row sample"
+  verify_grade_labels "$grade_dir.json" "checkpoint $step"
+  bind_grade_hardware "$grade_dir.json"
   rm -f "$snapshot" || die "could not remove transient snapshot for checkpoint $step"
 }
 
@@ -359,7 +411,7 @@ score_checkpoint() {
   run_panel "$step" "$artifact" one-user-turn/v1 0 one-user-generated >/dev/null ||
     die "checkpoint $step one-user panel failed"
 
-  local guard eos_top1 eos_p50 free_complete free_eos free_pairs
+  local guard eos_top1 eos_p50 first_top1 first_top8 first_p50 free_complete free_eos free_pairs
   guard=$(jq -er '.evaluation.top1_correct | numbers' \
     "$RUN/grades/$ATTEMPT/step-$(printf '%06d' "$step").json") ||
     die "checkpoint $step grade has no numeric top-1 reading"
@@ -369,6 +421,15 @@ score_checkpoint() {
   eos_p50=$(jq -er '.teacher_forced.totals.eos_rank_p50 | numbers' \
     "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
     die "checkpoint $step teacher panel has no numeric EOS median reading"
+  first_top1=$(jq -er '.teacher_forced.first_target.top1 | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
+    die "checkpoint $step teacher panel has no numeric first-target top-1 reading"
+  first_top8=$(jq -er '.teacher_forced.first_target.top8 | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
+    die "checkpoint $step teacher panel has no numeric first-target top-8 reading"
+  first_p50=$(jq -er '.teacher_forced.first_target.rank_p50 | numbers' \
+    "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-teacher.json") ||
+    die "checkpoint $step teacher panel has no numeric first-target median reading"
   free_complete=$(jq -er '.totals.complete | numbers' \
     "$RUN/panel/$ATTEMPT/step-$(printf '%06d' "$step")-per-turn-generated.json") ||
     die "checkpoint $step free panel has no numeric complete-row reading"
@@ -380,10 +441,14 @@ score_checkpoint() {
     die "checkpoint $step free panel has no numeric complete-pair reading"
   jq -n --argjson step "$step" --argjson guard "$guard" \
     --argjson eos_top1 "$eos_top1" --argjson eos_p50 "$eos_p50" \
+    --argjson first_top1 "$first_top1" --argjson first_top8 "$first_top8" \
+    --argjson first_p50 "$first_p50" \
     --argjson free_complete "$free_complete" --argjson free_eos "$free_eos" \
     --argjson free_pairs "$free_pairs" \
     '{step:$step, guard_top1:$guard, eos_top1:$eos_top1,
-      eos_rank_p50:$eos_p50, free_complete_rows:$free_complete,
+      eos_rank_p50:$eos_p50, first_target_top1:$first_top1,
+      first_target_top8:$first_top8, first_target_rank_p50:$first_p50,
+      free_complete_rows:$free_complete,
       free_eos_stops:$free_eos, free_complete_pairs:$free_pairs}' \
     >> "$RUN/checkpoint-readings-$ATTEMPT.jsonl" ||
     die "could not record checkpoint $step readings"
@@ -426,18 +491,19 @@ log "panel-overlap control"
   --plan "$RUN/inputs/m2-fresh256/plan.json" \
   --labels "$RUN/inputs/m2-fresh256/labels.json" \
   --out "$RUN/control/corpus-panel-overlap.json"
-jq -e '.pass == true and
-  .tokens_sha256 ==
-    "3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3" and
-  .mask_sha256 ==
-    "67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b" and
+jq -e --arg tokens "$TRAIN_TOKENS_SHA" --arg mask "$TRAIN_MASK_SHA" \
+  --argjson documents "$TRAIN_DOCUMENTS" \
+  --argjson replies "$TRAIN_ASSISTANT_REPLIES" '
+  .pass == true and
+  .tokens_sha256 == $tokens and
+  .mask_sha256 == $mask and
   .tokenizer_sha256 ==
     "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89" and
   .plan.sha256 ==
     "0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715" and
   .labels.sha256 ==
     "3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be" and
-  .counts.documents == 25071 and .counts.assistant_replies == 79679 and
+  .counts.documents == $documents and .counts.assistant_replies == $replies and
   .counts.exact_panel_in_document == 0 and
   .counts.exact_accepted_assistant_reply == 0 and
   .counts.documents_with_panel_6gram == 0 and
@@ -470,6 +536,8 @@ jq -e '.evaluation.samples == 512 and
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
   "$RUN/control/base-grade.json" >/dev/null ||
   die "base continuation grade did not use the registered 512-row sample"
+verify_grade_labels "$RUN/control/base-grade.json" base
+bind_grade_hardware "$RUN/control/base-grade.json"
 base_totals() {
   jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
     die "base $2 control differs from its registered reading"
@@ -522,13 +590,14 @@ train_and_score() {
     --data-root "$RUN/inputs/data" \
     --init-from "$B64L" \
     --train-split "$RUN/inputs/mix" \
-    --train-sha256 3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3 \
-    --train-mask-sha256 67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b \
+    --train-sha256 "$TRAIN_TOKENS_SHA" \
+    --train-mask-sha256 "$TRAIN_MASK_SHA" \
     --out "$run_dir" \
+    "${TRAIN_FLAGS[@]}" \
     --objective nearest --retain-rates 1 --decay-mult 1 \
     --lr 0.0002 --lr-end 0 --train-as-served 1 \
     --context 192 --width 256 --hamming-read 4 \
-    --batch 64 --micro-batch "$micro" --steps 1024 \
+    --batch 64 --micro-batch "$micro" --steps "$STEPS" \
     --eval-every 256 --samples 16 --reply-tokens 64 --seed 1 \
     > "$RUN/logs/train-$label.log" 2>&1 &
   TRAIN_PID=$!
@@ -551,11 +620,15 @@ train_and_score() {
     init_wait=$((init_wait + 1))
   done
   check_initialization "$run_dir"
+  if [ "$RECIPE" = opening-weight ]; then
+    jq -e '.opening_weight == 8' "$run_dir/config.json" >/dev/null ||
+      die "opening-weight run config does not record weight 8"
+  fi
   touch "$init_approval" ||
     die "could not approve the validated initialization"
 
   while kill -0 "$TRAIN_PID" 2>/dev/null; do
-    if [ "$next" -le 1024 ]; then
+    if [ "$next" -le "$STEPS" ]; then
       checkpoint="$run_dir/models/step-$(printf '%06d' "$next")"
       if [ -d "$checkpoint" ] && [ -f "$checkpoint/.checkpoint-ready" ]; then
         kill -STOP "$TRAIN_PID" 2>/dev/null || true
@@ -578,7 +651,7 @@ train_and_score() {
     TRAIN_FAILURE=$train_rc
     return 0
   fi
-  while [ "$next" -le 1024 ]; do
+  while [ "$next" -le "$STEPS" ]; do
     checkpoint="$run_dir/models/step-$(printf '%06d' "$next")"
     if [ -d "$checkpoint" ]; then
       [ -f "$checkpoint/.checkpoint-ready" ] ||
@@ -605,6 +678,7 @@ if [ "$TRAIN_FAILURE" -ne 0 ]; then
   if grep -Eiq 'out of memory|CUDA_ERROR_OUT_OF_MEMORY|\bOOM\b' \
     "$RUN/logs/train-attempt-1.log"; then
     log "micro-batch 16 ran out of memory; retrying once at micro-batch 8"
+    compact_failed_attempt attempt-1 "$TRAIN_RUN"
     STOP_REASON=
     TRAIN_FAILURE=0
     train_and_score 8 attempt-2 "$RUN/run-mb8"
@@ -617,6 +691,6 @@ fi
 if [ -n "$STOP_REASON" ]; then
   log "registered stop: $STOP_REASON"
 else
-  log "training completed all 1,024 steps"
+  log "training completed all $STEPS steps"
 fi
 log "job complete"
