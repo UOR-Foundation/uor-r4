@@ -181,5 +181,16 @@
       }
     }
   },
+  "resources": {
+    "receipt": "evidence/resources.json",
+    "opening_reports": 18,
+    "reply_reports": 20,
+    "measured_wall_lower_bound_seconds": 4993.408171,
+    "max_opening_peak_rss_kib": 334120,
+    "retained_evidence_and_inputs_bytes": 908645503,
+    "free_gib_at_measurement": 144.144,
+    "disk_floor_passes": true,
+    "shared_model_time_active_receipt": "absent"
+  },
   "verdict": "REJECT (global opening point table on m2-fresh256): active but zero first-token or complete-reply gain"
 }

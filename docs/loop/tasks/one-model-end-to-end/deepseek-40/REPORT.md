@@ -116,6 +116,20 @@ resident, so these are conservative costs: `per-turn/v1` took 123.5 s at
 is dominated by the full point-table construction; the 256-case panel read and
 parallel overlap audit follow it.
 
+The complete retained-run receipt is
+[`evidence/resources.json`](./evidence/resources.json). It covers 18 retained
+opening reports and 20 reply reports, including retries and the 2,713.369 s
+debug validation run: a measured wall-time lower bound of 4,993.408 s, with
+334,120 KiB peak opening RSS. Reply-run peak RSS was not instrumented. Retained
+evidence and direct inputs total 908,645,503 bytes (866.552 MiB); regenerable
+main/worktree build trees total 79,517,551,883 bytes, and temporary review
+outputs total 3,609,217 bytes. At accounting time the filesystem had
+154,773,643,264 bytes (144.144 GiB) free, clearing the 30 GiB floor and 128 MiB
+margin. The shared model-time ledger receipt
+`.uor-models/receipts/active.json` was absent. Builds, tests, source/corpus
+preparation, delivery, and failed runs without a retained report remain
+explicitly unmeasured in the receipt.
+
 ## Evidence
 
 - Selected artifact:
@@ -133,6 +147,8 @@ parallel overlap audit follow it.
   one-user memory/point/shuffled `70bca093…` / `d1b6c8bc…` / `5018e014…`.
 - Full evidence:
   [summary.json](./evidence/summary.json).
+- Cumulative D84 receipt:
+  [resources.json](./evidence/resources.json).
 - Local probe root:
   opening reports and artifacts are in
   `local/deepseek/opening-panel-20261108/attempt-10/`; the byte-identical
