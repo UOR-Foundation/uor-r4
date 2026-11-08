@@ -88,8 +88,8 @@ decision, reply, tally and paired count is identical.
 The cumulative D84 receipt is
 [`evidence/resources.json`](./evidence/resources.json): 14 retained reports,
 54.553 seconds measured probe time, 137,456 KiB maximum peak RSS,
-555,631,880 bytes of retained evidence/inputs, 3,674,715,698 bytes of
-regenerable target, and 147.602 GiB free. The canonical shared ledger
+555,631,880 bytes of retained evidence/inputs, 5,579,220,015 bytes of
+regenerable target, and 144.931 GiB free. The canonical shared ledger
 `.uor-models/native-joint-learning-2026-09-04/model-time.json` was `ABSENT`.
 Downloads, export, builds, tests and delivery are explicitly unmeasured.
 

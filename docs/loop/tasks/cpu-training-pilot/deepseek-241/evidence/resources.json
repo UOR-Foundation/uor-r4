@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.cpu-forced-copy-panel-resources/1",
-  "measured_at": "2026-11-08T18:04:40Z",
+  "measured_at": "2026-11-08T18:09:29Z",
   "substrate": "cpu-development-research",
   "root": "local/deepseek/forced-copy-panel",
   "hardware": {
@@ -34,10 +34,10 @@
   },
   "storage": {
     "local_evidence_and_inputs_bytes": 555631880,
-    "build_target_bytes": 3674715698,
+    "build_target_bytes": 5579220015,
     "temporary_logs_bytes": 17037,
-    "free_bytes_at_measurement": 158486441984,
-    "free_gib_at_measurement": 147.602,
+    "free_bytes_at_measurement": 155618586624,
+    "free_gib_at_measurement": 144.931,
     "floor_gib": 30,
     "required_margin_mib": 128,
     "floor_passes": true
