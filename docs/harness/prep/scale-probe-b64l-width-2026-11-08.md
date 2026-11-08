@@ -2,7 +2,7 @@
 
 Lab: claude. Item: scale-probe (#3472). Order: claude-317. Track B of Casey's 8 Nov decision, "Both in parallel" (#2028 6715318106).
 
-TEST FITNESS: round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2: pending.
+TEST FITNESS: round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2 FIT WITH CHANGES (a second fresh review, 8 Nov): no blockers, two majors, six minors, all applied below; "Changes from round 2" lists each.
 
 ## Question
 
@@ -54,6 +54,8 @@ Width 1,024 is not an arm:
 
 All are read with `scale-probe grade` and `scale-probe pair` at `clean=` D3's seen set, as in claude-301's `read-301.sh`. The wider arm is always the A side.
 
+**The verdict the Bar reads, fixed now:** each pair's `pooled.verdict`, over all held-out rows, as claude-298's and claude-301's Bars read it. `unseen.pooled.verdict` is written beside it as a qualifier ("ahead; unseen inside"), never in its place.
+
 - **R1:** (w512) against (w256).
 - **R2:** (w256) against (w128).
 - **R3:** each arm against D3's T2 and against D3's unigram.
@@ -63,6 +65,7 @@ All are read with `scale-probe grade` and `scale-probe pair` at `clean=` D3's se
   - R4 claims speed only. Served-against-trained quality parity is claude-308's open item and is not claimed here. Speed against context length is not measured, because the scorer has no context option; that part of the item's done-when stays open, and the REPORT says so.
 - **R5, the curve (recorded):** pooled top-1 rows for each width and seed. The fitted slope is the least-squares slope of each width's mean over seeds against log₂ width, in rows per doubling, over widths 128, 256 and 512. Whether it is distinguishable from flat is decided only by R1 and R2's verdicts (the Bar), never by the fit alone.
 - **R6, the contrast (recorded, no verdict):** (w128h4) seed 1 against (w128) seed 1 and against (w256) seed 1, d only. One seed has no band, so R6 only points to a cause.
+- **R7, the fallback span (read only on an I-q failure):** (w512) against (w128), both pairings, the same rules as R1. Both sides come from this unit's build, so it needs no tie to claude-301. It is recorded with its verdict and gives row 6 a slope; it never fills R1 or R2's cell in the Bar.
 
 **A pair needs both seeds on both sides.** With either side at one seed, that reading is "not read", never a one-seed verdict.
 
@@ -71,7 +74,8 @@ All are read with `scale-probe grade` and `scale-probe pair` at `clean=` D3's se
 - **The band.** `pair`'s band for each seed is the larger of the McNemar floor (about 1,100 rows) and the spread of d over the seed pairs (`assess`, `docs/labs/scale-probe/instrument/src/lib.rs` ~922).
   - The 10,552 band was (b64L) against T2, a fixed table. In R1 and R2 both sides vary by seed, so the band adds two arms' seed noise. Expect roughly √2 × 10.5k ≈ 15k rows.
   - `ahead` at two seeds also needs the smaller d to clear the band.
-- **The pairing rule, fixed now:** seed s against seed s, the pairing that shares window order. R1 and R2 are also run with the seeds crossed. A verdict counts only if it is the same under both pairings; if they differ, the reading is `inside` for the Bar.
+- **The pairing rule, fixed now:** seed s against seed s, the pairing that shares window order. R1 and R2 are also run with the seeds crossed. A verdict counts only if it is the same under both pairings; if they differ, the reading is `mixed` for the Bar.
+- **Known limit:** that (w256) and the new arms share window order rests on reading the code (`--seed` seeds the initial weights and each epoch's window order, `in_space_long.rs` ~1305). No test pins it, and I-q ties the build, not the order. The crossed pairing is the guard: if order mattered, the two pairings would disagree and the reading would be `mixed`.
 
 ## Bar
 
@@ -83,7 +87,7 @@ Set before any pod. Each reading is `ahead`, `inside`, `behind`, `mixed` or not 
 | **inside** | 2 flat at the top | 3 not distinguishable | 5 non-monotone | 3 | 3 |
 | **behind** | 4 falling at the top | 4 falling at the top | 4 falling | 4 falling at the top | 4 falling at the top |
 | **mixed** | 3 | 3 | 5 non-monotone | 3 | 3 |
-| **not read** | 2b rising below 256 only | 3 | 4 falling below 256 | 3 | 6 nothing read |
+| **not read** | 2b rising below 256 only | 3 | 5 non-monotone below 256 | 3 | 6 nothing read |
 
 ## What each outcome unlocks (the outcome map)
 
@@ -101,7 +105,7 @@ Set before any pod. Each reading is `ahead`, `inside`, `behind`, `mixed` or not 
    - Only if that also falls is the result classed mechanism. That closes this configuration, never the mechanism (§4.1).
 5. **Non-monotone (R2 behind: 128 beats 256).** The likeliest cause is the head count (2 against 4) or lr, not width.
    - The next unit reads R6 first, then runs an lr check at 256 and 128.
-6. **Nothing read.** Instrument. A repair unit, inside the ORDER's bound.
+6. **Nothing read.** Instrument. A repair unit, inside the ORDER's bound. If an I-q failure caused it, R7 is reported as the slope across the new build, and the repair unit ties (w256) again before any width call.
 
 ## Instrument checks
 
@@ -124,8 +128,12 @@ Registered here, before any pod. They are claude-301's gates, with the changes n
   - Every arm trains 16,384 steps; cutting would break the fixed-steps design.
   - The watcher posts the projection on #3472 if the unit's projected spend passes $30.
 - **I-q, the build tie (pod C).** Pod C fetches claude-301's seal `results/claude/one-model-end-to-end-d3-accum-2026-11-06/runs-2/s1/`, reads it back against its SHA256SUMS, and re-scores (b64L) seed 1's `models/step-016384` on DEV and oasst2 with claude-301's scoring flags.
-  - **Pass:** the `proj` hash (positions, targets, nearest, writer) of each row file equals claude-301's sealed rows'. Then R1 and R2 compare like with like.
-  - **Fail:** R1 and R2 are not read (an instrument), and R3 still is.
+  - **The seal was listed and read back on the laptop (8 Nov):** `d3-accum-s1.tar.gz` and its list pass `SHA256SUMS`, and the tarball holds `oh/run/b64L-s1/models/step-016384/` (model, config, Hamming read) and all 16 scored row files under `oh/run/b64L-s1-scored/`.
+  - **The sealed `proj` hashes** (sha256 of `jq -c '[.positions, .targets, .nearest, .writer]'`, the same in the memory and no-memory files, since memory lies outside the projection):
+    - DEV, every panel folder: `488cf911d35be329525e3245ed1535db5e5a79e30c2c3b0cc5660e42776b5601`;
+    - oasst2: `95b625931f46eb9eb6e89b9823e8991b2df44a9dc1f118472e0f59b04e1a2c87`.
+  - **Pass:** the re-scored DEV and oasst2 row files give exactly these two hashes. Then R1 and R2 compare like with like.
+  - **Fail:** R1 and R2 are not read (an instrument); R3 still is, and R7 is read. Pod C trains its three cells whatever I-q reads.
 - **I-r:** claude-301's (b64L) grades are re-paired with this unit's laptop `scale-probe` build against D3's T2. They must give claude-301's d, +75,038 / +85,590.
 - **I-5:** each panel is scored in its own process, as claude-295's repair did. Each process also scores DEV, and DEV must agree across a cell's four processes.
 - **I-x (laptop, before R4):** `cpu-fbs-export --raw-gates --raw-transition` (sha `724a3b78…`) re-exports claude-313's seal byte for byte (claude-315's I-xc). It then exports each new seal, and `served-reply-panel` must load each export and write 256 rows. Those exports are what R4 reads.
@@ -151,15 +159,17 @@ These are projections; the smokes measure the real rates.
 - **(w512):** the old recipe measured ×1.97 a step per doubling (claude-295), and a smaller micro-batch adds kernel launches. Projected 1.25–1.6 s a step, or more at micro-batch 4. That is 5.7–7.3 h of training plus about 0.5–1 h of scoring: up to about 8.3 h a pod.
 - **(w128):** projected 0.32–0.40 s a step, so 1.5–1.8 h a cell plus scoring. Pod C runs three cells plus I-q, about 6.5 h.
 - **Spend:** about 23 pod-hours at $0.56–1.15/h, so about $13–27. The ORDER's notice line is $30; it is not a cap, and the charter's extend rule applies to a healthy run.
+- **An expected overrun:** a (w512) out-of-memory stop late in its run restarts from step 0 at micro-batch 4. That can take one pod to about 15 h and the unit past $30. The notice then fires, and the run goes on.
 
 ## Stop rule
 
 claude-301's, with these changes:
+- **Any stop seals and takes the pod down at once** (L-004): the chain seals what exists and writes its exit marker, and the watcher downs the pod on that marker.
 - An I-0 or I-e failure stops that pod before any training.
 - **(w512) at micro-batch 8:** an I-m failure, or an out-of-memory stop in its smoke or mid-run, retries the arm from step 0 at micro-batch 4, once. A failure at 4 makes (w512) NOT_RUN at that seed, as an instrument; R1 is then not read, and the 48 GB card unit is next.
 - An out-of-memory stop at width 128 mid-run makes that cell NOT_RUN, and pod C's other cells still run.
 - A panel that fails to score is re-scored once, in its own process, from the checkpoint (claude-295's repair). It is NOT_RUN only if that also fails.
-- An I-q failure blocks R1 and R2; an I-r failure blocks R1 and R2 against (w256). Neither blocks the new arms' own R3.
+- An I-q failure blocks R1 and R2 and opens R7; an I-r failure blocks R1 and R2 against (w256). Neither blocks the new arms' own R3.
 - A pod that does not reach SSH within `uor-pod`'s window is replaced once.
 
 ## Changes from claude-301's sheet
@@ -187,3 +197,14 @@ claude-301's, with these changes:
 - **m3:** "exact" is now "to rounding", with I-e per width.
 - **m4:** I-t's spend projection is posted above $30.
 - **m5:** the fit is defined, and the notebook row and gap 9 are added to Steps.
+
+## Changes from round 2 (the second FIT's findings)
+
+- **1 (major):** two pairings that disagree now read `mixed`, not `inside`, so a disagreement lands on row 3 and never claims row 2's "512 gains nothing".
+- **2 (major):** the Bar reads `pooled.verdict`, as claude-298 and claude-301 did; `unseen.pooled` is recorded beside it.
+- **3:** the cell R1 not read, R2 `behind` now maps to row 5, where R6 is read first.
+- **4:** R7, (w512) against (w128), is registered and read only on an I-q failure, so row 6 keeps a slope.
+- **5:** claude-301's seal was listed and read back, and I-q now names the two sealed `proj` hashes it must match.
+- **6:** any stop seals and downs the pod at once, and pod C trains its three cells whatever I-q reads.
+- **7:** the micro-batch-4 restart's possible overrun past $30 is noted as expected.
+- **8:** the shared window order is named as resting on reading the code, with the crossed pairing as its guard.
