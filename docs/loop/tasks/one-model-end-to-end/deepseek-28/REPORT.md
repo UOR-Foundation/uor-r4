@@ -28,9 +28,11 @@ for roughly $0.45-$0.55 at the prior $0.563/hour offer.
 
 ## Checks run at the head
 
-- `gate.sh`: 217 checks passed.
-- `test-mutants.sh`: 80 of 80 semantic mutations caught.
+- `gate.sh`: 221 checks passed.
+- `test-mutants.sh`: 84 of 84 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
+- `uor-harness check --only prep`: the 2,048-step sheet has every required
+  block and no shape error.
 - The job rejects an unregistered 1,025-step dose, and the launcher rejects a
   2,048 dose paired with the 1,024 run label before repository or network work.
 

@@ -6,7 +6,8 @@ ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 JOB=${1:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"}
 LAUNCHER=${2:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh"}
 TRAINER="$ROOT/crates/uor-r4-float-train/src/in_space_long.rs"
-SHEET="$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"
+SHEET=${3:-"$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"}
+EXTENSION_SHEET=${4:-"$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md"}
 checks=0
 
 fail() {
@@ -154,6 +155,10 @@ require_line 'free_generation_rendering:"per-turn/v1",' "$JOB"
 require_line 'The free-generation values used by selection and the outcome map are the' "$SHEET"
 require_line '`per-turn/v1` generated panel'"'"'s EOS stops and complete accepted rows. The' "$SHEET"
 require_line '- Apply row 2 before continuing past 512. Apply rows 1 and 3-7 to the selected' "$SHEET"
+require_line '## Bar' "$EXTENSION_SHEET"
+require_line '## Data split' "$EXTENSION_SHEET"
+require_line '## Steps' "$EXTENSION_SHEET"
+require_line '## Stop rule' "$EXTENSION_SHEET"
 require_line 'init_approval="$RUN/control/init-approved-$label"' "$JOB"
 require_line '[ ! -e "$init_approval" ] ||' "$JOB"
 require_line 'UOR_TRAIN_INIT_APPROVAL="$init_approval" \' "$JOB"

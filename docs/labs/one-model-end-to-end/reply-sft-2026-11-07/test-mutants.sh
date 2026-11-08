@@ -5,6 +5,8 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 JOB="$HERE/job.sh"
 LAUNCHER="$HERE/run-s1.sh"
+SHEET="$HERE/../../../harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"
+EXTENSION_SHEET="$HERE/../../../harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 caught=0
@@ -58,6 +60,8 @@ mutate() {
   if "$HERE/gate.sh" \
     "$([ "$file" = "$JOB" ] && printf '%s' "$target" || printf '%s' "$JOB")" \
     "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
+    "$([ "$file" = "$SHEET" ] && printf '%s' "$target" || printf '%s' "$SHEET")" \
+    "$([ "$file" = "$EXTENSION_SHEET" ] && printf '%s' "$target" || printf '%s' "$EXTENSION_SHEET")" \
     >/dev/null 2>&1; then
     echo "mutation $name escaped" >&2
     exit 1
@@ -79,6 +83,8 @@ mutate_first() {
   if "$HERE/gate.sh" \
     "$([ "$file" = "$JOB" ] && printf '%s' "$target" || printf '%s' "$JOB")" \
     "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
+    "$([ "$file" = "$SHEET" ] && printf '%s' "$target" || printf '%s' "$SHEET")" \
+    "$([ "$file" = "$EXTENSION_SHEET" ] && printf '%s' "$target" || printf '%s' "$EXTENSION_SHEET")" \
     >/dev/null 2>&1; then
     echo "mutation $name escaped" >&2
     exit 1
@@ -258,6 +264,10 @@ mutate launcher-readback-true "$LAUNCHER" \
   '[ "$(cat "$READBACK_FILE")" = verified ]' 'true'
 mutate launcher-exit-true "$LAUNCHER" \
   '[ "$(cat "$CONTROLLER/readback/$OUT_STORE/EXIT")" = 0 ]' 'true'
+mutate_first missing-extension-bar "$EXTENSION_SHEET" '## Bar' '## Removed bar'
+mutate_first missing-extension-split "$EXTENSION_SHEET" '## Data split' '## Removed split'
+mutate_first missing-extension-steps "$EXTENSION_SHEET" '## Steps' '## Removed steps'
+mutate_first missing-extension-stop "$EXTENSION_SHEET" '## Stop rule' '## Removed stop'
 
 [ "$caught" -eq "$attempted" ]
 echo "$caught of $attempted mutations caught"
