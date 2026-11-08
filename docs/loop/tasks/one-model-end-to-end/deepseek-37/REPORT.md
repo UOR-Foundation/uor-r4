@@ -43,7 +43,8 @@ All four checkpoint readings remain as recorded in the
 
 The selected checkpoint maps to outcome row 5. Its top-32 count is also zero;
 training took 736.945 seconds. The launch receipt records 1,610 pod-seconds at
-`$0.563/hour`, or `$0.2517863888888889`, and deletion after verified readback.
+`$0.563/hour`, or about `$0.252` by rate times logged uptime, and deletion after
+verified readback.
 
 ## Evidence
 

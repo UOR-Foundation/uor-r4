@@ -14,7 +14,8 @@
     "deleted_at": "2026-11-08T08:42:19Z",
     "uptime_seconds": 1610,
     "usd_per_hour": 0.563,
-    "cost_usd": 0.2517863888888889,
+    "approx_cost_usd": 0.2517861111111111,
+    "cost_basis": "uptime_seconds * usd_per_hour / 3600; rate-derived estimate, not an invoiced charge",
     "source": "scripts/pod/uor-pod log -n 30"
   }
 }
