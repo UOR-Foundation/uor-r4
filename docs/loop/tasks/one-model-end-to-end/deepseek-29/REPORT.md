@@ -42,7 +42,7 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 - `gate.sh`: 235 checks passed.
 - `test-mutants.sh`: 99 of 99 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
-- The target sheet has no prep-shape error; FIT is recorded and D67 is pending.
+- The target sheet has no prep-shape error; FIT and D67 GO are recorded.
 - Fresh FIT: **FIT GO**, no blockers, at
   `536d95242b8301541b207fe171fbe5a96b2fa244`, runtime
   `8928ce7cae729894820ae1b7f3106d071f18dda77bdbf198a7dd4d8556d1eec5`,
