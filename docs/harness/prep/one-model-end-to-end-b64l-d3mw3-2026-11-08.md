@@ -167,6 +167,7 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 - **I-f, from the smoke:** the peak after the step-64 row is at most the peak before it plus 1,024 MiB.
 - **I-t, recorded only:** r = (train_seconds at step 128 − at step 64) / 64; W = used + 1.05 × r × 16,384 + 300 s, written to `it.txt`. claude-315 read 0.559 and 0.571 s a step.
 - **The watcher:** MAXSEC 14,400 s from the pod's start, a budget of PRICE × 4 h, and PRICE at most $0.70/h. Neither limit stops anything (D67): past either, the watcher logs one NOTICE and keeps watching and renewing the lease, so `seal=0` still takes the pod down.
+  - **A stall pauses the lease.** When the pod's line is unchanged for 30 checks, the watcher logs a STALL NOTICE and stops renewing. The lease then lapses and the pod's reaper can take an idle pod, so a hung pod's bill is bounded. A changed line clears the notice and renewals resume (the D67 pre-run review, M1).
 - **I-5:** the no-memory scoring's `.i5` reads `same` on every sub-panel, and DEV's rows agree across the four per-panel processes.
 - **I-4:** each graded checkpoint scores the 1,460,697 rows with identity `5f88a5b3…`.
 - **I-c, the scorer controls, on the laptop before any (b64L-d3mw3) reading,** with `served-reply-panel` at `be3d4cb0…`. Each control's `rows` must equal the reference output's, field by field:
@@ -235,10 +236,32 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 3. **The role-header count** is recorded, descriptive only (claude-315's decision review, point 4).
 4. **I-3's window count** is 357,907, and it now gates the full run (it was recorded only). **I-m** names claude-315's smoke peaks.
 5. **The outcome map:** row 3 is split by the cost ceiling; row 5 classes a drop below × 1; row 6 is split by collapse. "Behind" is defined for a `mixed` verdict.
-6. **The job** carries claude-317's signal trap, and the watchers start in `screen`.
+6. **The job** carries claude-317's signal trap, and the watchers start in `screen`. After the D67 pre-run review, the chain traps signals too, the job's sealing exit ignores a second signal, and the watcher pauses renewals during a stall.
 7. **Minimum test power** names claude-317's cross-pod scorer finding.
 8. **The seal path** is `results/claude/one-model-end-to-end-b64l-d3mw3-2026-11-08/runs/s{1,2}/`, and `runs-2/` for a rerun.
 
 ## Pre-run review
 
-Not yet run.
+**The D67 pre-run review**, two rounds, each a fresh-context reviewer (claude, `claude-opus-5-5`), on the scripts in `local/claude/claude-318/`.
+
+**Round 1: NO-GO as written.** One major and three minors, all fixed:
+- **M1, unbounded billing:** the watcher renewed the lease every 25 minutes whether or not the pod's line was changing. A hung pod could then never lapse its lease, so the pod reaper could never take it. Fix: no renewal while a STALL notice stands (30 unchanged checks); a changed line clears the notice. claude-317's live watcher carried the same code and was patched and restarted the same way (8 Nov, 03:05Z).
+- **m1:** the chain had no signal trap, so a TERM could end it before the seal ran. Fix: `trap ':' TERM INT HUP`, a no-op trap, so the job's own trap still installs in the child.
+- **m2:** `end()` reset the job's traps, so a second signal could kill the job while it sealed. Fix: `end()` begins with `trap '' TERM INT HUP`.
+- **m3:** the stall notice was never cleared, so one stall would have paused renewals for good. Fix: cleared on any line change.
+
+**Round 2: GO.** All four closed, and no new major:
+- **A healthy run is not reaped.** `progress.jsonl` grows at each `--eval-every 1024` row, about every 6 to 8 minutes, inside STALL's 30. A real quiet stretch only pauses renewals: the last 4-hour renewal is at most 25 minutes old, so the reaper could take the pod only after about 4 unchanged hours.
+- **The `trap ''` in `end()`** is inherited only by short children (`kill`, `wait`, `find`, `xargs`, `sha256sum`). The seal is started by the chain, not the job, so it does not inherit it.
+- **The window gate** writes `ok 357907` only on an exact match and sets GO=0 before the full run otherwise.
+- **One minor, applied:** m2 had no test. `gt/test-watch.sh` now runs the job's own `end()` under two TERMs and expects EXIT 0 and DONE. Deleting the ignore gives EXIT 9; `trap -` in its place kills the job before EXIT. Both mutations are caught.
+- **Two nits:** the watcher's header now says renewals pause during a stall (applied). A signal in the job's first few seconds, before its trap at line 234, leaves no EXIT; the chain then ends unsealed and the watcher keeps the pod up and exits 8 for the session (kept: bounded and seen).
+
+**The gates at the final hashes:** `gt/test-gates.sh` 44 ok; `gt/mutate.sh` 15 of 15 caught; `gt/test-seal.sh` 7 ok; `gt/test-watch.sh` 8 ok and 5 of 5 mutations caught; `bash -n` ok on every script. I-c rows equal (0 and 253 EOS stops); I-xc reproduced `1c9ae43c…`.
+
+**The script hashes** (sha256):
+- `job-318.sh` `5dd570e6a2ed0a66ac1110a696be1b72cb1b0a3c20ea20e35e5b4497a68cb867`
+- `chain-318.sh` `5f591616f9a38f40b04b841e5d49dba1de188c2705f7f6253916a6b5513184c8`
+- `seal-318.sh` `a49720dc772fdf22cce87c24a3de8d3cc99aeaaf716f567577d82c9cccb7fc31`
+- `watch-318.sh` `067eb369e7af39514edde4d0b74d1b3b242a4bedde954cb0d47dd26442464d20`
+- `read-318.sh` `d393a6f7416e40b7dee272ce9efa90cb78a3bf91a94c9e6e0ac201f32462f371`
