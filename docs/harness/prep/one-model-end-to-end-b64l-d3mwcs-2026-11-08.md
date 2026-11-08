@@ -21,7 +21,7 @@ At (b64L)'s recipe and pin, with TRAIN changed to claude-324's mix (claude-322's
 - what does the corpus cost on the held-out human text, against (b64L-D3) and against claude-322's (b64L-d3mwcap6)?
 
 **What the comparison can and cannot say.**
-- **Against claude-322:** the recipe, the pin and the ten roots are the same. Only the corpus is added. So a change in the bare reply or in `complete` is read as the corpus's.
+- **Against claude-322:** the recipe, the pin and the ten roots are the same. Only the corpus is added. So a change in the bare reply or in `complete` is read as the corpus's, since only the corpus teaches that form. A change in stopping or on held-out text is read as the mix's.
 - **But the corpus also moves D3's passes** from 2.51 to about 2.29, and the capped copies' share of windows from 63.3% to about 57.8% (see "Repetition and exposure"). A held-out cost cannot be split between the corpus and D3's fewer passes.
 
 ## Base artifact
@@ -68,7 +68,7 @@ The trainer samples windows uniformly by epoch. Over 16,384 × 64 = 1,048,576 wi
 - **Scored EOS per window seen:**
   - claude-322: 444,761 / 417,421 = 1.07;
   - here: (444,761 + 40,000) / 457,421 = 484,761 / 457,421 ≈ **1.06**.
-  - **So the stopping exposure per window is held.** The bound is the same as claude-322's sheet: EOS in chunks the trainer drops are never seen, under 1%.
+  - **So the count of scored EOS per window is matched, not the stopping it gives.** claude-322 showed that a matched count need not give matched stopping (×1's 177 and 122 against its own 109 and 86). The bound is the same as claude-322's sheet: EOS in chunks the trainer drops are never seen, under 1%.
 - **The EOS share of scored targets:** 484,761 / 33,839,081 ≈ **1.43%**, against 1.333% in claude-322. The corpus's replies are short, so this share rises a little. Scored targets per window fall from 79.9 to about 74.0.
 
 ## Arms
@@ -101,10 +101,16 @@ At seeds 1 and 2, from `served-reply-panel` on (b64L-d3mwcs)'s exported `step-01
 **The held-out pairs:**
 - `scale-probe grade` with `train=` the local copy `local/claude/claude-324/mix`, on all 1,460,697 rows, with no `clean=`.
 - **Deciding:** `scale-probe pair`, (b64L-d3mwcs) against claude-301's sealed (b64L-D3) grades `e17a13548d09304d901a93683cadb6c7695200261e86770e319003bfc976523a` and `3170c779def7ef376fdc11c96232f3f6ddb2809c436855121fd24be8ed7ab5a1`. The band, the per-seed positions, the pooled verdict and "behind" are as in claude-322's sheet.
-- **Descriptive, named before the run:** the pair against claude-322's pinned (b64L-d3mwcap6) grades, `local/claude/claude-322/grade/b64Ld3mwcap6-s1/grade.json` `24d69af0455c9b18ab819bd73355e30ffa2f56db191f83e899ce0d8d4b092f7e` and `-s2/grade.json` `4407e2c2baf24ec94b1ba823316c109868f1fdd4322b4667ff136792518d3ec3`. This is the corpus's cost on held-out text at the same recipe. Row (f) reads its mean d against the ceiling.
+- **Descriptive, named before the run:** the pair against claude-322's pinned (b64L-d3mwcap6) grades, `local/claude/claude-322/grade/b64Ld3mwcap6-s1/grade.json` `24d69af0455c9b18ab819bd73355e30ffa2f56db191f83e899ce0d8d4b092f7e` and `-s2/grade.json` `4407e2c2baf24ec94b1ba823316c109868f1fdd4322b4667ff136792518d3ec3`. This is the mix's cost on held-out text at the same recipe: the corpus, confounded with D3's fewer passes (2.29 against 2.51) and the capped copies' smaller share. Row (f) reads its mean d against the ceiling.
+
+**The bare-reply count, deciding rows (c) and (e),** named before the run, by `bare.jq` (hash below). It counts among each seed's EOS-stopped replies, lower-cased and trimmed:
+- **short:** one line ending in `.`, with no other `.`, `,`, `?` or `!`, of 1 to 8 words;
+- **bare:** a short reply whose first whole word is not a sentence frame (your, you, got it, i, my, it, that, ok, okay, sure, yes, no). Because it matches whole words, "okra" and "thatch" are not frames;
+- **span**, recorded with row (c): a bare reply whose words before the `.` occur as whole consecutive words in the prompt, with the prompt's punctuation read as spaces. A cut value such as "basalt lo" is not a span.
+
+A bare reply holding the wrong value counts here, and not in `complete`. Re-read by the same file, claude-322 gives bare 0 and 0, span 0 and 0, and short 68 and 16. So bare above 0 is above claude-322.
 
 **Recorded beside them, descriptive only:**
-- **The bare-reply share, named before the run,** by `bare.jq` (hash below), among each seed's EOS-stopped replies, lower-cased and trimmed: **short** is one line ending in `.`, with no other `.`, `,`, `?` or `!`, of 1 to 8 words; **bare** is a short reply that does not open with a sentence frame (`your`, `you `, `got it`, `i `, `my `, `it `, `that`, `ok`, `okay`, `sure`, `yes`, `no `); **span** is a bare reply whose text before its `.` occurs verbatim in the prompt. A bare reply holding the wrong value counts here, and not in `complete`. claude-322, re-read by the same file: bare 0 and 2, span 0 and 0, short 68 and 16.
 - **The first-line count,** by `firstline.jq` (`b15c778db57c2e65902e34987cf15748213128ab5d9bb72230f97f0ea58fb702`, the same file as claude-322's), with claude-322's matching rules.
 - **The role-header count:** rows whose reply contains `Assistant:`, and `User:`, among EOS-stopped rows and over all 256.
 - **The opening template count:** stopped replies that begin "Your friend's name is" or "Got it, your friend is", by `bare.jq`, beside claude-322's 73 and 28 (seed 1) and 1 and 36 (seed 2).
@@ -122,7 +128,7 @@ Fixed before any run. They are claude-322's, unchanged.
 
 ## What each outcome unlocks
 
-Read top to bottom; the first row that matches decides. Rows (f) and the held-out row are read beside whichever of (a) to (e) matches.
+Read in table order: 0a, 0b, 0c, a, d, b, c, e. The first row that matches decides. Row (f) and the held-out row are read beside whichever of them matches.
 
 | # | reading | the next unit |
 |---|---|---|
@@ -130,14 +136,14 @@ Read top to bottom; the first row that matches decides. Rows (f) and the held-ou
 | 0b | a seed NOT_RUN after its rerun, for a mechanism cause (a non-finite loss at a recipe that trains on both parts alone) | **`diagnostic stop`,** recorded as a result about (b64L) on the mix. Next: a decision review in the REPORT. |
 | 0c | I-c or I-xc fails, or an export or score fails on the laptop with both seals present | **`blocked`, no pod.** Repair the export or scorer and re-read from the seals. |
 | a | complete ≥ 104 and pairs ≥ 52, stops ≥ 128, no collapse, and the held-out pair against (b64L-D3) not `behind`, at both seeds | **The panel bar is met on this panel.** Next: a fresh-panel confirm under its own sheet. |
-| b | complete above 0 at a seed, but the panel bar not met | **The corpus lever works.** Next: the corpus's share (more rows, or repeats) under its own sheet. |
-| c | complete 0 at both seeds, and bare above 0 at a seed | **The form is learned; recall is the gap.** Next: the recall lever (writer admission, copy keys: claude-323's result). |
-| d | stops below claude-322's (109 at seed 1, 86 at seed 2) at both seeds | **The corpus disturbs stopping.** First the REPORT classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Next: a decision review in the REPORT. |
-| e | complete 0, bare 0 at both seeds, and stops not below claude-322's | **No change from claude-322: the corpus share is too small to move it.** Next: a repeat factor under its own sheet. |
-| f | the mean pooled d against claude-322's (b64L-d3mwcap6) below −58,212 | **The corpus's held-out cost is named,** beside the row above. The REPORT says it cannot be split from D3's fewer passes (2.29 against 2.51). |
+| d | row (a) not met, and either a seed is collapsed (one stopped text covers 64 or more), or stops are below claude-322's at both seeds (under 109 at seed 1 and under 86 at seed 2) | **The mix disturbs stopping.** This is the mix, not the corpus alone: D3's passes and the capped copies' share also fall. The REPORT first classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Next: a decision review in the REPORT. |
+| b | rows (a) and (d) not met, and complete above 0 at a seed | **The corpus lever works.** Next: the corpus's share (more rows, or repeats) under its own sheet. |
+| c | complete 0 at both seeds, and bare above 0 at a seed (claude-322: 0 and 0) | **The bare form is learned; recall is the gap.** The REPORT gives span. Span above 0 means chat values are copied, but not the asked-for one. Span 0 means the values do not come from the chat. Next: the recall lever (writer admission, copy keys: claude-323's result). |
+| e | complete 0 and bare 0 at both seeds | **No change from claude-322 in the reply form: the corpus share is too small to move it.** Next: a repeat factor under its own sheet. |
+| f | the mean pooled d against claude-322's (b64L-d3mwcap6) below −58,212 | **The mix's held-out cost is named,** beside the row above. The REPORT says it cannot be split from D3's fewer passes (2.29 against 2.51). |
 
 - **The held-out row is decided against (b64L-D3),** as in claude-322's sheet, and is recorded beside every row.
-- **A mixed seed reading** (one seed matching a row, the other not) is reported as mixed with both seeds' figures. It follows the lower row that both seeds meet.
+- **Seeds are read as each row is written:** "at a seed" means either seed, and "at both" means both. In order (d), (b), (c), (e), the rows cover every run that is not 0a to 0c or (a), so exactly one matches first. The REPORT gives both seeds' figures, and says "mixed" when the seeds differ.
 - A seed that is NOT_RUN reruns once, sealing to the new root `runs-2/s{1,2}/` (L-002). A second NOT_RUN reads by row 0a or 0b, by the class of its last cause.
 
 ## Instrument checks
@@ -149,7 +155,7 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
   - the mix's three files match the shas above. The likeliest wrong file is claude-322's ×6 capped mix (tokens `0273173e…`, mask `da506e85…`, manifest `442ead2c…`): the gate tests feed it, and expect a refusal for each;
   - the panel folders and the DEV files match claude-306's pins;
   - each run's `config.json` names the mix's tokens and mask shas, width 256, read 4, batch 64, micro-batch 16, 16,384 steps (128 for the smoke), the pod's seed and the recipe's flags, with no turn memory;
-  - **the window count:** the trainer's "usable TRAIN windows" line in the smoke must read exactly **457,421** (D3's 153,253, six times the capped copy's 44,028, and the corpus's 40,000: `build_document_windows` in `hamilton_sheet.rs` gives a document one window per 192 targets, and every corpus document is at most 188 tokens with 4 or more scored targets). Any other count, or none, makes the arm NOT_RUN at that seed before the 16,384-step run (row 0a), an instrument finding to classify before any reading. claude-322's 417,421 is a refusal.
+  - **the window count:** the trainer's "usable TRAIN windows" line in the smoke must read exactly **457,421** (D3's 153,253, six times the capped copy's 44,028, and the corpus's 40,000: `build_document_windows` in `hamilton_sheet.rs` gives a document one window per 192 targets, and keeps a window with at least one scored target; every corpus document is at most 188 tokens and has a scored reply). Any other count, or none, makes the arm NOT_RUN at that seed before the 16,384-step run (row 0a), an instrument finding to classify before any reading. claude-322's 417,421 is a refusal.
 - **I-1, the smoke:** 128 steps at `--eval-every 32` on the mix, at the pod's seed. It exits 0 with a finite loss and writes `models/step-000064`.
 - **I-m, from the smoke:** the largest `mem.log` sample inside the smoke's window is below 90% of the card. The mix is about 3.3M tokens larger than claude-322's, so claude-322's smoke peaks are the reference.
 - **I-f, I-t, the watcher, I-5, I-4, I-c, I-x and I-xc:** as in claude-322's sheet, unchanged. The watcher keeps MAXSEC 14,400 s, a budget of PRICE × 4 h, PRICE at most $0.70/h, and the stall pause (D67).
@@ -183,7 +189,7 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
 - **Stopping** is a count. claude-322's seeds read 109 and 86, a spread of 23. A seed within 32 of 128 (96 to 160) is reported as "near the bar". The row still follows the bar.
 - **Collapse:** a reading within 16 of 64 (48 to 80) is "near the bar". The REPORT gives the collapse count beside the number of EOS-stopped rows it is over.
 - **`complete`** is a count of 256. claude-322 read 0 and 0, so any complete row at a seed is above it. Row (b) needs only that; it does not claim a rate.
-- **The bare-reply share** is descriptive. No row reads its size, only whether it is above 0 (row c).
+- **The bare-reply count** decides rows (c) and (e) only by whether it is above 0 at a seed, where claude-322 read 0 and 0. No row reads its size.
 - **The held-out pair** uses `scale-probe pair`'s band. The scorer is not bit-reproducible across pod instances (claude-317's I-q); each seed is scored on its own pod, so that noise is inside the two-seed spread.
 - **The cost ceiling** is compared on the mean of two seeds. A mean within one band of −58,212 is "near the ceiling". The row still follows the ceiling.
 
@@ -222,10 +228,10 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
 - `seal-325.sh` `4cf1f375257539b004468e2ee9c93a330263b54dbd19797e8dccf58fbaa2632d`
 - `watch-325.sh` `93ca699ff7bbfc8e65c91bdfaedb457cfc3ddee4eccc2b28504e5b16c27f14a6`
 - `seed-325.sh` `6d69f16b3fd1a2f716d1398061f9a821669c2f93dedc98133c1445e9d7bc9a8c`
-- `read-325.sh` `2fc69868c153e21245af7cb65fbba0269ff95fbd403da4b3e2fd6b8e03dec4ae`
+- `read-325.sh` `dc372297e70bb98f8ccbc406bf2d95d754035ff7d687e8f23e7346cdf475d9f8`
 - `firstline.jq` `b15c778db57c2e65902e34987cf15748213128ab5d9bb72230f97f0ea58fb702` (the same file as claude-322's)
 - `unwrap.jq` `4bb7ef1bc57bf39fbe15c5e98e9b414ca1d1c820f2a56067e0e51d783ebe9db5`
-- `bare.jq` `ab114a9977604c2e8e8016ce21fbf7e91941c977637906369517bb1cc97d953f`
+- `bare.jq` `180987f67f54fafb9ce36871834b0150a4b70d4e0cd12907cada0cb5ed8e80fb`
 
 ## FIT
 
