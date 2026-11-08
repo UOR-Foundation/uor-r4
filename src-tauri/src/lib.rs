@@ -1158,6 +1158,19 @@ impl DesktopBackend {
         self.terminal_enabled
     }
 
+    /// Return whether an exact host-approved command remains within its one-shot validity window.
+    pub fn host_terminal_command_is_approved(&self, cwd: &Path, command: &str) -> bool {
+        if !self.terminal_enabled || command.trim().is_empty() {
+            return false;
+        }
+        let Ok(canonical_cwd) = self.verify_granted_existing_path(cwd) else {
+            return false;
+        };
+        self.host_approved_commands
+            .get(&(canonical_cwd, command.trim().to_string()))
+            .is_some_and(|approved_at| approved_at.elapsed() <= std::time::Duration::from_secs(60))
+    }
+
     /// Record a one-shot host-side user confirmation for exact `(cwd, command)`.
     ///
     /// In the desktop shell, confirmation comes from the native host dialog / CLI prompt rather
@@ -2292,6 +2305,18 @@ pub fn dispatch_rpc_command(
                 .map_err(|e| e.to_string())?;
             serde_json::to_value(report).map_err(|e| e.to_string())
         }
+        "native_enable_terminal" => Ok(json!({ "enabled": backend.terminal_enabled() })),
+        "native_confirm_terminal_command" => {
+            let cwd = args
+                .get("cwd")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing cwd".to_string())?;
+            let command = args
+                .get("command")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing command".to_string())?;
+            Ok(json!({ "approved": backend.host_terminal_command_is_approved(Path::new(cwd), command) }))
+        }
         "native_run_terminal_command" => {
             let cwd = args
                 .get("cwd")
@@ -2493,6 +2518,11 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
+    if canonical_root.file_name().and_then(|name| name.to_str()) == Some("dist")
+        && (rel.ends_with(".ts") || rel.ends_with(".tsx"))
+    {
+        return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
+    }
     let canonical_candidate = match fs::canonicalize(&candidate) {
         Ok(path) if path.starts_with(&canonical_root) => path,
         Ok(_) => return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec()),

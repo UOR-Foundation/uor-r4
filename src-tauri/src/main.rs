@@ -30,11 +30,34 @@ fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(),
                 .native_grant_folder(Path::new(dir))
                 .map_err(|e| format!("--grant {dir}: {e}"))?;
             i += 2;
+        } else if args[i] == "--enable-terminal" {
+            backend.native_set_terminal_enabled(true);
+            i += 1;
+        } else if args[i] == "--approve-command" {
+            let cwd = args
+                .get(i + 1)
+                .ok_or_else(|| "missing working directory after --approve-command".to_string())?;
+            let command = args
+                .get(i + 2)
+                .ok_or_else(|| "missing command after --approve-command".to_string())?;
+            backend
+                .host_approve_terminal_command(Path::new(cwd), command)
+                .map_err(|error| format!("--approve-command {cwd} {command}: {error}"))?;
+            i += 3;
         } else {
             i += 1;
         }
     }
     Ok(())
+}
+
+fn studio_root(args: &[String]) -> std::path::PathBuf {
+    args.iter()
+        .position(|arg| arg == "--studio-root")
+        .and_then(|index| args.get(index + 1))
+        .filter(|path| !path.starts_with("--"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio"))
 }
 
 fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(), String> {
@@ -129,7 +152,7 @@ fn main() {
             .filter(|s| !s.starts_with("--"))
             .map(String::as_str)
             .unwrap_or("127.0.0.1:1420");
-        let studio_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio");
+        let studio_root = studio_root(&args);
         if let Err(err) = run_serve_studio(addr, &studio_root, &args) {
             eprintln!("serve-studio error: {err}");
             std::process::exit(1);
@@ -162,5 +185,47 @@ fn main() {
         let resp = handle_rpc_line(&mut backend, &line);
         let _ = writeln!(stdout, "{resp}");
         let _ = stdout.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uor_r4_desktop_client::TerminalCommandRequest;
+
+    #[test]
+    fn studio_root_honors_the_explicit_dist_and_preserves_the_default() {
+        assert!(studio_root(&[]).ends_with("web/studio"));
+        let args = vec!["--studio-root".to_string(), "web/studio/dist".to_string()];
+        assert!(studio_root(&args).ends_with("web/studio/dist"));
+    }
+
+    #[test]
+    fn cli_controls_preauthorize_exact_command_once() {
+        let root = std::env::temp_dir().join(format!("uor-cli-approval-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create CLI approval workspace");
+        let args = vec![
+            "--grant".to_string(),
+            root.display().to_string(),
+            "--enable-terminal".to_string(),
+            "--approve-command".to_string(),
+            root.display().to_string(),
+            "pwd".to_string(),
+        ];
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        apply_cli_grants(&args, &mut backend).expect("apply host CLI controls");
+        let request = TerminalCommandRequest {
+            cwd: root.clone(),
+            command: "pwd".to_string(),
+            user_confirmed: true,
+            confirmed_command: "pwd".to_string(),
+        };
+        let output = backend
+            .native_run_terminal_command(&request)
+            .expect("host-approved command runs once");
+        assert!(output.contains(root.to_string_lossy().as_ref()));
+        assert!(backend.native_run_terminal_command(&request).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
