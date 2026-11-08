@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-22](../loop/tasks/one-model-end-to-end/deepseek-22/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `ec5eed0ac53960c60fe2ae72339bbd67289a0d6d`, reviewed-runtime `0f8f1952d260e69d49cb9c4375f5af1cddfb58a8fc392a176d06818c8526f8a8`, reviewer session `01a1b87e-f1d7-7552-a819-ddf861671a74`.
+TEST FITNESS: FIT - pending fresh review after adding the execution ORDER.
 
 PRE-RUN: PENDING (fresh D67 review required).
 

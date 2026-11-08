@@ -81,6 +81,9 @@ spend.
   sentence still required the whole outcome map before step 512, the free
   generation rendering was not named, and the guard-safe/first-result selector
   semantics had no permanent mutations.
+- **D67 found the controller-repair ORDER did not authorize execution.** The
+  active deepseek-25 ORDER explicitly prohibited pod launch, so the reviewed
+  runtime had no active run authority even though its run design passed.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -254,6 +257,14 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `0f8f1952d260e69d49cb9c4375f5af1cddfb58a8fc392a176d06818c8526f8a8`,
   reviewer session `01a1b87e-f1d7-7552-a819-ddf861671a74`. No FIT blockers
   remained.
+- D67: **NO-GO** at `6685b859b9e7d02132b8dd54a496fd5c177c42ea`,
+  reviewed-runtime
+  `0f8f1952d260e69d49cb9c4375f5af1cddfb58a8fc392a176d06818c8526f8a8`,
+  reviewer session `01a1b88b-503a-7283-ae4f-15ab17056b60`, because the active
+  controller-repair ORDER did not authorize pod launch.
+- Added deepseek-26 as the active execution ORDER for seed 1. It carries no
+  threshold or mechanism change and explicitly refuses seed 2, M2 substitution,
+  another lab's pod, or any unrecorded input.
 - `gate.sh`: 205 checks passed after pinning the reconciled stop sentence,
   per-turn source, guard-safe filter, first selected result, rendering label and
   full selector ordering.
@@ -281,7 +292,8 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh D67 review of the main-integrated exact runtime, then the seed-1 run.
+- Fresh FIT and D67 reviews of the execution-ORDER runtime, then the seed-1
+  run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary
