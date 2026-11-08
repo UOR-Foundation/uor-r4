@@ -43,6 +43,16 @@ for roughly $0.45-$0.55 at the prior $0.563/hour offer.
   The prerequisite sheet was changed without appearing in the ORDER scope, and
   the read-only reviewer sandbox could not perform live pod and store
   admission. The ORDER now names that sheet; live admission is rechecked below.
+- Corrected-head FIT: **FIT GO**, no blockers, at
+  `5e59d01d9bfa1ce533eeb451b1b9f9cde97c2708`, runtime
+  `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`,
+  reviewer session `01a1b8eb-6f3d-7dc2-97c7-ebdcb679fc05`.
+- Live admission from the writable controller found one running pod,
+  `vast-59635959`, at 96% GPU and $0.563/hour, so the project total is one of
+  four pods and $0.563 of $8/hour. No uncontested GPU is currently free; the
+  verified RTX 5090 offer remains $0.563/hour. The store topic contains only the
+  immutable 1,024-step `s1-20261108t005743z-a849820fba9cfbf4` root, so the
+  registered `s1-2048` prefix is absent.
 
 Not run: pod creation, remote build, training, export, panel scoring, store write
 or seal readback.
