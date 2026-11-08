@@ -381,3 +381,21 @@ describe('session verification invariants', () => {
         expect(store.getState().session.lastGeneration?.sessionId).toBe(a.id);
     });
 });
+
+
+describe('interruption idempotence', () => {
+    it('does not apply an identical interruption twice', () => {
+        const store = new LifecycleStore();
+        const a = { id: 'session-a', title: 'A', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' };
+        const b = { id: 'session-b', title: 'B', createdAt: 2, updatedAt: 2, messageCount: 0, preview: '' };
+        store.dispatch({ type: 'session/synchronized', activeId: a.id, items: [a, b] });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: a.id });
+        store.dispatch({ type: 'generation/finished', outcome: 'stopped', generationId: 1 });
+        const action: Parameters<LifecycleStore['dispatch']>[0] = { type: 'session/interrupted', activeId: b.id, items: [a, b], generationId: 1 };
+        store.dispatch(action);
+        const afterFirst = store.getState();
+        store.dispatch(action);
+        expect(store.getState()).toBe(afterFirst);
+    });
+});

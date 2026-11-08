@@ -321,7 +321,7 @@ export class LifecycleStore {
                 const session = this.state.session;
                 if (action.activeId !== null && !action.items.some((item) => item.id === action.activeId)) return;
                 const active = session.activeGeneration ?? (session.phase === 'stopped' ? session.lastGeneration : null);
-                if (!active || active.generationId !== action.generationId || active.sessionId === action.activeId || session.activeId !== active.sessionId) return;
+                if (!active || active.generationId !== action.generationId || active.sessionId === action.activeId || session.activeId !== active.sessionId || session.activeId === action.activeId) return;
                 this.state = {
                     ...this.state,
                     session: {

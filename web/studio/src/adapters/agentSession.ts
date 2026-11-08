@@ -13,7 +13,7 @@ export interface AgentSessionController {
     resume(id: string): SessionSummary | null;
     rename(id: string, title: string): boolean;
     duplicate(id: string): SessionSummary | null;
-    remove(id: string): SessionSummary | null;
+    remove(id: string): SessionSummary | true | null;
     export(id: string): { name: string; content: string } | null;
     send(prompt: string): boolean;
     stop(): void;
@@ -115,14 +115,19 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
         }
     }
 
-    function remove(id: string): SessionSummary | null {
+    function remove(id: string): SessionSummary | true | null {
         if (store.getState().session.phase === 'generating') return null;
         try {
             const before = read();
             if (!before?.items.some((item) => item.id === id) || !sessions.deleteSession(id)) return null;
             const after = read();
-            if (!after?.activeId || after.activeId === id || after.items.some((item) => item.id === id)) return null;
+            if (!after || after.activeId === id || after.items.some((item) => item.id === id)) return null;
             if (before.activeId !== id && after.activeId !== before.activeId) return null;
+            if (after.activeId === null) {
+                if (before.activeId !== null && after.items.length > 0) return null;
+                store.dispatch({ type: 'session/synchronized', activeId: null, items: after.items });
+                return store.getState().session.activeId === null ? true : null;
+            }
             const active = after.items.find((item) => item.id === after.activeId);
             if (!active) return null;
             store.dispatch({ type: 'session/synchronized', activeId: after.activeId, items: after.items });

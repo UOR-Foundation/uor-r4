@@ -48,7 +48,11 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
                 return false;
             };
             const expectedMode = selected.kind === 'api' ? 'api' : 'wasm';
-            if (sessions.getMode() !== expectedMode) return fail();
+            try {
+                if (sessions.getMode() !== expectedMode) return fail();
+            } catch {
+                return false;
+            }
             if (store.getState().session.phase === 'new') store.dispatch({ type: 'session/activated' });
             const prediction = selected.kind === 'artifact'
                 && store.getState().residentArtifact?.canGenerate === false

@@ -129,7 +129,7 @@ describe('agent/session authority', () => {
         expect(controller.duplicate('session-a')?.id).toBe('session-a-copy');
         expect(store.getState().session.activeId).toBe('session-a');
         expect(controller.export('session-a')).toEqual({ name: 'Renamed.json', content: '{"session":{"id":"session-a"}}' });
-        expect(controller.remove('session-a')?.id).toBe('session-new-1');
+        expect(controller.remove('session-a')).toMatchObject({ id: 'session-new-1' });
         expect(store.getState().session.activeId).toBe('session-new-1');
         expect(store.getState().session.revision).toBeGreaterThan(revision);
     });
@@ -246,5 +246,18 @@ describe('agent/session verification repairs', () => {
         expect(store.getState().session.activeId).toBe('session-b');
         expect(store.getState().session.phase).toBe('stopped');
         expect(store.getState().session.lastGeneration?.sessionId).toBe('session-a');
+    });
+});
+
+
+describe('verified no-active deletion', () => {
+    it('returns true only when target removal leaves no active session', () => {
+        const store = new LifecycleStore();
+        const state = fixture([first], null);
+        const controller = control(store, state.api);
+        expect(controller.remove(first.id)).toBe(true);
+        expect(state.items).toHaveLength(0);
+        expect(state.activeId).toBeNull();
+        expect(store.getState().session.activeId).toBeNull();
     });
 });

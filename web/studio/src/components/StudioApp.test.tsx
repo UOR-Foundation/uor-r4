@@ -693,6 +693,8 @@ describe('navigation command grouping', () => {
         act(() => { button('Command palette').click(); });
         const input = host.querySelector<HTMLInputElement>('input[aria-label="Search commands"]')!;
         act(() => { input.value = 'Navigation'; input.dispatchEvent(new Event('input', { bubbles: true })); });
-        expect(host.querySelector('button[data-command-id="agent"]')).not.toBeNull();
+        for (const id of ['agent', 'workspace', 'changes', 'terminal', 'models', 'guide']) {
+            expect(host.querySelector(`button[data-command-id="${id}"]`), `missing Navigation command ${id}`).not.toBeNull();
+        }
     });
 });

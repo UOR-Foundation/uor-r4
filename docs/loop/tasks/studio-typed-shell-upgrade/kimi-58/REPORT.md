@@ -27,7 +27,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Red/focused/full logs are under `local/kimi/studio-agent-session/`; mutation copies/results are under `verifier-mutation/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, built-browser, and fresh-main logs are preserved in a head-specific directory after commit. Fresh-main verification and fresh review are **NOT_RUN** at this writing. Expected advisories are the notebook scope, ORDER read-path size, and existing FILEMAP rows; no failing gate is hidden by an advisory.
+Red/focused/full logs are under `local/kimi/studio-agent-session/`; mutation copies/results are under `verifier-mutation/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved in a head-specific directory after commit. Fresh-main logs and fresh review are **NOT_RUN** at this writing. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes. Agent-37 subsequently returned CHANGES for command grouping, repeated interruption, fresh-main wording, and smaller evidence/double gaps; kimi-59 owns those repairs.
 
 Agent-36 returned CHANGES at the base. The follow-up fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 stays draft and uses `References #3500`; issue #3500 remains open. No production publisher was invoked.
 

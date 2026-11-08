@@ -61,11 +61,9 @@ function sessions(items: SessionSummary[] = [summary]): SessionApi {
         deleteSession: vi.fn((id: string) => {
             const index = items.findIndex((item) => item.id === id);
             if (index < 0) return false;
+            const wasActive = activeId === id;
             items.splice(index, 1);
-            if (activeId === id) {
-                activeId = items[0]?.id ?? null;
-                if (!activeId) create();
-            }
+            if (wasActive) create();
             return true;
         }),
         getConversationMessages: vi.fn(() => []), setComposerText: vi.fn(() => true),

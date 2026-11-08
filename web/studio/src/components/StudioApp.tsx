@@ -111,11 +111,11 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const operations = useMemo(() => createOperationGate(), []);
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
-        { id: 'workspace', group: 'Workspace', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
-        { id: 'changes', group: 'Changes', label: 'Go to Changes', description: 'Bounded Git status and diff', run: () => setActiveSection('changes') },
-        { id: 'terminal', group: 'Terminal', label: 'Go to Terminal', description: 'Guarded native commands', run: () => setActiveSection('terminal') },
-        { id: 'models', group: 'Models', label: 'Go to Models', description: 'Artifacts and providers', run: () => setActiveSection('models') },
-        { id: 'guide', group: 'Guide', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
+        { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
+        { id: 'changes', group: 'Navigation', label: 'Go to Changes', description: 'Bounded Git status and diff', run: () => setActiveSection('changes') },
+        { id: 'terminal', group: 'Navigation', label: 'Go to Terminal', description: 'Guarded native commands', run: () => setActiveSection('terminal') },
+        { id: 'models', group: 'Navigation', label: 'Go to Models', description: 'Artifacts and providers', run: () => setActiveSection('models') },
+        { id: 'guide', group: 'Navigation', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
         { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', disabled: state.session.phase === 'generating', run: () => {
             if (agent.create()) {
                 succeed('session:new');

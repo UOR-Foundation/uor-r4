@@ -18,7 +18,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - The built browser creates two distinct sessions, returns UOR's actual exact arithmetic `42` in the original, verifies its absence in the other transcript, and restores it on return with matching active markers. No fixture-generated assistant activity is inserted.
 - Documentation now distinguishes this mounted agent/session contract from remaining browser-data migration, full lifecycle ownership, native/shared packaging, desktop acceptance, and publication.
 
-## Measurements before the final committed head
+## Historical measurements at the kimi-57 review head
 
 - Red-first authority: missing module plus **2 lifecycle identity failures**; red-first composition: **8 failures**, including direct `sessions` access and no active marker.
 - After implementation and fixture correction: **50/50** authority/lifecycle/generation tests and **40/40** composed component tests pass.
@@ -29,7 +29,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Red/pre-final logs are under `local/kimi/studio-agent-session/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved in a head-specific directory after commit. Fresh-main logs are **NOT_RUN**. Any D76 scope/read-path/FILEMAP advisories are reported by the actual check logs; no failing gate is hidden by an advisory. Agent-36 subsequently returned CHANGES for no-op operation verification, long rename, read-failure, synchronous interruption, browser-evidence, and smaller record/double gaps; kimi-58 owns those repairs.
+Red/pre-final logs are under `local/kimi/studio-agent-session/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved in a head-specific directory after commit. Fresh-main logs are **NOT_RUN**. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes. Agent-36 subsequently returned CHANGES for no-op operation verification, long rename, read-failure, synchronous interruption, browser-evidence, and smaller record/double gaps; kimi-58 owns those repairs. Agent-37 returned CHANGES for command grouping, repeated interruption, fresh-main wording, and evidence/double gaps; kimi-59 owns those repairs.
 
 Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN** at this writing. The PR must keep `References #3500`; the issue remains open. No production publisher was or will be invoked in this unit.
 

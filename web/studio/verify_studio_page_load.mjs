@@ -280,11 +280,17 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                     if (hasExactResponse(transcript())) { answerReady = true; break; }
                     await pause(100);
                 }
+                let generationComplete = false;
+                for (let attempt = 0; attempt < 80; attempt += 1) {
+                    if (root.textContent.includes('Session: complete')) { generationComplete = true; break; }
+                    await pause(100);
+                }
                 const firstTranscript = transcript();
                 const otherResume = await resume(secondId);
                 const otherTranscript = transcript();
                 const restoredResume = await resume(firstId);
                 const restoredTranscript = transcript();
+                const restoredMatchesOriginal = restoredTranscript === firstTranscript;
                 const typedMcpAfterWorkflow = document.querySelectorAll('#studio-typed-root .mcp-connections').length;
                 const app = document.getElementById('app');
                 return {
@@ -313,6 +319,8 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                         restoredResume,
                         restoredAnswer: hasExactResponse(restoredTranscript),
                         restoredTranscript: restoredTranscript.slice(0, 1000),
+                        generationComplete,
+                        restoredMatchesOriginal,
                     },
                 };
             })()`,
@@ -408,6 +416,7 @@ async function main() {
             assert(flow.answerReady && flow.firstTranscript.includes('42'), 'typed UOR arithmetic response was not visible: ' + JSON.stringify(flow));
             assert(flow.otherResume?.idMatches && flow.otherResume.markerMatches && flow.otherHasAnswer === false, 'the other session exposed the original response: ' + JSON.stringify(flow));
             assert(flow.restoredResume?.idMatches && flow.restoredResume.markerMatches && flow.restoredAnswer, 'the original session did not restore its response: ' + JSON.stringify(flow));
+            assert(flow.generationComplete && flow.restoredMatchesOriginal, 'the restored transcript is incomplete or has extra content: ' + JSON.stringify(flow));
         }
         const typedMountError = process.env.UOR_STUDIO_TYPED === '1'
             ? await trapPageLoad(cdp, origin, '/studio/dist/__mount_error.html?typed=1', { mountError: true })
