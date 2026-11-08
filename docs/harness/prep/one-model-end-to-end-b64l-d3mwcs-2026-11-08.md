@@ -108,7 +108,7 @@ At seeds 1 and 2, from `served-reply-panel` on (b64L-d3mwcs)'s exported `step-01
 - **bare:** a short reply whose first whole word is not a sentence frame (your, you, got it, i, my, it, that, ok, okay, sure, yes, no). Because it matches whole words, "okra" and "thatch" are not frames;
 - **span**, recorded with row (c): a bare reply whose words before the `.` occur as whole consecutive words in the prompt, with the prompt's punctuation read as spaces. A cut value such as "basalt lo" is not a span.
 
-A bare reply holding the wrong value counts here, and not in `complete`. Re-read by the same file, claude-322 gives bare 0 and 0, span 0 and 0, and short 68 and 16. So bare above 0 is above claude-322.
+A bare reply holding the wrong value counts here, and not in `complete`. The frame list is closed, so a framed reply it does not list ("Her name is Basalt.") counts as bare: the REPORT quotes every bare reply word for word beside the count, and names any such reply. Re-read by the same file, claude-322 gives bare 0 and 0, span 0 and 0, and short 68 and 16. So bare above 0 is above claude-322.
 
 **Recorded beside them, descriptive only:**
 - **The first-line count,** by `firstline.jq` (`b15c778db57c2e65902e34987cf15748213128ab5d9bb72230f97f0ea58fb702`, the same file as claude-322's), with claude-322's matching rules.
@@ -138,7 +138,7 @@ Read in table order: 0a, 0b, 0c, a, d, b, c, e. The first row that matches decid
 | a | complete ≥ 104 and pairs ≥ 52, stops ≥ 128, no collapse, and the held-out pair against (b64L-D3) not `behind`, at both seeds | **The panel bar is met on this panel.** Next: a fresh-panel confirm under its own sheet. |
 | d | row (a) not met, and either a seed is collapsed (one stopped text covers 64 or more), or stops are below claude-322's at both seeds (under 109 at seed 1 and under 86 at seed 2) | **The mix disturbs stopping.** This is the mix, not the corpus alone: D3's passes and the capped copies' share also fall. The REPORT first classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Next: a decision review in the REPORT. |
 | b | rows (a) and (d) not met, and complete above 0 at a seed | **The corpus lever works.** Next: the corpus's share (more rows, or repeats) under its own sheet. |
-| c | complete 0 at both seeds, and bare above 0 at a seed (claude-322: 0 and 0) | **The bare form is learned; recall is the gap.** The REPORT gives span. Span above 0 means chat values are copied, but not the asked-for one. Span 0 means the values do not come from the chat. Next: the recall lever (writer admission, copy keys: claude-323's result). |
+| c | complete 0 at both seeds, and bare above 0 at a seed (claude-322: 0 and 0) | **The bare form is learned; recall is the gap.** The REPORT gives span. Span above 0 means chat values are copied, but not the asked-for one. Span 0 means the values do not come whole from the chat. Next: the recall lever (writer admission, copy keys: claude-323's result). |
 | e | complete 0 and bare 0 at both seeds | **No change from claude-322 in the reply form: the corpus share is too small to move it.** Next: a repeat factor under its own sheet. |
 | f | the mean pooled d against claude-322's (b64L-d3mwcap6) below −58,212 | **The mix's held-out cost is named,** beside the row above. The REPORT says it cannot be split from D3's fewer passes (2.29 against 2.51). |
 
@@ -182,7 +182,7 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
    1. `ctrl`: I-xc and I-c again; then `serve`: export each seal's `models/step-016384`, I-x, the panel, the role headers and the first-line count.
    2. `grade`: `scale-probe grade` with `train=` `local/claude/claude-324/mix`, then the pairs against (b64L-D3) and claude-322's pinned grades.
    3. `dev`: the DEV curves.
-   4. The bare-reply share and the opening template count, printed by `serve` from `bare.jq` for each seed's served output.
+   4. The bare-reply count and the opening template count, printed by `serve` from `bare.jq` for each seed's served output.
 
 ## Minimum test power
 
@@ -214,7 +214,7 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
 2. **The window gate** is exactly 457,421, in place of 417,421.
 3. **The exposure:** passes 2.29 (from 2.51), scored EOS per window 1.06 (from 1.07), EOS share 1.43% (from 1.333%), the corpus 8.7% of windows seen.
 4. **The comparison arm** is claude-322's (b64L-d3mwcap6), with its pinned grades. The earlier descriptive pairs are dropped from the sheet's readings.
-5. **The readings add** the bare-reply share, the opening template count, and the pair against claude-322's grades.
+5. **The readings add** the bare-reply count, the opening template count, and the pair against claude-322's grades.
 6. **The outcome map** is rewritten as rows (a) to (f) for the corpus question; rows 0a, 0b and 0c are kept.
 7. **I-3's gate tests** take claude-322's ×6 mix as the refusal.
 8. **The scripts** are claude-325's: claude-322's with renames, the new MIXR and its three shas in `job-325.sh`, the new seal root, and new hash pins in `seed-325.sh`. `read-325.sh` is claude-323's `read-323.sh` without its copy-key gate (I-k), grading with `train=` `local/claude/claude-324/mix` and pairing against claude-322's pinned grades.
@@ -228,15 +228,51 @@ Registered before any pod goes up. They are claude-322's, with TRAIN swapped:
 - `seal-325.sh` `4cf1f375257539b004468e2ee9c93a330263b54dbd19797e8dccf58fbaa2632d`
 - `watch-325.sh` `93ca699ff7bbfc8e65c91bdfaedb457cfc3ddee4eccc2b28504e5b16c27f14a6`
 - `seed-325.sh` `6d69f16b3fd1a2f716d1398061f9a821669c2f93dedc98133c1445e9d7bc9a8c`
-- `read-325.sh` `dc372297e70bb98f8ccbc406bf2d95d754035ff7d687e8f23e7346cdf475d9f8`
+- `read-325.sh` `4f33533df07267ab5384914c0265477cc42ce232d95b454483120c2cc8d32038`
 - `firstline.jq` `b15c778db57c2e65902e34987cf15748213128ab5d9bb72230f97f0ea58fb702` (the same file as claude-322's)
 - `unwrap.jq` `4bb7ef1bc57bf39fbe15c5e98e9b414ca1d1c820f2a56067e0e51d783ebe9db5`
-- `bare.jq` `180987f67f54fafb9ce36871834b0150a4b70d4e0cd12907cada0cb5ed8e80fb`
+- `bare.jq` `6b143d056b9007b535427cae700c231666debcd79c9f8e5deb1a15ea4be5226a`
 
 ## FIT
 
-Pending: filled by a fresh non-author reviewer / the session before any pod.
+[claude] Two fresh-context reviewers, neither the sheet's author, 8 Nov.
+
+**Round 1, at `4400a4182`: FIT WITH CHANGES.** The arithmetic, the bars and the window count checked out.
+- **MAJOR 1:** row (c) read "bare above claude-322", and claude-322 already read bare 2 at seed 2. The cause was prefix matching in the frame list, which let "ok" match "okra". So no change would have read as row (c). Fixed: `bare.jq` now matches whole words and counts only EOS-stopped replies. claude-322 re-reads bare 0 and 0, and the bare count is named as deciding rows (c) and (e).
+- **MAJOR 2:** no row held collapse, and a loss of stopping could read as row (b). Fixed: row (d) carries collapse and stopping below claude-322 at both seeds, and is read before (b), (c) and (e).
+- **MINOR 1–6:** overclaims fixed:
+  - "the mix" in place of "the corpus" for stopping and held-out changes;
+  - "the count of scored EOS is matched" in place of "exposure is held";
+  - the window clause now cites `build_document_windows`;
+  - row (b) reworded;
+  - the mixed-seed rule now covers every run.
+
+  All fixed at `587eca092`.
+
+**Round 2, at `587eca092` with the rewritten `bare.jq`: FIT.**
+- Both MAJORs hold.
+- The rows after 0a–0c and (a) partition every run:
+  - (d) covers any collapse, and stopping below claude-322 at both seeds;
+  - (b) needs complete above 0;
+  - (c) and (e) are complements on bare.
+- 17 synthetic replies probed `bare.jq`. It handles "okra", "Okay.", "It's", "Iris.", leading space, newlines and a missing period as intended. Three MINORs were applied before any pod:
+  - the `bare.jq` header named `span` as deciding (corrected, and re-pinned);
+  - a closed frame list counts "Her name is Basalt." as bare, so the REPORT quotes every bare reply word for word;
+  - "do not come whole from the chat", and "count" in place of "share".
+
+  Re-read after the re-pin, claude-322 is unchanged: s1 stopped 109, short 68, bare 0, span 0, templates 73 and 28; s2 stopped 86, short 16, bare 0, span 0, templates 1 and 36.
 
 ## Pre-run review
 
-Pending: filled by a fresh non-author reviewer / the session before any pod.
+[claude] D67, a fresh-context reviewer, 8 Nov: **GO, no findings.**
+- **The diffs:** every hunk of the six scripts against claude-322's (`job`, `chain`, `seal`, `watch`, `seed`) and claude-323's (`read`) is an intended change: renames, MIXR and its three shas, the window gate 457,421, the seal root, the seed pins, the bare pin. The seal, watch, trap and price-refusal logic is byte-identical.
+- **The pins:** each hash above equals `shasum -a 256` of its file. The local mix `local/claude/claude-324/mix` matches the three TRAIN shas.
+- **The gate tests**, all passing:
+  - `gt/test-gates.sh`: 56 ok, with claude-322's ×6 mix and the 417,421 count as refusals;
+  - `gt/mutate.sh`: 18 of 18 mutants caught;
+  - `gt/test-seal.sh`: 10 ok, with its seed-pin check shown to fail on a broken pin;
+  - `gt/test-watch.sh`: 5 of 5 caught.
+
+  `bash -n` passes on every script.
+- **After the review,** only `bare.jq` (rewritten, then its header comment) and `read-325.sh`'s pin line changed. Round 2 of the FIT read both; `read-325.sh` greps `bare` only at its pin and its print line.
+- **The whole-project chain:** Track A of "Both in parallel" under "pipeline first" (#2028). The inputs are in the store and on the laptop. The bars are unchanged, and each outcome row names its next unit. The lease and caps are checked at step 3.
