@@ -183,6 +183,7 @@ require_line '[ "$base_guard" -eq 132 ] ||' "$JOB"
 grep -Fq 'die "base continuation grade did not use the registered 512-row sample"' "$JOB" ||
   fail "$JOB does not pin the base-grade sample fingerprint"
 checks=$((checks + 1))
+require_line 'die "base grade is not labelled D84 CPU development evidence"' "$JOB"
 grep -Fq '.evaluation.samples == 512 and' "$JOB" ||
   fail "$JOB does not require the registered 512-row sample count"
 checks=$((checks + 1))
@@ -242,6 +243,10 @@ require_line 'PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-$BUILD_ROOT/panel-target}' "$
 require_line 'SNAPSHOT_ROOT=${UOR_SFT_SNAPSHOT_ROOT:-$BUILD_ROOT/snapshots}' "$JOB"
 require_line 'SEAL_LIMIT_BYTES=104857600' "$JOB"
 require_line 'exec >> "$RUN/job.log" 2>&1' "$JOB"
+require_line 'cpu_model=$(sed -n '"'"'s/^model name[[:space:]]*:[[:space:]]*//p'"'"' /proc/cpuinfo | head -n 1)' "$JOB"
+require_line '[ -n "$cpu_model" ] || die "could not identify the CPU hardware for D84 evaluation"' "$JOB"
+require_line '> "$RUN/cpu.json"' "$JOB"
+require_line '} > "$RUN/cpu.txt"' "$JOB"
 require_line 'CARGO_TARGET_DIR="$PANEL_TARGET" \' "$JOB"
 require_line 'PANEL_BIN="$PANEL_TARGET/release/served-reply-panel"' "$JOB"
 require_line 'oh/run/b64L-s1/models/step-016384 oh/run/b64L-s1/config.json' "$JOB"
@@ -266,7 +271,7 @@ require_line 'RUNTIME_EXCLUDE_REPORT=${UOR_SFT_REPORT:-docs/loop/tasks/one-model
 require_line 'STEPS=${UOR_SFT_STEPS:-1024}' "$LAUNCHER"
 require_line '1024:s1|2048:s1-2048) ;;' "$LAUNCHER"
 require_line '1024:docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md) ;;' "$LAUNCHER"
-require_line '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-28/REPORT.md) ;;' "$LAUNCHER"
+require_line '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-29/REPORT.md) ;;' "$LAUNCHER"
 require_line 'git ls-tree -r "$PIN" |' "$LAUNCHER"
 require_line "path != fit && path != report'" "$LAUNCHER"
 require_line 'git show "$PIN:$RUNTIME_EXCLUDE_FIT" |' "$LAUNCHER"

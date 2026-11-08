@@ -1,11 +1,11 @@
-# Prep sheet: 2,048-step reply-SFT dose extension (one-model-end-to-end, deepseek-28)
+# Prep sheet: 2,048-step reply-SFT dose extension (one-model-end-to-end, deepseek-29)
 
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
-(#3407). Order: [deepseek-28](../loop/tasks/one-model-end-to-end/deepseek-28/ORDER.md).
+(#3407). Order: [deepseek-29](../loop/tasks/one-model-end-to-end/deepseek-29/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `5e59d01d9bfa1ce533eeb451b1b9f9cde97c2708`, reviewed-runtime `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`, reviewer session `01a1b8eb-6f3d-7dc2-97c7-ebdcb679fc05`.
+TEST FITNESS: PENDING - merged-runtime and D84 CPU-identity repair requires a fresh review.
 
-PRE-RUN: GO - fresh D67 review at `fa5d7b0874159b17b0486248f5abd239269cfad3`, reviewed-runtime `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`, reviewer session `01a1b8f1-79b0-7c53-a3ed-0bda5eee206e`.
+PRE-RUN: PENDING - fresh D67 review required after the merged-runtime CPU-identity repair.
 
 ## Why
 
@@ -105,7 +105,8 @@ No result claims M2, a mechanism effect, seed reproducibility or useful chat.
    while retaining room inside the four-pod and $8/hour project caps.
 3. Build the exact merged pin, fetch and hash every inherited input, run the
    training-unit checks and reproduce the base rank, free-generation and
-   continuation controls.
+   continuation controls. Record the evaluation host's CPU model,
+   architecture, logical processor count and `lscpu` output before grading.
 4. Retrain from the base at step 0 for 2,048 steps. Export and score every
    256-step checkpoint before proceeding; at step 512, apply outcome row 2.
 5. Apply outcome rows 1 and 3-5 to the selected checkpoint after all available
@@ -127,6 +128,14 @@ No result claims M2, a mechanism effect, seed reproducibility or useful chat.
 
 All original initialization, checkpoint-completion, progress, seal/readback and
 teardown checks remain mandatory. Instrument failure trains nothing.
+
+## Instrument checks
+
+The D84 CPU-development grader must identify its host before the first grade.
+The job writes `cpu.json` and `cpu.txt`; both enter the seal. Every base and
+checkpoint grade must report substrate `cpu-development-research` and
+qualification `gpu-required`. A missing CPU identity or an unlabelled grade
+stops the dose before a result can be read.
 
 ## Minimum test power and cost
 

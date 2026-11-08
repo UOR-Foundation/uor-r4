@@ -194,6 +194,12 @@ mutate unchecked-positive-train-loss "$JOB" \
   'else ((.train_loss_mean | type) == "number" and
          (.train_loss_mean | isfinite))' \
   'else true'
+mutate missing-cpu-hardware-id "$JOB" \
+  'cpu_model=$(sed -n '"'"'s/^model name[[:space:]]*:[[:space:]]*//p'"'"' /proc/cpuinfo | head -n 1)' \
+  'cpu_model=unknown'
+mutate unchecked-cpu-hardware "$JOB" \
+  'die "base grade is not labelled D84 CPU development evidence"' \
+  'true'
 mutate checkpoint-progress-unchecked "$JOB" \
   'check_progress "$TRAIN_RUN/progress.jsonl"' 'true'
 mutate base-sample-unchecked "$JOB" \
@@ -252,7 +258,7 @@ mutate missing-remote-dose "$LAUNCHER" \
   'UOR_SFT_OUT_STORE="$OUT_STORE" UOR_SFT_STEPS="$STEPS" \' \
   'UOR_SFT_OUT_STORE="$OUT_STORE" \'
 mutate wrong-extension-report "$LAUNCHER" \
-  '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-28/REPORT.md) ;;' \
+  '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-29/REPORT.md) ;;' \
   '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md) ;;'
 mutate signal-cleanup-success "$LAUNCHER" \
   '[ "$STATUS" = SEALED ] || rc=1' \

@@ -171,6 +171,26 @@ log "run $RUN"
 log "store output $OUT_STORE"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader |
   tee "$RUN/gpu.txt"
+cpu_model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo | head -n 1)
+[ -n "$cpu_model" ] || die "could not identify the CPU hardware for D84 evaluation"
+cpu_arch=$(uname -m)
+cpu_logical=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
+case "$cpu_logical" in
+  ''|*[!0-9]*) die "could not identify the CPU's logical processor count" ;;
+esac
+jq -n --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
+  '{schema:"uor-r4.cpu-hardware/1",model:$model,architecture:$arch,logical_cpus:$logical}' \
+  > "$RUN/cpu.json"
+{
+  printf 'model: %s\narchitecture: %s\nlogical_cpus: %s\n' \
+    "$cpu_model" "$cpu_arch" "$cpu_logical"
+  uname -a
+  if command -v lscpu >/dev/null; then
+    lscpu
+  else
+    sed -n '/^processor[[:space:]]*:/p;/^model name[[:space:]]*:/p' /proc/cpuinfo
+  fi
+} > "$RUN/cpu.txt"
 
 if [ ! -d "$REPO/.git" ]; then
   install -d "$REPO"
@@ -327,6 +347,9 @@ grade_checkpoint() {
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
     "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade did not use the registered 512-row sample"
+  jq -e '.substrate == "cpu-development-research" and
+    .qualification == "gpu-required"' "$grade_dir.json" >/dev/null ||
+    die "checkpoint $step grade is not labelled D84 CPU development evidence"
   rm -f "$snapshot" || die "could not remove transient snapshot for checkpoint $step"
 }
 
@@ -475,6 +498,9 @@ jq -e '.evaluation.samples == 512 and
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
   "$RUN/control/base-grade.json" >/dev/null ||
   die "base continuation grade did not use the registered 512-row sample"
+jq -e '.substrate == "cpu-development-research" and
+  .qualification == "gpu-required"' "$RUN/control/base-grade.json" >/dev/null ||
+  die "base grade is not labelled D84 CPU development evidence"
 base_totals() {
   jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
     die "base $2 control differs from its registered reading"
