@@ -27,10 +27,11 @@
     "final_reports": 5,
     "final_seed_render_cells": 4,
     "determinism_repeats": 1,
-    "max_peak_rss_kib": 51056,
+    "max_peak_rss_kib": 51092,
     "threads": 32,
     "probe_seconds": 85.871,
-    "final_probe_seconds": 3.008
+    "final_probe_seconds": 3.008,
+    "final_max_peak_rss_kib": 51056
   },
   "artifacts": {
     "seed_1_model_uorlut": "86e51d5ee2c00a4041bcde4d2183884e351099f28f155fb1e6a7516f13064dfe",

@@ -34,11 +34,12 @@
     "report_count": 18,
     "measured_wall_ms": 85871,
     "measured_wall_seconds": 85.871,
-    "max_peak_rss_kib": 51056,
+    "max_peak_rss_kib": 51092,
     "final_report_count": 5,
     "final_measured_wall_seconds": 3.008,
     "final_seed_render_count": 4,
     "final_seed_render_wall_seconds": 2.432,
+    "final_max_peak_rss_kib": 51056,
     "sequential_seed_render_wall_seconds": 40.049,
     "sequential_to_final_speedup": 16.468
   },

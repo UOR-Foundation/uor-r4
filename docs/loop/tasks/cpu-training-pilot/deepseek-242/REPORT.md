@@ -79,7 +79,7 @@ field difference.
 
 Resources are in
 [`resources.json`](./evidence/resources.json): 18 retained reports,
-85.871 seconds measured probe time, 51,056 KiB maximum peak RSS,
+85.871 seconds measured probe time, 51,092 KiB maximum peak RSS,
 25,165,982 retained bytes, and a final 32-thread sweep of 0.56-0.66 seconds.
 The D84 ledger reconciles the previous 98,567.677487699-second admitted total
 plus this unit's 1,800-second projection to 100,367.677487699 seconds.
@@ -98,8 +98,9 @@ plus this unit's 1,800-second projection to 100,367.677487699 seconds.
   local policy and full loop gates pass.
 - The renderer test pins the complete decoded protocol-v2 prompt for both
   registered panel forms.
-- Final v4 traces are non-timing-equivalent to both v3 and the sequential v2
-  traces, and the repeat is exact apart from timing and RSS.
+- The final v4 reports reproduce every decision, row, span and count field from
+  v3 after excluding executable identity, wall time and RSS. The v4 repeat is
+  exact apart from timing and RSS.
 
 ## Skills used
 
