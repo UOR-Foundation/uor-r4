@@ -24,15 +24,17 @@ therefore does not by itself produce a usable conversation.
 
 ## What changed
 
-`mix-chat-corpus` now refuses incompatible source tokenizer identity, BOS,
-vocabulary, response counts and content hashes. It records the output
+`mix-chat-corpus` now refuses incompatible source tokenizer identity, CID,
+BOS, vocabulary, response counts and content hashes. It records the output
 `vocab_size`, BOS/EOS/UNK ids, tokenizer CID, dialogue protocol and the maximum
 input `max_tokens`. The source token bytes, masks and ordering are unchanged.
 
 Added a real-binary integration test that invokes `mix-chat-corpus` on two
 synthetic UORT stores, checks the token/mask bytes, and passes the emitted
 manifest through `uor_r4_cpu_train::validate_corpus_manifest`. A second test
-proves a mismatched source tokenizer is refused before the output is claimed.
+proves mismatched tokenizer hashes, vocabulary widths and CIDs are each refused
+before the output is claimed. Its source stores use different `max_tokens`
+values, proving the output takes the maximum covering both.
 
 ## Measurements
 
@@ -90,6 +92,7 @@ do not establish fresh-phrasing generalization or useful chat.
 - Targeted `rustfmt --check` passed for both changed Rust files. The repository
   still has unrelated pre-existing formatting drift under `cargo fmt --all`;
   this unit did not reformat unrelated files.
+- `uor-harness loop gates --full`: all gates green.
 
 ## Skills used
 

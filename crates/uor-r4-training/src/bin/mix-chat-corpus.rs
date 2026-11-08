@@ -148,6 +148,15 @@ fn run(args: &[String]) -> Result<()> {
                 store.path.display()
             ));
         }
+        if tokenizer_record
+            .get("tokenizer_cid")
+            .is_some_and(|value| value.as_str() != Some(protocol.tokenizer_cid.as_str()))
+        {
+            return Err(format!(
+                "{}: tokenizer CID differs from the dialogue protocol",
+                store.path.display()
+            ));
+        }
         if tokenizer_record.get("vocab_size").and_then(Value::as_u64) != Some(vocab_size as u64) {
             return Err(format!(
                 "{}: tokenizer vocabulary differs from its UORT header",

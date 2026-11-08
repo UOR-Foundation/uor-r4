@@ -21,6 +21,9 @@ diagnostics can consume the exact reply-SFT mix without hand-editing metadata.
 
 - `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
 - `crates/uor-r4-training/tests/mix_chat_corpus_manifest.rs`
+- `crates/uor-r4-training/Cargo.toml`
+- `Cargo.lock`
+- `docs/roadmap/items/one-model-end-to-end.md`
 - `docs/loop/tasks/one-model-end-to-end/deepseek-39/**`
 - `docs/research/notebook/cpu-training.md`
 

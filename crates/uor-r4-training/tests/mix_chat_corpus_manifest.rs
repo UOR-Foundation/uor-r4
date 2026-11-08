@@ -59,7 +59,7 @@ fn sha(path: &Path) -> String {
     uor_r4_training::sha256_file(path).unwrap()
 }
 
-fn source(root: &Path, name: &str, token: u16) -> PathBuf {
+fn source(root: &Path, name: &str, token: u16, max_tokens: u64) -> PathBuf {
     let dir = root.join(name);
     fs::create_dir_all(&dir).unwrap();
     let tokens_path = dir.join("tokens.u16");
@@ -76,7 +76,7 @@ fn source(root: &Path, name: &str, token: u16) -> PathBuf {
         "template_rule": "test",
         "mask_rule": "test",
         "dialogue_protocol": SCHEMA_V2,
-        "max_tokens": 8,
+        "max_tokens": max_tokens,
         "tokenizer": {
             "path": root.join("tokenizer.json"),
             "sha256": sha(&root.join("tokenizer.json")),
@@ -133,8 +133,8 @@ fn mixed_chat_manifest_is_accepted_by_the_cpu_trainer() {
     let root = root();
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("tokenizer.json"), TOKENIZER).unwrap();
-    let first = source(&root, "first", 3);
-    let second = source(&root, "second", 4);
+    let first = source(&root, "first", 3, 8);
+    let second = source(&root, "second", 4, 13);
     let out = root.join("mixed");
     let output = run_mix(&root, &[first, second], &out);
     assert!(
@@ -150,7 +150,7 @@ fn mixed_chat_manifest_is_accepted_by_the_cpu_trainer() {
     assert_eq!(reader.as_slice(), [0, 3, 1, 0, 4, 1]);
     assert_eq!(mask, [0, 1, 1, 0, 1, 1]);
     let parsed: Value = serde_json::from_slice(&manifest).unwrap();
-    assert_eq!(parsed["max_tokens"], 8);
+    assert_eq!(parsed["max_tokens"], 13);
     assert_eq!(parsed["tokenizer"]["vocab_size"], 5);
     assert_eq!(parsed["tokenizer"]["bos_id"], 0);
     assert_eq!(parsed["dialogue_protocol"], SCHEMA_V2);
@@ -158,10 +158,37 @@ fn mixed_chat_manifest_is_accepted_by_the_cpu_trainer() {
     let identity = uor_r4_cpu_train::validate_corpus_manifest(&manifest, &tokens, &mask).unwrap();
     assert_eq!(identity.vocab, 5);
     assert_eq!(identity.bos, 0);
-    assert_eq!(identity.max_tokens, 8);
+    assert_eq!(identity.max_tokens, 13);
     assert_eq!(identity.response_targets, 4);
 
     fs::remove_dir_all(root).unwrap();
+}
+
+fn assert_source_is_refused(
+    root: &Path,
+    name: &str,
+    mutate: impl FnOnce(&mut Value),
+    expected: &str,
+) {
+    let first = source(root, &format!("first-{name}"), 3, 8);
+    let second = source(root, name, 4, 13);
+    let manifest_path = second.join("manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    mutate(&mut manifest);
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let out = root.join(format!("mixed-{name}"));
+    let output = run_mix(root, &[first, second], &out);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(expected),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!out.exists());
 }
 
 #[test]
@@ -169,25 +196,25 @@ fn incompatible_source_tokenizer_is_refused_before_output_is_created() {
     let root = root();
     fs::create_dir_all(&root).unwrap();
     fs::write(root.join("tokenizer.json"), TOKENIZER).unwrap();
-    let first = source(&root, "first", 3);
-    let second = source(&root, "second", 4);
-    let manifest_path = second.join("manifest.json");
-    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
-    manifest["tokenizer"]["sha256"] = json!("11".repeat(32));
-    fs::write(
-        &manifest_path,
-        serde_json::to_vec_pretty(&manifest).unwrap(),
-    )
-    .unwrap();
-    let out = root.join("mixed");
-    let output = run_mix(&root, &[first, second], &out);
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("tokenizer SHA-256 differs"),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+
+    assert_source_is_refused(
+        &root,
+        "bad-hash",
+        |manifest| manifest["tokenizer"]["sha256"] = json!("11".repeat(32)),
+        "tokenizer SHA-256 differs",
     );
-    assert!(!out.exists());
+    assert_source_is_refused(
+        &root,
+        "bad-vocabulary",
+        |manifest| manifest["tokenizer"]["vocab_size"] = json!(4),
+        "tokenizer vocabulary differs",
+    );
+    assert_source_is_refused(
+        &root,
+        "bad-cid",
+        |manifest| manifest["tokenizer"]["tokenizer_cid"] = json!("00".repeat(32)),
+        "tokenizer CID differs",
+    );
 
     fs::remove_dir_all(root).unwrap();
 }
