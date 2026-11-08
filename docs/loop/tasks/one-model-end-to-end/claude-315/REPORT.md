@@ -9,7 +9,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **Stopping missed at seed 2: 122 of 256, against the bar of 128 at both seeds.** Seed 1 met it (177).
 - **Seed 2's stopped replies collapse.** Among its 122 EOS-stopped replies, 75 are " I'm sorry you feel calm!" The bar is 64. Seed 1's most common EOS-stopped reply occurs 62 times, 2 under the bar, so seed 1 is near collapse too. Only 68 and 39 distinct reply texts appear over all 256 rows. That is fewer than (b64L-mw)'s 120 and 104.
 - **No row is complete and no pair counts: 0 of 256 and 0 of 128 at both seeds.** The panel's bar is 104 and 52. Every served model scored so far has 0.
-- **Seed 2 writes the next turn's role header.** Its second most common EOS-stopped reply, 22 times, is " My current jobs." followed by "Assistant: My current jobs." three more times. The model learned the dialogue's turn layout, not where its own turn ends.
+- **Both seeds write the next turn's role header.** EOS-stopped replies that contain "Assistant:" number 29 at seed 1 and 27 at seed 2. Over all 256 rows the counts are 35 and 51 (`jq` `contains("Assistant:")` over `rows[]`). Seed 2's second most common EOS-stopped reply, 22 times, is " My current jobs." followed by "Assistant: My current jobs." three more times. The model learned the dialogue's turn layout, not where its own turn ends.
 - **The mix still costs held-out human text against D3 alone.** On the no-memory panel, (b64L-d3mw) is **behind** claude-301's (b64L-D3) at both seeds: pooled d = −14,975 and −23,833 rows, against a band of 8,858. That is about a fifteenth of (b64L-mw)'s cost (−304,197 and −307,764). This unit does not separate the two causes the sheet named: fewer D3 passes (4.73 against 6.84) and mw-balp's content.
 - **Tokens per second is the bin timer's figure, not decode speed:** 487 and 657 tok/s. The timer re-parses the artifact on every row (claude-311). It is recorded, not compared.
 - **The watchers ran unwatched for about 9 minutes.** The first pair ran as session background tasks and died when the session ended, about 23:35Z. They were restarted in detached `screen` sessions at 23:44Z (`rewatch-315.sh`). Both pods kept training, and no reading depends on the gap.
@@ -106,7 +106,7 @@ Row 5's next unit is the ratio lever: mw-balp's windows repeated in the mix, und
    - The mix is behind D3 by 15,000–24,000 rows, against mw-balp's 304,000.
    - The ratio sheet's held-out pair stays against (b64L-D3), with this unit's d beside it.
    - A ratio that buys stopping at more than about 3× this cost is a worse trade than a decode-time change. That threshold is the lab's judgement, recorded for the sheet's FIT to accept or change.
-4. **Seed 2's role-header text is an end-of-turn fault, not a content fault.** The model writes "Assistant:" where an EOS belongs. The ratio sheet should count rows whose reply contains a role header. That is a `jq` count over `rows[]`, descriptive only, so it does not need its own instrument.
+4. **The role-header text, at both seeds, is an end-of-turn fault, not a content fault.** The model writes "Assistant:" where an EOS belongs: 35 and 51 of 256 rows. The ratio sheet should count rows whose reply contains a role header. That is a `jq` count over `rows[]`, descriptive only, so it does not need its own instrument.
 
 What a pass and a fail would each unlock:
 - **Stopping met at both seeds with no collapse:** the reading is row 2 or 3 of a mix sheet. The next step is recall (the panel's complete bar).
