@@ -13,12 +13,12 @@ Every AgentComposer test now unmounts through the existing `act` helper before h
 ## Measurements
 
 - Original evidence: 411/411 tests passed with **1 unhandled error**, so the run failed.
-- Focused AgentComposer/StudioApp teardown: **60/60 tests**, no unhandled errors.
-- Final complete suite, legacy checks, report/local-PR checks, and full gates: preserved in the exact-head evidence directory after commit. Fresh review and fresh-main verification are **NOT_RUN**.
+- Focused AgentComposer/StudioApp teardown: **60/60 tests**, no unhandled errors, at `local/kimi/studio-agent-session/teardown-focused.log`.
+- Final complete suite at the exact head: **411/411 tests across 47 files with zero unhandled errors**. Plain-JS **112/112**, typecheck/build, all four legacy checks, report/local-PR checks, and all 11 full gates pass. Fresh review and fresh-main verification are **NOT_RUN**.
 
 ## Checks run at the head
 
-`full-vitest-teardown-rerun.log` records the interim green rerun; the original unhandled error remains preserved in the base evidence. The exact-head evidence directory contains identity, focused/full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs after commit. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes. Fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 remains draft with `References #3500`; issue #3500 remains open. No production publisher was invoked.
+`full-vitest-teardown-rerun.log` records the interim green rerun; the original unhandled error remains preserved in the base evidence. The exact-head evidence directory contains identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs after commit; the focused teardown log is at `local/kimi/studio-agent-session/teardown-focused.log`. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes. Fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 remains draft with `References #3500`; issue #3500 remains open. No production publisher was invoked.
 
 ## Skills used
 

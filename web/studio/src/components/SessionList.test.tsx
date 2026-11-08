@@ -177,6 +177,8 @@ describe('SessionList', () => {
         expect(host.querySelector('dialog')).toBeNull();
         expect(host.querySelector('[role="alert"]')).toBeNull();
         expect(store.getState().session.activeId).toBe('session-new-2');
-        expect(Array.from(host.querySelectorAll('li strong')).some((node) => node.textContent === 'New conversation')).toBe(true);
+        const replacement = host.querySelector('li[data-session-id="session-new-2"][aria-current="true"]');
+        expect(replacement?.querySelector('strong')?.textContent).toBe('New conversation');
+        expect(host.querySelector('li[data-session-id="session-new-1"]')?.getAttribute('aria-current')).toBeNull();
     });
 });

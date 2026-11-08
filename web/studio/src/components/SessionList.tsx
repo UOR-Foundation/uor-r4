@@ -48,7 +48,7 @@ export function SessionList({ store, agent, download, onError, onChange, onSucce
             {items.length === 0 && <p>No sessions yet</p>}
             <ul>
                 {items.map((session) => (
-                    <li aria-current={session.id === state.session.activeId ? 'true' : undefined}>
+                    <li data-session-id={session.id} aria-current={session.id === state.session.activeId ? 'true' : undefined}>
                         <strong>{session.title}</strong>
                         <span>{session.messageCount} messages · {session.preview}</span>
                         <button type="button" disabled={generating} onClick={() => { if (agent.resume(session.id)) activate(`session:select:${session.id}`); else reportError('Could not select that session.', `session:select:${session.id}`); }}>{`Select ${session.title}`}</button>

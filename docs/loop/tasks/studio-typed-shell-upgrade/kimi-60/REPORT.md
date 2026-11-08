@@ -15,7 +15,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 - Duplicate/resume/rename validate the target and catalog before any legacy mutation. Failed pre-reads cannot call those mutating APIs.
 - Generation completion refreshes real message counts/previews. Synchronous interruption preserves the stopped snapshot; later ordinary completion synchronization still works. Non-stoppable predictions are never stopped/relabelled.
-- SessionList deletion proves dialog closure, no error alert, the replacement active ID, and the replacement row. Shared StudioApp doubles have consistent active IDs/catalogs. No-active deletion returns `true` only after target removal; failures remain null.
+- SessionList deletion proves dialog closure, no error alert, the replacement active ID, and the replacement row through its real `data-session-id` and active marker. Shared StudioApp doubles have consistent active IDs/catalogs. No-active deletion returns `true` only after target removal; failures remain null.
 - Request capture settles for one second after typed evaluation. A request scheduled 500 ms after evaluation is rejected; normal typed requests stay local and the restored transcript remains byte-identical.
 - Reports distinguish actual defects from characterization, correct command-group history, mark the 384-test preview as historical, and describe no-active deletion consistently. Current records use 411 tests and actual advisories only.
 
