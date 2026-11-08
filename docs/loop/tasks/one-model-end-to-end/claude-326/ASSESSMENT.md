@@ -11,7 +11,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - Its only question-dependent path is the type heads' learned query, and no learned-query read on record has learned where to look.
 
 **The record cannot yet tell data from mechanism at the first token:**
-- The first-token measurement exists only for DeepSeek's checkpoints. Those were trained on a reply mix with no panel-shaped target, and they do not open with either prompt value (median rank 956–1,189 of 4,096).
+- The first-token measurement exists only for DeepSeek's checkpoints. They do not open with either prompt value (median rank 956–1,189 of 4,096). Their mix scored recall replies that were not bare values, so that rank mixes reply format with choice.
 - claude's own served models do put a prompt value first, and one seed picks the asked one about twice as often as the other (76 to 36, row 15).
 
 Three readings decide it, in this order:
@@ -49,13 +49,18 @@ DeepSeek scored this split teacher-forced on one SFT artifact, the content-ratio
 | **First target** | `per-turn/v1` | 0/256 | 0/256 | 0/256 | 67 / 956 / 4,055 |
 | **First target** | `one-user-turn/v1` | 0/256 | 0/256 | 0/256 | 43 / 1,189 / 4,060 |
 | **Later targets,** after a correct first token | `per-turn/v1` | 1,614/2,576 | 2,574/2,576 | n/a | n/a |
-| **Later targets,** after a correct first token | `one-user-turn/v1` | 1,600/2,576 | n/a | n/a | n/a |
+| **Later targets,** after a correct first token | `one-user-turn/v1` | 1,600/2,576 | 2,574/2,576 | n/a | n/a |
 
 - **The prompt barely moves the answer position.** The same run's opening query spread was 0.26249 there, against 2.06252 over all rows.
 - **Repeated openings did not help.** deepseek-36 repeated reply openings eight times in training (row 17; one artifact, rendering not split):
   - first-target top-1 and top-8 were 0/256 at every checkpoint, with median ranks 1,025–1,134;
   - first-target top-32 was 0/256 at the selected step 256.
-- **These artifacts do not open with prompt content at all.** Both were trained on an OASST2-heavy reply mix (rows 17, 18) with no panel-shaped scored target. A median rank near 1,000 means neither of the prompt's values is near the top, which is a failure to open with prompt content, not only a failure to choose between two values.
+- **These artifacts do not open with prompt content at all.** A median rank near 1,000 means neither of the prompt's values is near the top, which is a failure to open with prompt content, not only a failure to choose between two values.
+- **Their training mix held recall replies, but not bare ones, as far as the record shows.**
+  - Row 32: OASST2's reply-masked TRAIN root plus 20,000 M-World oracle-memory recall conversations, median reply 11 tokens.
+  - Row 21's content-ratio mix is 67.98% M-World by tokens and 43.35% by scored targets.
+  - The panel's first target is the bare value's first word. A model trained on framed replies ("Your job is …") ranks its frame's first word on top, so the bare value ranks low there however well it would choose a few tokens later.
+  - So **on these artifacts the first-target rank measures format and choice together.** Whether M-World's replies open with a frame is not checked here; Part A's teacher-forced reading on claude-325, trained on bare replies, does not have this confound.
 
 ### claude's served replies: copying, sometimes selective
 
@@ -94,7 +99,7 @@ The Hamming read's module doc (`crates/uor-r4-float-train/src/flock_read_hamming
 | Candidate | What it moved | What it did not move | What the record says |
 |---|---|---|---|
 | **Data**: mw-balp alone, D3 mixes × 1 / × 3 / capped × 3 / capped × 6, D4, DeepSeek's ratio, dose and opening weight (rows 14, 15, 17, 21–23, 25, 26, 28, 39) | **Stopping**: 0 → 253 / 244 EOS stops (row 28), and EOS median rank 7 → 2 (row 26). **Copying a prompt value first**: rows 13–15 | Complete replies: 0 in every one. Selection was inconsistent across seeds (the table above) | **Not excluded.** Every corpus so far scored long or stock replies. A corpus whose scored reply *is* the choice, in the panel's shape, was first built in claude-324 and is training now (claude-325) |
-| **Scale**: width 128 → 256 (row 16), 512 and 1,024 (rows 16, 41–43), D3 → D4 (row 39), steps (rows 38, 46), the capacity sweep (row 81) | Held-out text: width 256 is ahead of 128 by d +115,279 / +134,421 (row 16) | Recall: "No arm carries" (row 81). Width 512 and above never trained to the end | **Not shown to be the cause.** The read's design recalls exactly on the 27 Oct probe (row 109), so retrieval itself is within reach. A path from the question to the value is what has not been shown |
+| **Scale**: width 128 → 256 (row 16), 512 and 1,024 (rows 16, 41–43), D3 → D4 (row 39), steps (rows 38, 46), the capacity sweep (row 81) | Held-out text: width 256 is ahead of 128 by d +115,279 / +134,421 (row 16) | Recall: "No arm carries" (row 81). Width 512 and above never trained to the end on D3 (b64L) (rows 16, 41–43). Row 81's (w) 512/8 trained, and is inconclusive until its export is repaired | **Not shown to be the cause.** The read's design recalls exactly on the 27 Oct probe (row 109), so retrieval itself is within reach. A path from the question to the value is what has not been shown |
 | **Objective**: the nearest objective against cell, fixed targets and learning rate (rows 46–48) | Human text learned: (m1) and (near) are ahead of the control (row 47); (b64L) meets the one-track bar (row 44) | n/a | **Not separable from the mechanism at the first token on this record.** Part B's control arm and its header arm separate them |
 | **Mechanism**: the read's query path | Exact-token recall 0.984–0.994 in the far buckets, no read 0.000–0.002 (row 109); continuation copying (row 18) | First-token choice: 0/256 top-32 on DeepSeek's artifacts (row 18); inconsistent on claude's (rows 13–15); every learned-query read on record (rows 106, 108, 110) | **The leading hypothesis, untested.** Consistent with every row except the partial selection at claude-321 seed 2 |
 
@@ -143,7 +148,7 @@ Free-generation parity is still not established: 27 of 64 whole replies differ (
 **Inconclusive, open:**
 - D4 (row 39);
 - copy key 2 (rows 67, 76);
-- mixed keys `2,1` at × 6 (row 13; "the configuration closes, not the lever");
+- mixed keys `2,1` at × 6 (row 13: inconclusive; the configuration closed, the lever open);
 - the sweep's (w) arm (row 81).
 
 **Parked or blocked:**
@@ -183,7 +188,7 @@ Take the 27 Oct probe (row 109; `recall_window`, `--recall`) at (b64L)'s read se
 
 | Arm | The query | Separates |
 |---|---|---|
-| **B0, the control** | the key again, as row 109 (must reproduce its ≥ 0.98, or the run is an instrument fault) | instrument |
+| **B0, the control** | the key again, at row 109's own settings (its sheet's trunk, `--recall 4`, 4,096 steps); must reproduce its ≥ 0.98, or the run is an instrument fault. B1 and B2 then run at those same settings | instrument |
 | **B1, two-class** | each window holds values of two slot types, marked by type tokens; the query names a type with a token from a disjoint range, and the target is that type's latest value. This is the panel's choice | choosing by a learned query |
 | **B2, header gap** | B1, with a fixed 3–4-token header between the query token and the scored position, as `?` … `Assistant:` sits in the panel | carrying the question to the answer position |
 | **B-none** | B2 with no read | chance |
