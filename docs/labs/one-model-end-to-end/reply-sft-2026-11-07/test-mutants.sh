@@ -7,6 +7,7 @@ JOB="$HERE/job.sh"
 LAUNCHER="$HERE/run-s1.sh"
 SHEET="$HERE/../../../harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"
 EXTENSION_SHEET="$HERE/../../../harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md"
+HARDWARE_LIB="$HERE/hardware-evidence.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 caught=0
@@ -62,6 +63,7 @@ mutate() {
     "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
     "$([ "$file" = "$SHEET" ] && printf '%s' "$target" || printf '%s' "$SHEET")" \
     "$([ "$file" = "$EXTENSION_SHEET" ] && printf '%s' "$target" || printf '%s' "$EXTENSION_SHEET")" \
+    "$([ "$file" = "$HARDWARE_LIB" ] && printf '%s' "$target" || printf '%s' "$HARDWARE_LIB")" \
     >/dev/null 2>&1; then
     echo "mutation $name escaped" >&2
     exit 1
@@ -85,6 +87,7 @@ mutate_first() {
     "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
     "$([ "$file" = "$SHEET" ] && printf '%s' "$target" || printf '%s' "$SHEET")" \
     "$([ "$file" = "$EXTENSION_SHEET" ] && printf '%s' "$target" || printf '%s' "$EXTENSION_SHEET")" \
+    "$([ "$file" = "$HARDWARE_LIB" ] && printf '%s' "$target" || printf '%s' "$HARDWARE_LIB")" \
     >/dev/null 2>&1; then
     echo "mutation $name escaped" >&2
     exit 1
@@ -194,22 +197,39 @@ mutate unchecked-positive-train-loss "$JOB" \
   'else ((.train_loss_mean | type) == "number" and
          (.train_loss_mean | isfinite))' \
   'else true'
-mutate missing-cpu-hardware-id "$JOB" \
+mutate missing-cpu-hardware-id "$HARDWARE_LIB" \
   'cpu_model=$(sed -n '"'"'s/^model name[[:space:]]*:[[:space:]]*//p'"'"' /proc/cpuinfo | head -n 1)' \
   'cpu_model=unknown'
-mutate unchecked-cpu-hardware "$JOB" \
-  'die "base grade is not labelled D84 CPU development evidence"' \
-  'true'
-mutate unchecked-checkpoint-cpu-hardware "$JOB" \
-  'die "checkpoint $step grade is not labelled D84 CPU development evidence"' \
+mutate unchecked-grade-labels "$HARDWARE_LIB" \
+  'die "$label grade is not labelled D84 CPU development evidence"' \
   'true'
 mutate missing-checkpoint-hardware-binding "$JOB" \
   'bind_grade_hardware "$grade_dir.json"' 'true'
 mutate missing-base-hardware-binding "$JOB" \
   'bind_grade_hardware "$RUN/control/base-grade.json"' 'true'
-mutate cpu-hardware-excluded-from-seal "$JOB" \
+mutate cpu-hardware-excluded-from-seal "$HARDWARE_LIB" \
   "find . -type f ! -name 'SHA256SUMS*' -print0 |" \
   "find . -type f ! -name 'SHA256SUMS*' ! -name 'cpu.*' -print0 |"
+mutate forged-grade-hardware-sha "$HARDWARE_LIB" \
+  'grade_sha=$(sha256sum "$grade" | cut -d'"'"' '"'"' -f1)' \
+  'grade_sha=0000000000000000000000000000000000000000000000000000000000000000'
+mutate unbound-grade-hardware-model "$HARDWARE_LIB" \
+  '--arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \' \
+  '--arg model "unknown" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \'
+mutate unchecked-grade-hardware-drift "$HARDWARE_LIB" \
+  'die "grade $relative no longer matches its CPU hardware binding"' 'true'
+mutate unknown-cpu-identity-accepted "$HARDWARE_LIB" \
+  "''|unknown|UNKNOWN) die \"could not identify the CPU hardware for D84 evaluation\" ;;" \
+  "''|UNKNOWN) die \"could not identify the CPU hardware for D84 evaluation\" ;;"
+mutate zero-logical-cpus-accepted "$HARDWARE_LIB" \
+  "''|0|*[!0-9]*) die \"could not identify the CPU's logical processor count\" ;;" \
+  "''|*[!0-9]*) die \"could not identify the CPU's logical processor count\" ;;"
+mutate retry-model-evidence-omitted "$HARDWARE_LIB" \
+  'paths=("${run_dir#"$RUN/"}/models" "artifacts/$label" "grades/$label" \' \
+  'paths=("artifacts/$label" "grades/$label" \'
+mutate seal-size-ignores-cpu "$HARDWARE_LIB" \
+  "find \"\$1\" -type f ! -name 'SHA256SUMS*' -printf '%s\\n' |" \
+  "find \"\$1/control\" -type f ! -name 'SHA256SUMS*' -printf '%s\\n' |"
 mutate uncompacted-oom-retry "$JOB" \
   'compact_failed_attempt attempt-1 "$TRAIN_RUN"' 'true'
 mutate checkpoint-progress-unchecked "$JOB" \

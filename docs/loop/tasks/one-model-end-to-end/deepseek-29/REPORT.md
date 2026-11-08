@@ -38,15 +38,17 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 
 ## Checks run at the head
 
-- `gate.sh`: 231 checks passed.
-- `test-mutants.sh`: 91 of 91 semantic mutations caught.
+- `gate.sh`: 235 checks passed.
+- `test-mutants.sh`: 97 of 97 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
 - The target sheet has no prep-shape error and remains `PENDING` for review.
 - The job records the CPU model, architecture and logical processor count before
   grading and rejects a base grade whose D84 substrate labels are absent.
-- A targeted shell-function check confirmed that a grade sidecar binds the exact
-  grade SHA-256 to the captured CPU and that retry compaction retains four
-  bulky files plus the grade and its sidecar as six manifest entries.
+- `test-hardware-evidence.sh` exercised the isolated helper library: it captured
+  this machine's CPU, rejected unknown and zero-processor identities, rejected
+  unlabelled and tampered grades, bound the exact grade SHA-256 to the CPU,
+  compacted six partial-attempt files, measured all sealed bytes, and verified
+  that `cpu.json` and `cpu.txt` are present in `SHA256SUMS`.
 
 Not run: pod creation, remote build, training, export, panel scoring, store
 write or seal readback.

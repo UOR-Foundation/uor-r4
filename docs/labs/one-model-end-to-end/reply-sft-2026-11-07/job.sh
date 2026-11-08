@@ -69,55 +69,6 @@ check_path_absent() {
   local path=$1
   [ ! -e "$path" ] || die "refusing an existing output: $path"
 }
-bind_grade_hardware() {
-  local grade=$1 relative grade_sha
-  relative=${grade#"$RUN/"}
-  grade_sha=$(sha256sum "$grade" | cut -d' ' -f1)
-  jq -n \
-    --arg path "$relative" --arg grade_sha "$grade_sha" \
-    --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
-    '{schema:"uor-r4.cpu-grade-hardware/1",
-      grade:{path:$path,sha256:$grade_sha},
-      hardware:{model:$model,architecture:$arch,logical_cpus:$logical}}' \
-    > "$grade.hardware.json"
-  jq -e \
-    --arg path "$relative" --arg grade_sha "$grade_sha" \
-    --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
-    '.grade.path == $path and .grade.sha256 == $grade_sha and
-     .hardware.model == $model and .hardware.architecture == $arch and
-     .hardware.logical_cpus == $logical' "$grade.hardware.json" >/dev/null ||
-    die "grade $relative is not bound to the recorded CPU hardware"
-}
-compact_failed_attempt() {
-  local label=$1 run_dir=$2 manifest path files bytes
-  local -a paths
-  manifest="$RUN/control/$label-partial-SHA256SUMS"
-  paths=("${run_dir#"$RUN/"}/models" "artifacts/$label" "grades/$label" \
-    "panel/$label" "scores/$label")
-  (
-    cd "$RUN"
-    for path in "${paths[@]}"; do
-      [ ! -d "$path" ] || find "$path" -type f -print0
-    done | sort -z | xargs -0 -r sha256sum > "$manifest"
-  ) || die "could not hash compacted $label evidence"
-  files=$(wc -l < "$manifest")
-  bytes=$(
-    cd "$RUN"
-    for path in "${paths[@]}"; do
-      [ ! -d "$path" ] || find "$path" -type f -printf '%s\n'
-    done | awk '{ total += $1 } END { print total + 0 }'
-  )
-  jq -n --arg label "$label" --arg reason "oom-retry" \
-    --arg manifest "$(basename "$manifest")" --argjson files "$files" \
-    --argjson bytes "$bytes" \
-    '{schema:"uor-r4.compacted-attempt/1",label:$label,reason:$reason,
-      file_manifest:$manifest,files:$files,bytes:$bytes}' \
-    > "$RUN/control/$label-partial.json"
-  for path in "${paths[@]}"; do
-    [ ! -e "$RUN/$path" ] || find "$RUN/$path" -depth -delete
-  done
-  log "compacted $label bulky evidence: $files files, $bytes bytes retained as hashes"
-}
 fail() {
   die "$*"
 }
@@ -154,11 +105,13 @@ on_exit() {
     kill -CONT "$TRAIN_PID" 2>/dev/null || true
     wait "$TRAIN_PID" 2>/dev/null || true
   fi
+  if declare -F verify_grade_hardware_bindings >/dev/null; then
+    verify_grade_hardware_bindings "$RUN" || rc=1
+  fi
   printf '%s\n' "$rc" > "$RUN/EXIT"
   printf '%s\n' "${STOP_REASON:-natural-or-failure}" > "$RUN/STOP_REASON"
   local seal_bytes actual_seal_bytes
-  if ! seal_bytes=$(find "$RUN" -type f ! -name 'SHA256SUMS*' -printf '%s\n' |
-    awk '{ total += $1 } END { print total + 0 }'); then
+  if ! seal_bytes=$(measure_seal_bytes "$RUN"); then
     echo "could not measure the seal" >&2
     rc=1
     seal_bytes=0
@@ -166,13 +119,9 @@ on_exit() {
   printf '%s\n' "$seal_bytes" > "$RUN/BYTES"
   (
     cd "$RUN"
-    find . -type f ! -name 'SHA256SUMS*' -print0 |
-      sort -z | xargs -0 sha256sum > SHA256SUMS.next
-    mv SHA256SUMS.next SHA256SUMS
-    sha256sum -c SHA256SUMS
+    write_seal_manifest "$RUN"
   ) || rc=1
-  if ! actual_seal_bytes=$(find "$RUN" -type f -printf '%s\n' |
-    awk '{ total += $1 } END { print total + 0 }'); then
+  if ! actual_seal_bytes=$(measure_all_bytes "$RUN"); then
     echo "could not measure the completed seal" >&2
     rc=1
     actual_seal_bytes=$SEAL_LIMIT_BYTES
@@ -220,26 +169,6 @@ log "run $RUN"
 log "store output $OUT_STORE"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader |
   tee "$RUN/gpu.txt"
-cpu_model=$(sed -n 's/^model name[[:space:]]*:[[:space:]]*//p' /proc/cpuinfo | head -n 1)
-[ -n "$cpu_model" ] || die "could not identify the CPU hardware for D84 evaluation"
-cpu_arch=$(uname -m)
-cpu_logical=$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)
-case "$cpu_logical" in
-  ''|*[!0-9]*) die "could not identify the CPU's logical processor count" ;;
-esac
-jq -n --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
-  '{schema:"uor-r4.cpu-hardware/1",model:$model,architecture:$arch,logical_cpus:$logical}' \
-  > "$RUN/cpu.json"
-{
-  printf 'model: %s\narchitecture: %s\nlogical_cpus: %s\n' \
-    "$cpu_model" "$cpu_arch" "$cpu_logical"
-  uname -a
-  if command -v lscpu >/dev/null; then
-    lscpu
-  else
-    sed -n '/^processor[[:space:]]*:/p;/^model name[[:space:]]*:/p' /proc/cpuinfo
-  fi
-} > "$RUN/cpu.txt"
 
 if [ ! -d "$REPO/.git" ]; then
   install -d "$REPO"
@@ -251,6 +180,12 @@ git -C "$REPO" checkout --quiet --detach FETCH_HEAD || die "could not checkout $
 actual=$(git -C "$REPO" rev-parse HEAD)
 [ "$actual" = "$PIN" ] || die "source is $actual, not $PIN"
 [ -z "$(git -C "$REPO" status --porcelain)" ] || die "source checkout is dirty"
+HARDWARE_LIB="$REPO/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/hardware-evidence.sh"
+[ -f "$HARDWARE_LIB" ] || die "missing pinned hardware-evidence library"
+# shellcheck disable=SC1091
+# shellcheck source=hardware-evidence.sh
+source "$HARDWARE_LIB"
+capture_cpu_hardware "$RUN"
 
 fetch_file "results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/inputs/tokens.u16" \
   "$RUN/inputs/mix/tokens.u16"
@@ -396,9 +331,7 @@ grade_checkpoint() {
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
     "$grade_dir.json" >/dev/null ||
     die "checkpoint $step grade did not use the registered 512-row sample"
-  jq -e '.substrate == "cpu-development-research" and
-    .qualification == "gpu-required"' "$grade_dir.json" >/dev/null ||
-    die "checkpoint $step grade is not labelled D84 CPU development evidence"
+  verify_grade_labels "$grade_dir.json" "checkpoint $step"
   bind_grade_hardware "$grade_dir.json"
   rm -f "$snapshot" || die "could not remove transient snapshot for checkpoint $step"
 }
@@ -548,9 +481,7 @@ jq -e '.evaluation.samples == 512 and
     "b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4"' \
   "$RUN/control/base-grade.json" >/dev/null ||
   die "base continuation grade did not use the registered 512-row sample"
-jq -e '.substrate == "cpu-development-research" and
-  .qualification == "gpu-required"' "$RUN/control/base-grade.json" >/dev/null ||
-  die "base grade is not labelled D84 CPU development evidence"
+verify_grade_labels "$RUN/control/base-grade.json" base
 bind_grade_hardware "$RUN/control/base-grade.json"
 base_totals() {
   jq -e "$1" "$RUN/panel/step-000000-$2.json" >/dev/null ||
