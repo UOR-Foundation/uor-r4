@@ -47,10 +47,18 @@ Pending the reviewed run.
 - Mutation suite: 136 of 136 mutations caught.
 - `bash -n`, ShellCheck and `git diff --check`: passed.
 - `loop report --check`: passed.
+- Fresh-context exact-head TEST FITNESS: FIT at
+  `000daaf23540f6105fe6816c1e10133ede83035a`.
+- Fresh adversarial D67 review approved reviewed-runtime
+  `fd303c0a72d178a467ebed99b4fefc05347e193896fc74638b2023cac0b120a1`.
+  The pinned store inputs exist, the runner re-hashes them, the runner checks the
+  serialized weight of 8 before initialization approval, and the pod build runs
+  the CUDA weighted micro-batch test before training. No GPU was free at review,
+  so this grants no lease and does not touch the busy Claude pod.
 
-Not run: FIT/D67 review, pod creation, training, export, panel scoring, store
-write or seal readback. A CUDA-only whole-versus-micro-batch weighted-gradient
-test is compiled and run by the pod build before training.
+Not run: pod creation, training, export, panel scoring, store write or seal
+readback. A CUDA-only whole-versus-micro-batch weighted-gradient test is
+compiled and run by the pod build before training.
 
 ## Skills used
 
@@ -59,7 +67,8 @@ delivery rules were used directly.
 
 ## Still open
 
-- Review and run the fixed opening-weight recipe.
+- Merge through the protected queue, verify fresh `main`, then run the fixed
+  opening-weight recipe when a DeepSeek GPU lease is available.
 - No weight sweep and no seed 2 unless the positive content row is reached.
 
 ## Plain summary
