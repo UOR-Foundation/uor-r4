@@ -63,7 +63,14 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function create(): SessionSummary | null {
         if (store.getState().session.phase === 'generating') return null;
         try {
-            return sessions.newSession() ? verifiedActive() : null;
+            const before = read();
+            if (!before || !sessions.newSession()) return null;
+            const after = read();
+            if (!after?.activeId || after.activeId === before.activeId || before.items.some((item) => item.id === after.activeId)) return null;
+            const created = after.items.find((item) => item.id === after.activeId);
+            if (!created) return null;
+            store.dispatch({ type: 'session/synchronized', activeId: after.activeId, items: after.items });
+            return store.getState().session.activeId === created.id ? created : null;
         } catch {
             return null;
         }
@@ -81,9 +88,10 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function rename(id: string, title: string): boolean {
         if (store.getState().session.phase === 'generating') return false;
         try {
-            if (!sessions.renameSession(id, title)) return false;
+            const normalized = title.slice(0, 80);
+            if (!sessions.renameSession(id, normalized)) return false;
             const snapshot = read();
-            if (!snapshot || snapshot.items.find((item) => item.id === id)?.title !== title) return false;
+            if (!snapshot || snapshot.items.find((item) => item.id === id)?.title !== normalized) return false;
             store.dispatch({ type: 'session/synchronized', activeId: snapshot.activeId, items: snapshot.items });
             return true;
         } catch {
@@ -94,12 +102,13 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function duplicate(id: string): SessionSummary | null {
         if (store.getState().session.phase === 'generating') return null;
         try {
+            const before = read();
             const duplicateId = sessions.duplicateSession(id);
-            if (!duplicateId) return null;
-            const snapshot = read();
-            const duplicate = snapshot?.items.find((item) => item.id === duplicateId);
-            if (!snapshot || !duplicate) return null;
-            store.dispatch({ type: 'session/synchronized', activeId: snapshot.activeId, items: snapshot.items });
+            if (!before || !duplicateId || duplicateId === id || before.items.some((item) => item.id === duplicateId)) return null;
+            const after = read();
+            const duplicate = after?.items.find((item) => item.id === duplicateId);
+            if (!after || !duplicate || after.activeId !== before.activeId) return null;
+            store.dispatch({ type: 'session/synchronized', activeId: after.activeId, items: after.items });
             return duplicate;
         } catch {
             return null;
@@ -109,7 +118,15 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function remove(id: string): SessionSummary | null {
         if (store.getState().session.phase === 'generating') return null;
         try {
-            return sessions.deleteSession(id) ? verifiedActive() : null;
+            const before = read();
+            if (!before?.items.some((item) => item.id === id) || !sessions.deleteSession(id)) return null;
+            const after = read();
+            if (!after?.activeId || after.activeId === id || after.items.some((item) => item.id === id)) return null;
+            if (before.activeId !== id && after.activeId !== before.activeId) return null;
+            const active = after.items.find((item) => item.id === after.activeId);
+            if (!active) return null;
+            store.dispatch({ type: 'session/synchronized', activeId: after.activeId, items: after.items });
+            return store.getState().session.activeId === active.id ? active : null;
         } catch {
             return null;
         }
@@ -137,15 +154,21 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
         remove,
         export: exportSession,
         send(prompt) {
-            if (!prompt.trim() || !store.canRun()) return false;
-            if (sessions.activeSessionId() === null) {
-                if (!create()) return false;
-            } else if (!refresh()) {
+            try {
+                if (!prompt.trim() || !store.canRun()) return false;
+                const snapshot = read();
+                if (!snapshot) return false;
+                if (snapshot.activeId === null) {
+                    if (!create()) return false;
+                } else if (!refresh()) {
+                    return false;
+                }
+                const sent = generation.send(prompt);
+                refresh();
+                return sent;
+            } catch {
                 return false;
             }
-            const sent = generation.send(prompt);
-            refresh();
-            return sent;
         },
         stop() {
             generation.stop();

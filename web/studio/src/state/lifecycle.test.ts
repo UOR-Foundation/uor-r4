@@ -340,7 +340,7 @@ describe('verified session identity', () => {
         expect(store.getState().session.activeGeneration?.sessionId).toBe(item.id);
         store.dispatch({ type: 'session/synchronized', activeId: 'session-b', items: [item] });
         expect(store.getState().session.activeId).toBe(item.id);
-        store.dispatch({ type: 'session/interrupted', activeId: 'session-b', items: [item], generationId: 1 });
+        store.dispatch({ type: 'session/interrupted', activeId: 'session-b', items: [item, { ...item, id: 'session-b', title: 'B' }], generationId: 1 });
         expect(store.getState().session.activeId).toBe('session-b');
         expect(store.getState().session.activeGeneration).toBeNull();
         expect(store.getState().session.phase).toBe('stopped');
@@ -354,5 +354,30 @@ describe('verified session identity', () => {
         store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: 'session-b' });
         expect(store.getState().session.activeGeneration).toBeNull();
         expect(store.getState().session.phase).not.toBe('generating');
+    });
+});
+
+
+describe('session verification invariants', () => {
+    const a = { id: 'session-a', title: 'A', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' };
+    const b = { id: 'session-b', title: 'B', createdAt: 2, updatedAt: 2, messageCount: 0, preview: '' };
+
+    it('rejects an active ID absent from the catalog', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'session/synchronized', activeId: 'missing', items: [a] });
+        expect(store.getState().session.activeId).toBeNull();
+        expect(store.getState().session.items).toEqual([]);
+    });
+
+    it('interrupts using the just-stopped generation after activeGeneration clears', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'session/synchronized', activeId: a.id, items: [a, b] });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: a.id });
+        store.dispatch({ type: 'generation/finished', outcome: 'stopped', generationId: 1 });
+        store.dispatch({ type: 'session/interrupted', activeId: b.id, items: [a, b], generationId: 1 });
+        expect(store.getState().session.activeId).toBe(b.id);
+        expect(store.getState().session.phase).toBe('stopped');
+        expect(store.getState().session.lastGeneration?.sessionId).toBe(a.id);
     });
 });

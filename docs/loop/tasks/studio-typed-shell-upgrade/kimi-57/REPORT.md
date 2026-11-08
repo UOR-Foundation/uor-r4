@@ -29,7 +29,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Red/pre-final logs are under `local/kimi/studio-agent-session/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, built-browser, and fresh-main logs are preserved in a head-specific directory after commit. Any D76 scope/read-path/FILEMAP advisories are reported by the actual check logs; no failing gate is hidden by an advisory.
+Red/pre-final logs are under `local/kimi/studio-agent-session/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved in a head-specific directory after commit. Fresh-main logs are **NOT_RUN**. Any D76 scope/read-path/FILEMAP advisories are reported by the actual check logs; no failing gate is hidden by an advisory. Agent-36 subsequently returned CHANGES for no-op operation verification, long rename, read-failure, synchronous interruption, browser-evidence, and smaller record/double gaps; kimi-58 owns those repairs.
 
 Fresh exact-head review, PR push/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN** at this writing. The PR must keep `References #3500`; the issue remains open. No production publisher was or will be invoked in this unit.
 

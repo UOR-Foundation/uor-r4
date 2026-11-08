@@ -35,7 +35,12 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
         send(prompt) {
             const selected = store.getState().selectedSource;
             if (!selected || !prompt.trim() || !store.canRun()) return false;
-            const sessionId = sessions.activeSessionId?.() ?? null;
+            let sessionId: string | null;
+            try {
+                sessionId = sessions.activeSessionId?.() ?? null;
+            } catch {
+                return false;
+            }
             const fail = () => {
                 store.dispatch({ type: 'generation/started', source: selected, sessionId });
                 const active = store.getState().session.activeGeneration;

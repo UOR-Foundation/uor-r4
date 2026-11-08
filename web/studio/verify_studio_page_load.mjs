@@ -218,21 +218,6 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
         await drainChildSessions();
         await new Promise((r) => setTimeout(r, 100));
     }
-    const requested = cdp.events.slice(before)
-        .filter((e) => e.method === 'Network.requestWillBeSent')
-        .map((e) => e.params.request.url);
-    const external = requested.filter((u) => {
-        if (!/^https?:/i.test(u)) return false;
-        try { return new URL(u).origin !== origin; } catch (_e) { return true; }
-    });
-    const rawTypeScript = requested.filter((url) => {
-        try {
-            const pathname = new URL(url).pathname;
-            return /\.tsx?$/i.test(pathname) || /\/src\/main(?:\.[cm]?[jt]sx?)?$/i.test(pathname);
-        } catch (_e) {
-            return true;
-        }
-    });
     let typed = null;
     if (options.typed) {
         const evaluation = await cdp.send('Runtime.evaluate', {
@@ -241,7 +226,7 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                 if (models) models.click();
                 await new Promise((resolve) => setTimeout(resolve, 100));
                 const root = document.getElementById('studio-typed-root');
-                const typedMcp = document.querySelectorAll('#studio-typed-root .mcp-connections').length;
+                let typedMcp = document.querySelectorAll('#studio-typed-root .mcp-connections').length;
                 const load = Array.from(root.querySelectorAll('button')).find((button) => button.textContent === 'Load bundled demo');
                 if (load) load.click();
                 let artifactReady = false;
@@ -287,9 +272,12 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                 const send = button('Send');
                 if (send) send.click();
                 const transcript = () => root.querySelector('[aria-label="Conversation messages"]')?.innerText || '';
+                const hasExactResponse = (text) => text.includes('17 + 25 = 42')
+                    && text.includes('R4 geometric exact arithmetic')
+                    && text.includes('p0: 7 + 5 + 0 -> 2, carry 1');
                 let answerReady = false;
                 for (let attempt = 0; attempt < 80; attempt += 1) {
-                    if (transcript().includes('42')) { answerReady = true; break; }
+                    if (hasExactResponse(transcript())) { answerReady = true; break; }
                     await pause(100);
                 }
                 const firstTranscript = transcript();
@@ -297,6 +285,7 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                 const otherTranscript = transcript();
                 const restoredResume = await resume(firstId);
                 const restoredTranscript = transcript();
+                const typedMcpAfterWorkflow = document.querySelectorAll('#studio-typed-root .mcp-connections').length;
                 const app = document.getElementById('app');
                 return {
                     shell: Boolean(document.querySelector('#studio-typed-root .studio-shell')),
@@ -305,6 +294,7 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                     legacyHidden: app ? getComputedStyle(app).display === 'none' : false,
                     legacyMcp: document.querySelectorAll('#app #mcpConnections').length,
                     typedMcp,
+                    typedMcpAfterWorkflow,
                     artifactReady,
                     visible: getComputedStyle(root).display !== 'none',
                     typedText: root.innerText.includes('Agent'),
@@ -319,9 +309,9 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                         answerReady,
                         firstTranscript: firstTranscript.slice(0, 1000),
                         otherResume,
-                        otherHasAnswer: otherTranscript.includes('42'),
+                        otherHasAnswer: hasExactResponse(otherTranscript),
                         restoredResume,
-                        restoredAnswer: restoredTranscript.includes('42'),
+                        restoredAnswer: hasExactResponse(restoredTranscript),
                         restoredTranscript: restoredTranscript.slice(0, 1000),
                     },
                 };
@@ -356,6 +346,21 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
         }, sessionId);
         mountError = evaluation.result.value;
     }
+    const requested = cdp.events.slice(before)
+        .filter((e) => e.method === 'Network.requestWillBeSent')
+        .map((e) => e.params.request.url);
+    const external = requested.filter((u) => {
+        if (!/^https?:/i.test(u)) return false;
+        try { return new URL(u).origin !== origin; } catch (_e) { return true; }
+    });
+    const rawTypeScript = requested.filter((url) => {
+        try {
+            const pathname = new URL(url).pathname;
+            return /\.tsx?$/i.test(pathname) || /\/src\/main(?:\.[cm]?[jt]sx?)?$/i.test(pathname);
+        } catch (_e) {
+            return true;
+        }
+    });
     const runtimeErrors = cdp.events.slice(before)
         .filter((event) => event.method === 'Runtime.exceptionThrown' || event.method === 'Runtime.consoleAPICalled')
         .map((event) => event.params);
@@ -394,7 +399,7 @@ async function main() {
             assert(typedPreview.typed?.shellCount === 1 && typedPreview.typed.active, 'typed preview did not mount exactly one StudioApp: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.legacyHidden, 'legacy shell remained visible in typed preview');
             assert(typedPreview.typed.legacyMcp === 0, 'legacy MCP auto-boot mounted in typed preview');
-            assert(typedPreview.typed.typedMcp === 1, 'typed MCP panel missing or duplicated: ' + JSON.stringify(typedPreview.typed));
+            assert(typedPreview.typed.typedMcp === 1 && typedPreview.typed.typedMcpAfterWorkflow === 0, 'typed MCP panel counts do not match Models/Agent navigation: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.artifactReady, 'typed bundled demo did not reach Artifact: ready: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.visible && typedPreview.typed.typedText, 'typed shell is not computed-visible with typed text: ' + JSON.stringify(typedPreview.typed));
             const flow = typedPreview.typed.sessionFlow;

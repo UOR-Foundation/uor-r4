@@ -47,8 +47,9 @@ function fixture(items = [first, second], activeId: string | null = 'session-a')
         }),
         exportSession: vi.fn((id?: string) => id ? JSON.stringify({ session: { id } }) : null),
         deleteSession: vi.fn((id: string) => {
+            const wasActive = state.activeId === id;
             state.items = state.items.filter((item) => item.id !== id);
-            if (state.activeId === id) state.activeId = state.items[0]?.id ?? null;
+            if (wasActive) state.api.newSession();
             return true;
         }),
         getConversationMessages: vi.fn(() => []),
@@ -128,8 +129,8 @@ describe('agent/session authority', () => {
         expect(controller.duplicate('session-a')?.id).toBe('session-a-copy');
         expect(store.getState().session.activeId).toBe('session-a');
         expect(controller.export('session-a')).toEqual({ name: 'Renamed.json', content: '{"session":{"id":"session-a"}}' });
-        expect(controller.remove('session-a')?.id).toBe('session-a-copy');
-        expect(store.getState().session.activeId).toBe('session-a-copy');
+        expect(controller.remove('session-a')?.id).toBe('session-new-1');
+        expect(store.getState().session.activeId).toBe('session-new-1');
         expect(store.getState().session.revision).toBeGreaterThan(revision);
     });
 
@@ -179,5 +180,71 @@ describe('agent/session authority', () => {
         expect(controller.send('hello')).toBe(false);
         expect(state.api.sendPrompt).not.toHaveBeenCalled();
         expect(store.getState().session.activeGeneration).toBeNull();
+    });
+});
+
+
+describe('agent/session verification repairs', () => {
+    it('rejects a no-op create instead of returning the old active session', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        state.api.newSession = vi.fn(() => true);
+        const controller = control(store, state.api);
+        expect(controller.create()).toBeNull();
+        expect(store.getState().session.activeId).toBe('session-a');
+    });
+
+    it('rejects duplicate source IDs and no-op deletion', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        const controller = control(store, state.api);
+        state.api.duplicateSession = vi.fn(() => 'session-a');
+        expect(controller.duplicate('session-a')).toBeNull();
+        state.api.deleteSession = vi.fn(() => true);
+        expect(controller.remove('session-a')).toBeNull();
+        expect(store.getState().session.items.some((item) => item.id === 'session-a')).toBe(true);
+    });
+
+    it('verifies the legacy 80-code-unit rename boundary', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        state.api.renameSession = vi.fn((id: string, title: string) => {
+            const item = state.items.find((candidate) => candidate.id === id);
+            if (!item) return false;
+            item.title = title.slice(0, 80);
+            return true;
+        });
+        const controller = control(store, state.api);
+        const title = 'x'.repeat(81);
+        expect(controller.rename('session-a', title)).toBe(true);
+        expect(state.api.renameSession).toHaveBeenCalledWith('session-a', 'x'.repeat(80));
+        expect(store.getState().session.items[0].title).toBe('x'.repeat(80));
+    });
+
+    it('fails closed when active-session reads throw during send', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        const controller = control(store, state.api);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        state.api.activeSessionId = vi.fn(() => { throw new Error('read failed'); });
+        expect(controller.send('hello')).toBe(false);
+        expect(state.api.sendPrompt).not.toHaveBeenCalled();
+        expect(store.getState().session.activeGeneration).toBeNull();
+    });
+
+    it('synchronizes identity when stop emits its terminal event synchronously', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        state.api.stopGeneration = vi.fn(() => {
+            document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'stopped', generationId: 42 } }));
+        });
+        const controller = control(store, state.api);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        expect(controller.send('hello')).toBe(true);
+        state.activeId = 'session-b';
+        expect(controller.refresh()).toBe(true);
+        expect(store.getState().session.activeId).toBe('session-b');
+        expect(store.getState().session.phase).toBe('stopped');
+        expect(store.getState().session.lastGeneration?.sessionId).toBe('session-a');
     });
 });

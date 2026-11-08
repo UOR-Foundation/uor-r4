@@ -131,7 +131,13 @@ describe('StudioApp', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
         const files = makeFiles();
+        const items: Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number; preview: string }> = [];
+        let activeId: string | null = null;
+        sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => activeId);
         sessions.newSession = vi.fn(() => {
+            items.unshift({ id: 'session-created', title: 'New conversation', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' });
+            activeId = 'session-created';
             document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: 'chat' } }));
             return true;
         });
@@ -152,6 +158,7 @@ describe('StudioApp', () => {
         });
         act(() => { destination('Models').click(); });
         act(() => { button('New session').click(); });
+        expect(store.getState().session.activeId).toBe('session-created');
         expect(destination('Agent').getAttribute('aria-current')).toBe('page');
         const insert = Array.from(host.querySelectorAll<HTMLButtonElement>('article[data-role="assistant"] button')).find((node) => node.textContent === 'Insert into editor')!;
         act(() => { insert.click(); });
@@ -673,5 +680,19 @@ describe('StudioApp', () => {
         const mentions = host.querySelector('[role="listbox"][aria-label="Attachment mentions"]')!;
         expect(mentions.textContent).toContain('mcp-read_file.json');
         expect(session.callTool).toHaveBeenCalledOnce();
+    });
+});
+
+
+describe('navigation command grouping', () => {
+    it('keeps navigation commands searchable by their existing group', () => {
+        const store = new LifecycleStore();
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        act(() => { button('Command palette').click(); });
+        const input = host.querySelector<HTMLInputElement>('input[aria-label="Search commands"]')!;
+        act(() => { input.value = 'Navigation'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(host.querySelector('button[data-command-id="agent"]')).not.toBeNull();
     });
 });

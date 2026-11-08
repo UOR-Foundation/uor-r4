@@ -79,7 +79,7 @@ export function SessionList({ store, agent, download, onError, onChange, onSucce
                             reportError('Could not rename that session.', `session:rename:${renaming.id}`);
                         }
                     }}>
-                        <label>Session title<input aria-label="Session title" autofocus value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label>
+                        <label>Session title<input aria-label="Session title" autofocus maxlength={80} value={title} onInput={(event) => setTitle(event.currentTarget.value)} /></label>
                         <button type="submit">Save title</button>
                     </form>
                 </Modal>

@@ -164,6 +164,7 @@ describe('SessionList', () => {
         expect(store.getState().session.activeId).toBe('session-a');
         act(() => { button('Rename Session A').click(); });
         const input = host.querySelector<HTMLInputElement>('input[aria-label="Session title"]')!;
+        expect(input.maxLength).toBe(80);
         act(() => { input.value = 'Renamed session'; input.dispatchEvent(new Event('input', { bubbles: true })); });
         act(() => { button('Save title').click(); });
         expect(api.renameSession).toHaveBeenCalledWith('session-a', 'Renamed session');

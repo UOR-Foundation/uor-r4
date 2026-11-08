@@ -299,6 +299,7 @@ export class LifecycleStore {
                 return;
             case 'session/synchronized': {
                 const session = this.state.session;
+                if (action.activeId !== null && !action.items.some((item) => item.id === action.activeId)) return;
                 const activeGeneration = session.activeGeneration;
                 if (activeGeneration && activeGeneration.sessionId !== action.activeId) return;
                 const changed = session.activeId !== action.activeId;
@@ -318,8 +319,9 @@ export class LifecycleStore {
             }
             case 'session/interrupted': {
                 const session = this.state.session;
-                const active = session.activeGeneration;
-                if (!active || active.generationId !== action.generationId || active.sessionId === action.activeId) return;
+                if (action.activeId !== null && !action.items.some((item) => item.id === action.activeId)) return;
+                const active = session.activeGeneration ?? (session.phase === 'stopped' ? session.lastGeneration : null);
+                if (!active || active.generationId !== action.generationId || active.sessionId === action.activeId || session.activeId !== active.sessionId) return;
                 this.state = {
                     ...this.state,
                     session: {
