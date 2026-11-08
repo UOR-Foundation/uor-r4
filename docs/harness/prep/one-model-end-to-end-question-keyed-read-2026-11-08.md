@@ -1,6 +1,6 @@
 # Prep sheet: a question-keyed read (one-model-end-to-end, claude-329, 8 Nov 2026)
 
-TEST FITNESS: pending (a fresh non-author FIT comes before any code).
+TEST FITNESS: round 1 NOT FIT (fresh non-author reviewer, at `3c7a10f9a`: one blocker, the byte-identical I-R; one major, no pull at B2's question row; four minors). All six are applied below; round 2 pending.
 
 ## The question
 
@@ -32,12 +32,14 @@ Under `--hamming-ask 1`, each read's **type heads become ask heads**. Everything
 **The training signal, the found-copy pull** (`--hamming-attract λ`, the geometry's own distance):
 - Take a row `t` that carries a training target `y_t`. Let `S_t` be the earlier positions whose token is the target: `1 ≤ s < t`, `x_s = y_t`.
 - If `S_t` is not empty, each ask head `h` at each depth adds `λ · bits_h(t, s*) / head_width`. Here `bits_h` is the read's own `hamming_bits` between the ask head's code at `t` and its key code at `s`, and `s*` is the position of `S_t` with the nearest key (a hard minimum, no gradient through the choice).
-- The key code is detached, and the attraction moves only the ask offsets `a`, not `key_rotation`, so the copy heads are untouched.
+- The key code is detached, and in the pull's own query path `key_rotation` is detached too, so the pull moves only the ask offsets `a`.
+- **What the pull leaves alone, and what it does not:** the pull never moves the copy heads. The *task loss* through the ask heads does reach `key_rotation`, which the ask and copy heads share, just as the type heads' task loss reached `query_rotation` before. That sharing is part of the design, not hidden by it.
 - The term is averaged over the rows with a match, heads and depths, and added to the training loss.
+- **`--hamming-attract-at question` (B2-aq only):** in a two-class recall window, each scored episode's pull is placed at its `Q(K_j)` row instead, with that episode's scored target `v_j`. The row's task loss is unchanged (it stays unscored). This is a probe arm that only the recall task can express. It asks whether the choice at the question can be trained in B2's form when a signal reaches it.
 
 In B1, `y_t` at `Q(K_j)`'s row is `v_j`, and `S_t` is the fact's value position, whose key is `K_j`. So the pull moves `a[Q(K_j)]` until the ask code of `Q(K_j)` reads `K_j`. Because `Q` is the same in every window, one offset per question token serves every window. In language the same rule pulls a word's ask code toward the key of whatever preceded its next token's earlier occurrence: a learned "what to look for" per token.
 
-**What it cannot do, named in advance.** An ask head's query depends only on the current token. At B2's scored position the current token is always `H4`, so ask heads there cannot choose. B2 is passable only if the depth-2 ask head at `Q(K_j)`'s row fetches the value into the stream and the trunk carries it four tokens: route (i-b) of claude-328's sheet. B2's own scored rows give the pull at `H4`, a token that asks for a different key in each episode, so the pull there averages over keys. That is measured, not corrected. A B1 pass with a B2 fail therefore points to the carry, which claude-326's map names as the lever after this one.
+**What it cannot do, named in advance.** An ask head's query depends only on the current token. At B2's scored position the current token is always `H4`, so ask heads there cannot choose. B2 is passable only if the depth-2 ask head at `Q(K_j)`'s row fetches the value into the stream and the trunk carries it four tokens: route (i-b) of claude-328's sheet. **In B2-a the pull never acts at `Q(K_j)`.** The training loss covers only scored rows (`assemble` returns `(ids, scored, targets)`), and in B2 the `Q(K_j)` row is not scored. So `a[Q]` gets only the task loss through the four-token carry: B1-a0's cold start plus the carry. B2's scored rows give the pull at `H4`, a token that asks for a different key in each episode, so the pull there averages over keys. B2-aq is the arm that puts the pull at `Q(K_j)`, so a B2 failure can be split into "the choice at the question was never trained" and "the choice was made, and the carry failed" (outcome 3). In language every row has a next-token target, so this gap belongs to the recall task's scoring, not to the read.
 
 ## Steps: the arms
 
@@ -59,7 +61,8 @@ The ask arms add `--hamming-read 4 --hamming-ask 1`.
 | **B1-a** | B1 | ask, `--hamming-attract 1` |
 | **B1-a0** | B1 | ask, `--hamming-attract 0` (the offsets learn from the task loss alone) |
 | **B2-a** | B2 | ask, `--hamming-attract 1` |
-| **B1-h** | B1 | claude-328's read, `--hamming-read 4` (the reproduction check, I-R) |
+| **B2-aq** | B2 | ask, `--hamming-attract 1 --hamming-attract-at question` (the pull at `Q(K_j)`'s row) |
+| **B0-h** | B0 | claude-328's read, `--hamming-read 4` (the reproduction check, I-R) |
 | **B0-n, B1-n, B2-n** | B0, B1, B2 | none (the no-read twins, L-010) |
 
 `λ = 1` is pre-registered. The pull is at most 1 per head (`bits ≤ head_width`); the task loss and the pull are both logged at step 0 and at each checkpoint, so their scales are read, not assumed. No other `λ` is run in this unit.
@@ -68,6 +71,7 @@ The ask arms add `--hamming-read 4 --hamming-ask 1`.
 - `R_ask`, `R_oth` and `R_any` per bucket and tail slot;
 - the trace at the question and scored positions;
 - the five ablations: `−t` turns the ask heads off;
+- **new cut `R^{−aQ}`:** the ask heads at both depths cut at the 4 `Q(K_j)` rows only, through the row cut with a new ask scope (`ReadScope::Ask`, the ask heads' counterpart of claude-328's copy-scope `R^{−cQ}`). It is read on B1-a, B2-a and B2-aq;
 - **new:** the mean pull distance `bits / head_width` over the held-out queries' rows, per checkpoint, per depth.
 
 ## Bar (pre-registered), at step 4,096, both far buckets, both seeds
@@ -77,9 +81,10 @@ The rules are claude-328's, applied to the ask arms:
 | Arm | Passes when |
 |---|---|
 | **B0 (instrument)** | `R(B0-a) ≥ 0.95` and `R(B0-n) ≤ 0.02`. Otherwise nothing else is read |
-| **I-R (instrument)** | B1-h's `recall.jsonl` equals claude-328's sealed copy at the same seed, byte for byte. Otherwise the build moved the default path, and nothing else is read |
+| **I-R (instrument)** | B0-h's `recall.jsonl` is compared, line by line, with claude-328's sealed `runs/s{1,2}/…/B0-h-s{seed}/recall.jsonl` (in the store, checked 8 Nov). The timing fields `train_seconds` and `train_context_tokens_per_second` are ignored. Passes when: `rows` are equal; `hits` per bucket are within 0.02 of `rows` at every checkpoint; `train_loss_mean` is within 1% relative. Otherwise the build moved the default path, and nothing else is read. Byte identity across pods is not assumed: the CUDA kernels are not shown to be deterministic. I-1 is the bit-exact check, on the laptop |
 | **B1 (choice)** | `R_ask(B1-a) ≥ 0.50`, `R_ask(B1-a) ≥ R_oth(B1-a) + 0.25`, and `R_ask(B1-a) ≥ R_ask(B1-n) + 0.10` |
 | **B2 (carry)** | the B1 rule for B2-a against B2-n |
+| **B2-aq** | the B1 rule for B2-aq against B2-n; it decides only the outcome 3 split |
 | **B1-a0** | descriptive: the B1 rule is read and reported, and it decides no outcome by itself |
 
 **Kept** means what it meant in claude-328's sheet: weight above 0 for the asked position in at least 0.5 of queries, and at least 0.25 more often than for the paired position.
@@ -88,14 +93,17 @@ The rules are claude-328's, applied to the ask arms:
 
 0. **B0-a fails, or I-R fails:** an instrument fault. Repair it and rerun; nothing else is read.
 1. **Undertrained:** an arm's `R_ask` still rises by more than 0.05 between its last two checkpoints and misses its bar. Extend it to 16,384 steps under this sheet.
-2. **B2-a passes:** the question-keyed read chooses, and the value reaches the scored position. Attribute it from the trace and `R^{−cQ}`:
-   - a depth-2 ask head kept at `Q(K_j)` means a fetch at the question plus a carry by the trunk;
+2. **B2-a passes:** the question-keyed read chooses, and the value reaches the scored position, with no pull at the question. Attribute it from the trace and `R^{−aQ}`:
+   - a depth-2 ask head kept at `Q(K_j)`, with `R^{−aQ}` failing the B2 bar, means a fetch at the question plus a carry by the trunk;
    - any other pattern is named from the trace.
 
    **Next:** a language run with ask heads on claude-325's bare-answer recipe, under its own sheet.
-3. **B1-a passes, B2-a fails:** the read chooses by the question, and the carry fails. **Next:** the carry lever (claude-326, Q4), tested on B2 first. B1-a0 is read alongside: if it passes too, the task loss alone trains the offsets, and the pull is not needed; if it fails, the pull is the working signal.
+3. **B1-a passes, B2-a fails.** B1-a0 is read alongside: if it passes too, the task loss alone trains the offsets; if it fails, the pull is the working signal. Then split on B2-aq, first match wins:
+   - **B2-aq passes:** the choice at the question can be made, and the trunk carries its value, once a signal reaches the `Q` row. B2-a failed for want of that signal, which is a property of the recall task's unscored question row. **Next:** an ask-head language run on claude-325's recipe, under its own sheet, since every language row is scored. The carry lever is not needed yet.
+   - **B2-aq fails, and an ask head is kept at `Q(K_j)` in B2-aq's trace:** the read chooses at the question, and the carry fails. **Next:** the carry lever (claude-326, Q4), tested on B2 first.
+   - **B2-aq fails, and no ask head is kept at `Q(K_j)`:** the choice fails under B2's form even with the pull there. Read the header-interference rule (claude-328's, with `−c2`/`−c6` on B2-aq) first; otherwise name it from the trace and the pull distance at `Q`, under outcome 4's first two branches as instrument checks.
 4. **B1-a fails,** split by the readings, first match wins:
-   - **The pull distance at step 4,096 is above 0.25 of its step-512 value:** the signal does not reach the offsets. That is an instrument-side fault in the gradient path. Repair it and rerun; it is not a mechanism result.
+   - **The pull distance at step 4,096 is above 0.25 of its step-0 value** (about 0.5 at `a = 0`): the signal does not reach the offsets. That is an instrument-side fault in the gradient path. Repair it and rerun; it is not a mechanism result.
    - **The distance falls, and no ask head keeps the asked position:** the picks do not follow the codes, a fault in the choice or key path, also instrument-side. Repair it and rerun.
    - **An ask head keeps the asked position, and `R_ask` fails:** a payload or combine failure, mechanism-side for this configuration (§4.1, §4.2). **Next:** the combine, tested on B1 first.
 
@@ -114,6 +122,10 @@ The rules are claude-328's, applied to the ask arms:
   - the attraction's gradient reaches `a` and is zero for the table, `key_rotation` and the copy heads' margins.
 - **I-A3 (the pull trains):** on a toy window, gradient steps with `λ = 1` bring `bits(t, s*)` to 0 for a question token whose bijection partner is the key, within a pre-set step count. With `λ = 0` and no task loss, `a` does not move.
 - **I-A4 (payload and combine):** on a hand-built window, an ask head that keeps the value position moves the readout toward that value's table point, as a copy head does. `−t` removes the move.
+- **I-A5 (the question placement and the ask cut):**
+  - under `--hamming-attract-at question`, on a hand-built B2 window, the pull's rows are exactly the `Q(K_j)` rows, each with its episode's `v_j`, and no scored row carries a pull;
+  - `R^{−aQ}`'s row cut removes the ask heads' candidates at the `Q(K_j)` rows only, and leaves the copy heads' picks unchanged.
+- **The ask path is covered by I-A1 to I-A5, not by B0-a.** At `a = 0` the ask heads equal the copy heads, and in B0 the copy heads alone solve the task, so B0-a passing does not show the ask path works.
 - **I-4 (from claude-328):**
   - every ask arm's step-0 picks equal its no-read twin's, since the weights start at 0;
   - the ask weights move off 0 by step 512;
@@ -144,8 +156,8 @@ As claude-328's sheet, with 512 held-out queries per bucket:
 
 claude-328 measured these on one RTX 5090:
 - **Run times:** about 6 minutes for a read arm and 2.5 minutes for a no-read arm.
-- **Per seed:** eight arms is about 38 minutes, plus a build of about 10 minutes.
-- **Total:** two pods in parallel, one per seed, about $0.45 each, about $1 in all.
+- **Per seed:** six read arms and three no-read arms is about 44 minutes, plus a build of about 10 minutes.
+- **Total:** two pods in parallel, one per seed, about $0.50 each, about $1 in all.
 
 That is inside the caps and one GPU unit. Outcome 1's extension would add about 4× for the arms it covers.
 
