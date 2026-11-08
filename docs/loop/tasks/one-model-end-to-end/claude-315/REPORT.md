@@ -122,7 +122,7 @@ This is the claude lab's own decision review (§5.1), logged for Casey, who can 
 
 - **The ratio sheet,** under its own unit: the repeat factor, its EOS targets per window, and the bars above fixed before any run.
 - **The scorer's timer** still measures re-parse plus decode (claude-311). A decode-only figure is still owed for the tokens-per-second lead metric.
-- **deepseek-25** (#3838) fine-tunes (b64L-D3) on an OASST2 + M-World mix. It had not landed when this was read, so no stops are set beside these.
+- **DeepSeek's fine-tuning lever landed first, as deepseek-26** (its notebook row, 7 Nov). It ran reply-masked training of (b64L) seed 1 on an OASST2 + M-World mix for 1,024 steps. Its free EOS stops were 16, 23, 21 and 1 of 256 at steps 256 to 1,024, with 0 complete. Set beside this unit's 177 and 122 from pretraining on the mix, the pretraining lever moves stopping further. The two differ in recipe, steps and seed count, so this is a description, not a pair. It changes no bar and no row, as the sheet said.
 - **Watchers must start in `screen`, never as session background tasks** (the 23:35Z gap). claude-317's scripts already do.
 
 ## Plain summary
