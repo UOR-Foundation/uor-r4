@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-first-reply-hamming-trace-summary/1",
   "base": "bfa5de6ce",
   "substrate": "cpu-development-research",
-  "binary_sha256": "8f598c92679fc0c0c84cab3b291bbfe5f098453791d37db22ca23453dfa09570",
+  "binary_sha256": "df79343eada95ee9500b0efaca5c5e2f2f720faa4334e238b8aeae284c24bf1c",
   "artifacts": {
     "seed_1": "86e51d5ee2c00a4041bcde4d2183884e351099f28f155fb1e6a7516f13064dfe",
     "seed_2": "8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae"
@@ -15,13 +15,13 @@
     "panel_manifest_sha256": "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964"
   },
   "runs": {
-    "s1_one_user": "99009b0d8df6d82282c22da7315d32f0f736374fd85ee6e2ca951ae996104cde",
-    "s1_per_turn": "8b5c4315b132677741de4fadf482395dd21c8e760b5f538a676d4167f0f91106",
-    "s2_one_user": "c419857c6db4c994fb48e63c75344fbc3d29889b217614097665ae3be3d9db0a",
-    "s2_per_turn": "455a4bfdaf43e0b850cdb993c68234dfb533e11f90926808dc664958fab3fe94"
+    "s1_one_user": "e7e528f3b798a6560230c29e470bf94f973b30fc59aa3eded79dcc4c1317113c",
+    "s1_per_turn": "8337d8a93e447ec3e5b7bf0dc324302179ae8522017874161bbc110e852e3d6c",
+    "s2_one_user": "8f0c1b3eb5e7d59a646ed5e1cfe05bccb8a65cef1774965c56550625919c3a30",
+    "s2_per_turn": "430c035b67ff4dbff85108db7eb51ecc93c7c77e7e445c4400c941b1544ff5d4"
   },
   "repeat": {
-    "report_sha256": "8490a80a7293ab29fb53c5b382d614fa9ae5798d8296623ba05b16501efd7462",
+    "report_sha256": "46ea49e5ed2d92ca0a425eb93d2a4ec7cda51c1bb21d17185a385d8bfa682807",
     "non_timing_fields_equal": true
   },
   "trace_alignment": {

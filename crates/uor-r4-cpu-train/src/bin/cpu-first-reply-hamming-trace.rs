@@ -586,15 +586,30 @@ fn render(
 }
 
 fn reference(encoder: &DialogueEncoder<'_>, answers: &FrozenAnswers) -> Result<Reference> {
-    let answer = answers
+    let shortest_len = answers
         .accepted
         .iter()
-        .min_by_key(|answer| answer.len())
+        .map(String::len)
+        .min()
         .ok_or("frozen answer set is empty")?;
+    let shortest = answers
+        .accepted
+        .iter()
+        .filter(|answer| answer.len() == shortest_len)
+        .collect::<Vec<_>>();
+    let answer = match shortest.as_slice() {
+        [answer] => *answer,
+        _ => {
+            return Err(format!(
+                "the shortest accepted answer is ambiguous among {} forms",
+                shortest.len()
+            ));
+        }
+    };
     let encoded = encoder.encode_assistant_suffix(
         &[Message {
             role: "assistant",
-            content: answer,
+            content: answer.as_str(),
         }],
         true,
     );
@@ -1194,5 +1209,21 @@ mod tests {
         assert!(!reference.content_ids.is_empty());
         assert!(!reference.content_ids.contains(&EOS));
         assert!(parse_args(std::iter::empty()).is_err());
+    }
+
+    #[test]
+    fn equal_shortest_answers_are_refused_as_ambiguous() {
+        let tokenizer = byte_level_tokenizer();
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).expect("protocol");
+        let encoder = protocol.bind(&tokenizer).expect("encoder");
+        let answers = FrozenAnswers {
+            intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+            accepted: vec![" Aster.\n".to_owned(), " Beryl.\n".to_owned()],
+        };
+        let error = match reference(&encoder, &answers) {
+            Err(error) => error,
+            Ok(_) => panic!("equal-shortest answers should be ambiguous"),
+        };
+        assert!(error.contains("ambiguous"), "{error}");
     }
 }

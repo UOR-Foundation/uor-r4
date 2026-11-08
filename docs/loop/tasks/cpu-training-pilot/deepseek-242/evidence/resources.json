@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.cpu-first-reply-hamming-trace-resources/1",
-  "measured_at": "2026-11-08T21:58:10Z",
+  "measured_at": "2026-11-08T22:15:45Z",
   "substrate": "cpu-development-research",
   "root": "local/deepseek/first-reply-hamming-trace",
   "hardware": {
@@ -19,30 +19,35 @@
     {"path": "runs-v2/s1-per-turn.json", "wall_ms": 10718, "peak_rss_kib": 15256, "disposition": "superseded sequential evidence"},
     {"path": "runs-v2/s2-one-user.json", "wall_ms": 9381, "peak_rss_kib": 15208, "disposition": "superseded sequential evidence"},
     {"path": "runs-v2/s2-per-turn.json", "wall_ms": 10662, "peak_rss_kib": 15264, "disposition": "superseded sequential evidence"},
-    {"path": "runs-v3/s1-one-user.json", "wall_ms": 575, "peak_rss_kib": 50264, "disposition": "final 32-thread evidence"},
-    {"path": "runs-v3/s1-per-turn.json", "wall_ms": 658, "peak_rss_kib": 51092, "disposition": "final 32-thread evidence"},
-    {"path": "runs-v3/s2-one-user.json", "wall_ms": 569, "peak_rss_kib": 49484, "disposition": "final 32-thread evidence"},
-    {"path": "runs-v3/s2-per-turn.json", "wall_ms": 653, "peak_rss_kib": 50420, "disposition": "final 32-thread evidence"},
-    {"path": "runs-v3/s1-one-user-repeat.json", "wall_ms": 562, "peak_rss_kib": 46232, "disposition": "final determinism repeat"}
+    {"path": "runs-v3/s1-one-user.json", "wall_ms": 575, "peak_rss_kib": 50264, "disposition": "superseded pre-review 32-thread evidence"},
+    {"path": "runs-v3/s1-per-turn.json", "wall_ms": 658, "peak_rss_kib": 51092, "disposition": "superseded pre-review 32-thread evidence"},
+    {"path": "runs-v3/s2-one-user.json", "wall_ms": 569, "peak_rss_kib": 49484, "disposition": "superseded pre-review 32-thread evidence"},
+    {"path": "runs-v3/s2-per-turn.json", "wall_ms": 653, "peak_rss_kib": 50420, "disposition": "superseded pre-review 32-thread evidence"},
+    {"path": "runs-v3/s1-one-user-repeat.json", "wall_ms": 562, "peak_rss_kib": 46232, "disposition": "superseded pre-review determinism repeat"},
+    {"path": "runs-v4/s1-one-user.json", "wall_ms": 564, "peak_rss_kib": 49564, "disposition": "final reviewed-source 32-thread evidence"},
+    {"path": "runs-v4/s1-per-turn.json", "wall_ms": 655, "peak_rss_kib": 51056, "disposition": "final reviewed-source 32-thread evidence"},
+    {"path": "runs-v4/s2-one-user.json", "wall_ms": 567, "peak_rss_kib": 46872, "disposition": "final reviewed-source 32-thread evidence"},
+    {"path": "runs-v4/s2-per-turn.json", "wall_ms": 646, "peak_rss_kib": 49748, "disposition": "final reviewed-source 32-thread evidence"},
+    {"path": "runs-v4/s1-one-user-repeat.json", "wall_ms": 576, "peak_rss_kib": 50264, "disposition": "final reviewed-source determinism repeat"}
   ],
   "totals": {
-    "report_count": 13,
-    "measured_wall_ms": 82863,
-    "measured_wall_seconds": 82.863,
-    "max_peak_rss_kib": 51092,
+    "report_count": 18,
+    "measured_wall_ms": 85871,
+    "measured_wall_seconds": 85.871,
+    "max_peak_rss_kib": 51056,
     "final_report_count": 5,
-    "final_measured_wall_seconds": 3.017,
+    "final_measured_wall_seconds": 3.008,
     "final_seed_render_count": 4,
-    "final_seed_render_wall_seconds": 2.455,
+    "final_seed_render_wall_seconds": 2.432,
     "sequential_seed_render_wall_seconds": 40.049,
-    "sequential_to_final_speedup": 16.313
+    "sequential_to_final_speedup": 16.468
   },
   "storage": {
-    "local_evidence_and_inputs_bytes": 18175243,
-    "final_runs_bytes": 6990739,
+    "local_evidence_and_inputs_bytes": 25165982,
+    "final_runs_bytes": 13981478,
     "build_target_bytes": 4013712954,
-    "free_bytes_at_measurement": 157775917056,
-    "free_gib_at_measurement": 146.940,
+    "free_bytes_at_measurement": 156639670272,
+    "free_gib_at_measurement": 145.882,
     "floor_gib": 30,
     "required_margin_mib": 128,
     "floor_passes": true
@@ -60,5 +65,5 @@
     "tests, formatting, Clippy and harness gates",
     "review and delivery"
   ],
-  "note": "The measured wall is retained across the early sequential drafts and the final 32-thread runs. The four final seed/rendering reports total 2.455 seconds; the fifth report is the 0.562-second determinism repeat."
+  "note": "The measured wall is retained across the early sequential drafts and all 32-thread runs. The four final reviewed-source seed/rendering reports total 2.432 seconds; the fifth report is the 0.576-second determinism repeat, exact apart from timing and RSS."
 }
