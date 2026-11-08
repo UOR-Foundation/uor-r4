@@ -9,7 +9,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## What changed
 
-- kimi-62 is restored to its actual 411-test evidence, with later results explicitly assigned to kimi-63/kimi-64. The notebook now links every repair report and records the current 415 total.
+- kimi-62 is restored to its actual 411-test evidence and kimi-63 to its actual 414-test evidence; 415 belongs to kimi-64/current. The notebook now links every repair report and records the current 415 total.
 - A temporary production mutation marked `session-new-1` active and made the replacement assertion fail as required. Exact source restoration was confirmed by `git diff --exit-code`, and the same assertion passes afterward. No mutation remains in the delivery.
 - A modal-open-then-generating test proves the stop-first delete error and no deletion call. Verification/read failures retain their separate error text.
 
