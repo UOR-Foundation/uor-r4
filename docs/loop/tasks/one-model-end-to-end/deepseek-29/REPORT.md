@@ -25,6 +25,8 @@ or spend.
   scores into a sealed hash manifest while retaining logs and progress.
 - Gate and mutation coverage require both CPU labels, both grade bindings,
   CPU-file seal inclusion and retry compaction.
+- `docs/harness/claims.json` carries this branch's claim and is the sole
+  out-of-item-scope path; D76 makes that scope finding advisory.
 - The 2,048-step sheet and its merged runtime are awaiting fresh FIT and D67
   reviews after these changes.
 
