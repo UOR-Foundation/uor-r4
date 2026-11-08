@@ -52,6 +52,7 @@ fi
 
 install -d "$SOURCE" "$EVIDENCE/run/models" "$EVIDENCE/artifacts" \
   "$EVIDENCE/inputs" "$EVIDENCE/reports" "$EVIDENCE/logs"
+install -m 0755 /workspace/uor-parity-job.sh "$EVIDENCE/job.sh"
 exec >> "$EVIDENCE/job.log" 2>&1
 
 "$STORE" get "$SOURCE_STORE/" "$SOURCE"
@@ -161,6 +162,7 @@ jq -n --arg pin "$PIN" --arg source "$SOURCE_STORE" \
   > "$EVIDENCE/run.json"
 
 printf '0\n' > "$EVIDENCE/EXIT"
+exec >> "$ROOT.seal.log" 2>&1
 (
   cd "$EVIDENCE"
   find . -type f ! -name 'SHA256SUMS*' -print0 |
