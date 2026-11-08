@@ -278,7 +278,8 @@ describe('mounted migration transaction and routing', () => {
     });
 
     it('rolls back every new destination when the marker cannot be written', () => {
-        const storage = storageWith(completeFixture());
+        const fixture = completeFixture();
+        const storage = storageWith(fixture);
         const originalSet = storage.setItem.getMockImplementation()!;
         storage.setItem.mockImplementation((key, value) => {
             if (key === LIFECYCLE_MIGRATION_MARKER_KEY) throw new Error('marker write failed');
@@ -287,6 +288,7 @@ describe('mounted migration transaction and routing', () => {
         expect(migrateLifecycleStorage(storage).state).toBe('error');
         for (const destination of Object.values(DESTINATIONS)) expect(storage.getItem(destination)).toBeNull();
         expect(storage.getItem(LIFECYCLE_MIGRATION_MARKER_KEY)).toBeNull();
+        for (const [source, raw] of Object.entries(fixture)) expect(storage.getItem(source)).toBe(raw);
     });
 
     it('rejects destination read-back failures and rolls back new writes', () => {
@@ -343,5 +345,60 @@ describe('migration failure preservation', () => {
         expect(storage.getItem('uor.studio.settings.v1')).toBe('{malformed-source');
         expect(storage.getItem('uor.studio.conversations.v1')).toBeNull();
         expect(storage.getItem('uor.studio.modelSources.v1')).toBe('{"api":[{"apiKey":"sentinel-not-a-secret"}]}');
+    });
+});
+
+
+describe('marker verification and rollback failures', () => {
+    it('rolls back new writes and preserves sources after marker mismatch or read failure', () => {
+        for (const mode of ['mismatch', 'read-failure']) {
+            const fixture = completeFixture();
+            const storage = storageWith(fixture);
+            const originalGet = storage.getItem.getMockImplementation()!;
+            let intercept = true;
+            storage.getItem.mockImplementation((key) => {
+                if (intercept && key === LIFECYCLE_MIGRATION_MARKER_KEY && storage.values.has(key)) {
+                    intercept = false;
+                    if (mode === 'mismatch') return '{"schema":"wrong"}';
+                    throw new Error('marker read failed');
+                }
+                return originalGet(key);
+            });
+
+            expect(migrateLifecycleStorage(storage).state).toBe('error');
+            for (const destination of Object.values(DESTINATIONS)) expect(storage.getItem(destination)).toBeNull();
+            expect(storage.getItem(LIFECYCLE_MIGRATION_MARKER_KEY)).toBeNull();
+            for (const [source, raw] of Object.entries(fixture)) expect(storage.getItem(source)).toBe(raw);
+        }
+    });
+
+    it('reports rollback-failed, preserves sources, and retains only destinations that cannot be removed', () => {
+        const fixture = completeFixture();
+        fixture['uor.studio.lifecycle.editor.v2'] = fixture['uor.studio.editor.v1'];
+        const storage = storageWith(fixture);
+        const originalSet = storage.setItem.getMockImplementation()!;
+        storage.setItem.mockImplementation((key, value) => {
+            if (key === DESTINATIONS['uor.studio.settings.v1']) throw Object.assign(new Error('fixture quota'), { name: 'QuotaExceededError' });
+            originalSet(key, value);
+        });
+        storage.removeItem.mockImplementation((key) => {
+            if (key === DESTINATIONS['uor.studio.conversations.v1']) throw new Error('rollback remove failed');
+            storage.values.delete(key);
+        });
+
+        const result = migrateLifecycleStorage(storage);
+
+        expect(result).toMatchObject({ state: 'error', error: 'rollback-failed' });
+        expect(storage.getItem(DESTINATIONS['uor.studio.conversations.v1'])).not.toBeNull();
+        expect(storage.getItem('uor.studio.lifecycle.editor.v2')).toBe(fixture['uor.studio.editor.v1']);
+        for (const destination of Object.values(DESTINATIONS)) {
+            if (destination !== DESTINATIONS['uor.studio.conversations.v1'] && destination !== 'uor.studio.lifecycle.editor.v2') {
+                expect(storage.getItem(destination)).toBeNull();
+            }
+        }
+        expect(storage.getItem(LIFECYCLE_MIGRATION_MARKER_KEY)).toBeNull();
+        for (const [source, raw] of Object.entries(fixture)) {
+            if (!source.startsWith('uor.studio.lifecycle.')) expect(storage.getItem(source)).toBe(raw);
+        }
     });
 });

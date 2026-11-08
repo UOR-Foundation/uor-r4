@@ -478,7 +478,7 @@ async function main() {
         }
         const migrationResults = [];
         if (process.env.UOR_STUDIO_TYPED === '1') {
-            for (const mode of ['success', 'malformed', 'conflict']) {
+            for (const mode of ['success', 'malformed', 'conflict', 'quota']) {
                 const result = await trapPageLoad(cdp, origin, '/studio/dist/index.html?typed=1', { migration: mode });
                 assert(result.loaded, 'typed migration ' + mode + ' never fired loadEventFired');
                 assert(result.external.length === 0, 'typed migration ' + mode + ' made external requests: ' + JSON.stringify(result.external));

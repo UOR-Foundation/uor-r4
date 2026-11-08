@@ -41,6 +41,17 @@ export function migrationPreload(mode) {
             for (const [key, raw] of Object.entries(entries)) localStorage.setItem(key, raw);
             sessionStorage.setItem('uor.studio.fixture.migration.initialized', '1');
         }
+        if (${JSON.stringify(mode)}==='quota') {
+            const originalSet=Storage.prototype.setItem;
+            let thrown=false;
+            Storage.prototype.setItem=function(key,value){
+                if(!thrown && key==='uor.studio.lifecycle.settings.v2'){
+                    thrown=true;
+                    throw new DOMException('one-shot browser quota','QuotaExceededError');
+                }
+                return originalSet.call(this,key,value);
+            };
+        }
         window.__migrationOriginal=entries;
     })();`;
 }
@@ -117,6 +128,8 @@ export function migrationExpression(mode, phase) {
             attachments:window.__studioUi?.getAttachments().some((item)=>item.name==='seed.txt' && item.content==='seed context') || false,
             workspace:window.__studioFiles?.activeFile()?.path==='draft.md' && window.__studioFiles?.activeFile()?.content==='seed draft',
             tabs:window.__studioFiles?.tabs().some((item)=>item.path==='draft.md') || false,
+            theme:document.documentElement.dataset.theme==='dark',
+            currentUi:document.getElementById('app')?.dataset.nav==='collapsed',
         };
         const destinationsCopied=Object.entries(constants.destinations).every(([source,destination])=>localStorage.getItem(destination)!==null);
         const archivalUiV1=localStorage.getItem('uor.studio.lifecycle.ui.v2')===original['uor.studio.ui.v1'];
@@ -189,9 +202,10 @@ export function assertMigrationReport(report, mode) {
         if (!values.errorVisible || values.shellCount !== 0 || values.status?.state !== 'error' || !values.markerAbsent || !values.oldPreserved || !values.conflictPreserved || !values.noUnexpectedDestinations) {
             throw new Error('migration failure fixture did not fail closed: ' + JSON.stringify(values));
         }
+        if (mode === 'quota' && values.status?.error !== 'quota-exceeded') throw new Error('one-shot quota was retried or hidden: ' + JSON.stringify(values));
         return;
     }
-    if (!values.shell || !['migrated', 'current'].includes(values.status?.state) || !values.marker || !values.destinationsCopied || !values.archivalUiV1 || !values.oldPreservedBefore || !values.oldPreservedAfterEdits || !values.providerIsolatedAfterEdits) {
+    if (!values.shell || values.status?.state !== 'migrated' || !values.marker || !values.destinationsCopied || !values.archivalUiV1 || !values.oldPreservedBefore || !values.oldPreservedAfterEdits || !values.providerIsolatedAfterEdits) {
         throw new Error('migration success fixture did not preserve its contract: ' + JSON.stringify(values));
     }
     for (const [name, passed] of Object.entries(values.restored || {})) {

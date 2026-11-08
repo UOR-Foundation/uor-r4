@@ -1,6 +1,8 @@
 (function () {
     'use strict';
 
+    if (globalThis.UORStudioPersistence && globalThis.UORStudioPersistence.LIFECYCLE_SINGLETON === true) return;
+
     var MIGRATION_KEYS = [
         'uor.studio.conversations.v1',
         'uor.studio.activeConversation.v1',
@@ -207,6 +209,7 @@
     defaultPersistence.activate(typed);
 
     globalThis.UORStudioPersistence = {
+        LIFECYCLE_SINGLETON: true,
         MIGRATION_KEYS: MIGRATION_KEYS,
         DESTINATION_KEYS: DESTINATION_KEYS,
         LIFECYCLE_MIGRATION_MARKER_KEY: MARKER_KEY,
