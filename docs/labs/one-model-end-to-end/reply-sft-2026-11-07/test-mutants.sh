@@ -126,6 +126,8 @@ mutate missing-checkpoint "$JOB" \
   'elif [ -z "$STOP_REASON" ]; then' 'elif false; then'
 mutate no-termination-cont "$JOB" 'kill -CONT "$TRAIN_PID" 2>/dev/null || true' ''
 mutate wrong-eval "$JOB" '--eval-every 256' '--eval-every 2560'
+mutate wrong-dose "$JOB" '  1024|2048) ;;' '  1024) ;;'
+mutate fixed-dose "$JOB" '--steps "$STEPS" \' '--steps 1024 \'
 mutate wrong-seed "$JOB" '--seed 1 \' '--seed 2 \'
 mutate seed-two-enabled "$JOB" '2) echo "seed 2 is conditional and is not launched by this script" >&2; exit 2 ;;' '2) ;;'
 mutate zero-replies "$JOB" '--max-replies 1 --reply-tokens 1' \
@@ -240,6 +242,12 @@ mutate unknown-submission-success "$LAUNCHER" \
 mutate no-remote-job-discovery "$LAUNCHER" \
   "-name '*-"'$SESSION'"-gpu0.sh' -print" \
   "-name '*.sh' -print"
+mutate missing-remote-dose "$LAUNCHER" \
+  'UOR_SFT_OUT_STORE="$OUT_STORE" UOR_SFT_STEPS="$STEPS" \' \
+  'UOR_SFT_OUT_STORE="$OUT_STORE" \'
+mutate wrong-extension-report "$LAUNCHER" \
+  '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-28/REPORT.md) ;;' \
+  '2048:docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md:docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md) ;;'
 mutate signal-cleanup-success "$LAUNCHER" \
   '[ "$STATUS" = SEALED ] || rc=1' \
   '[ "$STATUS" = SEALED ] || true'
