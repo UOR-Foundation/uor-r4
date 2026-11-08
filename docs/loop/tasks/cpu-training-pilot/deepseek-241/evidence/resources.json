@@ -1,0 +1,58 @@
+{
+  "schema": "uor-r4.cpu-forced-copy-panel-resources/1",
+  "measured_at": "2026-11-08T18:04:40Z",
+  "substrate": "cpu-development-research",
+  "root": "local/deepseek/forced-copy-panel",
+  "hardware": {
+    "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
+    "physical_cores": 16,
+    "logical_cpus": 32,
+    "threads_per_core": 2,
+    "probe_threads": 32
+  },
+  "runs": [
+    {"path": "runs/s1-one-user.json", "wall_ms": 3526, "peak_rss_kib": 137456, "disposition": "superseded EOS-token instrument mismatch"},
+    {"path": "runs/s1-per-turn.json", "wall_ms": 8017, "peak_rss_kib": 136804, "disposition": "superseded EOS-token instrument mismatch"},
+    {"path": "runs/s2-one-user.json", "wall_ms": 9338, "peak_rss_kib": 135776, "disposition": "superseded EOS-token instrument mismatch"},
+    {"path": "runs/s2-per-turn.json", "wall_ms": 8496, "peak_rss_kib": 137192, "disposition": "superseded EOS-token instrument mismatch"},
+    {"path": "runs-v2/s1-one-user.json", "wall_ms": 2401, "peak_rss_kib": 131132, "disposition": "correct behavior before executable binding"},
+    {"path": "runs-v2/s1-per-turn.json", "wall_ms": 2496, "peak_rss_kib": 133528, "disposition": "correct behavior before executable binding"},
+    {"path": "runs-v2/s2-one-user.json", "wall_ms": 2528, "peak_rss_kib": 132148, "disposition": "correct behavior before executable binding"},
+    {"path": "runs-v2/s2-per-turn.json", "wall_ms": 2746, "peak_rss_kib": 133944, "disposition": "correct behavior before executable binding"},
+    {"path": "runs-v2/s1-one-user-repeat.json", "wall_ms": 2402, "peak_rss_kib": 131916, "disposition": "determinism repeat before executable binding"},
+    {"path": "runs-v3/s1-one-user.json", "wall_ms": 2397, "peak_rss_kib": 131232, "disposition": "final"},
+    {"path": "runs-v3/s1-per-turn.json", "wall_ms": 2545, "peak_rss_kib": 132772, "disposition": "final"},
+    {"path": "runs-v3/s2-one-user.json", "wall_ms": 2535, "peak_rss_kib": 131440, "disposition": "final"},
+    {"path": "runs-v3/s2-per-turn.json", "wall_ms": 2739, "peak_rss_kib": 132492, "disposition": "final"},
+    {"path": "runs-v3/s1-one-user-repeat.json", "wall_ms": 2387, "peak_rss_kib": 131924, "disposition": "final determinism repeat"}
+  ],
+  "totals": {
+    "report_count": 14,
+    "measured_wall_ms": 54553,
+    "measured_wall_seconds": 54.553,
+    "max_peak_rss_kib": 137456
+  },
+  "storage": {
+    "local_evidence_and_inputs_bytes": 555631880,
+    "build_target_bytes": 3674715698,
+    "temporary_logs_bytes": 17037,
+    "free_bytes_at_measurement": 158486441984,
+    "free_gib_at_measurement": 147.602,
+    "floor_gib": 30,
+    "required_margin_mib": 128,
+    "floor_passes": true
+  },
+  "ledger": {
+    "shared_model_time_active_receipt": "ABSENT",
+    "shared_model_time_ledger_path": ".uor-models/native-joint-learning-2026-09-04/model-time.json",
+    "note": "The canonical shared model-time ledger was absent during the accounting pass."
+  },
+  "unmeasured": [
+    "Claude artifact archive download and extraction",
+    "CPU export of the two integer artifacts",
+    "Rust builds and incremental rebuilds",
+    "tests, formatting, Clippy and harness gates",
+    "review and delivery"
+  ],
+  "note": "The measured wall is a lower bound from retained probe reports only."
+}
