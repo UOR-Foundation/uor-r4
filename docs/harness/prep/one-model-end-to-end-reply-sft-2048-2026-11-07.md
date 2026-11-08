@@ -3,9 +3,9 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-29](../loop/tasks/one-model-end-to-end/deepseek-29/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `536d95242b8301541b207fe171fbe5a96b2fa244`, reviewed-runtime `8928ce7cae729894820ae1b7f3106d071f18dda77bdbf198a7dd4d8556d1eec5`, reviewer session `01a1b933-75a7-7df2-9d05-7997d387beaa`.
+TEST FITNESS: FIT - fresh non-author main-integrated review at `c020b4d2e5946703e43ac158cfee7d48622dd79e`, reviewed-runtime `b5aa959857f387bdc2329d0e68e243cb6473e88fa46f56553f95a47c884eaa80`, reviewer session `01a1b944-30a2-7ce0-aac4-8b01fc2cc6d2`.
 
-PRE-RUN: PENDING - fresh D67 review required after the merged-runtime CPU-identity repair.
+PRE-RUN: GO - fresh D67 review at `c020b4d2e5946703e43ac158cfee7d48622dd79e`, reviewed-runtime `b5aa959857f387bdc2329d0e68e243cb6473e88fa46f56553f95a47c884eaa80`, reviewer session `01a1b944-30a2-7ce0-aac4-8b01fc2cc6d2`.
 
 ## Why
 
