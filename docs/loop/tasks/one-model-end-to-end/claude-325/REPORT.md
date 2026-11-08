@@ -12,8 +12,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
   Row (e) reads that the current-state corpus's share is too small to move the reply form.
 - **No reply is bare.** The 40,000 bare-answer documents did not move the opening frame:
-  - Seed 1 stopped 115 replies. 56 are short, all framed: 43 open "Your friend's name is" and 17 open "Got it, your friend is".
-  - Seed 2 stopped 66. 9 are short, 0 open "Your friend's name is", and 19 open "Got it, your friend is".
+  - Seed 1 stopped 115 replies. 56 are short, and none is bare. Among all 115 stopped replies, 43 open "Your friend's name is" and 17 open "Got it, your friend is".
+  - Seed 2 stopped 66. 9 are short, and none is bare. Among all 66 stopped replies, 0 open "Your friend's name is" and 19 open "Got it, your friend is".
   - There is no bare reply to quote. The most common stopped replies at seed 1 are " Your friend's name is basalt loggia." (7), " Your friend's name is feldspar gallery." (6), " Your friend's name is syenite annex." (6) and " Got it, your dog is a dry cabin." (4).
 - **The asked value is not chosen.** The first line holds the asked-for value in 27 and 0 rows, and the other value in 29 and 3 (claude-322: 14 / 11 and 2 / 6).
 - **Stopping fell at seed 2,** from claude-322's 86 to 66; 189 of its 256 replies ran to the cap.
@@ -42,7 +42,7 @@ Both seeds ran at `ff5156bcc` on two RTX 5090s (vast-59750631 and vast-59748529)
 | First line: asked / other / both | 27 / 29 / 0 | 0 / 3 / 0 | 14 / 11 / 0 and 2 / 6 / 0 |
 | Role headers `Assistant:` / `User:` (stopped; all) | 0 / 0; 1 / 0 | 0 / 0; 0 / 0 | — |
 | First target, teacher-forced, one-user-turn: top-1 / top-8 / top-32; median rank | 0 / 4 / 12; 2,335 | 0 / 3 / 8; 1,486 | 0 / 1 / 8; 1,282 and 0 / 0 / 0; 2,029 |
-| Model's own first token, one-user-turn | " Your" 102, " G" 86, " I" 54, " It" 14 | " Your" 172, " G" 84 | " Your" 172, " G" 84 (s1) |
+| Model's own first token, one-user-turn | " Your" 102, " G" 86, " I" 54, " It" 14 | " Your" 172, " G" 84 | " Your" 172, " G" 84 (s1; `local/claude/claude-327/a1/claude-322-s1-one.json`) |
 | DEV nearest hits at step 16,384 | 7,061 | 6,396 | 7,041 / 6,958 |
 | train_loss_mean / dev_loss at the last step | 0.853 / 2.350 | 0.914 / 2.354 | — |
 
@@ -75,6 +75,7 @@ DEV curves, every 1,024 steps, are in `local/claude/claude-325/dev.log`. Seed 1 
   - **I-xc:** ok, `1c9ae43c…`.
   - **I-c:** the negative and positive references' rows are equal (`read-325.sh ctrl`, exit 0).
   - **I-x:** artifacts `ac570514…` (s1) and `a3301596…` (s2).
+  - `serve-s2.log`'s line "s1: no step-016384 checkpoint: NOT_RUN" is from a serve run made before seed 1's seal landed. It is not row 0a: `serve-s1.log` then scored both seeds.
   - `uor-harness loop report --check --order`: run at the head before review.
 
 ## Skills used
@@ -91,4 +92,4 @@ DEV curves, every 1,024 steps, are in `local/claude/claude-325/dev.log`. Seed 1 
 
 ## Plain summary
 
-We added 40,000 short "just the answer" replies to the training mix and trained the same model at two seeds. The model still opens every reply with "Your friend's name is…" or "Got it, your friend is…". It still never names the asked-for value more often than the other one, and none of its 256 replies is fully right. It did not get worse on held-out text. The next step, more of those short replies, waits until the probe that asks whether the model's memory can pick the right fact at all has run.
+We added 40,000 short "just the answer" replies to the training mix and trained the same model at two seeds. The model still opens every reply with a stock word ("Your…", "Got it…", "I…", "It…"), never with the bare value. It still never names the asked-for value more often than the other one, and none of its 256 replies is fully right. It did not get worse on held-out text. The next step, more of those short replies, waits until the probe that asks whether the model's memory can pick the right fact at all has run.
