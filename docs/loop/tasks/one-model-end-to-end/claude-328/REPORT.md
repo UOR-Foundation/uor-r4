@@ -110,7 +110,10 @@ What fails is the learning: the type heads' rotation query never moves off chanc
 ## Checks run at the head
 
 - `cargo test --lib` of `uor-r4-float-train` on the laptop (CPU tests; the CUDA tests ran on the pod at `2904f2f1e`).
-- `cargo test --features cpu-parity --bin served-reply-panel` with the pinned tokenizer.
+- `cargo test --features cpu-parity --bin served-reply-panel` with the pinned tokenizer: 20 passed. The root workspace and the instrument's share `local/target` and left a stale `uor-r4-integer` build twice (`could not find stack`), so each passing run followed `cargo clean -p uor-r4-integer`.
+- **Coverage limits the exact-head review named (minors, not fixed):**
+  - The A2 end-to-end test skips when `UOR_PANEL_TOKENIZER` is unset, and no workflow sets it, so CI does not pin it.
+  - The laptop guard test pins what `UndoAblation`'s drop clears, not that the readings hold the guard across each ablation.
 - The mutation gates: `gt/mut-a2.sh` (10 of 10) and `gt/mut-i7.sh` (2 of 2); the pod gates are in `gates.txt` (4 fire, 2 named above).
 - `rustfmt --check` on `served-reply-panel.rs` (clean). `in_space_long.rs` is not rustfmt-clean on `main` (442 diff hunks), so the new tests are hand-formatted and the file was not reformatted.
 - `loop report --check`; `loop pr-check --local`.

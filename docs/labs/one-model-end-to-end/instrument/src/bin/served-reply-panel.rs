@@ -1484,6 +1484,11 @@ mod tests {
         let (_, prompt) = render(&tokenizer, &encoder, &case, RENDERING).unwrap();
         let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
         let other_first = teacher_forced_nearest_ranks(&mut forward, &prompt, &other_ids).unwrap();
+        // Distinct ranks, so a row that copies the asked rank into the other rank is caught.
+        assert_ne!(
+            teacher.target_ranks[0], other_first[0].rank,
+            "the fixture needs distinct first ranks"
+        );
         assert_eq!(row.other_rank, other_first[0].rank);
         assert_eq!(row.raw_other_rank, other_first[0].raw_rank);
 
