@@ -48,7 +48,7 @@ selector. No OOM retry occurred. Pod `vast-59672099` was released and deleted.
 | 2,048 | 140 | 0 | 2 | 129 | 0 | 0 |
 
 At step 512, teacher-forced EOS top-8 and top-32 are both 256/256. DEV
-nearest/writer top-1 was 6,712/393 at selection and 7,062/439 at step 2,048.
+nearest/writer top-1 was 6,116/330 at selection and 7,062/439 at step 2,048.
 Training took 1,369.986 seconds; pod uptime was about 37m24s and cost about
 $0.35.
 

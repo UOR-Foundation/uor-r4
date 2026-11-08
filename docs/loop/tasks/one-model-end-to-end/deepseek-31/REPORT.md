@@ -66,7 +66,7 @@ At the selected checkpoint, teacher-forced EOS top-8 and top-32 are both
 256/256. The audit rendering (`one-user-turn/v1`) gives 67 EOS stops; selection
 and outcome readings use the registered `per-turn/v1` values above.
 
-DEV nearest/writer top-1 rose from 3,185/192 at step 0 to 6,712/393 at the
+DEV nearest/writer top-1 rose from 3,185/192 at step 0 to 6,116/330 at the
 selected step and ended at 7,062/439 at step 2,048. Training loss ended at
 0.9493008314 after 1,369.986 seconds (18,369 context tokens/s). Pod uptime was
 about 37m24s, about $0.35 at the observed rate.
