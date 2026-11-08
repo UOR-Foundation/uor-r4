@@ -1418,20 +1418,41 @@ fn typed_dist_loopback_and_read_only_approval() {
     let root = unique_temp_dir("typed-dist-loopback").join("dist");
     fs::create_dir_all(root.join("assets")).expect("create dist assets");
     fs::create_dir_all(root.join("src")).expect("create forbidden source directory");
-    fs::write(root.join("index.html"), "<html><script type=\"module\" crossorigin>typed dist</script></html>").expect("write typed index");
-    fs::write(root.join("assets/index-abc123.js"), "export const answer = 42;").expect("write hashed asset");
-    fs::write(root.join("src/main.ts"), "export const forbidden = true;").expect("write raw TypeScript");
+    fs::write(
+        root.join("index.html"),
+        "<html><script type=\"module\" crossorigin>typed dist</script></html>",
+    )
+    .expect("write typed index");
+    fs::write(
+        root.join("assets/index-abc123.js"),
+        "export const answer = 42;",
+    )
+    .expect("write hashed asset");
+    fs::write(root.join("src/main.ts"), "export const forbidden = true;")
+        .expect("write raw TypeScript");
 
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    let enable = handle_rpc_line(&mut backend, &json!({"id": 1, "command": "native_enable_terminal", "args": {}}).to_string());
+    let enable = handle_rpc_line(
+        &mut backend,
+        &json!({"id": 1, "command": "native_enable_terminal", "args": {}}).to_string(),
+    );
     assert_eq!(enable["result"]["enabled"], json!(false));
     assert!(!backend.terminal_enabled());
 
     backend
         .native_grant_folder(&root)
         .expect("grant loopback workspace");
-    let selected = handle_rpc_line(&mut backend, &json!({"id": 6, "command": "native_choose_project_folder", "args": {}}).to_string());
-    assert_eq!(selected["result"]["path"], json!(root.canonicalize().expect("canonical grant").to_string_lossy()));
+    let selected = handle_rpc_line(
+        &mut backend,
+        &json!({"id": 6, "command": "native_choose_project_folder", "args": {}}).to_string(),
+    );
+    assert_eq!(
+        selected["result"]["path"],
+        json!(root
+            .canonicalize()
+            .expect("canonical grant")
+            .to_string_lossy())
+    );
     backend.native_set_terminal_enabled(true);
     let confirmation = handle_rpc_line(&mut backend, &json!({"id": 2, "command": "native_confirm_terminal_command", "args": {"cwd": root.display().to_string(), "command": "pwd"}}).to_string());
     assert_eq!(confirmation["result"]["approved"], json!(false));
@@ -1446,8 +1467,18 @@ fn typed_dist_loopback_and_read_only_approval() {
     assert_eq!(second["result"]["approved"], json!(false));
 
     fs::write(root.join("note.txt"), "loopback diff\n").expect("write diff fixture");
-    assert!(Command::new("git").arg("init").current_dir(&root).status().expect("git init").success());
-    assert!(Command::new("git").args(["add", "-N", "note.txt"]).current_dir(&root).status().expect("git intent-to-add").success());
+    assert!(Command::new("git")
+        .arg("init")
+        .current_dir(&root)
+        .status()
+        .expect("git init")
+        .success());
+    assert!(Command::new("git")
+        .args(["add", "-N", "note.txt"])
+        .current_dir(&root)
+        .status()
+        .expect("git intent-to-add")
+        .success());
     let diff = handle_rpc_line(&mut backend, &json!({"id": 7, "command": "native_git_diff", "args": {"repoPath": root.display().to_string()}}).to_string());
     assert_eq!(diff["ok"], json!(true));
     assert!(diff["result"]["diff"].to_string().contains("note.txt"));

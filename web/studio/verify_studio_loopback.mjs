@@ -74,7 +74,17 @@ async function main() {
         throw new Error('loopback initial load violated runtime boundaries: ' + JSON.stringify(typed));
     }
     const checks = typed.typed;
-    if (!checks?.shell || checks.shellCount !== 1 || !checks.active || !checks.legacyHidden || !checks.artifactReady || !checks.sessionFlow?.restoredMatchesOriginal) {
+    const flow = checks?.sessionFlow;
+    const completeSessionFlow = flow?.created
+        && flow.beforeSend?.idMatches && flow.beforeSend?.markerMatches
+        && flow.answerReady && flow.firstTranscript?.includes('17+25')
+        && flow.firstTranscript?.includes('assistant\n\n42\n')
+        && flow.otherHasAnswer === false
+        && flow.otherResume?.idMatches && flow.otherResume?.markerMatches
+        && flow.restoredResume?.idMatches && flow.restoredResume?.markerMatches
+        && flow.restoredAnswer && flow.generationComplete
+        && flow.restoredMatchesOriginal && flow.restoredTranscript === flow.firstTranscript;
+    if (!checks?.shell || checks.shellCount !== 1 || !checks.active || !checks.legacyHidden || !checks.artifactReady || !completeSessionFlow) {
         throw new Error('typed mount/session baseline failed: ' + JSON.stringify(checks));
     }
 
@@ -215,7 +225,7 @@ async function main() {
     const report = {
         verdict: 'LOOPBACK STUDIO ACCEPTANCE PASSED',
         workspace,
-        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length },
+        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length, sessionFlow: flow },
         workflow,
         saved,
         reopened: { requests: reopened.requested, external: reopened.external, rawTypeScript: reopened.rawTypeScript, runtimeErrors: reopened.runtimeErrors.length, restored },

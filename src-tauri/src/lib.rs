@@ -1820,12 +1820,17 @@ mod bounded_process_tests {
     #[test]
     fn closed_pipes_before_normal_exit_are_not_a_timeout() {
         let mut command = Command::new("/bin/sh");
-        command.arg("-c").arg("printf ok; exec 1>&- 2>&-; sleep 0.05");
+        command
+            .arg("-c")
+            .arg("printf ok; exec 1>&- 2>&-; sleep 0.05");
         let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
             .expect("closed pipes must allow a normal exit");
         assert_eq!(String::from_utf8_lossy(&output.stdout), "ok");
         assert!(output.status.success());
-        assert!(!output.timed_out, "normal exit after pipe closure was mislabeled as a timeout");
+        assert!(
+            !output.timed_out,
+            "normal exit after pipe closure was mislabeled as a timeout"
+        );
     }
 
     #[test]
@@ -1836,6 +1841,47 @@ mod bounded_process_tests {
             .expect("output cap must terminate without a timeout claim");
         assert!(output.truncated, "output cap was not reported");
         assert!(!output.timed_out, "output cap was mislabeled as a timeout");
+    }
+}
+
+#[cfg(test)]
+mod terminal_approval_tests {
+    use super::*;
+
+    #[test]
+    fn expired_host_approval_is_refused_and_consumed() {
+        let root =
+            std::env::temp_dir().join(format!("uor-expired-approval-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create expired-approval fixture");
+        let root = root
+            .canonicalize()
+            .expect("canonical expired-approval fixture");
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        backend
+            .native_grant_folder(&root)
+            .expect("grant fixture folder");
+        backend.native_set_terminal_enabled(true);
+        backend.host_approved_commands.insert(
+            (root.clone(), "pwd".to_string()),
+            std::time::Instant::now() - std::time::Duration::from_secs(61),
+        );
+        assert!(!backend.host_terminal_command_is_approved(&root, "pwd"));
+        let request = TerminalCommandRequest {
+            cwd: root.clone(),
+            command: "pwd".to_string(),
+            user_confirmed: true,
+            confirmed_command: "pwd".to_string(),
+        };
+        let result = backend.prepare_terminal_command(&request);
+        assert!(matches!(
+            result,
+            Err(DesktopClientError::TerminalConsentRequired)
+        ));
+        assert!(!backend
+            .host_approved_commands
+            .contains_key(&(root.clone(), "pwd".to_string())));
+        let _ = fs::remove_dir_all(&root);
     }
 }
 
