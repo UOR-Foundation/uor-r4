@@ -636,16 +636,7 @@ fn run_case(
         .ids
         .first()
         .ok_or_else(|| "target reference is empty".to_owned())?;
-    let target_prefix = &case.target.ids[..case.target.ids.len() - 1];
-    let other_prefix = &case.other.ids[..case.other.ids.len() - 1];
-    let shuffled_prefix = &case.shuffled.ids[..case.shuffled.ids.len() - 1];
-    let prefixes = [
-        (Arm::Free, Vec::new()),
-        (Arm::FirstTarget, vec![target_token]),
-        (Arm::CorrectValue, target_prefix.to_vec()),
-        (Arm::OtherRelation, other_prefix.to_vec()),
-        (Arm::ShuffledValue, shuffled_prefix.to_vec()),
-    ];
+    let prefixes = arm_prefixes(case)?;
     let target_words = value_words(&case.target.answer);
     let other_words = value_words(&case.other.answer);
     let scoring = ArmScoring {
@@ -663,6 +654,34 @@ fn run_case(
             arm_row(case, arm, &prefix, generated, &scoring)
         })
         .collect()
+}
+
+fn arm_prefixes(case: &PreparedCase) -> Result<Vec<(Arm, Vec<u32>)>> {
+    let content = |reference: &Reference| -> Result<Vec<u32>> {
+        let (last, content) = reference
+            .ids
+            .split_last()
+            .ok_or_else(|| format!("{:?} reference is empty", reference.answer))?;
+        if *last != EOS || content.is_empty() || content.contains(&EOS) {
+            return Err(format!(
+                "{:?} reference does not hold one terminal EOS",
+                reference.answer
+            ));
+        }
+        Ok(content.to_vec())
+    };
+    let target_token = *case
+        .target
+        .ids
+        .first()
+        .ok_or_else(|| "target reference is empty".to_owned())?;
+    Ok(vec![
+        (Arm::Free, Vec::new()),
+        (Arm::FirstTarget, vec![target_token]),
+        (Arm::CorrectValue, content(&case.target)?),
+        (Arm::OtherRelation, content(&case.other)?),
+        (Arm::ShuffledValue, content(&case.shuffled)?),
+    ])
 }
 
 fn arm_row(
@@ -1099,6 +1118,8 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
 
     fn byte_level_tokenizer() -> ByteBpeTokenizer {
         let direct = (b'!'..=b'~')
@@ -1187,6 +1208,13 @@ mod tests {
         }
     }
 
+    fn test_reference_with_ids(answer: &str, ids: Vec<u32>) -> Reference {
+        Reference {
+            answer: answer.to_owned(),
+            ids,
+        }
+    }
+
     #[test]
     fn renderer_matches_both_registered_panel_forms() {
         let tokenizer = byte_level_tokenizer();
@@ -1252,6 +1280,61 @@ mod tests {
             assert_ne!(index, control);
             assert_ne!(references[index].answer, references[control].answer);
         }
+    }
+
+    #[test]
+    fn arm_prefixes_use_exact_role_values_without_eos() {
+        let case = PreparedCase {
+            id: "case".to_owned(),
+            pair_id: "pair".to_owned(),
+            stratum: "length2".to_owned(),
+            prompt: vec![10, 11],
+            target_answers: FrozenAnswers {
+                intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+                accepted: vec![" target.".to_owned()],
+            },
+            target: test_reference_with_ids(" target.", vec![3, 4, EOS]),
+            other: test_reference_with_ids(" other.", vec![5, 6, EOS]),
+            shuffled: test_reference_with_ids(" shuffled.", vec![7, EOS]),
+            target_value_in_prompt: true,
+        };
+        let prefixes = arm_prefixes(&case).unwrap();
+        assert_eq!(
+            prefixes,
+            vec![
+                (Arm::Free, Vec::new()),
+                (Arm::FirstTarget, vec![3]),
+                (Arm::CorrectValue, vec![3, 4]),
+                (Arm::OtherRelation, vec![5, 6]),
+                (Arm::ShuffledValue, vec![7]),
+            ]
+        );
+    }
+
+    #[test]
+    fn forced_prefix_continues_through_one_complete_forward() {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            104,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 1,
+                context: 24,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = true;
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let prefix = vec![7, 8];
+        let generated = generate_with_prefix(&mut forward, &[40, 41, 42, 43], &prefix, 8).unwrap();
+        assert!(generated.tokens.starts_with(&prefix));
+        assert!(matches!(generated.stop, Stop::Eos | Stop::Bos | Stop::Cap));
     }
 
     #[test]

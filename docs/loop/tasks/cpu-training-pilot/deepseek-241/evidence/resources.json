@@ -32,6 +32,28 @@
     "measured_wall_seconds": 54.553,
     "max_peak_rss_kib": 137456
   },
+  "parity": {
+    "seed_1": {
+      "report": "parity/s1.json",
+      "report_sha256": "11271dc58a10c41c2fc79fc21b1ddafd3f9324c08aefeec1ec3d89409e5c024b",
+      "positions": 40,
+      "query_coordinates": 10240,
+      "query_coordinate_mismatches": 0,
+      "token_mismatches": 0,
+      "kept_cells": 320,
+      "kept_cell_mismatches": 0
+    },
+    "seed_2": {
+      "report": "parity/s2.json",
+      "report_sha256": "61aeab4529636f65f1fa7d50b89f8613198d45901be09e56ac9fe087b894b069",
+      "positions": 40,
+      "query_coordinates": 10240,
+      "query_coordinate_mismatches": 0,
+      "token_mismatches": 0,
+      "kept_cells": 320,
+      "kept_cell_mismatches": 0
+    }
+  },
   "storage": {
     "local_evidence_and_inputs_bytes": 555631880,
     "build_target_bytes": 5579220015,
@@ -45,7 +67,8 @@
   "ledger": {
     "shared_model_time_active_receipt": "ABSENT",
     "shared_model_time_ledger_path": ".uor-models/native-joint-learning-2026-09-04/model-time.json",
-    "note": "The canonical shared model-time ledger was absent during the accounting pass."
+    "canonical_resource_ledger": "docs/labs/cpu-training-pilot-forced-copy-2026-11-08/resource-ledger.json",
+    "note": "The canonical shared model-time ledger was absent during the accounting pass. The resource ledger chain is charged separately."
   },
   "unmeasured": [
     "Claude artifact archive download and extraction",

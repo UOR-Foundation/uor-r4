@@ -61,12 +61,22 @@ The executable is
 | 2 | `one-user-turn/v1` | 0/0 | 20/0 | **200/75** | 0 | 0 |
 | 2 | `per-turn/v1` | 0/0 | 21/0 | **213/86** | 0 | 0 |
 
-Every paired comparison passed its `max(2, ceil(2*sqrt(discordant)))` threshold:
+Overall paired gains passed the `max(2, ceil(2*sqrt(discordant)))` threshold:
 
 - first-target vs free: gains 41 and 20/21;
 - correct-value vs first-target: gains 189, 209, 180 and 192;
-- correct-value vs other-relation: gains 230, 250, 200 and 213;
-- correct-value vs shuffled-value: gains 230, 250, 200 and 213.
+
+The other-value and shuffled arms are identity controls, not statistical
+evidence of a gain: their wrong prefix remains in every reply, and exact
+accepted-answer scoring therefore prevents completion. Their result is that
+215-254 and 211-252 respectively still reached EOS, showing termination without
+the role-correct answer.
+
+The per-stratum `first-target-vs-free` comparison passes `length2` and
+`reassert`, but fails `length4`, `length8` and `update` at gain 0 versus
+threshold 2 in every seed/rendering. The per-stratum `correct-value-vs-first`
+comparison passes all 20 cells, with gains 16-64 against thresholds 8-16. These
+values are recorded in [summary.json](./evidence/summary.json).
 
 Correct-value completion by stratum, seed 1/seed 2:
 
@@ -85,18 +95,27 @@ First-target completion by stratum, seed 1/seed 2:
 The seed-1 one-user repeat differs only in wall time and peak RSS; every
 decision, reply, tally and paired count is identical.
 
-The cumulative D84 receipt is
+The exact artifacts also passed a panel-token served-forward audit at 40
+positions each: 10,240 Q12 coordinates, 40 token decisions and 320 kept cells
+with zero query, token or kept-cell mismatches. Audit report hashes are
+`11271dc5...` and `61aeab45...`.
+
+The canonical D84 ledger is
+[`resource-ledger.json`](../../../../labs/cpu-training-pilot-forced-copy-2026-11-08/resource-ledger.json),
+with the detailed retained-run receipt at
 [`evidence/resources.json`](./evidence/resources.json): 14 retained reports,
 54.553 seconds measured probe time, 137,456 KiB maximum peak RSS,
 555,631,880 bytes of retained evidence/inputs, 5,579,220,015 bytes of
-regenerable target, and 144.931 GiB free. The canonical shared ledger
+regenerable target, and 144.931 GiB free. The ledger charges a 1,800-second
+projected increment, producing a 37,808-second cumulative lab projection. The
+canonical shared ledger
 `.uor-models/native-joint-learning-2026-09-04/model-time.json` was `ABSENT`.
 Downloads, export, builds, tests and delivery are explicitly unmeasured.
 
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-forced-copy-panel`: 7 passed.
+  cpu-forced-copy-panel`: 9 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 455 passed,
   4 ignored.
 - `cargo test --release --offline --locked --features cpu-parity --bin

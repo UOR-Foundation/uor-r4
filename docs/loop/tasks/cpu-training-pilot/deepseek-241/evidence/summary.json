@@ -21,7 +21,14 @@
       "first_target": {"complete": 41, "pairs": 12, "eos_stops": 136, "prefix_retained_without_eos": 120},
       "correct_value": {"complete": 230, "pairs": 102, "eos_stops": 243, "prefix_retained_without_eos": 13},
       "other_relation": {"complete": 0, "pairs": 0, "eos_stops": 235},
-      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 239}
+      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 239},
+      "per_stratum_paired": {
+        "length2": {"first_vs_free": [27, 11], "correct_vs_first": [29, 11]},
+        "length4": {"first_vs_free": [0, 2], "correct_vs_first": [58, 16]},
+        "length8": {"first_vs_free": [0, 2], "correct_vs_first": [58, 16]},
+        "reassert": {"first_vs_free": [14, 8], "correct_vs_first": [16, 8]},
+        "update": {"first_vs_free": [0, 2], "correct_vs_first": [28, 11]}
+      }
     },
     "s1_per_turn": {
       "report_sha256": "3f98ef7b4f1ee7a03a1d86fdd4751d5360afb1ad7285124ca37570bd4599de56",
@@ -29,7 +36,14 @@
       "first_target": {"complete": 41, "pairs": 12, "eos_stops": 149, "prefix_retained_without_eos": 107},
       "correct_value": {"complete": 250, "pairs": 122, "eos_stops": 256, "prefix_retained_without_eos": 0},
       "other_relation": {"complete": 0, "pairs": 0, "eos_stops": 254},
-      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 252}
+      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 252},
+      "per_stratum_paired": {
+        "length2": {"first_vs_free": [29, 11], "correct_vs_first": [33, 12]},
+        "length4": {"first_vs_free": [0, 2], "correct_vs_first": [64, 16]},
+        "length8": {"first_vs_free": [0, 2], "correct_vs_first": [64, 16]},
+        "reassert": {"first_vs_free": [12, 7], "correct_vs_first": [16, 8]},
+        "update": {"first_vs_free": [0, 2], "correct_vs_first": [32, 12]}
+      }
     },
     "s2_one_user": {
       "report_sha256": "b3ac9c44b1deec6e3439d2cabdad462c4c75f0a94ad792f8c989f00a39c6f276",
@@ -37,7 +51,14 @@
       "first_target": {"complete": 20, "pairs": 0, "eos_stops": 119, "prefix_retained_without_eos": 137},
       "correct_value": {"complete": 200, "pairs": 75, "eos_stops": 237, "prefix_retained_without_eos": 19},
       "other_relation": {"complete": 0, "pairs": 0, "eos_stops": 235},
-      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 226}
+      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 226},
+      "per_stratum_paired": {
+        "length2": {"first_vs_free": [14, 8], "correct_vs_first": [31, 12]},
+        "length4": {"first_vs_free": [0, 2], "correct_vs_first": [44, 14]},
+        "length8": {"first_vs_free": [0, 2], "correct_vs_first": [58, 16]},
+        "reassert": {"first_vs_free": [6, 5], "correct_vs_first": [21, 10]},
+        "update": {"first_vs_free": [0, 2], "correct_vs_first": [26, 11]}
+      }
     },
     "s2_per_turn": {
       "report_sha256": "0e14747976d2ce0cc46f45482f650876d758e82860a87716aafec6947dc1cbeb",
@@ -45,7 +66,14 @@
       "first_target": {"complete": 21, "pairs": 0, "eos_stops": 130, "prefix_retained_without_eos": 126},
       "correct_value": {"complete": 213, "pairs": 86, "eos_stops": 218, "prefix_retained_without_eos": 38},
       "other_relation": {"complete": 0, "pairs": 0, "eos_stops": 215},
-      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 211}
+      "shuffled_value": {"complete": 0, "pairs": 0, "eos_stops": 211},
+      "per_stratum_paired": {
+        "length2": {"first_vs_free": [13, 8], "correct_vs_first": [37, 13]},
+        "length4": {"first_vs_free": [0, 2], "correct_vs_first": [54, 15]},
+        "length8": {"first_vs_free": [0, 2], "correct_vs_first": [50, 15]},
+        "reassert": {"first_vs_free": [8, 6], "correct_vs_first": [23, 10]},
+        "update": {"first_vs_free": [0, 2], "correct_vs_first": [28, 11]}
+      }
     }
   },
   "paired": {
@@ -78,6 +106,29 @@
     "report_sha256": "6288a51bf7e7d80154ccd99bbd79f43494064e685c7a0bef87edfac531784ac4",
     "non_timing_fields_equal": true
   },
-  "resources": "evidence/resources.json",
+  "parity": {
+    "seed_1": {
+      "report_sha256": "11271dc58a10c41c2fc79fc21b1ddafd3f9324c08aefeec1ec3d89409e5c024b",
+      "positions": 40,
+      "query_coordinates": 10240,
+      "query_coordinate_mismatches": 0,
+      "token_mismatches": 0,
+      "kept_cells": 320,
+      "kept_cell_mismatches": 0
+    },
+    "seed_2": {
+      "report_sha256": "61aeab4529636f65f1fa7d50b89f8613198d45901be09e56ac9fe087b894b069",
+      "positions": 40,
+      "query_coordinates": 10240,
+      "query_coordinate_mismatches": 0,
+      "token_mismatches": 0,
+      "kept_cells": 320,
+      "kept_cell_mismatches": 0
+    }
+  },
+  "resources": {
+    "detail": "evidence/resources.json",
+    "canonical_ledger": "docs/labs/cpu-training-pilot-forced-copy-2026-11-08/resource-ledger.json"
+  },
   "claim": "CPU development-research forced-copy attribution on two sealed current-state artifacts; not a capability bar or GPU qualification"
 }
