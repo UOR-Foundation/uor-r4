@@ -542,7 +542,7 @@ fn check_copy_keys(copy_keys: &[usize], heads: usize, width: usize) -> Result<()
 /// of the earlier positions `s` of the row's window holding `target`, `1 ≤ s < t` in the window,
 /// in ascending `s`; and, for each pull with any, the range of its pairs. A pull with none has no
 /// range, so it adds nothing.
-fn pull_pairs(
+pub(crate) fn pull_pairs(
     ids: &[u32],
     time: usize,
     pulls: &[(usize, u32)],

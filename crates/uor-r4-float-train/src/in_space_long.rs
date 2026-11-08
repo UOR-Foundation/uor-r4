@@ -153,6 +153,19 @@ pub struct LongConfig {
     /// (`HammingReads::with_copy_keys`, claude-268). Left out of `config.json` when none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_copy_keys: Option<Vec<usize>>,
+    /// The Hamming read's type heads as ask heads (`HammingReads::with_ask`, claude-330): each
+    /// asks with its token's point plus a learned question row, against the copy key. Off by
+    /// default, and left out of `config.json` when off.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hamming_ask: bool,
+    /// The found-copy pull's weight λ in the recall runner's loss (`HammingReads::ask_pull`,
+    /// claude-330); it needs the ask heads. 0, the default, is off and left out of `config.json`.
+    #[serde(skip_serializing_if = "is_zero_f64")]
+    pub hamming_attract: f64,
+    /// The pull at each two-class episode's question row (`Q(K_j)`, the scored row less 4) in
+    /// place of the scored rows (claude-330's B2-aq); left out of `config.json` when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hamming_attract_at_question: bool,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -1054,6 +1067,13 @@ fn checkpoint_hamming(
             config.type_spin
         )));
     }
+    if reads.has_ask() != config.hamming_ask {
+        return Err(invalid(format!(
+            "--init-from checkpoint Hamming ask heads are {}, but this run names {}",
+            reads.has_ask(),
+            config.hamming_ask
+        )));
+    }
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
     Ok(Some((reads, opt)))
@@ -1069,10 +1089,22 @@ fn start_hamming(
         crate::flock_read::FlockAdamW,
     )>,
 > {
+    if config.hamming_attract < 0.0 || !config.hamming_attract.is_finite() {
+        return Err(invalid("--hamming-attract is a weight of at least 0"));
+    }
+    if config.hamming_attract > 0.0 && !config.hamming_ask {
+        return Err(invalid("--hamming-attract pulls the ask heads; turn them on with --hamming-ask 1"));
+    }
+    if config.hamming_attract_at_question && config.hamming_attract == 0.0 {
+        return Err(invalid("--hamming-attract-at question places the pull; set --hamming-attract"));
+    }
     if let Some(directory) = &config.init_from {
         return checkpoint_hamming(config, directory, device);
     }
     if config.hamming_read == 0 {
+        if config.hamming_ask {
+            return Err(invalid("--hamming-ask changes the Hamming read's type heads; turn the read on with --hamming-read"));
+        }
         if config.hamming_copy_key != 1 || config.hamming_copy_keys.is_some() {
             return Err(invalid("--hamming-copy-key and --hamming-copy-keys key the Hamming read's copy heads; turn the read on with --hamming-read"));
         }
@@ -1096,6 +1128,10 @@ fn start_hamming(
     }
     if config.type_spin {
         reads = reads.with_type_spin()?;
+    }
+    if config.hamming_ask {
+        // One question row per token of the shared table (`build_fbs_model_at`'s vocabulary).
+        reads = reads.with_ask(hs::SHEET_VOCAB)?;
     }
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
@@ -1275,6 +1311,10 @@ fn start_memory(
 
 fn is_zero(n: &usize) -> bool {
     *n == 0
+}
+
+fn is_zero_f64(x: &f64) -> bool {
+    *x == 0.0
 }
 
 fn is_one(n: &usize) -> bool {
@@ -2973,6 +3013,25 @@ fn assemble(windows: &[&CausalWindow]) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
         }
     }
     (ids, scored, targets)
+}
+
+/// claude-330: the found-copy pull's `(row, target)`s for one step's windows, the rows numbered
+/// as [`assemble`] lays the windows out: each scored row with its target, or, `back` rows before
+/// it, the two-class task's question row `Q(K_j)` (`scored_offset = query_pos + header`,
+/// [`recall_query_window`]) with the same target.
+fn attract_rows(windows: &[&CausalWindow], back: usize) -> Result<Vec<(usize, u32)>> {
+    let mut rows = Vec::new();
+    let mut start = 0usize;
+    for window in windows {
+        for (&off, &target) in window.scored_offsets.iter().zip(&window.scored_targets) {
+            let row = off
+                .checked_sub(back)
+                .ok_or_else(|| invalid("a scored row with no question row before it"))?;
+            rows.push((start + row, target));
+        }
+        start += window.input_ids.len();
+    }
+    Ok(rows)
 }
 
 /// [`assemble`], repeating each target whose corpus position opens a reply.
@@ -12092,6 +12151,10 @@ pub struct RecallReading {
     /// The eval-only readings (claude-328), when the run takes them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub readings: Option<RecallReadings>,
+    /// The found-copy pull's mean distance, `bits(t, s*) / head_width`, over the training steps
+    /// since the last reading that had a pull (claude-330); left out when none had one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_attract_mean: Option<f64>,
 }
 
 /// claude-328: which recall task a run trains and scores. The default is `--recall` as before.
@@ -12212,6 +12275,9 @@ pub enum Ablation {
     /// `R^{−cQ}`: the copy heads at both reads cut at the question rows only, through the read's
     /// row cut ([`cut_at_rows`]).
     CopyAtQuery,
+    /// `R^{−aQ}` (claude-330): the ask heads at both reads cut at the question rows only; taken
+    /// after [`RECALL_ABLATIONS`], and only when the ask heads are on.
+    AskAtQuery,
 }
 
 /// The ablations in the order the readings record them.
@@ -12232,6 +12298,16 @@ impl Ablation {
             Self::Copy => "-c",
             Self::Type => "-t",
             Self::CopyAtQuery => "-cQ",
+            Self::AskAtQuery => "-aQ",
+        }
+    }
+
+    /// The heads its row cut limits, for the two that cut at the question rows.
+    pub fn row_scope(self) -> Option<ReadScope> {
+        match self {
+            Self::CopyAtQuery => Some(ReadScope::Copy),
+            Self::AskAtQuery => Some(ReadScope::Ask),
+            _ => None,
         }
     }
 
@@ -12243,7 +12319,7 @@ impl Ablation {
             Self::CopyReadout => [[false, false], [true, false]],
             Self::Copy => [[true, false], [true, false]],
             Self::Type => [[false, true], [false, true]],
-            Self::CopyAtQuery => [[false; 2]; 2],
+            Self::CopyAtQuery | Self::AskAtQuery => [[false; 2]; 2],
         }
     }
 }
@@ -12430,7 +12506,9 @@ fn recall_readings(
         held_out.iter().map(|(w, _)| (w, w.scored_offsets.clone())).unzip()
     };
     let mut ablations = Vec::new();
-    for ablation in RECALL_ABLATIONS {
+    // claude-330: `−aQ` after the five, when the ask heads are on.
+    let asks = reads.has_ask().then_some(Ablation::AskAtQuery);
+    for ablation in RECALL_ABLATIONS.into_iter().chain(asks) {
         let _undo = UndoAblation;
         fh::set_class_ablation(ablation.classes());
         let mut done = 0usize;
@@ -12439,13 +12517,13 @@ fn recall_readings(
             &windows,
             seed,
             |chunk| {
-                if ablation == Ablation::CopyAtQuery {
+                if let Some(scope) = ablation.row_scope() {
                     let time = chunk[0].input_ids.len();
                     if chunk.iter().any(|w| w.input_ids.len() != time) {
                         return Err(invalid("the row cut needs windows of one length"));
                     }
                     let limits = cut_at_rows(&cut_rows[done..done + chunk.len()], time)?;
-                    fh::set_row_cut(Some((ReadScope::Copy, limits)));
+                    fh::set_row_cut(Some((scope, limits)));
                 }
                 done += chunk.len();
                 Ok(())
@@ -12580,6 +12658,12 @@ pub fn run_recall(
     if form.readings && config.hamming_read == 0 {
         return Err(invalid("the recall readings need a Hamming read"));
     }
+    // claude-330: the question rows are the scored rows less the header; with none they are the
+    // scored rows themselves.
+    if config.hamming_attract_at_question && !(form.query && form.header > 0) {
+        return Err(invalid("--hamming-attract-at question needs the two-class task with a header"));
+    }
+    let attract_back = if config.hamming_attract_at_question { form.header } else { 0 };
     if out.exists() {
         return Err(invalid(format!(
             "{} exists; a run never writes over one",
@@ -12653,7 +12737,8 @@ pub fn run_recall(
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
     let log = out.join("recall.jsonl");
     let (mut train_seconds, mut loss_sum, mut loss_steps) = (0.0f64, 0.0f64, 0usize);
-    let reading = |step: usize, loss: Option<f64>, seconds: f64| -> Result<()> {
+    let (mut attract_sum, mut attract_steps) = (0.0f64, 0usize);
+    let reading = |step: usize, loss: Option<f64>, seconds: f64, attract: Option<f64>| -> Result<()> {
         let (rows, hits, query, picks) = if form.query {
             let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
             let picks = recall_picks(&model, &refs, config.seed)?;
@@ -12708,6 +12793,7 @@ pub fn run_recall(
             },
             query,
             readings,
+            hamming_attract_mean: attract,
         };
         println!(
             "[recall] step {step} hits {:?} of {:?} train {seconds:.0}s",
@@ -12715,7 +12801,7 @@ pub fn run_recall(
         );
         append_line(&log, &serde_json::to_string(&line)?)
     };
-    reading(0, None, 0.0)?;
+    reading(0, None, 0.0, None)?;
     for step in 0..config.steps {
         let windows: Vec<CausalWindow> = (0..config.batch)
             .map(|b| {
@@ -12731,8 +12817,14 @@ pub fn run_recall(
             .collect::<Result<_>>()?;
         let refs: Vec<&CausalWindow> = windows.iter().collect();
         let (ids, scored, targets) = assemble(&refs);
+        // claude-330: the found-copy pull's rows, when it is on.
+        let pulls = if config.hamming_attract > 0.0 {
+            attract_rows(&refs, attract_back)?
+        } else {
+            Vec::new()
+        };
         let started = Instant::now();
-        let (value, mut grads) = hs::with_gate_mode(
+        let (value, pulled, mut grads) = hs::with_gate_mode(
             HamiltonArm::HamiltonActive,
             config.seed,
             step + 1,
@@ -12751,7 +12843,25 @@ pub fn run_recall(
                 if !value.is_finite() {
                     return Err(invalid(format!("non-finite recall loss at step {step}")));
                 }
-                Ok((value, loss.backward()?))
+                // The task loss alone is the logged loss; the pull adds λ times its mean distance.
+                let pull = match (&hamming, pulls.is_empty()) {
+                    (Some((reads, _)), false) => {
+                        let table = model
+                            .variables()
+                            .get("embedding.weight")
+                            .ok_or_else(|| invalid("the model has no shared vector table"))?
+                            .as_tensor()
+                            .clone();
+                        reads.ask_pull(&ids, refs[0].input_ids.len(), &table, &pulls)?
+                    }
+                    _ => None,
+                };
+                let Some(pull) = pull else {
+                    return Ok((value, None, loss.backward()?));
+                };
+                let distance = f64::from(pull.to_scalar::<f32>()?);
+                let total = loss.add(&pull.affine(config.hamming_attract, 0.0)?)?;
+                Ok((value, Some(distance), total.backward()?))
             },
         )?;
         let progress = if config.steps == 1 {
@@ -12785,11 +12895,15 @@ pub fn run_recall(
         train_seconds += started.elapsed().as_secs_f64();
         loss_sum += value;
         loss_steps += 1;
+        if let Some(distance) = pulled {
+            (attract_sum, attract_steps) = (attract_sum + distance, attract_steps + 1);
+        }
         #[cfg(test)]
         RECALL_STEP_LOSSES.with(|l| l.borrow_mut().push(value));
         if (step + 1) % config.eval_every == 0 || step + 1 == config.steps {
-            reading(step + 1, Some(loss_sum / loss_steps as f64), train_seconds)?;
-            (loss_sum, loss_steps) = (0.0, 0);
+            let attract = (attract_steps > 0).then(|| attract_sum / attract_steps as f64);
+            reading(step + 1, Some(loss_sum / loss_steps as f64), train_seconds, attract)?;
+            (loss_sum, loss_steps, attract_sum, attract_steps) = (0.0, 0, 0.0, 0);
         }
     }
     // The final model and its reads, for the record and for any later reading.
@@ -15235,6 +15349,9 @@ mod tests {
             type_spin: false,
             hamming_copy_key: 1,
             hamming_copy_keys: None,
+            hamming_ask: false,
+            hamming_attract: 0.0,
+            hamming_attract_at_question: false,
             fix_input_table: false,
             train_split: None,
             opening_weight: 1,
@@ -21677,5 +21794,77 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// claude-330, I-A5: on B2's windows (header 4), the question placement pulls at exactly the
+    /// `Q(K_j)` rows, each with its episode's asked value, and at no scored row; each pull's
+    /// candidates are its one value position; the default placement pulls at the scored rows.
+    #[test]
+    fn the_question_pull_sits_at_each_episodes_question_row() -> Result<()> {
+        let header = 4;
+        let built = (0..2)
+            .map(|i| recall_query_window(17, i, SHEET_CONTEXT, header))
+            .collect::<Result<Vec<_>>>()?;
+        let windows: Vec<&CausalWindow> = built.iter().map(|(w, _)| w).collect();
+        let (ids, scored, targets) = assemble(&windows);
+        let time = windows[0].input_ids.len();
+        let pulls = attract_rows(&windows, header)?;
+        let want: Vec<(usize, u32)> = built
+            .iter()
+            .enumerate()
+            .flat_map(|(b, (_, qs))| qs.iter().map(move |q| (b * time + q.query_pos, q.ask_value)))
+            .collect();
+        assert_eq!(pulls, want);
+        assert_eq!(pulls.len(), 2 * RECALL_QUERY_EPISODES);
+        assert!(pulls.iter().all(|(row, _)| !scored.contains(&(*row as u32))), "no scored row");
+        let (pairs, spans) = crate::flock_read_hamming::pull_pairs(&ids, time, &pulls)?;
+        assert_eq!(spans.len(), pulls.len(), "every question has its copy");
+        let values: Vec<(u32, u32)> = built
+            .iter()
+            .enumerate()
+            .flat_map(|(b, (_, qs))| {
+                qs.iter().map(move |q| ((b * time + q.query_pos) as u32, (b * time + q.ask_value_pos) as u32))
+            })
+            .collect();
+        assert_eq!(pairs, values, "each episode's one value position");
+        let at_scored = attract_rows(&windows, 0)?;
+        let scored_pairs: Vec<(usize, u32)> =
+            scored.iter().map(|&r| r as usize).zip(targets.iter().copied()).collect();
+        assert_eq!(at_scored, scored_pairs);
+        assert!(attract_rows(&windows, SHEET_CONTEXT).is_err(), "no row before the window");
+        Ok(())
+    }
+
+    /// claude-330: the ask flags stay out of `config.json` when off, the pull needs the ask heads
+    /// and the question placement needs the pull, and `−aQ` cuts the ask heads after the five.
+    #[test]
+    fn the_ask_flags_are_off_by_default_and_checked() {
+        let plain = serde_json::to_string(&config(0, None)).unwrap();
+        assert!(!plain.contains("hamming_ask") && !plain.contains("hamming_attract"));
+        let on = LongConfig {
+            hamming_read: 4,
+            hamming_ask: true,
+            hamming_attract: 0.5,
+            hamming_attract_at_question: true,
+            ..config(0, None)
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_ask\":true") && json.contains("\"hamming_attract\":0.5"));
+        assert!(json.contains("\"hamming_attract_at_question\":true"));
+        let refused = |c: LongConfig| start_hamming(&c, &Device::Cpu).err().map(|e| e.to_string());
+        let no_ask = LongConfig { hamming_ask: false, hamming_attract_at_question: false, ..on.clone() };
+        assert!(refused(no_ask).unwrap().contains("--hamming-ask 1"));
+        let no_pull = LongConfig { hamming_attract: 0.0, ..on.clone() };
+        assert!(refused(no_pull).unwrap().contains("set --hamming-attract"));
+        let negative = LongConfig { hamming_attract: -1.0, ..on.clone() };
+        assert!(refused(negative).unwrap().contains("at least 0"));
+        let no_read = LongConfig { hamming_read: 0, hamming_attract: 0.0, hamming_attract_at_question: false, ..on };
+        assert!(refused(no_read).unwrap().contains("--hamming-read"));
+        assert_eq!(RECALL_ABLATIONS.len(), 5, "the five stay as claude-328 recorded them");
+        assert_eq!(Ablation::AskAtQuery.name(), "-aQ");
+        assert_eq!(Ablation::AskAtQuery.row_scope(), Some(ReadScope::Ask));
+        assert_eq!(Ablation::CopyAtQuery.row_scope(), Some(ReadScope::Copy));
+        assert_eq!(Ablation::AskAtQuery.classes(), [[false; 2]; 2]);
+        assert!(RECALL_ABLATIONS.iter().all(|a| *a == Ablation::CopyAtQuery || a.row_scope().is_none()));
     }
 }
