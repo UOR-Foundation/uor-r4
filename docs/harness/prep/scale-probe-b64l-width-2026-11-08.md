@@ -2,7 +2,7 @@
 
 Lab: claude. Item: scale-probe (#3472). Order: claude-317. Track B of Casey's 8 Nov decision, "Both in parallel" (#2028 6715318106).
 
-TEST FITNESS: round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2 FIT WITH CHANGES (a second fresh review, 8 Nov): no blockers, two majors, six minors, all applied below; "Changes from round 2" lists each. D67 pre-run review GO WITH CHANGES (8 Nov): one blocker and three minors, all applied; the section at the end lists each, with the scripts' hashes.
+TEST FITNESS: FIT WITH CHANGES, from two rounds. Round 1 FIT WITH CHANGES (a fresh non-author review, 8 Nov). Two blockers, five majors and five minors, all applied below; "Changes from round 1" lists each. Round 2 FIT WITH CHANGES (a second fresh review, 8 Nov): no blockers, two majors, six minors, all applied below; "Changes from round 2" lists each. D67 pre-run review GO WITH CHANGES (8 Nov): one blocker and three minors, all applied; the section at the end lists each, with the scripts' hashes.
 
 ## Question
 
