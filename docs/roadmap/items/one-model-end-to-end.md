@@ -8,7 +8,7 @@ open_to: lab
 needs_gpu: true
 depends_on: [turn-memory-reply]
 notebook: docs/research/notebook/float-training.md
-scope: [Cargo.lock, docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/cpu-training.md, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/Cargo.toml, crates/uor-r4-float-train/src/bin/packet-parity.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-training/examples/m-world.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-training/src/bin/m-world-recall-corpus.rs, crates/uor-r4-training/src/bin/mix-chat-corpus.rs, crates/uor-r4-training/tests/mix_chat_corpus_manifest.rs, crates/uor-r4-training/Cargo.toml, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-training/src/milestone_world_v2.rs, crates/uor-r4-cpu-train/src/fbs.rs, crates/uor-r4-cpu-train/src/lib.rs]
+scope: [Cargo.lock, docs/labs/one-model-end-to-end/**, docs/harness/prep/one-model-end-to-end*, docs/loop/tasks/one-model-end-to-end/**, docs/research/notebook/cpu-training.md, docs/research/notebook/float-training.md, docs/roadmap/items/one-model-end-to-end.md, crates/uor-r4-float-train/Cargo.toml, crates/uor-r4-float-train/src/bin/packet-parity.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/flock_read_memory.rs, crates/uor-r4-float-train/src/flock_read_hamming.rs, crates/uor-r4-training/examples/m-world.rs, crates/uor-r4-float-train/src/fbs_export.rs, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/stack/format.rs, crates/uor-r4-integer/src/stack/hamming.rs, crates/uor-r4-integer/src/stack/synthetic.rs, crates/uor-r4-integer/src/stack/tests.rs, crates/uor-r4-training/src/bin/m-world-recall-corpus.rs, crates/uor-r4-training/src/bin/mix-chat-corpus.rs, crates/uor-r4-training/tests/mix_chat_corpus_manifest.rs, crates/uor-r4-training/Cargo.toml, crates/uor-r4-integer/src/bin/fbs-toks.rs, crates/uor-r4-training/src/milestone_world_v2.rs, crates/uor-r4-cpu-train/src/bin/cpu-point-transfer-driver.rs, crates/uor-r4-cpu-train/src/fbs.rs, crates/uor-r4-cpu-train/src/lib.rs]
 ---
 
 ## Why it matters
@@ -325,6 +325,13 @@ failed diagnostic cannot contaminate the next forward on that thread. See
   - free-generation measures;
   - decode rules: greedy against a Flock rank rule;
   - integer-artifact measures.
+- **The pivot assessment** ([claude-326](../../loop/tasks/one-model-end-to-end/claude-326/ASSESSMENT.md), 8 Nov, owner decision #2028 6726003019).
+  - **Where the replies fail:** every served configuration from 4 to 8 Nov scored 0 complete on `m2-fresh256`, and the replies fail at the first reply token. There the model must choose which prompt value the question asks for.
+  - **The leading hypothesis is the read's query path:** copy heads match only the current token, and no learned-query read has learned where to look. Data is not yet excluded.
+  - **The next unit (claude-327):**
+    - a laptop first-token reading and Hamming trace on claude's seals;
+    - the 27 Oct recall probe with a query that is not the key, with a two-class arm and a header-gap arm, under its own sheet and FIT.
+  - **No one-knob language run starts on this line** until both are read.
 
 ## Done when
 
