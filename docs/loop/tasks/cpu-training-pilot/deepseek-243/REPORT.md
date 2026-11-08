@@ -51,8 +51,8 @@ This is an attribution result, not a causal selection or capability result.
   token, renderer, artifact, panel, span and executable controls while adding
   per-position metrics and per-head/per-stratum weighted-support totals.
 - Changed 4 code files plus task records, a resource ledger and the
-  notebook. Policy classifies the 11 changes as 4 code files (+550/-63),
-  3 docs files (+223/-0), and 4 other files (+249/-0); tests are inline.
+  notebook. Policy classifies the 11 changes as 4 code files (+611/-63),
+  3 docs files (+229/-0), and 4 other files (+254/-0); tests are inline.
   The ORDER gave no line estimate.
 
 ## Measurements
