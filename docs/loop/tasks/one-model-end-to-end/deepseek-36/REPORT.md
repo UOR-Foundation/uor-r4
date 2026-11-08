@@ -4,7 +4,8 @@ Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Run pin:
 `a3ac3f326fa95ffe38159cc3c589100cea627664`, reviewed runtime
-`fd303c0a72d178a467ebed99b4fefc05347e193896fc74638b2023cac0b120a1`.
+`fd303c0a72d178a467ebed99b4fefc05347e193896fc74638b2023cac0b120a1`
+([launch receipt](evidence/launch.json)).
 
 **Outcome row 5: no opening movement; the weight-8 configuration is closed.**
 All four checkpoints keep the first answer target at zero top-1 and zero top-8.
@@ -24,7 +25,8 @@ from 59 to 48 but worsens the median from the matched weight-1 run's 894 to
   comparator, but its median is 1,025 against 894 and its maximum is 4,064
   against 4,041.
 - No selected or later checkpoint completes an accepted row or a
-  complete-distinct pair. EOS remains rank 2 but never rank 1.
+  complete-distinct pair. The EOS median remains rank 2 and EOS top-1 remains
+  `0/256`.
 - `m2-reply512` remains unavailable, so this run supports no M2 claim.
 
 ## What changed
@@ -58,9 +60,10 @@ first-match map: guard is at least 93, the positive and opening-movement rows
 are not met, and top-1 is zero while top-8 is below 16. This is row 5, no
 opening movement. The configuration closes without seed 2 or a weight sweep.
 
-Training took 736.945 seconds (17,074 context tokens/s at the end). Pod uptime
-was 1,610 seconds at `$0.563/hour`, about `$0.252`. No OOM retry occurred.
-Generation used the AMD Ryzen 7 7800X3D CPU host, x86_64, 16 logical CPUs.
+Training took 736.945 seconds (17,074 context tokens/s at the end). The owned
+pod's recorded uptime was 1,610 seconds at `$0.563/hour`, about `$0.252`
+([launch receipt](evidence/launch.json)). No OOM retry occurred. Generation
+used the AMD Ryzen 7 7800X3D CPU host, x86_64, 16 logical CPUs.
 
 ## Evidence
 
@@ -85,6 +88,9 @@ Generation used the AMD Ryzen 7 7800X3D CPU host, x86_64, 16 logical CPUs.
   `READBACK=verified`, `EXIT=0`, `STOP_REASON=natural-or-failure`.
 - Store root:
   `results/deepseek/one-model-end-to-end-reply-sft-2026-11-07/runs/s1-opening-weight-20261108t081518z-2452c146afc9f2f7/`.
+- Launch/runtime receipt:
+  [`evidence/launch.json`](evidence/launch.json), including the recomputed
+  normalized runtime identity and the owned pod's up/release/down events.
 
 ## Checks run at the head
 
@@ -97,8 +103,10 @@ Generation used the AMD Ryzen 7 7800X3D CPU host, x86_64, 16 logical CPUs.
 - The run exported, graded and scored steps 256, 512, 768 and 1,024 before
   completing naturally; no instrument or hash failure occurred.
 - The deterministic selector ranked all four checkpoints and selected 256.
-- The reviewed launcher report records FIT, D67 approval and the pod's CUDA
-  whole-versus-micro-batch weighted-gradient check.
+- The prep sheet records FIT and D67 approval; the run log records the pod's
+  CUDA whole-versus-micro-batch weighted-gradient test passing.
+- Recomputing the normalized runtime identity from run pin `a3ac3f326` gives
+  `fd303c0a…`, matching the reviewed value and launch receipt.
 - `git diff --check`, `loop report --check`, `loop pr-check --local` and the
   repository quick gates are run before the exact-head review.
 
