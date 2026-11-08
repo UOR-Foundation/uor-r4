@@ -2,7 +2,7 @@
 
 [claude] (b64L) on D3 + reply-capped `mw-balp/train` × 3, at seeds 1 and 2, under [the sheet](../../../../harness/prep/one-model-end-to-end-b64l-d3mwcap-2026-11-08.md).
 
-**Outcome row 5: stopping not met, and both seeds are below 122.** Capping each repeated `mw-balp` reply at its first 8 occurrences takes stopping away: 1 and 0 of 256 replies end on EOS (bar 128; the uncapped × 3 mix gave 234 and 204). It is a mechanism result: I-3, I-c and I-xc all pass (below). Collapse cannot be read with so few stopped replies. A descriptive count that is not a bar points somewhere new: the prompt's value is in the reply's first line in **25 and 76** of 256 rows, against 0 to 2 for every earlier model on the same panel and the same rule.
+**Outcome row 5: stopping not met, and both seeds are below 122.** Capping each repeated `mw-balp` reply at its first 8 occurrences takes stopping away: 1 and 0 of 256 replies end on EOS (bar 128; the uncapped × 3 mix gave 234 and 204). It is a mechanism result: I-3, I-c and I-xc all pass (below). Collapse cannot be read with so few stopped replies. A descriptive count that is not a bar shows one new behaviour: the reply's first line now repeats a value from the prompt, in **46 and 112** of 256 rows, against 0 to 2 for every earlier model on the same panel and rule. It is the asked-for value in 25 / 76 of them and the prompt's other value in 21 / 36, so at seed 1 it is close to a coin flip between the two. That is copying from the prompt, not yet answering.
 
 ## What did not work, first
 
@@ -21,13 +21,16 @@
 
 **The served replies on `m2-fresh256`** (`served-reply-panel` at bin `be3d4cb0…`, greedy, 64-token cap):
 
-| seed | artifact (I-x) | EOS / cap stops | collapse among EOS-stopped | distinct texts / most common over all | median reply | `\n\nAssistant:` in reply | answer in first line |
+| seed | artifact (I-x) | EOS / cap stops | collapse among EOS-stopped | distinct texts / most common over all | median reply | `\n\nAssistant:` in reply | first line: asked-for value / other value |
 |---|---|---|---|---|---|---|---|
-| 1 | `812af8c7ac992b0b74f06bdc7cb817bdd4ab6adb6d2cdf5a8304d20d746d2cfa` | 1 / 255 | 1 | 96 / 35 | 64 | 116 | **25** |
-| 2 | `a346ce505bcbd60ac8e1ff6098b3b27bf941d7670ec4cc8d22358fd985ac5647` | 0 / 256 | 0 | 114 / 19 | 64 | 171 | **76** |
+| 1 | `812af8c7ac992b0b74f06bdc7cb817bdd4ab6adb6d2cdf5a8304d20d746d2cfa` | 1 / 255 | 1 | 96 / 35 | 64 | 116 | **25 / 21** |
+| 2 | `a346ce505bcbd60ac8e1ff6098b3b27bf941d7670ec4cc8d22358fd985ac5647` | 0 / 256 | 0 | 114 / 19 | 64 | 171 | **76 / 36** |
 
 - Seed 1's most common reply (35 rows) is a loop: `" I currently live in the in the in the …"`.
-- **Answer in first line** is descriptive, not a bar: the reply's text up to its first newline, lower-cased, contains one of the case's accepted answers (`labels.json`, trailing full stop dropped). On the same panel and rule: (b64L-D3) claude-309 0 / 0; (b64L-mw) claude-313 0 / 0; (b64L-d3mw) claude-315 2 / 0; (b64L-d3mw3) claude-319 0 / 0 (with 234 / 204 EOS stops). It does not check the swapped or old value is absent, so it is an upper bound on what the panel's own rule would give.
+- **The first-line count** is descriptive, not a bar. The reply's text up to its first newline, lower-cased, is checked for the case's accepted answers (`labels.json`, trailing full stop dropped). It is checked separately for the accepted answers of the other case in the same `pair_id`, which is the prompt's other value. No first line holds both.
+  - claude-321: asked-for 25 / 76, other 21 / 36.
+  - Asked-for value on the same panel and rule: (b64L-D3) claude-309 0 / 0; (b64L-mw) claude-313 0 / 0; (b64L-d3mw) claude-315 2 / 0, other 0 at seed 1; (b64L-d3mw3) claude-319 0 / 0 asked-for and 0 other at seed 1, with 234 / 204 EOS stops.
+  - The model copies a prompt value far more often than before. Which value it copies is near chance at seed 1 (25 to 21) and about 2 to 1 the asked-for one at seed 2 (76 to 36). A first line can also hold the right value in the wrong sentence: row 1 is asked for the job and replies "Your friend's name is basalt loggia."
 
 **The bars:**
 - Stopping (≥ 128 of 256 at both seeds): **not met**, 1 and 0.
@@ -63,7 +66,7 @@
 
 Row 5 offers two next levers: the counted × 6 capped mix, at 1.07 scored EOS per window (the × 1 mix's exposure), or a decode-time lever.
 
-- **For × 6 capped:** it is already built and counted (`d3mwcap6.census.json`). It matches × 1's EOS exposure, so it is the run that separates the cap from the exposure, the question this run cannot answer. It also asks whether the first-line answers survive when stopping returns.
+- **For × 6 capped:** it is already built and counted (`d3mwcap6.census.json`). It matches × 1's EOS exposure, so it is the run that separates the cap from the exposure, the question this run cannot answer. Its sheet should name the first-line count, asked-for and other value, as a descriptive reading. That shows whether the copying survives, and whether it moves towards the asked-for value, when stopping returns.
 - **For a decode-time lever:** the replies end their answer, then write `\n\nAssistant:`. An end-of-turn rule at the role header would turn those first lines into finished replies without retraining. But it is a serving rule, not a learned stop. It needs a scorer change under its own sheet, and the panel's bar counts EOS stops.
 - **Decision:** × 6 capped next, under its own prep sheet, one GPU unit. Its outcome map should carry the first-line count as a named descriptive reading beside the bars. The decode-time read (re-scoring these two seals with a role-header stop, laptop only) goes to Still open as a separate unit.
 - **Reversal cost:** low. × 6 is one GPU unit (about $3), and the decode-time read stays open. Casey can reverse it.
@@ -76,9 +79,13 @@ Row 5 offers two next levers: the counted × 6 capped mix, at 1.07 scored EOS pe
 
 - **Why stopping fell so far.** The fall is larger than the exposure change suggests. × 6 capped tests that.
 - **The decode-time read:** these two seals re-scored with an end-of-turn rule at `\n\nAssistant:`, on the laptop. It needs a scorer option and its own sheet.
-- **The first-line answers** are an upper bound until the panel's own rule reads them.
+- **The first-line count is copying, not yet answering:** asked-for and other value are close at seed 1. The panel's own rule has not read it.
+- **The `reply-cap` tool's review notes**, low severity, none affecting the registered counts (the real mix has `eos_not_at_reply_end` 0, and every scored run ends on EOS):
+  - reply runs are found from the mask alone, so a scored EOS in the middle of a run, or a run crossing a scored BOS, would merge into one reply without a refusal (`lib.rs:183–200`);
+  - `min_scored = 0` would count empty chunks (`lib.rs:276`; both binaries use 4);
+  - the window count is tested against hand-worked counts, not the trainer's own function.
 - **`mw-balp`'s licence and generator** are still unrecorded (open since claude-314).
 
 ## Plain summary
 
-We retrained the small model on everyday text plus a dialogue set in which no reply appears more than eight times. It no longer ends its replies: 1 and 0 of 256 stop, where the uncapped mix stopped on most. But it now often says the right thing first. In 25 and 76 of 256 replies, the first line holds the fact the question asked about, where earlier models managed 0 to 2. The model then writes "Assistant:" and repeats itself, instead of ending its turn. The checks show the tools worked, so this is how the model behaves. Next, a mix with more copies of each reply, which matches the earlier EOS exposure, to see whether stopping comes back and the answers stay. Two GPUs, $3.01.
+We retrained the small model on everyday text plus a dialogue set in which no reply appears more than eight times. It no longer ends its replies: 1 and 0 of 256 stop, where the uncapped mix stopped on most. But its replies now often start by repeating a value from the user's message: 46 and 112 of 256, where earlier models managed 0 to 2. That is not yet answering. The value is the one asked for in 25 and 76 replies, and the wrong one in 21 and 36, so at one seed it is close to a coin flip. After the first line, the model writes "Assistant:" and repeats itself instead of ending its turn. The checks show the tools worked, so this is how the model behaves. Next, a mix with more copies of each reply, which matches the earlier EOS exposure. It shows whether stopping comes back, and whether the copying keeps up and picks the right value more often. Two GPUs, $3.01.
