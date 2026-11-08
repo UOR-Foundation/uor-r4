@@ -55,7 +55,7 @@ This is an attribution result, not a causal selection or capability result.
   per-position metrics and per-head/per-stratum weighted-support totals.
 - Changed 4 code files plus task records, a resource ledger and the
   notebook. Policy classifies the 11 changes as 4 code files (+655/-64),
-  3 docs files (+231/-0), and 4 other files (+1,561/-0); tests are inline.
+  3 docs files (+232/-0), and 4 other files (+1,561/-0); tests are inline.
   The ORDER gave no line estimate.
 
 ## Measurements
