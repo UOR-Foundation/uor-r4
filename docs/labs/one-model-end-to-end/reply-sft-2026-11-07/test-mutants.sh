@@ -196,6 +196,9 @@ mutate wrong-sample "$JOB" \
   b724656f29bdade21aecb372d0568c48c81d78c80f43fe4de8ec667a7824ccc4 \
   0000000000000000000000000000000000000000000000000000000000000000
 mutate missing-init-check "$JOB" '[ -f "$run/init.json" ] ||' 'true ||'
+mutate missing-opening-micro-test "$JOB" \
+  'opening_weighted_micro_batches_match_the_whole_batch_step' \
+  'opening_weighted_micro_batches_match_nothing'
 mutate shared-init-approval "$JOB" \
   'init_approval="$RUN/control/init-approved-$label"' \
   'init_approval="$RUN/control/init-approved"'

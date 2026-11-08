@@ -307,6 +307,8 @@ log "building pinned binaries"
     in_space_long::tests::checkpoint_initialization
   cargo test --release --locked -p uor-r4-float-train --features cuda --lib \
     in_space_long::tests::a_step_saved_as_served
+  cargo test --release --locked -p uor-r4-float-train --features cuda --lib \
+    opening_weighted_micro_batches_match_the_whole_batch_step
 )
 (
   cd "$REPO/docs/labs/one-model-end-to-end/instrument"

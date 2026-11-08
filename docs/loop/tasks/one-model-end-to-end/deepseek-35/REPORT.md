@@ -37,18 +37,20 @@ Pending the reviewed run.
 
 - `cargo check --offline --locked -p uor-r4-float-train --lib --bin
   train-in-space`: passed.
-- Focused opening-weight tests: 2 passed.
+- Focused opening-weight tests: 3 passed, including nearest-only refusal and
+  weighted row normalization.
 - Full float-train library tests: 309 passed, 1 failed in
   `spiralcore_fbs_sheet::tests::a_saved_trunk_loads_back_exactly`
   (`owned artifact directory required`); the same failure reproduces on clean
   `main` and is unrelated to this change.
-- Reply-SFT gate: 320 checks passed.
-- Mutation suite: 135 of 135 mutations caught.
+- Reply-SFT gate: 321 checks passed.
+- Mutation suite: 136 of 136 mutations caught.
 - `bash -n`, ShellCheck and `git diff --check`: passed.
 - `loop report --check`: passed.
 
 Not run: FIT/D67 review, pod creation, training, export, panel scoring, store
-write or seal readback.
+write or seal readback. A CUDA-only whole-versus-micro-batch weighted-gradient
+test is compiled and run by the pod build before training.
 
 ## Skills used
 

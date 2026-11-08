@@ -1900,7 +1900,7 @@ fn step_gradient(
     } else {
         micro.min(windows.len())
     };
-    let total: usize = windows.iter().map(|w| w.scored_offsets.len()).sum();
+    let total = opening_weighted_total(windows, opening_weight)?;
     let mut grads: Option<candle_core::backprop::GradStore> = None;
     let mut losses = Vec::new();
     let mut shares = Vec::new();
@@ -3013,6 +3013,18 @@ fn assemble_with_opening_weight(
         }
     }
     Ok((ids, scored, targets))
+}
+
+fn opening_weighted_total(
+    windows: &[&CausalWindow],
+    opening_weight: Option<(&[u8], usize)>,
+) -> Result<usize> {
+    match opening_weight {
+        Some((mask, weight)) => Ok(assemble_with_opening_weight(windows, mask, weight)?
+            .1
+            .len()),
+        None => Ok(windows.iter().map(|w| w.scored_offsets.len()).sum()),
+    }
 }
 
 /// Whether the target at corpus `position` opens a reply: the token before it is not a response
@@ -12701,6 +12713,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if !(1..=16).contains(&config.opening_weight) {
         return Err(invalid("--opening-weight runs from 1 to 16"));
     }
+    if config.opening_weight != 1 && config.objective != PointObjective::Nearest {
+        return Err(invalid(
+            "--opening-weight changes the nearest objective's rows",
+        ));
+    }
     training_context(config.context)?;
     validate_checkpoint_selection(config)?;
     // A clock left on by a run that failed mid-step on this thread starts no stage of this one.
@@ -15037,6 +15054,11 @@ mod tests {
             assemble_with_opening_weight(&[&window], &mask, 3).unwrap();
         assert_eq!(scored, [1, 1, 1, 3]);
         assert_eq!(targets, [6, 6, 6, 8]);
+        assert_eq!(
+            opening_weighted_total(&[&window], Some((&mask, 3))).unwrap(),
+            4
+        );
+        assert_eq!(opening_weighted_total(&[&window], None).unwrap(), 2);
         let (_, default_scored, default_targets) =
             assemble_with_opening_weight(&[&window], &mask, 1).unwrap();
         assert_eq!((default_scored, default_targets), (vec![1, 3], vec![6, 8]));
@@ -15063,6 +15085,22 @@ mod tests {
         };
         let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
         assert!(json.contains("\"opening_weight\": 8"), "{json}");
+    }
+
+    #[test]
+    fn opening_weight_refuses_non_nearest_objectives() {
+        let root = init_test_dir("opening-weight-nearest");
+        let config = LongConfig {
+            objective: PointObjective::Cell,
+            opening_weight: 8,
+            ..config(0, None)
+        };
+        let refusal = run_long(&root, &root.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+        assert!(refusal.contains("--opening-weight"), "{refusal}");
+        assert!(!root.join("out").exists());
     }
 
     #[test]
@@ -16230,6 +16268,85 @@ mod tests {
             }
             assert!(compared > 0, "{case}: no gradient compared");
         }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn opening_weighted_micro_batches_match_the_whole_batch_step() {
+        let device = Device::new_cuda(0).unwrap();
+        let model = build_fbs_model(FbsArm::OneAtomActive, 1, &device).unwrap();
+        let windows: Vec<CausalWindow> = (0..4usize)
+            .map(|b| {
+                let input_ids: Vec<u32> = (0..SHEET_CONTEXT)
+                    .map(|i| ((i * 29 + b * 73) % 4095 + 1) as u32)
+                    .collect();
+                let scored_offsets: Vec<usize> = (0..=b).map(|r| 24 + r * 17).collect();
+                CausalWindow {
+                    doc_id: b,
+                    scored_targets: scored_offsets.iter().map(|&o| input_ids[o + 1]).collect(),
+                    scored_corpus_positions: scored_offsets
+                        .iter()
+                        .map(|&o| b * SHEET_CONTEXT + o + 1)
+                        .collect(),
+                    input_ids,
+                    scored_offsets,
+                }
+            })
+            .collect();
+        let mut mask = vec![1u8; windows.len() * SHEET_CONTEXT];
+        for window in &windows {
+            mask[window.scored_corpus_positions[0] - 1] = 0;
+        }
+        let refs: Vec<&CausalWindow> = windows.iter().collect();
+        let step = |micro: usize| {
+            step_gradient(
+                &model,
+                PointObjective::Nearest,
+                &refs,
+                micro,
+                SHEET_CONTEXT,
+                false,
+                1,
+                3,
+                Some((&mask, 3)),
+                |_, _| Ok(()),
+            )
+            .unwrap()
+        };
+        let (whole, whole_grads) = step(0);
+        let (split, split_grads) = step(2);
+        assert!(
+            (whole - split).abs() <= 1e-5 * whole.abs().max(1.0),
+            "loss {whole} != {split}"
+        );
+        let mut compared = 0;
+        for (name, var) in model.variables() {
+            let (a, b) = (
+                whole_grads.get(var.as_tensor()),
+                split_grads.get(var.as_tensor()),
+            );
+            assert_eq!(a.is_some(), b.is_some(), "{name}");
+            let (Some(a), Some(b)) = (a, b) else {
+                continue;
+            };
+            let flat = |t: &Tensor| {
+                t.flatten_all()
+                    .unwrap()
+                    .to_dtype(DType::F32)
+                    .unwrap()
+                    .to_vec1::<f32>()
+                    .unwrap()
+            };
+            let (a, b) = (flat(a), flat(b));
+            let scale = a.iter().fold(0f32, |m, x| m.max(x.abs()));
+            let diff = a.iter().zip(&b).fold(0f32, |m, (x, y)| m.max((x - y).abs()));
+            assert!(
+                diff <= 1e-4 * scale.max(1e-6),
+                "{name} differs by {diff} at scale {scale}"
+            );
+            compared += 1;
+        }
+        assert!(compared > 0, "no gradient compared");
     }
 
     #[cfg(feature = "cuda")]

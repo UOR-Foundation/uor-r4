@@ -147,4 +147,5 @@ OOM retry under $0.65.
 The CPU host identity, per-grade hardware sidecars, source hashes, running
 config with `opening_weight: 8`, first-target diagnostics, seal limit and store
 readback all remain mandatory. A missing or defaulted opening weight stops the
-run before training.
+run before training. The pod build must also pass the CUDA test that weighted
+whole-batch and micro-batched gradients agree.
