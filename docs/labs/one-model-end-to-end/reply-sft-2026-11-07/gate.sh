@@ -6,6 +6,7 @@ ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 JOB=${1:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/job.sh"}
 LAUNCHER=${2:-"$ROOT/docs/labs/one-model-end-to-end/reply-sft-2026-11-07/run-s1.sh"}
 TRAINER="$ROOT/crates/uor-r4-float-train/src/in_space_long.rs"
+SHEET="$ROOT/docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md"
 checks=0
 
 fail() {
@@ -138,6 +139,9 @@ require_line 'check_progress "$TRAIN_RUN/progress.jsonl"' "$JOB"
 require_line 'check_progress "$run_dir/progress.jsonl"' "$JOB"
 require_line 'select_best_checkpoint "$RUN/checkpoint-readings-$label.jsonl"' "$JOB"
 require_line 'free_complete=$(jq -er '"'"'.totals.complete | numbers'"'"' \' "$JOB"
+require_line '"$RUN/panel/$ATTEMPT/step-$(printf '"'"'%06d'"'"' "$step")-per-turn-generated.json") ||' "$JOB"
+require_line '| ($rows | any(.[]; .guard_top1 >= 93)) as $guard_safe' "$JOB"
+require_line '| ([$rows[] | select(($guard_safe | not) or .guard_top1 >= 93)]' "$JOB"
 require_line '(if $guard_safe then 0 else -(.guard_top1) end),' "$JOB"
 require_line '-(.eos_top1),' "$JOB"
 require_line '-(.free_eos_stops),' "$JOB"
@@ -145,6 +149,11 @@ require_line '-(.free_complete_rows),' "$JOB"
 require_line '.eos_rank_p50,' "$JOB"
 require_line '-(.guard_top1),' "$JOB"
 require_line '.step' "$JOB"
+require_line 'selected:$ranked[0],' "$JOB"
+require_line 'free_generation_rendering:"per-turn/v1",' "$JOB"
+require_line 'The free-generation values used by selection and the outcome map are the' "$SHEET"
+require_line '`per-turn/v1` generated panel'"'"'s EOS stops and complete accepted rows. The' "$SHEET"
+require_line '- Apply row 2 before continuing past 512. Apply rows 1 and 3-7 to the selected' "$SHEET"
 require_line 'init_approval="$RUN/control/init-approved-$label"' "$JOB"
 require_line '[ ! -e "$init_approval" ] ||' "$JOB"
 require_line 'UOR_TRAIN_INIT_APPROVAL="$init_approval" \' "$JOB"

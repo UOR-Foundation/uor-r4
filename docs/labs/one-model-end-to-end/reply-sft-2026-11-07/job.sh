@@ -411,6 +411,7 @@ select_best_checkpoint() {
          ])) as $ranked
     | {schema:"uor-r4.reply-sft-best-checkpoint/1",
        guard_safe_candidates:$guard_safe,
+       free_generation_rendering:"per-turn/v1",
        selected:$ranked[0],
        ranked:$ranked}' \
     "$readings" > "$RUN/best-checkpoint.json" ||

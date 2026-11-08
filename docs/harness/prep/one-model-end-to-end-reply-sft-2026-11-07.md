@@ -235,6 +235,11 @@ The first candidate is the best checkpoint. The job writes the complete ranked
 list and the selected row to `best-checkpoint.json`; after that mechanical
 selection, the outcome map below is applied in its listed order.
 
+The free-generation values used by selection and the outcome map are the
+`per-turn/v1` generated panel's EOS stops and complete accepted rows. The
+`one-user-turn/v1` generated panel is an audit control; it does not select the
+checkpoint or change an outcome.
+
 The first-match outcome map is:
 
 | order | condition at the best checkpoint through 1,024 | outcome |
@@ -341,6 +346,7 @@ Resource projection:
 - Out of memory: retry micro-batch 8 once; a second failure is `NOT_RUN`.
 - Non-finite loss, missing checkpoint, failed export/reload, or changed input
   hash: stop that seed.
-- Apply the first-match outcome map before continuing past 512 and before seed 2.
+- Apply row 2 before continuing past 512. Apply rows 1 and 3-7 to the selected
+  best checkpoint after all available checkpoints through 1,024, before seed 2.
 - Never cancel a healthy run because a self-set timer or budget expires; renew
   and record. Never touch Claude's pods, leases, files or GPU devices.

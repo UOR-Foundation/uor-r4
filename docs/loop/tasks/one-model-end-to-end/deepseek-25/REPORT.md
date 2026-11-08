@@ -77,6 +77,10 @@ spend.
 - **D67 found the pre-registration still ambiguous.** The deepseek-23 ORDER
   retained the retired early continuation stop, and neither it nor the sheet
   defined how "best checkpoint" would be selected before the results.
+- **The final FIT review found three selector-contract gaps.** One stop-rule
+  sentence still required the whole outcome map before step 512, the free
+  generation rendering was not named, and the guard-safe/first-result selector
+  semantics had no permanent mutations.
 - **The seal included the panel build target and duplicate downloads.** That
   contradicted the sheet's retained-storage projection and risked uploading
   build products as research evidence.
@@ -175,7 +179,10 @@ spend.
   complete accepted rows, EOS median rank, continuation guard and earlier step
   break ties. The job writes the ranked list and selection to
   `best-checkpoint.json`. The decision and reversal are recorded in
-  `DECISION.md`.
+  `DECISION.md`. Only `per-turn/v1` free-generation readings select or classify
+  a checkpoint; `one-user-turn/v1` is an audit control. The sheet's stop rule
+  now applies only row 2 before step 512 and applies the remaining rows to the
+  selected checkpoint after all available checkpoints through 1,024.
 - The trainer publishes `.init-ready` only after writing `init.json`, then waits
   for the controller's approval file before optimization. The controller
   validates the exact initialization record and releases that wait; an invalid
@@ -236,9 +243,16 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `b1ac030988746b155a36007ef32e79649a0beaaf2d6932f9250124bb59b4bfbe`,
   reviewer session `01a1b86a-98d9-7483-9a6f-7da2d0da013c`, because the order
   retained the retired early guard stop and "best checkpoint" was undefined.
-- `gate.sh`: 197 checks passed after adding the deterministic best-checkpoint
-  selector and its ordering pins.
-- `test-mutants.sh`: 71 of 71 semantic mutations caught.
+- Post-reconciliation FIT review: **NO-GO** at
+  `a668947d4e6243967bf3e74fa928486aa7d89f1e`, reviewed-runtime
+  `43791d32d7883925a2b48d5f0ae6e0a99ddbc3c011993449a1b583d91a049740`,
+  reviewer session `01a1b872-d7dc-7930-a937-2cb0d1dc1215`, because one stop
+  sentence, the free-generation rendering, and selector regression coverage
+  were still ambiguous.
+- `gate.sh`: 205 checks passed after pinning the reconciled stop sentence,
+  per-turn source, guard-safe filter, first selected result, rendering label and
+  full selector ordering.
+- `test-mutants.sh`: 76 of 76 semantic mutations caught.
 - Direct evaluation of the progress predicate accepted null and absent step-0
   training loss; it rejected finite, infinite and string step-0 training loss,
   non-finite positive-step training loss, and null or non-finite DEV loss,

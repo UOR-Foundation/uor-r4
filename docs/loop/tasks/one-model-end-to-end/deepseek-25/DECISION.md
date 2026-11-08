@@ -21,10 +21,11 @@ checkpoint through 1,024. The sheet did not define "best", so outcome rows 1 and
 2. If any checkpoint has `guard_top1 >= 93`, only those guard-safe checkpoints
    are candidates. If none are guard-safe, all checkpoints remain candidates
    and the first selection key is guard top-1 descending.
-3. Candidates are ordered by teacher-forced EOS top-1 descending, free EOS stops
-   descending, complete accepted rows descending, EOS median rank ascending,
-   guard top-1 descending, then step ascending. The first candidate is the
-   selected best checkpoint.
+3. Candidates are ordered by teacher-forced EOS top-1 descending, `per-turn/v1`
+   free EOS stops descending, `per-turn/v1` complete accepted rows descending,
+   EOS median rank ascending, guard top-1 descending, then step ascending. The
+   first candidate is the selected best checkpoint. The `one-user-turn/v1`
+   generated panel remains an audit control.
 4. The job writes the ranked candidates and selected checkpoint to
    `best-checkpoint.json`. The outcome map is applied to that exact selection.
 
