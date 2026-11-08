@@ -29,7 +29,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 Red/focused/full logs are under `local/kimi/studio-agent-session/`; delayed evidence is under `verifier-delayed/`. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved in a head-specific directory after commit. Fresh-main logs and fresh review are **NOT_RUN**. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes.
 
-Agent-38 returned CHANGES at the base. The follow-up fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 stays draft with `References #3500`; issue #3500 remains open. No production publisher was invoked.
+Agent-38 returned CHANGES at the base. A later full-suite run produced one intermittent `document is not defined` effect-cleanup error; kimi-61 repairs the test's un-acted unmount as an instrument race without changing production cleanup. The follow-up fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 stays draft with `References #3500`; issue #3500 remains open. No production publisher was invoked.
 
 ## Skills used
 
