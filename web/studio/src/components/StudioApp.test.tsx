@@ -300,6 +300,7 @@ describe('StudioApp', () => {
         const ui = makeUi();
         let items = [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }];
         sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => items[0]?.id ?? null);
         ui.clearSessions = vi.fn(() => { items = []; return { cleared: 1, total: 1 }; });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={ui} download={vi.fn()} />, host);
@@ -336,6 +337,7 @@ describe('StudioApp', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
         sessions.listSessions = vi.fn(() => [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }]);
+        sessions.activeSessionId = vi.fn(() => 'session-a');
         sessions.exportSession = vi.fn().mockReturnValueOnce(null).mockReturnValueOnce('{"schema":"uor-r4.studio-session/1"}');
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
@@ -534,6 +536,7 @@ describe('StudioApp', () => {
     it('keeps the partial session-clear warning after refreshing sessions', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
+        sessions.listSessions = vi.fn(() => [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 0, preview: '' }]);
         sessions.activeSessionId = vi.fn(() => 'session-a');
         const ui = makeUi();
         ui.clearSessions = vi.fn(() => ({ cleared: 1, total: 2 }));

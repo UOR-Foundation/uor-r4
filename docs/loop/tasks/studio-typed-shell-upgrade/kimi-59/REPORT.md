@@ -5,7 +5,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 ## What did not work
 
 - The composed rewrite moved five navigation commands out of the base `Navigation` group. The first regression test checked only Agent and therefore missed the drift. Base source comparison confirmed the issue.
-- Repeated interruption could reuse a stopped generation. The reducer now explicitly refuses an action whose active ID is already current, and the repeated-action test proves object/state identity does not change.
+- The existing mismatch guard already rejected a repeated identical interruption in the red run. The new explicit current-ID guard and repeated-action characterization test document that invariant; this was not a reproduced repeated-application defect.
 - `getMode` could throw outside the generation failure guard. The shared `makeSessions` defaults still returned create/select/delete success without mutating a catalog, and the SessionList active-delete fixture selected an existing row instead of creating a replacement.
 - Fresh-main wording in kimi-58 implied nonexistent logs, and the advisory list mentioned an ORDER read-path warning even though the actual check passed. The kimi-57 measurement heading was historical but insufficiently explicit.
 - The browser proved exact-response presence but not exact restored content, and could resume before generation completed.

@@ -1,5 +1,5 @@
 import type { LifecycleStore, SessionSummary } from '../state/lifecycle.js';
-import { createGenerationAdapter } from './generation.js';
+import { createGenerationAdapter, GENERATION_FINISHED_EVENT } from './generation.js';
 import type { SessionApi } from './workflow.js';
 
 interface SessionSnapshot {
@@ -22,6 +22,7 @@ export interface AgentSessionController {
 
 export function createAgentSessionController(store: LifecycleStore, sessions: SessionApi): AgentSessionController {
     const generation = createGenerationAdapter(store, sessions);
+    let interrupting = false;
 
     function read(): SessionSnapshot | null {
         try {
@@ -39,12 +40,16 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
         if (!snapshot) return false;
         const active = store.getState().session.activeGeneration;
         if (active && active.sessionId !== snapshot.activeId) {
+            if (active.canStop === false) return false;
+            interrupting = true;
             try {
                 sessions.stopGeneration();
                 store.dispatch({ type: 'session/interrupted', activeId: snapshot.activeId, items: snapshot.items, generationId: active.generationId });
             } catch {
+                interrupting = false;
                 return false;
             }
+            interrupting = false;
             return store.getState().session.activeGeneration === null && store.getState().session.activeId === snapshot.activeId;
         }
         store.dispatch({ type: 'session/synchronized', activeId: snapshot.activeId, items: snapshot.items });
@@ -79,6 +84,8 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function resume(id: string): SessionSummary | null {
         if (store.getState().session.phase === 'generating') return null;
         try {
+            const before = read();
+            if (!before?.items.some((item) => item.id === id)) return null;
             return sessions.selectSession(id) ? verifiedActive(id) : null;
         } catch {
             return null;
@@ -88,6 +95,8 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
     function rename(id: string, title: string): boolean {
         if (store.getState().session.phase === 'generating') return false;
         try {
+            const before = read();
+            if (!before?.items.some((item) => item.id === id)) return false;
             const normalized = title.slice(0, 80);
             if (!sessions.renameSession(id, normalized)) return false;
             const snapshot = read();
@@ -103,8 +112,9 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
         if (store.getState().session.phase === 'generating') return null;
         try {
             const before = read();
+            if (!before?.items.some((item) => item.id === id)) return null;
             const duplicateId = sessions.duplicateSession(id);
-            if (!before || !duplicateId || duplicateId === id || before.items.some((item) => item.id === duplicateId)) return null;
+            if (!duplicateId || duplicateId === id || before.items.some((item) => item.id === duplicateId)) return null;
             const after = read();
             const duplicate = after?.items.find((item) => item.id === duplicateId);
             if (!after || !duplicate || after.activeId !== before.activeId) return null;
@@ -148,6 +158,8 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
         }
     }
 
+    const completed = () => { if (!interrupting) refresh(); };
+    document.addEventListener(GENERATION_FINISHED_EVENT, completed);
     refresh();
 
     return {
@@ -180,6 +192,7 @@ export function createAgentSessionController(store: LifecycleStore, sessions: Se
             refresh();
         },
         dispose() {
+            document.removeEventListener(GENERATION_FINISHED_EVENT, completed);
             generation.dispose();
         },
     };

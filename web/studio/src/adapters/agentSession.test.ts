@@ -261,3 +261,51 @@ describe('verified no-active deletion', () => {
         expect(store.getState().session.activeId).toBeNull();
     });
 });
+
+
+describe('fail-closed session operations and live catalog', () => {
+    it('does not mutate duplicate, resume, or rename after a failed pre-read', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        const controller = control(store, state.api);
+        state.api.listSessions = vi.fn(() => { throw new Error('read failed'); });
+        expect(controller.duplicate('session-a')).toBeNull();
+        expect(state.api.duplicateSession).not.toHaveBeenCalled();
+        expect(controller.resume('session-a')).toBeNull();
+        expect(state.api.selectSession).not.toHaveBeenCalled();
+        expect(controller.rename('session-a', 'Changed')).toBe(false);
+        expect(state.api.renameSession).not.toHaveBeenCalled();
+    });
+
+    it('refreshes catalog message metadata when generation completes', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        const controller = control(store, state.api);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        expect(controller.send('17+25')).toBe(true);
+        state.items[0].messageCount = 2;
+        state.items[0].preview = '42';
+        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'complete', generationId: 42 } }));
+        expect(store.getState().session.items[0].messageCount).toBe(2);
+        expect(store.getState().session.items[0].preview).toBe('42');
+    });
+
+    it('does not stop or relabel a non-stoppable prediction during session change', () => {
+        const store = new LifecycleStore();
+        const state = fixture();
+        state.api.getMode = vi.fn((): 'wasm' | 'api' => 'wasm');
+        const controller = control(store, state.api);
+        store.dispatch({ type: 'artifact/selected', sourceId: 'model-a' });
+        store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: { schema: 'uor-r4.lut-discrete-trunk/1', canGenerate: false, canPredict: true, engineSupported: true } });
+        expect(controller.send('predict')).toBe(true);
+        expect(store.getState().session.activeGeneration?.canStop).toBe(false);
+        state.activeId = 'session-b';
+        expect(controller.refresh()).toBe(false);
+        expect(state.api.stopGeneration).not.toHaveBeenCalled();
+        expect(store.getState().session.activeId).toBe('session-a');
+        expect(store.getState().session.activeGeneration?.sessionId).toBe('session-a');
+        document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { outcome: 'complete', generationId: 42 } }));
+        expect(controller.refresh()).toBe(true);
+        expect(store.getState().session.activeId).toBe('session-b');
+    });
+});

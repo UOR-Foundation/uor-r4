@@ -174,5 +174,9 @@ describe('SessionList', () => {
         expect(host.querySelector('dialog')).not.toBeNull();
         act(() => { button('Confirm delete').click(); });
         expect(api.deleteSession).toHaveBeenCalledWith('session-a');
+        expect(host.querySelector('dialog')).toBeNull();
+        expect(host.querySelector('[role="alert"]')).toBeNull();
+        expect(store.getState().session.activeId).toBe('session-new-2');
+        expect(Array.from(host.querySelectorAll('li strong')).some((node) => node.textContent === 'New conversation')).toBe(true);
     });
 });

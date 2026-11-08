@@ -354,6 +354,13 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
         }, sessionId);
         mountError = evaluation.result.value;
     }
+    if (options.typed || options.mountError) {
+        const interactionSettleDeadline = Date.now() + 1000;
+        while (Date.now() < interactionSettleDeadline) {
+            await drainChildSessions();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+    }
     const requested = cdp.events.slice(before)
         .filter((e) => e.method === 'Network.requestWillBeSent')
         .map((e) => e.params.request.url);
