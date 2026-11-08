@@ -124,6 +124,7 @@ describe('desktop Git and terminal actions', () => {
             throw new Error('unexpected command: ' + command);
         });
         (window as unknown as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke } };
+        // @ts-expect-error The plain-JavaScript desktop adapter has no declaration file.
         await import('../../assets/js/desktop_actions.js');
         const actions = (window as unknown as { UORDesktopActions: { available: boolean; chooseProjectFolder(): Promise<{ path: string }> } }).UORDesktopActions;
         expect(actions.available).toBe(true);
