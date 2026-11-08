@@ -18,7 +18,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - Part B's prep sheet (new), after two FIT rounds, with every finding applied.
 - This REPORT.
-- No code, data, bar, status, scope or cap changed. The notebook row lands after claude-325's PR, which adds a row at the same place in the same table.
+- One notebook row in `docs/research/notebook/float-training.md`, above claude-325's.
+- No code, data, bar, status, scope or cap changed.
 
 ## Measurements
 
