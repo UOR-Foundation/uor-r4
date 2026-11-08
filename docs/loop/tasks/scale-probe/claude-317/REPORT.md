@@ -2,7 +2,7 @@
 
 Lab: claude. Order: [ORDER.md](ORDER.md). Item: [scale-probe](../../../../roadmap/items/scale-probe.md) (#3472). Pin: `ff5156bcc9539aa5bccd0319df3d96ee5dd5a71f`. Sheet: [scale-probe-b64l-width-2026-11-08.md](../../../../harness/prep/scale-probe-b64l-width-2026-11-08.md). PR #3842.
 
-**The outcome, by the sheet's Bar: row 2b, "rising below 256 only".**
+**The outcome: row 6, "nothing read", as registered (I-q failed); row 2b, "rising below 256 only", after the in-unit I-q repair, a deviation recorded under Decision review.**
 - R2, (w256) against (w128), is **ahead** at both seeds, both pairings, with the unseen split ahead too.
 - R1, (w512) against (w256), is **not read**: width 512 did not fit the card.
 
@@ -25,10 +25,10 @@ Every number below names its source. The run scripts are in `local/claude/claude
   - **The repair, inside this unit's bound (claude's decision review, logged in `msg-iq.md`):** one pod (R) re-scored both R2 arms from their seals on one build: claude-301's (w256) seeds 1 and 2, and pod C's (w128) seeds 1 and 2. Fresh pre-run review: GO, no blocker (`d67-rescore.md`).
   - What the repair measured:
     - **Same pod, same build:** (w128) s1 scored first and again last gives bit-identical rows on all five splits (pod R `drift.txt`). That is 0 hits of drift.
-    - **Pod to pod:** (w128) s1 is 216,455 on pod R against 215,642 on pod C (+813). (w256) s1 is 331,734 on pod R against claude-301's 331,698 (+36).
+    - **Pod to pod:** (w128) s1 is 216,455 on pod R against 215,642 on pod C (+813); (w128) s2 is 207,836 against 210,073 (−2,237). (w256) s1 is 331,734 on pod R against claude-301's 331,698 (+36).
     - The binaries are identical: pod R's `binary-vs-c.txt` reads "same binary as pod C". So the drift comes from the instance, not the build.
-    - An odd point, recorded and not classified: pod R's (w256) s1 DEV rows equal pod C's I-q re-score (both `08e1c1ee…`), yet pod R's (w128) s1 rows differ from pod C's own scoring of them.
-  - The largest cross-pod drift, 813 hits, is 0.7% of R2's smallest d (115,279).
+    - An odd point, recorded and not classified: pod R's (w256) s1 DEV rows equal pod C's I-q re-score (both `08e1c1ee…`), yet pod R's (w128) s1 rows differ from pod C's own scoring of them. The drift looks per instance and per input, not one offset for the whole pod.
+  - The largest cross-pod drift, 2,237 hits ((w128) s2), is 1.9% of R2's smallest d (115,279).
 - **I-x fails for (w128): the exporter cannot export a 2-head Hamming read.**
   - `cpu-fbs-export` refuses both (w128) cells: "run config Hamming read count differs from the checkpoint" (`crates/uor-r4-cpu-train/src/fbs_snapshot_cpu.rs` ~910).
   - It compares the run config's `hamming_read` (2) with the model config's `heads`, which is 4 for every cell, i.e. the model's own head count.
@@ -73,18 +73,18 @@ All are pooled over 1,460,697 held-out rows (row identity `5f88a5b3…`), graded
   - (w256) against T2: ahead, +75,038 / +85,590 (claude-301; I-r).
 - **R5, the curve (recorded):** at two widths the "fit" is the line through the two means: **+124,850 top-1 rows per doubling, from 128 to 256**. Whether that is distinguishable from flat is R2's verdict, ahead, and never the fit alone. The 512 point is missing.
 - **R6, the contrast (pod C's build, d only, one seed, no verdict):**
-  - (w128h4) s1 scores 220,083: +4,441 against (w128) s1 on the same pod, and −111,615 against (w256) s1 (cross-pod, drift at most 813).
+  - (w128h4) s1 scores 220,083: +4,441 against (w128) s1 on the same pod, and −111,615 against (w256) s1 (cross-pod, drift at most 2,237).
   - So doubling the Hamming heads at width 128 moves about 4% of what doubling the width moves. That points to width, not the head count, as R2's cause. With one seed, it only points.
 
 **R4, speed** (laptop, one process at a time):
 
 | cell | training, positions/s | served decode, tokens/s | served overall, tokens/s |
 |---|---|---|---|
-| (w128) s1 / s2 | 32,222 / 32,191 | not exported (I-x) | — |
+| (w128) s1 / s2 | 32,223 / 32,192 | not exported (I-x) | — |
 | (w128h4) s1 | 27,666 | 2,751 | 2,740 |
-| (w256) s1 | 18,429 | 1,673 | 1,666 |
+| (w256) s1 | 18,430 | 1,673 | 1,666 |
 
-- Training: 16,384 steps × 64 × 192 positions over each cell's sealed `train.seconds` (6,248 / 6,254 / 7,277 / 10,924 s), on one RTX 5090. Positions are an upper bound on scored tokens, and the count is the same for every cell.
+- Training: 16,384 steps × 64 × 192 positions over each cell's sealed `train.seconds` (6,248 / 6,254 / 7,277 / 10,924 s), rounded, on RTX 5090s: pod C for (w128) and (w128h4), claude-301's pod for (w256). Positions are an upper bound on scored tokens, and the count is the same for every cell.
 - Served: `served-reply-panel` on `m2-fresh256` (256 rows, 16,384 reply tokens each). The binary is claude-316's build `45f6692a…`, the one #3841 merged as `main` `3d3bbb6a`. Its rows equal `be3d4cb0`'s on claude-313's artifact (`claude-316/compare.txt`).
 - I-xc: `cpu-fbs-export` `724a3b78…` re-exports claude-313's seal byte for byte (`1c9ae43c…`).
 - I-x artifacts: (w128h4) `b9e837cf…` (1,083,584 bytes), (w256) `9a370566…` (2,156,416 bytes) (`served/SHA256SUMS`).
@@ -121,12 +121,12 @@ The run's own gates:
 **Repairing I-q inside this unit, and reading R2 from the repair.**
 - The sheet's row 6 says an I-q failure leaves R1 and R2 unread, and that "the repair unit ties (w256) again before any width call". The ORDER's bound allows one repair unit for an instrument failure.
 - The claude lab ran that repair inside this unit instead of opening a new one. It cost $0.17, and the inputs were sealed and in the store. The decision is logged for Casey in `msg-iq.md` on #3472.
-- The tie holds: pod R's (w256) s1 is within 36 hits of claude-301's, and the same pod reproduces itself exactly. So R2 enters the Bar from pod R's rows.
+- Both arms were scored on one pod and one build, which reproduces itself bit for bit (w128-s1 twice: 216,455 both times). The registered exact-hash tie is still unmet: pod R's (w256) s1 DEV is `08e1c1ee…`, not claude-301's `488cf911…`. So R2 enters the Bar from pod R's rows as a deviation, not as the registered reading.
 - Pod C's rows give the same verdict, so the call does not hang on which build is read.
 
 **Reading R4 with (w128) unexported.** The exporter's refusal is a check that conflates two counts, not a fault in the model. Fixing it is code outside this ORDER's files (`crates/uor-r4-cpu-train`). R4 is reported for the cells that export, and the gap is named.
 
-### What it unlocks (the outcome map, row 2b)
+### What it unlocks (the outcome map, row 2b after the repair; row 6 as registered)
 
 Row 2b reads "as row 2, with the cause of R1's absence named". **The cause:** at width 512, batch 64, the trainer's peak memory does not fall with the micro-batch, so a 32 GB card cannot hold it.
 
@@ -151,7 +151,7 @@ Nothing is closed: no configuration and no mechanism (§4.1).
 - **Served speed against context length.** The scorer has no context option.
 - **Served speed at (w128) 2 heads.** It waits on the exporter's Hamming count check.
 - **Served-against-trained quality parity.** That is claude-308's open item; this unit claims speed only.
-- **Why pod-to-pod drift differs between cells** (the odd point under I-q). It is recorded, not classified.
+- **Why pod-to-pod drift differs between cells** (the odd point under I-q). It is recorded, not classified; it looks per instance and per input, not pod-wide.
 
 ## Plain summary
 
