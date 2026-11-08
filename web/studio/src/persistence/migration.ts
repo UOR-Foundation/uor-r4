@@ -63,6 +63,7 @@ interface PersistenceRuntime {
     createCopyForwardPlan(snapshot: MigrationEntry[]): MigrationEntry[];
     migrateStorage(storage: LifecycleMigrationStorage): LifecycleMigrationResult;
     createLifecyclePersistence(storage: LifecycleMigrationStorage): LifecyclePersistence;
+    activate(typed: boolean): LifecycleMigrationResult;
     status(): LifecycleMigrationResult;
 }
 
@@ -84,6 +85,10 @@ export function migrateLifecycleStorage(storage: LifecycleMigrationStorage): Lif
 
 export function createLifecyclePersistence(storage: LifecycleMigrationStorage): LifecyclePersistence {
     return runtime().createLifecyclePersistence(storage);
+}
+
+export function activateStudioMigration(typed: boolean): LifecycleMigrationResult {
+    return runtime().activate(typed);
 }
 
 export function studioMigrationStatus(): LifecycleMigrationResult {
