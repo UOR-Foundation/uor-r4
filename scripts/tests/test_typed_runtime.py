@@ -39,6 +39,8 @@ class TypedRuntimeContractTests(unittest.TestCase):
         self.assertIn('build_serve_wasm.sh', source)
         self.assertIn('npm run build', source)
         self.assertIn('/?typed=1', source)
+        self.assertIn('local_target="${CARGO_TARGET_DIR:-$repo_root/target}/native-runner"', source)
+        self.assertIn('local_chat="$local_target/release/uor-chat"', source)
         result = run('bash', str(RUNNER), '--local', '--check')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('local: web/studio/dist', result.stdout)

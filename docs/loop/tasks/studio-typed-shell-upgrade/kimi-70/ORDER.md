@@ -8,6 +8,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Tauri stages that legacy page, then constructs `WebviewUrl::App("index.html")`; no typed mount or shared `dist` packaging exists.
 - Runtime allowlisting and package verification understand legacy source files, not hashed Vite assets or the early migration runtime.
 - Packaged-window acceptance found that the typed Changes/Terminal panels construct a second desktop adapter without the declared Tauri `invoke`, falsely reporting browser-only capability while native folder access works. Repair the existing factory default and its regression coverage without changing host approval or adding a service.
+- Exact-head acceptance then failed to build `uor-chat` after the desktop verifier had used the same target: unhashed mixed-workspace artifacts produced duplicate tokenizer/serde types even after package cleaning. A fresh isolated target succeeded. Namespace the local runner's generated target and prove the desktop-before-native order without changing dependency versions or model code.
 
 ## Selected approach and cancel probe
 

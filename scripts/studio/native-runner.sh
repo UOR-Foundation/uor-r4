@@ -89,6 +89,8 @@ if [ "${1:-}" = '--local' ]; then
             exit 1
         fi
     done
+    local_target="${CARGO_TARGET_DIR:-$repo_root/target}/native-runner"
+    export CARGO_TARGET_DIR="$local_target"
     (
         cd "$repo_root/web/studio"
         npm ci
@@ -97,10 +99,10 @@ if [ "${1:-}" = '--local' ]; then
     )
     (
         cd "$repo_root"
-        cargo build --release -p uor-r4-integer --features serving-wasm --bin uor-chat
+        cargo build --locked --release -p uor-r4-integer --features serving-wasm --bin uor-chat
     )
     studio_root="$repo_root/web/studio/dist"
-    local_chat="${CARGO_TARGET_DIR:-$repo_root/target}/release/uor-chat"
+    local_chat="$local_target/release/uor-chat"
     verify_hash "${studio_root}/pkg/synthetic-stack.lut" "$STACK_SHA256"
     verify_hash "${studio_root}/pkg/tokenizer.json" "$TOKENIZER_SHA256"
     UOR_RUNNER_TOKEN="$(openssl rand -hex 32)"
