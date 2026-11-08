@@ -10,7 +10,7 @@ Agent-54 correctly blocked the acceptance head because its host/product/current-
 
 `docs/roadmap/items/studio-typed-shell-upgrade.md` adds the narrow paths needed by the already reviewed native acceptance: `src-tauri/src/lib.rs`, `src-tauri/src/main.rs`, `src-tauri/tests/**`, `web/studio/assets/js/desktop_actions.js`, `scripts/tests/test_typed_runtime.py`, `docs/products/desktop-client.md`, `docs/integration/current-state.md`, and the two dated final-acceptance plan/spec files. No broad root wildcard or unrelated path was added.
 
-Size: one documentation file, +1/-1 line (the YAML scope list). The ORDER's documentation-only estimate is met; there is no code or generated diff.
+Size: the gate reports **3 documentation files, +58/-1 lines**. The item scope line itself is +1/-1; the remaining additions are this ORDER and REPORT. The ORDER's documentation-only estimate is met; there is no code or generated diff.
 
 ## Measurements
 
@@ -18,7 +18,7 @@ The scope list now covers every non-always-allowed path identified by agent-54's
 
 ## Checks run at the head
 
-Harness build, `loop report --check`, `loop pr-check --local`, and `loop gates --full` are required for this documentation-only PR and their outputs are retained under `local/kimi/studio-scope/<HEAD>/`. Fresh review and protected delivery are not inferred from local checks.
+Harness build, `loop report --check`, `loop pr-check --local`, and all 11 `loop gates --full` checks passed. Logs are retained under `local/kimi/studio-scope/1b85c53174fb73ebd9c43fef776fb5de3c64fe52/`, with the gate ledger and detailed gate logs under `local/kimi/gates/`. The local scope PASS reads the item at the merge base, so it validates only the three always-allowed changed paths in this PR; the nine new scope entries were inspected directly and still require acceptance-branch revalidation after merge. Fresh review and protected delivery are not inferred from local checks.
 
 ## Skills used
 
