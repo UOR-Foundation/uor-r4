@@ -5,11 +5,12 @@ Lab: deepseek. Item:
 (#3407). Order: [ORDER.md](./ORDER.md). Base: `6a5d51172`.
 
 **The global opening point table does not transfer to `m2-fresh256`.** It
-changed 236 of 256 first tokens under `per-turn/v1` and all 256 under
+changed 216 of 256 first tokens under `per-turn/v1` and 247 under
 `one-user-turn/v1`, but found the correct first token in neither rendering
-(0/256). Only one row reached top 32. The shuffled-target controls also found
-0/256 top-1, so the treatment has no measured opening gain. Complete replies
-and complete-distinct pairs remained 0/256 and 0/128 in every full-reply arm.
+(0/256). One row per rendering reached top 32. The shuffled-target controls
+also found 0/256 top-1, so the treatment has no measured opening gain.
+Complete replies and complete-distinct pairs remained 0/256 and 0/128 in every
+full-reply arm.
 
 ## What did not work, first
 
@@ -20,7 +21,7 @@ and complete-distinct pairs remained 0/256 and 0/128 in every full-reply arm.
 - **The finite target vocabulary is part of the gap.** The 256 panel rows use
   20 distinct first-target tokens. Eight of those tokens never occur as a
   point-table target. The other twelve do occur, but none reached top 8 under
-  either rendering and only one reached top 32.
+  either rendering; one row per rendering reached top 32.
 - **A nearest prompt point is not a query-conditioned value reader.** Point
   changes were active, but they selected generic frequent reply openings
   instead of the role-specific literal requested by the question. The result
@@ -34,20 +35,25 @@ and complete-distinct pairs remained 0/256 and 0/128 in every full-reply arm.
 
 `cpu-point-transfer-driver` now has an opt-in panel mode that:
 
-- validates exact artifact, TRAIN corpus and all five panel file hashes;
+- validates exact artifact, TRAIN corpus and all five panel file hashes, the
+  complete panel manifest and unique case/history/pair identities;
 - renders `m2-fresh256` exactly as `served-reply-panel` under either registered
   rendering;
 - builds the point table only from TRAIN reply openings, skipping EOS;
 - treats panel labels only as evaluation targets;
+- refuses exact panel text, accepted replies and shared six-word grams in the
+  TRAIN corpus;
 - reports raw, point, shuffled-point and training-mode constant baselines,
-  per stratum and overall;
+  per stratum and overall, including per-stratum paired comparisons;
 - checks every query and served-token decision for parity;
 - emits `memory-scaffold.uorlut`, `point.uorlut`,
   `shuffled-point.uorlut`, and `report.json`, so the unchanged reply scorer
   can evaluate the complete path.
 
-Point table construction is now parallel across independent windows. The full
-74,340-opening build and panel read used 32 threads rather than one.
+Point table construction and the document overlap audit are now parallel
+across independent windows. The full 74,340-opening build and panel read used
+32 threads rather than one. Raw and treatment openings use the artifact's
+served nearest head; the writer query remains the point-table key.
 
 ## Measurements
 
@@ -59,12 +65,32 @@ corpus is 6,444,377 tokens with 4,059,876 scored targets. The point table has
 
 | Rendering | Raw top-1 | Point changed raw | Point top-1 | Point top-8 | Point top-32 | Shuffled top-1 | Constant top-1 |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `per-turn/v1` | 0 | 236 | **0** | 0 | 1 | 0 | 0 |
-| `one-user-turn/v1` | 0 | 256 | **0** | 0 | 1 | 0 | 0 |
+| `per-turn/v1` | 0 | 216 | **0** | 0 | 1 | 0 | 0 |
+| `one-user-turn/v1` | 0 | 247 | **0** | 0 | 1 | 0 | 0 |
 
 Every `point_vs_shuffled`, `point_vs_raw` and `point_vs_constant` paired
 gain was 0 against threshold 2. Query mismatches, point served-token
 mismatches and shuffled served-token mismatches were all 0/256.
+
+### Per-stratum opening controls
+
+| Rendering | Stratum | Rows | Point changed raw | Point top-1 | Point top-8 | Point top-32 | Paired gain / threshold |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `per-turn/v1` | `length2` | 64 | 52 | 0 | 0 | 0 | 0 / 2 |
+| `per-turn/v1` | `length4` | 64 | 56 | 0 | 0 | 1 | 0 / 2 |
+| `per-turn/v1` | `length8` | 64 | 56 | 0 | 0 | 0 | 0 / 2 |
+| `per-turn/v1` | `reassert` | 32 | 24 | 0 | 0 | 0 | 0 / 2 |
+| `per-turn/v1` | `update` | 32 | 28 | 0 | 0 | 0 | 0 / 2 |
+| `one-user-turn/v1` | `length2` | 64 | 60 | 0 | 0 | 0 | 0 / 2 |
+| `one-user-turn/v1` | `length4` | 64 | 62 | 0 | 0 | 0 | 0 / 2 |
+| `one-user-turn/v1` | `length8` | 64 | 64 | 0 | 0 | 1 | 0 / 2 |
+| `one-user-turn/v1` | `reassert` | 32 | 30 | 0 | 0 | 0 | 0 / 2 |
+| `one-user-turn/v1` | `update` | 32 | 31 | 0 | 0 | 0 | 0 / 2 |
+
+Every per-stratum point-vs-shuffled, point-vs-raw and point-vs-constant paired
+gain was also zero against its row-count threshold. The overlap control passed
+over 25,071 documents and 79,679 assistant replies with zero exact-panel,
+accepted-reply or shared-six-word-gram hits.
 
 ### Complete replies
 
@@ -83,10 +109,12 @@ Neither is a useful-chat result.
 
 ### Cost
 
-Both opening runs used 32 threads. `per-turn/v1` took 116.9 s at 322,368 KiB
-peak RSS; `one-user-turn/v1` took 115.5 s at 321,492 KiB peak RSS. The
-cost is dominated by the full point-table construction; the 256-case panel
-read follows it.
+Both release runs used 32 logical threads on an AMD Ryzen 9 9950X
+(16 cores/32 threads). A low-priority, redundant debug validator was still
+resident, so these are conservative costs: `per-turn/v1` took 123.5 s at
+327,988 KiB peak RSS; `one-user-turn/v1` took 121.0 s at 326,912 KiB. The cost
+is dominated by the full point-table construction; the 256-case panel read and
+parallel overlap audit follow it.
 
 ## Evidence
 
@@ -99,27 +127,29 @@ read follows it.
 - Shuffled point artifact:
   `2d24deaa237eaf2d523e47d9ab7fd6e71c83fb6f84ce3bf96fd8de38c0e99ec9`.
 - Opening reports:
-  `126f737e…` (`per-turn`) and `a321e92d…` (`one-user`).
+  `4f03afcb…` (`per-turn`) and `a65b9be3…` (`one-user`).
 - Reply reports:
   per-turn memory/point/shuffled `5c3793f4…` / `b11c617f…` / `606a166b…`;
   one-user memory/point/shuffled `70bca093…` / `d1b6c8bc…` / `5018e014…`.
 - Full evidence:
   [summary.json](./evidence/summary.json).
 - Local probe root:
-  `local/deepseek/opening-panel-20261108/attempt-5/`.
+  opening reports and artifacts are in
+  `local/deepseek/opening-panel-20261108/attempt-10/`; the byte-identical
+  treatment/control artifacts' complete-reply reports remain in `attempt-5/`.
 
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-point-transfer-driver`: 27 passed.
+  cpu-point-transfer-driver`: 29 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 455 passed,
   0 failed, 4 ignored.
 - `cargo test --release --offline --locked --features cpu-parity --bin
   served-reply-panel`: 15 passed.
 - `cargo check --offline --locked -p uor-r4-cpu-train --bin
   cpu-point-transfer-driver`: passed.
-- Both rendered opening runs completed over 256/256 rows and wrote all three
-  artifacts plus `report.json`.
+- Both release opening runs completed over 256/256 rows, passed the
+  corpus/panel overlap audit and wrote all three artifacts plus `report.json`.
 - `served-reply-panel` ran unchanged on memory-only, point and shuffled
   artifacts under both renderings.
 - Targeted `rustfmt --check`: passed.
@@ -149,9 +179,10 @@ geometry and delivery rules were used directly.
 ## Plain summary
 
 On the real fresh test, the laptop model's nearest-point opening table changes
-many answers but still never starts with the right token. The old success on
-held-out training documents was not transfer. Eight of the twenty expected
-starting tokens had never appeared as point-table targets, and twelve that had
-appeared were still not in the top eight. The same models also completed no
-full replies. This tells us to stop tuning that global point lookup and build a
-role-conditioned value reader/copy path for the first token.
+216 or 247 of 256 answers but still never starts with the right token. The old
+success on held-out training documents was not transfer. Eight of the twenty
+expected starting tokens had never appeared as point-table targets, and twelve
+that had appeared were still not in the top eight. Every stratum and paired
+control agrees, and the corpus has no detected panel overlap. The same models
+also completed no full replies. This tells us to stop tuning that global point
+lookup and build a role-conditioned value reader/copy path for the first token.

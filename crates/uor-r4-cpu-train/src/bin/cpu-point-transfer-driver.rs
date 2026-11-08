@@ -7,8 +7,8 @@ use serde::Deserialize;
 use uor_r4_core::answer_oracle::FrozenAnswers;
 use uor_r4_cpu_train::{
     add_turn_memory_uorlut01, audit_memory_weight_samples, derive_turn_memory,
-    evaluate_memory_weight_samples, validate_corpus_manifest, CpuConversationSample, CpuFbsForward,
-    CpuFbsHead, CpuMaskedCorpus, MemoryWeightSample,
+    evaluate_memory_weight_samples, read_uort_token_slice, validate_corpus_manifest,
+    CpuConversationSample, CpuFbsForward, CpuFbsHead, CpuMaskedCorpus, MemoryWeightSample,
 };
 use uor_r4_integer::stack::{
     add_point_key_uorlut01, build_point_key, read_memory_uorlut01, reply_stop, FbsMemorySnapshot,
@@ -22,6 +22,7 @@ const PANEL_SCHEMA: &str = "uor-r4.cpu-opening-panel/1";
 const ONE_USER_RENDERING: &str = "one-user-turn/v1";
 const PER_TURN_RENDERING: &str = "per-turn/v1";
 const PANEL_EOS: u32 = 1;
+const PANEL_NGRAM: usize = 6;
 
 #[derive(Clone)]
 struct PanelConfig {
@@ -37,6 +38,13 @@ struct PanelConfig {
     expected_plan_sha256: String,
     expected_manifest_sha256: String,
     expected_tokenizer_sha256: String,
+}
+
+struct PanelTrainSource<'a> {
+    token_bytes: &'a [u8],
+    mask: &'a [u8],
+    tokenizer_sha256: &'a str,
+    examples: &'a [CpuConversationSample],
 }
 
 #[derive(Clone)]
@@ -383,6 +391,12 @@ fn run() -> Result<serde_json::Value, String> {
     }
     let identity =
         validate_corpus_manifest(&manifest, &tokens, &mask).map_err(|error| error.to_string())?;
+    if config.panel.is_some() && identity.split != "train" {
+        return Err(format!(
+            "panel mode requires a TRAIN corpus, found split {:?}",
+            identity.split
+        ));
+    }
     let model = IntegerStackModel::parse(&artifact).map_err(|error| error.to_string())?;
     let shape = model.shape();
     if identity.vocab != shape.vocab || identity.bos != 0 {
@@ -406,14 +420,20 @@ fn run() -> Result<serde_json::Value, String> {
             .map_err(|error| error.to_string())?,
     };
     if let Some(panel) = &config.panel {
+        let train_source = PanelTrainSource {
+            token_bytes: &tokens,
+            mask: &mask,
+            tokenizer_sha256: &identity.tokenizer_sha256,
+            examples: &examples,
+        };
         return run_panel_probe(
             &config,
             panel,
             &artifact,
+            &train_source,
             shape.width,
             shape.vocab,
             shape.context,
-            &examples,
         );
     }
     let (training, evaluation) = select_transfer_groups(&examples, &config)?;
@@ -862,23 +882,54 @@ fn run() -> Result<serde_json::Value, String> {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelInputs {
+    schema: String,
     cases: Vec<PanelInputCase>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelInputCase {
+    #[serde(default)]
+    #[serde(rename = "actual_prefix_ids")]
+    _actual_prefix_ids: Vec<u32>,
     id: String,
     query_ids: Vec<u32>,
     segments: Vec<PanelSegment>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelSegment {
     kind: String,
     event: u64,
     #[serde(default)]
     token_ids: Vec<u32>,
+    #[serde(default)]
+    #[serde(rename = "role")]
+    _role: Option<u64>,
+    #[serde(default)]
+    #[serde(rename = "commit")]
+    _commit: Option<u64>,
+    #[serde(default)]
+    #[serde(rename = "entity")]
+    _entity: Vec<u64>,
+    #[serde(default)]
+    #[serde(rename = "original_source_ids")]
+    _original_source_ids: Vec<u32>,
+    #[serde(default)]
+    #[serde(rename = "record")]
+    _record: Option<u64>,
+    #[serde(default)]
+    #[serde(rename = "relation")]
+    _relation: Option<u64>,
+    #[serde(default)]
+    #[serde(rename = "scope")]
+    _scope: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "view")]
+    _view: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -899,26 +950,89 @@ struct PanelLabelCase {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelPlan {
+    schema: String,
+    source_policy: String,
+    split: String,
     histories: Vec<PanelHistory>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelHistory {
     id: String,
     stratum: String,
+    turns: Vec<PanelTextRow>,
+    queries: Vec<PanelTextRow>,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PanelTextRow {
+    #[serde(rename = "act")]
+    _act: String,
+    #[serde(rename = "relation")]
+    _relation: String,
+    #[serde(rename = "template")]
+    _template: String,
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelManifest {
+    excluded_historical_exposures: PanelExcludedExposures,
     files: BTreeMap<String, PanelManifestFile>,
+    histories: usize,
+    issue: String,
+    milestone: String,
+    milestone_issue: String,
+    model_predictions: String,
+    opposite_query_pairs: usize,
+    ordered_role_value_banks: usize,
+    panel_id: String,
+    rows: usize,
+    schema: String,
+    target_bar_metric: String,
+    target_bar_of: usize,
+    target_bar_pairs: usize,
+    target_bar_pairs_of: usize,
+    target_bar_rows: usize,
     tokenizer_sha256: String,
     strata_rows: BTreeMap<String, usize>,
+    unordered_bank_blocks: usize,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PanelManifestFile {
+    bytes: usize,
     sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PanelExcludedExposures {
+    dev512_inputs_sha256: String,
+    historical_exposed_literals: usize,
+    opened_fresh128_inputs_sha256: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+struct PanelOverlapCounts {
+    documents: usize,
+    assistant_replies: usize,
+    exact_panel_in_document: usize,
+    exact_accepted_assistant_reply: usize,
+    documents_with_panel_6gram: usize,
+    assistant_replies_with_panel_6gram: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PanelOverlapAudit {
+    counts: PanelOverlapCounts,
+    pass: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Serialize)]
@@ -954,13 +1068,13 @@ fn run_panel_probe(
     config: &Config,
     panel: &PanelConfig,
     artifact: &[u8],
+    train: &PanelTrainSource<'_>,
     width: usize,
     vocab: usize,
     context: usize,
-    examples: &[CpuConversationSample],
 ) -> Result<serde_json::Value, String> {
     let started = Instant::now();
-    let training = training_openings(examples);
+    let training = training_openings(train.examples);
     if training.is_empty() {
         return Err("panel mode has no non-EOS reply openings in TRAIN".to_owned());
     }
@@ -1002,19 +1116,73 @@ fn run_panel_probe(
         read(&panel.tokenizer, &panel.expected_tokenizer_sha256)?;
     let manifest: PanelManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|error| format!("panel manifest: {error}"))?;
-    for (name, actual) in [
-        ("inputs.json", inputs_sha.as_str()),
-        ("labels.json", labels_sha.as_str()),
-        ("plan.json", plan_sha.as_str()),
+    let expected_strata = BTreeMap::from([
+        ("length2".to_owned(), 64),
+        ("length4".to_owned(), 64),
+        ("length8".to_owned(), 64),
+        ("reassert".to_owned(), 32),
+        ("update".to_owned(), 32),
+    ]);
+    if manifest.schema != "uor-r4.m2-fresh256-panel-manifest/1"
+        || manifest.panel_id != "m2-fresh256"
+        || manifest.milestone != "m2"
+        || manifest.milestone_issue != "#2030"
+        || manifest.issue != "#2849"
+        || manifest.rows != 256
+        || manifest.histories != 128
+        || manifest.opposite_query_pairs != 128
+        || manifest.unordered_bank_blocks != 16
+        || manifest.ordered_role_value_banks != 32
+        || manifest.model_predictions != "NOT_RUN"
+        || manifest.target_bar_metric != "pairs_both_complete_distinct"
+        || manifest.target_bar_rows != 104
+        || manifest.target_bar_of != 256
+        || manifest.target_bar_pairs != 52
+        || manifest.target_bar_pairs_of != 128
+        || manifest
+            .excluded_historical_exposures
+            .historical_exposed_literals
+            != 74
+        || manifest.strata_rows != expected_strata
+    {
+        return Err("panel manifest identity, scope or row inventory differs".to_owned());
+    }
+    for hash in [
+        manifest
+            .excluded_historical_exposures
+            .dev512_inputs_sha256
+            .as_str(),
+        manifest
+            .excluded_historical_exposures
+            .opened_fresh128_inputs_sha256
+            .as_str(),
     ] {
-        if manifest.files.get(name).map(|entry| entry.sha256.as_str()) != Some(actual) {
+        uor_r4_discrete::corpus::validate_sha256(hash)
+            .map_err(|error| format!("panel exclusion identity: {error}"))?;
+    }
+    if manifest.files.len() != 3 {
+        return Err("panel manifest file inventory differs".to_owned());
+    }
+    for (name, actual_sha, actual_bytes) in [
+        ("inputs.json", inputs_sha.as_str(), inputs_bytes.len()),
+        ("labels.json", labels_sha.as_str(), labels_bytes.len()),
+        ("plan.json", plan_sha.as_str(), plan_bytes.len()),
+    ] {
+        if manifest
+            .files
+            .get(name)
+            .is_none_or(|entry| entry.sha256.as_str() != actual_sha || entry.bytes != actual_bytes)
+        {
             return Err(format!(
-                "panel manifest files.{name}.sha256 differs from the file read"
+                "panel manifest files.{name} differs from the file read"
             ));
         }
     }
     if manifest.tokenizer_sha256 != tokenizer_sha {
         return Err("panel manifest tokenizer_sha256 differs".to_owned());
+    }
+    if train.tokenizer_sha256 != tokenizer_sha {
+        return Err("TRAIN corpus and panel tokenizer identities differ".to_owned());
     }
     let inputs: PanelInputs =
         serde_json::from_slice(&inputs_bytes).map_err(|error| format!("panel inputs: {error}"))?;
@@ -1023,7 +1191,23 @@ fn run_panel_probe(
     let plan: PanelPlan =
         serde_json::from_slice(&plan_bytes).map_err(|error| format!("panel plan: {error}"))?;
     validate_panel_labels(&labels)?;
-    if inputs.cases.len() != 256 || labels.cases.len() != 256 || plan.histories.len() != 128 {
+    if inputs.schema != "uor-r4.native-source-bank-probe-input/1"
+        || plan.schema != "uor-r4.raw-natural-reader-construction-plan/1"
+        || plan.split != "fresh"
+        || plan.source_policy
+            != "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+        || inputs.cases.len() != 256
+        || labels.cases.len() != 256
+        || plan.histories.len() != 128
+        || inputs.cases.iter().any(|case| {
+            !case._actual_prefix_ids.is_empty()
+                || case.query_ids.is_empty()
+                || case.segments.iter().any(|segment| {
+                    !matches!(segment.kind.as_str(), "Context" | "Source")
+                        || (segment.kind == "Context" && segment.token_ids.is_empty())
+                })
+        })
+    {
         return Err("m2-fresh256 case or history count differs".to_owned());
     }
     let by_id = inputs
@@ -1031,6 +1215,26 @@ fn run_panel_probe(
         .iter()
         .map(|case| (case.id.as_str(), case))
         .collect::<BTreeMap<_, _>>();
+    let label_ids = labels
+        .cases
+        .iter()
+        .map(|case| case.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let pair_rows =
+        labels
+            .cases
+            .iter()
+            .fold(BTreeMap::<&str, usize>::new(), |mut counts, label| {
+                *counts.entry(label.pair_id.as_str()).or_default() += 1;
+                counts
+            });
+    if by_id.len() != inputs.cases.len()
+        || label_ids.len() != labels.cases.len()
+        || pair_rows.len() != 128
+        || pair_rows.values().any(|&rows| rows != 2)
+    {
+        return Err("panel case, label or pair identities are not unique".to_owned());
+    }
     let strata = plan
         .histories
         .iter()
@@ -1041,8 +1245,19 @@ fn run_panel_probe(
             )
         })
         .collect::<BTreeMap<_, _>>();
+    if strata.len() != plan.histories.len() {
+        return Err("panel history identities are not unique".to_owned());
+    }
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
         .ok_or_else(|| "panel tokenizer is not a byte-level BPE tokenizer".to_owned())?;
+    let overlap =
+        audit_panel_training_overlap(train.token_bytes, train.mask, &tokenizer, &plan, &labels)?;
+    if !overlap.pass {
+        return Err(format!(
+            "panel/training overlap found: {:?}",
+            overlap.counts
+        ));
+    }
     let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).map_err(|e| e.to_string())?;
     let encoder = protocol.bind(&tokenizer).map_err(|e| e.to_string())?;
     let mut totals = PanelOpeningTally::default();
@@ -1055,6 +1270,8 @@ fn run_panel_probe(
     let mut point_vs_shuffled = Vec::with_capacity(labels.cases.len());
     let mut point_vs_raw = Vec::with_capacity(labels.cases.len());
     let mut point_vs_constant = Vec::with_capacity(labels.cases.len());
+    let mut stratified_pairs =
+        BTreeMap::<String, (Vec<(bool, bool)>, Vec<(bool, bool)>, Vec<(bool, bool)>)>::new();
     for label in &labels.cases {
         let case = by_id
             .get(label.id.as_str())
@@ -1068,9 +1285,18 @@ fn run_panel_probe(
         let target = *reference_ids
             .first()
             .ok_or_else(|| format!("{}: empty reference", label.id))?;
-        let (raw_query, raw_token) = opening_query_and_token(&memory_artifact, &prompt)?;
-        let (point_query, point_served) = opening_query_and_token(&point_artifact, &prompt)?;
-        let (shuffle_query, shuffled_served) = opening_query_and_token(&random_artifact, &prompt)?;
+        if target == POINT_KEY_BOS || target == PANEL_EOS {
+            return Err(format!(
+                "{}: reference starts at boundary token {target}",
+                label.id
+            ));
+        }
+        let (raw_query, raw_token) =
+            opening_query_and_token_with_head(&memory_artifact, &prompt, CpuFbsHead::Nearest)?;
+        let (point_query, point_served) =
+            opening_query_and_token_with_head(&point_artifact, &prompt, CpuFbsHead::Nearest)?;
+        let (shuffle_query, shuffled_served) =
+            opening_query_and_token_with_head(&random_artifact, &prompt, CpuFbsHead::Nearest)?;
         if point_query != raw_query || shuffle_query != raw_query {
             raw_query_mismatches += 1;
         }
@@ -1102,10 +1328,19 @@ fn run_panel_probe(
         };
         add_panel_tally(&mut totals, &row);
         add_panel_tally(per_stratum.entry(stratum.clone()).or_default(), &row);
-        *observed_strata.entry(stratum).or_default() += 1;
-        point_vs_shuffled.push((point_token == target, shuffled_token == target));
-        point_vs_raw.push((point_token == target, raw_token == target));
-        point_vs_constant.push((point_token == target, constant_token == target));
+        *observed_strata.entry(stratum.clone()).or_default() += 1;
+        let point_win = point_token == target;
+        let shuffled_win = shuffled_token == target;
+        let raw_win = raw_token == target;
+        let constant_win = constant_token == target;
+        point_vs_shuffled.push((point_win, shuffled_win));
+        point_vs_raw.push((point_win, raw_win));
+        point_vs_constant.push((point_win, constant_win));
+        let (shuffled_pairs, raw_pairs, constant_pairs) =
+            stratified_pairs.entry(stratum).or_default();
+        shuffled_pairs.push((point_win, shuffled_win));
+        raw_pairs.push((point_win, raw_win));
+        constant_pairs.push((point_win, constant_win));
         rows.push(row);
     }
     if observed_strata != manifest.strata_rows {
@@ -1129,6 +1364,19 @@ fn run_panel_probe(
             "panel query/served parity failed: queries={raw_query_mismatches}, point={point_served_mismatches}, shuffled={shuffled_served_mismatches}"
         ));
     }
+    let per_stratum_paired = stratified_pairs
+        .into_iter()
+        .map(|(stratum, (shuffled, raw, constant))| {
+            Ok((
+                stratum,
+                serde_json::json!({
+                    "point_vs_shuffled": paired_binary(&shuffled)?,
+                    "point_vs_raw": paired_binary(&raw)?,
+                    "point_vs_constant": paired_binary(&constant)?,
+                }),
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>, String>>()?;
     std::fs::create_dir_all(&config.out).map_err(|error| error.to_string())?;
     std::fs::write(config.out.join("memory-scaffold.uorlut"), &memory_artifact)
         .map_err(|error| error.to_string())?;
@@ -1163,6 +1411,7 @@ fn run_panel_probe(
         "settings": {
             "rendering": panel.rendering,
             "protocol": SCHEMA_V2,
+            "raw_head": "nearest",
             "train_examples_requested": panel.train_examples,
             "train_openings": training.len(),
             "random_seed": config.random_seed,
@@ -1180,8 +1429,13 @@ fn run_panel_probe(
             "panel_targets_absent_from_point_table": absent_targets.len(),
             "absent_target_tokens": absent_targets,
         },
+        "overlap_control": {
+            "pass": overlap.pass,
+            "counts": overlap.counts,
+        },
         "totals": totals,
         "per_stratum": per_stratum,
+        "per_stratum_paired": per_stratum_paired,
         "paired": {
             "point_vs_shuffled": paired_binary(&point_vs_shuffled)?,
             "point_vs_raw": paired_binary(&point_vs_raw)?,
@@ -1227,6 +1481,141 @@ fn validate_panel_labels(labels: &PanelLabels) -> Result<(), String> {
         return Err("panel labels schema or membership_only differs".to_owned());
     }
     Ok(())
+}
+
+fn panel_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    for character in text.chars() {
+        if character.is_alphanumeric() {
+            current.extend(character.to_lowercase());
+        } else if !current.is_empty() {
+            words.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    words
+}
+
+fn panel_grams(words: &[String]) -> BTreeSet<String> {
+    words
+        .windows(PANEL_NGRAM)
+        .map(|window| window.join(" "))
+        .collect()
+}
+
+fn contains_word_sequence(haystack: &[String], needle: &[String]) -> bool {
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+fn audit_panel_training_overlap(
+    train_token_bytes: &[u8],
+    train_mask: &[u8],
+    tokenizer: &ByteBpeTokenizer,
+    plan: &PanelPlan,
+    labels: &PanelLabels,
+) -> Result<PanelOverlapAudit, String> {
+    let token_slice = read_uort_token_slice(train_token_bytes, 0, train_mask.len())
+        .map_err(|error| format!("panel overlap token source: {error}"))?;
+    let prompt_words = plan
+        .histories
+        .iter()
+        .flat_map(|history| history.turns.iter().chain(&history.queries))
+        .map(|row| panel_words(&row.text))
+        .filter(|words| !words.is_empty())
+        .collect::<Vec<_>>();
+    let answer_words = labels
+        .cases
+        .iter()
+        .flat_map(|case| case.answers.accepted.iter())
+        .map(|answer| panel_words(answer))
+        .filter(|words| !words.is_empty())
+        .collect::<Vec<_>>();
+    let panel_gram_set = prompt_words
+        .iter()
+        .chain(&answer_words)
+        .flat_map(|words| panel_grams(words))
+        .collect::<BTreeSet<_>>();
+    let mut documents = Vec::new();
+    let mut start = 0usize;
+    for end in (0..=token_slice.tokens.len()).filter(|&index| {
+        index == token_slice.tokens.len() || token_slice.tokens[index] == POINT_KEY_BOS
+    }) {
+        if end <= start {
+            start = end + 1;
+            continue;
+        }
+        documents.push(start..end);
+        start = end + 1;
+    }
+    let counts = documents
+        .par_iter()
+        .map(|document| {
+            let mut counts = PanelOverlapCounts {
+                documents: 1,
+                ..PanelOverlapCounts::default()
+            };
+            let text = tokenizer.decode(&token_slice.tokens[document.clone()]);
+            let document_words = panel_words(&text);
+            counts.exact_panel_in_document = prompt_words
+                .iter()
+                .chain(&answer_words)
+                .filter(|needle| contains_word_sequence(&document_words, needle))
+                .count();
+            if panel_grams(&document_words)
+                .intersection(&panel_gram_set)
+                .next()
+                .is_some()
+            {
+                counts.documents_with_panel_6gram = 1;
+            }
+            let mut reply_start = None;
+            for (offset, masked) in (document.start..=document.end)
+                .map(|offset| (offset, train_mask.get(offset).copied().unwrap_or(0)))
+            {
+                let inside = offset < document.end && masked == 1;
+                match (inside, reply_start) {
+                    (true, None) => reply_start = Some(offset),
+                    (false, Some(from)) => {
+                        counts.assistant_replies += 1;
+                        let reply =
+                            panel_words(&tokenizer.decode(&token_slice.tokens[from..offset]));
+                        if answer_words.contains(&reply) {
+                            counts.exact_accepted_assistant_reply += 1;
+                        }
+                        if panel_grams(&reply)
+                            .intersection(&panel_gram_set)
+                            .next()
+                            .is_some()
+                        {
+                            counts.assistant_replies_with_panel_6gram += 1;
+                        }
+                        reply_start = None;
+                    }
+                    _ => {}
+                }
+            }
+            counts
+        })
+        .reduce(PanelOverlapCounts::default, |mut total, counts| {
+            total.documents += counts.documents;
+            total.assistant_replies += counts.assistant_replies;
+            total.exact_panel_in_document += counts.exact_panel_in_document;
+            total.exact_accepted_assistant_reply += counts.exact_accepted_assistant_reply;
+            total.documents_with_panel_6gram += counts.documents_with_panel_6gram;
+            total.assistant_replies_with_panel_6gram += counts.assistant_replies_with_panel_6gram;
+            total
+        });
+    let pass = counts.exact_panel_in_document == 0
+        && counts.exact_accepted_assistant_reply == 0
+        && counts.documents_with_panel_6gram == 0
+        && counts.assistant_replies_with_panel_6gram == 0;
+    Ok(PanelOverlapAudit { counts, pass })
 }
 
 fn constant_opening(training: &[CpuConversationSample]) -> Result<u32, String> {
@@ -1929,6 +2318,14 @@ fn add_count(left: u64, right: u64) -> Result<u64, String> {
 }
 
 fn opening_query_and_token(artifact: &[u8], prompt: &[u32]) -> Result<(Vec<i32>, u32), String> {
+    opening_query_and_token_with_head(artifact, prompt, CpuFbsHead::Writer)
+}
+
+fn opening_query_and_token_with_head(
+    artifact: &[u8],
+    prompt: &[u32],
+    head: CpuFbsHead,
+) -> Result<(Vec<i32>, u32), String> {
     let mut forward = CpuFbsForward::from_artifact(artifact).map_err(|error| error.to_string())?;
     let mut result = None;
     for (index, &token) in prompt.iter().enumerate() {
@@ -1936,7 +2333,7 @@ fn opening_query_and_token(artifact: &[u8], prompt: &[u32]) -> Result<(Vec<i32>,
             forward.mark_reply_start();
         }
         let step = forward
-            .step(token, CpuFbsHead::Writer)
+            .step(token, head)
             .map_err(|error| error.to_string())?;
         if index + 1 == prompt.len() {
             result = Some((step.query_q12, step.token));
@@ -2318,6 +2715,113 @@ mod tests {
             r#"{{"cases":[],"membership_only":true,"protocol":"{SCHEMA_V2}","schema":"uor-r4.native-source-bank-labels/1","extra":1}}"#
         );
         assert!(serde_json::from_str::<PanelLabels>(&extra).is_err());
+    }
+
+    #[test]
+    fn panel_input_and_plan_contracts_refuse_unknown_metadata() {
+        let inputs = r#"{"schema":"uor-r4.native-source-bank-probe-input/1","cases":[],"extra":1}"#;
+        assert!(serde_json::from_str::<PanelInputs>(inputs).is_err());
+        let plan = format!(
+            r#"{{"schema":"uor-r4.raw-natural-reader-construction-plan/1","source_policy":"explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2","split":"fresh","histories":[],"extra":1}}"#
+        );
+        assert!(serde_json::from_str::<PanelPlan>(&plan).is_err());
+    }
+
+    fn overlap_plan(prompt: &str) -> PanelPlan {
+        PanelPlan {
+            schema: "uor-r4.raw-natural-reader-construction-plan/1".to_owned(),
+            source_policy:
+                "explicit-current-role-assertions/raw-current-role-queries/all-source-candidates/2"
+                    .to_owned(),
+            split: "fresh".to_owned(),
+            histories: vec![PanelHistory {
+                id: "history".to_owned(),
+                stratum: "length2/q0".to_owned(),
+                turns: Vec::new(),
+                queries: vec![PanelTextRow {
+                    _act: "query".to_owned(),
+                    _relation: "job".to_owned(),
+                    _template: prompt.to_owned(),
+                    text: prompt.to_owned(),
+                }],
+            }],
+        }
+    }
+
+    fn overlap_labels() -> PanelLabels {
+        PanelLabels {
+            cases: vec![PanelLabelCase {
+                answers: FrozenAnswers {
+                    intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+                    accepted: vec!["eight nine ten eleven twelve thirteen".to_owned()],
+                },
+                id: "case".to_owned(),
+                pair_id: "history".to_owned(),
+            }],
+            membership_only: true,
+            protocol: SCHEMA_V2.to_owned(),
+            schema: "uor-r4.native-source-bank-labels/1".to_owned(),
+        }
+    }
+
+    fn overlap_uort(tokens: &[u32]) -> Vec<u8> {
+        let mut bytes = vec![0u8; 64];
+        bytes[..4].copy_from_slice(b"UORT");
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..16].copy_from_slice(&(tokens.len() as u64).to_le_bytes());
+        bytes[16..20].copy_from_slice(&512u32.to_le_bytes());
+        for token in tokens {
+            bytes.extend_from_slice(&u16::try_from(*token).expect("test token").to_le_bytes());
+        }
+        bytes
+    }
+
+    #[test]
+    fn panel_training_overlap_checks_exact_text_and_six_grams() {
+        let tokenizer = byte_level_tokenizer();
+        let training_text = "alpha beta gamma delta epsilon zeta eta";
+        let mut train_tokens = vec![POINT_KEY_BOS];
+        train_tokens.extend(tokenizer.encode(training_text));
+        let train_bytes = overlap_uort(&train_tokens);
+        let mask = vec![0; train_tokens.len()];
+        let labels = overlap_labels();
+        let clear = audit_panel_training_overlap(
+            &train_bytes,
+            &mask,
+            &tokenizer,
+            &overlap_plan("one two three four five six seven"),
+            &labels,
+        )
+        .unwrap();
+        assert!(clear.pass);
+        assert_eq!(clear.counts.documents, 1);
+        let reply = tokenizer.encode("reply text at end");
+        let mut eof_tokens = vec![POINT_KEY_BOS];
+        eof_tokens.extend(&reply);
+        let eof_bytes = overlap_uort(&eof_tokens);
+        let mut eof_mask = vec![0; eof_tokens.len()];
+        eof_mask[1..].fill(1);
+        let eof = audit_panel_training_overlap(
+            &eof_bytes,
+            &eof_mask,
+            &tokenizer,
+            &overlap_plan("one two three four five six seven"),
+            &labels,
+        )
+        .unwrap();
+        assert!(eof.pass);
+        assert_eq!(eof.counts.assistant_replies, 1);
+        let overlap = audit_panel_training_overlap(
+            &train_bytes,
+            &mask,
+            &tokenizer,
+            &overlap_plan("alpha beta gamma delta epsilon zeta"),
+            &labels,
+        )
+        .unwrap();
+        assert!(!overlap.pass);
+        assert_eq!(overlap.counts.exact_panel_in_document, 1);
+        assert_eq!(overlap.counts.documents_with_panel_6gram, 1);
     }
 
     #[test]
@@ -2798,6 +3302,20 @@ mod tests {
         assert_ne!(opening_token(&memory_artifact, &held_out.prompt), target);
         let point_token = opening_token(&point_artifact, &held_out.prompt);
         assert!([target, second_target].contains(&point_token));
+        let (nearest_query, nearest_point_token) = opening_query_and_token_with_head(
+            &point_artifact,
+            &held_out.prompt,
+            CpuFbsHead::Nearest,
+        )
+        .unwrap();
+        let (writer_query, writer_point_token) = opening_query_and_token_with_head(
+            &point_artifact,
+            &held_out.prompt,
+            CpuFbsHead::Writer,
+        )
+        .unwrap();
+        assert_eq!(nearest_query, writer_query);
+        assert_eq!(nearest_point_token, writer_point_token);
         let medoid = derive_target_medoids(&point).unwrap();
         let medoid_artifact = add_point_key_uorlut01(&memory_artifact, &medoid).unwrap();
         let (medoid_query, medoid_token) =
