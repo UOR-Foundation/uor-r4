@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 
 TEST FITNESS: FIT - fresh non-author review at `d358ecb848adf8e84ef22ab36d5e6b6c7b59880e`, reviewed-runtime `044120d4bc348aec934028a7fc77f70831b41a745cf601f1639abc516541089a`, reviewer session `01a1b894-3057-7ce1-af5f-b0a9fc06e2ba`.
 
-PRE-RUN: PENDING (fresh D67 review required).
+PRE-RUN: GO - fresh D67 review at `1902f0b2b2c4de57ecef59dc4bd1c1fee901857f`, reviewed-runtime `044120d4bc348aec934028a7fc77f70831b41a745cf601f1639abc516541089a`, reviewer session `01a1b89e-ade6-7b03-ba5f-d19cdbd091ef`.
 
 **Why.** The current (b64L) model clears the human-text panel but serves
 0 complete replies and 0 EOS stops on all 256 `m2-fresh256` rows. D3 scores

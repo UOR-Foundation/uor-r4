@@ -267,6 +267,12 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `044120d4bc348aec934028a7fc77f70831b41a745cf601f1639abc516541089a`,
   reviewer session `01a1b894-3057-7ce1-af5f-b0a9fc06e2ba`. No FIT blockers
   remained.
+- Fresh D67 pre-run review: **GO** at
+  `1902f0b2b2c4de57ecef59dc4bd1c1fee901857f`, reviewed-runtime
+  `044120d4bc348aec934028a7fc77f70831b41a745cf601f1639abc516541089a`,
+  reviewer session `01a1b89e-ade6-7b03-ba5f-d19cdbd091ef`. No blockers
+  remained; live lease, pricing, merged-pin and on-pod hash checks remain
+  mandatory dispatch rechecks.
 - Added deepseek-26 as the active execution ORDER for seed 1. It carries no
   threshold or mechanism change and explicitly refuses seed 2, M2 substitution,
   another lab's pod, or any unrecorded input.
