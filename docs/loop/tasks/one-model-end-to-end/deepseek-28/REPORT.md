@@ -35,6 +35,10 @@ for roughly $0.45-$0.55 at the prior $0.563/hour offer.
   block and no shape error.
 - The job rejects an unregistered 1,025-step dose, and the launcher rejects a
   2,048 dose paired with the 1,024 run label before repository or network work.
+- Fresh-context FIT: **FIT GO**, no blockers, at
+  `a628f4e9ee3f418e5e527a7d8ff34d3ad0bc7d5f`, runtime
+  `0964a28196410a44a7d6af28194731a1003d0bb211d890b7a00fbaf2cf7153a3`,
+  reviewer session `01a1b8dd-6013-7da2-9d34-53490ddef0e5`.
 
 Not run: pod creation, remote build, training, export, panel scoring, store write
 or seal readback.
@@ -46,7 +50,7 @@ geometry rules were used directly.
 
 ## Still open
 
-- Fresh FIT and D67 reviews of the exact parameterized runtime.
+- Fresh D67 review of the exact parameterized runtime.
 - Execute and evaluate the 2,048-step dose; no automatic second extension.
 
 ## Plain summary
