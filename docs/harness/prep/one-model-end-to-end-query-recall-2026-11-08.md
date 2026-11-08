@@ -173,3 +173,35 @@ Row 109 ran at about 12,187 context tokens a second with the read, so one arm of
 - **Stop** at B0's failure, or at any non-finite loss.
 - **A pod that does not answer SSH** is retried once on another offer.
 - **A watcher is armed on every pod** (L-004).
+
+## Pre-run review (D67, claude-328, 8 Nov 2026)
+
+**[claude] Verdict: PASS**, from a fresh non-author reviewer who read the sheet, the six pod scripts, the laptop gate outputs and the recall structs at the pin `659b2286b56afcd3e9056539d1f5d72d6c403c35`. It found no blocker and no major. Two of its minors were fixed before launch:
+- **Minor 1:** a loss written as `null` after step 0 now marks the arm diverged, so the stop rule acts on it whatever stderr says.
+- **Minor 3:** the watcher renews the lease to 1 h every 25 minutes, so a stalled pod's lease lapses within the hour.
+
+**Deviations the REPORT names:**
+- **I-7's first mutation is compound.** It deletes the class mask's reset and also reverses the ablation order. Alone, the deleted reset is an equivalent mutant: the last ablation, `R^{−cQ}`, sets an empty mask itself, so the test could not fail. Both code reviewers and the author found this independently.
+- **I-4's step-0 record** compares the twins' step-0 readings: rows, hits and the two-class counts, which are the nearest picks. It does not compare the predicted points and the step-0 loss, because `run_recall` logs neither at step 0.
+- **I-4's three gates** run the whole `flock_read_hamming::` module. `gates.txt` names the tests that failed.
+- **A gate that does not fail stops nothing.** The binary is built first. Such a gate's guard is read as unproven.
+- **Not scripted here:** seed 3 (if seeds 1 and 2 split) and outcome 1's 16,384-step extension. Each gets its own scripts and review.
+
+**Laptop gates, all green:**
+- the job's checks on fixtures: 32 cases, and 15 of 15 mutations caught;
+- the six source mutations: each applies at the pin with its exact diff and builds;
+- the seal and chain test, and the watch and chain test (5 of 5 mutations caught);
+- each arm's flags reach the CLI's CUDA refusal, not a flag error.
+
+**Scripts** (in `local/claude/claude-328/`), SHA-256:
+
+| Script | SHA-256 |
+|---|---|
+| `job-328.sh` | `a49075ca016b2a7735989762ab3882a165ca8a7fba4cd19225272e37c683c465` |
+| `chain-328.sh` | `aa610c745effc5343284475bda00993bdb71a35d8efc20224f33cc6ca52eda48` |
+| `seal-328.sh` | `021aa1a3a320f25739b6d8b0cb4d0febb52572637427700c38fa87db90e2cb30` |
+| `mutate-328.sh` | `6c6647e4b7882d39db24e189e2a3b29ca595317394b9d9e707e26bd20f6745c8` |
+| `watch-328.sh` | `5af0d07165b4d163c867147012a187ec40e483abb621b69c0d2915fee8bfcc8f` |
+| `seed-328.sh` | `5928ba2bc53413c16213cb715f64850667fe991453ccf5327fdbea775007902e` |
+
+**Compute:** two Vast RTX 5090 pods, one seed each, at most $0.70/h each, inside 4 pods and $8/h. The reviewer's estimate is 2.5–3.5 h per pod, about $4–5 in all.
