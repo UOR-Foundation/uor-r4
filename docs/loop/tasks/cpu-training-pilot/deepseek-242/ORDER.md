@@ -36,8 +36,9 @@ For each panel row and both registered renderings:
 
 1. Render the exact protocol-v2 prompt used by `served-reply-panel`.
 2. Encode the shortest accepted answer and the paired other answer, excluding
-   terminal EOS, and locate each full token span in the prompt. Refuse a row
-   whose value span is absent or ambiguous.
+   terminal EOS, and locate every full token span in the prompt. Refuse a row
+   whose value span is absent; retain repeated spans and count a kept position
+   as value membership when it lies in any matching span.
 3. Prime the integer session over every prompt token before the final prompt
    token with tracing enabled, discard those priming traces, mark the reply
    start, step the final prompt token, and retain only the reads produced by
