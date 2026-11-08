@@ -47,14 +47,14 @@ Pending the reviewed run.
 - Mutation suite: 136 of 136 mutations caught.
 - `bash -n`, ShellCheck and `git diff --check`: passed.
 - `loop report --check`: passed.
-- Fresh-context exact-head TEST FITNESS: FIT at
-  `000daaf23540f6105fe6816c1e10133ede83035a`.
+- Fresh-context exact-head TEST FITNESS: FIT, recorded on PR #3856.
 - Fresh adversarial D67 review approved reviewed-runtime
   `fd303c0a72d178a467ebed99b4fefc05347e193896fc74638b2023cac0b120a1`.
-  The pinned store inputs exist, the runner re-hashes them, the runner checks the
-  serialized weight of 8 before initialization approval, and the pod build runs
-  the CUDA weighted micro-batch test before training. No GPU was free at review,
-  so this grants no lease and does not touch the busy Claude pod.
+  The three pinned store inputs were downloaded and matched their recorded
+  hashes, the runner re-hashes them, the runner checks the serialized weight of 8
+  before initialization approval, and the pod build runs the CUDA weighted
+  micro-batch test before training. No GPU was free at review, so this grants no
+  lease and does not touch the busy Claude pod.
 
 Not run: pod creation, training, export, panel scoring, store write or seal
 readback. A CUDA-only whole-versus-micro-batch weighted-gradient test is

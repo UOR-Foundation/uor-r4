@@ -3,9 +3,9 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-35](../../loop/tasks/one-model-end-to-end/deepseek-35/ORDER.md).
 
-TEST FITNESS: FIT - fresh-context DeepSeek exact-head review at `000daaf23540f6105fe6816c1e10133ede83035a`; weighted rows and micro-batch normalization are covered, default behavior is unchanged, and no FIT blocker remains.
+TEST FITNESS: FIT - fresh-context DeepSeek exact-head review of this sheet and the opening-weight implementation; weighted rows and micro-batch normalization are covered, default behavior is unchanged, and no FIT blocker remains.
 
-PRE-RUN: GO WITH ADMISSION GATE - fresh D67 review passed; store inputs exist, the runner re-hashes them, the pod build runs the CUDA weighted micro-batch test, and initialization is approved only after the run config records weight 8. No DeepSeek GPU was free at review and no lease was taken; launch only after admission, from the merged pin, without touching another lab's pod.
+PRE-RUN: GO WITH ADMISSION GATE - fresh D67 review passed; the three stored input bytes were downloaded and matched the pinned hashes, the runner re-hashes them, the pod build runs the CUDA weighted micro-batch test, and initialization is approved only after the run config records weight 8. No DeepSeek GPU was free at review and no lease was taken; launch only after admission, from the merged pin, without touching another lab's pod.
 
 ## Why
 
