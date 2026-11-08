@@ -23,11 +23,19 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Legacy static page, runtime page-load, desktop client, and worker with bit-identical save/restore all PASS. Harness build and `loop report --check --order docs/loop/tasks/studio-typed-shell-upgrade/kimi-67/ORDER.md` PASS.
 - At the empty base diff, `loop pr-check --local` reported FAIL only for missing new ORDER/REPORT, with existing FILEMAP advisories. It will be rerun at this documentation head. Full gates, fresh exact-head review, protected delivery, and fresh-main verification are **NOT_RUN** at this report commit.
 
-## Evidence and limits
+## Checks run at the head
 
 Base-head logs are under `local/kimi/studio-lifecycle-migration/bfa5de6ce73dbd459f1d2dca1e4e677ccc2bae54/`; final-head logs will use the corresponding commit directory. The inline ledger is under this worktree's ignored `.superpowers/sdd/PLAN/`. No deliberate source/verifier mutation was made in this execution, so there is no new mutation-restoration claim. No actual profile, real credential, external endpoint, actual system-quota condition, or production path was used.
 
-First activation remains single-tab only; `ui.v1` is archival only and quota evidence is injected. This unit establishes no production cutover/publication, packaged-app acceptance, useful-chat, M7/M8, accessibility-certification, or Phase B claim.
+At the empty base diff, `loop pr-check --local` reported FAIL only for missing new ORDER/REPORT, with existing FILEMAP advisories. Its first documentation-head rerun also rejected this REPORT's missing required headings; those headings are now supplied without changing the evidence. It will be rerun at this corrected documentation head. Full gates, fresh exact-head review, protected delivery, and fresh-main verification are **NOT_RUN** at this report commit.
+
+## Skills used
+
+Inline plan execution with a persistent ledger, red-first TDD rules without reenacting historical failures, systematic root-cause diagnosis, solution-integrity review, worktree isolation, project research/delivery rules, and verification before completion. No dependency, real-data migration, native/package work, production cutover, or Phase B compute was added.
+
+## Still open
+
+First activation remains single-tab only; `ui.v1` is archival only and quota evidence is injected. This unit establishes no production cutover/publication, packaged-app acceptance, useful-chat, M7/M8, accessibility-certification, or Phase B claim. The plan path produces the same scope advisory already accepted for prior Studio planning records; the item's product scope is unchanged.
 
 ## Plain summary
 
