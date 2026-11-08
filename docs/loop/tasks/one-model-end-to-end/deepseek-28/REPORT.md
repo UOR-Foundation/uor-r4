@@ -71,7 +71,6 @@ geometry rules were used directly.
 
 ## Still open
 
-- Fresh D67 review of the exact parameterized runtime.
 - Execute and evaluate the 2,048-step dose; no automatic second extension.
 
 ## Plain summary
