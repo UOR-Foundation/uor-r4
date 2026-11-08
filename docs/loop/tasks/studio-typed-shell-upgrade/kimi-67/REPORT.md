@@ -28,7 +28,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Evidence is under `local/kimi/studio-lifecycle-migration/` and the exact-head subdirectory named by the reviewed commit: identity/base/diff, full product suite, typecheck/build, four legacy checks, built-browser, harness/report/local-PR/full-gate logs, and disabled-migration red/restored-green evidence with an empty restoration diff. Fresh exact-head review, PR creation/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open. No production publisher was invoked.
+Evidence is under `local/kimi/studio-lifecycle-migration/` and the exact-head subdirectory named by the reviewed commit: identity/base/diff, full product suite, typecheck/build, four legacy checks, built-browser, harness/report/local-PR/full-gate logs, and disabled-migration red/restored-green evidence with an empty restoration diff. Actual advisories are the notebook scope, `web/studio/assets/js/lifecycle_persistence.js` and its declaration outside the item's named asset allowlist, and existing FILEMAP rows; read-path and all hard checks pass. Fresh exact-head review, PR creation/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open. No production publisher was invoked.
 
 ## Skills used
 
