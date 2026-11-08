@@ -262,6 +262,11 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   `0f8f1952d260e69d49cb9c4375f5af1cddfb58a8fc392a176d06818c8526f8a8`,
   reviewer session `01a1b88b-503a-7283-ae4f-15ab17056b60`, because the active
   controller-repair ORDER did not authorize pod launch.
+- Fresh FIT after adding deepseek-26 and merging current main: **GO** at
+  `d358ecb848adf8e84ef22ab36d5e6b6c7b59880e`, reviewed-runtime
+  `044120d4bc348aec934028a7fc77f70831b41a745cf601f1639abc516541089a`,
+  reviewer session `01a1b894-3057-7ce1-af5f-b0a9fc06e2ba`. No FIT blockers
+  remained.
 - Added deepseek-26 as the active execution ORDER for seed 1. It carries no
   threshold or mechanism change and explicitly refuses seed 2, M2 substitution,
   another lab's pod, or any unrecorded input.
