@@ -370,6 +370,8 @@ fn run() -> Result<()> {
         BTreeMap::new()
     };
     let mut paired_rows = Vec::new();
+    // Paired-first time is kept out of the teacher-forced wall time, which stays as before.
+    let mut paired_time = Duration::ZERO;
     let (teacher_rows, teacher_wall_milliseconds) = if teacher_forced {
         let started = Instant::now();
         let mut teacher_rows = Vec::with_capacity(labels.cases.len());
@@ -384,18 +386,24 @@ fn run() -> Result<()> {
                 &tokenizer, &encoder, &artifact, case, label, stratum, rendering,
             )?;
             if paired_first {
+                let paired_started = Instant::now();
                 let other = partners
                     .get(label.id.as_str())
                     .ok_or(format!("{}: no pair partner", label.id))?;
                 paired_rows.push(paired_first_row(
                     &tokenizer, &encoder, &artifact, case, label, other, &teacher, rendering,
                 )?);
+                paired_time += paired_started.elapsed();
             }
             teacher_rows.push(teacher);
         }
         (
             teacher_rows,
-            started.elapsed().as_millis().clamp(1, u128::from(u64::MAX)) as u64,
+            started
+                .elapsed()
+                .saturating_sub(paired_time)
+                .as_millis()
+                .clamp(1, u128::from(u64::MAX)) as u64,
         )
     } else {
         (Vec::new(), 0)
@@ -461,7 +469,10 @@ fn run() -> Result<()> {
         report["teacher_forced"] = teacher_report;
     }
     if paired_first {
-        report["paired_first"] = paired_first_report(paired_rows)?;
+        let mut paired_report = paired_first_report(paired_rows)?;
+        paired_report["wall_milliseconds"] =
+            (paired_time.as_millis().clamp(1, u128::from(u64::MAX)) as u64).into();
+        report["paired_first"] = paired_report;
     }
     let mut text = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     text.push(b'\n');
@@ -1417,6 +1428,75 @@ mod tests {
     }
 
     #[test]
+    fn paired_first_row_ranks_the_partners_first_token_and_checks_the_teacher_rank() {
+        let Some(tokenizer) = tokenizer() else { return };
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).unwrap();
+        let encoder = protocol.bind(&tokenizer).unwrap();
+        // A trunk whose vocabulary covers the tokenizer's ids and whose context holds the prompt.
+        let mut spec = FBS_SYNTH_NON_SQUARE;
+        spec.vocab = tokenizer.vocab_size();
+        spec.context = 64;
+        spec.layers = 2;
+        let mut snapshot = synthetic_fbs_trunk_with(31, spec);
+        snapshot.readout_nearest = true;
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let case = InputCase {
+            id: "a".to_owned(),
+            query_ids: tokenizer.encode(" Where does Ada work?"),
+            segments: vec![Segment {
+                kind: "Context".to_owned(),
+                event: 0,
+                token_ids: tokenizer.encode("Ada works at the mill. Ada lives by the harbor."),
+            }],
+        };
+        let asked = LabelCase {
+            answers: answers("mill."),
+            id: "a".to_owned(),
+            pair_id: "p".to_owned(),
+        };
+        let other = LabelCase {
+            answers: answers("harbor."),
+            id: "b".to_owned(),
+            pair_id: "p".to_owned(),
+        };
+        let (_, asked_ids) = reference_ids(&encoder, &asked.answers).unwrap();
+        let (_, other_ids) = reference_ids(&encoder, &other.answers).unwrap();
+        assert_ne!(
+            asked_ids[0], other_ids[0],
+            "the fixture needs distinct first tokens"
+        );
+
+        let teacher = teacher_forced_row(
+            &tokenizer, &encoder, &artifact, &case, &asked, "length2", RENDERING,
+        )
+        .unwrap();
+        let row = paired_first_row(
+            &tokenizer, &encoder, &artifact, &case, &asked, &other, &teacher, RENDERING,
+        )
+        .unwrap();
+        assert_eq!(row.other_id, "b");
+        assert_eq!(row.other_answer, "harbor.");
+        assert_eq!(row.asked_token, asked_ids[0]);
+        assert_eq!(row.other_token, other_ids[0]);
+        assert!(!row.same_first_token);
+        assert_eq!(row.asked_rank, teacher.target_ranks[0]);
+        // The other rank is the partner's first token at this case's first reply position.
+        let (_, prompt) = render(&tokenizer, &encoder, &case, RENDERING).unwrap();
+        let mut forward = CpuFbsForward::from_artifact(&artifact).unwrap();
+        let other_first = teacher_forced_nearest_ranks(&mut forward, &prompt, &other_ids).unwrap();
+        assert_eq!(row.other_rank, other_first[0].rank);
+        assert_eq!(row.raw_other_rank, other_first[0].raw_rank);
+
+        // A teacher row whose first rank disagrees is refused.
+        let mut wrong = teacher;
+        wrong.target_ranks[0] += 1;
+        assert!(paired_first_row(
+            &tokenizer, &encoder, &artifact, &case, &asked, &other, &wrong, RENDERING,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn first_position_ranks_match_the_teacher_forced_first_rank() {
         let mut cpu = fixture(29, 2);
         let prompt = [0, 5, 9];
@@ -1438,7 +1518,7 @@ mod tests {
     }
 
     #[test]
-    fn paired_first_report_counts_distinct_pairs_only() {
+    fn paired_first_report_counts_distinct_first_token_rows() {
         let row =
             |id: &str, stratum: &str, asked: (u32, usize), other: (u32, usize)| PairedFirstRow {
                 id: id.to_owned(),
@@ -1457,7 +1537,7 @@ mod tests {
         let report = paired_first_report(vec![
             row("a", "update", (10, 1), (11, 4)),
             row("b", "update", (10, 5), (11, 2)),
-            row("c", "length2", (12, 3), (12, 3)),
+            row("c", "length2", (12, 1), (12, 1)),
             row("d", "length2", (13, 2), (14, 1)),
         ])
         .unwrap();
