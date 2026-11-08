@@ -1378,10 +1378,17 @@ fn run_bounded_process(
             }
         }
     }
-    let exited = child
+    let mut exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
+    while !exited && readers_disconnected && !killed && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        exited = child
+            .try_wait()
+            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+            .is_some();
+    }
     if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
@@ -1795,6 +1802,17 @@ mod bounded_process_tests {
         let output = run_bounded_process(&mut command, std::time::Duration::from_millis(50), 1024)
             .expect("exited parent with open descendant pipes must return bounded");
         assert!(output.timed_out, "open descendant pipes hid the timeout");
+    }
+
+    #[test]
+    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg("printf ok; exec 1>&- 2>&-; sleep 0.05");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
+            .expect("closed pipes must allow a normal exit");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "ok");
+        assert!(output.status.success());
+        assert!(!output.timed_out, "normal exit after pipe closure was mislabeled as a timeout");
     }
 
     #[test]
