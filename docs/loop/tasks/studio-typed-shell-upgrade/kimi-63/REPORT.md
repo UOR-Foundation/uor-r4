@@ -17,7 +17,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 ## Measurements
 
 - Red-first remount: `stopped` instead of `generating`, reproducing Agent-40's finding. Red-first SessionList also included the outdated delete-message expectation and shared-title leakage. After fixes: **26/26 focused tests** and a separate wrong-row mutation pass.
-- Final complete suite: **414/414 tests across 47 files with zero unhandled errors**. Plain-JS **112/112**, typecheck/build, all four legacy checks, report/local-PR checks, and all 11 full gates pass. Browser exact response, transcript equality, active-row identity, and delayed-request rejection remain green.
+- Final complete suite: **415/415 tests across 47 files with zero unhandled errors**. Plain-JS **112/112**, typecheck/build, all four legacy checks, report/local-PR checks, and all 11 full gates pass. Browser exact response, transcript equality, active-row identity, and delayed-request rejection remain green. The generation-specific delete refusal and a restored source-level wrong-row mutation also pass; their results belong to kimi-64.
 
 ## Checks run at the head
 

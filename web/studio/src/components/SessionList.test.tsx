@@ -201,3 +201,17 @@ describe('replacement-row mutation evidence', () => {
         expect(oldRow.querySelector('strong')?.textContent).toBe('New conversation');
     });
 });
+
+
+describe('generation-specific delete refusal', () => {
+    it('requires stopping the current reply when generation starts after the modal opens', () => {
+        const { store, api, onError } = mount();
+        act(() => { button('Delete Session A').click(); });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        act(() => { store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: 'session-a' }); });
+        act(() => { button('Confirm delete').click(); });
+        expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.', 'session:delete:session-a');
+        expect(api.deleteSession).not.toHaveBeenCalled();
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Stop the current reply first.');
+    });
+});
