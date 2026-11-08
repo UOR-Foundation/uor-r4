@@ -158,6 +158,10 @@ pub struct LongConfig {
     pub fix_input_table: bool,
     /// Train on this split in place of the pinned TRAIN; DEV stays the pinned one.
     pub train_split: Option<TrainSplit>,
+    /// Repeat each scored reply-opening row this many times in TRAIN's nearest loss
+    /// (deepseek-35). The default, 1, leaves the run and its config unchanged.
+    #[serde(skip_serializing_if = "is_one")]
+    pub opening_weight: usize,
     pub samples: usize,
     pub reply_tokens: usize,
     /// Take each step's `batch` windows forward and backward this many at a time, and make one
@@ -1888,6 +1892,7 @@ fn step_gradient(
     served: bool,
     seed: u64,
     step: usize,
+    opening_weight: Option<(&[u8], usize)>,
     mut rows: impl FnMut(usize, usize) -> Result<()>,
 ) -> Result<(f64, candle_core::backprop::GradStore)> {
     let micro = if micro == 0 {
@@ -1902,7 +1907,12 @@ fn step_gradient(
     for lo in (0..windows.len()).step_by(micro.max(1)) {
         let hi = (lo + micro).min(windows.len());
         rows(lo, hi)?;
-        let (ids, scored, targets) = assemble(&windows[lo..hi]);
+        let (ids, scored, targets) = match opening_weight {
+            Some((mask, weight)) => {
+                assemble_with_opening_weight(&windows[lo..hi], mask, weight)?
+            }
+            None => assemble(&windows[lo..hi]),
+        };
         // The memory's rows are `b · context + offset`, so every window must be whole.
         if ids.len() != (hi - lo) * context {
             return Err(invalid("a training batch's windows are not context-long"));
@@ -2963,6 +2973,46 @@ fn assemble(windows: &[&CausalWindow]) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
         }
     }
     (ids, scored, targets)
+}
+
+/// [`assemble`], repeating each target whose corpus position opens a reply.
+fn assemble_with_opening_weight(
+    windows: &[&CausalWindow],
+    mask: &[u8],
+    weight: usize,
+) -> Result<(Vec<u32>, Vec<u32>, Vec<u32>)> {
+    if !(1..=16).contains(&weight) {
+        return Err(invalid("opening weight must be between 1 and 16"));
+    }
+    if weight == 1 {
+        return Ok(assemble(windows));
+    }
+    let mut ids = Vec::with_capacity(windows.iter().map(|w| w.input_ids.len()).sum());
+    let (mut scored, mut targets) = (Vec::new(), Vec::new());
+    for window in windows {
+        let start = ids.len();
+        ids.extend_from_slice(&window.input_ids);
+        for ((&off, &target), &position) in window
+            .scored_offsets
+            .iter()
+            .zip(&window.scored_targets)
+            .zip(&window.scored_corpus_positions)
+        {
+            if position >= mask.len() {
+                return Err(invalid("opening weight's reply mask is shorter than TRAIN"));
+            }
+            let copies = if opens_reply(mask, position) {
+                weight
+            } else {
+                1
+            };
+            for _ in 0..copies {
+                scored.push((start + off) as u32);
+                targets.push(target);
+            }
+        }
+    }
+    Ok((ids, scored, targets))
 }
 
 /// Whether the target at corpus `position` opens a reply: the token before it is not a response
@@ -12361,7 +12411,7 @@ pub fn gradient_norms(
     config: &LongConfig,
     device: &Device,
 ) -> Result<Vec<GradientNorm>> {
-    let (usable, _) =
+    let (usable, train_mask) =
         load_train(
             data_root,
             config.batch,
@@ -12392,7 +12442,8 @@ pub fn gradient_norms(
     let _opening = start_opening(config, device)?;
     let _register = start_register(config, device)?;
     let windows: Vec<&CausalWindow> = usable.iter().take(config.batch).collect();
-    let (ids, scored, targets) = assemble(&windows);
+    let (ids, scored, targets) =
+        assemble_with_opening_weight(&windows, &train_mask, config.opening_weight)?;
     let grads = hs::with_gate_mode(HamiltonArm::HamiltonActive, config.seed, 0, false, || {
         Ok(batch_loss(
             &model,
@@ -12646,6 +12697,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             "--micro-batch {} does not divide --batch {}",
             config.micro_batch, config.batch
         )));
+    }
+    if !(1..=16).contains(&config.opening_weight) {
+        return Err(invalid("--opening-weight runs from 1 to 16"));
     }
     training_context(config.context)?;
     validate_checkpoint_selection(config)?;
@@ -13067,6 +13121,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             config.train_as_served,
             config.seed,
             step,
+            Some((&train_mask, config.opening_weight)),
             forward_rows,
         )?;
         // The gradient, taken at the exported values, moves the float values they came from.
@@ -14098,6 +14153,7 @@ mod tests {
             hamming_copy_keys: None,
             fix_input_table: false,
             train_split: None,
+            opening_weight: 1,
             samples: 6,
             reply_tokens: 48,
             micro_batch: 0,
@@ -14968,6 +15024,25 @@ mod tests {
     }
 
     #[test]
+    fn opening_weight_repeats_only_rows_that_open_a_reply() {
+        let window = CausalWindow {
+            doc_id: 0,
+            input_ids: vec![0, 5, 6, 7, 8, 9],
+            scored_offsets: vec![1, 3],
+            scored_targets: vec![6, 8],
+            scored_corpus_positions: vec![2, 4],
+        };
+        let mask = [0, 0, 1, 1, 1, 1];
+        let (_, scored, targets) =
+            assemble_with_opening_weight(&[&window], &mask, 3).unwrap();
+        assert_eq!(scored, [1, 1, 1, 3]);
+        assert_eq!(targets, [6, 6, 6, 8]);
+        let (_, default_scored, default_targets) =
+            assemble_with_opening_weight(&[&window], &mask, 1).unwrap();
+        assert_eq!((default_scored, default_targets), (vec![1, 3], vec![6, 8]));
+    }
+
+    #[test]
     fn a_config_without_the_opening_read_writes_neither_of_its_keys() {
         let json = String::from_utf8(serde_json::to_vec_pretty(&config(0, None)).unwrap()).unwrap();
         assert!(!json.contains("opening_read"), "{json}");
@@ -14977,6 +15052,17 @@ mod tests {
             json.contains("\"hamming_read\": 0,\n  \"width\": 256,"),
             "{json}"
         );
+        assert!(!json.contains("opening_weight"), "{json}");
+    }
+
+    #[test]
+    fn a_nondefault_opening_weight_is_written_to_the_run_config() {
+        let config = LongConfig {
+            opening_weight: 8,
+            ..config(0, None)
+        };
+        let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        assert!(json.contains("\"opening_weight\": 8"), "{json}");
     }
 
     #[test]
@@ -15856,6 +15942,7 @@ mod tests {
                     false,
                     1,
                     3,
+                    None,
                     |_, _| Ok(()),
                 )
             })
@@ -16096,6 +16183,7 @@ mod tests {
                     served,
                     1,
                     3,
+                    None,
                     |lo, hi| {
                         forwards.push((lo, hi));
                         Ok(())
