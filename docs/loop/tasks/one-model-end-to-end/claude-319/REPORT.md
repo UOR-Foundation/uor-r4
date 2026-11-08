@@ -7,7 +7,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## What did not work, first
 
 - **Both seeds collapsed, further past the bar than × 1.**
-  - Seed 1: 88 of its 234 EOS-stopped replies are " I'm good, thank you! How about you?". Its next two are prefixes of the same text (25 and 14).
+  - Seed 1: 88 of its 234 EOS-stopped replies are " I'm good, thank you! How about you?". Its next two open the same way (25 and 14).
   - Seed 2: 101 of its 204 are " Got it, your friends, your friends,". Its next is the same text repeated (9).
   - The bar is 64. Both readings are outside the sheet's "near the bar" band (48 to 80). At × 1 the seeds read 62 and 75.
 - **No row is complete and no pair counts: 0 of 256 and 0 of 128 at both seeds.** The panel's bar is 104 and 52. Every served model scored so far has 0.
@@ -44,7 +44,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 EOS stops per stratum (length2, length4, length8, reassert, update): seed 1 61, 62, 56, 29, 26; seed 2 56, 60, 39, 28, 21.
 
-**Role headers:** 0 replies at either seed contain "Assistant:" or "User:" (EOS-stopped or over all rows). At × 1 the counts were 35 and 51 over all rows. The end-of-turn fault claude-315 found is gone at × 3.
+**Role headers:** 0 replies at either seed contain "Assistant:" or "User:" (EOS-stopped or over all rows). At × 1 the counts were 35 and 51 over all rows. The end-of-turn fault claude-315 found is absent at × 3 on `m2-fresh256` (0 of 256 at both seeds).
 
 **The stops across ratios** (EOS stops of 256, seed 1 / seed 2):
 
@@ -118,12 +118,12 @@ Row 4's next step is a decision review on a larger or more varied dialogue corpu
 1. **The ratio lever is spent.**
    - Every step toward mw-balp has bought stops: 0, 177/122, 234/204, 253/244.
    - It has also paid for them, in collapse and in held-out text. × 3 costs about seven times × 1's d, and loses the trunk's lead over T2.
-   - A lower ratio (× 2) would sit between × 1 (seed 2 short, and collapsed) and × 3 (both collapsed). It cannot be expected to clear both bars, so it is not taken.
-2. **The collapse is the corpus, not the trunk.**
+   - A lower ratio (× 2) would sit between × 1 (seed 2 short, and collapsed) and × 3 (both collapsed). The lab judges it unlikely to clear both bars, so it is not taken.
+2. **The collapse follows mw-balp's own register.** Whether the corpus or greedy decoding causes it is untested here: this run has one trunk, one decode and one corpus at different ratios. The next sheet tests it.
    - The stock replies are mw-balp's own register ("I'm good, thank you! How about you?", "Got it, …"). mw-balp's replies were seen 8.79 times each at × 3 (claude-318's sheet).
    - Collapse has now appeared at every ratio that stops: × 1 seed 2, × 3 both seeds, mw-balp alone seed 1.
-   - So the next corpus must carry many more distinct replies per scored EOS. Repeating the same corpus cannot.
-3. **The end-of-turn fault is fixed at × 3:** 0 role headers, against 35 and 51 at × 1. A new corpus should keep that, so its sheet keeps the role-header count beside the bars.
+   - So the next corpus should carry many more distinct replies per scored EOS. Repeating the same corpus cannot add them.
+3. **The end-of-turn fault is absent at × 3 on `m2-fresh256`:** 0 role headers, against 35 and 51 at × 1. A new corpus should keep that, so its sheet keeps the role-header count beside the bars.
 4. **Provenance comes first.** mw-balp's licence and generator are still recorded nowhere (claude-314's REPORT). A new dialogue corpus is registered only with its licence, its source and its generator recorded. It must also be disjoint from the oasst2 held-out panel split.
 5. **The fine-tuning lever is a parallel track, not this one.**
    - deepseek-29 (#3847, merged) ran reply-masked SFT of (b64L) seed 1 to 2,048 steps: 52 of 256 free EOS stops at the selected step 1,280, and 0 complete.
