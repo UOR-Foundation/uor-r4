@@ -69,7 +69,7 @@ Run scripts live in `local/claude/claude-317/`, uncommitted, as for claude-301 a
 1. **The sheet** `docs/harness/prep/scale-probe-b64l-width-2026-11-08.md`, with a fresh non-author FIT and the D67 pre-run review, both posted on #3472. It registers:
    - the arms, the gates, the cost, the stop rule;
    - the bars and the outcome map, all before any pod goes up.
-2. **The runs:** widths 128 and 512 at seeds 1 and 2, sealed in the store with a SHA256SUMS that was read back. The pods are down.
+2. **The runs:** widths 128 and 512 at seeds 1 and 2, plus the (w128h4) contrast at seed 1, sealed in the store with a SHA256SUMS that was read back. The pods are down.
 3. **The REPORT, per width:**
    - training tokens per second;
    - served decode tokens per second, from `served-reply-panel`'s new decode fields on the exported artifact;
@@ -83,6 +83,6 @@ Run scripts live in `local/claude/claude-317/`, uncommitted, as for claude-301 a
 
 Nothing waits on Casey (§5.1). Stop and decide (never stop and wait) if:
 - **Width 512 does not fit at any registered micro-batch:** NOT_RUN at that seed, instrument, and the 48 GB card route becomes the next unit.
-- **Spend would pass $25,** the ORDER's notice line. It is not a cap: the charter's extend rule applies to a healthy run.
+- **Spend would pass $30,** the ORDER's notice line. It is not a cap: the charter's extend rule applies to a healthy run.
 - **A gate fails:** the sheet's stop rule applies, and the result is classified instrument versus mechanism before it is named.
 - **Bound:** this unit, plus one repair unit if a gate fails as an instrument.
