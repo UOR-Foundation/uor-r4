@@ -99,3 +99,23 @@ negative, empty), a short mask, a manifest without `eos_id`, a mask byte of 2, a
 
 Two mutations were checked to fail the tests. Comparing `j < k` fails the k = 1, 2 and 3 tests.
 Masking only the run's last byte fails the k = 1 and 2 tests.
+
+## window-count: the trainer's usable windows
+
+```sh
+window-count split=DIR context=N
+```
+
+It prints one JSON line: `documents`, `windows`, `usable_windows`, `context`, `min_scored` and the split's two shas. The split loads as for `reply-cap`, so its manifest needs `eos_id`; `bos_id`, if declared, must be 0, and the first token must be BOS.
+
+The count restates the trainer's rule:
+- `build_document_windows` in `crates/uor-r4-float-train/src/hamilton_sheet.rs` cuts each BOS-delimited document's targets into chunks of at most `context`;
+- `train_windows` in `crates/uor-r4-float-train/src/in_space_long.rs` keeps a chunk with at least 4 scored targets.
+
+A cap can empty a chunk of scored targets, so it changes this count.
+
+**Checked against the trainer's own logs (context 192), 8 Nov:**
+- claude-318's `d3mw3` mix reads 357,907, the trainer's "usable TRAIN windows" (claude-318's sheet);
+- `mw-balp/train` reads 68,218 (claude-313's trainer log).
+
+`tests/windows.rs` pins hand-worked counts on a three-document fixture. Two mutations fail it: `n > min_scored` for `n >= min_scored`, and a chunk one target longer than `context`.

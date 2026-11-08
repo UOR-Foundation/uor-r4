@@ -245,3 +245,89 @@ pub fn cap_mask(tokens: &[u16], mask: &[u8], eos: u16, k: u64) -> (Vec<u8>, Cap)
     };
     (out, cap)
 }
+
+/// The trainer's usable-window count (claude-321). It restates `build_document_windows` in
+/// `crates/uor-r4-float-train/src/hamilton_sheet.rs` and the filter in `train_windows`
+/// (`crates/uor-r4-float-train/src/in_space_long.rs`). Each `bos`-delimited document's target
+/// positions `doc_start + 1 .. doc_end` are cut into chunks of at most `context`. A chunk is a
+/// window when at least one target is scored (`tokens[p] != bos && mask[p] == 1`), and usable when
+/// at least `min_scored` are. Positions before the first `bos` belong to no document.
+/// Returns `(documents, windows, usable)`.
+pub fn usable_windows(
+    tokens: &[u16],
+    mask: &[u8],
+    bos: u16,
+    context: usize,
+    min_scored: usize,
+) -> (u64, u64, u64) {
+    let starts: Vec<usize> = (0..tokens.len()).filter(|&i| tokens[i] == bos).collect();
+    let (mut windows, mut usable) = (0u64, 0u64);
+    for (d, &start) in starts.iter().enumerate() {
+        let end = starts.get(d + 1).copied().unwrap_or(tokens.len());
+        let mut cursor = start + 1;
+        while cursor < end {
+            let stop = (cursor + context).min(end);
+            let n = (cursor..stop)
+                .filter(|&p| tokens[p] != bos && mask[p] == 1)
+                .count();
+            if n > 0 {
+                windows += 1;
+            }
+            if n >= min_scored {
+                usable += 1;
+            }
+            cursor = stop;
+        }
+    }
+    (starts.len() as u64, windows, usable)
+}
+
+/// The trainer's filter: a window is usable with at least this many scored targets.
+pub const MIN_SCORED: usize = 4;
+
+/// `window-count split=DIR context=N`: the trainer's usable TRAIN windows for one split, with
+/// `bos` 0 (the sheet's BOS id). The split loads as for `reply-cap`, so its manifest needs
+/// `eos_id`. Returns one JSON line.
+pub fn run_window_count(args: &[String]) -> R<String> {
+    let mut kv: BTreeMap<&str, &str> = BTreeMap::new();
+    for item in args {
+        let (k, v) = item
+            .split_once('=')
+            .ok_or(format!("argument {item:?}: expected key=value"))?;
+        if !["split", "context"].contains(&k) {
+            return Err(format!("unknown argument {k}="));
+        }
+        if kv.insert(k, v).is_some() {
+            return Err(format!("{k}= given more than once"));
+        }
+    }
+    let need = |k: &str| kv.get(k).copied().ok_or(format!("{k}= is required"));
+    let dir = PathBuf::from(need("split")?);
+    let cstr = need("context")?;
+    let context = cstr
+        .parse::<usize>()
+        .ok()
+        .filter(|&c| c >= 1)
+        .ok_or(format!("context={cstr}: expected a positive integer"))?;
+    let s = Split::load(&dir)?;
+    if let Some(b) = s.manifest.get("bos_id") {
+        if b.as_u64() != Some(0) {
+            return Err(format!("{}: bos_id {b} is not 0", dir.join("manifest.json").display()));
+        }
+    }
+    let tokens = s.tokens();
+    if tokens.first().copied() != Some(0) {
+        return Err(format!("{}: the first token is not BOS (0)", dir.join("tokens.u16").display()));
+    }
+    let (documents, windows, usable) = usable_windows(tokens, &s.mask, 0, context, MIN_SCORED);
+    let v = json!({
+        "split_tokens_sha256": s.tokens_sha,
+        "split_mask_sha256": s.mask_sha,
+        "context": context,
+        "min_scored": MIN_SCORED,
+        "documents": documents,
+        "windows": windows,
+        "usable_windows": usable,
+    });
+    Ok(serde_json::to_string(&v).expect("json value serialises"))
+}
