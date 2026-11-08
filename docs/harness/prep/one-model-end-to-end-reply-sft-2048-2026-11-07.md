@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-28](../loop/tasks/one-model-end-to-end/deepseek-28/ORDER.md).
 
-TEST FITNESS: FIT - fresh non-author review at `a628f4e9ee3f418e5e527a7d8ff34d3ad0bc7d5f`, reviewed-runtime `0964a28196410a44a7d6af28194731a1003d0bb211d890b7a00fbaf2cf7153a3`, reviewer session `01a1b8dd-6013-7da2-9d34-53490ddef0e5`.
+TEST FITNESS: PENDING - the D67 scope correction requires a fresh exact-head review.
 
 PRE-RUN: PENDING (fresh D67 review required).
 

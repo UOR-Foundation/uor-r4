@@ -39,6 +39,10 @@ for roughly $0.45-$0.55 at the prior $0.563/hour offer.
   `a628f4e9ee3f418e5e527a7d8ff34d3ad0bc7d5f`, runtime
   `0964a28196410a44a7d6af28194731a1003d0bb211d890b7a00fbaf2cf7153a3`,
   reviewer session `01a1b8dd-6013-7da2-9d34-53490ddef0e5`.
+- Fresh D67: **NO-GO** at `7dd28ece684aabf0dea72f412cbb20769dce6110`.
+  The prerequisite sheet was changed without appearing in the ORDER scope, and
+  the read-only reviewer sandbox could not perform live pod and store
+  admission. The ORDER now names that sheet; live admission is rechecked below.
 
 Not run: pod creation, remote build, training, export, panel scoring, store write
 or seal readback.

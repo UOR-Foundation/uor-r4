@@ -27,6 +27,7 @@ substitute may be scored under that name.
 ## Files in scope
 
 - `docs/loop/tasks/one-model-end-to-end/deepseek-28/**`
+- `docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md`
 - `docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md`
 - `docs/labs/one-model-end-to-end/reply-sft-2026-11-07/**`
 - `docs/research/notebook/float-training.md`
