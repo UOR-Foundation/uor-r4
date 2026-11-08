@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 
 TEST FITNESS: FIT - fresh non-author review at `5e59d01d9bfa1ce533eeb451b1b9f9cde97c2708`, reviewed-runtime `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`, reviewer session `01a1b8eb-6f3d-7dc2-97c7-ebdcb679fc05`.
 
-PRE-RUN: PENDING (fresh D67 review required).
+PRE-RUN: GO - fresh D67 review at `fa5d7b0874159b17b0486248f5abd239269cfad3`, reviewed-runtime `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`, reviewer session `01a1b8f1-79b0-7c53-a3ed-0bda5eee206e`.
 
 ## Why
 

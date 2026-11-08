@@ -53,6 +53,13 @@ for roughly $0.45-$0.55 at the prior $0.563/hour offer.
   verified RTX 5090 offer remains $0.563/hour. The store topic contains only the
   immutable 1,024-step `s1-20261108t005743z-a849820fba9cfbf4` root, so the
   registered `s1-2048` prefix is absent.
+- Fresh D67 after correction: **GO**, no blockers, at
+  `fa5d7b0874159b17b0486248f5abd239269cfad3`, runtime
+  `e69e05e968919f6d4f3f1b282f0af7934a3b0e86cd2e5e1616ca38dbe39b234a`,
+  reviewer session `01a1b8f1-79b0-7c53-a3ed-0bda5eee206e`. It independently
+  downloaded and re-hashed all 18 remote inputs, verified the prior source
+  seal, reran 221 gate checks and 84 mutations, and confirmed admission at two
+  of four pods and $1.126 of $8/hour with the new pod counted.
 
 Not run: pod creation, remote build, training, export, panel scoring, store write
 or seal readback.
