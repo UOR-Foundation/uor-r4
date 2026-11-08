@@ -40,10 +40,18 @@ termination/continuation gap.
   first attempt incorrectly reused a legacy helper that stops on token 0 and is
   retained as an instrument fault.
 - Reused one parsed CPU forward across 32 independent row workers. Each final
-  full five-arm sweep takes about 2.4-2.8 seconds.
+  full five-arm sweep takes about 2.3-2.7 seconds.
 - Added fail-closed artifact/tokenizer/panel hashes, unique case and pair checks,
   exact frozen-answer scoring, exact per-stratum pair metrics, paired controls,
   CPU identity and executable SHA-256.
+- Review repair separates the two matched-treatment comparisons from the two
+  structural identity controls in the machine-readable report. Identity
+  controls retain their descriptive counts but carry `passes: null`; they cannot
+  be mistaken for inferential wins. Arm summaries now carry both `pairs: 128`
+  and `complete_distinct_pairs`.
+- The served-forward parity input is now retained as the exact 40-token panel
+  slice, its case identity, derivation and source hash. Re-running both artifact
+  audits from that file reproduced the previous parity report hashes exactly.
 
 ## Measurements
 
@@ -52,9 +60,9 @@ The selected artifacts are seed 1
 and seed 2
 `8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae`.
 The executable is
-`86dadc06df624a4ecef9e98843f7e3db30cd19ca7c914b23a024101795028d44`.
+`a6cc69daad3f5dfd9af1ed64dd3a573a8086fa8a0b77d8d200e476c1795cc000`.
 
-| Seed | Rendering | Free complete/pairs | First-target complete/pairs | Correct-value complete/pairs | Other value complete | Shuffled value complete |
+| Seed | Rendering | Free complete/distinct pairs | First-target complete/distinct pairs | Correct-value complete/distinct pairs | Other value complete | Shuffled value complete |
 |---|---|---:|---:|---:|---:|---:|
 | 1 | `one-user-turn/v1` | 0/0 | 41/12 | **230/102** | 0 | 0 |
 | 1 | `per-turn/v1` | 0/0 | 41/12 | **250/122** | 0 | 0 |
@@ -97,25 +105,30 @@ decision, reply, tally and paired count is identical.
 
 The exact artifacts also passed a panel-token served-forward audit at 40
 positions each: 10,240 Q12 coordinates, 40 token decisions and 320 kept cells
-with zero query, token or kept-cell mismatches. Audit report hashes are
-`11271dc5...` and `61aeab45...`.
+with zero query, token or kept-cell mismatches. The committed source is case
+`fresh-diverse-length2-00-swap0-q0-forward-job`, token slice `[0:40]`,
+`reply_start: 39`, with sequence hash
+`c44886565e763cee62096af3c82e4e1427d7bd8fcd9f952969d25a230af47a7b`.
+Audit report hashes are `11271dc5...` and `61aeab45...`.
 
 The canonical D84 ledger is
 [`resource-ledger.json`](../../../../labs/cpu-training-pilot-forced-copy-2026-11-08/resource-ledger.json),
 with the detailed retained-run receipt at
-[`evidence/resources.json`](./evidence/resources.json): 19 retained reports,
-67.116 seconds measured probe time, 137,456 KiB maximum peak RSS,
-563,081,835 bytes of retained evidence/inputs, 5,585,107,350 bytes of
-regenerable target, and 144.632 GiB free. The ledger charges a 1,800-second
-projected increment, producing a 37,808-second cumulative lab projection. The
-canonical shared ledger
+[`evidence/resources.json`](./evidence/resources.json): 24 retained reports,
+79.524 seconds measured probe time, 137,456 KiB maximum peak RSS,
+570,541,430 bytes of retained evidence/inputs, 5,813,363,277 bytes of
+regenerable target, and 144.406 GiB free. The ledger preserves the legacy
+37,808.048816343-second projection chain and separately reconciles the
+95,627.677487699-second latest recorded admitted cumulative, the 1,140-second
+readout-refit projection, and this unit's 1,800-second increment. The admitted
+cumulative is 98,567.677487699 seconds. The canonical shared ledger
 `.uor-models/native-joint-learning-2026-09-04/model-time.json` was `ABSENT`.
 Downloads, export, builds, tests and delivery are explicitly unmeasured.
 
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-forced-copy-panel`: 9 passed.
+  cpu-forced-copy-panel`: 13 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 455 passed,
   4 ignored.
 - `cargo test --release --offline --locked --features cpu-parity --bin
@@ -124,9 +137,11 @@ Downloads, export, builds, tests and delivery are explicitly unmeasured.
   cpu-forced-copy-panel`: passed.
 - Targeted `rustfmt --check`, driver Clippy with no changed-code warnings,
   `git diff --check`, report check, local PR policy and full loop gates pass.
-- Five v4 reports from the exact reviewed source cover two seeds, both
+- Five v5 reports from the exact reviewed source cover two seeds, both
   renderings and the exact-schema repeat. All 256 rows and 128 pairs are present
-  in every arm; all non-timing fields match the retained v3 evidence exactly.
+  in every arm. Inputs, settings, arm rows, replies, tallies and decisions match
+  v4 and v3; v5 changes only executable identity, timing, RSS and the repaired
+  paired-comparison metadata.
 
 ## Skills used
 

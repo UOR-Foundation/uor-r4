@@ -306,23 +306,18 @@ fn run() -> Result<()> {
         ),
     ];
     for (name, bytes, expected) in identities {
-        let actual = uor_r4_discrete::corpus::sha256(bytes);
-        if actual != expected {
-            return Err(format!("{name} SHA-256 differs: got {actual}"));
-        }
+        verify_sha256_identity(name, bytes, expected)?;
     }
 
     let manifest: Manifest = parse_json("manifest", &manifest_bytes)?;
-    for (name, bytes) in [
-        ("inputs.json", &inputs_bytes),
-        ("labels.json", &labels_bytes),
-        ("plan.json", &plan_bytes),
-    ] {
-        let actual = uor_r4_discrete::corpus::sha256(bytes);
-        if manifest.files.get(name).map(|entry| entry.sha256.as_str()) != Some(actual.as_str()) {
-            return Err(format!("panel manifest files.{name}.sha256 differs"));
-        }
-    }
+    verify_manifest_files(
+        &manifest,
+        &[
+            ("inputs.json", &inputs_bytes),
+            ("labels.json", &labels_bytes),
+            ("plan.json", &plan_bytes),
+        ],
+    )?;
     if manifest.tokenizer_sha256 != args["expected-tokenizer-sha256"] {
         return Err("panel manifest tokenizer_sha256 differs".to_owned());
     }
@@ -444,19 +439,7 @@ fn prepare_cases(
     if inputs.cases.len() != labels.cases.len() || labels.cases.len() != 256 {
         return Err("inputs and labels must each hold 256 cases".to_owned());
     }
-    let by_id = inputs
-        .cases
-        .iter()
-        .map(|case| (case.id.as_str(), case))
-        .collect::<BTreeMap<_, _>>();
-    let label_ids = labels
-        .cases
-        .iter()
-        .map(|case| case.id.as_str())
-        .collect::<BTreeSet<_>>();
-    if by_id.len() != inputs.cases.len() || label_ids.len() != labels.cases.len() {
-        return Err("panel case identities are not unique".to_owned());
-    }
+    let by_id = panel_identity_map(inputs, labels)?;
     let strata = plan
         .histories
         .iter()
@@ -478,13 +461,7 @@ fn prepare_cases(
             .map_err(|error| error.to_string())?;
         references.push(reference(encoder, &label.answers)?);
     }
-    let mut pairs = BTreeMap::<&str, Vec<usize>>::new();
-    for (index, label) in labels.cases.iter().enumerate() {
-        pairs.entry(label.pair_id.as_str()).or_default().push(index);
-    }
-    if pairs.len() != 128 || pairs.values().any(|indices| indices.len() != 2) {
-        return Err("panel labels must form 128 two-row pairs".to_owned());
-    }
+    let pairs = label_pair_map(labels)?;
     let shuffled = distinct_shuffled_indices(&references, seed)?;
 
     let mut prepared = Vec::with_capacity(labels.cases.len());
@@ -515,6 +492,37 @@ fn prepare_cases(
         });
     }
     Ok(prepared)
+}
+
+fn panel_identity_map<'a>(
+    inputs: &'a Inputs,
+    labels: &'a Labels,
+) -> Result<BTreeMap<&'a str, &'a InputCase>> {
+    let by_id = inputs
+        .cases
+        .iter()
+        .map(|case| (case.id.as_str(), case))
+        .collect::<BTreeMap<_, _>>();
+    let label_ids = labels
+        .cases
+        .iter()
+        .map(|case| case.id.as_str())
+        .collect::<BTreeSet<_>>();
+    if by_id.len() != inputs.cases.len() || label_ids.len() != labels.cases.len() {
+        return Err("panel case identities are not unique".to_owned());
+    }
+    Ok(by_id)
+}
+
+fn label_pair_map(labels: &Labels) -> Result<BTreeMap<&str, Vec<usize>>> {
+    let mut pairs = BTreeMap::<&str, Vec<usize>>::new();
+    for (index, label) in labels.cases.iter().enumerate() {
+        pairs.entry(label.pair_id.as_str()).or_default().push(index);
+    }
+    if pairs.len() != 128 || pairs.values().any(|indices| indices.len() != 2) {
+        return Err("panel labels must form 128 two-row pairs".to_owned());
+    }
+    Ok(pairs)
 }
 
 fn reference(encoder: &DialogueEncoder<'_>, answers: &FrozenAnswers) -> Result<Reference> {
@@ -585,25 +593,37 @@ fn generate_with_prefix(
             .map_err(|error| error.to_string())?
             .token;
     }
-    let mut tokens = prefix.to_vec();
-    if tokens.len() == cap {
+    continue_generation(next, prefix.to_vec(), prompt.len(), cap, context, |token| {
+        forward
+            .step(token, CpuFbsHead::Nearest)
+            .map(|step| step.token)
+            .map_err(|error| error.to_string())
+    })
+}
+
+fn continue_generation(
+    mut next: u32,
+    mut tokens: Vec<u32>,
+    prompt: usize,
+    cap: usize,
+    context: usize,
+    mut advance: impl FnMut(u32) -> Result<u32>,
+) -> Result<Generated> {
+    if tokens.len() >= cap {
         return Ok(Generated {
             tokens,
             stop: Stop::Cap,
         });
     }
     loop {
-        let stop = stop_for(next, tokens.len(), prompt.len(), cap, context);
+        let stop = stop_for(next, tokens.len(), prompt, cap, context);
         if !matches!(stop, Some(Stop::Eos | Stop::Bos)) {
             tokens.push(next);
         }
         if let Some(stop) = stop {
             return Ok(Generated { tokens, stop });
         }
-        next = forward
-            .step(next, CpuFbsHead::Nearest)
-            .map_err(|error| error.to_string())?
-            .token;
+        next = advance(next)?;
     }
 }
 
@@ -693,8 +713,7 @@ fn arm_row(
 ) -> Result<ArmRow> {
     let stop = generated.stop;
     let reply_bytes = scoring.tokenizer.decode_bytes(&generated.tokens);
-    let complete = std::str::from_utf8(&reply_bytes)
-        .is_ok_and(|text| stop == Stop::Eos && case.target_answer_accepts(text, scoring.protocol));
+    let complete = reply_is_complete(&reply_bytes, stop, &case.target_answers, scoring.protocol);
     let reply_text = String::from_utf8_lossy(&reply_bytes).into_owned();
     let first_line = reply_text.split('\n').next().unwrap_or("");
     let first_line_words = words(first_line);
@@ -727,10 +746,14 @@ fn arm_row(
     })
 }
 
-impl PreparedCase {
-    fn target_answer_accepts(&self, text: &str, protocol: &DialogueProtocol) -> bool {
-        self.target_answers.accepts(protocol.reply_text(text))
-    }
+fn reply_is_complete(
+    reply_bytes: &[u8],
+    stop: Stop,
+    answers: &FrozenAnswers,
+    protocol: &DialogueProtocol,
+) -> bool {
+    std::str::from_utf8(reply_bytes)
+        .is_ok_and(|text| stop == Stop::Eos && answers.accepts(protocol.reply_text(text)))
 }
 
 fn summarize_arms(
@@ -854,14 +877,14 @@ fn summarize_pairs(rows: &[ArmRow]) -> Result<serde_json::Value> {
         .map(|row| ((row.id.as_str(), row.arm), row.complete))
         .collect::<BTreeMap<_, _>>();
     let comparisons = [
-        (Arm::FirstTarget, Arm::Free),
-        (Arm::CorrectValue, Arm::FirstTarget),
-        (Arm::CorrectValue, Arm::OtherRelation),
-        (Arm::CorrectValue, Arm::ShuffledValue),
+        (Arm::FirstTarget, Arm::Free, true),
+        (Arm::CorrectValue, Arm::FirstTarget, true),
+        (Arm::CorrectValue, Arm::OtherRelation, false),
+        (Arm::CorrectValue, Arm::ShuffledValue, false),
     ];
     let mut overall = BTreeMap::new();
     let mut per_stratum = BTreeMap::<String, BTreeMap<String, serde_json::Value>>::new();
-    for (candidate_arm, control_arm) in comparisons {
+    for (candidate_arm, control_arm, inferential) in comparisons {
         let mut all = Vec::new();
         let mut strata = BTreeMap::<String, Vec<(bool, bool)>>::new();
         for row in rows.iter().filter(|row| row.arm == candidate_arm) {
@@ -878,12 +901,12 @@ fn summarize_pairs(rows: &[ArmRow]) -> Result<serde_json::Value> {
                 .push((candidate, control));
         }
         let key = format!("{}-vs-{}", candidate_arm.as_str(), control_arm.as_str());
-        overall.insert(key.clone(), paired_binary(&all)?);
+        overall.insert(key.clone(), paired_binary(&all, inferential)?);
         for (stratum, pairs) in strata {
             per_stratum
                 .entry(stratum)
                 .or_default()
-                .insert(key.clone(), paired_binary(&pairs)?);
+                .insert(key.clone(), paired_binary(&pairs, inferential)?);
         }
     }
     Ok(serde_json::json!({
@@ -892,7 +915,7 @@ fn summarize_pairs(rows: &[ArmRow]) -> Result<serde_json::Value> {
     }))
 }
 
-fn paired_binary(rows: &[(bool, bool)]) -> Result<serde_json::Value> {
+fn paired_binary(rows: &[(bool, bool)], inferential: bool) -> Result<serde_json::Value> {
     if rows.is_empty() {
         return Err("paired comparison requires rows".to_owned());
     }
@@ -910,7 +933,9 @@ fn paired_binary(rows: &[(bool, bool)]) -> Result<serde_json::Value> {
         "discordant": discordant,
         "gain": gain,
         "threshold": threshold,
-        "passes": gain >= i64::try_from(threshold).unwrap_or(i64::MAX),
+        "comparison_kind": if inferential { "matched-treatment" } else { "identity-control" },
+        "inferential": inferential,
+        "passes": inferential.then_some(gain >= i64::try_from(threshold).unwrap_or(i64::MAX)),
     }))
 }
 
@@ -1061,6 +1086,24 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, Str
 
 fn parse_json<T: for<'de> Deserialize<'de>>(name: &str, bytes: &[u8]) -> Result<T> {
     serde_json::from_slice(bytes).map_err(|error| format!("{name}: {error}"))
+}
+
+fn verify_sha256_identity(name: &str, bytes: &[u8], expected: &str) -> Result<()> {
+    let actual = uor_r4_discrete::corpus::sha256(bytes);
+    if actual != expected {
+        return Err(format!("{name} SHA-256 differs: got {actual}"));
+    }
+    Ok(())
+}
+
+fn verify_manifest_files(manifest: &Manifest, files: &[(&str, &[u8])]) -> Result<()> {
+    for &(name, bytes) in files {
+        let actual = uor_r4_discrete::corpus::sha256(bytes);
+        if manifest.files.get(name).map(|entry| entry.sha256.as_str()) != Some(actual.as_str()) {
+            return Err(format!("panel manifest files.{name}.sha256 differs"));
+        }
+    }
+    Ok(())
 }
 
 fn validate_sha256(value: &str) -> Result<()> {
@@ -1241,10 +1284,40 @@ mod tests {
                 },
             ],
         };
-        let (one_user, _) = render(&tokenizer, &encoder, &case, ONE_USER_RENDERING).unwrap();
-        let (per_turn, _) = render(&tokenizer, &encoder, &case, PER_TURN_RENDERING).unwrap();
+        let (one_user, one_user_ids) =
+            render(&tokenizer, &encoder, &case, ONE_USER_RENDERING).unwrap();
+        let (per_turn, per_turn_ids) =
+            render(&tokenizer, &encoder, &case, PER_TURN_RENDERING).unwrap();
         assert_eq!(one_user, "first second Where?");
         assert_eq!(per_turn, "first\nsecond\nWhere?");
+        assert_eq!(
+            one_user_ids,
+            encoder
+                .encode_assistant_prefix(&[Message {
+                    role: "user",
+                    content: "first second Where?",
+                }])
+                .tokens
+        );
+        assert_eq!(
+            per_turn_ids,
+            encoder
+                .encode_assistant_prefix(&[
+                    Message {
+                        role: "user",
+                        content: "first",
+                    },
+                    Message {
+                        role: "user",
+                        content: "second",
+                    },
+                    Message {
+                        role: "user",
+                        content: "Where?",
+                    },
+                ])
+                .tokens
+        );
     }
 
     #[test]
@@ -1338,6 +1411,129 @@ mod tests {
     }
 
     #[test]
+    fn correct_prefix_continuation_stops_on_eos_without_keeping_it() {
+        let generated = continue_generation(EOS, vec![7, 8], 10, 8, 24, |_| {
+            Err("EOS was stepped".to_owned())
+        })
+        .unwrap();
+        assert_eq!(generated.tokens, vec![7, 8]);
+        assert_eq!(generated.stop, Stop::Eos);
+
+        let generated = continue_generation(9, vec![7, 8], 10, 8, 24, |_| Ok(EOS)).unwrap();
+        assert_eq!(generated.tokens, vec![7, 8, 9]);
+        assert_eq!(generated.stop, Stop::Eos);
+    }
+
+    #[test]
+    fn exact_completion_requires_eos_and_the_complete_accepted_answer() {
+        let tokenizer = byte_level_tokenizer();
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).expect("protocol");
+        let answers = FrozenAnswers {
+            intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+            accepted: vec!["Basalt loggia.".to_owned()],
+        };
+        assert!(reply_is_complete(
+            b" Basalt loggia.",
+            Stop::Eos,
+            &answers,
+            &protocol
+        ));
+        assert!(!reply_is_complete(
+            b" Basalt loggia.",
+            Stop::Cap,
+            &answers,
+            &protocol
+        ));
+        assert!(!reply_is_complete(
+            b" Basalt loggia. Extra",
+            Stop::Eos,
+            &answers,
+            &protocol
+        ));
+        assert!(!reply_is_complete(&[0xff], Stop::Eos, &answers, &protocol));
+    }
+
+    #[test]
+    fn metadata_hash_and_manifest_mismatches_fail_closed() {
+        let bytes = b"panel";
+        let actual = uor_r4_discrete::corpus::sha256(bytes);
+        verify_sha256_identity("panel", bytes, &actual).unwrap();
+        assert!(verify_sha256_identity("panel", bytes, &"0".repeat(64)).is_err());
+
+        let manifest = Manifest {
+            files: BTreeMap::from([(
+                "inputs.json".to_owned(),
+                ManifestFile {
+                    sha256: actual.clone(),
+                },
+            )]),
+            tokenizer_sha256: String::new(),
+            strata_rows: BTreeMap::new(),
+        };
+        verify_manifest_files(&manifest, &[("inputs.json", bytes)]).unwrap();
+        assert!(verify_manifest_files(&manifest, &[("labels.json", bytes)]).is_err());
+        assert!(verify_manifest_files(&manifest, &[("inputs.json", b"other")]).is_err());
+    }
+
+    #[test]
+    fn duplicate_cases_and_malformed_pairs_fail_closed() {
+        let answers = FrozenAnswers {
+            intent: uor_r4_core::answer_oracle::RecordedValueIntent::Current,
+            accepted: vec!["basalt loggia.".to_owned()],
+        };
+        let inputs = Inputs {
+            cases: vec![
+                InputCase {
+                    id: "same".to_owned(),
+                    query_ids: vec![3],
+                    segments: Vec::new(),
+                },
+                InputCase {
+                    id: "same".to_owned(),
+                    query_ids: vec![4],
+                    segments: Vec::new(),
+                },
+            ],
+        };
+        let labels = Labels {
+            cases: vec![
+                LabelCase {
+                    answers: answers.clone(),
+                    id: "one".to_owned(),
+                    pair_id: "pair-0".to_owned(),
+                },
+                LabelCase {
+                    answers: answers.clone(),
+                    id: "two".to_owned(),
+                    pair_id: "pair-1".to_owned(),
+                },
+            ],
+            membership_only: true,
+            protocol: SCHEMA_V2.to_owned(),
+            schema: "uor-r4.native-source-bank-labels/1".to_owned(),
+        };
+        assert!(panel_identity_map(&inputs, &labels).is_err());
+
+        let labels = Labels {
+            cases: (0..256)
+                .map(|index| LabelCase {
+                    answers: answers.clone(),
+                    id: format!("case-{index}"),
+                    pair_id: format!("pair-{}", index / 2),
+                })
+                .collect(),
+            membership_only: true,
+            protocol: SCHEMA_V2.to_owned(),
+            schema: "uor-r4.native-source-bank-labels/1".to_owned(),
+        };
+        assert_eq!(label_pair_map(&labels).unwrap().len(), 128);
+
+        let mut malformed = labels;
+        malformed.cases[0].pair_id = "orphan".to_owned();
+        assert!(label_pair_map(&malformed).is_err());
+    }
+
+    #[test]
     fn value_words_ignore_terminal_punctuation_only() {
         assert_eq!(
             value_words(" basalt loggia."),
@@ -1355,11 +1551,19 @@ mod tests {
 
     #[test]
     fn paired_binary_uses_the_registered_discordant_margin() {
-        let report = paired_binary(&[(true, false), (true, false), (false, true)]).unwrap();
+        let report = paired_binary(&[(true, false), (true, false), (false, true)], true).unwrap();
         assert_eq!(report["candidate_only"], 2);
         assert_eq!(report["control_only"], 1);
         assert_eq!(report["gain"], 1);
         assert_eq!(report["threshold"], 4);
+        assert_eq!(report["inferential"], true);
+        assert_eq!(report["comparison_kind"], "matched-treatment");
+        assert_eq!(report["passes"], false);
+
+        let control = paired_binary(&[(true, false), (false, false)], false).unwrap();
+        assert_eq!(control["inferential"], false);
+        assert_eq!(control["comparison_kind"], "identity-control");
+        assert!(control["passes"].is_null());
     }
 
     #[test]
