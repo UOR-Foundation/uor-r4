@@ -13896,6 +13896,50 @@ mod tests {
         assert_ne!(ids(1, 3), ids(2, 3));
     }
 
+    /// claude-328's I-1: the default `--recall` windows, training and held-out, for seeds 1 and 2
+    /// at indices 0–127, hash to the digests `main` wrote at f1112f4f, so the two-class task
+    /// leaves the default path where it was. Per window: the five field lengths, then each field,
+    /// little-endian (ids and targets as `u32`, offsets, positions and buckets as `u64`).
+    #[test]
+    fn recall_default_windows_match_main_fixture() {
+        let digest = |seed: u64| {
+            let mut bytes = Vec::new();
+            for index in 0..128 {
+                let (w, buckets) = recall_window(seed, index, SHEET_CONTEXT, 4).unwrap();
+                for len in [
+                    w.input_ids.len(),
+                    w.scored_offsets.len(),
+                    w.scored_targets.len(),
+                    w.scored_corpus_positions.len(),
+                    buckets.len(),
+                ] {
+                    bytes.extend_from_slice(&(len as u64).to_le_bytes());
+                }
+                w.input_ids.iter().for_each(|v| bytes.extend_from_slice(&v.to_le_bytes()));
+                w.scored_offsets
+                    .iter()
+                    .for_each(|&v| bytes.extend_from_slice(&(v as u64).to_le_bytes()));
+                w.scored_targets.iter().for_each(|v| bytes.extend_from_slice(&v.to_le_bytes()));
+                w.scored_corpus_positions
+                    .iter()
+                    .for_each(|&v| bytes.extend_from_slice(&(v as u64).to_le_bytes()));
+                buckets
+                    .iter()
+                    .for_each(|&v| bytes.extend_from_slice(&(v as u64).to_le_bytes()));
+            }
+            crate::sha256_bytes(&bytes)
+        };
+        let seeds = [1, 2, 1 ^ RECALL_EVAL_SEED, 2 ^ RECALL_EVAL_SEED];
+        let expected = [
+            "b8f80ad81c26d93f0ef23e2bb72fa2a6953703f4e87cd1f8d49500ce573ca597",
+            "ecaa9b2ceb9f666941527baed4f8b14a1f41271025754256f875aba8cfd862dc",
+            "dc2882a288d262b597d33999e0916b6e2d936514f53c8dffb20839fcf256376d",
+            "81bc98514a416bed283d04d172e069b4d449bb093db3aa2efd41ef60f2196136",
+        ];
+        let got: Vec<String> = seeds.iter().map(|&s| digest(s)).collect();
+        assert_eq!(got, expected);
+    }
+
     #[test]
     fn openings_carry_the_prompt_their_window_shows_back_to_the_last_reply() {
         // BOS, a prompt (10 11 12), a reply (20 21), a prompt (13 14), a reply (22).
