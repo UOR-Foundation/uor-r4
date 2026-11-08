@@ -249,6 +249,11 @@ now enforces a 100 MiB seal cap and keeps the panel build outside that seal.
   reviewer session `01a1b872-d7dc-7930-a937-2cb0d1dc1215`, because one stop
   sentence, the free-generation rendering, and selector regression coverage
   were still ambiguous.
+- Fresh main-integrated FIT: **GO** at
+  `ec5eed0ac53960c60fe2ae72339bbd67289a0d6d`, reviewed-runtime
+  `0f8f1952d260e69d49cb9c4375f5af1cddfb58a8fc392a176d06818c8526f8a8`,
+  reviewer session `01a1b87e-f1d7-7552-a819-ddf861671a74`. No FIT blockers
+  remained.
 - `gate.sh`: 205 checks passed after pinning the reconciled stop sentence,
   per-turn source, guard-safe filter, first selected result, rendering label and
   full selector ordering.
@@ -276,7 +281,7 @@ shell-controller rules were used directly.
 
 ## Still open
 
-- Fresh FIT and D67 reviews of the reconciled exact runtime, then the seed-1 run.
+- Fresh D67 review of the main-integrated exact runtime, then the seed-1 run.
 - `m2-reply512` remains unavailable unless exact bytes are recovered.
 
 ## Plain summary
