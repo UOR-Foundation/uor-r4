@@ -692,10 +692,20 @@ mod tests {
                 !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase()),
                 "{w} is not a lowercase word"
             );
-            let stem = w.strip_suffix('s').unwrap_or(w);
-            let plural = format!("{w}s");
-            if panel_words.contains(w) || panel_words.contains(stem) || panel_words.contains(&plural)
-            {
+            // The word, and its regular singular and plural forms (-s, -es, -y/-ies), both ways.
+            let mut forms = vec![w.to_string(), format!("{w}s"), format!("{w}es")];
+            for suffix in ["s", "es"] {
+                if let Some(stem) = w.strip_suffix(suffix) {
+                    forms.push(stem.to_string());
+                }
+            }
+            if let Some(stem) = w.strip_suffix("ies") {
+                forms.push(format!("{stem}y"));
+            }
+            if let Some(stem) = w.strip_suffix('y') {
+                forms.push(format!("{stem}ies"));
+            }
+            if forms.iter().any(|f| panel_words.contains(f)) {
                 clashes.push(w);
             }
         }
@@ -719,7 +729,9 @@ mod tests {
     fn no_user_message_equals_a_panel_user_message() {
         let pinned = load_tokenizer().unwrap();
         let panel_messages = panel_user_messages(&pinned.tokenizer).unwrap();
-        assert!(panel_messages.len() >= 256, "{} panel messages", panel_messages.len());
+        // 256 served prompts plus the distinct history-turn joins; pinned so a change to the
+        // panel or to this rebuild of its `render` is seen.
+        assert_eq!(panel_messages.len(), 320, "{} panel messages", panel_messages.len());
         assert!(panel_messages.iter().any(|m| m.contains("basalt loggia")));
         for episode in episodes(5000, 324) {
             assert!(!panel_messages.contains(&episode.user_message()));

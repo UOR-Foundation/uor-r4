@@ -11,6 +11,12 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - A mix's manifest has no `source`, so claude-322's mix cannot be a root (claude-322 hit the same with D3). The new mix is built from claude-322's ten roots again, plus the corpus.
 - **Two builder subagents were refused every write** before the third built the crate. The guard binds a subagent to its suborder from the session's current folder, and the session was in the main checkout. Recorded in `local/claude/FRICTION.md`.
 - **No notebook row, against the ORDER's done-when 3.** The notebook's rules (`docs/research/notebook/README.md:34`, and its five verdict words) give a tooling or data step no row, since it measures no model. The row comes with claude-325's run of this mix.
+- **The ORDER's disjointness from "any word of the sealed dev512 inputs" was not checked.** The dev512 inputs file (sha `b9661606…`) is not in the repository; only its audit summaries are, under `archive/labs/m2-fresh-437-2026-10-10/`. The check covers what is on disk:
+  - the `m2-fresh256` panel's own literals (`FRESH256_*`), the panel this item is read on;
+  - `HISTORICAL_EXPOSED_LITERALS`;
+  - the repository's loaded historical literals. That loader (`load_historical_exposed_literals_from_repo`) checks the opened-fresh128 audit's input sha and that every literal of its frozen banks is in the set. So opened-fresh128 is covered, but only through its literals, not every word of its inputs.
+- **The mix was built with `scale-probe mix`, not `mix-chat-corpus`, and no `mix-chat-corpus` round trip was run.** The store test reads back every field both tools check, and the trainer's own loader reads the mix in claude-325.
+- **The first disjointness test caught only a trailing `s`, and the overlap test asserted `≥ 256` panel messages.** After the fresh review it also checks `-es` and `-y`/`-ies` both ways (no new clash), and it pins the count at exactly 320. Only tests changed; the corpus and mix bytes are as sealed.
 - **One curriculum template reads badly:** "I am a {v} by trade." gives "I am a opera …" for vowel-initial values. It is noise in the user text, not in the scored reply.
 
 ## What changed
