@@ -75,7 +75,7 @@
   },
   "storage": {
     "local_evidence_and_inputs_bytes": 570541430,
-    "new_unit_retained_runs_bytes": 7358103,
+    "new_unit_retained_runs_bytes": 7367743,
     "new_unit_retained_parity_bytes": 91852,
     "build_target_bytes": 5813363277,
     "temporary_logs_bytes": 17037,

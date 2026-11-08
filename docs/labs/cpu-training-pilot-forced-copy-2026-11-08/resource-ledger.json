@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-forced-copy-resource/1",
   "status": "COMPLETE_DIAGNOSTIC",
   "experiment": "forced-copy attribution on m2-fresh256 with two sealed current-state artifacts",
-  "updated_utc": "2026-11-08T19:24:11Z",
+  "updated_utc": "2026-11-08T19:38:31Z",
   "previous_ledger": "cpu-training-pilot-readout-refit-2026-11-06/resource-ledger.json",
   "previous_ledger_projection_seconds": 1140,
   "previous_admitted_cumulative_projection_seconds": 95627.677487699,
@@ -48,7 +48,7 @@
   },
   "storage": {
     "local_evidence_and_inputs_bytes": 570541430,
-    "new_unit_retained_runs_bytes": 7358103,
+    "new_unit_retained_runs_bytes": 7367743,
     "new_unit_retained_parity_bytes": 91852,
     "build_target_bytes": 5813363277,
     "temporary_logs_bytes": 17037,
