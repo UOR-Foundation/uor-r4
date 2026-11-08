@@ -97,6 +97,31 @@ mutate_first() {
   fi
   caught=$((caught + 1))
 }
+mutate_swap() {
+  local name=$1 file=$2 first=$3 second=$4
+  attempted=$((attempted + 1))
+  local target="$TMP/$name"
+  cp "$file" "$target"
+  FIRST=$first SECOND=$second perl -0pi -e \
+    's/\Q$ENV{FIRST}\E/\x00/g; s/\Q$ENV{SECOND}\E/$ENV{FIRST}/g; s/\x00/$ENV{SECOND}/g' \
+    "$target"
+  cmp -s "$file" "$target" && {
+    echo "mutation $name did not change its file" >&2
+    exit 1
+  }
+  if "$HERE/gate.sh" \
+    "$([ "$file" = "$JOB" ] && printf '%s' "$target" || printf '%s' "$JOB")" \
+    "$([ "$file" = "$LAUNCHER" ] && printf '%s' "$target" || printf '%s' "$LAUNCHER")" \
+    "$([ "$file" = "$SHEET" ] && printf '%s' "$target" || printf '%s' "$SHEET")" \
+    "$([ "$file" = "$EXTENSION_SHEET" ] && printf '%s' "$target" || printf '%s' "$EXTENSION_SHEET")" \
+    "$([ "$file" = "$HARDWARE_LIB" ] && printf '%s' "$target" || printf '%s' "$HARDWARE_LIB")" \
+    "$([ "$file" = "$CONTENT_SHEET" ] && printf '%s' "$target" || printf '%s' "$CONTENT_SHEET")" \
+    >/dev/null 2>&1; then
+    echo "mutation $name escaped" >&2
+    exit 1
+  fi
+  caught=$((caught + 1))
+}
 
 mutate wrong-stop-step "$JOB" '[ "$step" -eq 512 ]' '[ "$step" -eq 768 ]'
 mutate disabled-stop "$JOB" '[ "$eos_p50" -ge 7 ]; then' '[ "$eos_p50" -ge 7 ] && false; then'
@@ -346,6 +371,26 @@ case "$RECIPE" in'
 mutate content-sheet-override "$LAUNCHER" \
   'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-content-ratio-2026-11-08.md' \
   'RUNTIME_EXCLUDE_FIT=${UOR_SFT_PREP_SHEET:-docs/harness/prep/one-model-end-to-end-content-ratio-2026-11-08.md}'
+mutate_swap swapped-recipe-data "$JOB" \
+  '  legacy)
+' \
+  '  content-ratio)
+'
+mutate_swap swapped-launcher-pair "$LAUNCHER" \
+  '  legacy:2048:s1-2048)
+' \
+  '  content-ratio:2048:s1-content-ratio)
+'
+mutate missing-successful-input-compaction "$JOB" \
+  'compact_successful_inputs "$RUN" ||' 'true ||'
+mutate skipped-compaction-token-hash "$HARDWARE_LIB" \
+  '[ "$tokens_sha" = "$TRAIN_TOKENS_SHA" ] &&' 'true &&'
+mutate skipped-compaction-mask-hash "$HARDWARE_LIB" \
+  '[ "$mask_sha" = "$TRAIN_MASK_SHA" ] || return 1' 'true || return 1'
+mutate delete-before-compaction-record "$HARDWARE_LIB" \
+  'mv "$staging" "$output" || return 1
+  [ -f "$output" ] || return 1' \
+  'rm -f "$tokens" "$mask"; true'
 mutate_first missing-extension-bar "$EXTENSION_SHEET" '## Bar' '## Removed bar'
 mutate_first missing-extension-split "$EXTENSION_SHEET" '## Data split' '## Removed split'
 mutate_first missing-extension-steps "$EXTENSION_SHEET" '## Steps' '## Removed steps'
@@ -354,6 +399,9 @@ mutate_first missing-content-bar "$CONTENT_SHEET" '## Bar' '## Removed bar'
 mutate_first missing-content-split "$CONTENT_SHEET" '## Data split' '## Removed split'
 mutate_first missing-content-recipe "$CONTENT_SHEET" '## Recipe' '## Removed recipe'
 mutate_first missing-content-stop "$CONTENT_SHEET" '## Stop rule' '## Removed stop'
+mutate_first missing-content-post-use-record "$CONTENT_SHEET" \
+  '`control/post-use-inputs.json`, and then removes only those two raw payloads.' \
+  '`control/removed.json`, and then removes only those two raw payloads.'
 mutate_first wrong-content-sheet-tokens "$CONTENT_SHEET" \
   3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34 \
   0000000000000000000000000000000000000000000000000000000000000000

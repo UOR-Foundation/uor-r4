@@ -11,8 +11,9 @@ PRE-RUN: PENDING - fresh D67 review required.
 
 The closed 2,048-step reply-SFT dose selected step 1,280 with 52/256 free EOS
 stops, but zero EOS top-1 and zero complete accepted replies. Its mixed corpus was
-about 20% M-World tokens. This is one distinct data-distribution intervention:
-repeat the same excluded M-World store three times while keeping OASST2 once.
+41.45% M-World by total tokens but only 20.32% by scored reply tokens. This is
+one distinct data-distribution intervention: repeat the same excluded M-World
+store three times while keeping OASST2 once.
 
 ## Question
 
@@ -53,7 +54,9 @@ excluded M-World v2 store three times:
 The store was uploaded and read back with those hashes. It has 65,071 documents,
 11,786,293 tokens, 5,710,018 scored targets, 223,469 scored EOS (39,136 per
 million) and median reply length 11. The M-World sources are three exact copies;
-OASST2 remains 32% of tokens and M-World 68%.
+OASST2 remains 32.02% of total tokens and M-World rises to 67.98%. By scored
+reply targets, OASST2 is 56.65% and M-World is 43.35%, versus 20.32% for
+M-World in the old mix.
 
 `corpus-panel-overlap` decoded every document and mask-1 assistant response:
 exact panel strings, exact accepted replies, and shared word 6-grams are all zero
@@ -134,3 +137,9 @@ The job records the CPU model, architecture and logical processor count before
 grading, and binds every base and checkpoint grade to that hardware. Both CPU
 files and all sidecars must enter the seal. The completed seal must be at most
 100 MiB, read back with every `SHA256SUMS` entry valid, and report `EXIT=0`.
+After training and all checkpoint scoring finish, the successful job re-hashes
+the raw training token and mask files, records their sizes and hashes in
+`control/post-use-inputs.json`, and then removes only those two raw payloads.
+The fixed source store and the retained corpus manifest keep the input
+recoverable; this prevents the larger mix from pushing the completed seal over
+its size cap.

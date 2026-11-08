@@ -30,6 +30,49 @@ require_line() {
   ' "$file" || fail "$file lacks complete line: $text"
   checks=$((checks + 1))
 }
+case_block() {
+  local label=$1 file=$2
+  awk -v label="$label" '
+    {
+      line=$0
+      sub(/^[ \t]+/, "", line)
+      sub(/[ \t]+$/, "", line)
+      if (substr(line, 1, length(label)) == label) inside=1
+    }
+    inside {
+      print
+      if (line == ";;") exit
+    }
+  ' "$file"
+}
+require_case_block() {
+  local label=$1 file=$2
+  shift 2
+  local block want
+  block=$(case_block "$label" "$file")
+  [ -n "$block" ] || fail "$file lacks case block $label"
+  printf '%s\n' "$block" | awk 'END { exit(found ? 0 : 1) } { line=$0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line); if (line == ";;") found=1 }' ||
+    fail "$file case block $label is unterminated"
+  for want in "$@"; do
+    printf '%s\n' "$block" | awk -v want="$want" '
+      { line=$0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line); if (line == want) found=1 }
+      END { exit(found ? 0 : 1) }
+    ' || fail "$file case block $label lacks complete line: $want"
+  done
+  checks=$((checks + 1))
+}
+reject_case_block_line() {
+  local label=$1 file=$2 want=$3 block
+  block=$(case_block "$label" "$file")
+  [ -n "$block" ] || fail "$file lacks case block $label"
+  if printf '%s\n' "$block" | awk -v want="$want" '
+    { line=$0; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line); if (line == want) found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "$file case block $label has forbidden complete line: $want"
+  fi
+  checks=$((checks + 1))
+}
 
 bash -n "$JOB"
 bash -n "$LAUNCHER"
@@ -99,6 +142,22 @@ require_line '.rows_used == 65071 and .tokens == 11786293 and' "$JOB"
 require_line '.response_tokens == 5710018 and' "$JOB"
 require_line '["oasst2-reply", "mworld-repeat-1", "mworld-repeat-2", "mworld-repeat-3"]'"'"' \' "$JOB"
 require_line 'die "content-ratio corpus manifest differs from the registered split"' "$JOB"
+require_case_block 'legacy)' "$JOB" \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07' \
+  'TRAIN_TOKENS_SHA=3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3' \
+  'TRAIN_MASK_SHA=67af9f09152510edba99795f3ff247a6f17eb80c3907836cd7c0af6d7cddb28b' \
+  'TRAIN_MANIFEST_SHA=1c7aee4dfaffdde07f9c64a5b887b504ee21355038b6ae00897a8a97407d9bbe' \
+  'TRAIN_DOCUMENTS=25071' 'TRAIN_ASSISTANT_REPLIES=79679'
+reject_case_block_line 'legacy)' "$JOB" \
+  'TRAIN_TOKENS_SHA=3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34'
+require_case_block 'content-ratio)' "$JOB" \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08' \
+  'TRAIN_TOKENS_SHA=3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34' \
+  'TRAIN_MASK_SHA=83911dc7488c13475469fa743e0b6fbca15fcd20e76fc2fee33cb89877673baf' \
+  'TRAIN_MANIFEST_SHA=8b43ff038133a7dc9744bee71dd8aa7e3f6c5e59a664d19690b991a69f0be9fd' \
+  'TRAIN_DOCUMENTS=65071' 'TRAIN_ASSISTANT_REPLIES=223469'
+reject_case_block_line 'content-ratio)' "$JOB" \
+  'TRAIN_TOKENS_SHA=3a2c397e4b1a13c488096f931cf377efaeed51d2de17c231ac72d4b6291899e3'
 
 for hash in \
   02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e \
@@ -201,6 +260,7 @@ require_line '## Stop rule' "$CONTENT_SHEET"
 require_line '| `tokens.u16` | `3a645e736f96d2e37a267ba3826512001c41b92d8c689fae1451784b2fa2da34` |' "$CONTENT_SHEET"
 require_line '| `response_mask.u8` | `83911dc7488c13475469fa743e0b6fbca15fcd20e76fc2fee33cb89877673baf` |' "$CONTENT_SHEET"
 require_line '| `manifest.json` | `8b43ff038133a7dc9744bee71dd8aa7e3f6c5e59a664d19690b991a69f0be9fd` |' "$CONTENT_SHEET"
+require_line '`control/post-use-inputs.json`, and then removes only those two raw payloads.' "$CONTENT_SHEET"
 require_line 'init_approval="$RUN/control/init-approved-$label"' "$JOB"
 require_line '[ ! -e "$init_approval" ] ||' "$JOB"
 require_line 'UOR_TRAIN_INIT_APPROVAL="$init_approval" \' "$JOB"
@@ -289,6 +349,16 @@ require_line 'BUILD_ROOT=${UOR_SFT_BUILD_ROOT:-/workspace/uor-r4/build/deepseek-
 require_line 'PANEL_TARGET=${UOR_SFT_PANEL_TARGET:-$BUILD_ROOT/panel-target}' "$JOB"
 require_line 'SNAPSHOT_ROOT=${UOR_SFT_SNAPSHOT_ROOT:-$BUILD_ROOT/snapshots}' "$JOB"
 require_line 'SEAL_LIMIT_BYTES=104857600' "$JOB"
+require_line 'compact_successful_inputs() {' "$HARDWARE_LIB"
+require_line '[ "$tokens_sha" = "$TRAIN_TOKENS_SHA" ] &&' "$HARDWARE_LIB"
+require_line '[ "$mask_sha" = "$TRAIN_MASK_SHA" ] || return 1' "$HARDWARE_LIB"
+require_line 'output="$run/control/post-use-inputs.json"' "$HARDWARE_LIB"
+require_line 'reason:"successful-run seal compaction",' "$HARDWARE_LIB"
+require_line 'mv "$staging" "$output" || return 1' "$HARDWARE_LIB"
+require_line '[ -f "$output" ] || return 1' "$HARDWARE_LIB"
+require_line 'rm -f "$tokens" "$mask" || return 1' "$HARDWARE_LIB"
+require_line 'compact_successful_inputs "$RUN" ||' "$JOB"
+require_line '{ echo "could not compact the used training inputs for sealing" >&2; rc=1; }' "$JOB"
 require_line 'exec >> "$RUN/job.log" 2>&1' "$JOB"
 require_line 'if ! seal_bytes=$(measure_seal_bytes "$RUN"); then' "$JOB"
 require_line 'if ! actual_seal_bytes=$(measure_all_bytes "$RUN"); then' "$JOB"
@@ -329,6 +399,24 @@ require_line 'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-content
 require_line 'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-31/REPORT.md' "$LAUNCHER"
 require_line 'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08' "$LAUNCHER"
 require_line 'OUT_STORE="$STORE_TOPIC/runs/$RUN_LABEL-$RUN_ID"' "$LAUNCHER"
+require_case_block 'legacy:1024:s1)' "$LAUNCHER" \
+  'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-reply-sft-2026-11-07.md' \
+  'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-25/REPORT.md' \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07'
+require_case_block 'legacy:2048:s1-2048)' "$LAUNCHER" \
+  'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-reply-sft-2048-2026-11-07.md' \
+  'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-29/REPORT.md' \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07'
+require_case_block 'content-ratio:2048:s1-content-ratio)' "$LAUNCHER" \
+  'RUNTIME_EXCLUDE_FIT=docs/harness/prep/one-model-end-to-end-content-ratio-2026-11-08.md' \
+  'RUNTIME_EXCLUDE_REPORT=docs/loop/tasks/one-model-end-to-end/deepseek-31/REPORT.md' \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08'
+reject_case_block_line 'legacy:1024:s1)' "$LAUNCHER" \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08'
+reject_case_block_line 'legacy:2048:s1-2048)' "$LAUNCHER" \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-content-ratio-2026-11-08'
+reject_case_block_line 'content-ratio:2048:s1-content-ratio)' "$LAUNCHER" \
+  'STORE_TOPIC=results/deepseek/one-model-end-to-end-reply-sft-2026-11-07'
 require_line 'git ls-tree -r "$PIN" |' "$LAUNCHER"
 require_line "path != fit && path != report'" "$LAUNCHER"
 require_line 'git show "$PIN:$RUNTIME_EXCLUDE_FIT" |' "$LAUNCHER"

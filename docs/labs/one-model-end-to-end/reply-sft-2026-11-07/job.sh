@@ -125,6 +125,10 @@ on_exit() {
     kill -CONT "$TRAIN_PID" 2>/dev/null || true
     wait "$TRAIN_PID" 2>/dev/null || true
   fi
+  if [ "$rc" -eq 0 ]; then
+    compact_successful_inputs "$RUN" ||
+      { echo "could not compact the used training inputs for sealing" >&2; rc=1; }
+  fi
   if declare -F verify_grade_hardware_bindings >/dev/null; then
     verify_grade_hardware_bindings "$RUN" || rc=1
   fi

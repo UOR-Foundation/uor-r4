@@ -9,9 +9,10 @@ or spend.
 
 - The 2,048-step extension repeated row 6: stopping moved, but complete accepted
   replies stayed at zero.
-- The current mix gives M-World only about 20% of tokens in the old mixed store.
-  Repeating the excluded M-World store three times raises that to about 68% and
-  raises scored EOS exposure from 19,625 to 39,136 per million.
+- The old mixed store was 41.45% M-World by total tokens but only 20.32% by
+  scored reply tokens. Repeating the excluded M-World store three times raises
+  those shares to 67.98% and 43.35%, and raises scored EOS exposure from 19,625
+  to 39,136 per million.
 - The exact `m2-reply512` bytes remain unavailable. Its deterministic lookalike
   fails both registered hashes, so it is not used.
 
@@ -32,6 +33,13 @@ or spend.
   registered document and assistant-reply counts.
 - Added static-gate and mutation coverage for the recipe pair, corpus hashes,
   split counts, label, reviewed sheet/report paths and output root.
+- Successful runs now re-hash the raw token and mask after all checkpoint
+  scoring, record their hashes and sizes in `control/post-use-inputs.json`, and
+  remove only those raw payloads before sealing. The fixed source store and
+  corpus manifest preserve recovery and keep the larger input from pushing the
+  seal over 100 MiB.
+- Gate checks are block-aware, so provider-side swaps of legacy and
+  content-ratio constants or launcher pairs fail closed.
 
 ## Measurements
 
@@ -47,8 +55,8 @@ The projected run cost remains about $0.50 at the observed $0.563/hour rate.
 
 ## Checks run at the head
 
-- `gate.sh`: 276 checks passed.
-- `test-mutants.sh`: 118 of 118 mutations caught.
+- `gate.sh`: 297 checks passed.
+- `test-mutants.sh`: 125 of 125 mutations caught.
 - `test-hardware-evidence.sh`: passed.
 - ShellCheck over the job, launcher and hardware helpers: passed.
 - `bash -n` and `git diff --check`: passed.
