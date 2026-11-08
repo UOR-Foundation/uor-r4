@@ -12,11 +12,11 @@
   "base": "229739cf9",
   "binary_sha256": "78ae6595c7407a405592810acbbad9577691be6b66029b17801bd38b1a6ed4f1",
   "chosen": {
-    "neither": 0,
+    "rows": 1024,
+    "target_first_token": 0,
     "other_first_token": 0,
-    "rows": 8192,
-    "same_first_token": 0,
-    "target_first_token": 8192
+    "neither": 1024,
+    "same_first_token": 0
   },
   "claim": "read-only first-reply Hamming position, distance and margin-weight attribution; not a causal, capability or serving result",
   "heads": [

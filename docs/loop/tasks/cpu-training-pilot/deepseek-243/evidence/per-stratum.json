@@ -1004,24 +1004,24 @@
   "schema": "uor-r4.cpu-first-reply-hamming-weight-per-stratum/1",
   "strata": [
     {
-      "rows": 2048,
-      "stratum": "length2"
+      "stratum": "length2",
+      "panel_rows": 256
     },
     {
-      "rows": 2048,
-      "stratum": "length4"
+      "stratum": "length4",
+      "panel_rows": 256
     },
     {
-      "rows": 2048,
-      "stratum": "length8"
+      "stratum": "length8",
+      "panel_rows": 256
     },
     {
-      "rows": 1024,
-      "stratum": "reassert"
+      "stratum": "reassert",
+      "panel_rows": 128
     },
     {
-      "rows": 1024,
-      "stratum": "update"
+      "stratum": "update",
+      "panel_rows": 128
     }
   ]
 }
