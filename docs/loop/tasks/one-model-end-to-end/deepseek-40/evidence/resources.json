@@ -80,9 +80,9 @@
     "temporary_directory_available": true
   },
   "ledger": {
-    "shared_model_time_active_receipt": "absent",
-    "shared_model_time_ledger_path": ".uor-models/receipts/active.json",
-    "note": "The ledger directory was absent during the accounting pass; these runs were recorded in task evidence and the REPORT only."
+    "shared_model_time_active_receipt": "ABSENT",
+    "shared_model_time_ledger_path": ".uor-models/native-joint-learning-2026-09-04/model-time.json",
+    "note": "The canonical shared model-time ledger was absent during the accounting pass; these runs were recorded in task evidence and the REPORT only."
   },
   "unmeasured": [
     "source acquisition and model/corpus preparation",

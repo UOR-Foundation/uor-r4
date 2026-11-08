@@ -125,10 +125,10 @@ evidence and direct inputs total 908,645,503 bytes (866.552 MiB); regenerable
 main/worktree build trees total 79,517,551,883 bytes, and temporary review
 outputs total 3,609,217 bytes. At accounting time the filesystem had
 154,773,643,264 bytes (144.144 GiB) free, clearing the 30 GiB floor and 128 MiB
-margin. The shared model-time ledger receipt
-`.uor-models/receipts/active.json` was absent. Builds, tests, source/corpus
-preparation, delivery, and failed runs without a retained report remain
-explicitly unmeasured in the receipt.
+margin. The canonical shared model-time ledger
+`.uor-models/native-joint-learning-2026-09-04/model-time.json` was `ABSENT`.
+Builds, tests, source/corpus preparation, delivery, and failed runs without a
+retained report remain explicitly unmeasured in the receipt.
 
 ## Evidence
 
