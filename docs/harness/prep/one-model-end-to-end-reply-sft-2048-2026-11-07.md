@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-29](../loop/tasks/one-model-end-to-end/deepseek-29/ORDER.md).
 
-TEST FITNESS: PENDING - merged-runtime and D84 CPU-identity repair requires a fresh review.
+TEST FITNESS: FIT - fresh non-author review at `536d95242b8301541b207fe171fbe5a96b2fa244`, reviewed-runtime `8928ce7cae729894820ae1b7f3106d071f18dda77bdbf198a7dd4d8556d1eec5`, reviewer session `01a1b933-75a7-7df2-9d05-7997d387beaa`.
 
 PRE-RUN: PENDING - fresh D67 review required after the merged-runtime CPU-identity repair.
 

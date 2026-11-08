@@ -29,8 +29,7 @@ or spend.
   CPU-file seal inclusion and retry compaction.
 - `docs/harness/claims.json` carries this branch's claim and is the sole
   out-of-item-scope path; D76 makes that scope finding advisory.
-- The 2,048-step sheet and its merged runtime are awaiting fresh FIT and D67
-  reviews after these changes.
+- The 2,048-step sheet and its merged runtime are awaiting the fresh D67 review.
 
 ## Measurements
 
@@ -43,7 +42,11 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 - `gate.sh`: 235 checks passed.
 - `test-mutants.sh`: 99 of 99 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
-- The target sheet has no prep-shape error and remains `PENDING` for review.
+- The target sheet has no prep-shape error; FIT is recorded and D67 is pending.
+- Fresh FIT: **FIT GO**, no blockers, at
+  `536d95242b8301541b207fe171fbe5a96b2fa244`, runtime
+  `8928ce7cae729894820ae1b7f3106d071f18dda77bdbf198a7dd4d8556d1eec5`,
+  reviewer session `01a1b933-75a7-7df2-9d05-7997d387beaa`.
 - The job records the CPU model, architecture and logical processor count before
   grading and rejects a base grade whose D84 substrate labels are absent.
 - `test-hardware-evidence.sh` exercised the isolated helper library: it captured
