@@ -26,7 +26,7 @@ Under `--hamming-ask 1`, each read's **type heads become ask heads**. Everything
 - **Key:** the copy heads' key, `rotate(key_rotation, point(x_{s−1}))`.
 - **Payload:** the copy payload, the table point of the token at the kept position `s`.
 - **Combine:** the copy form. On the readout it moves toward the mean kept point, with its own weight `w_y`; on the stream it adds `w_y ⊙ y`. Ask heads have their own margins, initialized as the copy heads' (`head_width / 4`).
-- **No dense matmul:** a table lookup, a lane-wise quaternion rotation and Hamming top-k.
+- **No dense matrix multiplication:** a table lookup, a lane-wise quaternion rotation and Hamming top-k.
 - **No squashing:** the sign code with the identity backward, as the read already uses.
 
 **The training signal, the found-copy pull** (`--hamming-attract λ`, the geometry's own distance):
