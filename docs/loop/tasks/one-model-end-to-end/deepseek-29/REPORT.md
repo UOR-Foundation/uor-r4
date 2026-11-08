@@ -41,6 +41,11 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 Not run: pod creation, remote build, training, export, panel scoring, store
 write or seal readback.
 
+## Skills used
+
+No system-provided Codex skill applied. The repository's D22, D67, D84, geometry
+and delivery rules were used directly.
+
 ## Still open
 
 - Merge the CPU-identity and merged-runtime repair.
