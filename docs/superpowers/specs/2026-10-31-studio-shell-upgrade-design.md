@@ -159,3 +159,23 @@ Deliver in small protected PRs, each with its own ORDER at the merged item base:
 3. **Core workflows.** Migrate AppShell, ModelPicker, WorkspaceEditor, AgentComposer, SessionList, Inspector, Guide, and Settings against the store and adapters. Keep the legacy page live and retain all current capabilities while their parity records are completed.
 4. **Parity and migration.** Finish every feature/browser-data migration and all legacy/new behavioral, worker, offline, accessibility, and mobile checks. No production publication.
 5. **Cutover.** Only after full parity and fresh exact-head approval, change the entry point and publisher. Production publication remains a separate owner decision through the existing controlled path; generated roadmap status is updated only on delivered evidence.
+
+## Mounted migration implementation addendum — 8 November 2026
+
+The mounted-preview implementation exposed an additional constraint: a copy-only migration would leave the typed application calling legacy writers, allowing later edits to change the old rollback keys. This addendum selects the implementation mechanism under the active autonomous Phase A goal. It does not change the approved phased architecture, persistence contract, dependency class, or production boundary.
+
+### Approaches
+
+- **Copy-only:** rejected because it cannot preserve old keys after the first typed edit.
+- **Independent typed persistence implementations:** rejected for this unit because reimplementing every session/file/settings writer would duplicate proven behavior and widen the review surface without improving the migration guarantee.
+- **Early shared migration and key routing — selected:** run one transaction before any legacy storage reader/writer, then route only migratable keys to their destinations through the existing writers. This is not another application state owner. `modelSources.v1` bypasses routing and remains the only provider-credential store.
+
+### Transaction and failure protocol
+
+1. Typed-preview activation performs migration before the inline theme reader, conversation initialization, UI initialization, or file restoration. Default legacy activation performs no migration or routing. Final default cutover remains a later unit.
+2. Preflight reads every migratable source and destination before any write. Unknown JSON fields survive by copying the exact raw source string. Missing sources create no destination. A destination may already exist only when it is byte-identical to its source; any other conflict aborts before writes. Malformed JSON, an invalid existing marker, or a read failure also aborts before writes.
+3. The live `modelSources.v1` key is excluded from destination writes and migration diagnostics. No migration report contains source values or provider credentials.
+4. After successful preflight, each missing destination is written in raw-exact form and read back for equality. Existing identical destinations are not rewritten. Before the marker is written, every source is re-read and must equal its preflight raw value.
+5. The marker is the versioned value `{"schema":"uor-r4.studio-lifecycle-migration/1"}`. It is written last and read back for equality. Any destination/source/marker write or verification failure removes and verifies only destinations created by this attempt, leaving pre-existing destinations and every source untouched. A rollback failure is reported generically and still prevents typed mounting.
+6. Only a verified current marker enables key routing. Subsequent `getItem`, `setItem`, and `removeItem` calls for migratable keys resolve to their destinations through the existing legacy implementations. Migration failure uses identity routing so the default legacy application remains usable, while the typed mount explicitly refuses to start. No destructive reset or silent fallback to an empty typed session is permitted.
+7. Real-browser fixtures, never actual browser profiles, seed every key and prove restored workflows, old-key preservation after edits, reload persistence, malformed/conflict refusal, and zero external requests. Later native/package and production units reuse the same reviewed runtime rather than adding another migrator.
