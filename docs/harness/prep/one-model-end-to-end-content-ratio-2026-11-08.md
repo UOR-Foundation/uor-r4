@@ -3,9 +3,9 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [deepseek-31](../../loop/tasks/one-model-end-to-end/deepseek-31/ORDER.md).
 
-TEST FITNESS: PENDING - fresh non-author review required.
+TEST FITNESS: FIT - fresh non-author review at `53f8f4f2bdc194efb921622aea720ae3537fbcdf`, reviewed-runtime `c8f9937a197573af83f34d167c246f14167840f738361429fe4c1896e0c1147d`, reviewer session `pr3850_fit_exact`.
 
-PRE-RUN: PENDING - fresh D67 review required.
+PRE-RUN: GO - fresh D67 review at `53f8f4f2bdc194efb921622aea720ae3537fbcdf`, reviewed-runtime `c8f9937a197573af83f34d167c246f14167840f738361429fe4c1896e0c1147d`, reviewer session `pr3850_d67_verify`.
 
 ## Why
 

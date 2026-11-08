@@ -61,9 +61,13 @@ The projected run cost remains about $0.50 at the observed $0.563/hour rate.
 - ShellCheck over the job, launcher and hardware helpers: passed.
 - `bash -n` and `git diff --check`: passed.
 - `loop report --check` and `loop pr-check --local`: passed.
+- Fresh non-author FIT review approved runtime head `53f8f4f2b` with normalized
+  runtime identity `c8f9937a197573af83f34d167c246f14167840f738361429fe4c1896e0c1147d`.
+- Fresh adversarial D67 review approved the same runtime head and rechecked the
+  seal, recipe-pair, compatibility and collision constraints.
 
-Fresh FIT and D67 review remain required. Not run: pod creation, training,
-export, panel scoring, store write or seal readback.
+Not run: pod creation, training, export, panel scoring, store write or seal
+readback.
 
 ## Skills used
 
@@ -72,8 +76,7 @@ and delivery rules were used directly.
 
 ## Still open
 
-- Obtain fresh exact-head FIT and D67 approval, merge through the queue and
-  verify the landed runtime.
+- Merge through the queue and verify the landed runtime.
 - Run the content-ratio intervention only from that merged pin.
 - No seed 2 unless row 3 is reached. No second ratio extension.
 
