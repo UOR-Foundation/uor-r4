@@ -1,6 +1,9 @@
 # Prep sheet: a question-keyed read (one-model-end-to-end, claude-329, 8 Nov 2026)
 
-TEST FITNESS: round 1 NOT FIT (fresh non-author reviewer, at `3c7a10f9a`: one blocker, the byte-identical I-R; one major, no pull at B2's question row; four minors). All six are applied below; round 2 pending.
+TEST FITNESS: NOT FIT after two rounds, by fresh non-author reviewers (claude-329's stop rule applies; no code or run under this unit).
+- **Round 1, at `3c7a10f9a`:** one blocker, the byte-identical I-R; one major, no pull at B2's question row; four minors. All six are applied.
+- **Round 2, at `59b69fad4`:** every round 1 finding is confirmed fixed. One blocker remains: I-R gated hits against `rows` at every checkpoint, which step 0 fails. There are also two minors. The reviewer called the sheet "fit" apart from that wording. All three are applied below.
+- **Owed:** a fresh FIT of this text, in the next unit (claude-330), before any code.
 
 ## The question
 
@@ -81,7 +84,7 @@ The rules are claude-328's, applied to the ask arms:
 | Arm | Passes when |
 |---|---|
 | **B0 (instrument)** | `R(B0-a) ≥ 0.95` and `R(B0-n) ≤ 0.02`. Otherwise nothing else is read |
-| **I-R (instrument)** | B0-h's `recall.jsonl` is compared, line by line, with claude-328's sealed `runs/s{1,2}/…/B0-h-s{seed}/recall.jsonl` (in the store, checked 8 Nov). The timing fields `train_seconds` and `train_context_tokens_per_second` are ignored. Passes when: `rows` are equal; `hits` per bucket are within 0.02 of `rows` at every checkpoint; `train_loss_mean` is within 1% relative. Otherwise the build moved the default path, and nothing else is read. Byte identity across pods is not assumed: the CUDA kernels are not shown to be deterministic. I-1 is the bit-exact check, on the laptop |
+| **I-R (instrument)** | B0-h's `recall.jsonl` is compared, line by line, with claude-328's sealed `runs/s{1,2}/…/B0-h-s{seed}/recall.jsonl` (in the store, checked 8 Nov). The timing fields `train_seconds` and `train_context_tokens_per_second` are ignored. Passes when, **at the step-4,096 line only**: `rows` are equal to the sealed line's; each bucket's `hits` is within `0.02 · rows` of the sealed line's `hits`, so `|hits − sealed hits| ≤ 0.02 · rows`; and `train_loss_mean` is within 1% relative of the sealed line's. The earlier checkpoints are compared and reported but not gated, since hits still rise fast between 512 and 2,048 steps and two runs that are not bit-identical can differ there. A broken default path fails it plainly: claude-328's `−c` reading drops B0-h to 0 / 0, against sealed hits of 0.98–0.996. Otherwise the build moved the default path, and nothing else is read. Byte identity across pods is not assumed: the CUDA kernels are not shown to be deterministic. I-1 is the bit-exact check, on the laptop |
 | **B1 (choice)** | `R_ask(B1-a) ≥ 0.50`, `R_ask(B1-a) ≥ R_oth(B1-a) + 0.25`, and `R_ask(B1-a) ≥ R_ask(B1-n) + 0.10` |
 | **B2 (carry)** | the B1 rule for B2-a against B2-n |
 | **B2-aq** | the B1 rule for B2-aq against B2-n; it decides only the outcome 3 split |
@@ -100,7 +103,7 @@ The rules are claude-328's, applied to the ask arms:
    **Next:** a language run with ask heads on claude-325's bare-answer recipe, under its own sheet.
 3. **B1-a passes, B2-a fails.** B1-a0 is read alongside: if it passes too, the task loss alone trains the offsets; if it fails, the pull is the working signal. Then split on B2-aq, first match wins:
    - **B2-aq passes:** the choice at the question can be made, and the trunk carries its value, once a signal reaches the `Q` row. B2-a failed for want of that signal, which is a property of the recall task's unscored question row. **Next:** an ask-head language run on claude-325's recipe, under its own sheet, since every language row is scored. The carry lever is not needed yet.
-   - **B2-aq fails, and an ask head is kept at `Q(K_j)` in B2-aq's trace:** the read chooses at the question, and the carry fails. **Next:** the carry lever (claude-326, Q4), tested on B2 first.
+   - **B2-aq fails, and an ask head is kept at `Q(K_j)` in B2-aq's trace:** the read chooses at the question, and either its write to the stream (`w_y ⊙ y` at the `Q` row) or the trunk's four-token carry fails. This sheet does not separate the two: B1 can pass through the readout move alone, so B1-a passing does not show the stream write works. **Next:** the carry lever (claude-326, Q4), tested on B2 first, under a sheet that adds an ask-stream cut to split the stream write from the carry.
    - **B2-aq fails, and no ask head is kept at `Q(K_j)`:** the choice fails under B2's form even with the pull there. Read the header-interference rule (claude-328's, with `−c2`/`−c6` on B2-aq) first; otherwise name it from the trace and the pull distance at `Q`, under outcome 4's first two branches as instrument checks.
 4. **B1-a fails,** split by the readings, first match wins:
    - **The pull distance at step 4,096 is above 0.25 of its step-0 value** (about 0.5 at `a = 0`): the signal does not reach the offsets. That is an instrument-side fault in the gradient path. Repair it and rerun; it is not a mechanism result.
@@ -123,7 +126,7 @@ The rules are claude-328's, applied to the ask arms:
 - **I-A3 (the pull trains):** on a toy window, gradient steps with `λ = 1` bring `bits(t, s*)` to 0 for a question token whose bijection partner is the key, within a pre-set step count. With `λ = 0` and no task loss, `a` does not move.
 - **I-A4 (payload and combine):** on a hand-built window, an ask head that keeps the value position moves the readout toward that value's table point, as a copy head does. `−t` removes the move.
 - **I-A5 (the question placement and the ask cut):**
-  - under `--hamming-attract-at question`, on a hand-built B2 window, the pull's rows are exactly the `Q(K_j)` rows, each with its episode's `v_j`, and no scored row carries a pull;
+  - under `--hamming-attract-at question`, on a hand-built B2 window, the pull's rows are exactly the `Q(K_j)` rows, each with its episode's `v_j`, and no scored row carries a pull. The rows are found from the training window itself: each scored offset is `query_pos + 4` with target `ask_value` (`recall_query_window`'s `scored_offsets` and `scored_targets`), so the `Q` row is the scored offset minus 4, with the same target. Each episode's `S_t` is its one value position, since a window's 8 values are distinct;
   - `R^{−aQ}`'s row cut removes the ask heads' candidates at the `Q(K_j)` rows only, and leaves the copy heads' picks unchanged.
 - **The ask path is covered by I-A1 to I-A5, not by B0-a.** At `a = 0` the ask heads equal the copy heads, and in B0 the copy heads alone solve the task, so B0-a passing does not show the ask path works.
 - **I-4 (from claude-328):**
@@ -140,10 +143,13 @@ Each check is a unit test (I-6 and I-R excepted). Each has at least one mutation
 
 B0-a and the I-R arm first on each pod. If either misses, stop and repair. B1 and B2 do not run on a failed instrument.
 
-## Data split, base artifact
+## Data split
 
-- **Data split:** as claude-328's sheet. Every window is generated from `(seed, index)`, and held-out windows use `seed ^ RECALL_EVAL_SEED`.
-- **Base artifact:** none. Every arm trains from step 0.
+As claude-328's sheet. Every window is generated from `(seed, index)`, and held-out windows use `seed ^ RECALL_EVAL_SEED`.
+
+## Base artifact
+
+None. Every arm trains from step 0.
 
 ## Minimum test power
 
