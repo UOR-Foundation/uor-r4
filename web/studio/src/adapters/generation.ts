@@ -35,8 +35,9 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
         send(prompt) {
             const selected = store.getState().selectedSource;
             if (!selected || !prompt.trim() || !store.canRun()) return false;
+            const sessionId = sessions.activeSessionId?.() ?? null;
             const fail = () => {
-                store.dispatch({ type: 'generation/started', source: selected });
+                store.dispatch({ type: 'generation/started', source: selected, sessionId });
                 const active = store.getState().session.activeGeneration;
                 if (active) store.dispatch({ type: 'generation/finished', outcome: 'error', generationId: active.generationId, error: 'Generation could not be started.' });
                 return false;
@@ -53,7 +54,7 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
                 const generationId = prediction ? sessions.predict(prompt) : sessions.sendPrompt(prompt);
                 deferredEvents = null;
                 if (typeof generationId !== 'number' || !Number.isInteger(generationId) || generationId <= 0) return fail();
-                store.dispatch({ type: 'generation/started', source: selected, generationId });
+                store.dispatch({ type: 'generation/started', source: selected, generationId, sessionId });
                 deferred.forEach(finished);
                 return true;
             } catch {

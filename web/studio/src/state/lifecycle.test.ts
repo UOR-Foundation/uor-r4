@@ -325,3 +325,34 @@ describe('folder, file-close, and session activation states', () => {
         expect(store.getState().session.phase).toBe('generating');
     });
 });
+
+describe('verified session identity', () => {
+    const item = { id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 0, preview: '' };
+
+    it('synchronizes catalog identity and pins generation to that session', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'session/synchronized', activeId: item.id, items: [item] });
+        expect(store.getState().session.activeId).toBe(item.id);
+        expect(store.getState().session.items[0]).not.toBe(item);
+        expect(store.getState().session.revision).toBe(1);
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: item.id });
+        expect(store.getState().session.activeGeneration?.sessionId).toBe(item.id);
+        store.dispatch({ type: 'session/synchronized', activeId: 'session-b', items: [item] });
+        expect(store.getState().session.activeId).toBe(item.id);
+        store.dispatch({ type: 'session/interrupted', activeId: 'session-b', items: [item], generationId: 1 });
+        expect(store.getState().session.activeId).toBe('session-b');
+        expect(store.getState().session.activeGeneration).toBeNull();
+        expect(store.getState().session.phase).toBe('stopped');
+        expect(store.getState().session.lastGeneration?.sessionId).toBe(item.id);
+    });
+
+    it('refuses to start generation for a different current session', () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'session/synchronized', activeId: item.id, items: [item] });
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        store.dispatch({ type: 'generation/started', source: { kind: 'api', id: 'api-a' }, sessionId: 'session-b' });
+        expect(store.getState().session.activeGeneration).toBeNull();
+        expect(store.getState().session.phase).not.toBe('generating');
+    });
+});

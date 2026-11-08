@@ -249,6 +249,54 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                     if (root.textContent.includes('Artifact: ready')) { artifactReady = true; break; }
                     await new Promise((resolve) => setTimeout(resolve, 100));
                 }
+                const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+                const button = (label) => Array.from(root.querySelectorAll('button')).find((candidate) => candidate.textContent === label);
+                const firstNew = button('New session');
+                if (firstNew) firstNew.click();
+                await pause(100);
+                const firstId = window.__studioUi?.activeSessionId() || null;
+                const secondNew = button('New session');
+                if (secondNew) secondNew.click();
+                await pause(100);
+                const secondId = window.__studioUi?.activeSessionId() || null;
+                const resume = async (id) => {
+                    const sessions = window.__studioUi.listSessions();
+                    const index = sessions.findIndex((item) => item.id === id);
+                    const rows = Array.from(root.querySelectorAll('section[aria-label="Sessions"] li'));
+                    const select = index >= 0 && rows[index]
+                        ? Array.from(rows[index].querySelectorAll('button')).find((candidate) => candidate.textContent === 'Select ' + sessions[index].title)
+                        : null;
+                    if (select) select.click();
+                    await pause(100);
+                    const currentRows = Array.from(root.querySelectorAll('section[aria-label="Sessions"] li'));
+                    return {
+                        idMatches: window.__studioUi.activeSessionId() === id,
+                        markerMatches: currentRows[index]?.getAttribute('aria-current') === 'true',
+                    };
+                };
+                const beforeSend = await resume(firstId);
+                const agent = button('Agent');
+                if (agent) agent.click();
+                await pause(100);
+                const prompt = root.querySelector('textarea[aria-label="Prompt"]');
+                if (prompt) {
+                    prompt.value = '17+25';
+                    prompt.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                await pause(50);
+                const send = button('Send');
+                if (send) send.click();
+                const transcript = () => root.querySelector('[aria-label="Conversation messages"]')?.innerText || '';
+                let answerReady = false;
+                for (let attempt = 0; attempt < 80; attempt += 1) {
+                    if (transcript().includes('42')) { answerReady = true; break; }
+                    await pause(100);
+                }
+                const firstTranscript = transcript();
+                const otherResume = await resume(secondId);
+                const otherTranscript = transcript();
+                const restoredResume = await resume(firstId);
+                const restoredTranscript = transcript();
                 const app = document.getElementById('app');
                 return {
                     shell: Boolean(document.querySelector('#studio-typed-root .studio-shell')),
@@ -265,6 +313,17 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
                     legacyReady: Boolean(window.__studioUi && window.__studioFiles),
                     legacyWorker: Boolean(window.__studioApp?.worker),
                     scriptCount: document.scripts.length,
+                    sessionFlow: {
+                        created: Boolean(firstId && secondId && firstId !== secondId),
+                        beforeSend,
+                        answerReady,
+                        firstTranscript: firstTranscript.slice(0, 1000),
+                        otherResume,
+                        otherHasAnswer: otherTranscript.includes('42'),
+                        restoredResume,
+                        restoredAnswer: restoredTranscript.includes('42'),
+                        restoredTranscript: restoredTranscript.slice(0, 1000),
+                    },
                 };
             })()`,
             awaitPromise: true,
@@ -338,6 +397,12 @@ async function main() {
             assert(typedPreview.typed.typedMcp === 1, 'typed MCP panel missing or duplicated: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.artifactReady, 'typed bundled demo did not reach Artifact: ready: ' + JSON.stringify(typedPreview.typed));
             assert(typedPreview.typed.visible && typedPreview.typed.typedText, 'typed shell is not computed-visible with typed text: ' + JSON.stringify(typedPreview.typed));
+            const flow = typedPreview.typed.sessionFlow;
+            assert(flow?.created, 'typed session creation did not produce two distinct real session IDs: ' + JSON.stringify(flow));
+            assert(flow.beforeSend?.idMatches && flow.beforeSend.markerMatches, 'typed resume did not verify the original active session: ' + JSON.stringify(flow));
+            assert(flow.answerReady && flow.firstTranscript.includes('42'), 'typed UOR arithmetic response was not visible: ' + JSON.stringify(flow));
+            assert(flow.otherResume?.idMatches && flow.otherResume.markerMatches && flow.otherHasAnswer === false, 'the other session exposed the original response: ' + JSON.stringify(flow));
+            assert(flow.restoredResume?.idMatches && flow.restoredResume.markerMatches && flow.restoredAnswer, 'the original session did not restore its response: ' + JSON.stringify(flow));
         }
         const typedMountError = process.env.UOR_STUDIO_TYPED === '1'
             ? await trapPageLoad(cdp, origin, '/studio/dist/__mount_error.html?typed=1', { mountError: true })

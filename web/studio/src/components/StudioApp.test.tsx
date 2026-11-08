@@ -213,8 +213,13 @@ describe('StudioApp', () => {
     it('clears a session error after a successful duplicate', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
-        sessions.listSessions = vi.fn(() => [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }]);
-        sessions.duplicateSession = vi.fn().mockReturnValueOnce(null).mockReturnValueOnce('session-copy');
+        const items = [{ id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 1, preview: 'message' }];
+        sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => 'session-a');
+        sessions.duplicateSession = vi.fn().mockReturnValueOnce(null).mockImplementationOnce(() => {
+            items.unshift({ id: 'session-copy', title: 'Session A (copy)', createdAt: 3, updatedAt: 3, messageCount: 1, preview: 'message' });
+            return 'session-copy';
+        });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
         });
@@ -366,7 +371,15 @@ describe('StudioApp', () => {
     it('clears a SessionList new-session error after a palette retry', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
-        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const items: Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number; preview: string }> = [];
+        let activeId: string | null = null;
+        sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => activeId);
+        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockImplementationOnce(() => {
+            items.unshift({ id: 'session-new', title: 'New conversation', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' });
+            activeId = 'session-new';
+            return true;
+        });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
         });
@@ -380,7 +393,15 @@ describe('StudioApp', () => {
     it('clears a palette new-session error after a successful retry', () => {
         const store = new LifecycleStore();
         const sessions = makeSessions();
-        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const items: Array<{ id: string; title: string; createdAt: number; updatedAt: number; messageCount: number; preview: string }> = [];
+        let activeId: string | null = null;
+        sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => activeId);
+        sessions.newSession = vi.fn().mockReturnValueOnce(false).mockImplementationOnce(() => {
+            items.unshift({ id: 'session-new', title: 'New conversation', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' });
+            activeId = 'session-new';
+            return true;
+        });
         act(() => {
             render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
         });
@@ -481,6 +502,26 @@ describe('StudioApp', () => {
         await act(async () => { button('Test API A').click(); await Promise.resolve(); });
         expect(host.querySelector('[role="alert"]')?.textContent).toContain('unauthorized');
         expect(host.querySelector('[role="alert"]')?.textContent).not.toContain('network down');
+    });
+
+    it('derives the active session marker from verified lifecycle state', () => {
+        const store = new LifecycleStore();
+        const sessions = makeSessions();
+        const items = [
+            { id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 1, messageCount: 0, preview: '' },
+            { id: 'session-b', title: 'Session B', createdAt: 2, updatedAt: 2, messageCount: 0, preview: '' },
+        ];
+        let activeId = 'session-a';
+        sessions.listSessions = vi.fn(() => items);
+        sessions.activeSessionId = vi.fn(() => activeId);
+        sessions.selectSession = vi.fn((id: string) => { activeId = id; return true; });
+        act(() => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        expect(host.querySelector('li[aria-current="true"] strong')?.textContent).toBe('Session A');
+        act(() => { button('Select Session B').click(); });
+        expect(store.getState().session.activeId).toBe('session-b');
+        expect(host.querySelector('li[aria-current="true"] strong')?.textContent).toBe('Session B');
     });
 
     it('keeps the partial session-clear warning after refreshing sessions', () => {
