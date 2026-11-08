@@ -180,6 +180,8 @@ fn against_split_b_without_bos() {
     assert_eq!(vb["replies"], 4);
     assert_eq!(vb["replies_ending_eos"], 4);
     assert_eq!(vb["reply_8grams"], json!({ "windows": 4, "distinct": 4 }));
+    // Four replies (lengths 3, 4, 9, 9): an even count, so the lower median (4) differs from the upper (9).
+    assert_eq!(vb["reply_length"], json!({ "median_lower": 4, "min": 3, "max": 9 }));
 
     let v = ok(&[
         ("split", d(&a)),

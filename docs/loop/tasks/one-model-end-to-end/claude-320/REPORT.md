@@ -53,7 +53,8 @@ The median is the lower median.
 - **`reply-census` tests:** `cargo test --offline --locked` reads 8 passed, 0 failed.
   - The fixture's counts were worked out by hand before the code: replies, EOS ends, a mid-reply EOS, an EOS with mask 0, duplicates, 8-grams, the median, an `against=` split with no `bos_id`, and refusals.
   - The refusals cover a mask-length mismatch, a missing `eos_id`, a non-0/1 mask byte, a wrong declared `mask_sha256` and bad arguments.
-- **Two mutations fail the tests:**
+- **Three mutations fail the tests:**
+  - Taking the upper median instead of the lower fails `against_split_b_without_bos`, whose four replies have an even count. The in-unit review found that no test pinned this; the session added the assertion and ran the mutation: 7 passed, 1 failed, then 8 passed once restored.
   - Merging reply runs across a single mask-0 gap fails `split_a_counts_exactly` and `against_split_b_without_bos` (the builder's run).
   - Counting EOS regardless of the mask fails `split_a_counts_exactly`. The session re-ran this one itself: 7 passed and 1 failed under the mutation, then 8 passed once restored.
 - **Release build:** `cargo build --release --offline --locked` exits 0.
