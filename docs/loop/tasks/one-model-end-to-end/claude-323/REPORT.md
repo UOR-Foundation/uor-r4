@@ -3,7 +3,7 @@
 [claude] (b64L) on claude-322's × 6 capped mix with a mixed pair of copy keys, `--hamming-copy-keys 2,1`, at seeds 1 and 2, under [the sheet](../../../../harness/prep/one-model-end-to-end-b64l-d3mwcap6-k21-2026-11-08.md).
 
 **Outcome row 5, mechanism: mixed, no direction is read.**
-- At seed 2, the keys lift the first-line count, and the lift is selective: the asked-for value rose from 2 to 32 rows, the other value from 6 to 30.
+- At seed 2, the keys lift the first-line count. By the sheet's rule the lift is selective, but only by a margin of 6: the asked-for value rose from 2 to 32 rows (+30), the other value from 6 to 30 (+24). The decision review reads this as mostly continuation.
 - At seed 1 the count fell from 14 to 0, and the stopped replies collapsed onto one text.
 - Stopping is not held at either seed. The panel's bar is still 0: no reply is complete.
 
@@ -54,7 +54,7 @@
 |---|---|---|---|
 | EOS stops of 256 | 123 | 29 | 109 / 86 |
 | length-cap stops | 133 | 227 | 147 / 170 |
-| collapse (largest EOS-stopped text / EOS-stopped rows) | **113 / 123 (collapsed)** | 4 / 29 | 9 / 6 |
+| collapse (largest EOS-stopped text / EOS-stopped rows) | **113 / 123 (collapsed)** | 4 / 29 | 9 / 109, 6 / 86 |
 | distinct texts / most common over all | 54 / 113 | 95 / 18 | 94 / 13, 125 / 10 |
 | complete, pairs | 0, 0 | 0, 0 | 0, 0 |
 | `Assistant:` in EOS-stopped / all | 0 / 3 | 0 / 2 | 5 / 31, 17 / 33 |
