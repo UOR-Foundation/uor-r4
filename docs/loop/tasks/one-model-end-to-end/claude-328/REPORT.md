@@ -107,6 +107,15 @@ What fails is the learning: the type heads' rotation query never moves off chanc
 - The D67 pre-run review: PASS.
 - The fresh exact-head review of this PR is recorded with `loop review`.
 
+## Checks run at the head
+
+- `cargo test --lib` of `uor-r4-float-train` on the laptop (CPU tests; the CUDA tests ran on the pod at `2904f2f1e`).
+- `cargo test --features cpu-parity --bin served-reply-panel` with the pinned tokenizer.
+- The mutation gates: `gt/mut-a2.sh` (10 of 10) and `gt/mut-i7.sh` (2 of 2); the pod gates are in `gates.txt` (4 fire, 2 named above).
+- `rustfmt --check` on `served-reply-panel.rs` (clean). `in_space_long.rs` is not rustfmt-clean on `main` (442 diff hunks), so the new tests are hand-formatted and the file was not reformatted.
+- `loop report --check`; `loop pr-check --local`.
+- The fresh exact-head review is posted with `loop review` before the queue.
+
 ## Skills used
 
 - None beyond the loop itself: ORDER, FIT rounds, the D67 pre-run review, the A2 slice review and the fresh exact-head review.
