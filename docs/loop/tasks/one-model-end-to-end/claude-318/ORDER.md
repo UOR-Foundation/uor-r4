@@ -13,7 +13,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 The run itself is the next unit.
 
 Claim check:
-- **(a) The step is "pipeline first"** (#2028, 6709947526). claude-315 (#3840, row 5) found that the D3 + mw-balp mix makes (b64L) stop 177 and 122 times of 256, against 0 and 0 on D3 alone. Seed 2 fell 6 short of 128, and seed 2's stopped replies collapsed (75). The held-out cost against (b64L-D3) was −14,975 and −23,833 rows, about a fifteenth of mw-balp alone.
+- **(a) The step is "pipeline first"** (#2028, 6709947526). claude-315 (#3840, row 5) found that the D3 + mw-balp mix makes (b64L) stop 177 and 122 times of 256, against 0 and 0 on D3 alone. Seed 2 fell 6 short of 128, and seed 2's stopped replies collapsed (75). The held-out cost against (b64L-D3) was −14,975 and −23,833 rows, about a sixteenth of mw-balp alone.
 - **(b) The one change from claude-315's arm is how many times mw-balp appears in TRAIN.** Stopping, collapse, the role-header count and the held-out cost can each be read against (b64L-d3mw).
 
 ## Harness record

@@ -16,7 +16,7 @@ TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 8 Nov). It f
 - **(b64L) on D3 + `mw-balp/train` once, (b64L-d3mw), stops on one seed only.** claude-315 (#3840, outcome row 5):
   - 177 and 122 of 256 EOS stops, against the bar of 128 at both seeds;
   - seed 2 collapsed: 75 of its EOS-stopped replies are one text, against the bar of 64; seed 1 had 62;
-  - behind (b64L-D3) by −14,975 and −23,833 rows (band 8,858), about a fifteenth of mw-balp's cost.
+  - behind (b64L-D3) by −14,975 and −23,833 rows (band 8,858), about a sixteenth of mw-balp's cost.
 - **claude-315's decision review chose the ratio lever:** mw-balp's windows repeated in the mix, with the collapse bar kept fixed before any run. This sheet repeats mw-balp three times.
 
 ## Question
@@ -53,7 +53,7 @@ Each root's two shas are checked by the tool before it reads the root. The same 
 
 **Checks on the laptop, 8 Nov:**
 - the mix's first 35,480,910 mask bytes hash to `d3mw`'s whole mask `5bf91524…`, and its first 35,480,910 body tokens to `d3mw`'s body. So the mix begins with claude-314's mix, which begins with D3;
-- each of the two later 7,512,797-byte mask segments hashes to `mw-balp/train`'s mask `b5e7352d…`, and each later body segment to mw-balp's body;
+- each of the two later 7,512,797-byte mask segments (the first copy is inside the prefix above) hashes to `mw-balp/train`'s mask `b5e7352d…`, and each later body segment to mw-balp's body;
 - the token at each of the three mw-balp starts is BOS (0). So no document runs into the next copy.
 
 The table's per-part figures are claude-314's counts. The mix's totals follow from them because the mix is these parts, byte for byte.
@@ -126,9 +126,9 @@ Fixed before any run. They are claude-312's, unchanged, with the earlier arms' f
 - **Stopping:** at least **128 of 256** EOS stops at **both** seeds. (b64L-D3): 0 and 0; (b64L-d3mw): 177 and 122; (b64L-mw): 253 and 244.
 - **Collapse:** a seed is collapsed if, among its EOS-stopped rows, one reply text covers **at least 64**. (b64L-d3mw): 62 and 75 (collapsed); (b64L-mw): 73 (collapsed) and 40.
 - **The panel's bar:** at least 104 rows complete and at least 52 pairs at both seeds. Every model scored so far has 0.
-- **The held-out cost:** `behind` (b64L-D3) on the pooled verdict above. (b64L-d3mw) was behind by −14,975 and −23,833.
+- **The held-out cost:** `behind` (b64L-D3) on the pooled verdict above. One reading is stricter than claude-314's sheet, which left the case undefined: a `mixed` verdict with a seed `behind` now reads "behind" (row 3, not row 2). (b64L-d3mw) was behind by −14,975 and −23,833.
 
-**The cost ceiling, a decision rule, not a bar.** claude-315's decision review judged that a ratio buying stopping at more than about 3× (b64L-d3mw)'s cost is a worse trade than a decode-time change. Here that is a mean pooled d against (b64L-D3) **below −58,212**: three times claude-315's mean, (−14,975 − 23,833) ÷ 2 = −19,404. It only chooses between rows 3a and 3b. It is the lab's judgement, fixed now, and this sheet's FIT may accept or change it.
+**The cost ceiling, a decision rule, not a bar.** claude-315's decision review judged that a ratio buying stopping at more than about 3× (b64L-d3mw)'s cost is a worse trade than a decode-time change. Here that is a mean pooled d against (b64L-D3) **below −58,212**: three times claude-315's mean, (−14,975 − 23,833) ÷ 2 = −19,404. It only chooses between rows 3a and 3b. It is the lab's judgement, fixed now; FIT round 1 did not change it.
 
 ## What each outcome unlocks
 
@@ -144,9 +144,9 @@ Read top to bottom; the first row that matches decides.
 | 3a | stopping met, neither seed collapsed, the pair is `behind`, and the mean d is at or above −58,212 | **The ratio stops and varies, at a cost inside the ceiling.** Next: a decision review on the recall lever, with this TRAIN as the base. The REPORT says the cost cannot be split between fewer D3 passes (2.93) and mw-balp's content. |
 | 3b | stopping met, neither seed collapsed, the pair is `behind`, and the mean d is below −58,212 | **The ratio stops and varies, at a cost past the ceiling.** Next: a decision review between a lower ratio (× 2) and a decode-time lever. |
 | 4 | stopping met, a seed collapsed | **More copies stop the model, but its stopped replies collapse.** Next: a decision review on a larger or more varied dialogue corpus. |
-| 5 | stopping not met, and both seeds below 122 EOS stops (× 1's lower seed) | **Fewer stops than × 1 at both seeds, against the direction claude-315 measured.** First the REPORT classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Then a decision review. A higher ratio is not offered. |
-| 6a | stopping not met, a seed at 122 or more, and neither seed collapsed | **Tripling mw-balp does not lift both seeds past the bar.** The REPORT sets the stops at × 0, × 1, × 3 and mw-balp alone side by side. Next: a decision review between a higher ratio and the fine-tuning lever (deepseek-26, deepseek-28). |
-| 6b | stopping not met, a seed at 122 or more, and a seed collapsed | **More copies do not lift both seeds, and the stopped replies collapse.** Next: row 4's decision review, a larger or more varied dialogue corpus, or the fine-tuning lever. A higher ratio is not offered, since repeating mw-balp repeats its stock replies. |
+| 5 | stopping not met, and at least one seed below 122 EOS stops (× 1's lower seed) | **Fewer stops than × 1 at that seed, against the direction claude-315 measured.** First the REPORT classes it as instrument or mechanism (§4.2), from I-3, I-c and I-xc. Then a decision review. A higher ratio is not offered. |
+| 6a | stopping not met, both seeds at 122 or more, and neither seed collapsed | **Tripling mw-balp does not lift both seeds past the bar.** The REPORT sets the stops at × 0, × 1, × 3 and mw-balp alone side by side. Next: a decision review between a higher ratio and the fine-tuning lever (deepseek-26, deepseek-28). |
+| 6b | stopping not met, both seeds at 122 or more, and a seed collapsed | **More copies do not lift both seeds, and the stopped replies collapse.** Next: row 4's decision review, a larger or more varied dialogue corpus, or the fine-tuning lever. A higher ratio is not offered, since repeating mw-balp repeats its stock replies. |
 
 A seed that is NOT_RUN reruns once, sealing to the new root `runs-2/s{1,2}/` (L-002). A second NOT_RUN reads by row 0a or 0b, by the class of its last cause.
 
@@ -251,7 +251,7 @@ Registered before any pod goes up. They are claude-314's, with TRAIN swapped:
 - **m3:** the stall notice was never cleared, so one stall would have paused renewals for good. Fix: cleared on any line change.
 
 **Round 2: GO.** All four closed, and no new major:
-- **A healthy run is not reaped.** `progress.jsonl` grows at each `--eval-every 1024` row, about every 6 to 8 minutes, inside STALL's 30. A real quiet stretch only pauses renewals: the last 4-hour renewal is at most 25 minutes old, so the reaper could take the pod only after about 4 unchanged hours.
+- **A healthy run is not reaped.** `progress.jsonl` grows at each `--eval-every 1024` row, about every 10 minutes at the recorded 0.56 to 0.57 s a step plus DEV, about a third of STALL's 30 checks; the log byte counts grow more often. A real quiet stretch only pauses renewals: the last 4-hour renewal is at most 25 minutes old, so the reaper could take the pod only after about 4 unchanged hours.
 - **The `trap ''` in `end()`** is inherited only by short children (`kill`, `wait`, `find`, `xargs`, `sha256sum`). The seal is started by the chain, not the job, so it does not inherit it.
 - **The window gate** writes `ok 357907` only on an exact match and sets GO=0 before the full run otherwise.
 - **One minor, applied:** m2 had no test. `gt/test-watch.sh` now runs the job's own `end()` under two TERMs and expects EXIT 0 and DONE. Deleting the ignore gives EXIT 9; `trap -` in its place kills the job before EXIT. Both mutations are caught.

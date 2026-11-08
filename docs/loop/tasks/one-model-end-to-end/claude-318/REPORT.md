@@ -7,7 +7,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **No result yet.** This unit registers a run; it trains nothing. Whether (b64L) on D3 + `mw-balp/train` × 3 stops at both seeds, keeps its stopped replies varied, and keeps D3's held-out text within the cost ceiling is read by the next unit.
 - **The first draft of the sheet had two majors that a run could have misread.** A fresh FIT found them (FIT WITH CHANGES, round 1, no blockers):
   - **Row 5 ignored collapse.** A run that stopped less than × 1 and collapsed would have been offered a higher ratio. Rows 5 and 6 now read collapse, and row 6 is split into 6a and 6b.
-  - **A drop in stopping was classed only below 8 stops.** A seed that fell from 177 to, say, 60 would have read as "stopping not met", with no classification first. Row 5 now classifies any run where both seeds fall below × 1's 122.
+  - **A drop in stopping was classed only below 8 stops.** A seed that fell from 177 to, say, 60 would have read as "stopping not met", with no classification first. Row 5 now classifies any run where a seed falls below × 1's 122 (the exact-head review widened it from "both seeds", so a one-seed drop can no longer reach row 6a).
   - **Four minors,** all applied: I-3's window count now gates the full run; collapse has a near-bar band; the descriptive pair against (b64L-d3mw) names its confound; and "behind" is defined for a `mixed` pair verdict.
 - **The D67 pre-run review of the scripts was NO-GO as written.** It found one major and three minors, all now fixed and tested:
   - **M1, unbounded billing:** the watcher renewed the lease every 25 minutes forever, stalled or not. A hung pod could then never be taken by the pod reaper, which deletes a pod 20 minutes after its lease lapses. Now no renewal is made while a STALL notice stands, and a changed line clears the notice. claude-317's watcher carried the same code on a live pod (`vast-59652743`); it was patched the same way and restarted at 03:05Z.
@@ -74,7 +74,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **The mix against its parts,** re-run on 8 Nov against claude-314's `d3mw`:
   - the mix's first 35,480,910 mask bytes hash to `d3mw`'s mask `5bf91524…`, and its first 35,480,910 body tokens to `d3mw`'s body;
-  - each of the three 7,512,797-byte mw-balp segments, mask and body, hashes equal to `d3mw`'s mw-balp segment (mask `b5e7352d…`);
+  - each of the three mw-balp segments (7,512,797 mask bytes, 15,025,594 body bytes) hashes equal to `d3mw`'s mw-balp segment (mask `b5e7352d…`);
   - `scale-probe mix` over claude-314's five roots rebuilt `d3mw` byte for byte (the cancel probe).
 - **The store copy:** fetched back; the three hashes matched.
 - **The laptop gates,** on the scripts at the hashes in `local/claude/claude-318/script-hashes.txt`:
