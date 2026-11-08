@@ -52,8 +52,8 @@ After the first target:
 | `per-turn/v1` | 2,576 | 1,614 | 2,574 |
 | `one-user-turn/v1` | 2,576 | 1,600 | 2,574 |
 
-The run's `progress.jsonl` independently records opening query spread 0.2417 at
-step 512, against 2.0761 over all rows: the prompt changes the opening point
+The run's `progress.jsonl` independently records opening query spread 0.26249 at
+step 512, against 2.06252 over all rows: the prompt changes the opening point
 very little. This is consistent with the failed first-target selection.
 
 ## Evidence
