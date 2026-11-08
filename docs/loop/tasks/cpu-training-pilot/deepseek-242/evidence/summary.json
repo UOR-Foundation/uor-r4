@@ -25,7 +25,9 @@
     "non_timing_fields_equal": true
   },
   "trace_alignment": {
-    "served_panel_free_arm": "../../../../../../local/deepseek/forced-copy-panel/runs-v5",
+    "reviewed_free_arm": "../../../../../../local/deepseek/forced-copy-panel/runs-v5",
+    "free_arm_executable_sha256": "a6cc69daad3f5dfd9af1ed64dd3a573a8086fa8a0b77d8d200e476c1795cc000",
+    "reference_note": "forced-copy free arm reproducing served-reply-panel generation; CPU decision parity is retained by deepseek-241",
     "rows_compared": 1024,
     "chosen_token_mismatches": 0
   },

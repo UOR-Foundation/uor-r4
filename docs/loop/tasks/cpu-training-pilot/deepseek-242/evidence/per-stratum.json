@@ -1,6 +1,12 @@
 {
   "schema": "uor-r4.cpu-first-reply-hamming-trace-per-stratum/1",
-  "rows_per_cell": 256,
+  "rows_per_stratum": {
+    "length2": 256,
+    "length4": 256,
+    "length8": 256,
+    "reassert": 128,
+    "update": 128
+  },
   "heads": [
     {"stratum":"length2","depth":2,"head":0,"kind":"copy","asked_first_token":0,"other_first_token":0,"asked_only_span":23,"other_only_span":22,"both_spans":211,"neither_span":0},
     {"stratum":"length2","depth":2,"head":1,"kind":"copy","asked_first_token":119,"other_first_token":103,"asked_only_span":14,"other_only_span":10,"both_spans":232,"neither_span":0},

@@ -32,7 +32,10 @@
     "max_peak_rss_kib": 51092,
     "final_report_count": 5,
     "final_measured_wall_seconds": 3.017,
-    "sequential_to_final_speedup": 13.274
+    "final_seed_render_count": 4,
+    "final_seed_render_wall_seconds": 2.455,
+    "sequential_seed_render_wall_seconds": 40.049,
+    "sequential_to_final_speedup": 16.313
   },
   "storage": {
     "local_evidence_and_inputs_bytes": 18175243,
@@ -57,5 +60,5 @@
     "tests, formatting, Clippy and harness gates",
     "review and delivery"
   ],
-  "note": "The measured wall is retained across the early sequential drafts and the final 32-thread runs. The final five reports alone total 3.017 seconds."
+  "note": "The measured wall is retained across the early sequential drafts and the final 32-thread runs. The four final seed/rendering reports total 2.455 seconds; the fifth report is the 0.562-second determinism repeat."
 }

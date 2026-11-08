@@ -1051,6 +1051,14 @@ mod tests {
         assert_eq!(one_user, "first second Where?");
         assert_eq!(per_turn, "first\nsecond\nWhere?");
         assert_eq!(
+            tokenizer.decode(&one_user_ids),
+            "<|bos|>User: first second Where?\nAssistant:"
+        );
+        assert_eq!(
+            tokenizer.decode(&per_turn_ids),
+            "<|bos|>User: first\nUser: second\nUser: Where?\nAssistant:"
+        );
+        assert_eq!(
             one_user_ids,
             encoder
                 .encode_assistant_prefix(&[Message {
