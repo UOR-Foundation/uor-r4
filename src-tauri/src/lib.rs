@@ -1158,6 +1158,19 @@ impl DesktopBackend {
         self.terminal_enabled
     }
 
+    /// Return whether an exact host-approved command remains within its one-shot validity window.
+    pub fn host_terminal_command_is_approved(&self, cwd: &Path, command: &str) -> bool {
+        if !self.terminal_enabled || command.trim().is_empty() {
+            return false;
+        }
+        let Ok(canonical_cwd) = self.verify_granted_existing_path(cwd) else {
+            return false;
+        };
+        self.host_approved_commands
+            .get(&(canonical_cwd, command.trim().to_string()))
+            .is_some_and(|approved_at| approved_at.elapsed() <= std::time::Duration::from_secs(60))
+    }
+
     /// Record a one-shot host-side user confirmation for exact `(cwd, command)`.
     ///
     /// In the desktop shell, confirmation comes from the native host dialog / CLI prompt rather
@@ -1378,10 +1391,17 @@ fn run_bounded_process(
             }
         }
     }
-    let exited = child
+    let mut exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
+    while !exited && readers_disconnected && !killed && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        exited = child
+            .try_wait()
+            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+            .is_some();
+    }
     if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
@@ -1798,6 +1818,22 @@ mod bounded_process_tests {
     }
 
     #[test]
+    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg("-c")
+            .arg("printf ok; exec 1>&- 2>&-; sleep 0.05");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
+            .expect("closed pipes must allow a normal exit");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "ok");
+        assert!(output.status.success());
+        assert!(
+            !output.timed_out,
+            "normal exit after pipe closure was mislabeled as a timeout"
+        );
+    }
+
+    #[test]
     fn output_cap_does_not_impersonate_a_wall_clock_timeout() {
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg("yes x");
@@ -1805,6 +1841,47 @@ mod bounded_process_tests {
             .expect("output cap must terminate without a timeout claim");
         assert!(output.truncated, "output cap was not reported");
         assert!(!output.timed_out, "output cap was mislabeled as a timeout");
+    }
+}
+
+#[cfg(test)]
+mod terminal_approval_tests {
+    use super::*;
+
+    #[test]
+    fn expired_host_approval_is_refused_and_consumed() {
+        let root =
+            std::env::temp_dir().join(format!("uor-expired-approval-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create expired-approval fixture");
+        let root = root
+            .canonicalize()
+            .expect("canonical expired-approval fixture");
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        backend
+            .native_grant_folder(&root)
+            .expect("grant fixture folder");
+        backend.native_set_terminal_enabled(true);
+        backend.host_approved_commands.insert(
+            (root.clone(), "pwd".to_string()),
+            std::time::Instant::now() - std::time::Duration::from_secs(61),
+        );
+        assert!(!backend.host_terminal_command_is_approved(&root, "pwd"));
+        let request = TerminalCommandRequest {
+            cwd: root.clone(),
+            command: "pwd".to_string(),
+            user_confirmed: true,
+            confirmed_command: "pwd".to_string(),
+        };
+        let result = backend.prepare_terminal_command(&request);
+        assert!(matches!(
+            result,
+            Err(DesktopClientError::TerminalConsentRequired)
+        ));
+        assert!(!backend
+            .host_approved_commands
+            .contains_key(&(root.clone(), "pwd".to_string())));
+        let _ = fs::remove_dir_all(&root);
     }
 }
 
@@ -2221,6 +2298,16 @@ pub fn dispatch_rpc_command(
                 .collect();
             Ok(json!({ "folders": folders }))
         }
+        "native_choose_project_folder" => {
+            let mut folders = backend.granted_folders().iter();
+            let Some(folder) = folders.next() else {
+                return Ok(Value::Null);
+            };
+            if folders.next().is_some() {
+                return Err("multiple granted folders require the native folder picker".to_string());
+            }
+            Ok(json!({ "path": folder.to_string_lossy() }))
+        }
         "native_grant_folder" => Err(
             "PathNotGranted: folder grants are host-owned (--grant <dir>) and cannot be granted by page RPC"
                 .to_string(),
@@ -2271,6 +2358,28 @@ pub fn dispatch_rpc_command(
                 .ok_or_else(|| "missing repoPath".to_string())?;
             let report = backend
                 .native_git_status(Path::new(repo_path))
+                .map_err(|e| e.to_string())?;
+            serde_json::to_value(report).map_err(|e| e.to_string())
+        }
+        "native_enable_terminal" => Ok(json!({ "enabled": backend.terminal_enabled() })),
+        "native_confirm_terminal_command" => {
+            let cwd = args
+                .get("cwd")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing cwd".to_string())?;
+            let command = args
+                .get("command")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing command".to_string())?;
+            Ok(json!({ "approved": backend.host_terminal_command_is_approved(Path::new(cwd), command) }))
+        }
+        "native_git_diff" => {
+            let repo_path = args
+                .get("repoPath")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing repoPath".to_string())?;
+            let report = backend
+                .native_git_diff(Path::new(repo_path))
                 .map_err(|e| e.to_string())?;
             serde_json::to_value(report).map_err(|e| e.to_string())
         }
@@ -2475,6 +2584,11 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
+    if canonical_root.file_name().and_then(|name| name.to_str()) == Some("dist")
+        && (rel.ends_with(".ts") || rel.ends_with(".tsx"))
+    {
+        return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
+    }
     let canonical_candidate = match fs::canonicalize(&candidate) {
         Ok(path) if path.starts_with(&canonical_root) => path,
         Ok(_) => return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec()),
@@ -2490,8 +2604,8 @@ pub fn handle_studio_http_request(
             expected_token
         );
         let injected = html.replacen(
-            "<script type=\"module\">",
-            &format!("{bootstrap}\n    <script type=\"module\">"),
+            "<script type=\"module\"",
+            &format!("{bootstrap}\n    <script type=\"module\""),
             1,
         );
         bytes = injected.into_bytes();
