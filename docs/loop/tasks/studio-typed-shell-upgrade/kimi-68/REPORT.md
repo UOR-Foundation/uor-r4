@@ -27,7 +27,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Checks run at the head
 
-Evidence is under `local/kimi/studio-lifecycle-migration/` and the exact-head subdirectory: identity/base/diff, full product suite, typecheck/build, four legacy checks, built-browser including quota, harness/report/local-PR/full-gate logs, and identity-tagged activation-disable red/restored-green evidence with an empty restoration diff. Accepted advisories remain the notebook, `lifecycle_persistence.js`/`.d.ts` asset allowlist entries, and existing FILEMAP rows; read-path and hard checks pass. Fresh exact-head review, PR creation/update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. The PR uses `References #3500`; the issue remains open. No production publisher was invoked.
+Evidence is under `local/kimi/studio-lifecycle-migration/` and the exact-head subdirectory: identity/base/diff, full product suite, typecheck/build, four legacy checks, built-browser including quota, harness/report/local-PR/full-gate logs, and identity-tagged activation-disable red/restored-green evidence with an empty restoration diff. Accepted advisories remain the notebook, `lifecycle_persistence.js`/`.d.ts` asset allowlist entries, and existing FILEMAP rows; read-path and hard checks pass. Agent-48 returned CHANGES for non-discriminating theme/current-UI and read-route evidence, plus the recent-view and initial-marker-read gaps. Those findings and final delivery continue in the [kimi-69 repair REPORT](../kimi-69/REPORT.md). The PR uses `References #3500`; the issue remains open. No production publisher was invoked.
 
 ## Skills used
 

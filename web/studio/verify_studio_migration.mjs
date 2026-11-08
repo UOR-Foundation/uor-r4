@@ -19,13 +19,13 @@ function fixture(mode) {
         'uor.studio.activeConversation.v1': JSON.stringify('session-a'),
         'uor.studio.editor.v1': JSON.stringify({ content: 'seed draft', futureEditor: [1, 2] }),
         'uor.studio.modelSources.v1': JSON.stringify({ active: { kind: 'api', id: 'remote' }, api: [{ id: 'remote', apiKey: 'sentinel-not-a-secret' }] }),
-        'uor.studio.settings.v1': JSON.stringify({ theme: 'dark', fontSize: 16, futureSetting: true }),
-        'uor.studio.ui.v2': JSON.stringify({ nav: 'collapsed', futureFlag: 42 }),
+        'uor.studio.settings.v1': JSON.stringify({ theme: 'light', fontSize: 16, futureSetting: true }),
+        'uor.studio.ui.v2': JSON.stringify({ nav: 'expanded', futureFlag: 42 }),
         'uor.studio.ui.v1': JSON.stringify({ legacyNav: 'archival-only' }),
         'uor.studio.attachments.v1': JSON.stringify([{ name: 'seed.txt', content: 'seed context', futureAttachment: 'retained' }]),
         'uor.studio.tabs.v2': JSON.stringify({ activePath: 'draft.md', activeRootPath: '', tabs: [{ path: 'draft.md', content: 'seed draft', dirty: true, mode: 'draft', rootPath: '' }] }),
         'uor.studio.recent.v2': JSON.stringify([{ path: 'draft.md', rootPath: '' }]),
-        'uor.studio.theme': 'dark',
+        'uor.studio.theme': 'light',
     };
     if (mode === 'malformed') entries['uor.studio.settings.v1'] = '{malformed-source';
     if (mode === 'conflict') entries['uor.studio.lifecycle.conversations.v2'] = '[{"conflicting":true}]';
@@ -97,7 +97,11 @@ export function migrationExpression(mode, phase) {
                 marker:localStorage.getItem(constants.markerKey)===constants.markerValue,
                 renamed:window.__studioUi?.listSessions().some((item)=>item.id==='session-a' && item.title==='Renamed migration') || false,
                 settings:window.__studioUi?.getSettings().fontSize===22,
-                workspace:window.__studioFiles?.activeFile()?.path==='draft.md' && window.__studioFiles?.activeFile()?.content==='seed draft',
+                workspace:window.__studioFiles?.activeFile()?.path==='draft.md' && window.__studioFiles?.activeFile()?.content==='edited draft',
+                theme:document.documentElement.dataset.theme==='dark',
+                currentUi:document.getElementById('app')?.dataset.nav==='collapsed',
+                attachments:window.__studioUi?.getAttachments().some((item)=>item.name==='pasted-context.txt' && item.content==='reload context') || false,
+                recentEmpty:(()=>{const list=document.getElementById('recentFiles');return Boolean(list)&&list.textContent.includes('No files opened yet.')&&!list.querySelector('.recent-file');})(),
                 oldPreserved,
                 deletedDestinationNotResurrected:localStorage.getItem('uor.studio.lifecycle.recent.v3')===null && localStorage.getItem('uor.studio.recent.v2')===original['uor.studio.recent.v2'],
                 providerIsolated:!lifecycleSecrets.some((value)=>value.includes('sentinel-not-a-secret')) && localStorage.getItem('uor.studio.lifecycle.modelSources.v1')===null,
@@ -128,8 +132,8 @@ export function migrationExpression(mode, phase) {
             attachments:window.__studioUi?.getAttachments().some((item)=>item.name==='seed.txt' && item.content==='seed context') || false,
             workspace:window.__studioFiles?.activeFile()?.path==='draft.md' && window.__studioFiles?.activeFile()?.content==='seed draft',
             tabs:window.__studioFiles?.tabs().some((item)=>item.path==='draft.md') || false,
-            theme:document.documentElement.dataset.theme==='dark',
-            currentUi:document.getElementById('app')?.dataset.nav==='collapsed',
+            theme:document.documentElement.dataset.theme==='light',
+            currentUi:document.getElementById('app')?.dataset.nav==='expanded',
         };
         const destinationsCopied=Object.entries(constants.destinations).every(([source,destination])=>localStorage.getItem(destination)!==null);
         const archivalUiV1=localStorage.getItem('uor.studio.lifecycle.ui.v2')===original['uor.studio.ui.v1'];
@@ -158,12 +162,48 @@ export function migrationExpression(mode, phase) {
             await pause(0);
             font.blur();
         }
+        const themeSelect=root.querySelector('select[aria-label="Theme"]');
+        if(themeSelect){
+            themeSelect.value='dark';
+            themeSelect.dispatchEvent(new Event('change',{bubbles:true}));
+            await pause(0);
+        }
+        const navCollapse=document.getElementById('btnNavCollapse');
+        if(navCollapse)navCollapse.click();
+        const closeSettings=button('Close');
+        if(closeSettings)closeSettings.click();
+        await pause(50);
+        const agent=button('Agent');
+        if(agent)agent.click();
+        await pause(50);
+        const pasted=root.querySelector('textarea[aria-label="Pasted context"]');
+        if(pasted){
+            pasted.value='reload context';
+            pasted.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'reload context'}));
+            await pause(0);
+        }
+        const attach=button('Attach pasted text');
+        if(attach)attach.click();
+        await pause(50);
+        const workspace=button('Workspace');
+        if(workspace)workspace.click();
+        await pause(50);
+        const editor=root.querySelector('textarea[aria-label="File contents"]');
+        if(editor){
+            editor.value='edited draft';
+            editor.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'edited draft'}));
+            await pause(0);
+        }
         await pause(100);
         const edits={
             renamed:window.__studioUi?.listSessions().some((item)=>item.id==='session-a' && item.title==='Renamed migration') || false,
             conversationDestination: (localStorage.getItem('uor.studio.lifecycle.conversations.v2')||'').includes('Renamed migration'),
             settings:window.__studioUi?.getSettings().fontSize===22,
             settingsDestination:JSON.parse(localStorage.getItem('uor.studio.lifecycle.settings.v2')||'{}').fontSize===22,
+            theme:document.documentElement.dataset.theme==='dark' && localStorage.getItem('uor.studio.lifecycle.theme.v1')==='dark',
+            currentUi:document.getElementById('app')?.dataset.nav==='collapsed' && JSON.parse(localStorage.getItem('uor.studio.lifecycle.ui.v3')||'{}').nav==='collapsed',
+            attachments:window.__studioUi?.getAttachments().some((item)=>item.name==='pasted-context.txt' && item.content==='reload context') && (localStorage.getItem('uor.studio.lifecycle.attachments.v2')||'').includes('pasted-context.txt'),
+            workspace:window.__studioFiles?.activeFile()?.content==='edited draft' && JSON.parse(localStorage.getItem('uor.studio.lifecycle.tabs.v3')||'{}').tabs[0].content==='edited draft',
         };
         const oldPreservedAfterEdits=oldPreserved();
         const providerIsolatedAfterEdits=providerIsolated();
@@ -215,7 +255,7 @@ export function assertMigrationReport(report, mode) {
         if (!passed) throw new Error('migration edit failed ' + name + ': ' + JSON.stringify(values));
     }
     const reload = values.reload;
-    if (!values.pageReloaded || !reload || reload.shellCount !== 1 || reload.status?.state !== 'current' || !reload.marker || !reload.renamed || !reload.settings || !reload.workspace || !reload.oldPreserved || !reload.deletedDestinationNotResurrected || !reload.providerIsolated) {
+    if (!values.pageReloaded || !reload || reload.shellCount !== 1 || reload.status?.state !== 'current' || !reload.marker || !reload.renamed || !reload.settings || !reload.workspace || !reload.theme || !reload.currentUi || !reload.attachments || !reload.recentEmpty || !reload.oldPreserved || !reload.deletedDestinationNotResurrected || !reload.providerIsolated) {
         throw new Error('marked reload did not preserve the migrated state: ' + JSON.stringify(values));
     }
 }

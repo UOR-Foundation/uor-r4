@@ -60,6 +60,14 @@ describe('actual legacy storage routing after migration', () => {
         expect(JSON.parse(window.localStorage.getItem('uor.studio.lifecycle.settings.v2') || '{}')).toMatchObject({ fontSize: 20, futureSetting: true });
         expect(JSON.parse(window.localStorage.getItem('uor.studio.lifecycle.attachments.v2') || '[]')).toHaveLength(2);
         expect(window.localStorage.getItem('uor.studio.lifecycle.theme.v1')).toBe('dark');
+
+        vi.resetModules();
+        // @ts-expect-error A query suffix creates a fresh real UI initialization against divergent destinations.
+        await import('../../assets/js/studio_ui.js?divergent-read');
+        await vi.waitFor(() => expect(legacyWindow.__studioUi.getSettings().fontSize).toBe(20));
+        expect(legacyWindow.__studioUi.getAttachments()).toMatchObject([{ name: 'seed.txt', content: 'seed' }, { name: 'new.txt', content: 'new' }]);
+        expect(window.localStorage.getItem('uor.studio.settings.v1')).toBe(settings);
+        expect(window.localStorage.getItem('uor.studio.attachments.v1')).toBe(attachments);
     });
 
     it('retains direct legacy writes when typed activation is off', async () => {
@@ -93,5 +101,13 @@ describe('actual legacy storage routing after migration', () => {
         expect(window.localStorage.getItem('uor.studio.tabs.v2')).toBe(tabs);
         expect(JSON.parse(window.localStorage.getItem('uor.studio.lifecycle.tabs.v3') || '{}')).toMatchObject({ activePath: 'draft.md' });
         expect(JSON.parse(window.localStorage.getItem('uor.studio.lifecycle.tabs.v3') || '{}').tabs[0].content).toBe('edited draft');
+
+        vi.resetModules();
+        document.body.innerHTML = '<div id="fileTree"></div><div id="fileTreeMeta"></div><textarea id="editorText"></textarea>';
+        document.dispatchEvent(new Event('DOMContentLoaded'));
+        // @ts-expect-error A query suffix creates a fresh real workspace initialization against divergent destinations.
+        await import('../../assets/js/studio_files.js?divergent-read');
+        expect(legacyWindow.__studioFiles.activeFile()).toMatchObject({ path: 'draft.md', content: 'edited draft' });
+        expect(window.localStorage.getItem('uor.studio.tabs.v2')).toBe(tabs);
     });
 });

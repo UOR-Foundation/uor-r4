@@ -402,3 +402,20 @@ describe('marker verification and rollback failures', () => {
         }
     });
 });
+
+
+describe('initial marker read failure', () => {
+    it('fails before any write when the existing marker cannot be read', () => {
+        const fixture = completeFixture();
+        const storage = storageWith(fixture);
+        storage.getItem.mockImplementation((key) => {
+            if (key === LIFECYCLE_MIGRATION_MARKER_KEY) throw new Error('initial marker read failed');
+            return fixture[key] ?? null;
+        });
+
+        expect(migrateLifecycleStorage(storage)).toMatchObject({ state: 'error', error: 'marker-read-failed' });
+        expect(storage.setItem).not.toHaveBeenCalled();
+        expect(storage.removeItem).not.toHaveBeenCalled();
+        for (const [source, raw] of Object.entries(fixture)) expect(fixture[source]).toBe(raw);
+    });
+});

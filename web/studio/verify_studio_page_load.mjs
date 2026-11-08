@@ -204,6 +204,7 @@ async function trapPageLoad(cdp, origin, path, options = {}) {
         }
     };
     if (options.migration) {
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
         await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: migrationPreload(options.migration) }, sessionId);
     }
     const before = cdp.events.length;
