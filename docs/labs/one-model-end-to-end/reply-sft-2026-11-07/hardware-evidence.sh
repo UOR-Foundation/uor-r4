@@ -63,20 +63,33 @@ bind_grade_hardware() {
     die "grade $relative is not bound to the recorded CPU hardware"
 }
 
+verify_grade_hardware_binding() {
+  local run=$1 grade=$2 sidecar relative actual
+  sidecar="$grade.hardware.json"
+  [ -f "$sidecar" ] || die "grade $grade has no CPU hardware binding"
+  relative=${grade#"$run/"}
+  actual=$(sha256sum "$grade" | cut -d' ' -f1)
+  jq -e \
+    --arg path "$relative" --arg grade_sha "$actual" \
+    --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
+    '.grade.path == $path and .grade.sha256 == $grade_sha and
+     .hardware.model == $model and .hardware.architecture == $arch and
+     .hardware.logical_cpus == $logical' "$sidecar" >/dev/null ||
+    die "grade $relative no longer matches its CPU hardware binding"
+}
+
 verify_grade_hardware_bindings() {
-  local run=$1 sidecar grade relative actual
+  local run=$1 sidecar grade
+  if [ -f "$run/control/base-grade.json" ]; then
+    verify_grade_hardware_binding "$run" "$run/control/base-grade.json"
+  fi
+  while IFS= read -r -d '' grade; do
+    verify_grade_hardware_binding "$run" "$grade"
+  done < <(find "$run/grades" -type f -name '*.json' ! -name '*.hardware.json' -print0 2>/dev/null)
   while IFS= read -r -d '' sidecar; do
     grade=${sidecar%.hardware.json}
     [ -f "$grade" ] || die "hardware sidecar has no grade: $sidecar"
-    relative=${grade#"$run/"}
-    actual=$(sha256sum "$grade" | cut -d' ' -f1)
-    jq -e \
-      --arg path "$relative" --arg grade_sha "$actual" \
-      --arg model "$cpu_model" --arg arch "$cpu_arch" --argjson logical "$cpu_logical" \
-      '.grade.path == $path and .grade.sha256 == $grade_sha and
-       .hardware.model == $model and .hardware.architecture == $arch and
-       .hardware.logical_cpus == $logical' "$sidecar" >/dev/null ||
-      die "grade $relative no longer matches its CPU hardware binding"
+    verify_grade_hardware_binding "$run" "$grade"
   done < <(find "$run/control" "$run/grades" -type f -name '*.hardware.json' -print0 2>/dev/null)
 }
 
@@ -99,7 +112,8 @@ compact_failed_attempt() {
       [ ! -d "$path" ] || find "$path" -type f -printf '%s\n'
     done | awk '{ total += $1 } END { print total + 0 }'
   )
-  jq -n --arg label "$label" --arg reason "oom-retry" \
+    jq -e \
+    -n --arg label "$label" --arg reason "oom-retry" \
     --arg manifest "$(basename "$manifest")" --argjson files "$files" \
     --argjson bytes "$bytes" \
     '{schema:"uor-r4.compacted-attempt/1",label:$label,reason:$reason,
@@ -128,10 +142,9 @@ write_seal_manifest() {
     sort -z | xargs -0 -r sha256sum > SHA256SUMS.next
   mv SHA256SUMS.next SHA256SUMS
   for required in ./cpu.json ./cpu.txt; do
-    if [ -f "$required" ]; then
-      grep -F "  $required" SHA256SUMS >/dev/null ||
-        die "seal manifest omits required CPU evidence: $required"
-    fi
+    [ -f "$required" ] || die "seal is missing required CPU evidence: $required"
+    grep -F "  $required" SHA256SUMS >/dev/null ||
+      die "seal manifest omits required CPU evidence: $required"
   done
   sha256sum -c SHA256SUMS
 }

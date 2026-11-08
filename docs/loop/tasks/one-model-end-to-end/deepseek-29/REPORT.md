@@ -21,6 +21,8 @@ or spend.
   qualification labels.
 - Every base and checkpoint grade gets a sidecar binding its exact bytes to the
   recorded CPU model, architecture and logical processor count.
+- Final verification inventories every grade, requires its sidecar, and checks
+  the sidecar again before sealing; a missing CPU file fails the manifest.
 - OOM retry compacts bulky partial-attempt checkpoints, exports, panels and
   scores into a sealed hash manifest while retaining logs and progress.
 - Gate and mutation coverage require both CPU labels, both grade bindings,
@@ -39,7 +41,7 @@ and roughly $0.45-$0.55 at the observed $0.563/hour offer.
 ## Checks run at the head
 
 - `gate.sh`: 235 checks passed.
-- `test-mutants.sh`: 97 of 97 semantic mutations caught.
+- `test-mutants.sh`: 99 of 99 semantic mutations caught.
 - `bash -n`, ShellCheck at warning severity and `git diff --check`: passed.
 - The target sheet has no prep-shape error and remains `PENDING` for review.
 - The job records the CPU model, architecture and logical processor count before

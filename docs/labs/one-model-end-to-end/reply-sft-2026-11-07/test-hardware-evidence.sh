@@ -55,6 +55,12 @@ verify_grade_hardware_bindings "$RUN"
 jq -e --arg sha "$(sha256sum "$grade" | cut -d' ' -f1)" --arg model "$cpu_model" \
   '.grade.sha256 == $sha and .hardware.model == $model' \
   "$grade.hardware.json" >/dev/null
+unbound="$RUN/grades/attempt-1/unbound.json"
+cp "$grade" "$unbound"
+if (verify_grade_hardware_bindings "$RUN") >/dev/null 2>&1; then
+  die "grade without a hardware sidecar escaped validation"
+fi
+unlink "$unbound"
 
 printf '%s\n' '{"tampered":true}' > "$grade"
 if (verify_grade_hardware_bindings "$RUN") >/dev/null 2>&1; then
@@ -74,6 +80,9 @@ jq -e '.files == 6 and .bytes > 0 and .reason == "oom-retry"' \
   "$RUN/control/attempt-1-partial.json" >/dev/null
 test ! -e "$RUN/run/models"
 test ! -e "$RUN/artifacts/attempt-1"
+test ! -e "$RUN/grades/attempt-1"
+test ! -e "$RUN/panel/attempt-1"
+test ! -e "$RUN/scores/attempt-1"
 
 printf 'log\n' > "$RUN/job.log"
 MEASURE="$TMP/measure"
@@ -83,6 +92,12 @@ printf 'ef' > "$MEASURE/control/inner"
 printf '0123456789' > "$MEASURE/SHA256SUMS"
 [ "$(measure_seal_bytes "$MEASURE")" -eq 6 ]
 [ "$(measure_all_bytes "$MEASURE")" -eq 16 ]
+MISSING_CPU="$TMP/missing-cpu"
+install -d "$MISSING_CPU"
+printf 'other\n' > "$MISSING_CPU/other"
+if (write_seal_manifest "$MISSING_CPU") >/dev/null 2>&1; then
+  die "seal without CPU evidence escaped validation"
+fi
 write_seal_manifest "$RUN"
 grep -F '  ./cpu.json' "$RUN/SHA256SUMS" >/dev/null
 grep -F '  ./cpu.txt' "$RUN/SHA256SUMS" >/dev/null

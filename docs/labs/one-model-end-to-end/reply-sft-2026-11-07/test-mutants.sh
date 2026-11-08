@@ -227,6 +227,11 @@ mutate zero-logical-cpus-accepted "$HARDWARE_LIB" \
 mutate retry-model-evidence-omitted "$HARDWARE_LIB" \
   'paths=("${run_dir#"$RUN/"}/models" "artifacts/$label" "grades/$label" \' \
   'paths=("artifacts/$label" "grades/$label" \'
+mutate retry-hash-partial "$HARDWARE_LIB" \
+  'for path in "${paths[@]}"; do' \
+  'for path in "${paths[@]:0:2}"; do'
+mutate retry-deletion-disabled "$HARDWARE_LIB" \
+  '[ ! -e "$RUN/$path" ] || find "$RUN/$path" -depth -delete' 'true'
 mutate seal-size-ignores-cpu "$HARDWARE_LIB" \
   "find \"\$1\" -type f ! -name 'SHA256SUMS*' -printf '%s\\n' |" \
   "find \"\$1/control\" -type f ! -name 'SHA256SUMS*' -printf '%s\\n' |"
