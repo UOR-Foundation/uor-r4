@@ -46,14 +46,15 @@ This is an attribution result, not a causal selection or capability result.
   position's distance, its head's Q16 margin, and the exact Q31
   `max(0, margin - distance) / max(margin, 1)` selector weight.
 - The trace remains off by default. A regression confirms that tracing changes
-  no step output, that CPU kept positions equal the integer-session trace, and
-  that every recorded weight equals the serving formula.
+  no step output, that CPU query, key and kept positions equal the
+  integer-session trace, and that every recorded weight equals the serving
+  formula.
 - Extended `cpu-first-reply-hamming-trace` to schema 2, preserving the chosen
   token, renderer, artifact, panel, span and executable controls while adding
   per-position metrics and per-head/per-stratum weighted-support totals.
 - Changed 4 code files plus task records, a resource ledger and the
-  notebook. Policy classifies the 11 changes as 4 code files (+611/-63),
-  3 docs files (+229/-0), and 4 other files (+254/-0); tests are inline.
+  notebook. Policy classifies the 11 changes as 4 code files (+655/-64),
+  3 docs files (+230/-0), and 4 other files (+1,561/-0); tests are inline.
   The ORDER gave no line estimate.
 
 ## Measurements
