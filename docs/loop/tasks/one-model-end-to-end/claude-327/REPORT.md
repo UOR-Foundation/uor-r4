@@ -9,8 +9,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - the model's own top-1 at that position is a frame word on every row: " Your", " G" (the start of "Got it, …"), " I" or " It".
 
   The frame word does not follow the asked relation. So, as on DeepSeek's artifacts, the first-target rank here measures reply format, not which value is chosen. Verdict: **diagnostic stop** for the first-target rank as a choice instrument on these artifacts.
-- **No claude checkpoint read here chooses the asked value.** When a reply's first line holds a prompt value at all, it is the other relation's value about as often as the asked one: 75 asked against 79 other, pooled over six seeds (A2).
-- **A2 was not measured as the ORDER first framed it.** That framing was the teacher-forced rank of the other value's first token. The scorer ranks only the reference reply, and at a position where the top-1 is always a frame word, a second rank would carry the same confound. A2 is therefore read from the free-generation first-line counts (`firstline.jq`, unchanged). The unit wrote no instrument code.
+- **No claude checkpoint read here shows a choice of the asked value.** When a reply's first line holds a prompt value at all, it is the other relation's value about as often as the asked one: 75 asked against 79 other, pooled over six seeds (A2). That reading rests on about 10% of rows.
+- **A2 deviates from the ORDER.** The ORDER's A2 is the teacher-forced rank of the other value's first token beside the asked one's, at the same position. Where the scorer cannot read the other value, the ORDER asks for the instrument to be extended, with a test. The scorer ranks only the reference reply, and this unit did not extend it. A2 is instead read from the free-generation first-line counts (`firstline.jq`, unchanged).
+  - **The substitute is weaker.** It sees only the rows whose first line holds a prompt value at all: 154 of 1,536 rows over six seeds, about 10%. The paired rank would read every row, and a frame word at top-1 would push both ranks down alike.
+  - **Done-when 2 is met only under the changed measure.** The paired rank is named under Still open for claude-328.
 - **Part B's sheet is not FIT yet.** Two fresh FIT rounds both read NOT FIT. Round 2's blocker: the read runs at two depths (`HAMMING_DEPTHS = [2, 6]`), so a copy head at the query token can fetch the value and the trunk can carry it to the scored position. The first sheet would have misread that as an instrument fault. All findings are applied; round 3 is the first step of the unit that builds Part B's code.
 - **The Hamming trace at the first reply position was not taken.** It needs new code, so under the ORDER it is named here as still open.
 
@@ -36,7 +38,7 @@ All laptop CPU. `served-reply-panel --teacher-forced 1` was built from `main` at
 | claude-325 s1 | 0 / 4 / 12; 6 / 2,335 / 4,080 | 0 / 2 / 4; 5 / 1,940 / 4,070 |
 | claude-325 s2 | 0 / 3 / 8; 5 / 1,486 / 4,066 | 0 / 0 / 14; 17 / 1,070 / 4,064 |
 
-**The model's own top-1 at the first reply position** (one-user-turn/v1; per-turn/v1 is the same set of words):
+**The model's own top-1 at the first reply position** (one-user-turn/v1; per-turn/v1 uses words from the same four, with different counts, for example claude-325 s1 " Your" 128, " G" 84, " It" 44):
 
 | Artifact | Top-1 first token, rows of 256 |
 |---|---|
@@ -49,6 +51,12 @@ All laptop CPU. `served-reply-panel --teacher-forced 1` was built from `main` at
 
 - **The frame does not follow the relation.** On claude-322's seed 1, home questions split " G" 44 / " Your" 84, and job questions split " G" 40 / " Your" 88.
 - **It does not follow the stratum either:** each stratum shows both words.
+- **It follows the question's template.** The panel phrases each question in one of six forms (`q0`–`q5` in the row id). On claude-322 s1, claude-323 s2 and claude-325 s2:
+  - " G" appears only on forms q3–q5;
+  - form q4 gives " G" on all 40 of its rows;
+  - forms q0–q2 give " Your" on all of theirs.
+
+  On claude-325 s1, " I" and " It" appear on forms q0–q3. This is descriptive.
 - **Later targets are mostly right under teacher forcing.** Over all 2,832 reference targets of claude-325's seed 2 (one-user-turn), 1,805 are top-1, while the 256 first targets give 0 of those.
 
 **A2, the first line** (`firstline.jq`, sha `b15c778d…`; asked / other / both, of 256):
@@ -68,7 +76,7 @@ All laptop CPU. `served-reply-panel --teacher-forced 1` was built from `main` at
 
 ## Checks run at the head
 
-- `uor-harness loop report --check --order docs/loop/tasks/one-model-end-to-end/claude-327/ORDER.md`: run at the head before review.
+- `uor-harness loop report --check --order docs/loop/tasks/one-model-end-to-end/claude-327/ORDER.md`: PASS at the head.
 - **Build control:** claude-322 s1's free-generation rows under the teacher-forced build equal its stored rows.
 - **Part B FIT, round 1** (fresh, non-author): NOT FIT, with 2 blockers, 4 majors and 4 minors, applied at `a61f7e590`:
   - table alignment lets copy heads solve B1;
@@ -93,8 +101,9 @@ All laptop CPU. `served-reply-panel --teacher-forced 1` was built from `main` at
 
 - **Part B, the next unit (claude-328):** FIT round 3 of the sheet first, then the code it names, then the run under a D67 pre-run review. claude-326's lab decision stands: no one-knob language run on this line until Part B has run.
 - **The Hamming trace at the first reply position** on the served artifacts. It needs new code in `fbs-toks` or the scorer. It matters less now that the first position is a frame word.
-- **What sets " G" against " Your" on a row** is not known. It does not follow the asked relation or the stratum, and " G" sits near 84 rows on most artifacts.
+- **A2 as the ORDER framed it,** the paired teacher-forced rank of the asked value's first token against the other value's at the first reply position, on every row. It needs the scorer to rank a second reference, with a test, and goes to claude-328.
+- **Why the question's template picks the frame word** (" G" on forms q3–q5) is described here, not explained.
 
 ## Plain summary
 
-We checked what claude's last six trained models say first when they answer a question about a fact in the chat. Every one opens with a stock word ("Your…", "Got it…", "It…"), never the answer, whichever fact is asked. When a value does appear, it is the wrong fact about as often as the right one. So the models do not pick the asked-for fact. The test that asks whether the memory read can pick a fact by a question that does not repeat the fact's own word is designed and has had two outside reviews. It is the next unit's to build and run.
+We checked what claude's last six trained models say first when they answer a question about a fact in the chat. Every one opens with a stock word ("Your…", "Got it…", "It…"), never the answer, whichever fact is asked. The stock word depends on how the question is phrased, not on which fact it asks for. In the roughly one reply in ten that names a value, it is the wrong fact about as often as the right one. So nothing here shows the models picking the asked-for fact. The test that asks whether the memory read can pick a fact by a question that does not repeat the fact's own word is designed and has had two outside reviews. It is the next unit's to build and run.

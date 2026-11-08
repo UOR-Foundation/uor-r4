@@ -43,11 +43,11 @@ In the panel, the current token at the answer position is the header's last toke
 - **Targets:** the scored target is `K_j`'s value, written into the input at the next position, as `--recall` writes its targets (teacher forcing). These 4 are the window's only scored targets.
 - **Signal:** 4 targets × 16 windows × 4,096 steps is 262,144 scored targets, row 109's count at its saturation step, 1,024 × 16 × 16.
 - **Distance** is counted from a fact's value position to its episode's `Q(K_j)` position, in both B1 and B2. The asked fact's distance falls in one of the far buckets, 33–96 or 97–180, two episodes per bucket per window. **The other fact's distance is drawn uniformly from the same bucket**, independently, so within each bucket the asked fact is the nearer one half the time.
-- **Placement:** the 4 queries sit at fixed positions at the end of each window, after every fact: the last 8 positions in B1, and the last 20 in B2, with each query's header. The facts sit at the positions their drawn distances name, with filler between; a draw that collides with another fact is redrawn from the same generator. Which of an episode's two facts is written first is drawn uniformly, so pairing and order cannot be read from position.
+- **Placement:** the 4 queries sit at fixed positions at the end of each window, after every fact: the last 8 positions in B1, each episode's tail being `Q(K_j) v`, and the last 24 in B2, each tail being `Q(K_j) H1 H2 H3 H4 v`. The facts sit at the positions their drawn distances name, with filler between; a draw that collides with another fact is redrawn from the same generator. Which of an episode's two facts is written first is drawn uniformly, so pairing and order cannot be read from position.
 - **Ranges:** values, relations, queries, header and filler are disjoint.
 - **Recording:** each held-out query records whether nearest names the asked value (`R_ask`), the paired relation's value (`R_oth`), another of the window's values (`R_any`), or none.
 
-**The header** (`--recall-header 4`): four fixed tokens `H1 … H4`, from their own range, follow each `Q(K_j)`, and the target is scored after `H4`.
+**The header** (`--recall-header 4`): four fixed tokens `H1 … H4`, from their own range, follow each `Q(K_j)`. The value `v` is written 5 positions after `Q(K_j)`, and it is predicted at `H4`'s position, the scored position. In B1 the value follows `Q(K_j)` directly and is predicted at `Q(K_j)`'s position.
 - The current token at every scored position is then `H4`, whichever relation is asked, so (i-a) cannot tell the relations apart.
 - The header occurs 4 times a window, so a copy head that matches `H4` finds earlier headers. Their next tokens are the other episodes' targets, which are scored "another value", not `R_ask`. This is noise, not a shortcut. It may pull the copy heads' combine weight down in B2, and the REPORT says whether it did.
 
@@ -98,7 +98,7 @@ An ablated reading **keeps the bar** when it passes its arm's rule with `R_ask` 
 2. **B2 passes:** the read answers a question whose answer position does not show the question. Attribute it, using the ablations only if the B0 controls passed:
    - **`R^{−c}` keeps the bar:** the type heads carry it (route ii). The trace at the scored position shows a type head keeping the asked position.
    - **`R^{−c2}` fails, `R^{−c6}` keeps the bar, and the trace at `Q(K_j)` shows a depth-2 copy head keeping the asked position:** route (i-b), a copy at the query plus a carry by the trunk. This is a positive for this read on the panel's form, not an instrument fault: the panel's question word is a current token too.
-   - **Any other pattern:** read from the trace at both positions; the REPORT names the heads and depths that carry it. It is a positive for B2, with the attribution open.
+   - **Any other pattern,** including a depth-6 copy head at `Q(K_j)` carried forward by later layers: read from the trace at both positions; the REPORT names the heads and depths that carry it. It is a positive for B2, with the attribution open.
 
    **Next, either way:** claude-325's bare-answer recipe, larger or with a curriculum from B2's form to the panel's. Under (i-b), the next sheet also checks that the panel's question word can align with its fact's key word in the trained table.
 3. **B2 fails, B1 passes:**
@@ -123,7 +123,7 @@ An ablated reading **keeps the bar** when it passes its arm's rule with `R_ask` 
   - over 10,000 windows, within each far bucket and within each band of 8 query positions, `j` is balanced against which fact is nearer and against which fact is written first, each within 2%.
 
   Each is a unit test with a mutation that makes it fail.
-- **I-3 (header):** each target sits 4 tokens after its `Q(K_j)`, and the header tokens are fixed. Tested the same way.
+- **I-3 (header):** each value sits 5 positions after its `Q(K_j)` and is scored at the position 4 after it (`H4`); the 4 episode tails fill the window's last 24 positions; the header tokens are fixed. Tested the same way.
 - **I-4:** every read arm's step-0 predicted points and step-0 loss equal its no-read twin's bit for bit, since the read's weights start at 0. The Hamming combine weights move off 0 by step 512, by `hamming_weight_mean_abs`. The read's three negative gates, run before the timed run, each fail their test with code 101: the margin's sign flipped; a row allowed to keep itself; picks that lose their window's offset.
 - **I-5:** the trace and each of the four ablations match a hand-built two-episode window in a unit test, at both positions and both depths. Ablating a head that found the value drops `R_ask` on it, and a position kept at weight 0 counts as not kept.
 - **I-6 (finite CUDA):** a 32-step smoke of every arm on the pod, at finite losses, before the timed run.
