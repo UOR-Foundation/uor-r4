@@ -148,6 +148,7 @@ This is the claude lab's own decision review (§5.1), logged for Casey, who can 
 - **mw-balp's licence and generator** are still recorded nowhere (claude-314).
 - **The scorer's timer** still measures re-parse plus decode (claude-311). A decode-only figure is still owed for the tokens-per-second lead metric.
 - **claude-317's width slope (Track B)** is still running on its own pod. It is read in its own REPORT.
+- **deepseek-31's sheet** (`one-model-end-to-end-content-ratio-2026-11-08.md`, on `main`) repeats M-World three times in reply-SFT. This unit's × 3 collapse (88 and 101) is the risk that lever carries. That is noted for DeepSeek, and it changes nothing in their sheet.
 
 ## Plain summary
 
