@@ -139,7 +139,9 @@
 //! (`in_space_long::recall_query_window`): each window's 4 episodes hold two relations each and
 //! ask one by a query token that is not its key; with `--recall-header 4` the value is predicted
 //! 4 header tokens after the query. Each reading adds the outcome counts by bucket and tail slot,
-//! and `DIR/recall.json` the held-out distances.
+//! and `DIR/recall.json` the held-out distances. `--recall-readings 1` adds the eval-only readings
+//! to each reading (`in_space_long::recall_readings`): five ablations and, for the two-class task,
+//! the trace at the query token and the scored position. They need `--hamming-read`.
 //!
 //! `train-in-space --data-root DIR --opening-bound 1 [--panel NAME=DIR]...`: how well the prompt
 //! words a window shows could name each reply opening, as TRAIN's commonest opening per key
@@ -362,6 +364,7 @@ fn main() -> Result<()> {
     let (mut split_dir, mut split_tokens, mut split_mask) = (None, None, None);
     let mut recall = 0usize;
     let (mut recall_query, mut recall_header, mut recall_eval) = (false, 0usize, None::<usize>);
+    let mut recall_readings = false;
     let mut time_quantizers = false;
     let mut fused_quantize: Option<bool> = None;
     let (mut opening_read, mut opening_anchor) = (None, None);
@@ -546,6 +549,7 @@ fn main() -> Result<()> {
             "--recall-query" => recall_query = switch(&value)?,
             "--recall-header" => recall_header = number(&value)?,
             "--recall-eval-windows" => recall_eval = Some(number(&value)?),
+            "--recall-readings" => recall_readings = switch(&value)?,
             "--objective" => {
                 config.objective = match value.as_str() {
                     "sheet" => PointObjective::Sheet,
@@ -893,9 +897,9 @@ fn main() -> Result<()> {
     }
     // claude-328's two-class task: its flags apply to --recall only, the header to the two-class
     // task only, and the two-class task holds 4 episodes a window.
-    if recall == 0 && (recall_query || recall_header != 0 || recall_eval.is_some()) {
+    if recall == 0 && (recall_query || recall_header != 0 || recall_eval.is_some() || recall_readings) {
         return Err(FloatTrainError::Invalid(
-            "--recall-query, --recall-header and --recall-eval-windows apply to --recall only".to_owned(),
+            "--recall-query, --recall-header, --recall-eval-windows and --recall-readings apply to --recall only".to_owned(),
         ));
     }
     if recall_header != 0 && !recall_query {
@@ -948,6 +952,7 @@ fn main() -> Result<()> {
             query: recall_query,
             header: recall_header,
             eval_windows: recall_eval.map_or(RecallForm::default().eval_windows, |n| n as u64),
+            readings: recall_readings,
         };
         let device = Device::new_cuda(0)?;
         return run_recall(&out, &config, recall, form, &device);
