@@ -23,6 +23,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 `replacement-restore-diff.log` is empty at the final head, confirming no source mutation remains. `replacement-source-mutation.log` and `replacement-source-restored.log` preserve the real source-mutation red/green pair. Exact-head identity, full-suite, four-legacy, harness/report/local-PR/full-gate, and built-browser logs are preserved after commit. Actual advisories are the notebook scope and existing FILEMAP rows; read-path passes. Fresh exact-head review, PR update, GitHub checks, ready/queue/merge, and fresh-main verification are **NOT_RUN**. PR #3843 remains draft with `References #3500`; issue #3500 remains open. No production publisher was invoked.
 
+kimi-66 completes the evidence links and reproducible mutation records; this report remains the reconciliation unit.
+
 ## Skills used
 
 Receiving review with exact-head verification, source-level mutation evidence, and verification before completion. No dependency, real-data migration, native/package work, or production cutover was added.

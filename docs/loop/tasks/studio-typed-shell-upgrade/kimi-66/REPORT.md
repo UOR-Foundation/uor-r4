@@ -11,7 +11,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 ## What changed
 
 - Notebook now links kimi-57 ORDER and REPORT, every repair report through kimi-66, and the full range. It retains 415/415 with zero unhandled errors.
-- Repeating the real source mutation against the final explicit non-null assertion produced `expected null not to be null` as required. Exact source restoration produced an empty diff and a passing assertion.
+- Repeating the real source mutation against the final explicit non-null assertion produced `expected null not to be null` as required. Exact source restoration produced an empty diff and a passing assertion. The exact one-line wrong-row patch is preserved at `local/kimi/studio-agent-session/replacement-wrong-row.patch`, and the kimi-65 report is now linked before this report.
 - The preserved immediate-external variant again contains `https://interaction.example.invalid/probe.png` and rejects that URL at runtime. The delayed variant continues to reject its 500 ms request. Reserved `.invalid` names only; no real endpoint was contacted.
 
 ## Measurements
