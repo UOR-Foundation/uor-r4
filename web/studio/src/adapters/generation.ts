@@ -24,8 +24,8 @@ export function createGenerationAdapter(store: LifecycleStore, sessions: Session
         }
     };
     const active = store.getState().session.activeGeneration;
-    if (attachedStores.has(store) && active) {
-        if (active.canStop !== false) sessions.stopGeneration();
+    if (attachedStores.has(store) && active && active.canStop !== false) {
+        sessions.stopGeneration();
         store.dispatch({ type: 'generation/finished', outcome: 'stopped', generationId: active.generationId });
     }
     attachedStores.add(store);

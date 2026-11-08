@@ -26,6 +26,7 @@ afterEach(() => {
 const summary: SessionSummary = { id: 'session-a', title: 'Session A', createdAt: 1, updatedAt: 2, messageCount: 2, preview: 'Latest message' };
 
 function sessions(items: SessionSummary[] = [summary]): SessionApi {
+    items = items.map((item) => ({ ...item }));
     let activeId = items[0]?.id ?? null;
     let nextId = 0;
     const create = () => {
@@ -127,8 +128,8 @@ describe('SessionList', () => {
         expect(onError).toHaveBeenCalledWith('Session export is unavailable.', 'session:export:session-a');
         act(() => { button('Delete Session A').click(); });
         act(() => { button('Confirm delete').click(); });
-        expect(onError).toHaveBeenCalledWith('Could not delete that session. Stop the current reply first.', 'session:delete:session-a');
-        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not delete that session.');
+        expect(onError).toHaveBeenCalledWith('Could not delete that session or verify its result.', 'session:delete:session-a');
+        expect(host.querySelector('dialog [role="alert"]')?.textContent).toContain('Could not delete that session or verify its result.');
     });
 
     it('disables session mutations while a reply is generating', () => {
@@ -180,5 +181,23 @@ describe('SessionList', () => {
         const replacement = host.querySelector('li[data-session-id="session-new-2"][aria-current="true"]');
         expect(replacement?.querySelector('strong')?.textContent).toBe('New conversation');
         expect(host.querySelector('li[data-session-id="session-new-1"]')?.getAttribute('aria-current')).toBeNull();
+    });
+});
+
+
+describe('replacement-row mutation evidence', () => {
+    it('rejects the wrong active-row marker instead of accepting title-only evidence', () => {
+        const { store } = mount();
+        act(() => { button('New session').click(); });
+        act(() => { button('Select Session A').click(); });
+        act(() => { button('Delete Session A').click(); });
+        act(() => { button('Confirm delete').click(); });
+        expect(store.getState().session.activeId).toBe('session-new-2');
+        const oldRow = host.querySelector('li[data-session-id="session-new-1"]')!;
+        oldRow.setAttribute('aria-current', 'true');
+        const replacement = host.querySelector('li[data-session-id="session-new-2"]')!;
+        replacement.setAttribute('aria-current', 'false');
+        expect(host.querySelector('li[data-session-id="session-new-2"][aria-current="true"]')).toBeNull();
+        expect(oldRow.querySelector('strong')?.textContent).toBe('New conversation');
     });
 });

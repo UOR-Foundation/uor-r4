@@ -94,7 +94,7 @@ export function SessionList({ store, agent, download, onError, onChange, onSucce
                             setDeleting(null);
                             activate(`session:delete:${deleting.id}`);
                         } else {
-                            reportError('Could not delete that session. Stop the current reply first.', `session:delete:${deleting.id}`);
+                            reportError(generating ? 'Could not delete that session. Stop the current reply first.' : 'Could not delete that session or verify its result.', `session:delete:${deleting.id}`);
                         }
                     }}>Confirm delete</button>
                 </Modal>

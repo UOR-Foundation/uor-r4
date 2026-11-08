@@ -16,7 +16,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 ## Measurements
 
 - Red-first SessionList replacement assertion: **1 failure / 6 passes** because no session ID existed. After adding it: **7/7 focused tests pass** with the exact replacement active row.
-- Final exact-head suite: **411/411 tests across 47 files with zero unhandled errors**. Plain-JS **112/112**, typecheck/build, all four legacy checks, report/local-PR checks, and all 11 full gates pass. Browser session flow, exact transcript restoration, and delayed-request rejection remain green.
+- Final exact-head suite: **414/414 tests across 47 files with zero unhandled errors**. Plain-JS **112/112**, typecheck/build, all four legacy checks, report/local-PR checks, and all 11 full gates pass. Browser session flow, exact transcript restoration, delayed-request rejection, non-stoppable remount preservation, and post-dispose listener cleanup remain green. Agent-40 subsequently returned CHANGES for the remount/canStop relabel and evidence gaps; kimi-63 owns those repairs.
 
 ## Checks run at the head
 
