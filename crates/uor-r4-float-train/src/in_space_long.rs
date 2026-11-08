@@ -14907,6 +14907,24 @@ mod tests {
         }
     }
 
+    /// claude-328's I-7, on the laptop: dropping the readings' guard clears every ablation, so no
+    /// class mask or row cut set by one ablation reaches the next ablation or training. The pod
+    /// test above cannot see a leaked depth-2 copy mask, since `−c2` reads equal to the plain read
+    /// on that configuration (claude-328's run).
+    #[test]
+    fn the_ablation_guard_clears_every_mask_and_cut() {
+        use crate::flock_read_hamming as fh;
+        for ablation in RECALL_ABLATIONS {
+            {
+                let _undo = UndoAblation;
+                fh::set_class_ablation(ablation.classes());
+                fh::set_row_cut(Some((fh::ReadScope::Copy, vec![1])));
+            }
+            assert_eq!(fh::class_ablation(), [[false; 2]; 2], "{ablation:?}");
+            assert!(!fh::row_cut_set(), "{ablation:?}");
+        }
+    }
+
     /// claude-328's I-2 balance over 10,000 windows of each form. In each bucket × slot cell (about
     /// 5,000 queries) the asked fact is the nearer one, and relation 0 is asked, each 0.5 ± 0.02;
     /// each slot receives a 33–96 bucket in 0.5 ± 0.02 of windows. "Written first" is not a
