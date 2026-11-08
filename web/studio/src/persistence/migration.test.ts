@@ -327,3 +327,21 @@ describe('mounted migration transaction and routing', () => {
         expect(persistence.getItem('uor.studio.ui.v2')).toBeNull();
     });
 });
+
+
+describe('migration failure preservation', () => {
+    it('makes migratable keys read-only after activation failure without blocking the live provider key', () => {
+        const storage = storageWith({ 'uor.studio.settings.v1': '{malformed-source' });
+        const persistence = createLifecyclePersistence(storage);
+        expect(persistence.activate(true).state).toBe('error');
+
+        persistence.setItem('uor.studio.settings.v1', '{"replacement":true}');
+        persistence.removeItem('uor.studio.settings.v1');
+        persistence.setItem('uor.studio.conversations.v1', '[{"replacement":true}]');
+        persistence.setItem('uor.studio.modelSources.v1', '{"api":[{"apiKey":"sentinel-not-a-secret"}]}');
+
+        expect(storage.getItem('uor.studio.settings.v1')).toBe('{malformed-source');
+        expect(storage.getItem('uor.studio.conversations.v1')).toBeNull();
+        expect(storage.getItem('uor.studio.modelSources.v1')).toBe('{"api":[{"apiKey":"sentinel-not-a-secret"}]}');
+    });
+});

@@ -29,7 +29,7 @@
 - [ ] Run `npm ci` in `web/studio`, using only the pinned lockfile.
 - [ ] Add failing tests for every key and unknown fields; raw-exact destinations; idempotent marker/no-op repeat; marked edits/reloads and missing-destination non-resurrection; no second provider-secret store or secret diagnostics; post-migration set/remove routing; live provider-key bypass; malformed JSON and invalid markers; destination conflicts; quota, destination/source/marker write and read-back failures; rollback of only new writes; archival-only `ui.v1`; and typed versus default activation. Spy on logs and assert no source values are emitted.
 - [ ] Run `npm test -- src/persistence/migration.test.ts`; require the new transaction/routing cases to FAIL against the absent runtime.
-- [ ] Implement the shared classic runtime and TypeScript delegation. Preflight all reads/conflicts, write and verify destinations, re-read sources, write/verify the marker last, and roll back only newly created destinations on any failure. On migration failure use identity routing and expose only a generic status/error; never throw away source data.
+- [ ] Implement the shared classic runtime and TypeScript delegation. Preflight all reads/conflicts, write and verify destinations, re-read sources, write/verify the marker last, and roll back only newly created destinations on any failure. On migration failure use identity reads but make migratable keys read-only, and expose only a generic status/error; never throw away source data.
 - [ ] Rerun the focused test and `npm run typecheck`; require PASS. Commit the runtime and tests.
 
 ### Task 2: Early activation, legacy call sites, and mount refusal

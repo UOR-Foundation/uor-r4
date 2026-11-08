@@ -181,8 +181,14 @@
             migrate: function () { return migrateStorage(storage); },
             status: function () { return cloneStatus(current); },
             getItem: function (key) { return storage.getItem(destination(key)); },
-            setItem: function (key, value) { storage.setItem(destination(key), value); },
-            removeItem: function (key) { storage.removeItem(destination(key)); },
+            setItem: function (key, value) {
+                if (current.state === 'error' && Object.prototype.hasOwnProperty.call(DESTINATION_KEYS, key)) return;
+                storage.setItem(destination(key), value);
+            },
+            removeItem: function (key) {
+                if (current.state === 'error' && Object.prototype.hasOwnProperty.call(DESTINATION_KEYS, key)) return;
+                storage.removeItem(destination(key));
+            },
         };
     }
 
