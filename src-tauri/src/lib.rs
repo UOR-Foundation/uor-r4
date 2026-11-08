@@ -2252,6 +2252,16 @@ pub fn dispatch_rpc_command(
                 .collect();
             Ok(json!({ "folders": folders }))
         }
+        "native_choose_project_folder" => {
+            let mut folders = backend.granted_folders().iter();
+            let Some(folder) = folders.next() else {
+                return Ok(Value::Null);
+            };
+            if folders.next().is_some() {
+                return Err("multiple granted folders require the native folder picker".to_string());
+            }
+            Ok(json!({ "path": folder.to_string_lossy() }))
+        }
         "native_grant_folder" => Err(
             "PathNotGranted: folder grants are host-owned (--grant <dir>) and cannot be granted by page RPC"
                 .to_string(),
@@ -2316,6 +2326,16 @@ pub fn dispatch_rpc_command(
                 .and_then(Value::as_str)
                 .ok_or_else(|| "missing command".to_string())?;
             Ok(json!({ "approved": backend.host_terminal_command_is_approved(Path::new(cwd), command) }))
+        }
+        "native_git_diff" => {
+            let repo_path = args
+                .get("repoPath")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing repoPath".to_string())?;
+            let report = backend
+                .native_git_diff(Path::new(repo_path))
+                .map_err(|e| e.to_string())?;
+            serde_json::to_value(report).map_err(|e| e.to_string())
         }
         "native_run_terminal_command" => {
             let cwd = args
@@ -2538,8 +2558,8 @@ pub fn handle_studio_http_request(
             expected_token
         );
         let injected = html.replacen(
-            "<script type=\"module\">",
-            &format!("{bootstrap}\n    <script type=\"module\">"),
+            "<script type=\"module\"",
+            &format!("{bootstrap}\n    <script type=\"module\""),
             1,
         );
         bytes = injected.into_bytes();

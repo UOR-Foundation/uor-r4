@@ -117,6 +117,20 @@ describe('desktop Git and terminal actions', () => {
         delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
     });
 
+    it('mounts loopback file and Git actions when the host supplies invoke without a chat channel', async () => {
+        vi.resetModules();
+        const invoke = vi.fn(async (command: string) => {
+            if (command === 'native_choose_project_folder') return { path: '/granted/project' };
+            throw new Error('unexpected command: ' + command);
+        });
+        (window as unknown as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke } };
+        await import('../../assets/js/desktop_actions.js');
+        const actions = (window as unknown as { UORDesktopActions: { available: boolean; chooseProjectFolder(): Promise<{ path: string }> } }).UORDesktopActions;
+        expect(actions.available).toBe(true);
+        await expect(actions.chooseProjectFolder()).resolves.toEqual({ path: '/granted/project' });
+        expect(invoke).toHaveBeenCalledWith('native_choose_project_folder', {});
+    });
+
     it('keeps an honest disabled state when the host is unavailable', () => {
         controls();
         const actions = createDesktopActions();
