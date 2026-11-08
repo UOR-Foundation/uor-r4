@@ -11,7 +11,9 @@
 //! The default `one-user-turn/v1` rendering is unchanged. `--rendering
 //! per-turn/v1` keeps each `Context` as its own user turn, and
 //! `--teacher-forced 1` ranks each reference reply token, including EOS, with
-//! the same integer nearest read that generation uses.
+//! the same integer nearest read that generation uses. `--paired-first 1` (with
+//! `--teacher-forced 1`) also ranks, at the first reply position, the first
+//! reference token of the other case in the same pair beside the asked one's.
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -148,6 +150,35 @@ struct TeacherForcedRow {
     candidate_count: usize,
 }
 
+/// One case's first reply position: the rank of its own first reference token
+/// and of the first reference token of the other case in its pair.
+#[derive(Serialize)]
+struct PairedFirstRow {
+    id: String,
+    other_id: String,
+    stratum: String,
+    answer: String,
+    other_answer: String,
+    asked_token: u32,
+    other_token: u32,
+    same_first_token: bool,
+    asked_rank: usize,
+    other_rank: usize,
+    raw_asked_rank: usize,
+    raw_other_rank: usize,
+}
+
+#[derive(Default, Serialize)]
+struct PairedFirstTally {
+    rows: usize,
+    same_first_token: usize,
+    distinct_first_token: usize,
+    asked_better: usize,
+    other_better: usize,
+    asked_top1: usize,
+    other_top1: usize,
+}
+
 #[derive(Default, Serialize)]
 struct RankTally {
     targets: usize,
@@ -219,7 +250,7 @@ fn run() -> Result<()> {
             "--rendering wants {RENDERING} or {PER_TURN_RENDERING}"
         ));
     }
-    let teacher_forced = parse_switch("teacher-forced", args.get("teacher-forced"))?;
+    let (teacher_forced, paired_first) = rank_switches(&args)?;
     let read = |name: &str| -> Result<(Vec<u8>, String)> {
         let path = PathBuf::from(flag(name)?);
         let bytes = fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -333,6 +364,12 @@ fn run() -> Result<()> {
     }
     let wall_milliseconds = started.elapsed().as_millis().max(1);
     let decode_milliseconds = decode_time.as_millis().max(1);
+    let partners = if paired_first {
+        pair_partners(&labels.cases)?
+    } else {
+        BTreeMap::new()
+    };
+    let mut paired_rows = Vec::new();
     let (teacher_rows, teacher_wall_milliseconds) = if teacher_forced {
         let started = Instant::now();
         let mut teacher_rows = Vec::with_capacity(labels.cases.len());
@@ -343,9 +380,18 @@ fn run() -> Result<()> {
             let stratum = strata
                 .get(&label.pair_id)
                 .ok_or(format!("{}: no plan history", label.pair_id))?;
-            teacher_rows.push(teacher_forced_row(
+            let teacher = teacher_forced_row(
                 &tokenizer, &encoder, &artifact, case, label, stratum, rendering,
-            )?);
+            )?;
+            if paired_first {
+                let other = partners
+                    .get(label.id.as_str())
+                    .ok_or(format!("{}: no pair partner", label.id))?;
+                paired_rows.push(paired_first_row(
+                    &tokenizer, &encoder, &artifact, case, label, other, &teacher, rendering,
+                )?);
+            }
+            teacher_rows.push(teacher);
         }
         (
             teacher_rows,
@@ -414,6 +460,9 @@ fn run() -> Result<()> {
         teacher_report["wall_milliseconds"] = teacher_wall_milliseconds.into();
         report["teacher_forced"] = teacher_report;
     }
+    if paired_first {
+        report["paired_first"] = paired_first_report(paired_rows)?;
+    }
     let mut text = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;
     text.push(b'\n');
     write_new(&out, &text)?;
@@ -474,6 +523,16 @@ fn render(
         _ => return Err("unknown rendering".to_owned()),
     };
     Ok((content, ids))
+}
+
+/// `--teacher-forced` and `--paired-first`; the second needs the first.
+fn rank_switches(args: &BTreeMap<String, String>) -> Result<(bool, bool)> {
+    let teacher_forced = parse_switch("teacher-forced", args.get("teacher-forced"))?;
+    let paired_first = parse_switch("paired-first", args.get("paired-first"))?;
+    if paired_first && !teacher_forced {
+        return Err("--paired-first 1 needs --teacher-forced 1".to_owned());
+    }
+    Ok((teacher_forced, paired_first))
 }
 
 fn parse_switch(name: &str, value: Option<&String>) -> Result<bool> {
@@ -751,6 +810,143 @@ fn teacher_forced_report(rows: Vec<TeacherForcedRow>) -> Result<serde_json::Valu
     }))
 }
 
+/// Each case's partner: the other case with its `pair_id`. Every pair holds
+/// exactly two cases.
+fn pair_partners(cases: &[LabelCase]) -> Result<BTreeMap<&str, &LabelCase>> {
+    let mut by_pair: BTreeMap<&str, Vec<&LabelCase>> = BTreeMap::new();
+    for case in cases {
+        by_pair.entry(case.pair_id.as_str()).or_default().push(case);
+    }
+    let mut partners = BTreeMap::new();
+    for (pair, members) in by_pair {
+        let [left, right] = members.as_slice() else {
+            return Err(format!("pair {pair} holds {} cases, not 2", members.len()));
+        };
+        if left.id == right.id {
+            return Err(format!("pair {pair} holds {} twice", left.id));
+        }
+        partners.insert(left.id.as_str(), *right);
+        partners.insert(right.id.as_str(), *left);
+    }
+    Ok(partners)
+}
+
+/// Every target ranked against the same first reply position: the state after
+/// the prompt, before any reply token is fed.
+fn first_position_ranks(
+    forward: &mut CpuFbsForward,
+    prompt: &[u32],
+    targets: &[u32],
+) -> Result<Vec<NearestRank>> {
+    if prompt.is_empty() {
+        return Err("first-position ranking needs a nonempty prompt".to_owned());
+    }
+    forward.reset();
+    let next = prime_prompt(forward, prompt)?;
+    targets
+        .iter()
+        .map(|&target| {
+            nearest_rank(
+                &next.query_q12,
+                forward.shared_table(),
+                forward.width(),
+                target,
+                next.token,
+            )
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paired_first_row(
+    tokenizer: &ByteBpeTokenizer,
+    encoder: &DialogueEncoder<'_>,
+    artifact: &[u8],
+    case: &InputCase,
+    label: &LabelCase,
+    other: &LabelCase,
+    teacher: &TeacherForcedRow,
+    rendering: &str,
+) -> Result<PairedFirstRow> {
+    let (_, prompt) = render(tokenizer, encoder, case, rendering)?;
+    let (other_answer, other_ids) = reference_ids(encoder, &other.answers)?;
+    let asked_token = *teacher
+        .reference_ids
+        .first()
+        .ok_or(format!("{}: empty reference", label.id))?;
+    let other_token = *other_ids
+        .first()
+        .ok_or(format!("{}: empty reference", other.id))?;
+    let mut forward = CpuFbsForward::from_artifact(artifact).map_err(|e| e.to_string())?;
+    let ranks = first_position_ranks(&mut forward, &prompt, &[asked_token, other_token])?;
+    let [asked, other_rank] = ranks.as_slice() else {
+        return Err(format!("{}: first-position ranks differ", label.id));
+    };
+    if Some(&asked.rank) != teacher.target_ranks.first() {
+        return Err(format!(
+            "{}: first-position rank {} differs from the teacher-forced {:?}",
+            label.id,
+            asked.rank,
+            teacher.target_ranks.first()
+        ));
+    }
+    Ok(PairedFirstRow {
+        id: label.id.clone(),
+        other_id: other.id.clone(),
+        stratum: teacher.stratum.clone(),
+        answer: teacher.answer.clone(),
+        other_answer,
+        asked_token,
+        other_token,
+        same_first_token: asked_token == other_token,
+        asked_rank: asked.rank,
+        other_rank: other_rank.rank,
+        raw_asked_rank: asked.raw_rank,
+        raw_other_rank: other_rank.raw_rank,
+    })
+}
+
+fn paired_first_tally<'a>(rows: impl Iterator<Item = &'a PairedFirstRow>) -> PairedFirstTally {
+    let mut tally = PairedFirstTally::default();
+    for row in rows {
+        tally.rows += 1;
+        if row.same_first_token {
+            tally.same_first_token += 1;
+            continue;
+        }
+        tally.distinct_first_token += 1;
+        tally.asked_better += usize::from(row.asked_rank < row.other_rank);
+        tally.other_better += usize::from(row.other_rank < row.asked_rank);
+        tally.asked_top1 += usize::from(row.asked_rank == 1);
+        tally.other_top1 += usize::from(row.other_rank == 1);
+    }
+    tally
+}
+
+fn paired_first_report(rows: Vec<PairedFirstRow>) -> Result<serde_json::Value> {
+    if rows
+        .iter()
+        .any(|row| !row.same_first_token && row.asked_rank == row.other_rank)
+    {
+        return Err("two distinct first tokens share one rank".to_owned());
+    }
+    let mut by_stratum: BTreeMap<String, Vec<&PairedFirstRow>> = BTreeMap::new();
+    for row in &rows {
+        by_stratum.entry(row.stratum.clone()).or_default().push(row);
+    }
+    let per_stratum: BTreeMap<String, PairedFirstTally> = by_stratum
+        .into_iter()
+        .map(|(stratum, rows)| (stratum, paired_first_tally(rows.into_iter())))
+        .collect();
+    Ok(serde_json::json!({
+        "method": "first-reply-position nearest rank of the asked and the other value's first reference token",
+        "reference": "shortest frozen accepted answer of each case",
+        "totals": paired_first_tally(rows.iter()),
+        "per_stratum": per_stratum,
+        "rows": rows,
+    }))
+}
+
 fn rank_tally(targets: &[usize], eos: &[usize]) -> RankTally {
     let ranks = |values: &[usize]| {
         let mut values = values.to_vec();
@@ -893,7 +1089,7 @@ fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, u
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 10] = [
+    const FLAGS: [&str; 11] = [
         "artifact",
         "tokenizer",
         "inputs",
@@ -904,6 +1100,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, Str
         "reply-tokens",
         "rendering",
         "teacher-forced",
+        "paired-first",
     ];
     let mut values = BTreeMap::new();
     let mut args = args;
@@ -1193,6 +1390,108 @@ mod tests {
             rows.iter().map(|row| row.target_token).collect::<Vec<_>>(),
             [2, 3]
         );
+    }
+
+    #[test]
+    fn pair_partners_are_symmetric_and_refuse_odd_pairs() {
+        let case = |id: &str, pair: &str| LabelCase {
+            answers: answers("value."),
+            id: id.to_owned(),
+            pair_id: pair.to_owned(),
+        };
+        let cases = vec![
+            case("a", "p"),
+            case("b", "p"),
+            case("c", "q"),
+            case("d", "q"),
+        ];
+        let partners = pair_partners(&cases).unwrap();
+        assert_eq!(partners.len(), 4);
+        assert_eq!(partners["a"].id, "b");
+        assert_eq!(partners["b"].id, "a");
+        assert_eq!(partners["c"].id, "d");
+        assert_eq!(partners["d"].id, "c");
+        assert!(pair_partners(&[case("a", "p")]).is_err());
+        assert!(pair_partners(&[case("a", "p"), case("b", "p"), case("c", "p")]).is_err());
+        assert!(pair_partners(&[case("a", "p"), case("a", "p")]).is_err());
+    }
+
+    #[test]
+    fn first_position_ranks_match_the_teacher_forced_first_rank() {
+        let mut cpu = fixture(29, 2);
+        let prompt = [0, 5, 9];
+        let first = first_position_ranks(&mut cpu, &prompt, &[7, 11, 3]).unwrap();
+        for (target, row) in [7u32, 11, 3].into_iter().zip(&first) {
+            let teacher = teacher_forced_nearest_ranks(&mut cpu, &prompt, &[target, 2]).unwrap();
+            assert_eq!(row.target_token, target);
+            assert_eq!(row.rank, teacher[0].rank);
+            assert_eq!(row.raw_rank, teacher[0].raw_rank);
+            assert_eq!(row.chosen_token, teacher[0].chosen_token);
+        }
+        // Distinct tokens hold distinct ranks at one position.
+        assert_ne!(first[0].rank, first[1].rank);
+        assert_ne!(first[1].rank, first[2].rank);
+        // The reset makes a second call independent of the first.
+        let again = first_position_ranks(&mut cpu, &prompt, &[7]).unwrap();
+        assert_eq!(again[0].rank, first[0].rank);
+        assert!(first_position_ranks(&mut cpu, &[], &[7]).is_err());
+    }
+
+    #[test]
+    fn paired_first_report_counts_distinct_pairs_only() {
+        let row =
+            |id: &str, stratum: &str, asked: (u32, usize), other: (u32, usize)| PairedFirstRow {
+                id: id.to_owned(),
+                other_id: format!("{id}-other"),
+                stratum: stratum.to_owned(),
+                answer: "a.".to_owned(),
+                other_answer: "b.".to_owned(),
+                asked_token: asked.0,
+                other_token: other.0,
+                same_first_token: asked.0 == other.0,
+                asked_rank: asked.1,
+                other_rank: other.1,
+                raw_asked_rank: asked.1,
+                raw_other_rank: other.1,
+            };
+        let report = paired_first_report(vec![
+            row("a", "update", (10, 1), (11, 4)),
+            row("b", "update", (10, 5), (11, 2)),
+            row("c", "length2", (12, 3), (12, 3)),
+            row("d", "length2", (13, 2), (14, 1)),
+        ])
+        .unwrap();
+        let totals = &report["totals"];
+        assert_eq!(totals["rows"], 4);
+        assert_eq!(totals["same_first_token"], 1);
+        assert_eq!(totals["distinct_first_token"], 3);
+        assert_eq!(totals["asked_better"], 1);
+        assert_eq!(totals["other_better"], 2);
+        assert_eq!(totals["asked_top1"], 1);
+        assert_eq!(totals["other_top1"], 1);
+        assert_eq!(report["per_stratum"]["update"]["asked_better"], 1);
+        assert_eq!(report["per_stratum"]["length2"]["same_first_token"], 1);
+        assert_eq!(report["per_stratum"]["length2"]["other_better"], 1);
+        assert!(paired_first_report(vec![row("e", "update", (10, 2), (11, 2))]).is_err());
+    }
+
+    #[test]
+    fn paired_first_needs_the_teacher_forced_switch() {
+        let switches = |given: &[&str]| {
+            rank_switches(&parse_args(given.iter().map(|s| s.to_string())).unwrap())
+        };
+        assert_eq!(switches(&[]), Ok((false, false)));
+        assert_eq!(switches(&["--teacher-forced", "1"]), Ok((true, false)));
+        assert_eq!(
+            switches(&["--teacher-forced", "1", "--paired-first", "1"]),
+            Ok((true, true))
+        );
+        assert_eq!(
+            switches(&["--teacher-forced", "1", "--paired-first", "0"]),
+            Ok((true, false))
+        );
+        assert!(switches(&["--paired-first", "1"]).is_err());
+        assert!(switches(&["--teacher-forced", "0", "--paired-first", "1"]).is_err());
     }
 
     #[test]
