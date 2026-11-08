@@ -21,13 +21,14 @@ This is an attribution result, not a causal selection or capability result.
 - **Neither copy head 1 weighted both values in the same row.**
   Depth-2 copy head 1 kept both spans in 906/1,024 rows but weighted both in
   0; it weighted asked and other separately in 48 rows each. Depth-6 copy head
-  1 kept both in 973/1,024 and weighted neither from either span. Their mean
-  distances (17.37 and 17.39 bits) exceeded their margins (14.52 and 9.14
-  bits).
+  1 kept both in 973/1,024 and weighted neither from either span. Per seed,
+  depth-2 mean distance was 19.53/15.21 bits against margins 14.52/15.51;
+  depth-6 was 19.86/14.92 against margins 9.14/9.21.
 - **The remaining copy heads were only partly active.** Depth-2 copy head 0
   weighted both spans in 486/897 retained-both rows; depth-6 copy head 0
-  weighted both in 480/978. Mean distance was 12.89 and 13.03 bits against
-  margins of 14.48 and 9.18 bits.
+  weighted both in 480/978. Its per-seed mean distance was 9.61/16.17 bits at
+  depth 2 against margins 14.48/16.18, and 6.87/19.19 bits at depth 6 against
+  margins 9.18/9.43.
 - **Type heads did not distinguish the roles.** Depth-2 type heads weighted both
   spans in 992/1,024 and 928/1,024 rows; depth-6 type heads did so in 929 and
   873 rows. Pooled asked/other weight totals were close, not role-selective:
@@ -71,7 +72,7 @@ Each command was the built `cpu-first-reply-hamming-trace` with
 expected hashes. Four seed/rendering reports and one seed-1 one-user repeat
 were retained.
 
-| Read | Head | Kind | Margin bits s1 / s2 | Mean dist. bits s1 / s2 | Active / kept | Active rows asked / other | Asked weight | Other weight |
+| Read | Head | Kind | Margin bits s1 / s2 | Mean dist. bits s1 / s2 | Active positions / kept | Active rows asked / other | Asked weight | Other weight |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
 | 2 | 0 | copy | 14.48 / 16.18 | 9.61 / 16.17 | 11,360 / 16,384 | 546 / 548 | 736,407,628,496 | 736,336,212,095 |
 | 2 | 1 | copy | 14.52 / 15.51 | 19.53 / 15.21 | 3,592 / 16,384 | 48 / 48 | 5,621,811,920 | 5,621,811,920 |
