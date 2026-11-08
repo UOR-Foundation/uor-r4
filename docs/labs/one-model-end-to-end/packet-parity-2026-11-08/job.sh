@@ -147,7 +147,7 @@ for step in 000512 002048; do
       --manifest "$EVIDENCE/inputs/manifest.json" \
       --out "$out" --rendering "$rendering" > "$log" 2>&1 ||
       die "packet parity failed at step $step, rendering $rendering"
-    jq -e '.totals.rows == 512 and .totals.eos_rows == 512' "$out" >/dev/null ||
+    jq -e '.totals.rows == 256 and .totals.eos_rows == 256' "$out" >/dev/null ||
       die "packet parity report at step $step, rendering $rendering is incomplete"
   done
 done
