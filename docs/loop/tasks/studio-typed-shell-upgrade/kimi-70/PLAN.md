@@ -21,9 +21,9 @@
 
 **Files:** create `scripts/studio/catalog.mjs`; modify `scripts/stage-studio-site.sh`, `web/studio/src/stage-dist.mjs`, and focused catalog tests.
 
-- [ ] Add a failing check that `web/studio/dist/models.json` is absent and the existing publisher still generates byte-identical synthetic catalog output. Require the dist catalog to match the pinned `96e296b74530e8488a6c525c59b4dfbd9f980f519ce39c1c338ed7a5cd12554a` bytes without using an archive.
+- [ ] Add a failing check that `web/studio/dist/models.json` is absent and compare its synthetic-only output with the actual pre-change publisher on identical input. Preserve the Tauri resource catalog's separate release pin `96e296b74530e8488a6c525c59b4dfbd9f980f519ce39c1c338ed7a5cd12554a`; do not confuse that five-model catalog with the local synthetic dist catalog.
 - [ ] Extract the current catalog implementation into `catalog.mjs`, preserving public-model/trained-manifest behavior and receipt validation. Delegate both the publisher and `stage-dist.mjs` to it.
-- [ ] Rerun publisher/catalog checks and the Vite build; require the exact catalog hash and no behavior change for optional trained/public entries. Commit the shared catalog path.
+- [ ] Rerun publisher/catalog checks and the Vite build; require byte identity with the pre-change publisher for identical input and no behavior change for optional trained/public entries. Commit the shared catalog path.
 
 ### Task 2: Typed runtime allowlist and local native runner
 

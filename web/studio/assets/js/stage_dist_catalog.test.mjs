@@ -17,14 +17,20 @@ function fixtureRoot() {
     return root;
 }
 
-test('shared Studio catalog matches the existing publisher byte-for-byte', () => {
+test('dist catalog matches the pre-change publisher for identical synthetic input', () => {
+    const repo = join(import.meta.dirname, '..', '..', '..', '..');
     const root = fixtureRoot();
     const dist = join(root, 'dist');
     mkdirSync(dist, { recursive: true });
     cpSync(join(root, 'pkg'), join(dist, 'pkg'), { recursive: true });
     writeStudioCatalog({ dest: dist, publicUrl: '', publicLabel: 'Public model', trainedManifestPath: '', receiptGate: '' });
 
+    mkdirSync(join(root, 'scripts/studio'), { recursive: true });
+    cpSync(join(repo, 'scripts/studio/runtime-files.sh'), join(root, 'scripts/studio/runtime-files.sh'));
+    const basePublisher = join(root, 'scripts/publisher-base.sh');
+    const baseSource = execFileSync('git', ['show', '000f4b457ee020013654ffbc65f9da5061c2317a:scripts/stage-studio-site.sh'], { cwd: repo, encoding: 'utf8' });
+    writeFileSync(basePublisher, baseSource);
     const published = join(root, 'published');
-    execFileSync('bash', ['scripts/stage-studio-site.sh', root, published], { cwd: join(import.meta.dirname, '..', '..', '..', '..'), stdio: 'pipe' });
+    execFileSync('bash', [basePublisher, root, published], { cwd: repo, stdio: 'pipe' });
     assert.equal(readFileSync(join(dist, 'models.json'), 'utf8'), readFileSync(join(published, 'models.json'), 'utf8'));
 });

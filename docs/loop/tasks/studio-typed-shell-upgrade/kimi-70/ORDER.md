@@ -19,7 +19,7 @@ The cancel probe is the current legacy archive/runtime, absent typed allowlist, 
 ## Files in scope
 
 - `scripts/studio/runtime-files.sh`, `native-runner.sh`, `prepare-tauri-runtime.sh`, `verify-tauri-app.sh`, `catalog.mjs`, `scripts/stage-studio-site.sh`, and directly related runtime tests.
-- `web/studio/src/stage-dist.mjs`, `web/studio/assets/js/desktop_actions.js` only for the declared-host factory default, its focused adapter tests, `web/studio/README.md`, `docs/products/web-client.md`, the approved design, roadmap/notebook evidence, and this task folder.
+- `web/studio/src/stage-dist.mjs`, `web/studio/assets/js/desktop_actions.js` only for the declared-host factory default, its focused adapter tests, `web/studio/README.md`, `docs/products/web-client.md`, `docs/integration/current-state.md`, the approved design, roadmap/notebook evidence, and this task folder.
 - `src-tauri/tauri.conf.json`, `src-tauri/src/lib.rs` only for the typed App URL and package assertions, `src-tauri/tests/**` only for focused runtime evidence. `src-tauri/src/main.rs` is unchanged.
 
 No new dependency, external test endpoint/credential, model/engine/worker/tokenizer/`studio_api.js` change, release/publication, production cutover, or Phase B compute. Preserve existing release defaults and the unsigned-development-only boundary.
