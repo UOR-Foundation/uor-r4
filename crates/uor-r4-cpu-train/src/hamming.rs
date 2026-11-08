@@ -164,6 +164,10 @@ impl TypeHeads {
         }
     }
 
+    fn key(&self, token: u32, head: usize) -> u64 {
+        self.keys[token as usize * (self.heads - self.copy) + head]
+    }
+
     fn queries(&self, point: &[i64]) -> Vec<u64> {
         let head_width = self.width / self.heads;
         (self.copy..self.heads)
@@ -190,7 +194,7 @@ impl TypeHeads {
             return Vec::new();
         }
         nearest(query, tokens.len() - 1, self.kept, |position| {
-            self.keys[tokens[position - 1] as usize * (self.heads - self.copy) + head]
+            self.key(tokens[position - 1], head)
         })
     }
 
@@ -262,6 +266,8 @@ pub enum CpuHammingHeadKind {
 pub struct CpuHammingHeadTrace {
     pub head: usize,
     pub kind: CpuHammingHeadKind,
+    pub query: u64,
+    pub key: u64,
     pub margin_q16: i32,
     pub kept: Vec<CpuHammingPositionTrace>,
 }
@@ -401,10 +407,15 @@ impl CpuHamming {
                     .as_ref()
                     .map_or(0, |types| types.heads - types.copy),
         );
+        let row = tokens.len().checked_sub(1);
         for head in 0..read.copy.copy {
             heads.push(CpuHammingHeadTrace {
                 head,
                 kind: CpuHammingHeadKind::Copy,
+                query: row.map_or(0, |row| read.copy.query_at(tokens, row, head)),
+                key: row
+                    .filter(|row| *row > 0)
+                    .map_or(0, |row| read.copy.key_at(tokens, row, head)),
                 margin_q16: read.copy.margins[head],
                 kept: traced_positions(read.copy.choose(head, tokens), read.copy.margins[head]),
             });
@@ -415,6 +426,10 @@ impl CpuHamming {
                 heads.push(CpuHammingHeadTrace {
                     head,
                     kind: CpuHammingHeadKind::Type,
+                    query,
+                    key: row
+                        .filter(|row| *row > 0)
+                        .map_or(0, |row| types.key(tokens[row - 1], offset)),
                     margin_q16: types.margins[offset],
                     kept: traced_positions(
                         types.choose(offset, query, tokens),

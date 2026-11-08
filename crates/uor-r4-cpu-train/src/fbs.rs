@@ -2671,6 +2671,8 @@ mod tests {
             assert_eq!(cpu_read.depth, served_read.depth);
             assert_eq!(cpu_read.heads.len(), served_read.heads.len());
             for (cpu_head, served_head) in cpu_read.heads.iter().zip(&served_read.heads) {
+                assert_eq!(cpu_head.query, served_head.query);
+                assert_eq!(cpu_head.key, served_head.key);
                 assert_eq!(
                     cpu_head
                         .kept

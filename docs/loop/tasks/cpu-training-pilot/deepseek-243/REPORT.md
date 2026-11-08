@@ -4,13 +4,14 @@ Lab: deepseek. Item:
 [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506).
 Order: [ORDER.md](./ORDER.md). Base: `229739cf9`.
 
-**The opening still has both values after Hamming weighting, and the scalar
-margin weights do not favor the asked role.** Across 1,024 first-reply
-decisions, the chosen token was neither value's first token in
-**1,024/1,024** rows. The four type heads gave nonzero weight to both value
-spans in **873-992/1,024** rows and their pooled asked/other weights differed
-by only **-0.51%**. The copy heads were much more selective: neither copy head 1
-weighted both values in the same row, and depth-6 copy head 1 weighted neither.
+**At the opening, at least one retained position from each value span carries
+nonzero weight, and the scalar margin weights do not favor the asked role.**
+Across 1,024 first-reply decisions, the chosen token was neither value's first
+token in **1,024/1,024** rows. The four type heads gave nonzero weight to at
+least one position in both value spans in **873-992/1,024** rows. Their
+asked/other totals differed by **-0.62%**; pooling all eight heads gives
+**-0.51%**. The copy heads were much more selective: neither copy head 1
+weighted both spans in the same row, and depth-6 copy head 1 weighted neither.
 This is an attribution result, not a causal selection or capability result.
 
 ## What did not work, first
@@ -62,23 +63,23 @@ Artifacts: Claude-322 seed 1
 and seed 2
 `8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae`.
 The final executable is
-`1a5671362e86c74036ce2ccdd9d5e7e7662556d7905f3e1acbe849501d75230f`.
+`78ae6595c7407a405592810acbbad9577691be6b66029b17801bd38b1a6ed4f1`.
 
 Each command was the built `cpu-first-reply-hamming-trace` with
 `RAYON_NUM_THREADS=32`, the pinned tokenizer and panel files, and all six
 expected hashes. Four seed/rendering reports and one seed-1 one-user repeat
 were retained.
 
-| Read | Head | Kind | Margin bits | Mean dist. bits | Active / kept | Active asked / other | Asked weight | Other weight |
+| Read | Head | Kind | Margin bits s1 / s2 | Mean dist. bits s1 / s2 | Active / kept | Active rows asked / other | Asked weight | Other weight |
 |---|---:|---|---:|---:|---:|---:|---:|---:|
-| 2 | 0 | copy | 14.48 | 12.89 | 11,360 / 16,384 | 546 / 548 | 736,407,628,496 | 736,336,212,095 |
-| 2 | 1 | copy | 14.52 | 17.37 | 3,592 / 16,384 | 48 / 48 | 5,621,811,920 | 5,621,811,920 |
-| 2 | 2 | type | 36.65 | 27.88 | 16,384 / 16,384 | 1,008 / 1,008 | 1,816,808,827,047 | 1,809,408,881,476 |
-| 2 | 3 | type | 36.67 | 28.22 | 16,384 / 16,384 | 972 / 980 | 1,256,728,859,470 | 1,287,764,390,380 |
-| 6 | 0 | copy | 9.18 | 13.03 | 8,060 / 16,384 | 496 / 496 | 629,008,514,168 | 628,883,551,244 |
-| 6 | 1 | copy | 9.14 | 17.39 | 2,048 / 16,384 | 0 / 0 | 0 | 0 |
-| 6 | 2 | type | 38.09 | 27.41 | 16,384 / 16,384 | 973 / 980 | 1,634,401,937,021 | 1,639,533,651,144 |
-| 6 | 3 | type | 38.00 | 26.91 | 16,384 / 16,384 | 946 / 943 | 1,509,786,509,955 | 1,520,096,022,295 |
+| 2 | 0 | copy | 14.48 / 16.18 | 9.61 / 16.17 | 11,360 / 16,384 | 546 / 548 | 736,407,628,496 | 736,336,212,095 |
+| 2 | 1 | copy | 14.52 / 15.51 | 19.53 / 15.21 | 3,592 / 16,384 | 48 / 48 | 5,621,811,920 | 5,621,811,920 |
+| 2 | 2 | type | 36.65 / 36.87 | 28.56 / 27.20 | 16,384 / 16,384 | 1,008 / 1,008 | 1,816,808,827,047 | 1,809,408,881,476 |
+| 2 | 3 | type | 36.67 / 36.51 | 28.64 / 27.79 | 16,384 / 16,384 | 972 / 980 | 1,256,728,859,470 | 1,287,764,390,380 |
+| 6 | 0 | copy | 9.18 / 9.43 | 6.87 / 19.19 | 8,060 / 16,384 | 496 / 496 | 629,008,514,168 | 628,883,551,244 |
+| 6 | 1 | copy | 9.14 / 9.21 | 19.86 / 14.92 | 2,048 / 16,384 | 0 / 0 | 0 | 0 |
+| 6 | 2 | type | 38.09 / 37.36 | 27.34 / 27.48 | 16,384 / 16,384 | 973 / 980 | 1,634,401,937,021 | 1,639,533,651,144 |
+| 6 | 3 | type | 38.00 / 36.99 | 25.91 / 27.91 | 16,384 / 16,384 | 946 / 943 | 1,509,786,509,955 | 1,520,096,022,295 |
 
 Pooled active support is 90,596/131,072 positions (69.11%); zero-weight support
 is 40,476. Asked and other total weights are 7,588,764,088,077 and
@@ -86,8 +87,8 @@ is 40,476. Asked and other total weights are 7,588,764,088,077 and
 counts are in [`per-stratum.json`](./evidence/per-stratum.json); run hashes,
 semantics and totals are in [`summary.json`](./evidence/summary.json).
 
-The final four seed/rendering reports took **3.539 s**; the separate repeat
-took 0.981 s. All 20 retained reports consumed 18.197 s of measured probe time,
+The final four seed/rendering reports took **3.567 s**; the separate repeat
+took 0.988 s. All 25 retained reports consumed 22.752 s of measured probe time,
 with 157,560 KiB maximum peak RSS. The trace adds a second CPU Hamming selection
 pass, so it is slower than deepseek-242's position-only trace but remains
 sub-second per full panel.
@@ -140,10 +141,10 @@ the resulting integer weight. Some retained positions have zero weight and
 therefore contribute nothing through that head.
 
 The result is mixed but clear. Two copy heads barely clear their thresholds,
-and neither depth-level copy head 1 weights both values together. The deep copy
-head contributes nothing from either value; the depth-2 head contributes only
-sparsely and never to both together. The type heads weight both the asked and
-other values almost everywhere, with nearly equal total weights. So the model
-is not failing merely because value positions are absent or unweighted. It
-still fails to turn that balanced value evidence into a role-correct first
-token.
+and neither depth-level copy head 1 weights both value spans together. The deep
+copy head contributes nothing from either value; the depth-2 head contributes
+only sparsely and never to both together. The type heads have at least one
+nonzero-weight position in both the asked and other spans almost everywhere,
+with nearly equal total weights. So the model is not failing merely because
+value positions are absent or unweighted. It still fails to turn that balanced
+positional evidence into a role-correct first token.

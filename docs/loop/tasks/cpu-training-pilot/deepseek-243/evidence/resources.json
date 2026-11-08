@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.cpu-first-reply-hamming-weight-resources/1",
-  "measured_at": "2026-11-08T23:01:45Z",
+  "measured_at": "2026-11-08T23:07:38Z",
   "substrate": "cpu-development-research",
   "root": "local/deepseek/first-reply-hamming-weight",
   "hardware": {
@@ -26,29 +26,34 @@
     {"path":"runs-v2/s2-one-user.json","wall_ms":980,"peak_rss_kib":157560,"disposition":"superseded pre-review 32-thread evidence"},
     {"path":"runs-v2/s2-per-turn.json","wall_ms":864,"peak_rss_kib":157212,"disposition":"superseded pre-review 32-thread evidence"},
     {"path":"runs-v2/s1-one-user-repeat.json","wall_ms":977,"peak_rss_kib":157472,"disposition":"superseded pre-review determinism repeat"},
-    {"path":"runs-v3/s1-one-user.json","wall_ms":858,"peak_rss_kib":157272,"disposition":"final reviewed-source 32-thread evidence"},
-    {"path":"runs-v3/s1-per-turn.json","wall_ms":856,"peak_rss_kib":157192,"disposition":"final reviewed-source 32-thread evidence"},
-    {"path":"runs-v3/s2-one-user.json","wall_ms":975,"peak_rss_kib":157464,"disposition":"final reviewed-source 32-thread evidence"},
-    {"path":"runs-v3/s2-per-turn.json","wall_ms":850,"peak_rss_kib":157264,"disposition":"final reviewed-source 32-thread evidence"},
-    {"path":"runs-v3/s1-one-user-repeat.json","wall_ms":981,"peak_rss_kib":157472,"disposition":"final reviewed-source determinism repeat"}
+    {"path":"runs-v3/s1-one-user.json","wall_ms":858,"peak_rss_kib":157272,"disposition":"superseded pre-review 32-thread evidence"},
+    {"path":"runs-v3/s1-per-turn.json","wall_ms":856,"peak_rss_kib":157192,"disposition":"superseded pre-review 32-thread evidence"},
+    {"path":"runs-v3/s2-one-user.json","wall_ms":975,"peak_rss_kib":157464,"disposition":"superseded pre-review 32-thread evidence"},
+    {"path":"runs-v3/s2-per-turn.json","wall_ms":850,"peak_rss_kib":157264,"disposition":"superseded pre-review 32-thread evidence"},
+    {"path":"runs-v3/s1-one-user-repeat.json","wall_ms":981,"peak_rss_kib":157472,"disposition":"superseded pre-review determinism repeat"},
+    {"path":"runs-v4/s1-one-user.json","wall_ms":864,"peak_rss_kib":157192,"disposition":"final reviewed-source 32-thread evidence"},
+    {"path":"runs-v4/s1-per-turn.json","wall_ms":859,"peak_rss_kib":157188,"disposition":"final reviewed-source 32-thread evidence"},
+    {"path":"runs-v4/s2-one-user.json","wall_ms":985,"peak_rss_kib":157512,"disposition":"final reviewed-source 32-thread evidence"},
+    {"path":"runs-v4/s2-per-turn.json","wall_ms":859,"peak_rss_kib":157240,"disposition":"final reviewed-source 32-thread evidence"},
+    {"path":"runs-v4/s1-one-user-repeat.json","wall_ms":988,"peak_rss_kib":157380,"disposition":"final reviewed-source determinism repeat"}
   ],
   "totals": {
-    "report_count": 20,
-    "measured_wall_ms": 18197,
-    "measured_wall_seconds": 18.197,
+    "report_count": 25,
+    "measured_wall_ms": 22752,
+    "measured_wall_seconds": 22.752,
     "max_peak_rss_kib": 157560,
     "final_report_count": 5,
-    "final_measured_wall_seconds": 4.520,
+    "final_measured_wall_seconds": 4.555,
     "final_seed_render_count": 4,
-    "final_seed_render_wall_seconds": 3.539,
-    "final_max_peak_rss_kib": 157472,
-    "final_reports_bytes": 30600938
+    "final_seed_render_wall_seconds": 3.567,
+    "final_max_peak_rss_kib": 157512,
+    "final_reports_bytes": 30706698
   },
   "storage": {
-    "local_evidence_and_inputs_bytes": 121313867,
+    "local_evidence_and_inputs_bytes": 152020565,
     "build_target_bytes": 3835625723,
-    "free_bytes_at_measurement": 156365193216,
-    "free_gib_at_measurement": 145.626,
+    "free_bytes_at_measurement": 155516141568,
+    "free_gib_at_measurement": 144.836,
     "floor_gib": 30,
     "required_margin_mib": 128,
     "floor_passes": true
@@ -66,5 +71,5 @@
     "tests, formatting, Clippy and harness gates",
     "review and delivery"
   ],
-  "note": "Four retained source iterations establish that the extra distance aggregation and fail-closed validation leave every weight, span and chosen-token field unchanged. The final v3 seed/rendering reports total 3.539 seconds; the fifth report is the 0.981-second determinism repeat."
+  "note": "Five retained source iterations establish that distance aggregation and fail-closed query/key/shape validation leave every weight, span and chosen-token field unchanged. The final v4 seed/rendering reports total 3.567 seconds; the fifth report is the 0.988-second determinism repeat."
 }

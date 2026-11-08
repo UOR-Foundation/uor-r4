@@ -138,8 +138,8 @@ struct HeadTrace {
     other_first_token: bool,
     asked_first_token_active: bool,
     other_first_token_active: bool,
-    asked_active_span: bool,
-    other_active_span: bool,
+    asked_active_span_rows: bool,
+    other_active_span_rows: bool,
     asked_weight_q31: u64,
     other_weight_q31: u64,
 }
@@ -189,9 +189,9 @@ struct HeadTally {
     distance_max: u32,
     kept_positions: u64,
     active_positions: u64,
-    asked_active_span: usize,
-    other_active_span: usize,
-    both_active_spans: usize,
+    asked_active_span_rows: usize,
+    other_active_span_rows: usize,
+    both_active_span_rows: usize,
     asked_weight_q31: u64,
     other_weight_q31: u64,
 }
@@ -225,9 +225,9 @@ struct HeadSummary {
     distance_max: u32,
     kept_positions: u64,
     active_positions: u64,
-    asked_active_span: usize,
-    other_active_span: usize,
-    both_active_spans: usize,
+    asked_active_span_rows: usize,
+    other_active_span_rows: usize,
+    both_active_span_rows: usize,
     asked_weight_q31: u64,
     other_weight_q31: u64,
 }
@@ -796,6 +796,8 @@ fn validate_cpu_trace_alignment(
                 .collect::<Vec<_>>();
             if cpu_head.head != head
                 || cpu_head.kind != expected_kind
+                || integer_head.query != cpu_head.query
+                || integer_head.key != cpu_head.key
                 || integer_head.kept != positions
             {
                 return Err(format!(
@@ -873,8 +875,8 @@ fn trace_case(
                         .collect::<Result<Vec<_>>>()?;
                     let asked_span = kept_in_spans(&kept, &case.target_spans);
                     let other_span = kept_in_spans(&kept, &case.other_spans);
-                    let asked_active_span = active_in_spans(&kept, &case.target_spans);
-                    let other_active_span = active_in_spans(&kept, &case.other_spans);
+                    let asked_active_span_rows = active_in_spans(&kept, &case.target_spans);
+                    let other_active_span_rows = active_in_spans(&kept, &case.other_spans);
                     Ok(HeadTrace {
                         head,
                         kind,
@@ -885,8 +887,8 @@ fn trace_case(
                         other_first_token: kept_at_span_starts(&kept, &case.other_spans),
                         asked_first_token_active: active_at_span_starts(&kept, &case.target_spans),
                         other_first_token_active: active_at_span_starts(&kept, &case.other_spans),
-                        asked_active_span,
-                        other_active_span,
+                        asked_active_span_rows,
+                        other_active_span_rows,
                         asked_weight_q31: weight_in_spans(&kept, &case.target_spans),
                         other_weight_q31: weight_in_spans(&kept, &case.other_spans),
                         kept,
@@ -941,9 +943,10 @@ fn tally_head(tally: &mut HeadTally, head: &HeadTrace) {
         );
         tally.distance_max = tally.distance_max.max(position.distance);
     }
-    tally.asked_active_span += usize::from(head.asked_active_span);
-    tally.other_active_span += usize::from(head.other_active_span);
-    tally.both_active_spans += usize::from(head.asked_active_span && head.other_active_span);
+    tally.asked_active_span_rows += usize::from(head.asked_active_span_rows);
+    tally.other_active_span_rows += usize::from(head.other_active_span_rows);
+    tally.both_active_span_rows +=
+        usize::from(head.asked_active_span_rows && head.other_active_span_rows);
     tally.asked_weight_q31 = tally.asked_weight_q31.saturating_add(head.asked_weight_q31);
     tally.other_weight_q31 = tally.other_weight_q31.saturating_add(head.other_weight_q31);
     match (head.asked_span, head.other_span) {
@@ -987,9 +990,9 @@ fn summarize(
             distance_max: tally.distance_max,
             kept_positions: tally.kept_positions,
             active_positions: tally.active_positions,
-            asked_active_span: tally.asked_active_span,
-            other_active_span: tally.other_active_span,
-            both_active_spans: tally.both_active_spans,
+            asked_active_span_rows: tally.asked_active_span_rows,
+            other_active_span_rows: tally.other_active_span_rows,
+            both_active_span_rows: tally.both_active_span_rows,
             asked_weight_q31: tally.asked_weight_q31,
             other_weight_q31: tally.other_weight_q31,
         });
@@ -1335,10 +1338,10 @@ mod tests {
             other_first_token_active: kept
                 .iter()
                 .any(|&(position, weight)| position == 8 && weight != 0),
-            asked_active_span: kept
+            asked_active_span_rows: kept
                 .iter()
                 .any(|&(position, weight)| weight != 0 && in_spans(position, &[asked])),
-            other_active_span: kept
+            other_active_span_rows: kept
                 .iter()
                 .any(|&(position, weight)| weight != 0 && in_spans(position, &[other])),
             asked_weight_q31: kept
@@ -1376,9 +1379,9 @@ mod tests {
         assert_eq!(tally.asked_first_token_active, 1);
         assert_eq!(tally.other_first_token_active, 0);
         assert_eq!(tally.active_positions, 3);
-        assert_eq!(tally.asked_active_span, 2);
-        assert_eq!(tally.other_active_span, 1);
-        assert_eq!(tally.both_active_spans, 1);
+        assert_eq!(tally.asked_active_span_rows, 2);
+        assert_eq!(tally.other_active_span_rows, 1);
+        assert_eq!(tally.both_active_span_rows, 1);
         assert_eq!(tally.asked_weight_q31, 6);
         assert_eq!(tally.other_weight_q31, 3);
         assert_eq!(tally.margin_q16, 2 << 16);
@@ -1534,26 +1537,34 @@ mod tests {
             distance: 3,
             weight_q31: 7,
         };
-        let cpu_head = |head, kind, kept: Vec<u32>| CpuHammingHeadTrace {
+        let cpu_head = |head, kind, query: u64, key: u64, kept: Vec<u32>| CpuHammingHeadTrace {
             head,
             kind,
+            query,
+            key,
             margin_q16: 4 << 16,
             kept: kept.into_iter().map(position).collect(),
         };
-        let integer_head = |kept: Vec<u32>| HammingStepHead {
-            query: 1,
-            key: 2,
-            kept,
-        };
         let integer = vec![HammingStepRead {
             depth: 2,
-            heads: vec![integer_head(vec![1, 2]), integer_head(vec![3])],
+            heads: vec![
+                HammingStepHead {
+                    query: 11,
+                    key: 12,
+                    kept: vec![1, 2],
+                },
+                HammingStepHead {
+                    query: 13,
+                    key: 14,
+                    kept: vec![3],
+                },
+            ],
         }];
         let matching = vec![CpuHammingReadTrace {
             depth: 2,
             heads: vec![
-                cpu_head(0, CpuHammingHeadKind::Copy, vec![1, 2]),
-                cpu_head(1, CpuHammingHeadKind::Type, vec![3]),
+                cpu_head(0, CpuHammingHeadKind::Copy, 11, 12, vec![1, 2]),
+                cpu_head(1, CpuHammingHeadKind::Type, 13, 14, vec![3]),
             ],
         }];
         validate_cpu_trace_alignment(&integer, &matching, 1).unwrap();
@@ -1574,6 +1585,21 @@ mod tests {
         let mut wrong_kept = matching;
         wrong_kept[0].heads[0].kept[1].position = 4;
         let error = validate_cpu_trace_alignment(&integer, &wrong_kept, 1).unwrap_err();
+        assert!(error.contains("choices"), "{error}");
+
+        let mut wrong_query = vec![CpuHammingReadTrace {
+            depth: 2,
+            heads: vec![
+                cpu_head(0, CpuHammingHeadKind::Copy, 99, 12, vec![1, 2]),
+                cpu_head(1, CpuHammingHeadKind::Type, 13, 14, vec![3]),
+            ],
+        }];
+        let error = validate_cpu_trace_alignment(&integer, &wrong_query, 1).unwrap_err();
+        assert!(error.contains("choices"), "{error}");
+
+        wrong_query[0].heads[0].query = 11;
+        wrong_query[0].heads[0].key = 99;
+        let error = validate_cpu_trace_alignment(&integer, &wrong_query, 1).unwrap_err();
         assert!(error.contains("choices"), "{error}");
     }
 }
