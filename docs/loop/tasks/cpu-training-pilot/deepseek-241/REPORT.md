@@ -40,7 +40,7 @@ termination/continuation gap.
   first attempt incorrectly reused a legacy helper that stops on token 0 and is
   retained as an instrument fault.
 - Reused one parsed CPU forward across 32 independent row workers. Each final
-  full five-arm sweep takes about 2.4-2.7 seconds.
+  full five-arm sweep takes about 2.4-2.8 seconds.
 - Added fail-closed artifact/tokenizer/panel hashes, unique case and pair checks,
   exact frozen-answer scoring, exact per-stratum pair metrics, paired controls,
   CPU identity and executable SHA-256.
@@ -52,7 +52,7 @@ The selected artifacts are seed 1
 and seed 2
 `8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae`.
 The executable is
-`82052efdf55e5973ac13a9dd7a7538cae4f32479a0a0cb9904b25992a4700ed8`.
+`86dadc06df624a4ecef9e98843f7e3db30cd19ca7c914b23a024101795028d44`.
 
 | Seed | Rendering | Free complete/pairs | First-target complete/pairs | Correct-value complete/pairs | Other value complete | Shuffled value complete |
 |---|---|---:|---:|---:|---:|---:|
@@ -103,10 +103,10 @@ with zero query, token or kept-cell mismatches. Audit report hashes are
 The canonical D84 ledger is
 [`resource-ledger.json`](../../../../labs/cpu-training-pilot-forced-copy-2026-11-08/resource-ledger.json),
 with the detailed retained-run receipt at
-[`evidence/resources.json`](./evidence/resources.json): 14 retained reports,
-54.553 seconds measured probe time, 137,456 KiB maximum peak RSS,
-555,631,880 bytes of retained evidence/inputs, 5,579,220,015 bytes of
-regenerable target, and 144.931 GiB free. The ledger charges a 1,800-second
+[`evidence/resources.json`](./evidence/resources.json): 19 retained reports,
+67.116 seconds measured probe time, 137,456 KiB maximum peak RSS,
+563,081,835 bytes of retained evidence/inputs, 5,585,107,350 bytes of
+regenerable target, and 144.632 GiB free. The ledger charges a 1,800-second
 projected increment, producing a 37,808-second cumulative lab projection. The
 canonical shared ledger
 `.uor-models/native-joint-learning-2026-09-04/model-time.json` was `ABSENT`.
@@ -124,8 +124,9 @@ Downloads, export, builds, tests and delivery are explicitly unmeasured.
   cpu-forced-copy-panel`: passed.
 - Targeted `rustfmt --check`, driver Clippy with no changed-code warnings,
   `git diff --check`, report check, local PR policy and full loop gates pass.
-- Five final reports cover two seeds, both renderings and the exact-schema
-  repeat. All 256 rows and 128 pairs are present in every arm.
+- Five v4 reports from the exact reviewed source cover two seeds, both
+  renderings and the exact-schema repeat. All 256 rows and 128 pairs are present
+  in every arm; all non-timing fields match the retained v3 evidence exactly.
 
 ## Skills used
 

@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-forced-copy-panel-summary/1",
   "base": "973bc0750",
   "substrate": "cpu-development-research",
-  "binary_sha256": "82052efdf55e5973ac13a9dd7a7538cae4f32479a0a0cb9904b25992a4700ed8",
+  "binary_sha256": "86dadc06df624a4ecef9e98843f7e3db30cd19ca7c914b23a024101795028d44",
   "artifacts": {
     "seed_1": "86e51d5ee2c00a4041bcde4d2183884e351099f28f155fb1e6a7516f13064dfe",
     "seed_2": "8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae"
@@ -16,7 +16,7 @@
   },
   "runs": {
     "s1_one_user": {
-      "report_sha256": "23ef11b940719ddae211bc9140d2527adb60b96bc611e375434724bd92e25d68",
+      "report_sha256": "f671943b42c14817a89bdf394e3f72ca0d04831476230aae4bfc0029686212a7",
       "free": {"complete": 0, "pairs": 0, "eos_stops": 109, "first_line_asked": 14, "first_line_other": 11},
       "first_target": {"complete": 41, "pairs": 12, "eos_stops": 136, "prefix_retained_without_eos": 120},
       "correct_value": {"complete": 230, "pairs": 102, "eos_stops": 243, "prefix_retained_without_eos": 13},
@@ -31,7 +31,7 @@
       }
     },
     "s1_per_turn": {
-      "report_sha256": "3f98ef7b4f1ee7a03a1d86fdd4751d5360afb1ad7285124ca37570bd4599de56",
+      "report_sha256": "74787e39ff7991a1e9b470679faab90a89eb449a86d5538a1d6ff00e0546817c",
       "free": {"complete": 0, "pairs": 0, "eos_stops": 130, "first_line_asked": 12, "first_line_other": 12},
       "first_target": {"complete": 41, "pairs": 12, "eos_stops": 149, "prefix_retained_without_eos": 107},
       "correct_value": {"complete": 250, "pairs": 122, "eos_stops": 256, "prefix_retained_without_eos": 0},
@@ -46,7 +46,7 @@
       }
     },
     "s2_one_user": {
-      "report_sha256": "b3ac9c44b1deec6e3439d2cabdad462c4c75f0a94ad792f8c989f00a39c6f276",
+      "report_sha256": "c19717cd83f17f8caa94a9c233270ed1146195da73ca5cb4e937b5bbc9a0d652",
       "free": {"complete": 0, "pairs": 0, "eos_stops": 86, "first_line_asked": 2, "first_line_other": 6},
       "first_target": {"complete": 20, "pairs": 0, "eos_stops": 119, "prefix_retained_without_eos": 137},
       "correct_value": {"complete": 200, "pairs": 75, "eos_stops": 237, "prefix_retained_without_eos": 19},
@@ -61,7 +61,7 @@
       }
     },
     "s2_per_turn": {
-      "report_sha256": "0e14747976d2ce0cc46f45482f650876d758e82860a87716aafec6947dc1cbeb",
+      "report_sha256": "2d42e4ab6dbcbda24c690738d0f2df9bd0f5475034fd920c61843bd36fb05b7c",
       "free": {"complete": 0, "pairs": 0, "eos_stops": 100, "first_line_asked": 2, "first_line_other": 4},
       "first_target": {"complete": 21, "pairs": 0, "eos_stops": 130, "prefix_retained_without_eos": 126},
       "correct_value": {"complete": 213, "pairs": 86, "eos_stops": 218, "prefix_retained_without_eos": 38},
@@ -103,7 +103,7 @@
     }
   },
   "repeat": {
-    "report_sha256": "6288a51bf7e7d80154ccd99bbd79f43494064e685c7a0bef87edfac531784ac4",
+    "report_sha256": "0a9ff8e29e605b9818604e744b10f3a8c72318f06eb4c0c4006773743c738297",
     "non_timing_fields_equal": true
   },
   "parity": {

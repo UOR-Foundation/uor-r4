@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.cpu-forced-copy-panel-resources/1",
-  "measured_at": "2026-11-08T18:09:29Z",
+  "measured_at": "2026-11-08T18:24:30Z",
   "substrate": "cpu-development-research",
   "root": "local/deepseek/forced-copy-panel",
   "hardware": {
@@ -20,16 +20,21 @@
     {"path": "runs-v2/s2-one-user.json", "wall_ms": 2528, "peak_rss_kib": 132148, "disposition": "correct behavior before executable binding"},
     {"path": "runs-v2/s2-per-turn.json", "wall_ms": 2746, "peak_rss_kib": 133944, "disposition": "correct behavior before executable binding"},
     {"path": "runs-v2/s1-one-user-repeat.json", "wall_ms": 2402, "peak_rss_kib": 131916, "disposition": "determinism repeat before executable binding"},
-    {"path": "runs-v3/s1-one-user.json", "wall_ms": 2397, "peak_rss_kib": 131232, "disposition": "final"},
-    {"path": "runs-v3/s1-per-turn.json", "wall_ms": 2545, "peak_rss_kib": 132772, "disposition": "final"},
-    {"path": "runs-v3/s2-one-user.json", "wall_ms": 2535, "peak_rss_kib": 131440, "disposition": "final"},
-    {"path": "runs-v3/s2-per-turn.json", "wall_ms": 2739, "peak_rss_kib": 132492, "disposition": "final"},
-    {"path": "runs-v3/s1-one-user-repeat.json", "wall_ms": 2387, "peak_rss_kib": 131924, "disposition": "final determinism repeat"}
+    {"path": "runs-v3/s1-one-user.json", "wall_ms": 2397, "peak_rss_kib": 131232, "disposition": "superseded by exact-source regeneration; non-timing fields equal v4"},
+    {"path": "runs-v3/s1-per-turn.json", "wall_ms": 2545, "peak_rss_kib": 132772, "disposition": "superseded by exact-source regeneration; non-timing fields equal v4"},
+    {"path": "runs-v3/s2-one-user.json", "wall_ms": 2535, "peak_rss_kib": 131440, "disposition": "superseded by exact-source regeneration; non-timing fields equal v4"},
+    {"path": "runs-v3/s2-per-turn.json", "wall_ms": 2739, "peak_rss_kib": 132492, "disposition": "superseded by exact-source regeneration; non-timing fields equal v4"},
+    {"path": "runs-v3/s1-one-user-repeat.json", "wall_ms": 2387, "peak_rss_kib": 131924, "disposition": "superseded by exact-source regeneration; non-timing fields equal v4"},
+    {"path": "runs-v4/s1-one-user.json", "wall_ms": 2384, "peak_rss_kib": 131200, "disposition": "final exact-source evidence"},
+    {"path": "runs-v4/s1-per-turn.json", "wall_ms": 2522, "peak_rss_kib": 134556, "disposition": "final exact-source evidence"},
+    {"path": "runs-v4/s2-one-user.json", "wall_ms": 2478, "peak_rss_kib": 131756, "disposition": "final exact-source evidence"},
+    {"path": "runs-v4/s2-per-turn.json", "wall_ms": 2811, "peak_rss_kib": 133524, "disposition": "final exact-source evidence"},
+    {"path": "runs-v4/s1-one-user-repeat.json", "wall_ms": 2368, "peak_rss_kib": 132932, "disposition": "final exact-source determinism repeat"}
   ],
   "totals": {
-    "report_count": 14,
-    "measured_wall_ms": 54553,
-    "measured_wall_seconds": 54.553,
+    "report_count": 19,
+    "measured_wall_ms": 67116,
+    "measured_wall_seconds": 67.116,
     "max_peak_rss_kib": 137456
   },
   "parity": {
@@ -55,11 +60,11 @@
     }
   },
   "storage": {
-    "local_evidence_and_inputs_bytes": 555631880,
-    "build_target_bytes": 5579220015,
+    "local_evidence_and_inputs_bytes": 563081835,
+    "build_target_bytes": 5585107350,
     "temporary_logs_bytes": 17037,
-    "free_bytes_at_measurement": 155618586624,
-    "free_gib_at_measurement": 144.931,
+    "free_bytes_at_measurement": 155297583104,
+    "free_gib_at_measurement": 144.632,
     "floor_gib": 30,
     "required_margin_mib": 128,
     "floor_passes": true
