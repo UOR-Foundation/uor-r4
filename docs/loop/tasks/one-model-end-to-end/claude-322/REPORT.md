@@ -66,7 +66,7 @@
 
 Row 5 opens a decision review led by the decode-time read: re-scoring these seals with an end-of-turn rule at `\n\nAssistant:`, on the laptop.
 
-- **The decode-time read is bounded by these scores, and the bound misses the bar.** A role-header stop can only end rows that contain `Assistant:` and did not already stop. That is 31 − 5 = 26 rows at seed 1 and 33 − 17 = 16 at seed 2, so at most 135 and 102 EOS-or-header stops. Seed 2 stays below 128. Only those same 26 and 16 rows can change, so the rule adds at most 26 and 16 complete rows, from 0. The panel's bar is 104.
+- **The decode-time read is bounded by these scores, and the bound misses the bar.** A stop at `\n\nAssistant:` can only end rows that hold that string and hit the length cap: 26 at seed 1 and 12 at seed 2 (counted from `score/s{1,2}.json`). So it gives at most 135 and 98 EOS-or-header stops, and seed 2 stays below 128. The rule would also shorten replies that already stopped on EOS but hold the string before it (5 and 16). So it can change at most the 31 and 28 rows whose reply holds `\n\nAssistant:`, and add at most 31 and 28 complete rows, from 0. The panel's bar is 104.
 - **Recall is the binding gap.** Stopping went from 1 and 0 (capped × 3) to 109 and 86, with no collapse, so exposure moved stopping a long way. Complete is 0 even among the stopped rows: the replies end, but they do not carry the asked-for value. No stopping lever reaches the panel's bar while that is 0.
 - **Decision:** the next unit is the recall lever, under its own prep sheet, with this mix and these seals as its base and the first-line count as its starting reading. The decode-time read stays in Still open with the bound above, and does not run as its own unit.
 - **Reversal cost:** low. No compute is spent by this decision, and the decode-time read stays available. Casey can reverse it.
@@ -78,7 +78,7 @@ Row 5 opens a decision review led by the decode-time read: re-scoring these seal
 ## Still open
 
 - **The recall lever:** the replies stop but do not carry the asked-for value (0 complete at both seeds). It is the next unit.
-- **The decode-time read**, bounded here at 135 / 102 stops and at most 26 / 16 complete.
+- **The decode-time read**, bounded here at 135 / 98 stops and at most 31 / 28 complete.
 - **Why the capped mix stops less than × 1 at the same EOS per window** (109 / 86 against 177 / 122). It cannot be separated from D3's lower passes (2.51 epochs) or the higher EOS share.
 - **The store's upload can be rate-limited** (HTTP 429). A seal script could wait and retry the put once, into a path it has just checked is empty. And before a hand-taken `down`, the pod's seal outputs should be copied off.
 - **`uor-pod up`'s SSH wait is 900 s**, where this sheet allows 1,800 s. A sheet's wait should be passed to it, or written as 900 s.
