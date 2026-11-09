@@ -20,7 +20,7 @@ const PANEL_SCHEMA: &str = "uor-r4.served-reply-panel/1";
 const USAGE: &str = "usage: real-artifact-audit --carried ARTIFACT --minus-c ARTIFACT \
 --carried-cpu REPORT --carried-integer REPORT --minus-c-cpu REPORT --minus-c-integer REPORT \
 [--carried-rank REPORT --minus-c-rank REPORT] \
-[--carried-sha256 SHA256 --minus-c-sha256 SHA256] --out NEW_FILE";
+[--carried-sha256 SHA256 --minus-c-sha256 SHA256] --expected-rows N --out NEW_FILE";
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -43,6 +43,7 @@ struct Args {
     minus_c_rank: Option<String>,
     carried_sha256: Option<String>,
     minus_c_sha256: Option<String>,
+    expected_rows: usize,
     out: String,
 }
 
@@ -73,19 +74,28 @@ fn run() -> Result<()> {
         &carried_cpu,
         &carried_sha256,
         ExpectedEngine::Cpu,
+        args.expected_rows,
     )?;
     require_report_identity(
         "carried integer",
         &carried_integer,
         &carried_sha256,
         ExpectedEngine::Integer,
+        args.expected_rows,
     )?;
-    require_report_identity("−C CPU", &minus_c_cpu, &minus_c_sha256, ExpectedEngine::Cpu)?;
+    require_report_identity(
+        "−C CPU",
+        &minus_c_cpu,
+        &minus_c_sha256,
+        ExpectedEngine::Cpu,
+        args.expected_rows,
+    )?;
     require_report_identity(
         "−C integer",
         &minus_c_integer,
         &minus_c_sha256,
         ExpectedEngine::Integer,
+        args.expected_rows,
     )?;
     require_report_parity("carried CPU/integer", &carried_cpu, &carried_integer)?;
     require_report_parity("−C CPU/integer", &minus_c_cpu, &minus_c_integer)?;
@@ -100,8 +110,15 @@ fn run() -> Result<()> {
                 &carried,
                 &carried_sha256,
                 ExpectedEngine::Cpu,
+                args.expected_rows,
             )?;
-            require_report_identity("−C rank", &minus_c, &minus_c_sha256, ExpectedEngine::Cpu)?;
+            require_report_identity(
+                "−C rank",
+                &minus_c,
+                &minus_c_sha256,
+                ExpectedEngine::Cpu,
+                args.expected_rows,
+            )?;
             require_report_metadata(
                 "panel and rank",
                 &[
@@ -133,6 +150,7 @@ fn run() -> Result<()> {
     let report = json!({
         "schema": SCHEMA,
         "verdict": "instrument-parity",
+        "panel_rows": args.expected_rows,
         "published_sha256": {
             "supplied": args.carried_sha256.is_some() && args.minus_c_sha256.is_some(),
             "verified": args.carried_sha256.is_some() && args.minus_c_sha256.is_some(),
@@ -162,7 +180,7 @@ fn run() -> Result<()> {
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
-    const FLAGS: [&str; 11] = [
+    const FLAGS: [&str; 12] = [
         "carried",
         "minus-c",
         "carried-cpu",
@@ -173,6 +191,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
         "minus-c-rank",
         "carried-sha256",
         "minus-c-sha256",
+        "expected-rows",
         "out",
     ];
     let mut values = BTreeMap::new();
@@ -200,6 +219,14 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
     let minus_c_rank = values.remove("minus-c-rank");
     let carried_sha256 = values.remove("carried-sha256");
     let minus_c_sha256 = values.remove("minus-c-sha256");
+    let expected_rows = values
+        .remove("expected-rows")
+        .ok_or_else(|| format!("--expected-rows is required\n{USAGE}"))?
+        .parse::<usize>()
+        .map_err(|_| "--expected-rows is not a count".to_owned())?;
+    if expected_rows == 0 {
+        return Err("--expected-rows must be positive".to_owned());
+    }
     let out = take_required(&mut values, "out")?;
     Ok(Args {
         carried,
@@ -212,6 +239,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
         minus_c_rank,
         carried_sha256,
         minus_c_sha256,
+        expected_rows,
         out,
     })
 }
@@ -365,9 +393,23 @@ fn require_report_identity(
     report: &Value,
     expected_artifact_sha256: &str,
     engine: ExpectedEngine,
+    expected_rows: usize,
 ) -> Result<()> {
     if report.get("schema").and_then(Value::as_str) != Some(PANEL_SCHEMA) {
         return Err(format!("{label} report is not {PANEL_SCHEMA}"));
+    }
+    let rows = report
+        .get("rows")
+        .and_then(Value::as_array)
+        .ok_or(format!("{label} report has no rows array"))?;
+    if rows.len() != expected_rows {
+        return Err(format!(
+            "{label} report holds {} rows, not {expected_rows}",
+            rows.len()
+        ));
+    }
+    if report["totals"]["rows"].as_u64() != Some(expected_rows as u64) {
+        return Err(format!("{label} totals.rows is not {expected_rows}"));
     }
     let inputs = report
         .get("inputs")
@@ -397,14 +439,16 @@ fn require_report_identity(
         .get("settings")
         .and_then(Value::as_object)
         .ok_or(format!("{label} report has no settings object"))?;
-    let reported_engine = settings.get("engine").and_then(Value::as_str);
+    let reported_engine = settings.get("engine");
     match engine {
-        ExpectedEngine::Cpu if reported_engine.is_some() && reported_engine != Some("cpu") => {
+        ExpectedEngine::Cpu
+            if reported_engine.is_some_and(|value| value.as_str() != Some("cpu")) =>
+        {
             return Err(format!(
                 "{label} report names engine {reported_engine:?}, not the CPU port"
             ));
         }
-        ExpectedEngine::Integer if reported_engine != Some("integer") => {
+        ExpectedEngine::Integer if reported_engine.and_then(Value::as_str) != Some("integer") => {
             return Err(format!(
                 "{label} report names engine {reported_engine:?}, not integer"
             ));
@@ -568,9 +612,23 @@ fn generation_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
 }
 
 fn rank_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
+    let carried_generation = rows_by_id(carried, None)?;
+    let minus_generation = rows_by_id(minus_c, None)?;
+    require_same_ids("rank generation", &carried_generation, &minus_generation)?;
+
     let carried_teacher = rows_by_id(carried, Some("teacher_forced"))?;
     let minus_teacher = rows_by_id(minus_c, Some("teacher_forced"))?;
     require_same_ids("teacher-forced", &carried_teacher, &minus_teacher)?;
+    require_same_ids(
+        "carried teacher-forced/generation",
+        &carried_teacher,
+        &carried_generation,
+    )?;
+    require_same_ids(
+        "minus-C teacher-forced/generation",
+        &minus_teacher,
+        &minus_generation,
+    )?;
     let mut teacher_changed = Vec::new();
     let mut first_target_changed = Vec::new();
     for (id, carried_row) in &carried_teacher {
@@ -602,6 +660,16 @@ fn rank_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
     let carried_paired = rows_by_id(carried, Some("paired_first"))?;
     let minus_paired = rows_by_id(minus_c, Some("paired_first"))?;
     require_same_ids("paired-first", &carried_paired, &minus_paired)?;
+    require_same_ids(
+        "carried paired-first/generation",
+        &carried_paired,
+        &carried_generation,
+    )?;
+    require_same_ids(
+        "minus-C paired-first/generation",
+        &minus_paired,
+        &minus_generation,
+    )?;
     let mut paired_changed = Vec::new();
     for (id, carried_row) in &carried_paired {
         let minus_row = &minus_paired[id];
@@ -712,11 +780,12 @@ mod tests {
             },
             "settings": settings,
             "rendering": {"name": "one-user-turn/v1"},
+            "totals": {"rows": 1},
             "wall_milliseconds": 10,
             "decode_milliseconds": 9,
             "tokens_per_second": 1,
             "decode_tokens_per_second": 2,
-            "rows": [],
+            "rows": [{"id": "a"}],
         })
     }
 
@@ -742,14 +811,32 @@ mod tests {
         integer["decode_milliseconds"] = json!(88);
         integer["tokens_per_second"] = json!(3);
         integer["decode_tokens_per_second"] = json!(4);
-        require_report_identity("cpu", &cpu, "carried", ExpectedEngine::Cpu).unwrap();
-        require_report_identity("integer", &integer, "carried", ExpectedEngine::Integer).unwrap();
-        assert!(require_report_identity("cpu", &integer, "carried", ExpectedEngine::Cpu).is_err());
+        require_report_identity("cpu", &cpu, "carried", ExpectedEngine::Cpu, 1).unwrap();
+        require_report_identity("integer", &integer, "carried", ExpectedEngine::Integer, 1)
+            .unwrap();
         assert!(
-            require_report_identity("integer", &cpu, "carried", ExpectedEngine::Integer).is_err()
+            require_report_identity("cpu", &integer, "carried", ExpectedEngine::Cpu, 1).is_err()
         );
         assert!(
-            require_report_identity("wrong artifact", &cpu, "minus-C", ExpectedEngine::Cpu)
+            require_report_identity("integer", &cpu, "carried", ExpectedEngine::Integer, 1)
+                .is_err()
+        );
+        assert!(
+            require_report_identity("wrong artifact", &cpu, "minus-C", ExpectedEngine::Cpu, 1)
+                .is_err()
+        );
+        let mut malformed_engine = cpu.clone();
+        malformed_engine["settings"]["engine"] = Value::Null;
+        assert!(require_report_identity(
+            "malformed CPU engine",
+            &malformed_engine,
+            "carried",
+            ExpectedEngine::Cpu,
+            1
+        )
+        .is_err());
+        assert!(
+            require_report_identity("partial rows", &cpu, "carried", ExpectedEngine::Cpu, 2)
                 .is_err()
         );
         assert_eq!(normalize_report(&cpu), normalize_report(&integer));
@@ -784,6 +871,7 @@ mod tests {
     #[test]
     fn rank_delta_detects_a_real_case_change_and_ignores_row_order() {
         let carried = json!({
+            "rows": [{"id": "a"}],
             "teacher_forced": {
                 "first_target": {"top1": 0, "top8": 2, "top32": 3, "rank_p50": 10},
                 "rows": [{
@@ -803,6 +891,7 @@ mod tests {
             }
         });
         let minus_c = json!({
+            "rows": [{"id": "a"}],
             "teacher_forced": {
                 "first_target": {"top1": 0, "top8": 1, "top32": 3, "rank_p50": 12},
                 "rows": [{

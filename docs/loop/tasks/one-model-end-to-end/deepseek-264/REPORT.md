@@ -30,7 +30,8 @@ Added `real-artifact-audit` to the one-model instrument. It:
 - checks optional published `SHA256SUMS` values for both artifacts;
 - reproduces `−C` with `drop_hamming_carry_uorlut01` and requires byte equality;
 - binds every panel and rank report to its artifact and expected engine;
-- requires the same settings, rendering and non-artifact inputs across all reports;
+- requires the explicit row count and `totals.rows`, then the same settings, rendering and
+  non-artifact inputs across all reports;
 - compares CPU and integer panel reports after removing only timing fields and engine identity;
 - finds generation divergence by case id and token index;
 - compares teacher-forced and paired-first reports by case id using the fields the panel
@@ -75,8 +76,8 @@ asked-value first lines and 0 complete replies.
 ## Checks run at the head
 
 - `real-artifact-audit` tests: **6 passed**, including same-engine rejection,
-  wrong-artifact rejection, cross-arm metadata rejection and missing-rank-section
-  rejection.
+  malformed-engine rejection, wrong-artifact rejection, partial-inventory rejection,
+  cross-arm metadata rejection and missing-rank-section rejection.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
 - Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
   and 16,384, with both published hashes supplied and verified.

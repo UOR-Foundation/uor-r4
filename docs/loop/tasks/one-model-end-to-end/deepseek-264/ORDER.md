@@ -37,6 +37,7 @@ Add `real-artifact-audit` to the one-model instrument. It accepts:
 - carried and `−C` CPU panel reports;
 - carried and `−C` integer panel reports;
 - optional CPU rank reports from `--teacher-forced 1 --paired-first 1`;
+- the expected panel row count;
 - an output path.
 
 It refuses unless:
@@ -46,9 +47,11 @@ It refuses unless:
   `SHA256SUMS` values;
 - `drop_hamming_carry_uorlut01(carried)` equals the supplied `−C` byte-for-byte;
 - every report is for the artifact it scores, the CPU reports are not integer reports,
-  and all six reports share the same settings, rendering and non-artifact inputs;
+  and all six reports hold exactly the expected row count with the same settings,
+  rendering and non-artifact inputs;
 - CPU and integer reports equal after only timing fields and `settings.engine`;
-- ranked reports have the same cases and compare by case id, not row position.
+- ranked reports have the same cases as their generation rows and compare by case id, not
+  row position.
 
 It writes a receipt with artifact identities and sizes, ask depths, carry rows, report
 equality, first `reply_ids` divergence, and carried-versus-`−C` teacher/paired rank deltas.

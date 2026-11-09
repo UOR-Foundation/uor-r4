@@ -2,6 +2,7 @@
   "schema": "uor-r4.real-artifact-audit-summary/1",
   "source_pr": 3894,
   "cell": "L-aC-s1",
+  "panel_rows": 256,
   "steps": {
     "008192": {
       "carried_sha256": "d94669b12a0d5740fbe7b6a29692242653c4e8e1cf24e11dbaf57d6b3df7ec98",
@@ -68,7 +69,7 @@
     "status": "independent_export_from_sealed_checkpoint",
     "cell": "L-aC-s2",
     "step": "016384",
-    "audit_receipt_sha256": "ee26e0feba8eaafaab2b05341dd9e1e9e0a0f031328feb062338723c08cdbd30",
+    "audit_receipt_sha256": "a38013dad6a879adcba402051d1a6ba971d5187a9218a6d5fc182cf16e47474c",
     "carried_sha256": "852c47216b417e05920523daa02d4352ccdb3923481e1bcd039b62f92f7a1028",
     "minus_c_sha256": "e3fd234c9a7b5aa761e1177306cac75844e5b419fd56cdede076c6e774c67d9a",
     "carried_cpu_report_sha256": "cc7752165f7ff64be98f93cd68d987801e143d4bfad281323618058dce17ead1",
