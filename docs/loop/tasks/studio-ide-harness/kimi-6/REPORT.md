@@ -1,6 +1,6 @@
 # REPORT: close remaining PTY identity races and reconcile delivery evidence, kimi-6
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Order: [ORDER.md](ORDER.md). Base: `6fa2baf377e74080e57cb64330f091b701059e01`, tree `36d5b6701c9d3ee9bfdbecde9a21de011b4c0aca`; initial merged main `1e5e84a1d497222099a97e22da024b07759750a8`, latest merged main `f75725d3071abb9488e058ac158a04d8d093014d`. Fresh reviewer agent-67 returned CHANGES, recorded on PR #3890 at the base head. The PR remains draft and unqueued. This is the historical kimi-6 record; the active repair is kimi-7, with identity reconciliation in kimi-8 and the remaining record corrections in kimi-9.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Order: [ORDER.md](ORDER.md). Base: `6fa2baf377e74080e57cb64330f091b701059e01`, tree `36d5b6701c9d3ee9bfdbecde9a21de011b4c0aca`; initial merged main `1e5e84a1d497222099a97e22da024b07759750a8`, latest merged main `f75725d3071abb9488e058ac158a04d8d093014d`. Fresh reviewer agent-67 returned CHANGES, recorded on PR #3890 at the base head. The PR remains draft and unqueued. This is the historical kimi-6 record; the active repair is kimi-7, with identity reconciliation in kimi-8, record corrections in kimi-9, and approval-flow wording correction in kimi-10.
 
 ## What did not work
 
