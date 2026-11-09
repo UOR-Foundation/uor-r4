@@ -129,7 +129,8 @@ so it supports no value-reach claim.
 cargo run --release --offline --features cpu-parity --bin real-carry-geometry -- \
   train-census \
   --tokens TRAIN/tokens.u16 --mask TRAIN/response_mask.u8 \
-  --manifest TRAIN/manifest.json --tokenizer TOKENIZER.json \
+  --manifest TRAIN/manifest.json --manifest-sha256 MANIFEST_SHA256 \
+  --tokenizer TOKENIZER.json --tokenizer-sha256 TOKENIZER_SHA256 \
   --carry-rows 32 --out NEW_CENSUS.json
 ```
 
@@ -144,11 +145,14 @@ path is new.
 ```sh
 cargo run --release --offline --features cpu-parity --bin real-carry-geometry -- \
   first-reply \
-  --carried CARRIED.uorlut --minus-c MINUS_C.uorlut \
+  --carried CARRIED.uorlut --carried-sha256 CARRIED_SHA256 \
+  --minus-c MINUS_C.uorlut --minus-c-sha256 MINUS_C_SHA256 \
   --carried-report CARRIED.json --minus-c-report MINUS_C.json \
   --carried-rank CARRIED_RANKED.json --minus-c-rank MINUS_C_RANKED.json \
   --inputs inputs.json --labels labels.json --plan plan.json \
-  --panel-manifest manifest.json --tokenizer TOKENIZER.json \
+  --panel-manifest manifest.json --panel-manifest-sha256 MANIFEST_SHA256 \
+  --tokenizer TOKENIZER.json \
+  --expected-carried-first-lines N --expected-minus-c-first-lines N \
   --out NEW_TRACE.json
 ```
 

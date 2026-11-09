@@ -1,5 +1,26 @@
 {
   "claim": "none; explains the registered configuration only and moves no bar",
+  "command": {
+    "argv": [
+      "docs/labs/one-model-end-to-end/instrument/target/release/real-carry-geometry",
+      "receipt",
+      "--train-census",
+      "local/deepseek/carry-geometry/results/train-census-repaired-v2.json",
+      "--train-census-repeat",
+      "local/deepseek/carry-geometry/results/train-census-repaired-v2-repeat.json",
+      "--s1",
+      "local/deepseek/carry-geometry/results/first-reply-s1-repaired-v2.json",
+      "--s1-repeat",
+      "local/deepseek/carry-geometry/results/first-reply-s1-repaired-v2-repeat.json",
+      "--s2",
+      "local/deepseek/carry-geometry/results/first-reply-s2-repaired-v2.json",
+      "--s2-repeat",
+      "local/deepseek/carry-geometry/results/first-reply-s2-repaired-v2-repeat.json",
+      "--out",
+      "<out>"
+    ],
+    "cwd": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-real-carry-geometry-diagnosis"
+  },
   "first_reply": {
     "seed_1": {
       "artifact": {
@@ -93,10 +114,54 @@
       },
       "checks": {
         "carried_writer_table_equals_minus_c": true,
+        "expected_carried_first_lines": 0,
+        "expected_minus_c_first_lines": 0,
         "minus_c_reproduced_byte_equal": true,
+        "official_first_line_counts_match": true,
         "official_first_rank_parity": 256,
         "panel_hashes_verified": true,
         "rows": 256
+      },
+      "command": {
+        "argv": [
+          "docs/labs/one-model-end-to-end/instrument/target/release/real-carry-geometry",
+          "first-reply",
+          "--carried",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s1-step-016384.uorlut",
+          "--carried-sha256",
+          "ba221c27f846fc171856280135964e6a66a7a4ff5d7733b763570fa1d196b6e7",
+          "--minus-c",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s1-cut.uorlut",
+          "--minus-c-sha256",
+          "6e85e4e201e09771b56aa54d0ed680120ed00fbb082caaf7a8459681296da5e6",
+          "--carried-report",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s1-step-016384.json",
+          "--minus-c-report",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s1-cut.json",
+          "--carried-rank",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/final/L-aC-s1/step-016384/panel-cpu-ranked/carried.json",
+          "--minus-c-rank",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/final/L-aC-s1/step-016384/panel-cpu-ranked/minus-C.json",
+          "--inputs",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/inputs.json",
+          "--labels",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/labels.json",
+          "--plan",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/plan.json",
+          "--panel-manifest",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/manifest.json",
+          "--panel-manifest-sha256",
+          "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964",
+          "--tokenizer",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/tokenizer/pod-setup/rung0-complete-path/20261013-05c84bece/tokenizer-d36d3e87.json",
+          "--expected-carried-first-lines",
+          "0",
+          "--expected-minus-c-first-lines",
+          "0",
+          "--out",
+          "<out>"
+        ],
+        "cwd": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-real-carry-geometry-diagnosis"
       },
       "controls": {
         "exact_minus_c": "the cut reproduces byte for byte and replaces the carried query",
@@ -106,16 +171,27 @@
       "first_line_successes": [],
       "inputs": {
         "carried": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s1-step-016384.uorlut",
+        "carried_rank": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/final/L-aC-s1/step-016384/panel-cpu-ranked/carried.json",
+        "carried_rank_sha256": "cc1c724eafdc7c3711989214cba78732d750f63430f2690b083e40742dced116",
+        "carried_report": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s1-step-016384.json",
+        "carried_report_sha256": "cde8fd6a8475c9d54afa874839bedcdcdd858528c3224bd6429b8b96749f1e22",
         "carried_sha256": "ba221c27f846fc171856280135964e6a66a7a4ff5d7733b763570fa1d196b6e7",
         "inputs_sha256": "1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a",
         "labels_sha256": "3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be",
         "minus_c": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s1-cut.uorlut",
+        "minus_c_rank": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/final/L-aC-s1/step-016384/panel-cpu-ranked/minus-C.json",
+        "minus_c_rank_sha256": "81b2d5bea3a158bf0204bbf8ca23c3e1ffee2dfbd9f473224ac92face5f7a678",
+        "minus_c_report": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s1-cut.json",
+        "minus_c_report_sha256": "74b32adcfb8cfd031d9c2060f82d7ff5a0b932949555e9ca218664643e98bb33",
         "minus_c_sha256": "6e85e4e201e09771b56aa54d0ed680120ed00fbb082caaf7a8459681296da5e6",
+        "panel_manifest": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/manifest.json",
         "panel_manifest_sha256": "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964",
         "plan_sha256": "0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715",
+        "tokenizer": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/tokenizer/pod-setup/rung0-complete-path/20261013-05c84bece/tokenizer-d36d3e87.json",
         "tokenizer_sha256": "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89"
       },
       "totals": {
+        "asked_rank_changed": 136,
         "asked_token_in_prompt": 256,
         "asked_token_inside_carry": 159,
         "carried_asked_first_line": 0,
@@ -125,12 +201,14 @@
         "carried_beats_other": 128,
         "carried_other_first_line": 3,
         "carried_other_top1": 0,
-        "changed_by_cut": 156,
+        "chosen_or_rank_changed": 156,
+        "chosen_token_changed": 0,
         "minus_c_asked_first_line": 0,
         "minus_c_asked_top1": 0,
         "minus_c_beats_other": 127,
         "minus_c_other_first_line": 4,
         "minus_c_other_top1": 0,
+        "other_rank_changed": 136,
         "other_token_in_prompt": 256,
         "other_token_inside_carry": 159,
         "query_changed": 168,
@@ -223,10 +301,54 @@
       },
       "checks": {
         "carried_writer_table_equals_minus_c": true,
+        "expected_carried_first_lines": 2,
+        "expected_minus_c_first_lines": 2,
         "minus_c_reproduced_byte_equal": true,
+        "official_first_line_counts_match": true,
         "official_first_rank_parity": 256,
         "panel_hashes_verified": true,
         "rows": 256
+      },
+      "command": {
+        "argv": [
+          "docs/labs/one-model-end-to-end/instrument/target/release/real-carry-geometry",
+          "first-reply",
+          "--carried",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s2-step-016384.uorlut",
+          "--carried-sha256",
+          "2741d9383a80c300b90ca2d5cbc1e06a9b664d913971f84ddbc2916a1625a430",
+          "--minus-c",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s2-cut.uorlut",
+          "--minus-c-sha256",
+          "391392f5c47af2cd6a1e091417dcc04c5340080474ebf6dad5d10ca2cfd277e5",
+          "--carried-report",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s2-step-016384.json",
+          "--minus-c-report",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s2-cut.json",
+          "--carried-rank",
+          "local/deepseek/carry-geometry/results/rank-s2-carried.json",
+          "--minus-c-rank",
+          "local/deepseek/carry-geometry/results/rank-s2-minus-C.json",
+          "--inputs",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/inputs.json",
+          "--labels",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/labels.json",
+          "--plan",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/plan.json",
+          "--panel-manifest",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/manifest.json",
+          "--panel-manifest-sha256",
+          "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964",
+          "--tokenizer",
+          "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/tokenizer/pod-setup/rung0-complete-path/20261013-05c84bece/tokenizer-d36d3e87.json",
+          "--expected-carried-first-lines",
+          "2",
+          "--expected-minus-c-first-lines",
+          "2",
+          "--out",
+          "<out>"
+        ],
+        "cwd": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-real-carry-geometry-diagnosis"
       },
       "controls": {
         "exact_minus_c": "the cut reproduces byte for byte and replaces the carried query",
@@ -277,16 +399,27 @@
       ],
       "inputs": {
         "carried": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s2-step-016384.uorlut",
+        "carried_rank": "local/deepseek/carry-geometry/results/rank-s2-carried.json",
+        "carried_rank_sha256": "f111da5df7d5cbba15816431afbaf7d03dfdd921f3677de3de815e2e6da7ba30",
+        "carried_report": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s2-step-016384.json",
+        "carried_report_sha256": "790b442951944131898de5d3b2776c0d6ab6ab2faaed65a70e195616bec9adf1",
         "carried_sha256": "2741d9383a80c300b90ca2d5cbc1e06a9b664d913971f84ddbc2916a1625a430",
         "inputs_sha256": "1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a",
         "labels_sha256": "3b5c54771b8dc62e3c30aef2b30de28c09dfe79625f333854af046e6e354e2be",
         "minus_c": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/served/L-aC-s2-cut.uorlut",
+        "minus_c_rank": "local/deepseek/carry-geometry/results/rank-s2-minus-C.json",
+        "minus_c_rank_sha256": "026926f31b2fd7b7182035d7a6438461d2b9040bd9731a27ff3e55f0b3b6dbf7",
+        "minus_c_report": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read/score/L-aC-s2-cut.json",
+        "minus_c_report_sha256": "854538dace22717ac3c323259d2af75bc09706be00261ace5e7926885d034aa8",
         "minus_c_sha256": "391392f5c47af2cd6a1e091417dcc04c5340080474ebf6dad5d10ca2cfd277e5",
+        "panel_manifest": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/data/m2-fresh256/data/m2-fresh256/manifest.json",
         "panel_manifest_sha256": "7c33f3f7e19edcb4b1a7aa5e5eab3bb0056db9351067d809f62f97b4a8880964",
         "plan_sha256": "0ed1ab98ab50bbad6c484c4e7e4ffeeb8bb7ad17d162251826302efe86d75715",
+        "tokenizer": "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/tokenizer/pod-setup/rung0-complete-path/20261013-05c84bece/tokenizer-d36d3e87.json",
         "tokenizer_sha256": "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89"
       },
       "totals": {
+        "asked_rank_changed": 168,
         "asked_token_in_prompt": 256,
         "asked_token_inside_carry": 159,
         "carried_asked_first_line": 2,
@@ -296,12 +429,14 @@
         "carried_beats_other": 128,
         "carried_other_first_line": 3,
         "carried_other_top1": 0,
-        "changed_by_cut": 208,
+        "chosen_or_rank_changed": 208,
+        "chosen_token_changed": 5,
         "minus_c_asked_first_line": 2,
         "minus_c_asked_top1": 0,
         "minus_c_beats_other": 128,
         "minus_c_other_first_line": 3,
         "minus_c_other_top1": 0,
+        "other_rank_changed": 175,
         "other_token_in_prompt": 256,
         "other_token_inside_carry": 159,
         "query_changed": 215,
@@ -313,28 +448,53 @@
   "repeats": {
     "seed_1": {
       "byte_identical": true,
-      "receipt_sha256": "01e57efebe73046f72a63ff5765fbe366def59d0d98438e1a89b96ca678511e0",
-      "repeat_sha256": "01e57efebe73046f72a63ff5765fbe366def59d0d98438e1a89b96ca678511e0"
+      "receipt_sha256": "1c74107bd5a07b26757cb69d7e06fd70120cd610be7fdea9d0c841198d14157a",
+      "repeat_sha256": "1c74107bd5a07b26757cb69d7e06fd70120cd610be7fdea9d0c841198d14157a"
     },
     "seed_2": {
       "byte_identical": true,
-      "receipt_sha256": "b0e79f3f1dbc769eca7a2b47a3ea84f3a2ae10670ad7822dab4603492c0bfaa5",
-      "repeat_sha256": "b0e79f3f1dbc769eca7a2b47a3ea84f3a2ae10670ad7822dab4603492c0bfaa5"
+      "receipt_sha256": "f122af21c689c152f3ddf8d7bad496bba64581c8497bd4b0d2f5825d826787cf",
+      "repeat_sha256": "f122af21c689c152f3ddf8d7bad496bba64581c8497bd4b0d2f5825d826787cf"
     },
     "train_census": {
       "byte_identical": true,
-      "receipt_sha256": "215155331284b58abf260cd5a6aacd4991ebafd6fa0d07161407e1daadfd8423",
-      "repeat_sha256": "215155331284b58abf260cd5a6aacd4991ebafd6fa0d07161407e1daadfd8423"
+      "receipt_sha256": "124a4c30f0b41e9a813d5d5cd585f73c3c2957309de5039f6504ff69a90acc74",
+      "repeat_sha256": "124a4c30f0b41e9a813d5d5cd585f73c3c2957309de5039f6504ff69a90acc74"
     }
   },
   "schema": "uor-r4.real-carry-geometry-receipt/1",
   "software": {
-    "carry_geometry_source_sha256": "b0d173ea7b3a8619308f1c5a4f15099046a43d7af7cee1e97fac8497b78c6fe6",
+    "cargo_lock_sha256": "055a1d68855c062c57546d4c47704574791d068d6eca6971e2e8dc903158f6c2",
+    "carry_geometry_source_sha256": "5de43df1d9458f2d94b239ee32215ebeaa0fbfc6f2463d43ce1f690484596db2",
+    "executable_sha256": "6f21f41e63c0aebeafc0ac367a49d3fa9668caf1d05180392592985f8d6afb50",
     "package": "one-model-end-to-end-panel",
     "version": "0.1.0"
   },
   "train_census": {
     "carry_rows": 32,
+    "command": {
+      "argv": [
+        "docs/labs/one-model-end-to-end/instrument/target/release/real-carry-geometry",
+        "train-census",
+        "--tokens",
+        "local/deepseek/carry-geometry/train/results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/tokens.u16",
+        "--mask",
+        "local/deepseek/carry-geometry/train/results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/response_mask.u8",
+        "--manifest",
+        "local/deepseek/carry-geometry/train/results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/manifest.json",
+        "--manifest-sha256",
+        "442ead2c92ae9a2e6b0b500ebbc12eb6e472f91c96465b6c1347fa80ac232ae9",
+        "--tokenizer",
+        "/home/callard/projects/codex-playground/uor-r4/local/deepseek/real-artifact-audit/tokenizer/pod-setup/rung0-complete-path/20261013-05c84bece/tokenizer-d36d3e87.json",
+        "--tokenizer-sha256",
+        "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89",
+        "--carry-rows",
+        "32",
+        "--out",
+        "<out>"
+      ],
+      "cwd": "/home/callard/projects/codex-playground/uor-r4/.worktrees/deepseek-real-carry-geometry-diagnosis"
+    },
     "components": {
       "d3-oasst2": {
         "first_scored_within_192": 4465,
@@ -354,15 +514,27 @@
       }
     },
     "controls": {
-      "next_question_answer_pairs_in_same_document": {
+      "previous_question_answer_pairs_in_same_document": {
+        "excluded_no_prior_question_or_nonprior": 0,
         "excluded_single_question_documents": 165289,
-        "rows": 11010,
-        "within_carry": 6544
+        "interpretation": "only a strictly earlier question may be paired with a scored reply; future questions are never counted",
+        "rows": 6244,
+        "within_carry": 930
       },
-      "question_shifted_32_rows_earlier": {
+      "question_end_offset_32_earlier": {
+        "clamped_to_document_start": 0,
+        "interpretation": "moves the same question earlier by the carry reach; this is an offset perturbation, not the primary result",
         "rows": 176299,
         "within_carry": 0
       }
+    },
+    "exclusions": {
+      "assistant_marker_not_terminal": 0,
+      "assistant_reply_runs": 444761,
+      "empty_reply": 0,
+      "missing_assistant_marker": 12945,
+      "missing_user_marker": 0,
+      "user_turn_not_a_question": 255517
     },
     "first_answer_target": {
       "histogram": {
@@ -700,6 +872,7 @@
     },
     "inputs": {
       "documents": 378016,
+      "documents_scanned": 378016,
       "manifest": "local/deepseek/carry-geometry/train/results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/manifest.json",
       "manifest_sha256": "442ead2c92ae9a2e6b0b500ebbc12eb6e472f91c96465b6c1347fa80ac232ae9",
       "mask": "local/deepseek/carry-geometry/train/results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/response_mask.u8",

@@ -35,7 +35,8 @@ Added `real-carry-geometry` to the one-model CPU instrument:
 - `train-census` validates the UORT token file, mask and manifest hashes,
   identifies masked assistant replies, counts question-to-first-scored-row and
   question-to-first-answer-token distances, reports source/component coverage,
-  and runs shifted and same-document shuffle controls.
+  counts every excluded reply or user turn, and runs an offset perturbation plus
+  a prior-question-only same-document control.
 - `first-reply` renders the official panel prompts, replays carried and exact
   `−C` artifacts through `CpuFbsForward`, verifies the cut byte for byte, checks
   both existing/regenerated official first-rank reports case by case, and writes
@@ -43,9 +44,9 @@ Added `real-carry-geometry` to the one-model CPU instrument:
 - `receipt` verifies byte-identical reruns and emits a small committed summary.
   Full 14 MB traces stay in the project store.
 
-At the code head the size is **1,867 code/build lines** including tests, **271
-task/document/notebook lines**, the generated **807-line receipt**, and a
-**7-line claim record**: 2,952 lines in all. The roadmap item has no numeric line
+At the code head the size is **2,126 code/build lines** including tests, **285
+task/document/notebook lines**, the generated **980-line receipt**, and a
+**7-line claim record**: 3,398 lines in all. The roadmap item has no numeric line
 estimate, so no ratio is available. No model weight, serving arithmetic, panel
 bar, run or lease changed.
 
@@ -55,10 +56,12 @@ bar, run or lease changed.
 
 Inputs were the published `0273173e…` tokens, `da506e85…` mask and `442ead2c…`
 manifest. The full run and a byte-identical repeat both hash to
-`215155331284b58abf260cd5a6aacd4991ebafd6fa0d07161407e1daadfd8423`.
+`124a4c30f0b41e9a813d5d5cd585f73c3c2957309de5039f6504ff69a90acc74`.
 
 - **176,299 questions** were identified across the manifest's **378,016
-  documents**.
+  documents**. Of 444,761 masked assistant-reply runs, 255,517 followed a
+  non-question user turn and 12,945 had no terminal Assistant marker; the
+  counts reconcile exactly. No user marker or empty reply was excluded.
 - **176,299 / 176,299 question ends are exactly 5 rows before the first scored
   reply input.** The first masked answer target is exactly 6 rows after the
   question end. Every observed value is 5 or 6, respectively.
@@ -68,8 +71,10 @@ manifest. The full run and a byte-identical repeat both hash to
 - Coverage is 171,834 `mw-balp` questions and 4,465 OASST2 questions. Each
   component has 100% first-reply coverage at 32 rows.
 - The control that shifts a question 32 rows earlier leaves **0 / 176,299**
-  inside the carry. Same-document next-question pairing leaves 6,544 / 11,010
-  inside, while 165,289 documents have only one question and are excluded.
+  inside the carry. The non-tautological control pairs an answer only with a
+  strictly **earlier** question in the same document: 930 / 6,244 are inside,
+  while future questions are never counted. Single-question documents account
+  for 165,289 exclusions.
 - The nonsemantic repeated-span control is retained in the receipt with decoded
   examples. It supports no value-reach claim.
 - The most common **first assistant reply tokens** are `" It"` 39,860,
@@ -84,32 +89,36 @@ reproduce the official 256 first-token ranks, and byte-identical repeats match.
 
 | seed | receipt SHA-256 | query changed | type-head rows changed | asked top-1 carried / `−C` | asked-rank p50 carried / `−C` | first-line answered carried / `−C` |
 |---|---:|---:|---:|---:|---:|---:|
-| 1 | `01e57efe…` | 168 / 256 | 256 / 256 | 0 / 0 | 1,423 / 1,454 | 0 / 0 |
-| 2 | `b0e79f3f…` | 215 / 256 | 256 / 256 | 0 / 0 | 2,447 / 2,450 | 2 / 2 |
+| 1 | `1c74107b…` | 168 / 256 | 256 / 256 | 0 / 0 | 1,423 / 1,454 | 0 / 0 |
+| 2 | `f122af21…` | 215 / 256 | 256 / 256 | 0 / 0 | 2,447 / 2,450 | 2 / 2 |
 
-At seed 1, carry changes 156 complete first-position decisions; asked rank
-improves on 60 rows, ties on 120 and worsens on 76. At seed 2 it changes 208
-rows; asked rank improves on 95, ties on 88 and worsens on 73. The shift moves
-the final Q12 query and the readout's selected positions, but not the asked
-token to top-1.
+At seed 1, carry changes 156 chosen-token-or-rank outcomes but **0 chosen
+tokens**; asked rank changes on 136 rows, improving on 60, tying on 120 and
+worsening on 76. At seed 2 it changes 208 chosen-token-or-rank outcomes,
+including **5 chosen tokens**; asked rank changes on 168 rows, improving on 95,
+tying on 88 and worsening on 73. The shift moves the final Q12 query and the
+readout's selected positions, but not the asked first token to top-1.
 
-The asked value's spelling is present in every panel prompt, but only 159 / 256
-prompts have its last occurrence inside the final 32 rows. The trace records the
-per-position carry gain and term magnitude; the exact `−C` remains the negative
-control. Neither seed's first-line count changes under that control.
+The asked reference's **first token** is present in every panel prompt, but only
+159 / 256 prompts have its last occurrence inside the final 32 rows. This is not
+a count of the whole answer value. The trace records the per-position carry gain
+and term magnitude; the exact `−C` remains the negative control. Neither seed's
+first-line count changes under that control.
 
-**Diagnosis:** the first-reply failure is not a carry-reach failure. The model
-is trained to put a pronoun/template first (`"Your friend…"`, `"It…"`,
-`"That's…"`) while this panel grades a value-first reply. Moving the question
-closer cannot by itself turn the first trained target into the panel target.
-This is a target/layout mismatch supported by both the exact TRAIN first-token
-census and the official first-position trace; it is not evidence that geometry,
-the ask heads or the carry mechanism cannot work.
+**Bounded diagnosis:** the carry changes geometry at the first position, but the
+asked reference's first token remains top-1 on 0 / 256 rows. TRAIN instead
+usually asks the first reply token to be a pronoun or template opening
+(`"Your friend…"`, `"It…"`, `"That's…"`). That supports a target/layout
+explanation for the first-token failure. It does not rule out a semantic
+answer-value reach limit, because that row is unmeasured, and it is not evidence
+that geometry, the ask heads or the carry mechanism cannot work.
 
 ## Checks run at the head
 
-- `cargo test --offline --features cpu-parity --lib`: **23 passed**, including
-  four new distance/inference/overwrite/input-render tests.
+- `cargo test --offline --features cpu-parity --lib`: **25 passed, 1 ignored**,
+  including new tests for controls, repeat mismatch, first-line boundaries and
+  five earlier instrument tests. The ignored pinned-input render test was then
+  run separately: **1 passed** across all 256 official prompts.
 - Strict changed-target Clippy:
   `cargo clippy --offline --features cpu-parity --bin real-carry-geometry --no-deps -- -D warnings`:
   passed.
@@ -121,6 +130,8 @@ the ask heads or the carry mechanism cannot work.
   parity; the rank reports were regenerated from the published artifacts.
 - Exact `−C` reproduction, panel hashes and writer-table equality: passed on
   both seeds.
+- Official first-line totals were pinned at 0 / 0 for seed 1 and 2 / 2 for seed 2
+  and matched the computed first lines.
 - Store upload and read-back: **6 / 6 files** hash-identical.
 - No GPU, pod, lease, training run or Claude artifact was touched.
 
@@ -144,14 +155,13 @@ artifacts, `served-reply-panel`, and the project store.
 
 ## Plain summary
 
-The trained memory is close enough to the question: every identified TRAIN
-question ends only five rows before the row that predicts its first reply, so a
-32-row carry can reach the question in training. On the official test prompts,
-the carry changes many later choices and positions, but the first token is never
-the asked value on either seed. The two seed-2 lines that eventually name the
-right value do so later in the line and still do so when the carry is removed.
-The stronger mismatch is in the training data: its replies usually begin with a
-pronoun or sentence template, while the panel expects the value first. This
-rules out carry reach as the explanation for this failure. It does not prove
-that the carry cannot work, and it does not change Claude's outcome or the
-serving path.
+Every identified TRAIN question ends only five rows before the row that predicts
+its first reply, so a 32-row carry can reach the question's end in training. The
+semantic answer-value row remains unmeasured. On the official test prompts, the
+carry changes many later choices and positions, but the asked reference's first
+token is never top-1 on either seed. TRAIN usually makes a pronoun or sentence
+template the first reply target, so the first-token result is strongly
+consistent with a target/layout mismatch. The two seed-2 lines that eventually
+name the right value do so later in the line and still do so when the carry is
+removed. This does not prove that the carry cannot work, and it does not change
+Claude's outcome or the serving path.

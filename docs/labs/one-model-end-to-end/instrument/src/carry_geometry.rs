@@ -30,7 +30,7 @@ const UORT_HEADER: usize = 64;
 const CONTEXT: usize = 192;
 const WINDOW_ROWS: [usize; 14] = [0, 1, 2, 4, 8, 16, 24, 32, 64, 128, 191, 192, 512, 1_024];
 const RECEIPT_SCHEMA: &str = "uor-r4.real-carry-geometry-receipt/1";
-const USAGE: &str = "usage:\n  real-carry-geometry train-census --tokens FILE --mask FILE --manifest FILE --tokenizer FILE --carry-rows N [--skip-documents N --limit-documents N] --out NEW_FILE\n  real-carry-geometry first-reply --carried FILE --minus-c FILE --carried-report FILE --minus-c-report FILE --carried-rank FILE --minus-c-rank FILE --inputs FILE --labels FILE --plan FILE --panel-manifest FILE --tokenizer FILE [--carried-sha256 HEX --minus-c-sha256 HEX] [--limit N] --out NEW_FILE\n  real-carry-geometry receipt --train-census FILE [--train-census-repeat FILE] --s1 FILE [--s1-repeat FILE] --s2 FILE [--s2-repeat FILE] --out NEW_FILE";
+const USAGE: &str = "usage:\n  real-carry-geometry train-census --tokens FILE --mask FILE --manifest FILE --manifest-sha256 HEX --tokenizer FILE --tokenizer-sha256 HEX --carry-rows N [--skip-documents N --limit-documents N] --out NEW_FILE\n  real-carry-geometry first-reply --carried FILE --carried-sha256 HEX --minus-c FILE --minus-c-sha256 HEX --carried-report FILE --minus-c-report FILE --carried-rank FILE --minus-c-rank FILE --inputs FILE --labels FILE --plan FILE --panel-manifest FILE --panel-manifest-sha256 HEX --tokenizer FILE --expected-carried-first-lines N --expected-minus-c-first-lines N [--limit N] --out NEW_FILE\n  real-carry-geometry receipt --train-census FILE [--train-census-repeat FILE] --s1 FILE [--s1-repeat FILE] --s2 FILE [--s2-repeat FILE] --out NEW_FILE";
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -87,6 +87,15 @@ fn sha256_file(path: &str) -> Result<String> {
     Ok(hex::encode(Sha256::digest(bytes)))
 }
 
+fn executable_sha256() -> Result<String> {
+    let executable =
+        std::env::current_exe().map_err(|error| format!("current executable: {error}"))?;
+    let path = executable
+        .to_str()
+        .ok_or("current executable path is not UTF-8")?;
+    sha256_file(path)
+}
+
 fn sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -107,6 +116,22 @@ fn write_new(path: &Path, value: &Value) -> Result<()> {
     file.write_all(&bytes)
         .and_then(|_| file.sync_all())
         .map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn invocation() -> Result<Value> {
+    let cwd = std::env::current_dir().map_err(|error| format!("current directory: {error}"))?;
+    let mut argv = std::env::args().collect::<Vec<_>>();
+    let mut at = 0usize;
+    while at + 1 < argv.len() {
+        if argv[at] == "--out" {
+            argv[at + 1] = "<out>".to_owned();
+        }
+        at += 1;
+    }
+    Ok(json!({
+        "argv": argv,
+        "cwd": cwd,
+    }))
 }
 
 #[derive(Clone, Debug)]
@@ -269,6 +294,16 @@ struct QuestionPair {
     value: Option<ValuePair>,
 }
 
+#[derive(Clone, Debug, Default, Serialize)]
+struct QuestionExclusions {
+    assistant_reply_runs: usize,
+    missing_assistant_marker: usize,
+    assistant_marker_not_terminal: usize,
+    missing_user_marker: usize,
+    user_turn_not_a_question: usize,
+    empty_reply: usize,
+}
+
 #[derive(Clone, Debug)]
 struct ValuePair {
     row: usize,
@@ -418,6 +453,7 @@ fn question_pairs(
     document: usize,
     document_start: usize,
     document_end: usize,
+    exclusions: &mut QuestionExclusions,
 ) -> Result<Vec<QuestionPair>> {
     let mut pairs = Vec::new();
     let mut at = document_start;
@@ -431,16 +467,20 @@ fn question_pairs(
         while at < document_end && mask[at] == 1 {
             at += 1;
         }
+        exclusions.assistant_reply_runs += 1;
         let run = &tokens[unmasked_start..answer_target];
         let Some(assistant_at) = find_last(run, &markers.assistant) else {
+            exclusions.missing_assistant_marker += 1;
             unmasked_start = at;
             continue;
         };
         if assistant_at + markers.assistant.len() != run.len() {
+            exclusions.assistant_marker_not_terminal += 1;
             unmasked_start = at;
             continue;
         }
         let Some(user_at) = find_last(&run[..assistant_at], &markers.user) else {
+            exclusions.missing_user_marker += 1;
             unmasked_start = at;
             continue;
         };
@@ -466,6 +506,7 @@ fn question_pairs(
         }
         let question_text = decode(tokenizer, &tokens[question_start..question_end], "question")?;
         if !question_text.trim().ends_with('?') {
+            exclusions.user_turn_not_a_question += 1;
             unmasked_start = at;
             continue;
         }
@@ -477,6 +518,7 @@ fn question_pairs(
             reply_end += 1;
         }
         if reply_end == answer_target {
+            exclusions.empty_reply += 1;
             unmasked_start = at;
             continue;
         }
@@ -527,11 +569,71 @@ struct ComponentStats {
     heuristic_span_within_192: usize,
 }
 
+fn census_controls(pairs: &[QuestionPair], carry_rows: usize) -> Value {
+    let mut shifted_rows = 0usize;
+    let mut shifted_within = 0usize;
+    let mut shifted_document_start = 0usize;
+    for pair in pairs {
+        match pair.question_end.checked_sub(carry_rows) {
+            Some(shifted_question) => {
+                shifted_rows += 1;
+                shifted_within +=
+                    usize::from(pair.scored_input.saturating_sub(shifted_question) <= carry_rows);
+            }
+            None => shifted_document_start += 1,
+        }
+    }
+
+    let mut documents = BTreeMap::<usize, Vec<&QuestionPair>>::new();
+    for pair in pairs {
+        documents.entry(pair.document).or_default().push(pair);
+    }
+    let mut previous_rows = 0usize;
+    let mut previous_within = 0usize;
+    let mut nonprior_pairs = 0usize;
+    for document in documents.values_mut() {
+        document.sort_by_key(|pair| pair.question_start);
+        for current in document.iter().skip(1) {
+            let previous = document
+                .iter()
+                .rev()
+                .find(|candidate| candidate.question_start < current.question_start);
+            match previous {
+                Some(previous) if previous.question_end < current.scored_input => {
+                    previous_rows += 1;
+                    previous_within += usize::from(
+                        current.scored_input.saturating_sub(previous.question_end) <= carry_rows,
+                    );
+                }
+                _ => nonprior_pairs += 1,
+            }
+        }
+    }
+
+    json!({
+        "question_end_offset_32_earlier": {
+            "rows": shifted_rows,
+            "within_carry": shifted_within,
+            "clamped_to_document_start": shifted_document_start,
+            "interpretation": "moves the same question earlier by the carry reach; this is an offset perturbation, not the primary result",
+        },
+        "previous_question_answer_pairs_in_same_document": {
+            "rows": previous_rows,
+            "within_carry": previous_within,
+            "excluded_no_prior_question_or_nonprior": nonprior_pairs,
+            "excluded_single_question_documents": documents.values().filter(|rows| rows.len() < 2).count(),
+            "interpretation": "only a strictly earlier question may be paired with a scored reply; future questions are never counted",
+        },
+    })
+}
+
 fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
     let tokens_path = flag(flags, "tokens")?;
     let mask_path = flag(flags, "mask")?;
     let manifest_path = flag(flags, "manifest")?;
     let tokenizer_path = flag(flags, "tokenizer")?;
+    let expected_manifest = flag(flags, "manifest-sha256")?;
+    let expected_tokenizer = flag(flags, "tokenizer-sha256")?;
     let carry_rows = optional_usize(flags, "carry-rows")?.ok_or("--carry-rows is required")?;
     if carry_rows == 0 {
         return Err("--carry-rows must be positive".to_owned());
@@ -545,6 +647,12 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
             "{} tokens but {} mask bytes",
             train.tokens.len(),
             mask.len()
+        ));
+    }
+    let manifest_sha256 = sha256_file(manifest_path)?;
+    if expected_manifest != manifest_sha256 {
+        return Err(format!(
+            "TRAIN manifest hash {expected_manifest} differs from {manifest_sha256}"
         ));
     }
     let manifest = parse_json(manifest_path, "TRAIN manifest")?;
@@ -570,6 +678,11 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
         ));
     }
     let (tokenizer, tokenizer_sha256) = tokenizer(tokenizer_path)?;
+    if expected_tokenizer != tokenizer_sha256 {
+        return Err(format!(
+            "TRAIN tokenizer hash {expected_tokenizer} differs from {tokenizer_sha256}"
+        ));
+    }
     if train.vocabulary > 65_536 {
         return Err("TRAIN UORT vocabulary exceeds u16".to_owned());
     }
@@ -594,6 +707,8 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
         .map(|(at, _)| at)
         .collect::<Vec<_>>();
     let mut pairs = Vec::new();
+    let mut exclusions = QuestionExclusions::default();
+    let mut documents_scanned = 0usize;
     let document_skip = optional_usize(flags, "skip-documents")?.unwrap_or(0);
     let document_limit = optional_usize(flags, "limit-documents")?.unwrap_or(starts.len());
     for (document, &start) in starts
@@ -602,6 +717,7 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
         .skip(document_skip)
         .take(document_limit)
     {
+        documents_scanned += 1;
         let end = starts
             .get(document + 1)
             .copied()
@@ -615,6 +731,7 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
             document,
             start,
             end,
+            &mut exclusions,
         )?);
     }
 
@@ -678,45 +795,22 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
             .or_insert(0) += 1;
     }
 
-    let shifted_control = first_scored
-        .iter()
-        .filter(|&&distance| distance.saturating_add(carry_rows) <= carry_rows)
-        .count();
-    let mut shuffled_rows = 0usize;
-    let mut shuffled_within = 0usize;
-    let mut documents = BTreeMap::<usize, Vec<&QuestionPair>>::new();
-    for pair in &pairs {
-        documents.entry(pair.document).or_default().push(pair);
-    }
-    for document in documents.values_mut() {
-        if document.len() < 2 {
-            continue;
-        }
-        document.sort_by_key(|pair| pair.question_start);
-        for index in 0..document.len() {
-            let shuffled_question = document[(index + 1) % document.len()].question_end;
-            let distance = document[index]
-                .scored_input
-                .saturating_sub(shuffled_question);
-            shuffled_rows += 1;
-            shuffled_within += usize::from(distance <= carry_rows);
-        }
-    }
-
     let report = json!({
         "schema": CENSUS_SCHEMA,
         "verdict": "instrument-distance-census",
         "claim": "none; TRAIN geometry only",
+        "command": invocation()?,
         "inputs": {
             "tokens": tokens_path,
             "tokens_sha256": train.source_sha256,
             "mask": mask_path,
             "mask_sha256": mask_sha256,
             "manifest": manifest_path,
-            "manifest_sha256": sha256_file(manifest_path)?,
+            "manifest_sha256": manifest_sha256,
             "tokenizer": tokenizer_path,
             "tokenizer_sha256": tokenizer_sha256,
             "documents": starts.len(),
+            "documents_scanned": documents_scanned,
             "tokens": train.tokens.len(),
             "vocabulary": train.vocabulary,
         },
@@ -730,6 +824,7 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
         },
         "carry_rows": carry_rows,
         "questions": pairs.len(),
+        "exclusions": exclusions,
         "first_scored_input": distance_stats(first_scored.iter().copied()),
         "first_answer_target": distance_stats(first_target.iter().copied()),
         "question_start_to_scored_input": distance_stats(start_to_scored.iter().copied()),
@@ -760,17 +855,7 @@ fn train_census(flags: &BTreeMap<String, String>) -> Result<()> {
                 "question_end_to_value_row": value.row.saturating_sub(pair.question_end),
             }))).take(5).collect::<Vec<_>>(),
         },
-        "controls": {
-            "question_shifted_32_rows_earlier": {
-                "rows": first_scored.len(),
-                "within_carry": shifted_control,
-            },
-            "next_question_answer_pairs_in_same_document": {
-                "rows": shuffled_rows,
-                "within_carry": shuffled_within,
-                "excluded_single_question_documents": documents.values().filter(|rows| rows.len() < 2).count(),
-            },
-        },
+        "controls": census_controls(&pairs, carry_rows),
     });
     write_new(&out, &report)
 }
@@ -1104,10 +1189,20 @@ fn reply_map<'a>(
 
 fn first_line_matches(text: &str, answers: &FrozenAnswers) -> bool {
     let line = text.lines().next().unwrap_or(text);
-    answers
-        .accepted
-        .iter()
-        .any(|answer| line.contains(answer.trim_end_matches(['.', '!', '?'])))
+    answers.accepted.iter().any(|answer| {
+        let needle = answer.trim_end_matches(['.', '!', '?']);
+        !needle.is_empty()
+            && line.match_indices(needle).any(|(start, _)| {
+                let before = line[..start].chars().next_back();
+                let end = start + needle.len();
+                let after = line[end..].chars().next();
+                let boundary = |character: Option<char>| {
+                    character
+                        .is_none_or(|character| !character.is_alphanumeric() && character != '_')
+                };
+                boundary(before) && boundary(after)
+            })
+    })
 }
 
 fn first_ranks(
@@ -1177,7 +1272,10 @@ struct CaseReading {
     minus_c_other_first_line: bool,
     carried: PromptProbe,
     minus_c: PromptProbe,
-    changed_by_cut: bool,
+    chosen_token_changed: bool,
+    asked_rank_changed: bool,
+    other_rank_changed: bool,
+    chosen_or_rank_changed: bool,
     query_changed_coordinates: usize,
     query_l1: u128,
     type_head_kept_changed: Vec<usize>,
@@ -1263,27 +1361,30 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
     let carried_rank_path = flag(flags, "carried-rank")?;
     let minus_c_rank_path = flag(flags, "minus-c-rank")?;
     let panel_manifest_path = flag(flags, "panel-manifest")?;
+    let expected_panel_manifest = flag(flags, "panel-manifest-sha256")?;
     let tokenizer_path = flag(flags, "tokenizer")?;
     let out = PathBuf::from(flag(flags, "out")?);
     let limit = optional_usize(flags, "limit")?;
+    let expected_carried_first_lines = optional_usize(flags, "expected-carried-first-lines")?
+        .ok_or("--expected-carried-first-lines is required")?;
+    let expected_minus_c_first_lines = optional_usize(flags, "expected-minus-c-first-lines")?
+        .ok_or("--expected-minus-c-first-lines is required")?;
 
     let carried = fs::read(carried_path).map_err(|error| format!("{carried_path}: {error}"))?;
     let minus_c = fs::read(minus_c_path).map_err(|error| format!("{minus_c_path}: {error}"))?;
     let carried_sha256 = sha256(&carried);
     let minus_c_sha256 = sha256(&minus_c);
-    if let Some(expected) = flags.get("carried-sha256") {
-        if expected != &carried_sha256 {
-            return Err(format!(
-                "carried artifact hash {expected} differs from {carried_sha256}"
-            ));
-        }
+    let expected_carried = flag(flags, "carried-sha256")?;
+    if expected_carried != carried_sha256 {
+        return Err(format!(
+            "carried artifact hash {expected_carried} differs from {carried_sha256}"
+        ));
     }
-    if let Some(expected) = flags.get("minus-c-sha256") {
-        if expected != &minus_c_sha256 {
-            return Err(format!(
-                "minus-C artifact hash {expected} differs from {minus_c_sha256}"
-            ));
-        }
+    let expected_minus_c = flag(flags, "minus-c-sha256")?;
+    if expected_minus_c != minus_c_sha256 {
+        return Err(format!(
+            "minus-C artifact hash {expected_minus_c} differs from {minus_c_sha256}"
+        ));
     }
     let reproduced =
         drop_hamming_carry_uorlut01(&carried).map_err(|error| format!("carry cut: {error}"))?;
@@ -1326,6 +1427,12 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
     let ask = readout.ask.as_ref().ok_or("readout has no ask table")?;
     let (reach, gains) = ask.carry.as_ref().ok_or("readout has no question carry")?;
 
+    let panel_manifest_sha256 = sha256_file(panel_manifest_path)?;
+    if expected_panel_manifest != panel_manifest_sha256 {
+        return Err(format!(
+            "panel manifest hash {expected_panel_manifest} differs from {panel_manifest_sha256}"
+        ));
+    }
     let manifest = parse_json(panel_manifest_path, "panel manifest")?;
     if manifest["schema"].as_str() != Some(PANEL_SCHEMA) {
         return Err(format!("panel manifest schema is not {PANEL_SCHEMA}"));
@@ -1513,7 +1620,10 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
             carried_other_first_line,
             minus_c_asked_first_line,
             minus_c_other_first_line,
-            changed_by_cut: carried_probe.chosen_token != minus_probe.chosen_token
+            chosen_token_changed: carried_probe.chosen_token != minus_probe.chosen_token,
+            asked_rank_changed: carried_probe.asked.rank != minus_probe.asked.rank,
+            other_rank_changed: carried_probe.other.rank != minus_probe.other.rank,
+            chosen_or_rank_changed: carried_probe.chosen_token != minus_probe.chosen_token
                 || carried_probe.asked.rank != minus_probe.asked.rank
                 || carried_probe.other.rank != minus_probe.other.rank,
             query_changed_coordinates,
@@ -1539,7 +1649,20 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
     let success = |case: &CaseReading| case.carried_asked_first_line;
     let failures = cases.iter().filter(|case| !success(case)).count();
     let successes = cases.len() - failures;
-    let changed = cases.iter().filter(|case| case.changed_by_cut).count();
+    let minus_c_asked_first_line = cases
+        .iter()
+        .filter(|case| case.minus_c_asked_first_line)
+        .count();
+    if successes != expected_carried_first_lines {
+        return Err(format!(
+            "carried first-line count {successes} differs from expected {expected_carried_first_lines}"
+        ));
+    }
+    if minus_c_asked_first_line != expected_minus_c_first_lines {
+        return Err(format!(
+            "minus-C first-line count {minus_c_asked_first_line} differs from expected {expected_minus_c_first_lines}"
+        ));
+    }
     let prompt_contains_asked = cases
         .iter()
         .filter(|case| case.asked_membership.last_occurrence.is_some())
@@ -1593,15 +1716,26 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
         "schema": TRACE_SCHEMA,
         "verdict": "instrument-first-reply-trace",
         "claim": "none; explains this configuration only and moves no bar",
+        "command": invocation()?,
         "inputs": {
             "carried": carried_path,
             "carried_sha256": carried_sha256,
+            "carried_report": carried_report_path,
+            "carried_report_sha256": sha256_file(carried_report_path)?,
             "minus_c": minus_c_path,
             "minus_c_sha256": minus_c_sha256,
+            "minus_c_report": minus_c_report_path,
+            "minus_c_report_sha256": sha256_file(minus_c_report_path)?,
+            "carried_rank": carried_rank_path,
+            "carried_rank_sha256": sha256_file(carried_rank_path)?,
+            "minus_c_rank": minus_c_rank_path,
+            "minus_c_rank_sha256": sha256_file(minus_c_rank_path)?,
             "inputs_sha256": sha256_file(inputs_path)?,
             "labels_sha256": sha256_file(labels_path)?,
             "plan_sha256": sha256_file(plan_path)?,
-            "panel_manifest_sha256": sha256_file(panel_manifest_path)?,
+            "panel_manifest": panel_manifest_path,
+            "panel_manifest_sha256": panel_manifest_sha256,
+            "tokenizer": tokenizer_path,
             "tokenizer_sha256": tokenizer_sha256,
         },
         "artifact": {
@@ -1617,6 +1751,9 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
             "carried_writer_table_equals_minus_c": true,
             "panel_hashes_verified": true,
             "official_first_rank_parity": cases.len(),
+            "expected_carried_first_lines": expected_carried_first_lines,
+            "expected_minus_c_first_lines": expected_minus_c_first_lines,
+            "official_first_line_counts_match": true,
             "rows": cases.len(),
         },
         "totals": {
@@ -1625,12 +1762,15 @@ fn first_reply(flags: &BTreeMap<String, String>) -> Result<()> {
             "carried_asked_first_line": successes,
             "carried_asked_not_first_line": failures,
             "carried_other_first_line": cases.iter().filter(|case| case.carried_other_first_line).count(),
-            "minus_c_asked_first_line": cases.iter().filter(|case| case.minus_c_asked_first_line).count(),
+            "minus_c_asked_first_line": minus_c_asked_first_line,
             "minus_c_other_first_line": cases.iter().filter(|case| case.minus_c_other_first_line).count(),
             "minus_c_asked_top1": cases.iter().filter(|case| case.minus_c.asked_top1).count(),
             "carried_other_top1": cases.iter().filter(|case| case.carried.other_top1).count(),
             "minus_c_other_top1": cases.iter().filter(|case| case.minus_c.other_top1).count(),
-            "changed_by_cut": changed,
+            "chosen_token_changed": cases.iter().filter(|case| case.chosen_token_changed).count(),
+            "asked_rank_changed": cases.iter().filter(|case| case.asked_rank_changed).count(),
+            "other_rank_changed": cases.iter().filter(|case| case.other_rank_changed).count(),
+            "chosen_or_rank_changed": cases.iter().filter(|case| case.chosen_or_rank_changed).count(),
             "query_changed": cases.iter().filter(|case| case.query_changed_coordinates > 0).count(),
             "type_head_kept_changed": cases.iter().filter(|case| !case.type_head_kept_changed.is_empty()).count(),
             "type_heads_changed": type_heads_changed,
@@ -1714,6 +1854,7 @@ fn compact_trace(value: &Value) -> Result<Value> {
         })
         .collect::<Vec<_>>();
     Ok(json!({
+        "command": value["command"],
         "inputs": value["inputs"],
         "artifact": value["artifact"],
         "checks": value["checks"],
@@ -1736,10 +1877,12 @@ fn compact_census(value: &Value) -> Result<Value> {
     let mut top_tokens = top_tokens;
     top_tokens.sort_by_key(|(token, count)| (std::cmp::Reverse(*count), token.clone()));
     Ok(json!({
+        "command": value["command"],
         "inputs": value["inputs"],
         "method": value["method"],
         "carry_rows": value["carry_rows"],
         "questions": value["questions"],
+        "exclusions": value["exclusions"],
         "first_scored_input": value["first_scored_input"],
         "first_answer_target": value["first_answer_target"],
         "question_start_to_scored_input": value["question_start_to_scored_input"],
@@ -1765,10 +1908,13 @@ fn receipt(flags: &BTreeMap<String, String>) -> Result<()> {
         "schema": RECEIPT_SCHEMA,
         "verdict": "instrument-diagnosis",
         "claim": "none; explains the registered configuration only and moves no bar",
+        "command": invocation()?,
         "software": {
             "package": env!("CARGO_PKG_NAME"),
             "version": env!("CARGO_PKG_VERSION"),
             "carry_geometry_source_sha256": sha256(include_bytes!("carry_geometry.rs")),
+            "cargo_lock_sha256": sha256(include_bytes!("../Cargo.lock")),
+            "executable_sha256": executable_sha256()?,
         },
         "repeats": {
             "train_census": repeat_identity(census_path, flags.get("train-census-repeat"), "TRAIN census")?,
@@ -1787,6 +1933,28 @@ fn receipt(flags: &BTreeMap<String, String>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn question_pair(
+        document: usize,
+        question_start: usize,
+        question_end: usize,
+        scored_input: usize,
+    ) -> QuestionPair {
+        QuestionPair {
+            document,
+            source: "test".to_owned(),
+            component: "test".to_owned(),
+            question_text: "question?".to_owned(),
+            reply_text: "answer".to_owned(),
+            question_start,
+            question_end,
+            answer_target: scored_input + 1,
+            scored_input,
+            first_answer_token: 2,
+            first_answer_piece: " answer".to_owned(),
+            value: None,
+        }
+    }
 
     #[test]
     fn distance_stats_are_inclusive_at_the_carry_boundary() {
@@ -1849,5 +2017,96 @@ mod tests {
             " The job is unknown.\nbasalt loggia.",
             &answers
         ));
+        let number = FrozenAnswers {
+            accepted: vec!["71.".to_owned()],
+            intent: "current".to_owned(),
+        };
+        assert!(first_line_matches(" It is 71.", &number));
+        assert!(!first_line_matches(" It is 710.", &number));
+    }
+
+    #[test]
+    fn controls_pair_only_prior_questions_and_never_treat_future_rows_as_reached() {
+        let pairs = [
+            question_pair(0, 5, 10, 20),
+            question_pair(0, 30, 35, 40),
+            question_pair(1, 100, 105, 115),
+        ];
+        let controls = census_controls(&pairs, 32);
+        assert_eq!(
+            controls["previous_question_answer_pairs_in_same_document"]["rows"],
+            1
+        );
+        assert_eq!(
+            controls["previous_question_answer_pairs_in_same_document"]["within_carry"],
+            1
+        );
+        assert_eq!(
+            controls["previous_question_answer_pairs_in_same_document"]
+                ["excluded_single_question_documents"],
+            1
+        );
+        assert_eq!(controls["question_end_offset_32_earlier"]["rows"], 2);
+        assert_eq!(
+            controls["question_end_offset_32_earlier"]["clamped_to_document_start"],
+            1
+        );
+    }
+
+    #[test]
+    fn receipt_repeat_mismatch_is_refused() {
+        let root = std::env::temp_dir().join(format!(
+            "uor-r4-carry-geometry-repeat-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let first = root.join("first.json");
+        let second = root.join("second.json");
+        fs::write(&first, b"one").unwrap();
+        fs::write(&second, b"two").unwrap();
+        let error = repeat_identity(
+            first.to_str().unwrap(),
+            Some(&second.to_str().unwrap().to_owned()),
+            "test",
+        )
+        .unwrap_err();
+        assert!(error.contains("differs"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "needs the pinned tokenizer and official panel inputs"]
+    fn official_render_matches_every_report_prompt_length() {
+        let tokenizer_path =
+            std::env::var("UOR_R4_PINNED_TOKENIZER").expect("UOR_R4_PINNED_TOKENIZER");
+        let panel = std::env::var("UOR_R4_CARRY_PANEL").expect("UOR_R4_CARRY_PANEL");
+        let report_path = std::env::var("UOR_R4_CARRY_REPORT").expect("UOR_R4_CARRY_REPORT");
+        let (tokenizer, _) = tokenizer(&tokenizer_path).unwrap();
+        let protocol = DialogueProtocol::literal_roles_v2(&tokenizer).unwrap();
+        let encoder = protocol.bind(&tokenizer).unwrap();
+        let inputs: Inputs =
+            serde_json::from_slice(&fs::read(Path::new(&panel).join("inputs.json")).unwrap())
+                .unwrap();
+        let report = parse_json(&report_path, "report").unwrap();
+        let rows = report["rows"].as_array().unwrap();
+        let expected = rows
+            .iter()
+            .map(|row| {
+                (
+                    row["id"].as_str().unwrap(),
+                    row["prompt_tokens"].as_u64().unwrap() as usize,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(inputs.cases.len(), expected.len());
+        for case in &inputs.cases {
+            let prompt = render_case(&tokenizer, &encoder, case).unwrap();
+            assert_eq!(
+                prompt.len(),
+                expected[case.id.as_str()],
+                "{} prompt length",
+                case.id
+            );
+        }
     }
 }
