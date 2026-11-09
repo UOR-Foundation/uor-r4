@@ -65,38 +65,80 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
     - M8 the ask rounding;
     - M9 the carry dropped in the export;
     - M10 truncation in place of rounding.
-- **Unit gates at the head:**
-  - `uor-r4-integer --lib --features serving-wasm`: 499 passed, 0 failed, 1 ignored.
-  - `uor-r4-float-train --lib`: 336 passed, 0 failed.
-  - `cargo check` passes:
-    - `uor-r4-cpu-train --all-targets`;
-    - `uor-r4-float-train --lib` and `--bin fbs-snapshot`;
-    - `uor-r4-integer --all-targets --features serving-wasm`.
-  - No banned word in the diff.
-  - A read without `a` and `c` exports and decodes as before: the existing `lut-stack/6` round trips pass, and `fbs-snapshot` writes the same JSON when no read asks.
 
-## Run pins
+## What changed
 
-- Pod side: `job-336.sh` sha256 `912248c0badbc06ede98a127ad3c87848beab32bdc111c05d6fa6158b21eb57a`. Laptop driver `drive-336.sh` sha256 `3a1db66543dd3fe7afc292034f970ee3c0c3bd19bf15f292cd39394c7d7cdb3c`. The checkpoint's three files were hash-checked on the pod before the job started.
-- Float outputs (sha256):
-  - `snap.json` `2564b61238eb09f62890c8b3c47900f15ca7429922929eefdc5c585cd2427f2f`
-  - `d11-tie-rounded.json` `80e501ab697fb60fda9007ec14b022acf16348d89b260fd84b3846fd9528e4b7`
-  - `trace-tie-rounded.json` `20a740b95c4337e825dd230f2e448378bd83d0ec04a97f168ed23f3cdeec934a`
-  - `trace-tie.json` `551c3bf9a50844901bbcffae097f0becac0d9773d26802db251f98f9514dbe85`
-- Integer, on the laptop at the head:
-  - artifact `0f9e34317b475cea30997db5ff602bcfe65ec96411e67a27d92c635b57a363f7`
-  - trace `b598595d7eb4852f881ef8204e2a9c40564a8503c2d25727783503fd2aac5277`
-  - comparison `899c4de897889bc4ad71dd95cec402aec9e329fa034378472bd066a620a0f086`
-- The files stay in the lab's local folder, `local/claude/claude-336/pulled/`, and are not committed (no binaries or model outputs in the repo).
+- **`crates/uor-r4-float-train`:**
+  - `fbs_export.rs`: `fbs_hamming_snapshot_with_ask` exports the ask table and the carry; `fbs_hamming_snapshot` refuses an ask read by name and points to it; `round_hamming_as_exported` rounds `a` and `c` as stored.
+  - `bin/fbs-snapshot.rs`: writes the ask block under `hamming_ask` when a read asks, and the same JSON as before otherwise.
+  - `flock_read_hamming.rs`: the carry test now expects rounding to succeed (the specified behaviour changed).
+- **`crates/uor-r4-integer`:**
+  - `stack/hamming.rs`: `AskImage`; `TypeHeads::with_ask`, which builds the question; and loading of the read's ask sections.
+  - `stack/format.rs`: the record fields `asks` and `carry_rows`, their refusals, and `add_hamming_ask_uorlut01`.
+  - `fbs_snapshot.rs`: `quantize_hamming_ask` and the block's types.
+  - `bin/fbs-export.rs`: reads the block and writes the sections.
+  - `stack/mod.rs`: re-exports.
+  - `stack/tests.rs`: the tests above.
+- This REPORT, the ORDER's scope note, one notebook row in `docs/research/notebook/float-training.md`, and the item's scope gains the three files used.
+- No bar, status, scope rule or cap changed. The float cached decode step still refuses the carry (`from > 0`): float decodes a carried read uncached.
 
-## Done when (the ORDER's list)
+## Measurements
 
-1. The export writes `a` and `c`, and the integer engine serves them; each test passes and its mutation fails. **Yes, at the head**; merged and verified on `main` at delivery.
-2. Every existing integer and float-train library test passes at the head. **Yes.**
-3. The parity check is recorded: 8 fixed windows, no differing decision against the rounded float. Rounding's own effect is measured against the unrounded float. **Yes**, on the fixed windows, not B2's (above).
-4. A fresh exact-head review passes the PR. At delivery.
+- **Pod:** `vast-59878078`, 1 × RTX 5090, $0.563/h, 455 s up to down, about $0.07. Build 26 s, snapshot 1 s, each trace 16–25 s.
+- **Integer trace on the laptop:** 1.25 s for 8 windows × 192 rows.
+- **Artifact:** 6,367,488 bytes. The ask tables are 4,096 × 256 `i16` per read (2 MiB each), and the carry is 4,096 `i32`.
+- **Pins:**
+  - Pod side: `job-336.sh` sha256 `912248c0badbc06ede98a127ad3c87848beab32bdc111c05d6fa6158b21eb57a`. Laptop driver `drive-336.sh` sha256 `3a1db66543dd3fe7afc292034f970ee3c0c3bd19bf15f292cd39394c7d7cdb3c`. The checkpoint's three files were hash-checked on the pod before the job started.
+  - Float outputs (sha256):
+    - `snap.json` `2564b61238eb09f62890c8b3c47900f15ca7429922929eefdc5c585cd2427f2f`
+    - `d11-tie-rounded.json` `80e501ab697fb60fda9007ec14b022acf16348d89b260fd84b3846fd9528e4b7`
+    - `trace-tie-rounded.json` `20a740b95c4337e825dd230f2e448378bd83d0ec04a97f168ed23f3cdeec934a`
+    - `trace-tie.json` `551c3bf9a50844901bbcffae097f0becac0d9773d26802db251f98f9514dbe85`
+  - Integer, on the laptop at the code head:
+    - artifact `0f9e34317b475cea30997db5ff602bcfe65ec96411e67a27d92c635b57a363f7`
+    - trace `b598595d7eb4852f881ef8204e2a9c40564a8503c2d25727783503fd2aac5277`
+    - comparison `899c4de897889bc4ad71dd95cec402aec9e329fa034378472bd066a620a0f086`
+  - The files stay in the lab's local folder, `local/claude/claude-336/pulled/`, and are not committed (no binaries or model outputs in the repo).
 
-## Next
+## What this does and does not show
 
-- **The claim it supports:** the first read that passes B2 now exports and serves in integers, with the integer choices equal to the float's as exported. That is step 2 of the run-claude order for the recall gap (11).
-- **Next unit:** B2's answer through the integer session, by a B2 decode in `fbs-toks` or a B2 window writer for `fbs-snapshot`. That precedes a language run with the carry, under its own sheet. The float cached decode step for the carry stays out of scope: float decodes a carried read uncached.
+- **It shows:**
+  - A trained model with ask heads and the question carry exports through D11 and runs in the integer session.
+  - Its Hamming choices equal the float's as exported, on every row of 8 full-context windows, including every carry lag up to `h = 4`.
+  - Both the ask table and the carry change the integer choices when removed, so the match is not a match of an unused part.
+- **It does not show:**
+  - whether the integer session answers B2: the windows are the fixed sequences, not B2's;
+  - anything about language text;
+  - the float cached decode step with the carry.
+
+Closes nothing: #3407 stays open.
+
+## Checks run at the head
+
+- `uor-r4-integer --lib --features serving-wasm`: 499 passed, 0 failed, 1 ignored. `uor-r4-float-train --lib`: 336 passed, 0 failed. Both at the code head `917908c2b`; the later commit changes only docs.
+- `cargo check` passes:
+  - `uor-r4-cpu-train --all-targets`;
+  - `uor-r4-float-train --lib` and `--bin fbs-snapshot`;
+  - `uor-r4-integer --all-targets --features serving-wasm`.
+- Mutations M1–M10, each set aside and restored, with its test failing.
+- No banned word in the diff.
+- `loop gates --full`, `loop report --check` and `loop pr-check --local` are run at the head before the queue. The fresh exact-head review is posted with `loop review`.
+
+## Skills used
+
+- None beyond the loop itself: the ORDER, the parity host check and the fresh exact-head review.
+
+## Still open
+
+- **B2's answer through the integer session:** a B2 decode in `fbs-toks`, or a B2 window writer for `fbs-snapshot`. Then a language run with the carry, under its own sheet.
+- **The float cached decode step for the carry:** out of scope. Float decodes a carried read uncached.
+- **Rounding's 21 of 3,072 depth-2 type decisions:** the export's Q12 rounding of the read tables moves them against the unrounded float. It is the export gap of the read, recorded, not a parity fault.
+- **Formatting:** the touched files were not `rustfmt`-clean at the base, and this unit adds hunks (counts above). This is for a formatting pass, if the project takes one up.
+
+## Plain summary
+
+The model that learned to carry a question forward (claude-335) can now be turned into the integer form that runs on ordinary devices, and run there. Before this unit, the export refused it.
+
+On eight test texts of 192 tokens each, the integer version picks the same memory entries as the training version at every position, once the training version's numbers are rounded the way the export stores them. With the new parts removed, the two disagree on most positions, so the match comes from the new parts. One rented GPU did the float side in under eight minutes for about seven cents.
+
+The next step is to check the integer version on the recall task itself, then try the carry on real text.
