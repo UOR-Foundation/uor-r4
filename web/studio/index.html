@@ -6,18 +6,6 @@
     <meta name="color-scheme" content="dark light">
     <meta name="description" content="UOR-R4 Studio: an offline-first conversation interface for the geometric language model project.">
     <title>UOR-R4 Studio — local chat</title>
-    <script>
-        (function () {
-            var params = new URLSearchParams(window.location.search);
-            if (params.get('legacy') === '1' || params.get('typed') === '0' || params.get('typed') === '1') return;
-            if (params.get('theme') !== 'light' && params.get('theme') !== 'dark') {
-                if (window.location.hash === '#theme=light') params.set('theme', 'light');
-                if (window.location.hash === '#theme=dark') params.set('theme', 'dark');
-            }
-            params.delete('typed');
-            window.location.replace(window.location.pathname + '?typed=1&' + params.toString() + window.location.hash);
-        }());
-    </script>
     <link rel="stylesheet" href="./assets/css/uor_offline_fonts.css">
     <link rel="stylesheet" href="./index.css">
     <style>
