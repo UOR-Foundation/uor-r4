@@ -30,7 +30,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - Exact-head logs and retained screenshots: `local/kimi/default-cutover/c23679a2125113c48b4c3a12c192d3a2b3bcbaab/`, including `typed-tests.log`, `typecheck.log`, `playwright.log`, `runtime-contracts.log`, `runtime-page-load.log`, `static-page.log`, `worker.log`, `stage.log`, `stage-verify.log`, `wasm-audit.log`, `artifact-identity.txt`, `staged-default-desktop.png`, and `staged-default-mobile.png`.
 - No GPU, paid compute, new dependency, new model execution or real browser profile/credential was used. Measured command durations include typed tests 10.36 s, runtime contracts 18.146 s, Playwright 2.2 min, and the two-route runtime trap 66.144 s; the complete correction/review/delivery window is not presented as a precise measured cost.
 
-## Checks and delivery state
+## Checks run at the head
 
 - Default routing, migration, build-only and duplicate-MCP regressions failed for their intended reasons before their corresponding fixes. The focused default/legacy Playwright cases then passed (`green-focused-review.log`), followed by the complete checks above at `c23679a2125113c48b4c3a12c192d3a2b3bcbaab` / `5a0576c160ef8507771aad8d4ba6c67a56baf98c`.
 - `git diff --check`, staged allowlist/catalog validation and direct staged WASM **7/7** pass. Earlier raw-TypeScript, bare-receiver, stale-dist, setup and fixture failures are not relabeled as passes.
