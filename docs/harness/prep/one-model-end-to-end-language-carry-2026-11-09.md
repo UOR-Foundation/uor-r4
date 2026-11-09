@@ -111,7 +111,7 @@ Registered before any pod. claude-322's, with these changes:
 - **I-5a, the asks in the no-memory scoring:** `--score-rows` serves the asks it was trained with. Checked in code at the pin:
   - `score_rows` calls `load_reads` (`in_space_long.rs:8912`);
   - `load_reads` restores `HammingReads::load`, which loads each read's `d{depth}.ask` (`flock_read_hamming.rs:1417`) and the readout read's `d{depth}.carry` with `carry_rows`.
-  - On the pod, I-5 also records `carry_rows` from `step-016384`'s saved tensors. It must be 32 (L-aC) or absent (L-a).
+  - The run records the carry as loaded: `step-016384`'s snapshot, which `fbs-snapshot` takes through the same `HammingReads::load`. Its readout entry's `carry.rows` must be 32 (L-aC), or the entry has no carry (L-a).
 - **I-pull, from the smoke:** `pull.jsonl` exists after the smoke and its mean copy rows per step is above 0. A pull that never runs is an instrument NOT_RUN.
 - **I-xg, the GPU export control, once on the first pod before its full run:** `fbs-snapshot` of claude-322's sealed seed-1 `step-016384` (fetched from the store), then `fbs-export --run-config --raw-gates --raw-transition` on the laptop, must give claude-322's artifact `86e51d5e…`. This shows that the export path this run must use (below) serves what claude-322's did.
 - **I-xa, the ask export, on the smoke's `step-000064`:** its snapshot has a `hamming_ask` entry per read; the readout's entry has `carry.rows` 32 (L-aC) or none (L-a); `fbs-export` accepts it; and `served-reply-panel --engine integer` scores it while the default engine refuses it by name.
@@ -121,6 +121,7 @@ Registered before any pod. claude-322's, with these changes:
   - **Provenance, recorded beside the cut:** the input snapshot's sha256, the `jq` filter's text and sha256, and the cut snapshot's and cut artifact's sha256.
   - **Where the carry comes from:** `fbs-export` takes the carry from the snapshot's `hamming_ask` entries (`quantize_hamming_ask`, `fbs-export.rs:219`). It does not compare it with the run config's `hamming_carry_question`, which still says 32 for the cut. So the snapshot, not the config, is what the cut changes, and I-cut checks the artifact.
 - **I-c, on the laptop before any reading:** claude-322's two artifacts score, under `--engine integer`, to claude-322's sealed reports without the timing fields (claude-338's parity, repeated at the pin).
+  - **Result (9 Nov, before any pod): PASS at both seeds.** The scorer was built at the pin (`c6204f66…`). The stripped reports are equal: s1 `5a27775c…` (claude-338's value), s2 `7eb8dbf5…`.
 
 **Why the export moves to the pod:** `cpu-fbs-export` (DeepSeek's CPU exporter, which claude-322 served through) does not read ask heads. Exporting an asking checkpoint through it would drop them silently, the fault claude-338 closed in the scorer. `fbs-snapshot` reads the routes through the model's CUDA projection, so it runs on the pod. `fbs-export` (CPU) then runs on the laptop.
 
@@ -139,6 +140,10 @@ Registered before any pod. claude-322's, with these changes:
    - Their gate tests and mutations, and `bash -n`.
    - I-c, and the scorer and `fbs-export` built at the pin.
 3. `uor-pod status`. The caps must hold with four pods: at most 4 and $8/h. Then one RTX 5090 pod (at most $0.70/h) per arm and seed, each with its watcher before any script ships.
+   - **The order, so I-xg comes before any full run:**
+     - L-aC seed 1's pod starts first. After its build it snapshots claude-322's seed-1 checkpoint and waits, before its own full run, for the laptop's verdict.
+     - The laptop exports that snapshot and compares the artifact with `86e51d5e…`, then writes PASS or FAIL on the pod.
+     - The other three pods start only after a PASS. A FAIL stops all four before any full run (row 0c).
 4. **On each pod:** I-p, I-0, the build, the inputs, I-3, the smoke, I-m, I-f, I-pull, I-xa's snapshot, I-t. Then 16,384 steps. Then the three snapshots, and the no-memory scoring of `step-016384` with I-5.
 5. **Seal** to `results/claude/one-model-end-to-end-language-carry-2026-11-09/runs/{L-aC,L-a}/s{1,2}/`, each root empty first (L-002). Read back, then take the pod down.
 6. **On the laptop:** I-xg, I-xa, I-c. Then serve every snapshot, cut `−C`, I-cut, the panel, the first-line counts and the trend. Then grade and pair.
