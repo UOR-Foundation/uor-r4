@@ -1403,7 +1403,7 @@ fn run_bounded_process(
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    let exited = child
+    let mut exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
@@ -1860,7 +1860,7 @@ mod bounded_process_tests {
     }
 
     #[test]
-    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+    fn closed_pipes_before_normal_exit_without_output_are_not_a_timeout() {
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg("exec 1>&- 2>&-; sleep 0.1; exit 0");
         let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
