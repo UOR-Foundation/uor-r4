@@ -39,6 +39,8 @@ three-row readout carry. The new tests use deepseek-262's
 1. `both_engines_read_the_ask_heads_and_carry`:
    - CPU and integer generation are equal on the carried artifact.
    - CPU and integer generation are equal on the ablated artifact.
+   - Carried generation differs from ask-preserving ablated generation on both
+     engines, so the readout carry is live in the free-running path.
    - CPU carried generation differs from CPU generation on the plain artifact,
      so the ask path is non-vacuous.
 2. `cpu_rank_modes_use_the_carried_question`:
@@ -59,7 +61,7 @@ three-row readout carry. The new tests use deepseek-262's
 - Targeted CPU-versus-integer carry parity: **1 / 1 passed**.
 - Carry effect: at least one teacher-forced rank after the first row changed
   between the carried artifact and the ask-preserving ablation; paired-first
-  ranks also changed.
+  ranks also changed, and free-running generation changed on both engines.
 - Real language artifact: **NOT_RUN**.
 
 ## Checks run at the head

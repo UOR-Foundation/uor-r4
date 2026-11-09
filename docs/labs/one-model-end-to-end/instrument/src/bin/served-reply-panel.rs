@@ -1582,23 +1582,28 @@ mod tests {
             let forward = CpuFbsForward::from_artifact(bytes).unwrap();
             decode_all(|| forward.clone())
         };
-        assert_ne!(cpu(&asking), cpu(&plain));
+        let (plain_cpu, asking_cpu, ablated_cpu) = (cpu(&plain), cpu(&asking), cpu(&ablated));
+        assert_ne!(asking_cpu, plain_cpu);
+        assert_ne!(
+            asking_cpu, ablated_cpu,
+            "the carry must change free-running CPU generation"
+        );
         let (plain_model, asking_model, ablated_model) = (
             IntegerStackModel::parse(&plain).unwrap(),
             IntegerStackModel::parse(&asking).unwrap(),
             IntegerStackModel::parse(&ablated).unwrap(),
         );
-        assert_eq!(
+        let (plain_integer, asking_integer, ablated_integer) = (
             decode_all(|| IntegerDecoder::new(&plain_model)),
-            cpu(&plain)
-        );
-        assert_eq!(
-            cpu(&asking),
             decode_all(|| IntegerDecoder::new(&asking_model)),
-        );
-        assert_eq!(
-            cpu(&ablated),
             decode_all(|| IntegerDecoder::new(&ablated_model)),
+        );
+        assert_eq!(plain_integer, plain_cpu);
+        assert_eq!(asking_integer, asking_cpu);
+        assert_eq!(ablated_integer, ablated_cpu);
+        assert_ne!(
+            asking_integer, ablated_integer,
+            "the carry must change free-running integer generation"
         );
     }
 
