@@ -23,8 +23,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent: [deepseek-249](../deepseek-2
 
 ## Checks run at the head
 
-- Final report/policy and full-gate checks are recorded after the accounting
-  commit.
+- Final report policy, local policy and all 11 full gates passed at this head.
 
 ## Skills used
 
