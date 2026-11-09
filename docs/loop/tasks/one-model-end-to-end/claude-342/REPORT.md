@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). ORDER: [ORDER.md](ORDER.md). Base `67972456d`. No GPU was used and no model was trained.
 
-**In one line:** By the rule fixed before the count, 32 rows does not reach the question in TRAIN (1.2% of oasst2's scored rows, 76.3% of the capped mw-balp's, bar 80%). The bigger finding is in the sealed replies of claude-339: 243 to 255 of 256 end in a repeated-token loop, with a median onset at reply position 3 to 5 (claude-322: 130 and 140, onset 11). So the next unit checks the serving path, then runs a cause ladder at the new trainer commit.
+**In one line:** By the rule fixed before the count, 32 rows does not reach the question in TRAIN (1.2% of oasst2's scored rows, 76.3% of the capped mw-balp's, bar 80%). The bigger finding is in the sealed replies of claude-339: 240 to 255 of 256 end in a repeated-token loop, with a median onset at reply position 3 to 5 (claude-322: 130 and 140, onset 11). So the next unit checks the serving path, then runs a cause ladder at the new trainer commit.
 
 ## What did not work, first
 
@@ -52,7 +52,7 @@ A reply "loops" here when its last 24 token ids repeat with a period of 1 to 8 (
 | **A decode-time stop at the role header** | 0 of 256 replies carry `\n\nAssistant:`, so it has nothing to end. | Rejected. |
 | **Parity, then a cause ladder** | L-a differs from claude-322 in the ask heads, the pull, the trainer commit (20 commits touch the trainer crate between the pins) and the serving path for asks. None is separated. | **Next.** |
 
-**The steps,** under one sheet, FIT and pre-run review. Parity first, at about the $0.07 of pod time a parity run took in claude-336. That run traced 8 fixed 192-token sequences, which would miss a fault that shows on short contexts, so this one must compare float and integer on the panel's own prompts and on their decode, where the loops start. Then, on L-a's recipe, TRAIN, seeds and step count, at pin `721a4784f` (the merged crate differs from it on the non-finite path only):
+**The steps,** under one sheet, FIT and pre-run review. Parity first, at about the $0.07 of pod time a parity run took in claude-336. That run traced 8 fixed 192-token sequences, which would miss a fault that shows on short contexts, so this one must compare float and integer on the panel's own prompts and on their decode, where the loops start. Disagreement means any Hamming question or key bit that differs from the float trace rounded as exported, row by row, with the float fed the integer's decoded reply ids, so it cannot run free past a first flip. Rounding alone moved 21 of 3,072 depth-2 type decisions against the unrounded float in claude-336, and that is not a fault. Then, on L-a's recipe, TRAIN, seeds and step count, at pin `721a4784f` (the merged crate differs from it on the non-finite path only):
 
 | arm | flags | what it isolates |
 |---|---|---|
@@ -64,7 +64,7 @@ A reply "loops" here when its last 24 token ids repeat with a period of 1 to 8 (
 
 | # | reading | next |
 |---|---|---|
-| P | float and integer disagree on L-a's asks, on the panel's prompts or their decode | **`blocked`:** a serving fault. Repair and re-serve the sealed checkpoints before any ask reading stands. N0 can still run. |
+| P | the integer disagrees with the float rounded as exported (defined above) on L-a's asks, on the panel's prompts or their decode | **`blocked`:** a serving fault. Repair and re-serve the sealed checkpoints before any ask reading stands. N0 can still run. |
 | 1 | N0 does not hold, at both seeds | The commit lost it. Bisect the 20 commits. No ask run until N0 holds. |
 | 2 | one seed holds and the other does not, on N0 or N1 | **Mixed:** no direction read. Report both seeds and take a second decision review. |
 | 3 | N0 holds, N1 does not at either seed, but N1 is at least 32 EOS above L-a at both | Partial: both the ask heads and the pull cost stopping. A decision review weighs the two. |
