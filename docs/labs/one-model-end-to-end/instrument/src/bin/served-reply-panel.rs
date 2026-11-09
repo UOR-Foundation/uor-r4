@@ -230,7 +230,11 @@ struct Tally {
 }
 
 fn run() -> Result<()> {
-    let args = parse_args(std::env::args().skip(1))?;
+    run_with_args(std::env::args().skip(1))
+}
+
+fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
+    let args = parse_args(args)?;
     let flag = |name: &str| {
         args.get(name)
             .cloned()
@@ -1333,6 +1337,7 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use uor_r4_integer::stack::synthetic::{
         synthetic_fbs_trunk_with, synthetic_hamming, FBS_SYNTH_NON_SQUARE,
     };
@@ -1351,6 +1356,68 @@ mod tests {
             return None;
         };
         Some(ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(path).unwrap()).unwrap())
+    }
+
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "served-reply-panel-{name}-{}-{}",
+                std::process::id(),
+                NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn byte_level_alphabet() -> [char; 256] {
+        let mut table = ['\0'; 256];
+        let mut assigned = [false; 256];
+        for byte in (b'!'..=b'~').chain(0xA1..=0xAC).chain(0xAE..=0xFF) {
+            table[byte as usize] = char::from_u32(u32::from(byte)).unwrap();
+            assigned[byte as usize] = true;
+        }
+        let mut extra = 0u32;
+        for byte in 0usize..256 {
+            if !assigned[byte] {
+                table[byte] = char::from_u32(256 + extra).unwrap();
+                extra += 1;
+            }
+        }
+        table
+    }
+
+    fn run_tokenizer() -> (Vec<u8>, ByteBpeTokenizer) {
+        let mut vocab = serde_json::Map::new();
+        for (id, surface) in ["<|bos|>", "<|eos|>", "<|unk|>"].iter().enumerate() {
+            vocab.insert((*surface).to_owned(), serde_json::json!(id));
+        }
+        for (byte, ch) in byte_level_alphabet().iter().enumerate() {
+            vocab.insert(ch.to_string(), serde_json::json!(byte + 3));
+        }
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+            "added_tokens": [
+                {"id": 0, "content": "<|bos|>"},
+                {"id": 1, "content": "<|eos|>"},
+                {"id": 2, "content": "<|unk|>"}
+            ],
+            "model": {"type": "BPE", "vocab": vocab, "merges": []}
+        }))
+        .unwrap();
+        let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes).unwrap();
+        (bytes, tokenizer)
     }
 
     fn answers(accepted: &str) -> FrozenAnswers {
@@ -1655,6 +1722,171 @@ mod tests {
         record_content_readout(&mut report, Some("sidecar-sha256"));
         assert_eq!(report["inputs"]["content_readout_sha256"], "sidecar-sha256");
         assert_eq!(report["settings"]["content_readout"], "attached");
+    }
+
+    #[test]
+    fn the_complete_run_path_attaches_and_reports_the_content_readout() {
+        let temp = TempDir::new("content-readout-run");
+        let (tokenizer_bytes, tokenizer) = run_tokenizer();
+        let query = tokenizer.encode("Hi");
+
+        let mut spec = FBS_SYNTH_NON_SQUARE;
+        spec.d = 256;
+        spec.context = 64;
+        let mut snapshot = synthetic_fbs_trunk_with(431, spec);
+        snapshot.readout_nearest = true;
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let artifact_sha256 = sha256(&artifact);
+        let tokenizer_sha256 = sha256(&tokenizer_bytes);
+
+        let mut cases = Vec::new();
+        let mut labels = Vec::new();
+        let mut histories = Vec::new();
+        let mut pair = 0usize;
+        for (stratum, pairs) in [
+            ("length2", 32),
+            ("length4", 32),
+            ("length8", 32),
+            ("reassert", 16),
+            ("update", 16),
+        ] {
+            for _ in 0..pairs {
+                let pair_id = format!("fresh-p{pair}");
+                histories.push(serde_json::json!({
+                    "id": format!("p{pair}"),
+                    "stratum": format!("{stratum}/pair"),
+                }));
+                for arm in ["a", "b"] {
+                    let id = format!("case-{pair}-{arm}");
+                    cases.push(serde_json::json!({
+                        "id": id.clone(),
+                        "query_ids": query.clone(),
+                        "segments": [],
+                    }));
+                    labels.push(serde_json::json!({
+                        "answers": {"accepted": ["unused"], "intent": "current"},
+                        "id": id,
+                        "pair_id": pair_id.clone(),
+                    }));
+                }
+                pair += 1;
+            }
+        }
+        let inputs_bytes = serde_json::to_vec(&serde_json::json!({"cases": cases})).unwrap();
+        let labels_bytes = serde_json::to_vec(&serde_json::json!({
+            "cases": labels,
+            "membership_only": false,
+            "protocol": SCHEMA_V2,
+            "schema": "test",
+        }))
+        .unwrap();
+        let plan_bytes = serde_json::to_vec(&serde_json::json!({"histories": histories})).unwrap();
+        let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+            "files": {
+                "inputs.json": {"sha256": sha256(&inputs_bytes)},
+                "labels.json": {"sha256": sha256(&labels_bytes)},
+                "plan.json": {"sha256": sha256(&plan_bytes)},
+            },
+            "tokenizer_sha256": tokenizer_sha256,
+            "strata_rows": {
+                "length2": 64,
+                "length4": 64,
+                "length8": 64,
+                "reassert": 32,
+                "update": 32,
+            },
+        }))
+        .unwrap();
+
+        let artifact_path = temp.0.join("model.uorlut");
+        let tokenizer_path = temp.0.join("tokenizer.json");
+        let inputs_path = temp.0.join("inputs.json");
+        let labels_path = temp.0.join("labels.json");
+        let plan_path = temp.0.join("plan.json");
+        let manifest_path = temp.0.join("manifest.json");
+        for (path, bytes) in [
+            (&artifact_path, artifact.as_slice()),
+            (&tokenizer_path, tokenizer_bytes.as_slice()),
+            (&inputs_path, inputs_bytes.as_slice()),
+            (&labels_path, labels_bytes.as_slice()),
+            (&plan_path, plan_bytes.as_slice()),
+            (&manifest_path, manifest_bytes.as_slice()),
+        ] {
+            fs::write(path, bytes).unwrap();
+        }
+
+        let write_sidecar = |path: &Path, target: u32, artifact_sha256: &str| {
+            let readout = ContentReadout {
+                mode: ContentSignatureMode::Code,
+                signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+                includes_reference_end: false,
+                rows: vec![ContentExample {
+                    signature: vec![0; CONTENT_CODE_SIGNATURE_BITS / 64],
+                    target,
+                }],
+                max_distance: CONTENT_CODE_SIGNATURE_BITS as u32,
+            };
+            let bytes = serde_json::to_vec(&serde_json::json!({
+                "schema": STACK_CONTENT_READOUT_SCHEMA,
+                "artifact_sha256": artifact_sha256,
+                "readout": readout,
+            }))
+            .unwrap();
+            fs::write(path, &bytes).unwrap();
+            sha256(&bytes)
+        };
+        let sidecar_path = temp.0.join("readout.json");
+        let sidecar_sha256 = write_sidecar(&sidecar_path, 42, &artifact_sha256);
+        let args = |out: &Path, sidecar: &Path| {
+            [
+                "--engine",
+                "integer",
+                "--content-readout",
+                sidecar.to_str().unwrap(),
+                "--artifact",
+                artifact_path.to_str().unwrap(),
+                "--tokenizer",
+                tokenizer_path.to_str().unwrap(),
+                "--inputs",
+                inputs_path.to_str().unwrap(),
+                "--labels",
+                labels_path.to_str().unwrap(),
+                "--plan",
+                plan_path.to_str().unwrap(),
+                "--manifest",
+                manifest_path.to_str().unwrap(),
+                "--reply-tokens",
+                "1",
+                "--out",
+                out.to_str().unwrap(),
+            ]
+            .map(String::from)
+            .into_iter()
+        };
+
+        let out = temp.0.join("report.json");
+        run_with_args(args(&out, &sidecar_path)).unwrap();
+        let report: serde_json::Value = serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();
+        assert_eq!(report["inputs"]["content_readout_sha256"], sidecar_sha256);
+        assert_eq!(report["settings"]["content_readout"], "attached");
+
+        let wrong_artifact_sidecar = temp.0.join("wrong-artifact.json");
+        write_sidecar(&wrong_artifact_sidecar, 42, &"0".repeat(64));
+        let wrong_artifact_out = temp.0.join("wrong-artifact-report.json");
+        let error = run_with_args(args(&wrong_artifact_out, &wrong_artifact_sidecar)).unwrap_err();
+        assert!(error.contains("sidecar binds artifact"), "{error}");
+        assert!(!wrong_artifact_out.exists());
+
+        let wrong_vocab_sidecar = temp.0.join("wrong-vocab.json");
+        write_sidecar(
+            &wrong_vocab_sidecar,
+            snapshot.vocab as u32,
+            &artifact_sha256,
+        );
+        let wrong_vocab_out = temp.0.join("wrong-vocab-report.json");
+        let error = run_with_args(args(&wrong_vocab_out, &wrong_vocab_sidecar)).unwrap_err();
+        assert!(error.contains("outside vocabulary"), "{error}");
+        assert!(!wrong_vocab_out.exists());
     }
 
     /// The panel marks the reply start before the prompt's last token, as `StackChat` does. On the
