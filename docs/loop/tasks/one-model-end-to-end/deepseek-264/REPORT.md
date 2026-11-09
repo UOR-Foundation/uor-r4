@@ -21,10 +21,14 @@ Added `real-artifact-audit` to the one-model instrument. It:
 
 - parses a carried artifact and its supplied `−C`;
 - requires identical shapes, depths and ask tables, with the carry only at the readout;
+- checks optional published `SHA256SUMS` values for both artifacts;
 - reproduces `−C` with `drop_hamming_carry_uorlut01` and requires byte equality;
+- binds every panel and rank report to its artifact and expected engine;
+- requires the same settings, rendering and non-artifact inputs across all reports;
 - compares CPU and integer panel reports after removing only timing fields and engine identity;
 - finds generation divergence by case id and token index;
-- compares teacher-forced and paired-first reports by case id;
+- compares teacher-forced and paired-first reports by case id using the fields the panel
+  actually serializes;
 - reports carry-gain distribution and first-target rank changes.
 
 The command is reusable on the remaining 16,384 cells without code changes.
@@ -49,14 +53,19 @@ At every point:
 - The readout carry has 32 rows and 4,096 gains at depth 6.
 
 The cut changes later teacher-forced ranks, but the first-position ranking remains
-effectively tied. At 16,384 the carry moves the paired comparison by one row while both
-artifacts remain at 0 asked-value first lines and 0 complete replies.
+effectively tied. At 12,288, for example, 165 teacher-forced rows change in the full
+serialized rank data while no first-target rank and no paired-first rank changes. At
+16,384 the carry moves the paired comparison by one row while both artifacts remain at 0
+asked-value first lines and 0 complete replies.
 
 ## Checks run at the head
 
-- `real-artifact-audit` tests: **4 passed**.
+- `real-artifact-audit` tests: **6 passed**, including same-engine rejection,
+  wrong-artifact rejection, cross-arm metadata rejection and missing-rank-section
+  rejection.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
-- Real artifact audits: **3 / 3 passed** at steps 8,192, 12,288 and 16,384.
+- Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
+  and 16,384, with both published hashes supplied and verified.
 - CPU panel versus stored integer report: **6 / 6 comparisons passed** across carried and
   `−C`.
 - Published store `SHA256SUMS`: **3 / 3 pairs verified**.

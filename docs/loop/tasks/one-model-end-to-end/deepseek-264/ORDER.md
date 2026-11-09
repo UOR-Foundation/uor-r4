@@ -42,7 +42,11 @@ Add `real-artifact-audit` to the one-model instrument. It accepts:
 It refuses unless:
 
 - both artifacts parse, have the same ask inventory, and differ in the expected carry;
+- optional `--carried-sha256` and `--minus-c-sha256` equal the artifacts' published
+  `SHA256SUMS` values;
 - `drop_hamming_carry_uorlut01(carried)` equals the supplied `−C` byte-for-byte;
+- every report is for the artifact it scores, the CPU reports are not integer reports,
+  and all six reports share the same settings, rendering and non-artifact inputs;
 - CPU and integer reports equal after only timing fields and `settings.engine`;
 - ranked reports have the same cases and compare by case id, not row position.
 

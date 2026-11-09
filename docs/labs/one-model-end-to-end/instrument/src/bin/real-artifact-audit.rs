@@ -16,9 +16,11 @@ use uor_r4_integer::stack::{
 };
 
 const SCHEMA: &str = "uor-r4.real-artifact-audit/1";
+const PANEL_SCHEMA: &str = "uor-r4.served-reply-panel/1";
 const USAGE: &str = "usage: real-artifact-audit --carried ARTIFACT --minus-c ARTIFACT \
 --carried-cpu REPORT --carried-integer REPORT --minus-c-cpu REPORT --minus-c-integer REPORT \
-[--carried-rank REPORT --minus-c-rank REPORT] --out NEW_FILE";
+[--carried-rank REPORT --minus-c-rank REPORT] \
+[--carried-sha256 SHA256 --minus-c-sha256 SHA256] --out NEW_FILE";
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -39,6 +41,8 @@ struct Args {
     minus_c_integer: String,
     carried_rank: Option<String>,
     minus_c_rank: Option<String>,
+    carried_sha256: Option<String>,
+    minus_c_sha256: Option<String>,
     out: String,
 }
 
@@ -46,28 +50,93 @@ fn run() -> Result<()> {
     let args = parse_args(std::env::args().skip(1))?;
     let carried = fs::read(&args.carried).map_err(|e| format!("{}: {e}", args.carried))?;
     let minus_c = fs::read(&args.minus_c).map_err(|e| format!("{}: {e}", args.minus_c))?;
+    let carried_sha256 = sha256(&carried);
+    let minus_c_sha256 = sha256(&minus_c);
+    require_published_sha(
+        "carried artifact",
+        &carried_sha256,
+        args.carried_sha256.as_deref(),
+    )?;
+    require_published_sha(
+        "minus-C artifact",
+        &minus_c_sha256,
+        args.minus_c_sha256.as_deref(),
+    )?;
     let artifacts = audit_artifacts(&carried, &minus_c)?;
 
     let carried_cpu = read_json("--carried-cpu", &args.carried_cpu)?;
     let carried_integer = read_json("--carried-integer", &args.carried_integer)?;
     let minus_c_cpu = read_json("--minus-c-cpu", &args.minus_c_cpu)?;
     let minus_c_integer = read_json("--minus-c-integer", &args.minus_c_integer)?;
+    require_report_identity(
+        "carried CPU",
+        &carried_cpu,
+        &carried_sha256,
+        ExpectedEngine::Cpu,
+    )?;
+    require_report_identity(
+        "carried integer",
+        &carried_integer,
+        &carried_sha256,
+        ExpectedEngine::Integer,
+    )?;
+    require_report_identity("−C CPU", &minus_c_cpu, &minus_c_sha256, ExpectedEngine::Cpu)?;
+    require_report_identity(
+        "−C integer",
+        &minus_c_integer,
+        &minus_c_sha256,
+        ExpectedEngine::Integer,
+    )?;
     require_report_parity("carried CPU/integer", &carried_cpu, &carried_integer)?;
     require_report_parity("−C CPU/integer", &minus_c_cpu, &minus_c_integer)?;
     let generation = generation_delta(&carried_cpu, &minus_c_cpu)?;
 
     let ranks = match (&args.carried_rank, &args.minus_c_rank) {
-        (Some(carried), Some(minus_c)) => Some(rank_delta(
-            &read_json("--carried-rank", carried)?,
-            &read_json("--minus-c-rank", minus_c)?,
-        )?),
+        (Some(carried), Some(minus_c)) => {
+            let carried = read_json("--carried-rank", carried)?;
+            let minus_c = read_json("--minus-c-rank", minus_c)?;
+            require_report_identity(
+                "carried rank",
+                &carried,
+                &carried_sha256,
+                ExpectedEngine::Cpu,
+            )?;
+            require_report_identity("−C rank", &minus_c, &minus_c_sha256, ExpectedEngine::Cpu)?;
+            require_report_metadata(
+                "panel and rank",
+                &[
+                    &carried_cpu,
+                    &carried_integer,
+                    &minus_c_cpu,
+                    &minus_c_integer,
+                    &carried,
+                    &minus_c,
+                ],
+            )?;
+            Some(rank_delta(&carried, &minus_c)?)
+        }
         (None, None) => None,
         _ => return Err("--carried-rank and --minus-c-rank must be given together".to_owned()),
     };
+    if ranks.is_none() {
+        require_report_metadata(
+            "panel",
+            &[
+                &carried_cpu,
+                &carried_integer,
+                &minus_c_cpu,
+                &minus_c_integer,
+            ],
+        )?;
+    }
 
     let report = json!({
         "schema": SCHEMA,
         "verdict": "instrument-parity",
+        "published_sha256": {
+            "supplied": args.carried_sha256.is_some() && args.minus_c_sha256.is_some(),
+            "verified": args.carried_sha256.is_some() && args.minus_c_sha256.is_some(),
+        },
         "artifacts": artifacts,
         "reports": {
             "carried_cpu_equals_integer": true,
@@ -93,7 +162,7 @@ fn run() -> Result<()> {
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
-    const FLAGS: [&str; 9] = [
+    const FLAGS: [&str; 11] = [
         "carried",
         "minus-c",
         "carried-cpu",
@@ -102,6 +171,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
         "minus-c-integer",
         "carried-rank",
         "minus-c-rank",
+        "carried-sha256",
+        "minus-c-sha256",
         "out",
     ];
     let mut values = BTreeMap::new();
@@ -116,6 +187,9 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
             return Err(format!("{arg} given twice"));
         }
     }
+    if values.contains_key("carried-sha256") != values.contains_key("minus-c-sha256") {
+        return Err("--carried-sha256 and --minus-c-sha256 must be given together".to_owned());
+    }
     let carried = take_required(&mut values, "carried")?;
     let minus_c = take_required(&mut values, "minus-c")?;
     let carried_cpu = take_required(&mut values, "carried-cpu")?;
@@ -124,6 +198,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
     let minus_c_integer = take_required(&mut values, "minus-c-integer")?;
     let carried_rank = values.remove("carried-rank");
     let minus_c_rank = values.remove("minus-c-rank");
+    let carried_sha256 = values.remove("carried-sha256");
+    let minus_c_sha256 = values.remove("minus-c-sha256");
     let out = take_required(&mut values, "out")?;
     Ok(Args {
         carried,
@@ -134,6 +210,8 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args> {
         minus_c_integer,
         carried_rank,
         minus_c_rank,
+        carried_sha256,
+        minus_c_sha256,
         out,
     })
 }
@@ -265,6 +343,111 @@ fn read_json(label: &str, path: &str) -> Result<Value> {
     serde_json::from_slice(&bytes).map_err(|e| format!("{label} {path}: {e}"))
 }
 
+fn require_published_sha(label: &str, actual: &str, expected: Option<&str>) -> Result<()> {
+    if let Some(expected) = expected {
+        if !actual.eq_ignore_ascii_case(expected.trim()) {
+            return Err(format!(
+                "{label} SHA-256 {actual} differs from the published {expected}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ExpectedEngine {
+    Cpu,
+    Integer,
+}
+
+fn require_report_identity(
+    label: &str,
+    report: &Value,
+    expected_artifact_sha256: &str,
+    engine: ExpectedEngine,
+) -> Result<()> {
+    if report.get("schema").and_then(Value::as_str) != Some(PANEL_SCHEMA) {
+        return Err(format!("{label} report is not {PANEL_SCHEMA}"));
+    }
+    let inputs = report
+        .get("inputs")
+        .and_then(Value::as_object)
+        .ok_or(format!("{label} report has no inputs object"))?;
+    for key in [
+        "tokenizer_sha256",
+        "inputs_sha256",
+        "labels_sha256",
+        "plan_sha256",
+        "manifest_sha256",
+    ] {
+        if inputs.get(key).and_then(Value::as_str).is_none() {
+            return Err(format!("{label} report has no inputs.{key}"));
+        }
+    }
+    let artifact = inputs
+        .get("artifact_sha256")
+        .and_then(Value::as_str)
+        .ok_or(format!("{label} report has no inputs.artifact_sha256"))?;
+    if artifact != expected_artifact_sha256 {
+        return Err(format!(
+            "{label} report is for artifact {artifact}, not {expected_artifact_sha256}"
+        ));
+    }
+    let settings = report
+        .get("settings")
+        .and_then(Value::as_object)
+        .ok_or(format!("{label} report has no settings object"))?;
+    let reported_engine = settings.get("engine").and_then(Value::as_str);
+    match engine {
+        ExpectedEngine::Cpu if reported_engine.is_some() && reported_engine != Some("cpu") => {
+            return Err(format!(
+                "{label} report names engine {reported_engine:?}, not the CPU port"
+            ));
+        }
+        ExpectedEngine::Integer if reported_engine != Some("integer") => {
+            return Err(format!(
+                "{label} report names engine {reported_engine:?}, not integer"
+            ));
+        }
+        _ => {}
+    }
+    if report.get("rendering").and_then(Value::as_object).is_none() {
+        return Err(format!("{label} report has no rendering object"));
+    }
+    Ok(())
+}
+
+fn report_metadata(report: &Value) -> Value {
+    let mut metadata = json!({
+        "schema": report.get("schema"),
+        "inputs": report.get("inputs"),
+        "settings": report.get("settings"),
+        "rendering": report.get("rendering"),
+    });
+    if let Some(inputs) = metadata.get_mut("inputs").and_then(Value::as_object_mut) {
+        inputs.remove("artifact_sha256");
+    }
+    if let Some(settings) = metadata.get_mut("settings").and_then(Value::as_object_mut) {
+        settings.remove("engine");
+    }
+    metadata
+}
+
+fn require_report_metadata(label: &str, reports: &[&Value]) -> Result<()> {
+    let first = reports
+        .first()
+        .ok_or("cannot compare an empty report set")?;
+    let expected = report_metadata(first);
+    for report in &reports[1..] {
+        if report_metadata(report) != expected {
+            return Err(format!(
+                "{label} reports differ in settings, rendering or non-artifact inputs"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn normalize_report(report: &Value) -> Value {
     let mut report = report.clone();
     if let Some(object) = report.as_object_mut() {
@@ -298,7 +481,12 @@ fn require_report_parity(label: &str, cpu: &Value, integer: &Value) -> Result<()
 }
 
 fn rows_by_id(report: &Value, section: Option<&str>) -> Result<BTreeMap<String, Value>> {
-    let root = section.and_then(|name| report.get(name)).unwrap_or(report);
+    let root = match section {
+        Some(name) => report
+            .get(name)
+            .ok_or_else(|| format!("report has no {name} section"))?,
+        None => report,
+    };
     let rows = root
         .get("rows")
         .and_then(Value::as_array)
@@ -390,8 +578,11 @@ fn rank_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
         if [
             "target_ranks",
             "raw_target_ranks",
-            "chosen_token",
-            "raw_nearest_token",
+            "raw_nearest_tokens",
+            "eos_rank",
+            "raw_eos_rank",
+            "point_key_overrides",
+            "chosen_target_mismatches",
         ]
         .into_iter()
         .any(|field| carried_row.get(field) != minus_row.get(field))
@@ -504,6 +695,31 @@ mod tests {
         (carried, minus_c)
     }
 
+    fn panel_report(artifact_sha256: &str, engine: Option<&str>) -> Value {
+        let mut settings = json!({"reply_tokens": 64});
+        if let Some(engine) = engine {
+            settings["engine"] = json!(engine);
+        }
+        json!({
+            "schema": PANEL_SCHEMA,
+            "inputs": {
+                "artifact_sha256": artifact_sha256,
+                "tokenizer_sha256": "tokenizer",
+                "inputs_sha256": "inputs",
+                "labels_sha256": "labels",
+                "plan_sha256": "plan",
+                "manifest_sha256": "manifest",
+            },
+            "settings": settings,
+            "rendering": {"name": "one-user-turn/v1"},
+            "wall_milliseconds": 10,
+            "decode_milliseconds": 9,
+            "tokens_per_second": 1,
+            "decode_tokens_per_second": 2,
+            "rows": [],
+        })
+    }
+
     #[test]
     fn real_cut_audit_accepts_only_the_reproduced_control() {
         let (carried, minus_c) = artifacts();
@@ -518,26 +734,34 @@ mod tests {
     }
 
     #[test]
-    fn report_parity_ignores_only_timing_and_engine() {
-        let cpu = json!({
-            "settings": {"engine": "integer", "reply_tokens": 64},
-            "wall_milliseconds": 10,
-            "decode_milliseconds": 9,
-            "tokens_per_second": 1,
-            "decode_tokens_per_second": 2,
-            "rows": [],
-        });
+    fn report_identity_requires_cross_engines_artifacts_and_shared_metadata() {
+        let cpu = panel_report("carried", None);
         let mut integer = cpu.clone();
         integer["settings"]["engine"] = json!("integer");
         integer["wall_milliseconds"] = json!(99);
         integer["decode_milliseconds"] = json!(88);
         integer["tokens_per_second"] = json!(3);
         integer["decode_tokens_per_second"] = json!(4);
-        integer["settings"]
-            .as_object_mut()
-            .unwrap()
-            .remove("engine");
+        require_report_identity("cpu", &cpu, "carried", ExpectedEngine::Cpu).unwrap();
+        require_report_identity("integer", &integer, "carried", ExpectedEngine::Integer).unwrap();
+        assert!(require_report_identity("cpu", &integer, "carried", ExpectedEngine::Cpu).is_err());
+        assert!(
+            require_report_identity("integer", &cpu, "carried", ExpectedEngine::Integer).is_err()
+        );
+        assert!(
+            require_report_identity("wrong artifact", &cpu, "minus-C", ExpectedEngine::Cpu)
+                .is_err()
+        );
         assert_eq!(normalize_report(&cpu), normalize_report(&integer));
+        require_report_metadata("panel", &[&cpu, &integer]).unwrap();
+
+        let mut different_inputs = integer.clone();
+        different_inputs["inputs"]["labels_sha256"] = json!("other labels");
+        assert!(require_report_metadata("panel", &[&cpu, &different_inputs]).is_err());
+
+        let mut different_settings = integer;
+        different_settings["settings"]["reply_tokens"] = json!(32);
+        assert!(require_report_metadata("panel", &[&cpu, &different_settings]).is_err());
     }
 
     #[test]
@@ -562,7 +786,16 @@ mod tests {
         let carried = json!({
             "teacher_forced": {
                 "first_target": {"top1": 0, "top8": 2, "top32": 3, "rank_p50": 10},
-                "rows": [{"id": "a", "target_ranks": [3], "raw_target_ranks": [3], "chosen_token": 4, "raw_nearest_token": 4}]
+                "rows": [{
+                    "id": "a",
+                    "target_ranks": [3],
+                    "raw_target_ranks": [3],
+                    "raw_nearest_tokens": [4],
+                    "eos_rank": 2,
+                    "raw_eos_rank": 2,
+                    "point_key_overrides": 0,
+                    "chosen_target_mismatches": 1
+                }]
             },
             "paired_first": {
                 "totals": {"asked_better": 1},
@@ -572,7 +805,16 @@ mod tests {
         let minus_c = json!({
             "teacher_forced": {
                 "first_target": {"top1": 0, "top8": 1, "top32": 3, "rank_p50": 12},
-                "rows": [{"id": "a", "target_ranks": [5], "raw_target_ranks": [5], "chosen_token": 4, "raw_nearest_token": 4}]
+                "rows": [{
+                    "id": "a",
+                    "target_ranks": [5],
+                    "raw_target_ranks": [5],
+                    "raw_nearest_tokens": [5],
+                    "eos_rank": 2,
+                    "raw_eos_rank": 2,
+                    "point_key_overrides": 0,
+                    "chosen_target_mismatches": 0
+                }]
             },
             "paired_first": {
                 "totals": {"asked_better": 0},
@@ -583,5 +825,23 @@ mod tests {
         assert_eq!(delta["changed_by_cut"], true);
         assert_eq!(delta["teacher_forced"]["changed_rows"], 1);
         assert_eq!(delta["paired_first"]["changed_rows"], 1);
+    }
+
+    #[test]
+    fn rank_delta_refuses_a_report_without_rank_sections() {
+        let generation_only = json!({"rows": [{"id": "a"}]});
+        assert!(rank_delta(&generation_only, &generation_only).is_err());
+    }
+
+    #[test]
+    fn published_hashes_are_checked_case_insensitively_and_required_as_a_pair() {
+        require_published_sha("artifact", "abc123", Some("ABC123")).unwrap();
+        assert!(require_published_sha("artifact", "abc123", Some("def456")).is_err());
+        let args = ["--carried", "a", "--carried-sha256", "abc"]
+            .into_iter()
+            .map(str::to_owned);
+        assert!(parse_args(args)
+            .unwrap_err()
+            .contains("must be given together"));
     }
 }
