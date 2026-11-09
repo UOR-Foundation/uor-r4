@@ -16,6 +16,8 @@ The exports use the existing laptop snapshot path (`hamming-base-copy`, then `cp
 | L-aC-s1 | step-008192 | exact -C | 0 | 0 | 0 | 0 | 39 | 0 | 217 | 0 | 25 | 135 | 25 |
 | L-aC-s1 | step-012288 | carried | 0 | 4 | 0 | 0 | 0 | 0 | 256 | 0 | 0 | 44 | 104 |
 | L-aC-s1 | step-012288 | exact -C | 0 | 4 | 0 | 0 | 2 | 0 | 254 | 0 | 2 | 43 | 95 |
+| L-aC-s1 | step-016384 | carried | 0 | 3 | 0 | 0 | 2 | 0 | 254 | 0 | 1 | 60 | 77 |
+| L-aC-s1 | step-016384 | exact -C | 0 | 4 | 0 | 0 | 4 | 0 | 252 | 0 | 2 | 58 | 89 |
 
 ## Files and hashes
 
@@ -56,5 +58,19 @@ d88a6f6eea24e42e6973bcce51e810115b8c8e0f7ae131115984eedb3818862c served-minus-C.
 1184810cd13377db25e461380fb27ddfe1e891ad496f4f22b4b1ccafc3088aae score-minus-C.json
 dc48e39511dc937d1066fecbb2f843630fa9e88a0096fb54d7cb4f3631e71c3e pod.snapshot.json
 8f65173c078c27681db31bb947eb4cf195923977ba96becf2af3f30b3e82399c served.snapshot.json
+scorer served-reply-panel at main, b4aa8d85b72f17619234dee1a34b8949f4860bee53210c0e8823e24f63982b43
+```
+
+### L-aC-s1 step-016384
+
+Store: `results/claude/one-model-end-to-end-language-carry-2026-11-09/early/L-aC-s1/step-016384/` (fetch with `scripts/pod/uor-store get`).
+
+```text
+ba221c27f846fc171856280135964e6a66a7a4ff5d7733b763570fa1d196b6e7 served.uorlut
+6e85e4e201e09771b56aa54d0ed680120ed00fbb082caaf7a8459681296da5e6 served-minus-C.uorlut
+f3a955ddbb1cf98e6d58a3987544e9fbf30f1d453151ed158053ac82a8748a1d score.json
+24f0411424348440c60d60a35d48a0b39fbba8681829853395b44bb3347594de score-minus-C.json
+17e908270e6e5d3b64e07975c312f5c306c7bd64a0b2dfbc8797b504ef080e57 pod.snapshot.json
+e4ae9c820f54466ae5a81572a0841cb739c381328e8c203daa2783731a457f85 served.snapshot.json
 scorer served-reply-panel at main, b4aa8d85b72f17619234dee1a34b8949f4860bee53210c0e8823e24f63982b43
 ```
