@@ -22,15 +22,19 @@ At (b64L)'s recipe and pin, on claude-322's TRAIN (D3 + the reply-capped `mw-bal
 - **does stopping hold** (EOS stops and collapse, against claude-322's 109 / 86 and 9 / 6)?
 - **what does it cost on the held-out human text,** against (b64L-D3) and claude-322?
 
-## Base artifact and TRAIN
+## Base artifact
 
 - **Recipe:** claude-301's (b64L), unchanged. `--objective nearest --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 64 --micro-batch 16`, for 16,384 steps at `--eval-every 1024`.
-- **TRAIN:** claude-322's mix, from the store at `results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/`:
+- **The pin:** `fbf15e56f3ab1961b30610893392e7a97fd0ab18` (claude-338's merge). It holds claude-337's pull, claude-336's served asks and claude-338's scorer. The trainer is built at the pin on each pod; the scorer and `fbs-export` are built at the pin on the laptop.
+
+## Data split
+
+- **TRAIN:** claude-322's mix, unchanged, from the store at `results/claude/one-model-end-to-end-b64l-d3mwcap6-2026-11-08/train/`:
   - tokens `0273173e16e805706a9b3e816c3de46b824a53daf91be3b812be360f8e8e75a7`;
   - mask `da506e850145f55b746929e108e0fd240ddf753f6a90b23976c98e159a1cb293`;
   - manifest `442ead2c92ae9a2e6b0b500ebbc12eb6e472f91c96465b6c1347fa80ac232ae9`.
   - 417,421 usable TRAIN windows.
-- **The pin:** `fbf15e56f3ab1961b30610893392e7a97fd0ab18` (claude-338's merge). It holds claude-337's pull, claude-336's served asks and claude-338's scorer. The trainer is built at the pin on each pod; the scorer and `fbs-export` are built at the pin on the laptop.
+- **DEV, the held-out panels and m2-fresh256:** claude-322's, at its pins (its sheet's Data split). Nothing is regenerated.
 
 ## Arms
 
