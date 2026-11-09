@@ -679,10 +679,13 @@ pub fn hold_hamming_ask_in_exported_range(reads: &HammingReads) -> Result<()> {
     for ask in reads.reads.iter().filter_map(|read| read.ask.as_ref()) {
         let tensor = ask.as_tensor();
         let values = tensor.flatten_all()?.to_vec1::<f32>()?;
-        if values.iter().any(|&v| v < low || v > high) {
+        if values.iter().any(|&v| v.is_finite() && (v < low || v > high)) {
             // On the host, as the rounding does. A value that is not finite stays as it is,
             // for the rounding to refuse by name.
-            let held = values.into_iter().map(|v| v.clamp(low, high)).collect();
+            let held = values
+                .into_iter()
+                .map(|v| if v.is_finite() { v.clamp(low, high) } else { v })
+                .collect();
             ask.set(&Tensor::from_vec(held, tensor.shape(), tensor.device())?)?;
         }
     }

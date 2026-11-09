@@ -327,7 +327,8 @@ struct ServedValues {
 impl ServedValues {
     /// Copy each variable's value, then round them in place with the export's own roundings
     /// (`fbs_export::round_tables_as_exported`, `round_hamming_as_exported`,
-    /// `round_memory_as_exported`). A rounding the export refuses leaves every value as it was.
+    /// `round_memory_as_exported`). A rounding the export refuses leaves every value as it was,
+    /// apart from an ask weight already held at the end of its range.
     fn round(
         model: &StackModel,
         reads: Option<&crate::flock_read_hamming::HammingReads>,
@@ -21776,6 +21777,37 @@ mod tests {
         assert_eq!(head(ask)?, [-8.0, top, top, -7.5, 0.25], "the served values");
         guard.restore()?;
         assert_eq!(head(ask)?, [-8.0, top, top, -7.5, 0.25], "the float masters");
+        Ok(())
+    }
+
+    /// claude-339: the hold covers every read's ask table, and holds only finite weights. An
+    /// infinite weight or a NaN is still refused by the rounding, never served as the range's end.
+    #[test]
+    fn every_ask_is_held_and_a_weight_not_finite_is_still_refused() -> Result<()> {
+        let device = Device::Cpu;
+        let (model, reads, _memory) = served_parts(&device)?;
+        let reads = reads.with_ask(2)?;
+        let asks: Vec<_> = reads.reads.iter().filter_map(|read| read.ask.as_ref()).collect();
+        assert!(asks.len() > 1, "more than one read asks");
+        for ask in asks {
+            let set = |first: f32| -> Result<()> {
+                let mut values = vec![0f32; ask.elem_count()];
+                values[0] = first;
+                Ok(ask.set(&Tensor::from_vec(values, ask.shape(), &device)?)?)
+            };
+            set(-8.25)?;
+            let guard = round_if_served(true, &model, Some(&reads), None)?.expect("the guard is on");
+            assert_eq!(ask.as_tensor().flatten_all()?.to_vec1::<f32>()?[0], -8.0, "held");
+            guard.restore()?;
+            for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
+                set(bad)?;
+                assert!(
+                    round_if_served(true, &model, Some(&reads), None).is_err(),
+                    "{bad} refused"
+                );
+            }
+            set(0.0)?;
+        }
         Ok(())
     }
 
