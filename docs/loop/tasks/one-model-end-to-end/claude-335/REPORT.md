@@ -9,10 +9,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - It is **undertrained** by the sheet's test: `R_ask` rose from 0.041 / 0.066 at 14,336 to 0.240 / 0.258 at 16,384.
   - The same arm passes at seed 2 (below), so the seeds split on whether the scored loss alone trains the carry in this budget. The REPORT makes no claim on that question.
 - **The carry gain `c` is not largest on the question tokens alone, as the sheet expected.**
-  - On every carried arm, `|c|` settles near 7.55 on the 16 question tokens and near 8.2 on the 4 header tokens. The header's extremes are as large as the question's, or larger.
+  - On every carried arm, the largest `|c|` on the 16 question tokens is near 7.57, and on the 4 header tokens near 8.2 (B2-aC at seed 1: header mean 6.15, minimum 0.0). The header's extremes are as large as the question's, or larger.
   - On B2-aqC at seed 1 the header mean is 8.09 against the question's 7.55. At seed 2 the header tokens split in sign (mean 0.00, extremes −8.22 / +8.22), while the question tokens stay at +7.53 to +7.57.
   - On B2-aC the question tokens also split in sign: mean 1.89 (seed 1) and −2.83 (seed 2), extremes ±7.57.
-  - The value tokens stay small (mean −0.03 to 0.10, extremes about ±2.1), and the rest stays at about 0.
+  - On the `both` arms the value tokens stay small (mean −0.03 to 0.10, extremes about ±2.1) and the rest stays at about 0. On B2-aC both groups are exactly 0.
   - So the carry weights the question and the header, not the question alone. A negative `c` adds the token's antipode; the sheet did not foresee the sign split, and this unit does not read what it does.
 - **The question row's own choice is lost on B2-aqC8 and B2-aC, while the scored row answers.**
   - The readout read's question-row trace (`position == "query"`, depth 6) reads below 0.5 · rows on B2-aqC8 (138–168 of 512 at both seeds) and on B2-aC (152–160 at seed 1, 84–146 at seed 2). B2-aqC keeps it, lower than without the carry: 335–407 (seed 1) and 288–357 (seed 2). B2-aq, with no carry, keeps 410–512 there.
@@ -100,7 +100,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **It shows:**
   - With the question's ask point carried four rows forward to the readout read, the model answers B2's question four tokens after it is asked: 466–512 of 512 per far bucket, against at most 2 of 512 with no read, on both seeds, with `h = 4` and `h = 8`.
   - The answer comes through the carry: with the carry cut at evaluation, the same models answer at most 54 of 512.
-  - The learned gain picks the question and the header tokens out of the window, with no aid.
+  - The learned gain picks the question and the header tokens out of the window, with no hand-set value: the found-copy pull trains it.
 - **It does not show:**
   - whether the pull at the scored rows alone trains the carry (the seeds split);
   - anything about language text, longer gaps than `h`, or the served integer path. No carried model is exported or served: the export and the decode step refuse the carry.
@@ -127,8 +127,8 @@ Closes nothing: #3407 stays open.
 
 ## Plain summary
 
-The model can now answer a question four words after it is asked. Before this unit it picked the right fact at the question but could not give it four words later: at most 2 right answers out of 512.
+On a synthetic recall task, the model can now answer a question four tokens after it is asked. Before this unit it picked the right fact at the question but could not give it four tokens later: at most 2 right answers out of 512.
 
 This unit carries the question itself forward, four or eight words, to the place where the model looks up the answer. With that, it answers 466 to 512 of 512 on both test seeds. With the carried question switched off, the same models fall back to at most 54 of 512, so the carry is what does it.
 
-One version, trained only where the answer is scored, worked on one seed and was still learning on the other. Three rented GPUs did the work for $1.92. The next step is to make the served model use the carry, then try it on real text.
+One version, trained only where the answer is scored, worked on one seed and was still learning on the other. Three rented GPUs did the work for $1.92, plus at most $0.43 for three that never started. The next step is to make the served model use the carry, then try it on real text.
