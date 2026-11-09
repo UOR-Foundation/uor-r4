@@ -91,6 +91,10 @@ projection gives `109,367.677487699 s`.
 - `cargo build --release --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-arm-regression`: passed.
 - Targeted `rustfmt --check` and `git diff --check`: passed.
+- `uor-harness loop report --check`, `loop pr-check --local` and
+  `loop gates --full`: passed; all 11 full gates were green.
+- `uor-harness check`: 363 rules, 0 errors and 329 pre-existing warnings,
+  predominantly merged-claim and orphan-branch hygiene outside this unit.
 
 ## Skills used
 
