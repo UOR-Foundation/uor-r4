@@ -17,7 +17,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Updated the deepseek-257 report to record the fourth review and this repair.
 - Recomputed the retained-text receipt only after this report was final:
   deepseek-254 through deepseek-258 plus the resource ledger total
-  `87247` bytes.
+  `87536` bytes.
 - Corrected only `storage.task_and_ledger_bytes` and the ledger timestamp in
   `resource-ledger.json`. No Rust source, checkpoint, evidence report,
   executable, notebook row or scientific claim changed.
@@ -26,17 +26,23 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 
 ## Measurements
 
-- Exact task-folder files plus the resource ledger: `87247` bytes.
+- Exact task-folder files plus the resource ledger: `87536` bytes.
 - Focused binary tests: eight remain defined; this record-only repair does not
   rebuild or execute them.
 - Evidence hashes and release executable identity are unchanged from
   deepseek-254 through deepseek-257.
+- `pr-check` size: tests 0 files `+0/-0`; code 2 files `+937/-109`; docs 12
+  files `+713/-0`; generated 0 files `+0/-0`; other 4 files `+1864/-0`.
 - External GPU cost remains `$0`; no pod, store upload or paid API was used.
 
 ## Checks run at the head
 
-- Exact task-plus-ledger byte arithmetic and `git diff --check`: pending.
-- `loop report --check`, `loop pr-check --local` and all 11 full gates: pending.
+- Exact task-plus-ledger byte arithmetic, JSON parsing and `git diff --check`:
+  passed.
+- `loop report --check --order .../deepseek-258/ORDER.md` and
+  `loop pr-check --local`: passed. The only warnings were five pre-existing
+  FILEMAP advisory rows.
+- `loop gates --full`: all 11 gates passed.
 - A fifth fresh exact-head review is requested after the final receipt commit.
 
 ## Skills used
