@@ -34,7 +34,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 - Default routing, migration, build-only and duplicate-MCP regressions failed for their intended reasons before their corresponding fixes. The focused default/legacy Playwright cases then passed (`green-focused-review.log`), followed by the complete checks above at `c23679a2125113c48b4c3a12c192d3a2b3bcbaab` / `5a0576c160ef8507771aad8d4ba6c67a56baf98c`.
 - `git diff --check`, staged allowlist/catalog validation and direct staged WASM **7/7** pass. Earlier raw-TypeScript, bare-receiver, stale-dist, setup and fixture failures are not relabeled as passes.
-- `uor-harness loop report --check`, `uor-harness loop pr-check --local` and `uor-harness loop gates --full` run after this REPORT commit, with final clean HEAD/tree and retained logs. Fresh exact-head review, required GitHub checks, protected queue acceptance and actual merge remain outstanding at this writing.
+- `uor-harness loop report --check`, `uor-harness loop pr-check --local` and `uor-harness loop gates --full` passed at clean HEAD `0ceddb0f8009ad6c55eb7afedf0c37b56474298c`, with all 11 gate commands GREEN and retained logs. Agent-80 then required this REPORT-only tense correction; the same checks are rerun at its new clean delivery head before fresh review. Fresh exact-head approval, required GitHub checks, protected queue acceptance and actual merge remain outstanding at this writing.
 - Fresh-main publication and hard-reloaded public default-route verification are also outstanding. `kimi-17` will own live publication/current records and rollback identity after actual deployment; none is inferred from this staged evidence.
 
 ## Decisions and rejected alternatives
@@ -52,7 +52,7 @@ Systematic debugging, receiving code review, red/green test-driven development, 
 
 ## Still open
 
-Final repository gates, fresh exact-head approval, required checks, actual protected merge, fresh-main typed build/publication, public default/legacy/terminal-limit verification, and `kimi-17` publication records. Shared agent runtime, parallel tasks, project memory, steering/orchestration, Dispatch, connectors, embedded browser/computer use, live R4 API, signed release and useful-model behavior remain unbuilt.
+Fresh exact-head approval, required GitHub checks, actual protected merge, fresh-main repository gates and typed build/publication, public default/legacy/terminal-limit verification, and `kimi-17` publication records. Shared agent runtime, parallel tasks, project memory, steering/orchestration, Dispatch, connectors, embedded browser/computer use, live R4 API, signed release and useful-model behavior remain unbuilt.
 
 ## Plain summary
 
