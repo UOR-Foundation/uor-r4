@@ -207,10 +207,19 @@ That is inside the caps and one GPU unit. Outcome 1's extension would add about 
 
 | Script | SHA-256 |
 |---|---|
-| `job-330.sh` | `a1a60323fe1d0702feb433c8a493ede8769d6f96c8c68aac74fe8ffbbf9c2d5b` |
+| `job-330.sh` | `8d4f86a78cb2e6e8e929a3e030943d4dc0c8cecc719c54ffdb18e6df512e80d6` |
 | `chain-330.sh` | `110145dde3e26e6c90c08f906948950071a86ac08c2efdf4986d11831b974251` |
 | `seal-330.sh` | `302257b9a16168199c71204d64c9f00fea9f17ee7ca8d901289039a6320575c1` |
 | `mutate-330.sh` | `746fd39d32fc8c781c9a45dfe70e1c8192d207aa667f042e925bb83c5ba9424f` |
 | `mutate-328.sh` | `6c6647e4b7882d39db24e189e2a3b29ca595317394b9d9e707e26bd20f6745c8` |
 | `watch-330.sh` | `3ebc07a18f2dc85b2edd4b11fd4d307126db27feb255833e7db299dac6619e4b` |
-| `seed-330.sh` | `a9cc06f41c4ee2c32390a9f0b2bd351b3146591bcd8a269ed73ed37ef752cf30` |
+| `seed-330.sh` | `2926e5a7dfd6f64a1ceffc2f52599c84b84b432db1a463f5092dc0693a7f8f86` |
+
+**[claude] First launch, and the fix (8 Nov 2026).** Both pods stopped at I-0 with `EXIT 4 I-0: ask_heads_start_as_copy_heads_bit_for_bit did not pass`. Both sealed to `runs/s1` and `runs/s2` and went down. The two pods cost about $0.12 together.
+- **The cause was an instrument fault, not the mechanism.** I-1 built the base checkout into the same target directory the pin used. Cargo keeps a workspace member's absolute path out of its artifact hash, so it counted the base's binary as fresh for the pin. It finished in 0.06 s and ran the base's tests: 442 of them, 426 passed, with the same binary hash, `092ee3c6f32e4c6e`, in `i1-base.err` and `tests.err`. The pin's new tests did not exist in that binary.
+- **The fix:**
+  - The base builds into its own target, `/root/build/target-base`.
+  - Two new guards stop the job if a step runs another checkout's binary. The base's digest step must show the crate compiling from the base's checkout. I-0 must show it compiling from the pin's.
+  - `seed-330.sh` now takes the store root and allows only `runs-2`. `runs/s1` and `runs/s2` stay sealed as they are (L-002).
+  - Only `job-330.sh` and `seed-330.sh` changed. Their old hashes were `a1a60323fe1d0702feb433c8a493ede8769d6f96c8c68aac74fe8ffbbf9c2d5b` and `a9cc06f41c4ee2c32390a9f0b2bd351b3146591bcd8a269ed73ed37ef752cf30`, and the table above now shows the new ones.
+- **The rerun** goes to `runs-2/s1` and `runs-2/s2`, at the same pin, with the same bars.
