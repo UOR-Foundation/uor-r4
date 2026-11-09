@@ -51,11 +51,37 @@ All three seed-1 L-aC artifact pairs were independently downloaded from the stor
 their published `SHA256SUMS` files verified. The final carried artifact at step 16,384 is
 `ba221c27…`; its reproduced `−C` is `6e85e4e2…`.
 
+The final seed-2 audit command was:
+
+```sh
+ROOT=local/deepseek/real-artifact-audit
+READ=$ROOT/official-read/results/claude/one-model-end-to-end-language-carry-2026-11-09/read
+real-artifact-audit \
+  --carried "$READ/served/L-aC-s2-step-016384.uorlut" \
+  --minus-c "$READ/served/L-aC-s2-cut.uorlut" \
+  --carried-cpu "$ROOT/official-read/panel-cpu/carried.json" \
+  --carried-integer "$READ/score/L-aC-s2-step-016384.json" \
+  --minus-c-cpu "$ROOT/official-read/panel-cpu/minus-C.json" \
+  --minus-c-integer "$READ/score/L-aC-s2-cut.json" \
+  --carried-rank "$ROOT/official-read/panel-cpu-ranked/carried.json" \
+  --minus-c-rank "$ROOT/official-read/panel-cpu-ranked/minus-C.json" \
+  --carried-sha256 2741d9383a80c300b90ca2d5cbc1e06a9b664d913971f84ddbc2916a1625a430 \
+  --minus-c-sha256 391392f5c47af2cd6a1e091417dcc04c5340080474ebf6dad5d10ca2cfd277e5 \
+  --expected-rows 256 --out "$ROOT/official-read/audit-v10.json"
+```
+
+The seed-1 runs use the same flags, with the early or final directory named in
+[AUDIT.json](AUDIT.json) in place of the read-store paths.
+
 | Step | Generation rows changed by cut | First-target rows changed | Paired-first rows changed | Asked-better carried / `−C` | First-target top-1 carried / `−C` |
 |---|---:|---:|---:|---:|---:|
 | 8,192 | 157 / 256 | 223 / 256 | 254 / 256 | 126 / 256 vs 125 / 256 | 0 / 256 vs 0 / 256 |
 | 12,288 | 53 / 256 | 0 / 256 | 0 / 256 | 127 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
 | 16,384 | 87 / 256 | 136 / 256 | 156 / 256 | 128 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
+
+The earliest generation divergence is at token index 1 at all three seed-1 points
+and token 0 for seed 2. The first changed case in id order diverges later at
+6, 9, 1 and 12 respectively; [AUDIT.json](AUDIT.json) records both.
 
 Seed 2's official artifacts are in the read store. The carried artifact hashes to
 `2741d938…`, and the exact cut hashes to `391392f5…`. The audit changes 44 / 256
@@ -85,15 +111,16 @@ lines and 0 complete replies.
 
 ## Checks run at the head
 
-- `real-artifact-audit` tests: **7 passed**, including same-engine rejection,
+- `real-artifact-audit` tests: **8 passed**, including same-engine rejection,
   malformed-engine rejection, wrong-artifact rejection, partial-inventory rejection,
   cross-arm metadata rejection, missing-rank-section rejection and a rank inventory that
-  diverges from the CPU generation report.
+  diverges from the CPU generation report, plus a generation row missing its compared
+  fields.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
 - Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
   and 16,384, with both published hashes supplied and verified.
 - Official seed-2 final pair: **1 / 1 passed**, with both published hashes, report identity
-  and panel metadata checked. The audit receipt hashes to `4932d7b0…`.
+  and panel metadata checked. The audit receipt hashes to `86228e82…`.
 - CPU panel versus stored integer report: **8 / 8 comparisons passed** across carried and
   `−C`.
 - Published store `SHA256SUMS`: **4 / 4 pairs verified**.

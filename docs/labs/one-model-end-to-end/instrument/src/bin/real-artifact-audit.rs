@@ -180,7 +180,8 @@ fn run() -> Result<()> {
             "out": args.out,
             "sha256": sha256(&bytes),
             "carry_changes_generation": report["reports"]["generation"]["changed_rows"].as_u64().unwrap_or(0) > 0,
-            "carry_changes_ranks": report["ranks"]["changed_by_cut"].as_bool().unwrap_or(false),
+            "ranks_supplied": report["ranks"].is_object(),
+            "carry_changes_ranks": report["ranks"]["changed_by_cut"].as_bool(),
         })
     );
     Ok(())
@@ -568,15 +569,96 @@ fn require_same_ids(
     Ok(())
 }
 
+fn require_fields(label: &str, id: &str, row: &Value, fields: &[&str]) -> Result<()> {
+    for field in fields {
+        if row.get(*field).is_none() {
+            return Err(format!("{label} row {id} has no {field}"));
+        }
+    }
+    Ok(())
+}
+
+fn require_generation_row(label: &str, id: &str, row: &Value) -> Result<()> {
+    require_fields(
+        label,
+        id,
+        row,
+        &["reply_ids", "reply_text", "stop", "complete"],
+    )?;
+    if !row["reply_ids"].is_array()
+        || !row["reply_text"].is_string()
+        || !row["stop"].is_string()
+        || !row["complete"].is_boolean()
+    {
+        return Err(format!("{label} row {id} has a malformed generation field"));
+    }
+    Ok(())
+}
+
+fn require_teacher_row(id: &str, row: &Value) -> Result<()> {
+    require_fields(
+        "teacher-forced",
+        id,
+        row,
+        &[
+            "target_ranks",
+            "raw_target_ranks",
+            "raw_nearest_tokens",
+            "eos_rank",
+            "raw_eos_rank",
+            "point_key_overrides",
+            "chosen_target_mismatches",
+        ],
+    )?;
+    if !row["target_ranks"].is_array()
+        || !row["raw_target_ranks"].is_array()
+        || !row["raw_nearest_tokens"].is_array()
+        || !row["eos_rank"].is_u64()
+        || !row["raw_eos_rank"].is_u64()
+        || !row["point_key_overrides"].is_u64()
+        || !row["chosen_target_mismatches"].is_u64()
+    {
+        return Err(format!(
+            "teacher-forced row {id} has a malformed rank field"
+        ));
+    }
+    Ok(())
+}
+
+fn require_paired_row(id: &str, row: &Value) -> Result<()> {
+    require_fields(
+        "paired-first",
+        id,
+        row,
+        &[
+            "asked_rank",
+            "other_rank",
+            "raw_asked_rank",
+            "raw_other_rank",
+        ],
+    )?;
+    if !row["asked_rank"].is_u64()
+        || !row["other_rank"].is_u64()
+        || !row["raw_asked_rank"].is_u64()
+        || !row["raw_other_rank"].is_u64()
+    {
+        return Err(format!("paired-first row {id} has a malformed rank field"));
+    }
+    Ok(())
+}
+
 fn generation_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
     let carried = rows_by_id(carried, None)?;
     let minus_c = rows_by_id(minus_c, None)?;
     require_same_ids("generation", &carried, &minus_c)?;
     let mut changed_rows = 0usize;
     let mut changed_tokens = 0usize;
-    let mut first_divergence = Value::Null;
+    let mut earliest_divergence: Option<(usize, String, Value, Value)> = None;
+    let mut first_changed_case = Value::Null;
     for (id, carried_row) in &carried {
         let minus_row = &minus_c[id];
+        require_generation_row("carried", id, carried_row)?;
+        require_generation_row("minus-C", id, minus_row)?;
         let same = ["reply_ids", "reply_text", "stop", "complete"]
             .into_iter()
             .all(|field| carried_row.get(field) == minus_row.get(field));
@@ -598,23 +680,39 @@ fn generation_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
             let minus_token = minus_ids.get(index).cloned().unwrap_or(Value::Null);
             if carried_token != minus_token {
                 changed_tokens += 1;
-                if first_divergence.is_null() {
-                    first_divergence = json!({
+                if first_changed_case.is_null() {
+                    first_changed_case = json!({
                         "id": id,
                         "index": index,
                         "carried_token": carried_token,
                         "minus_c_token": minus_token,
                     });
                 }
+                if earliest_divergence
+                    .as_ref()
+                    .is_none_or(|(earliest, _, _, _)| index < *earliest)
+                {
+                    earliest_divergence = Some((index, id.clone(), carried_token, minus_token));
+                }
                 break;
             }
         }
     }
+    let earliest_divergence =
+        earliest_divergence.map_or(Value::Null, |(index, id, carried, minus)| {
+            json!({
+                "id": id,
+                "index": index,
+                "carried_token": carried,
+                "minus_c_token": minus,
+            })
+        });
     Ok(json!({
         "rows": carried.len(),
         "changed_rows": changed_rows,
         "changed_token_rows": changed_tokens,
-        "first_divergence": first_divergence,
+        "earliest_divergence": earliest_divergence,
+        "first_changed_case": first_changed_case,
     }))
 }
 
@@ -637,6 +735,22 @@ fn rank_delta(
         &minus_teacher,
         minus_c_generation,
     )?;
+    for (id, row) in &carried_teacher {
+        require_teacher_row(id, row)?;
+    }
+    for (id, row) in &minus_teacher {
+        require_teacher_row(id, row)?;
+    }
+    for report in [carried, minus_c] {
+        let first = report["teacher_forced"]["first_target"]
+            .as_object()
+            .ok_or("teacher-forced report has no first_target object")?;
+        for field in ["top1", "top8", "top32", "rank_p50"] {
+            if first.get(field).is_none() {
+                return Err(format!("teacher-forced first_target has no {field}"));
+            }
+        }
+    }
     let mut teacher_changed = Vec::new();
     let mut teacher_rank_changed = Vec::new();
     let mut first_target_changed = Vec::new();
@@ -687,6 +801,30 @@ fn rank_delta(
         &minus_paired,
         minus_c_generation,
     )?;
+    for (id, row) in &carried_paired {
+        require_paired_row(id, row)?;
+    }
+    for (id, row) in &minus_paired {
+        require_paired_row(id, row)?;
+    }
+    for report in [carried, minus_c] {
+        let totals = report["paired_first"]["totals"]
+            .as_object()
+            .ok_or("paired-first report has no totals object")?;
+        for field in [
+            "rows",
+            "same_first_token",
+            "distinct_first_token",
+            "asked_better",
+            "other_better",
+            "asked_top1",
+            "other_top1",
+        ] {
+            if totals.get(field).is_none() {
+                return Err(format!("paired-first totals has no {field}"));
+            }
+        }
+    }
     let mut paired_changed = Vec::new();
     for (id, carried_row) in &carried_paired {
         let minus_row = &minus_paired[id];
@@ -883,8 +1021,8 @@ mod tests {
         let delta = generation_delta(&carried, &minus_c).unwrap();
         assert_eq!(delta["rows"], 2);
         assert_eq!(delta["changed_rows"], 1);
-        assert_eq!(delta["first_divergence"]["id"], "a");
-        assert_eq!(delta["first_divergence"]["index"], 1);
+        assert_eq!(delta["earliest_divergence"]["id"], "a");
+        assert_eq!(delta["earliest_divergence"]["index"], 1);
     }
 
     #[test]
@@ -905,7 +1043,15 @@ mod tests {
                 }]
             },
             "paired_first": {
-                "totals": {"asked_better": 1},
+                "totals": {
+                    "rows": 1,
+                    "same_first_token": 0,
+                    "distinct_first_token": 1,
+                    "asked_better": 1,
+                    "other_better": 0,
+                    "asked_top1": 0,
+                    "other_top1": 0
+                },
                 "rows": [{"id": "a", "asked_rank": 3, "other_rank": 5, "raw_asked_rank": 3, "raw_other_rank": 5}]
             }
         });
@@ -925,7 +1071,15 @@ mod tests {
                 }]
             },
             "paired_first": {
-                "totals": {"asked_better": 0},
+                "totals": {
+                    "rows": 1,
+                    "same_first_token": 0,
+                    "distinct_first_token": 1,
+                    "asked_better": 0,
+                    "other_better": 0,
+                    "asked_top1": 0,
+                    "other_top1": 0
+                },
                 "rows": [{"id": "a", "asked_rank": 5, "other_rank": 5, "raw_asked_rank": 5, "raw_other_rank": 5}]
             }
         });
@@ -958,6 +1112,12 @@ mod tests {
                 .unwrap_err()
                 .contains("different case inventories")
         );
+    }
+
+    #[test]
+    fn generation_delta_refuses_rows_missing_their_compared_fields() {
+        let truncated = json!({"rows": [{"id": "a"}]});
+        assert!(generation_delta(&truncated, &truncated).is_err());
     }
 
     #[test]
