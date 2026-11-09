@@ -14061,6 +14061,8 @@ pub fn summarize_profile(rows: &[ProfileRow]) -> ProfileSummary {
 }
 
 pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Device) -> Result<()> {
+    // claude-337: the pull's question placements are refused before anything is read or written.
+    refuse_pull_placement_outside_recall(config)?;
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 {
         return Err(invalid("steps, batch and eval-every must be positive"));
     }
@@ -14208,7 +14210,6 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         None
     };
     // The Hamming reads, when on: their own optimizer, applied inside the trunk.
-    refuse_pull_placement_outside_recall(config)?;
     let mut hamming = start_hamming(config, device)?;
     // claude-337: the found-copy pull's record since the last checkpoint, when the pull is on.
     let mut pull_tally = (config.hamming_attract > 0.0).then(|| PullTally::new(config.hamming_attract));
@@ -18101,6 +18102,26 @@ mod tests {
             assert!(err.contains(&format!("--hamming-attract-at {place}")) && err.contains("--recall"), "{err}");
         }
         assert!(refuse_pull_outside_recall(&base).is_err(), "the other runners still refuse it");
+        // run_long itself refuses them first, before it reads its data root.
+        let missing = std::env::temp_dir().join(format!("claude-337-none-{}", std::process::id()));
+        let both = LongConfig { hamming_attract_at_both: true, ..base.clone() };
+        let refusal = run_long(&missing, &missing.join("out"), &both, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        assert!(refusal.contains("--hamming-attract-at both"), "{refusal}");
+        assert!(!missing.exists());
+    }
+
+    /// claude-337: a language run's `config.json` records the pull's weight, and leaves it out at 0.
+    #[test]
+    fn a_language_runs_config_records_the_pull_only_when_on() {
+        let on = LongConfig { hamming_read: 4, hamming_ask: true, hamming_attract: 1.0, ..config(0, None) };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_attract\":1.0"), "{json}");
+        assert!(!json.contains("hamming_attract_at"), "{json}");
+        let off = serde_json::to_string(&LongConfig { hamming_attract: 0.0, ..on }).unwrap();
+        assert!(!off.contains("hamming_attract"), "{off}");
     }
 
     /// claude-337: the pull in [`step_gradient`]. At λ = 0 the step is bit-identical to a step
