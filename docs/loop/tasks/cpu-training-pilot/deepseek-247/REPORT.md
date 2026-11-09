@@ -17,9 +17,18 @@ Implementation is in progress. The ORDER is committed and this REPORT stub
 exists so the branch can satisfy the loop's commit-order policy. No product
 code, measurement or claim has landed yet.
 
+## Measurements
+
+None yet.
+
 ## Checks run at the head
 
 None yet beyond the pre-push policy run that reported the missing REPORT.
+
+## Skills used
+
+No system-provided Codex skill applied. The project's loop and CPU-research
+instructions are being followed directly.
 
 ## Still open
 
