@@ -57,8 +57,8 @@ initializer experiment, not an artifact-schema or serving change.
 
 1. Unit tests cover exact solving, multiple targets, deterministic output,
    malformed pulls/checkpoints and non-finite failures.
-2. A synthetic checkpoint and B2 mapping produce a retained candidate Hamming
-   sidecar and report.
+2. A synthetic checkpoint and B2 mapping produce a candidate Hamming sidecar.
+   Its report and hashes are retained; the generated binary is not committed.
 3. The existing ask-offset audit accepts the candidate and shows the expected
    distance change.
 4. REPORT, report check, local policy, full gates and a fresh exact-head review

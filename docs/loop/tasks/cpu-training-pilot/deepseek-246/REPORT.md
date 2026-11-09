@@ -12,7 +12,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   the objective, candidate construction, sidecar and audit path; it is not
   evidence of learned generalization.
 - The release control uses synthetic identity rotations and a deterministic
-  two-target corpus. Its 40 ms wall measures local search throughput only, not
+  two-target corpus. Its 41 ms wall measures local search throughput only, not
   quality on a trained checkpoint.
 - The first validation pass covered malformed pull corpora but did not yet pin
   the malformed and non-finite checkpoint cases required by this order. Those
@@ -30,6 +30,13 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   Hamming depths `[2,6]` and rejects two-token copy keys on four-coordinate
   head halves. The solver and existing audit now validate those actual shapes
   and invariants.
+- A later exact-head review found three delivery defects. The solver accepted
+  ask tables at only some depths, the retained safetensors sidecar was a
+  committed binary, and the evidence-retention test could overwrite a sealed
+  prior root with `fs::copy`. The source reader now requires ask tables at
+  either none or every depth; evidence is retained by hash rather than as a
+  committed binary; and retention claims a fresh root and uses the same
+  no-replacement pair writer as the CLI.
 - Repository-wide `cargo fmt --all -- --check` is already red across many
   untouched files. The two new Rust files and their edited module are
   targeted-format clean; this unit did not reformat unrelated code.
@@ -67,10 +74,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   query/key/value rotations, margins and weights, plus valid scalar or mixed
   copy keys in the actual `[width/4,4]` quaternion layout. It requires the
   fixed depths `[2,6]`, rejects unknown tensor names and enforces the
-  two-token key's eight-coordinate half rule. Empty or zero-weight pulls,
-  out-of-vocab tokens, bad shapes, invalid head geometry, partial depths,
-  checked-overflow failures, non-finite values, type-spin mixing and invalid
-  copy-key records fail closed.
+  two-token key's eight-coordinate half rule. Existing ask tables must cover
+  either none or every depth. Empty or zero-weight pulls, out-of-vocab tokens,
+  bad shapes, invalid head geometry, partial depths, checked-overflow failures,
+  non-finite values, type-spin mixing and invalid copy-key records fail closed.
 - Output names are normalized through their real parent directories so aliases
   collide before solving. Candidate and report bytes are written to synced
   sibling temporaries and promoted without replacement. If the second
@@ -82,30 +89,34 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   relation map, verifies preserved candidate metadata and non-ask tensor bytes,
   then re-audits every selected pull from the serialized candidate. It writes
   candidate/report hashes plus per-cell zero/solved/improvement readings.
+- The deterministic evidence test creates its retention root exclusively and
+  publishes the report and candidate through synced, no-replacement promotion.
+  The repository retains the text report, hashes and measurement; the generated
+  safetensors sidecar is not committed under the charter's binary hygiene rule.
 - No serving, artifact-schema, training-default, GPU or Claude-owned file was
   changed.
-- Size: `pr-check` reports 14 changed paths: code 6 files `+2,199/-6`,
-  documentation 3 files `+263/-0`, and other/evidence/claim files 5 files
-  `+1,077/-0` (`+3,539/-6` total). The ORDER gave no line estimate. Inline unit
+- Size: `pr-check` reports 13 changed paths: code 6 files `+2,243/-6`,
+  documentation 3 files `+277/-0`, and other/evidence/claim files 4 files
+  `+1,079/-0` (`+3,599/-6` total). The ORDER gave no line estimate. Inline unit
   tests are counted in the code class.
 
 ## Measurements
 
-The retained synthetic checkpoint has 64 tokens, width 8, two Hamming depths
-and one copy/ask head pair. Over 16 questions and two depths it reduced total
+The synthetic B2-style run used 64 tokens, width 8, two Hamming depths and one
+copy/ask head pair. Over 16 questions and two depths it reduced total
 weighted search bits from **8 to 0**, improved **2/32** readings and used **96**
 total objective evaluations, all during candidate selection; no cell exhausted
 its budget. The selected-corpus audit reproduced the same 8-to-0 result across
 all 32 readings. The existing relation audit then measured **32/32** exact
 codes and **32/32** target-nearest cells, versus **30/32** target-nearest for
-the zero offsets. A fresh-output repeat was byte-identical. The selected-corpus
-verification makes another 64 objective calls after solving; those audit calls
-are outside the solver-search budget and are not included in
-`total_evaluations`.
+the zero offsets. A repeated invocation with fresh output paths in the same
+process was byte-identical. The selected-corpus verification makes another 64
+objective calls after solving; those audit calls are outside the solver-search
+budget and are not included in `total_evaluations`.
 
 - Synthetic report SHA-256:
-  `806019427e00b9c873cf717591e34c1dad3193809ed6bac6d9a104bccfc8584f`
-- Candidate Hamming sidecar SHA-256:
+  `1904418708b5bae93470b0fe892dec112bb7c5491a4cc1cf10b7c0e3beb21c32`
+- Generated candidate Hamming sidecar SHA-256 (not committed):
   `ef785c378684f997d24d91b026840854803c61c1a1d61b26ec35bbbc650d0d4a`
 - Synthetic model input SHA-256:
   `2a7a8ed21c2a3b5d07c3a4c9e2a35a30c53fa91f0c261bb8da18fde546b49549`
@@ -114,16 +125,17 @@ are outside the solver-search budget and are not included in
 - Default pull corpus SHA-256:
   `5b0b129803110a3efb90d063ca6c84bcdc9ac6ac0079ad2ccf733a09c61a80e0`
 - Binary SHA-256 recorded by the retained report:
-  `dbd89cb862cc855b85b9ec0caa347146659d6e088335bf11736f795ac0a2f8eb`
+  `20bcf337eff525ae2badc6bec033b42115f15c1c726b0051495c891be59c8af2`
 - Resource measurement SHA-256:
-  `078bbc59d79476912fd5ed7fc5f0cc7174b7a326cd6e9e4ec18b3dc47f2a2168`
+  `9e443dd9e2e6bb60f16c70d57e413be45b3103398146c001b785d0246f2cfcd2`
   ([measurement](evidence/resource-measurement.json)).
 
 The isolated release control used width 256, two depths, 16 questions and two
 targets per question. It completed **393,344** total objective evaluations in
-**40 ms** across 16 workers, with no exhausted cell. Maximum resident set size
-was 56,220 KiB for the benchmark and 236,444 KiB for the evidence test. This is
-a throughput measurement, not a trained-model or capability result.
+**41 ms** across 16 workers, with no exhausted cell. Maximum resident set size
+was 60,108 KiB for the benchmark and 236,100 KiB for the evidence test. The
+full library suite peaked at 772,512 KiB. This is a throughput measurement, not
+a trained-model or capability result.
 
 Resources are recorded in the
 [D84 ledger](../../../../labs/cpu-training-pilot-ask-offset-solver-2026-11-09/resource-ledger.json).
@@ -137,15 +149,17 @@ projection gives `107,567.677487699 s`.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver`: 4 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 472 passed,
-  5 ignored in 47.58 s.
+  5 ignored in 43.09 s; the timed process took 43.17 s and peaked at 772,512 KiB.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-audit`: 4 passed.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
-- `RAYON_NUM_THREADS=16 cargo test --release --offline --locked -p
-  uor-r4-cpu-train --lib release_width_256_two_depth_solver_benchmark --
-  --ignored --nocapture`: passed at 393,344 total evaluations and 40 ms.
-- The evidence-retaining binary test described above reproduced the retained
-  report and candidate sidecar in 5.85 s, peak RSS 236,444 KiB.
+- `RAYON_NUM_THREADS=16` on the release test binary with
+  `--ignored --nocapture --exact
+  ask_offset_solver::tests::release_width_256_two_depth_solver_benchmark`:
+  passed at 393,344 total evaluations and 41 ms.
+- The evidence-retaining binary test, run with 16 workers into a fresh root,
+  reproduced detached report and candidate outputs in 5.97 s, peak RSS 236,100
+  KiB.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver --bin cpu-ask-offset-audit`: passed with only
   pre-existing warnings in untouched files.
@@ -177,12 +191,12 @@ task-loop and delivery instructions were followed directly.
 
 ## Plain summary
 
-This unit gives the workstation a fast way to synthesize Claude-330's learned
-question offsets from token geometry alone. For each question token and
-Hamming depth, it tests the zero offset, exact offsets to requested target
-tokens and a robust median, then improves the best starts by exact weighted
-Hamming distance over rotated sign codes. It writes a complete checkpoint-like
-sidecar rather than mutating the source checkpoint.
+This unit gives the workstation a fast way to construct Claude-330-compatible
+question offsets from token geometry and supplied pulls. For each question
+token and Hamming depth, it tests the zero offset, exact offsets to requested
+target tokens and a robust median, then improves the best starts by exact
+weighted Hamming distance over rotated sign codes. It writes a complete
+checkpoint-like sidecar rather than mutating the source checkpoint.
 
 The synthetic run proves that a valid candidate can be made, preserved through
 safetensors, reopened by the existing audit and repeated byte-for-byte. It does

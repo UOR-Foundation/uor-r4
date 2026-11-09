@@ -243,7 +243,8 @@ impl AskOffsetSolveBasis {
         }
 
         let mut reads = Vec::with_capacity(depths.len());
-        for depth in depths {
+        let mut ask_depths = BTreeSet::new();
+        for &depth in &depths {
             let quaternion_shape = vec![width / 4, 4];
             for (part, shape) in [
                 ("query_rotation", quaternion_shape.clone()),
@@ -264,6 +265,7 @@ impl AskOffsetSolveBasis {
                     .tensor(&ask_name)
                     .map_err(|error| format!("{ask_name}: {error}"))?;
                 f32_values(&ask, &ask_name, &[vocab, width])?;
+                ask_depths.insert(depth);
             }
             let key_name = format!("d{depth}.key_rotation");
             let key_rotation = hamming_tensors
@@ -273,6 +275,11 @@ impl AskOffsetSolveBasis {
                 depth,
                 key_rotation: f32_values(&key_rotation, &key_name, &quaternion_shape)?,
             });
+        }
+        if !ask_depths.is_empty() && ask_depths.len() != depths.len() {
+            return Err(format!(
+                "ask tables cover depths {ask_depths:?}, but the Hamming read covers {depths:?}"
+            ));
         }
         let has_copy_key = hamming_tensors.names().contains(&"copy_key");
         let has_copy_keys = hamming_tensors.names().contains(&"copy_keys");
@@ -1273,6 +1280,22 @@ mod tests {
             .err()
             .expect("unexpected depth")
             .contains("Claude-330 Hamming depths are [2, 6]"));
+
+        let mut partial_ask_tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[heads as u32]),
+        )];
+        partial_ask_tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
+        partial_ask_tensors.retain(|(name, ..)| name != "d6.ask");
+        let partial_ask_hamming = tensor_file_owned(partial_ask_tensors, None);
+        assert!(
+            AskOffsetSolveBasis::from_bytes(&model, &partial_ask_hamming)
+                .err()
+                .expect("partial ask depths")
+                .contains("ask tables cover depths")
+        );
 
         let mut type_spin_tensors = vec![(
             "heads".to_owned(),

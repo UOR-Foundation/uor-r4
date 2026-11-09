@@ -417,6 +417,16 @@ fn write_new_pair(
     Ok(())
 }
 
+fn retain_evidence(root: &Path, hamming: &[u8], report: &[u8]) -> Result<()> {
+    std::fs::create_dir(root).map_err(|error| format!("{}: {error}", root.display()))?;
+    write_new_pair(
+        &root.join("synthetic-hamming.safetensors"),
+        hamming,
+        &root.join("synthetic-report.json"),
+        report,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,11 +665,10 @@ mod tests {
             .contains("reports are never replaced"));
 
         if let Ok(root) = std::env::var("UOR_KEEP_ASK_OFFSET_SOLVER_EVIDENCE") {
-            std::fs::create_dir_all(&root).unwrap();
-            std::fs::copy(&args["out"], Path::new(&root).join("synthetic-report.json")).unwrap();
-            std::fs::copy(
-                &args["hamming-out"],
-                Path::new(&root).join("synthetic-hamming.safetensors"),
+            retain_evidence(
+                Path::new(&root),
+                &std::fs::read(&args["hamming-out"]).unwrap(),
+                &std::fs::read(&args["out"]).unwrap(),
             )
             .unwrap();
         }
@@ -681,5 +690,17 @@ mod tests {
                 .to_string_lossy()
                 .contains(".uor-tmp-")
         }));
+
+        let retained = dir.0.join("retained");
+        retain_evidence(&retained, b"candidate", b"report").unwrap();
+        assert!(retain_evidence(&retained, b"changed", b"changed").is_err());
+        assert_eq!(
+            std::fs::read(retained.join("synthetic-hamming.safetensors")).unwrap(),
+            b"candidate"
+        );
+        assert_eq!(
+            std::fs::read(retained.join("synthetic-report.json")).unwrap(),
+            b"report"
+        );
     }
 }
