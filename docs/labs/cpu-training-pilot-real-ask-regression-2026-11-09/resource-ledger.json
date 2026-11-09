@@ -71,7 +71,7 @@
     "downloaded_store_metadata_bytes": 18191,
     "temporary_input_bytes": 556424899,
     "worktree_build_target_bytes": 5800592549,
-    "free_bytes_at_measurement": 149049872384,
+    "free_bytes_at_measurement": 149048844288,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
