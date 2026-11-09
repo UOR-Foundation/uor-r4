@@ -14,7 +14,7 @@ The automatic `loop claim` check was unavailable because the item's existing sco
 
 ## Files in scope
 
-- `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, and `web/studio/README.md`.
+- `web/studio/index.html`, `web/studio/vite.config.ts`, `web/studio/src/bootstrap.ts`, `web/studio/src/bootstrap.test.ts`, `web/studio/src/viteConfig.test.ts`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, and `web/studio/README.md`.
 - `docs/loop/tasks/studio-ide-harness/kimi-16/**` and `docs/superpowers/plans/2026-11-09-studio-default-cutover.md`.
 - `docs/integration/current-state.md`, `docs/products/web-client.md`, `docs/products/harness-parity.md`, `docs/research/notebook/m4-serving.md`, and the two existing Studio item records.
 - `scripts/tests/test_typed_runtime.py` only if an existing expectation needs to describe the new default truthfully.
@@ -24,7 +24,7 @@ No `src-tauri/**`, `web/studio/src/**`, API/model/engine/worker/tokenizer implem
 
 ## Done when
 
-- A real-browser test of `/` fails at base by retaining the legacy URL/UI, then passes by redirecting to `typed=1`, mounting one neutral shell, and preserving other query parameters and the theme hash. `?legacy=1` and `?typed=0` keep the old interface; `?typed=1` does not redirect.
+- A real-browser test of `/` fails at base by retaining the legacy URL/UI, then passes by mounting one neutral shell through the built entry while preserving the original URL, other query parameters and theme hash. `?legacy=1` and `?typed=0` keep the old interface without redirecting. Mounting activates migration only when inactive and preserves already migrated/current state.
 - The full typed unit and Playwright suites, generated-artifact build, typed staging/WASM checks, local policy and full gates pass at the exact clean head. Existing migration and Tauri inputs are unchanged.
 - Fresh adversarial review approves, required GitHub checks pass, and the protected queue returns an actual MERGED result.
 - Fresh-main verification passes, the reviewed typed build is published through the existing guarded path, and plain public `/studio/` mounts the neutral workbench at desktop and mobile sizes with no startup/runtime errors. The explicit legacy routes still work and the live terminal limitation remains truthful.

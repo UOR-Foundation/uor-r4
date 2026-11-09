@@ -4,7 +4,7 @@
 
 **Goal:** Make the plain hosted Studio URL mount the neutral workbench while keeping explicit legacy access and all existing runtime boundaries.
 
-**Architecture:** Add a small same-document `window.location.replace` redirect before persistence or legacy application code can run. It adds `typed=1` only when neither an explicit typed nor legacy selection exists, preserves other query parameters and the URL hash, and leaves the existing typed bootstrap unchanged.
+**Architecture:** Use a narrowly scoped Vite `transform` so only the built `typed_entry.js` defaults to the workbench; the source entry keeps its explicit `typed=1` preview guard and makes no raw-TypeScript request. `typedPreviewRequested` defaults to typed except for `legacy=1` or `typed=0`, and `mountTypedStudio` activates migration only when inactive, preserving first-mount and marked-reload state. The original URL, other query parameters, and hash are preserved without a redirect.
 
 **Tech Stack:** Existing HTML/vanilla JavaScript, Preact/Vite, Playwright, Node test tooling, Bash publication scripts, protected GitHub delivery.
 
@@ -23,30 +23,30 @@
 
 - Empty query: enter the typed workbench, not the legacy conversation page.
 - Explicit `legacy=1` or `typed=0`: retain the old interface without a redirect.
-- Additional query parameters and `#theme=light`: survive the default redirect exactly.
+- Additional query parameters and `#theme=light`: remain unchanged during default mounting.
 - Existing `typed=1`: do not create a navigation/reload loop or a second model worker.
 - Native `index.html?typed=1`: remains unchanged and needs no routing or storage edit.
 
 ---
 
-### Task 1: Default-route regression and minimal redirect
+### Task 1: Default-route regression and built-entry cutover
 
 **Files:**
 - Create: `docs/loop/tasks/studio-ide-harness/kimi-16/ORDER.md`, `docs/loop/tasks/studio-ide-harness/kimi-16/REPORT.md`, `docs/superpowers/plans/2026-11-09-studio-default-cutover.md`.
-- Modify: `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, `web/studio/README.md`.
+- Modify: `web/studio/index.html`, `web/studio/vite.config.ts`, `web/studio/src/bootstrap.ts`, `web/studio/src/bootstrap.test.ts`, `web/studio/src/viteConfig.test.ts`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, `web/studio/README.md`.
 - Modify after actual publication: `docs/integration/current-state.md`, `docs/products/web-client.md`, `docs/products/harness-parity.md`, `docs/research/notebook/m4-serving.md`, `docs/roadmap/items/studio-ide-harness.md`, `docs/roadmap/items/studio-typed-shell-upgrade.md`.
 
 **Interfaces:**
 - Consumes: existing `typedPreviewRequested(search)` and early persistence activation, both of which already recognize `typed=1`; the typed Vite publisher and existing Playwright configuration.
-- Produces: plain `/studio/` redirects to `?typed=1`; `?legacy=1` and `?typed=0` retain the legacy page; other parameters and hash are preserved. No TypeScript, model, storage, or native API signature changes.
+- Produces: plain `/studio/` mounts the neutral workbench without a redirect; `?legacy=1` and `?typed=0` retain the legacy page; other parameters and hash are preserved. No HTML source, model, storage migration, or native API signature changes.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add a real Playwright case to `web/studio/tests/e2e/shell.spec.ts`:
 
 ```ts
 await page.goto('/?publish=cutover#theme=light');
-await expect(page).toHaveURL('/?typed=1&publish=cutover&theme=light#theme=light');
+await expect(page).toHaveURL('/?publish=cutover#theme=light');
 await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
 await expect(page.locator('#app')).toBeHidden();
 await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -54,14 +54,14 @@ await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
 Also cover `?legacy=1` and `?typed=0`: each must keep the legacy `#app` visible and must not activate the typed root.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx playwright test tests/e2e/shell.spec.ts --grep "default URL enters the typed workbench"`.
 Expected: FAIL because the plain root retains the legacy URL and `#app` remains visible. Legacy fallback cases pass before and after the fix.
 
-- [ ] **Step 3: Implement the early default redirect in `web/studio/index.html`**
+- [x] **Step 3: Implement the built-entry default in `web/studio/vite.config.ts` and `web/studio/src/bootstrap.ts`**
 
-Before any stylesheet, persistence, or legacy application script runs, return immediately for `typed=0`, `typed=1`, or `legacy=1`. Otherwise translate an existing theme hash into the existing `theme` query when no explicit theme selection is present, delete the old typed value, and call `window.location.replace(window.location.pathname + '?typed=1&' + params.toString() + window.location.hash)`. Do not edit `bootstrap.ts`, `lifecycle_persistence.js`, the native URL, or the publisher. Legacy screenshot fixtures explicitly use `?legacy=1` so their original coverage remains intact.
+Keep the source `typed_entry.js` preview guard unchanged, and use the scoped `studio-default-typed-entry` Vite transform to replace only the built guard with `get('legacy') !== '1' && new URLSearchParams(globalThis.location?.search || '').get('typed') !== '0'`; missing guards fail the build. `typedPreviewRequested` defaults to typed except for `legacy=1` or `typed=0`. `mountTypedStudio` activates migration only when inactive, preserving an already migrated or current store, and applies both explicit theme queries and hashes. The source redirect is removed, so the original URL and hash remain unchanged and the source page makes no raw-TypeScript request. Legacy screenshot fixtures explicitly use `?legacy=1` so their original coverage remains intact.
 
 Update `web/studio/README.md` to describe default typed mounting and the explicit legacy fallbacks without claiming a full runtime cutover.
 

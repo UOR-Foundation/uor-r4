@@ -3,7 +3,7 @@ import { openTyped } from './support';
 
 test('default URL enters the typed workbench', async ({ page }) => {
     await page.goto('/?publish=cutover#theme=light');
-    await expect(page).toHaveURL('/?typed=1&publish=cutover&theme=light#theme=light');
+    await expect(page).toHaveURL('/?publish=cutover#theme=light');
     await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
     await expect(page.locator('#app')).toBeHidden();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
