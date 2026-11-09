@@ -274,6 +274,81 @@ describe('interactive PTY terminal', () => {
         expect(terminals).toHaveLength(1);
     });
 
+    it('never restores an old workspace when close and retry both reject', async () => {
+        let attempts = 0;
+        const close = vi.fn(async () => {
+            attempts += 1;
+            if (attempts < 3) throw new Error(`workspace close failure ${attempts}`);
+            return { active: false };
+        });
+        const invoke = nativeMock({ native_close_terminal: close });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/old/project')} />, host); });
+        await openTerminal();
+        act(() => { document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: { rootPath: '/new/project' } })); });
+        await vi.waitFor(() => expect(document.getElementById('terminalConsentState')?.textContent).toContain('workspace close failure 1'));
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined();
+        expect(button('Retry close')).toBeDefined();
+        act(() => { button('Retry close').click(); });
+        await vi.waitFor(() => expect(document.getElementById('terminalConsentState')?.textContent).toContain('workspace close failure 2'));
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined();
+        expect(button('Retry close')).toBeDefined();
+        act(() => { button('Retry close').click(); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(3));
+        expect(button('Open terminal')).toBeDefined();
+        expect(terminals).toHaveLength(1);
+    });
+
+    it('retries a rejected close once after unmount', async () => {
+        let attempts = 0;
+        const close = vi.fn(async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error('first unmount close failed');
+            return { active: false };
+        });
+        const invoke = nativeMock({ native_close_terminal: close });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await openTerminal();
+        act(() => { render(null, host); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+        expect(close).toHaveBeenNthCalledWith(1, { sessionId: 'session-a' });
+        expect(close).toHaveBeenNthCalledWith(2, { sessionId: 'session-a' });
+        expect(terminals).toHaveLength(1);
+    });
+
+    it('drops stale read input and resize completions after a new shell opens', async () => {
+        let sequence = 0;
+        let rejectRead!: (error: Error) => void;
+        let rejectInput!: (error: Error) => void;
+        let rejectResize!: (error: Error) => void;
+        const invoke = nativeMock({
+            native_open_terminal: () => { sequence += 1; return { sessionId: `session-${sequence}`, cursor: 0, active: true, events: [] }; },
+            native_read_terminal: (args) => args.sessionId === 'session-1'
+                ? new Promise((_resolve, reject) => { rejectRead = reject; })
+                : { sessionId: 'session-2', cursor: 1, active: true, events: [] },
+            native_terminal_input: () => new Promise((_resolve, reject) => { rejectInput = reject; }),
+            native_resize_terminal: () => new Promise((_resolve, reject) => { rejectResize = reject; }),
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await openTerminal();
+        await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('native_read_terminal', { sessionId: 'session-1', after: 0 }));
+        terminals[0].onData.mock.calls[0][0]('printf stale\n');
+        terminals[0].onResize.mock.calls[0][0]({ cols: 100, rows: 40 });
+        act(() => { button('Close shell').click(); });
+        await vi.waitFor(() => expect(button('Open terminal').disabled).toBe(false));
+        act(() => { button('Open terminal').click(); });
+        await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('native_read_terminal', { sessionId: 'session-2', after: 0 }));
+        await act(async () => {
+            rejectRead(new Error('old read failed'));
+            rejectInput(new Error('old input failed'));
+            rejectResize(new Error('old resize failed'));
+            await Promise.resolve();
+        });
+        const status = document.getElementById('terminalConsentState')?.textContent || '';
+        expect(status).not.toContain('old read failed');
+        expect(status).not.toContain('old input failed');
+        expect(status).not.toContain('old resize failed');
+    });
+
     it('resets the truncation notice for a new shell', async () => {
         let sequence = 0;
         const notices: string[] = [];

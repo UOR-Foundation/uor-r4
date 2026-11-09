@@ -10,11 +10,12 @@ interface DesktopPanelProps { actions: DesktopActions; files: WorkspaceApi; idPr
 type TerminalLike = Pick<XTerm, 'open' | 'write' | 'onData' | 'onResize' | 'loadAddon' | 'focus' | 'dispose' | 'options'>;
 interface TerminalRuntime {
     snapshot: TerminalSnapshot | null;
+    sessionRevision: number;
     terminal: TerminalLike | null;
     observer: ResizeObserver | null;
     poller: number | null;
     cursor: number;
-    reading: boolean;
+    readingFor: string | null;
     disposed: boolean;
     closeRequested: boolean;
     truncationNotified: boolean;
@@ -29,7 +30,7 @@ function bytesFromHex(value: string): Uint8Array {
 export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelProps) {
     const { path, revision, updatePath } = useWorkspacePath(files);
     const containerRef = useRef<HTMLDivElement>(null);
-    const runtime = useRef<TerminalRuntime>({ snapshot: null, terminal: null, observer: null, poller: null, cursor: 0, reading: false, disposed: false, closeRequested: false, truncationNotified: false });
+    const runtime = useRef<TerminalRuntime>({ snapshot: null, sessionRevision: revision, terminal: null, observer: null, poller: null, cursor: 0, readingFor: null, disposed: false, closeRequested: false, truncationNotified: false });
     const mounted = useRef(true);
     const workspaceRevision = useRef(revision);
     const [session, setSession] = useState<TerminalSnapshot | null>(null);
@@ -47,6 +48,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         current.observer = null;
         current.terminal?.dispose();
         current.terminal = null;
+        current.readingFor = null;
         const previous = current.snapshot;
         if (!previous) {
             current.disposed = !mounted.current;
@@ -65,8 +67,14 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             setFailedSession(null);
         }
         const sessionId = previous.sessionId;
-        const closeRevision = workspaceRevision.current;
-        void actions.closeTerminal(sessionId).then(() => {
+        void actions.closeTerminal(sessionId).catch(async error => {
+            if (mounted.current) throw error;
+            try {
+                await actions.closeTerminal(sessionId);
+            } catch (retryError) {
+                console.error(`Could not close PTY after unmount: ${String(retryError instanceof Error ? retryError.message : retryError)}`);
+            }
+        }).then(() => {
             if (current.snapshot?.sessionId !== sessionId) return;
             current.snapshot = null;
             current.disposed = true;
@@ -79,7 +87,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             if (current.snapshot?.sessionId !== sessionId) return;
             current.closeRequested = false;
             if (mounted.current) {
-                const restore = restoreOnFailure && closeRevision === workspaceRevision.current;
+                const restore = restoreOnFailure && current.sessionRevision === workspaceRevision.current;
                 setSession(restore ? previous : null);
                 setFailedSession(restore ? null : previous);
                 setConsent(`Could not close the PTY: ${String(error instanceof Error ? error.message : error)}`);
@@ -117,8 +125,8 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         current.cursor = session.cursor;
         current.truncationNotified = false;
         const read = async () => {
-            if (current.disposed || current.reading || current.snapshot?.sessionId !== sessionId) return;
-            current.reading = true;
+            if (current.disposed || current.readingFor === sessionId || current.snapshot?.sessionId !== sessionId) return;
+            current.readingFor = sessionId;
             try {
                 const snapshot = await actions.readTerminal(sessionId, current.cursor);
                 if (current.disposed || current.snapshot?.sessionId !== sessionId) return;
@@ -143,9 +151,9 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
                     current.poller = null;
                 }
             } catch (error) {
-                if (!current.disposed) setConsent(`Could not read PTY output: ${String(error instanceof Error ? error.message : error)}`);
+                if (!current.disposed && current.snapshot?.sessionId === sessionId) setConsent(`Could not read PTY output: ${String(error instanceof Error ? error.message : error)}`);
             } finally {
-                current.reading = false;
+                if (current.readingFor === sessionId) current.readingFor = null;
             }
         };
         const mount = async () => {
@@ -162,13 +170,13 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             terminal.onData((data) => {
                 if (current.disposed || current.snapshot?.sessionId !== sessionId) return;
                 void actions.inputTerminal(sessionId, data).catch((error) => {
-                    if (!current.disposed) setConsent(`Terminal input failed: ${String(error instanceof Error ? error.message : error)}`);
+                    if (!current.disposed && current.snapshot?.sessionId === sessionId) setConsent(`Terminal input failed: ${String(error instanceof Error ? error.message : error)}`);
                 });
             });
             terminal.onResize(({ cols, rows }) => {
                 if (current.disposed || current.snapshot?.sessionId !== sessionId) return;
                 void actions.resizeTerminal(sessionId, rows, cols).catch((error) => {
-                    if (!current.disposed) setConsent(`Terminal resize failed: ${String(error instanceof Error ? error.message : error)}`);
+                    if (!current.disposed && current.snapshot?.sessionId === sessionId) setConsent(`Terminal resize failed: ${String(error instanceof Error ? error.message : error)}`);
                 });
             });
             terminal.focus();
@@ -180,7 +188,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             current.poller = window.setInterval(() => { void read(); }, 50);
         };
         void mount().catch((error) => {
-            if (!cancelled && !current.disposed) setConsent(`Could not mount the terminal: ${String(error instanceof Error ? error.message : error)}`);
+            if (!cancelled && !current.disposed && current.snapshot?.sessionId === sessionId) setConsent(`Could not mount the terminal: ${String(error instanceof Error ? error.message : error)}`);
         });
         return () => { cancelled = true; };
     }, [session?.sessionId]);
@@ -204,6 +212,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             }
             if (current.disposed || requestedRevision !== workspaceRevision.current) return;
             const snapshot = await actions.openTerminal(cwd, 24, 80);
+            current.sessionRevision = requestedRevision;
             current.snapshot = snapshot;
             if (current.disposed || requestedRevision !== workspaceRevision.current) {
                 closeSession(false);
