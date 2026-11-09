@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 
 const studioDefaultTypedEntry = {
     name: 'studio-default-typed-entry',
+    apply: 'build',
     transform(code: string, id: string) {
         if (!id.endsWith('/assets/js/typed_entry.js')) return null;
         const guard = "get('typed') === '1'";
