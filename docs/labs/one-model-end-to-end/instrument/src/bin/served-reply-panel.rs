@@ -19,12 +19,10 @@
 //! The CPU port's Hamming reads never read an ask table or a question carry
 //! (claude-336), so `--engine cpu` refuses, by name, an artifact whose Hamming
 //! image asks or carries. `--engine integer` decodes through
-//! `IntegerStackSession::step_native`, which serves both (claude-338), and records
-//! `settings.engine`; the teacher-forced and paired-first ranks stay on the CPU
-//! port, so it refuses them. Two limits, named rather than refused: neither
-//! engine applies a content readout's vote (`step_native` returns before it,
-//! where `serve_step` applies it), and the integer engine scores an artifact
-//! with turn memory, which the CPU port refuses, with no test of that path here.
+//! `IntegerStackSession::serve_step` (claude-336), the product path, and records
+//! `settings.engine`. `--content-readout` attaches an artifact-bound sidecar to
+//! the integer model, as `uor-chat` does. The teacher-forced and paired-first
+//! ranks stay on the CPU port, so the integer engine refuses them.
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -36,7 +34,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uor_r4_core::answer_oracle::FrozenAnswers;
 use uor_r4_cpu_train::{CpuFbsForward, CpuFbsHead, CpuFbsStep};
-use uor_r4_integer::stack::{read_hamming_uorlut01, IntegerStackModel, IntegerStackSession};
+use uor_r4_integer::stack::{
+    read_hamming_uorlut01, ContentReadout, IntegerStackModel, IntegerStackSession,
+};
 use uor_r4_tokenizer::dialogue::{DialogueEncoder, DialogueProtocol, Message, SCHEMA_V2};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
@@ -308,13 +308,26 @@ fn run() -> Result<()> {
             labels.protocol
         ));
     }
-    let model = IntegerStackModel::parse(&artifact).map_err(|e| format!("artifact: {e}"))?;
+    let mut model = IntegerStackModel::parse(&artifact).map_err(|e| format!("artifact: {e}"))?;
     if !model.shape().head_nearest() {
         return Err(
             "artifact serves the writer head; this scorer reads the nearest head".to_owned(),
         );
     }
-    refuse_engine(engine, &artifact, teacher_forced)?;
+    refuse_engine(
+        engine,
+        &artifact,
+        teacher_forced,
+        args.contains_key("content-readout"),
+    )?;
+    let content_readout_sha256 = match args.get("content-readout") {
+        Some(path) => Some(attach_content_readout(
+            &mut model,
+            &artifact_sha,
+            Path::new(path),
+        )?),
+        None => None,
+    };
     // Built once: every row decodes from a clone of this untouched forward, or from a fresh session
     // of the parsed model, so the timed loop holds no artifact parse.
     let fresh_forward = match engine {
@@ -497,6 +510,10 @@ fn run() -> Result<()> {
     if engine == Engine::Integer {
         // Recorded only off the default, so a CPU-port report is byte-for-byte what it was.
         report["settings"]["engine"] = "integer".into();
+        if let Some(sha256) = content_readout_sha256 {
+            report["inputs"]["content_readout_sha256"] = sha256.into();
+            report["settings"]["content_readout"] = "attached".into();
+        }
     }
     if teacher_forced {
         let mut teacher_report = teacher_forced_report(teacher_rows)?;
@@ -699,7 +716,7 @@ fn teacher_forced_nearest_ranks(
         return Err("teacher-forced sequence passes the context".to_owned());
     }
     forward.reset();
-    let mut next = prime_prompt(forward, prompt)?;
+    let mut next = prime_cpu_prompt(forward, prompt)?;
     let mut rows = Vec::with_capacity(targets.len());
     for (index, &target) in targets.iter().enumerate() {
         rows.push(nearest_rank(
@@ -888,7 +905,7 @@ fn first_position_ranks(
         return Err("first-position ranking needs a nonempty prompt".to_owned());
     }
     forward.reset();
-    let next = prime_prompt(forward, prompt)?;
+    let next = prime_cpu_prompt(forward, prompt)?;
     targets
         .iter()
         .map(|&target| {
@@ -1066,10 +1083,28 @@ fn engine_switch(args: &BTreeMap<String, String>) -> Result<Engine> {
     }
 }
 
+fn attach_content_readout(
+    model: &mut IntegerStackModel,
+    artifact_sha256: &str,
+    path: &Path,
+) -> Result<String> {
+    let (bytes, readout) = ContentReadout::read_sidecar(path, artifact_sha256, model.shape().vocab)
+        .map_err(|error| format!("--content-readout: {error}"))?;
+    model
+        .set_content_readout(readout)
+        .map_err(|error| format!("--content-readout: {error}"))?;
+    Ok(sha256(&bytes))
+}
+
 /// Refuses what an engine would score silently wrong: the CPU port on an artifact whose Hamming
 /// image asks (a carry needs an ask, so this covers the carry), and the integer engine with the
 /// teacher-forced ranks, which stay on the CPU port.
-fn refuse_engine(engine: Engine, artifact: &[u8], teacher_forced: bool) -> Result<()> {
+fn refuse_engine(
+    engine: Engine,
+    artifact: &[u8],
+    teacher_forced: bool,
+    content_readout: bool,
+) -> Result<()> {
     match engine {
         Engine::Cpu => {
             let asks = read_hamming_uorlut01(artifact)
@@ -1079,6 +1114,13 @@ fn refuse_engine(engine: Engine, artifact: &[u8], teacher_forced: bool) -> Resul
                 return Err(
                     "the artifact's Hamming image asks or carries a question, which the \
                             CPU port does not read; score it with --engine integer"
+                        .to_owned(),
+                );
+            }
+            if content_readout {
+                return Err(
+                    "--content-readout is applied by the integer serving path; use \
+                     --engine integer"
                         .to_owned(),
                 );
             }
@@ -1100,7 +1142,7 @@ fn refuse_engine(engine: Engine, artifact: &[u8], teacher_forced: bool) -> Resul
 trait Decoder {
     fn context_length(&self) -> usize;
     fn mark_reply_start(&mut self);
-    fn step_nearest(&mut self, token: u32) -> Result<CpuFbsStep>;
+    fn step_served(&mut self, token: u32) -> Result<u32>;
 }
 
 impl Decoder for CpuFbsForward {
@@ -1110,14 +1152,15 @@ impl Decoder for CpuFbsForward {
     fn mark_reply_start(&mut self) {
         CpuFbsForward::mark_reply_start(self);
     }
-    fn step_nearest(&mut self, token: u32) -> Result<CpuFbsStep> {
+    fn step_served(&mut self, token: u32) -> Result<u32> {
         self.step(token, CpuFbsHead::Nearest)
             .map_err(|e| e.to_string())
+            .map(|step| step.token)
     }
 }
 
-/// A fresh integer session: `step_native` serves the Hamming reads with their ask heads and the
-/// readout's carry, on the head the artifact names (checked nearest in `run`).
+/// A fresh integer session: `serve_step` is the product path, serving the Hamming reads, their
+/// ask heads and carry, turn memory and an attached content readout.
 struct IntegerDecoder<'m> {
     session: IntegerStackSession<'m>,
     context: usize,
@@ -1139,13 +1182,11 @@ impl Decoder for IntegerDecoder<'_> {
     fn mark_reply_start(&mut self) {
         self.session.mark_reply_start();
     }
-    fn step_nearest(&mut self, token: u32) -> Result<CpuFbsStep> {
-        let step = self.session.step_native(token).map_err(|e| e.to_string())?;
-        Ok(CpuFbsStep {
-            token: step.token,
-            kept_cells: step.kept_cells,
-            query_q12: step.query_q12,
-        })
+    fn step_served(&mut self, token: u32) -> Result<u32> {
+        self.session
+            .serve_step(token)
+            .map_err(|e| e.to_string())
+            .map(|(token, _)| token)
     }
 }
 
@@ -1157,7 +1198,7 @@ fn generate<D: Decoder>(forward: &mut D, prompt: &[u32], cap: usize) -> Result<(
     if prompt.len() > context {
         return Ok((Vec::new(), Stop::Context));
     }
-    let mut next = prime_prompt(forward, prompt)?.token;
+    let mut next = prime_prompt(forward, prompt)?;
     let mut reply = Vec::new();
     loop {
         let stop = stop_for(next, reply.len(), prompt.len(), cap, context);
@@ -1167,17 +1208,31 @@ fn generate<D: Decoder>(forward: &mut D, prompt: &[u32], cap: usize) -> Result<(
         if let Some(stop) = stop {
             return Ok((reply, stop));
         }
-        next = forward.step_nearest(next)?.token;
+        next = forward.step_served(next)?;
     }
 }
 
-fn prime_prompt<D: Decoder>(forward: &mut D, prompt: &[u32]) -> Result<CpuFbsStep> {
+fn prime_prompt<D: Decoder>(forward: &mut D, prompt: &[u32]) -> Result<u32> {
     let mut step = None;
     for (index, &token) in prompt.iter().enumerate() {
         if index + 1 == prompt.len() {
             forward.mark_reply_start();
         }
-        step = Some(forward.step_nearest(token)?);
+        step = Some(forward.step_served(token)?);
+    }
+    step.ok_or_else(|| "empty prompt".to_owned())
+}
+
+/// Prime the CPU port when a caller also needs its Q12 query for ranking.
+fn prime_cpu_prompt(forward: &mut CpuFbsForward, prompt: &[u32]) -> Result<CpuFbsStep> {
+    let mut step = None;
+    for (index, &token) in prompt.iter().enumerate() {
+        if index + 1 == prompt.len() {
+            CpuFbsForward::mark_reply_start(forward);
+        }
+        step = Some(
+            CpuFbsForward::step(forward, token, CpuFbsHead::Nearest).map_err(|e| e.to_string())?,
+        );
     }
     step.ok_or_else(|| "empty prompt".to_owned())
 }
@@ -1223,8 +1278,9 @@ fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, u
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 12] = [
+    const FLAGS: [&str; 13] = [
         "engine",
+        "content-readout",
         "artifact",
         "tokenizer",
         "inputs",
@@ -1278,7 +1334,9 @@ mod tests {
     };
     use uor_r4_integer::stack::{
         add_hamming_ask_uorlut01, add_point_key_uorlut01, export_fbs_trunk_uorlut01, AskImage,
-        FbsMemoryEntry, FbsMemorySnapshot, FbsReplyTable, PointKeyImage, MEMORY_PAD,
+        ContentExample, ContentReadout, ContentSignatureMode, FbsMemoryEntry, FbsMemorySnapshot,
+        FbsReplyTable, PointKeyImage, CONTENT_CODE_SIGNATURE_BITS, MEMORY_PAD,
+        STACK_CONTENT_READOUT_SCHEMA,
     };
 
     /// The pinned tokenizer (`d36d3e87…`) lives outside the repository: name it in
@@ -1420,12 +1478,18 @@ mod tests {
     #[test]
     fn each_engine_refuses_what_it_would_score_silently_wrong() {
         let (plain, asking) = ask_fixture();
-        assert_eq!(refuse_engine(Engine::Cpu, &plain, true), Ok(()));
-        let refused = refuse_engine(Engine::Cpu, &asking, false).unwrap_err();
+        assert_eq!(refuse_engine(Engine::Cpu, &plain, true, false), Ok(()));
+        let refused = refuse_engine(Engine::Cpu, &asking, false, false).unwrap_err();
         assert!(refused.contains("--engine integer"), "{refused}");
-        assert_eq!(refuse_engine(Engine::Integer, &asking, false), Ok(()));
-        let refused = refuse_engine(Engine::Integer, &plain, true).unwrap_err();
+        assert_eq!(
+            refuse_engine(Engine::Integer, &asking, false, false),
+            Ok(())
+        );
+        let refused = refuse_engine(Engine::Integer, &plain, true, false).unwrap_err();
         assert!(refused.contains("--teacher-forced"), "{refused}");
+        let refused = refuse_engine(Engine::Cpu, &plain, false, true).unwrap_err();
+        assert!(refused.contains("--engine integer"), "{refused}");
+        assert_eq!(refuse_engine(Engine::Integer, &plain, false, true), Ok(()));
         let args = |v: &str| BTreeMap::from([("engine".to_owned(), v.to_owned())]);
         assert_eq!(engine_switch(&BTreeMap::new()), Ok(Engine::Cpu));
         assert_eq!(engine_switch(&args("cpu")), Ok(Engine::Cpu));
@@ -1433,6 +1497,16 @@ mod tests {
         assert!(engine_switch(&args("float")).is_err());
         let given = parse_args(["--engine", "integer"].map(String::from).into_iter()).unwrap();
         assert_eq!(engine_switch(&given), Ok(Engine::Integer));
+        let given = parse_args(
+            ["--engine", "integer", "--content-readout", "readout.json"]
+                .map(String::from)
+                .into_iter(),
+        )
+        .unwrap();
+        assert_eq!(
+            given.get("content-readout").map(String::as_str),
+            Some("readout.json")
+        );
     }
 
     /// Without an ask table the engines are one decoder: the same replies and stops through the
@@ -1474,6 +1548,73 @@ mod tests {
             decode_all(|| IntegerDecoder::new(&asking_model)),
             decode_all(|| IntegerDecoder::new(&plain_model))
         );
+    }
+
+    /// `uor-chat` applies an attached content readout only through `serve_step`. The panel's integer
+    /// engine must do the same, or it scores the native pick instead of the product pick.
+    #[test]
+    fn the_integer_engine_applies_the_product_content_readout() {
+        let mut spec = FBS_SYNTH_NON_SQUARE;
+        spec.d = 256;
+        spec.context = 24;
+        let mut snapshot = synthetic_fbs_trunk_with(411, spec);
+        snapshot.readout_nearest = true;
+        let plain = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let prompt = [BOS, 7, 11];
+        let probe = IntegerStackModel::parse(&plain).unwrap();
+        let mut session = probe.session();
+        let mut native = None;
+        for (index, &token) in prompt.iter().enumerate() {
+            if index + 1 == prompt.len() {
+                session.mark_reply_start();
+            }
+            native = Some(session.step_native(token).unwrap().token);
+        }
+        let native = native.unwrap();
+        let query = session.last_query_q12().unwrap().to_vec();
+        let vocab = probe.shape().vocab as u32;
+        let mut target = (native + 1) % vocab;
+        while target == BOS || target == EOS || target == native {
+            target = (target + 1) % vocab;
+        }
+        let readout = ContentReadout {
+            mode: ContentSignatureMode::Code,
+            signature_bits: CONTENT_CODE_SIGNATURE_BITS,
+            includes_reference_end: false,
+            rows: vec![ContentExample {
+                signature: ContentReadout::signature(&query).unwrap(),
+                target,
+            }],
+            max_distance: 0,
+        };
+        let sidecar = serde_json::json!({
+            "schema": STACK_CONTENT_READOUT_SCHEMA,
+            "artifact_sha256": sha256(&plain),
+            "readout": readout,
+        });
+        let path = std::env::temp_dir().join(format!(
+            "served-reply-panel-content-readout-{}.json",
+            std::process::id()
+        ));
+        let bytes = serde_json::to_vec(&sidecar).unwrap();
+        fs::write(&path, &bytes).unwrap();
+        let mut candidate = IntegerStackModel::parse(&plain).unwrap();
+        let sidecar_sha256 =
+            attach_content_readout(&mut candidate, &sha256(&plain), &path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert_eq!(sidecar_sha256, sha256(&bytes));
+        let decoded = generate(&mut IntegerDecoder::new(&candidate), &prompt, 1).unwrap();
+        assert_eq!(decoded.0, vec![target]);
+        assert_ne!(target, native);
+    }
+
+    /// The panel marks the reply start before the prompt's last token, as `StackChat` does. On the
+    /// point-key fixture that mark makes the memory's opening override select token 99.
+    #[test]
+    fn the_integer_engine_uses_turn_memory_reply_start() {
+        let model = IntegerStackModel::parse(&point_key_artifact(83)).unwrap();
+        let decoded = generate(&mut IntegerDecoder::new(&model), &[BOS, 7, 11], 1).unwrap();
+        assert_eq!(decoded.0, vec![99]);
     }
 
     #[test]
