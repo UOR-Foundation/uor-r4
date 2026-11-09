@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-carry-hold-audit-resource/1",
   "status": "COMPLETE_RECORD_REAL_NOT_RUN",
   "experiment": "CPU held ask-write checkpoint structure and gain audit",
-  "updated_utc": "2026-11-09T05:20:03Z",
+  "updated_utc": "2026-11-09T05:22:41Z",
   "previous_ledger": "cpu-training-pilot-real-ask-regression-2026-11-09/resource-ledger.json",
   "previous_admitted_cumulative_projection_seconds": 109367.677487699,
   "cost_kind": "local CPU measured floor plus explicit unmeasured-stage projection",
@@ -47,9 +47,9 @@
     "release_executable_sha256": "224dd54bf8aea4a6e993787a3d1bea4413590a322516560dc91a0120b2447a8b"
   },
   "storage": {
-    "task_and_ledger_bytes": 26089,
+    "task_and_ledger_bytes": 26183,
     "worktree_build_target_bytes": 4782077049,
-    "free_bytes_at_measurement": 155399548928,
+    "free_bytes_at_measurement": 155399651328,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
