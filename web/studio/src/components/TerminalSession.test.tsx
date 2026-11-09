@@ -204,6 +204,117 @@ describe('interactive PTY terminal', () => {
         await vi.waitFor(() => expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined());
     });
 
+    it('closes an opened shell when unmount happens before the session effect', async () => {
+        let resolveOpen!: (value: unknown) => void;
+        const close = vi.fn(async () => ({ active: false }));
+        const invoke = nativeMock({
+            native_open_terminal: () => new Promise((resolve) => { resolveOpen = resolve; }),
+            native_close_terminal: close,
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
+        await act(async () => {
+            resolveOpen({ sessionId: 'pre-effect-shell', cursor: 0, active: true, events: [] });
+            await Promise.resolve();
+            await Promise.resolve();
+            render(null, host);
+        });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledWith({ sessionId: 'pre-effect-shell' }));
+        expect(terminals).toHaveLength(0);
+    });
+
+    it('retains a rejected stale close for retry without mounting it', async () => {
+        let resolveOpen!: (value: unknown) => void;
+        let attempts = 0;
+        const close = vi.fn(async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error('stale reap failed');
+            return { active: false };
+        });
+        const invoke = nativeMock({
+            native_open_terminal: () => new Promise((resolve) => { resolveOpen = resolve; }),
+            native_close_terminal: close,
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/old/project')} />, host); });
+        await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: { rootPath: '/new/project' } })); });
+        await act(async () => { resolveOpen({ sessionId: 'stale-close-failure', cursor: 0, active: true, events: [] }); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('terminalConsentState')?.textContent).toContain('stale reap failed'));
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined();
+        expect(terminals).toHaveLength(0);
+        expect(invoke).not.toHaveBeenCalledWith('native_read_terminal', expect.anything());
+        act(() => { button('Retry close').click(); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+        expect(button('Open terminal')).toBeDefined();
+        expect(terminals).toHaveLength(0);
+    });
+
+    it('does not restore an old session when its close fails after a workspace change', async () => {
+        let rejectClose!: (error: Error) => void;
+        let attempts = 0;
+        const close = vi.fn(() => {
+            attempts += 1;
+            if (attempts === 1) return new Promise((_resolve, reject) => { rejectClose = reject; });
+            return Promise.resolve({ active: false });
+        });
+        const invoke = nativeMock({ native_close_terminal: close });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/old/project')} />, host); });
+        await openTerminal();
+        act(() => { button('Close shell').click(); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+        act(() => { document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: { rootPath: '/new/project' } })); });
+        await act(async () => { rejectClose(new Error('reap after workspace change')); await Promise.resolve(); });
+        await vi.waitFor(() => expect(document.getElementById('terminalConsentState')?.textContent).toContain('reap after workspace change'));
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined();
+        expect(document.getElementById('terminalConsentState')?.textContent).not.toContain('Interactive PTY ·');
+        expect(terminals).toHaveLength(1);
+        act(() => { button('Retry close').click(); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+        expect(button('Open terminal')).toBeDefined();
+        expect(terminals).toHaveLength(1);
+    });
+
+    it('resets the truncation notice for a new shell', async () => {
+        let sequence = 0;
+        const notices: string[] = [];
+        const observer = new MutationObserver(() => {
+            const text = document.getElementById('terminalConsentState')?.textContent || '';
+            if (text && notices.at(-1) !== text) notices.push(text);
+        });
+        const truncationNotices = () => notices.filter((text) => text.includes('capped at 1 MiB'));
+        observer.observe(host, { childList: true, characterData: true, subtree: true });
+        const invoke = nativeMock({
+            native_open_terminal: () => { sequence += 1; return { sessionId: `session-${sequence}`, cursor: 0, active: true, events: [] }; },
+            native_read_terminal: (args) => ({ sessionId: String(args.sessionId), cursor: 1, active: true, truncated: true, events: [] }),
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await openTerminal();
+        await vi.waitFor(() => expect(truncationNotices()).toHaveLength(1));
+        act(() => { button('Close shell').click(); });
+        await vi.waitFor(() => expect(button('Open terminal').disabled).toBe(false));
+        act(() => { button('Open terminal').click(); });
+        await vi.waitFor(() => expect(sequence).toBe(2));
+        await vi.waitFor(() => expect(truncationNotices()).toHaveLength(2));
+        observer.disconnect();
+    });
+
+    it('renders the first output only after xterm has mounted', async () => {
+        let reads = 0;
+        const invoke = nativeMock({
+            native_read_terminal: () => {
+                reads += 1;
+                return reads === 1
+                    ? { sessionId: 'session-a', cursor: 1, active: true, events: [{ type: 'output', sessionId: 'session-a', sequence: 1, dataHex: hex('first-output') }] }
+                    : { sessionId: 'session-a', cursor: 1, active: true, events: [] };
+            },
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await openTerminal();
+        await vi.waitFor(() => expect(terminals[0].write.mock.calls.length).toBeGreaterThan(0));
+        const first = terminals[0].write.mock.calls[0][0] as Uint8Array;
+        expect(new TextDecoder().decode(first)).toBe('first-output');
+    });
+
     it('does not open a shell without a granted working directory', async () => {
         const invoke = nativeMock();
         act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace()} />, host); });
