@@ -1,6 +1,6 @@
 # Prep sheet: the carry lever, a held stream write (one-model-end-to-end, claude-331, 9 Nov 2026)
 
-TEST FITNESS: NOT FIT after two rounds, by fresh non-author reviewers (claude-331's stop rule applies: no code or run under that unit).
+TEST FITNESS: NOT_FIT after two rounds, by fresh non-author reviewers (claude-331's stop rule applies: no code or run under that unit).
 - **Round 2, at `6aec906df`:** every round 1 major is confirmed fixed in the text. Two new majors and two minors, all applied below:
   - **Major A:** (r1u) by one scalar `|w_y|_mean` did not undo a lane-wise `w_y` with mixed signs. It now ranks `u` against the written value points `w_y ⊙ p_v` at the best non-negative scale, and so does (r1h).
   - **Major B:** outcome 4's third branch read the whole stream at `H4`, which `H4`'s own point can swamp. It is now split on (r1h), with a branch of its own for a held term the residual swamps.
