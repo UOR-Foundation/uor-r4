@@ -13,6 +13,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - The first build-time test fixture declared a malformed gain shape but
   supplied 63 values to a 64-element view. The fixture, not production parsing,
   was corrected to carry the requested wrong shape explicitly.
+- The first final `loop gates --full` run hit the harness's known transient
+  `Text file busy` race in its fake-`gh` test; the clean rerun passed.
 - This audit verifies checkpoint structure and learned table movement. It does
   not execute the held write and does not prove that a selected value reaches
   `H4`.
