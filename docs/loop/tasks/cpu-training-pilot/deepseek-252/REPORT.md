@@ -37,7 +37,7 @@ The release executable remains
 - Regression binary tests: 3 passed.
 - Additional malformed-hold and both-hash controls: passed.
 - `loop report --check` and `loop pr-check --local`: passed.
-- `loop gates --full`: pending the accounting commit.
+- `loop gates --full`: passed; all 11 gates were green.
 
 ## Skills used
 
