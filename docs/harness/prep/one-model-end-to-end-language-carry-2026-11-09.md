@@ -320,3 +320,7 @@ claude-322's, with:
 - **The store has room again.** With the owner's approval (#2028 6747419800), 784 files (15.4 GB) were deleted and the history squashed. Writes worked again about 18:05Z, so the seals go to the store and read back as Step 5 says. `autopull-339.sh` stays armed for a `seal=4`.
 
 **What runs:** all four from step 0 at the pin above, sealing to `runs-3/`. L-aC seed 1 (`vast-59927559`) passed I-xg against `86e51d5e…` at 18:12:56Z, and the other three started after it: L-a seed 1 (`vast-59928444`), L-aC seed 2 (`vast-59928474`), L-a seed 2 (`vast-59928489`).
+
+## Read (9 Nov, row 4c)
+
+**All four runs reached `step-016384` and sealed (`job=0 seal=0`), and the read's instrument checks passed. The outcome is row 4c, a negative for this configuration.** L-aC's first-line asked count is 0 and 2, its `−C` cut reads the same at both seeds, no cell has a complete reply, and EOS is 2 and 0. The numbers and hashes are in the [REPORT](../../loop/tasks/one-model-end-to-end/claude-339/REPORT.md).
