@@ -40,7 +40,7 @@
     "release_executable_sha256": "d061fc03b2f6a8debd39524a054916ca3d923adc530cf7fc9256fb8c467c3c13"
   },
   "storage": {
-    "task_and_ledger_bytes": 67724,
+    "task_and_ledger_bytes": 73328,
     "debug_build_target_bytes": 4871862331,
     "release_build_target_bytes": 304013458,
     "free_bytes_at_measurement": 154269257728,

@@ -53,8 +53,9 @@ with 5 ignored in 44.05 s.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing crate warnings.
 - Release build: passed.
-- Report policy, local policy, all 11 gates and a second fresh review: pending
-  this record.
+- `loop report --check` and `loop pr-check --local`: passed.
+- All 11 `loop gates --full` gates: green.
+- A second fresh exact-head review: pending this record.
 
 ## Skills used
 
