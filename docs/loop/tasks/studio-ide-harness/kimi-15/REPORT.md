@@ -4,7 +4,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 ## What did not work
 
-- Current product records still described typed static publication as pending or placed mobile/accessibility/cutover checks before an already-completed publication. One historical entry also described the legacy page as currently live.
+- Current product records still described typed static publication as pending or placed mobile/accessibility/cutover checks before an already-completed publication. Agent-77 returned CHANGES at `808b5e03091af0be716645d5785f378fb23907a2`: a second historical current-state entry still used a present-tense legacy-live claim, the roadmap-check sentence could be read as six problems instead of four total, and typed-production wording needed explicit static scope. All three are corrected without changing application behavior.
 - kimi-14's ORDER confused the status-record base with the merged publisher's tree. Both records now use the actual status-record base and distinguish the publisher merge identity.
 - Prior local gate rows belonged to the old commit with subsequent uncommitted edits. They were not exact clean-head receipts for the repaired records. The first policy run at the new merge commit also failed because this REPORT did not yet exist; that failure is retained, not relabeled as a pass.
 - The PR-body candidate omitted the native-window/exit limitation and exact unrelated roadmap IDs. It is corrected before posting the final body.

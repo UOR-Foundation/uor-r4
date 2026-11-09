@@ -26,7 +26,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - `pages-build-deployment` run `42668187497`: **SUCCESS** at `6540e2717d3a606330dbd141e3642f3f13b87ecf`.
 - Hard-reloaded public `/studio/?typed=1&publish=6540e271`: neutral UOR Harness at desktop and restored mobile primary; split/secondary close works; explicit static-terminal unavailability.
 - Status-record final `uor-harness loop pr-check --local` and `uor-harness loop gates --full` are rerun after this REPORT is committed. Fresh exact-head review and required GitHub checks remain outstanding.
-- `cargo xtask roadmap check` retains four unrelated existing problems in `float-kernel-fusion.md` and `infra-desktop-client-tauri.md` plus two stale `issues.json` ids. Those files were not edited or represented as passing.
+- `cargo xtask roadmap check` retains **four problems total**: two unrelated existing roadmap-file problems (`float-kernel-fusion.md` missing `## What is missing` and `infra-desktop-client-tauri.md` using unsupported `in_progress`) plus two stale `issues.json` ids (`float-kernel-fusion` and `infra-desktop-client-tauri`). Those files were not edited or represented as passing.
 
 ## Skills used
 
