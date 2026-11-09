@@ -1,89 +1,59 @@
 # ORDER: one-model-end-to-end, claude-331
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Base: `35f55d334`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Base: `35f55d334`.
 
 ## Goal
 
-The item's done-when reads:
+**The carry lever on B2, from its sheet to its run.** [claude-330](../claude-330/REPORT.md) landed on the outcome map's outcome 3, second branch:
+- the question-keyed read (ask heads with the found-copy pull) passes B1 exactly at both seeds;
+- B2 stays at chance;
+- B2-aq's ask heads keep the asked value at the question row `Q(K_j)` in 376–512 of 512 rows, and nothing at the scored row four tokens later.
 
-> 1. **The census (laptop, counts only, CHARTER §4.5).** A standalone Rust instrument under `docs/labs/one-model-end-to-end/instrument/` must:
->    - resolve the TRAIN size conflict, and build the TRAIN reply index (exact replies and reply 8- and 13-grams);
->    - report for DEV, Fresh V2 and `m2-fresh256`: the share of reply n-grams in TRAIN replies, the share of prompt templates seen in TRAIN with values masked, and the 8-token key share;
->    - read only the manifest of the K16 fresh slice, and leave the slice unopened.
->
->    It also says which panel, if any, holds new templates.
-> 2. **The overturn check (GPU, under a prep sheet with a fresh FIT and a pre-run review).** Score turn-memory-reply claude-194's (r), (r0), and (r) with its memory off.
->    - **Pinned in the sheet:** the checkpoints by store path, `SHA256SUMS` and step; the binary's sha; a lease and cost inside the caps.
->    - **The pod** also seals a float reference for the read's parity: claude-194's (r), with its memory off, at both seeds. That is every DEV row's writer and nearest pick, and its 64 greedy samples. The parity itself, kept sets and top-1, is `integer-hamming-read`'s step 5, on the checkpoint that item's prep sheet names; the first greedy divergence is done-when 3's integer-artifact measure (claude-205's decision review, on #3407).
->    - **Rows:** DEV's 3,406 later rows the reply table does not name, and its 32 unkeyed openings, judged pooled (3,438).
->    - **Band, fixed in advance:** `max(2·√(b+c), the two-seed spread)`, where b and c are the paired discordant rows.
->    - **The cells:**
->      - (r) ahead at both seeds, beyond the band: the memory recipe stays the training default;
->      - (r) behind at both seeds, beyond the band: a memory-dropout arm joins the training run;
->      - mixed (the seeds disagree, or either seed is inside the band): both arms train.
->    - **Descriptive only:** Fresh V2, and 64 greedy samples per arm scored against the census index.
-> 3. **The protocol.** A prep sheet, with a fresh FIT, written before the training run of the model to ship. It holds:
->    - **Strata:**
->      - keyed rows;
->      - unkeyed rows;
->      - new-template rows, from a panel no decision has touched. Fresh V2 is never one.
->    - **Arms:** (r), memory-off, (r0), tables only, and a longest-suffix table over TRAIN.
->    - **Scores:**
->      - teacher-forced top-1, per stratum;
->      - free generation: the share of replies that are verbatim TRAIN replies, new n-grams for n = 4–8, distinct-1 and distinct-2, the repeated-n-gram rate, and the table hit rate under generation against teacher forcing;
->      - on the integer artifact: kept-set agreement, first divergence, and tok/s against context.
->    - **Decode rules:** greedy, and a Flock rank rule with the harmonic weights of `stack/flock.rs`.
->    - **The verdict rule, written in advance:**
->      - "memorized": the gains appear only on keyed rows, and generated replies are mostly TRAIN replies;
->      - "generalizes": the model beats (r0) and the longest-suffix table on unkeyed and new-template rows, with novelty near DEV's own replies.
->
->    The training run itself (ASSESSMENT §6, step 5) adds:
->    - the transport controls: frozen and identity SpiralCore routes, under the fixed backward;
->    - the read-by-meaning arms: the Flock read, and the type spin.
-> 4. **Lead with tokens per second** (decode against context). One notebook row per result; each REPORT negatives first.
+So the read chooses at the question, and the value is lost between that choice and the scored row. [claude-326's map](../claude-326/ASSESSMENT.md) (Q4) names the lever for this branch: "the carry: a read at the question token whose result is written forward, or a header-free answer position. It is tested on B2 first."
+
+1. **A prep sheet** under `docs/harness/prep/one-model-end-to-end-carry-*.md`. It holds:
+   - the lever, chosen from the code as it stands, with its geometric form;
+   - **an ask-stream cut**, separating the ask heads' write to the stream at the `Q` row from the trunk's four-token carry;
+   - arms at claude-330's settings, with B1-a and B2-aq reproduced as controls, and no-read twins;
+   - a bar, an outcome map written in advance, the instrument checks, and the cost.
+2. **A fresh non-author FIT of the sheet.** One more round is allowed. If round 2 reads NOT FIT, the unit stops at the sheet.
+3. **If FIT: the code**, behind a default-off flag in `crates/uor-r4-float-train`.
+   - The instrument checks are unit tests, each with a mutation that makes it fail.
+   - The default paths are byte-identical (I-1).
+4. **If the code merges inside the unit:** the two-seed run under a D67 pre-run review, read against the bar, with a notebook row.
+
+**Claim check:**
+- **(a) Step:** the run-claude order's step 4, one model trained and scored end to end. This is the recall gap (11). Under claude-326's lab decision, no language run on this line starts until a read passes B2.
+- **(b) What it changes:** the model gains a way to carry a value chosen at the question to the answer position. That is the step between choosing a fact from the prompt and saying it in the reply. A fail closes this configuration, and the sheet's outcome map names the next lever.
 
 ## Cancel probe (run first)
 
-To fill in.
+1. No open PR adds a carry, hold or ask-stream cut to the read (checked at claim: none).
+2. claude-330's code, REPORT and notebook row are on `main` at the base (`35f55d334`).
+3. **Compute:** the laptop CPU for the sheet, the FIT, the build and the tests. A GPU only after FIT and a pre-run review, at about $1.50, inside the caps.
+4. **Disk:** about 22 GB free. Builds use one target dir in this worktree, removed on merge.
 
 ## Files in scope
 
-- `Cargo.lock`
-- `docs/labs/one-model-end-to-end/**`
-- `docs/harness/prep/one-model-end-to-end*`
+- `crates/uor-r4-float-train/**`
 - `docs/loop/tasks/one-model-end-to-end/**`
-- `docs/research/notebook/cpu-training.md`
+- `docs/harness/prep/one-model-end-to-end-*.md`
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
-- `crates/uor-r4-float-train/Cargo.toml`
-- `crates/uor-r4-float-train/src/bin/packet-parity.rs`
-- `crates/uor-r4-float-train/src/hamilton_sheet.rs`
-- `crates/uor-r4-float-train/src/geometric_stack_native.rs`
-- `crates/uor-r4-float-train/src/in_space_long.rs`
-- `crates/uor-r4-float-train/src/bin/train-in-space.rs`
-- `crates/uor-r4-float-train/src/flock_read_memory.rs`
-- `crates/uor-r4-float-train/src/flock_read_hamming.rs`
-- `crates/uor-r4-training/examples/m-world.rs`
-- `crates/uor-r4-float-train/src/fbs_export.rs`
-- `crates/uor-r4-integer/src/fbs_snapshot.rs`
-- `crates/uor-r4-integer/src/stack/format.rs`
-- `crates/uor-r4-integer/src/stack/hamming.rs`
-- `crates/uor-r4-integer/src/stack/synthetic.rs`
-- `crates/uor-r4-integer/src/stack/tests.rs`
-- `crates/uor-r4-training/src/bin/m-world-recall-corpus.rs`
-- `crates/uor-r4-training/src/bin/mix-chat-corpus.rs`
-- `crates/uor-r4-training/tests/mix_chat_corpus_manifest.rs`
-- `crates/uor-r4-training/Cargo.toml`
-- `crates/uor-r4-integer/src/bin/fbs-toks.rs`
-- `crates/uor-r4-training/src/milestone_world_v2.rs`
-- `crates/uor-r4-cpu-train/src/bin/cpu-point-transfer-driver.rs`
-- `crates/uor-r4-cpu-train/src/fbs.rs`
-- `crates/uor-r4-cpu-train/src/lib.rs`
 
 ## Done when
 
-To fill in.
+1. The sheet has a FIT line from a fresh non-author reviewer.
+2. If FIT:
+   - the code is merged;
+   - its instrument checks pass, and their mutations fail;
+   - the default paths are byte-identical (I-1).
+3. If the run happens, both seeds are:
+   - sealed to the store and read back;
+   - read against the bar;
+   - recorded in a notebook row.
+4. A fresh exact-head review passes each PR, and each one merges and is verified on `main`.
 
 ## Stop and ask if
 
-To fill in.
+Nothing waits on Casey (§5.1). Bound: two units. The sheet, the code and the run may land in separate PRs. Past the bound, the unfinished parts are named in the REPORT.
