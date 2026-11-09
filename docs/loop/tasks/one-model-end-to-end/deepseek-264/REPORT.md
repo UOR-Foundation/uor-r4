@@ -17,8 +17,9 @@ carried and `−C` have **2 asked-value first lines**, 0 complete rows and 0 EOS
 carry changes 44 generation rows, 168 first-target ranks and 207 paired-first ranks, but
 neither arm reaches the value reliably.
 
-This is a diagnostic over the published final read. The two-seed outcome remains Claude's
-registered read; this unit does not substitute for it.
+This is a diagnostic over the published final read. Claude's registered read classifies
+this configuration negative at outcome row 4c; this unit supplies the implementation
+controls, not the capability outcome.
 
 ## What changed
 
@@ -103,11 +104,10 @@ panel inputs, pinned tokenizer and existing panel scorer.
 
 ## Still open
 
-1. Reconcile seed 2's independent export with Claude's official published artifact when it
-   arrives; audit both L-a guards once their reports are available.
-2. Apply the registered two-seed outcome map in claude-339; this unit supplies diagnostics.
-3. Explain why the carry changes later ranks but not the first asked-value choice.
-4. Re-run the same receipt against a direct `uor-chat` loopback transcript if the final
+1. Audit both L-a guards once ranked reports are available; their generation reports and
+   published artifacts are present.
+2. Explain why the carry changes later ranks but not the first asked-value choice.
+3. Re-run the same receipt against a direct `uor-chat` loopback transcript if the final
    product-path probe needs a second wrapper beyond `IntegerSession::serve_step`.
 
 ## Plain summary
