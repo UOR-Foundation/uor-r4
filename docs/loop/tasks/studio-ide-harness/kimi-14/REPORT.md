@@ -34,7 +34,7 @@ Fresh-main source verification, explicit-root browser and Playwright acceptance,
 
 ## Still open
 
-Status PR fresh exact-head review, required checks, protected queue acceptance and actual merge, then evidence preservation and branch/worktree/build-output cleanup. Full agent runtime, parallel tasks, project memory, steering/orchestration, Dispatch, hosted native workflows, live R4 API, signed release and useful-model behavior remain unbuilt.
+Status-record reconciliation in kimi-15, then fresh exact-head review, required checks, protected queue acceptance and actual merge, then evidence preservation and branch/worktree/build-output cleanup. Full agent runtime, parallel tasks, project memory, steering/orchestration, Dispatch, hosted native workflows, live R4 API, signed release and useful-model behavior remain unbuilt.
 
 ## Plain summary
 

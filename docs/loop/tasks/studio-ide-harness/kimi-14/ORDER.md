@@ -1,6 +1,6 @@
 # ORDER: record the verified typed Studio publication, kimi-14
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Base: `7303c39563ab64a55ea0e9ecce11d0283883a8ac`, tree `0f41d59fb5fe10291f5b5c4bef0a190081c50484`; merged PR #3897 is `a8e51c0f4d0ed6e999b6d9e13f8289215efbd684` with the same tree. Fresh-main publish commit is `6540e2717d3a606330dbd141e3642f3f13b87ecf`, rollback head `ab752d59586c595f9409d8c9ba59026a51d4a613`.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Base: `dfee63a0449863ce12a6549aaf8beaccddf3c4af`, tree `66270e868a68c9c4ee81192db4700be5cf776d27`; merged PR #3897 is `a8e51c0f4d0ed6e999b6d9e13f8289215efbd684` with tree `0f41d59fb5fe10291f5b5c4bef0a190081c50484`. Fresh-main publish commit is `6540e2717d3a606330dbd141e3642f3f13b87ecf`, rollback head `ab752d59586c595f9409d8c9ba59026a51d4a613`.
 
 ## Verified result and decision review
 
