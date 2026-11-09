@@ -30,6 +30,8 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
     const { path, revision, updatePath } = useWorkspacePath(files);
     const containerRef = useRef<HTMLDivElement>(null);
     const runtime = useRef<TerminalRuntime>({ id: null, terminal: null, observer: null, poller: null, cursor: 0, reading: false, disposed: false, closeRequested: false, truncationNotified: false });
+    const latestRevision = useRef(revision);
+    latestRevision.current = revision;
     const [session, setSession] = useState<TerminalSnapshot | null>(null);
     const [opening, setOpening] = useState(false);
     const [closing, setClosing] = useState(false);
@@ -141,6 +143,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
             setConsent('Choose a project folder before opening an interactive PTY.');
             return;
         }
+        const requestedRevision = latestRevision.current;
         setOpening(true);
         try {
             const enabled = await actions.enableTerminal();
@@ -148,7 +151,17 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
                 setConsent('Terminal enablement was cancelled; no PTY was started.');
                 return;
             }
+            if (requestedRevision !== latestRevision.current) return;
             const snapshot = await actions.openTerminal(cwd, 24, 80);
+            if (requestedRevision !== latestRevision.current) {
+                try {
+                    await actions.closeTerminal(snapshot.sessionId);
+                    setConsent('Workspace changed before the shell opened; the stale shell was closed.');
+                } catch (error) {
+                    setConsent(`Could not close the stale PTY: ${String(error instanceof Error ? error.message : error)}`);
+                }
+                return;
+            }
             setSession(snapshot);
             setConsent(`Interactive PTY · ${snapshot.shell} · ${snapshot.cwd}`);
         } catch (error) {

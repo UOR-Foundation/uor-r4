@@ -1414,17 +1414,10 @@ fn run_bounded_process(
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    let mut exited = child
+    let exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
-    while !exited && readers_disconnected && !killed && Instant::now() < deadline {
-        std::thread::sleep(Duration::from_millis(1));
-        exited = child
-            .try_wait()
-            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
-            .is_some();
-    }
     if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
@@ -3474,8 +3467,8 @@ pub mod tauri_gui {
         Ok(Value::String(state.run_terminal_command(&request)?))
     }
 
-    #[tauri::command]
-    pub fn native_open_terminal(
+    #[tauri::command(async)]
+    pub async fn native_open_terminal(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
         cwd: String,

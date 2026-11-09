@@ -120,8 +120,8 @@ pub(crate) struct TerminalSession {
     shared: Arc<Mutex<EventQueue>>,
     stopped: Arc<AtomicBool>,
     child: Box<dyn Child + Send + Sync>,
-    master: Option<Box<dyn MasterPty>>,
-    writer: Option<Box<dyn Write + Send>>,
+    master: Mutex<Option<Box<dyn MasterPty>>>,
+    writer: Mutex<Option<Box<dyn Write + Send>>>,
     reader: Option<JoinHandle<()>>,
     cwd: PathBuf,
     shell: PathBuf,
@@ -218,8 +218,8 @@ impl TerminalSession {
                 shared,
                 stopped,
                 child,
-                master: Some(pair.master),
-                writer: Some(writer),
+                master: Mutex::new(Some(pair.master)),
+                writer: Mutex::new(Some(writer)),
                 reader: Some(reader),
                 cwd: cwd.to_path_buf(),
                 shell: shell.to_path_buf(),
@@ -275,7 +275,12 @@ impl TerminalSession {
             return matches!(self.child.try_wait(), Ok(Some(_)));
         }
         self.stopped.store(true, Ordering::Relaxed);
-        if let Some(master) = &self.master {
+        if let Some(master) = self
+            .master
+            .get_mut()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+        {
             #[cfg(unix)]
             if let Some(group) = master.process_group_leader() {
                 let group = format!("-{group}");
@@ -289,8 +294,14 @@ impl TerminalSession {
             }
         }
         let _ = self.child.kill();
-        self.writer.take();
-        self.master.take();
+        self.writer
+            .get_mut()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
+        self.master
+            .get_mut()
+            .unwrap_or_else(|error| error.into_inner())
+            .take();
         let deadline = Instant::now() + Duration::from_millis(250);
         let reaped = loop {
             match self.child.try_wait() {
@@ -438,8 +449,11 @@ impl DesktopBackend {
         if session.stopped.load(Ordering::Relaxed) {
             return Err(DesktopClientError::SessionNotFound(session_id.to_string()));
         }
-        let writer = session
+        let mut guard = session
             .writer
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let writer = guard
             .as_mut()
             .ok_or_else(|| DesktopClientError::SessionNotFound(session_id.to_string()))?;
         writer
@@ -470,6 +484,8 @@ impl DesktopBackend {
         }
         session
             .master
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
             .as_ref()
             .ok_or_else(|| DesktopClientError::SessionNotFound(session_id.to_string()))?
             .resize(PtySize {

@@ -70,6 +70,12 @@ fn wait_for(
 }
 
 #[test]
+fn backend_is_send_and_sync_for_scoped_host_threads() {
+    fn assert_send_and_sync<T: Send + Sync>() {}
+    assert_send_and_sync::<DesktopBackend>();
+}
+
+#[test]
 fn approved_pty_supports_multiple_inputs_resize_and_close() {
     let root = workspace("basic");
     let mut backend = isolated_backend(&root);

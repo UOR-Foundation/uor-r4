@@ -119,6 +119,19 @@ describe('interactive PTY terminal', () => {
         await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('native_open_terminal', expect.objectContaining({ cwd: '/new/project' })));
     });
 
+    it('closes a shell whose opening completes after the workspace changes', async () => {
+        let resolveOpen!: (value: unknown) => void;
+        const invoke = nativeMock({ native_open_terminal: () => new Promise((resolve) => { resolveOpen = resolve; }) });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/old/project')} />, host); });
+        await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: { rootPath: '/new/project' } })); });
+        await act(async () => { resolveOpen({ sessionId: 'stale-shell', cursor: 0, active: true, events: [] }); await Promise.resolve(); });
+        expect(invoke).toHaveBeenCalledWith('native_close_terminal', { sessionId: 'stale-shell' });
+        expect(terminals).toHaveLength(0);
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined();
+        expect(document.getElementById('terminalConsentState')?.textContent).toContain('Workspace changed');
+    });
+
     it('drops a stale read after workspace change', async () => {
         let resolveRead!: (value: unknown) => void;
         const invoke = nativeMock({ native_read_terminal: () => new Promise((resolve) => { resolveRead = resolve; }) });
