@@ -21790,23 +21790,27 @@ mod tests {
         let asks: Vec<_> = reads.reads.iter().filter_map(|read| read.ask.as_ref()).collect();
         assert!(asks.len() > 1, "more than one read asks");
         for ask in asks {
-            let set = |first: f32| -> Result<()> {
+            let set = |first: f32, second: f32| -> Result<()> {
                 let mut values = vec![0f32; ask.elem_count()];
-                values[0] = first;
+                (values[0], values[1]) = (first, second);
                 Ok(ask.set(&Tensor::from_vec(values, ask.shape(), &device)?)?)
             };
-            set(-8.25)?;
+            set(-8.25, 0.0)?;
             let guard = round_if_served(true, &model, Some(&reads), None)?.expect("the guard is on");
             assert_eq!(ask.as_tensor().flatten_all()?.to_vec1::<f32>()?[0], -8.0, "held");
             guard.restore()?;
-            for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
-                set(bad)?;
+            // Alone, and beside a finite weight past the range, which makes the hold run.
+            for (bad, other) in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN]
+                .into_iter()
+                .flat_map(|bad| [(bad, 0.0), (bad, -9.0)])
+            {
+                set(bad, other)?;
                 assert!(
                     round_if_served(true, &model, Some(&reads), None).is_err(),
-                    "{bad} refused"
+                    "{bad} beside {other} refused"
                 );
             }
-            set(0.0)?;
+            set(0.0, 0.0)?;
         }
         Ok(())
     }

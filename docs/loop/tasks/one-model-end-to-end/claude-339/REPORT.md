@@ -36,7 +36,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **Teardown rule, owner's words (9 Nov).** "Tear each pod down independently as soon as its own four checks pass": `job=0 seal=0`; all 41 required files; independent store read-back and `SHA256SUMS`; no GPU process. `--score-rows` is a required pod-side input. "Do not infer a final outcome from the 8,192/12,288 trend."
 - **A launch failed I-xg on my launcher's own leftovers (instrument).** On `vast-59926331`, `read-339.sh` refused the first round's I-xg folder, compared nothing and reported FAIL. Each launch now names its own `IXG_OUT`. The job's NOT_RUN seal in `runs-3/L-aC/s1` moved byte-identical to `runs-3-void-ixg-collision/L-aC/s1`; it reads nothing about any arm.
 - **`fetch-339.sh` with a relative path wrote into the main checkout,** because the script changes to the repo root. I moved the folder under `local/claude/claude-339/diag/` and added an absolute-path guard.
-- **The fresh exact-head review found a defect in the ask-range hold (fixed).** `clamp` held an infinite weight at the end of the range, where the rounding used to refuse it by name. The hold now touches finite weights only, and a new test fails on `inf refused` with the fix set aside. The merged code differs from the training pin `721a4784f` on this non-finite path only. Finite trajectories do not change, so the sealed runs stand.
+- **The fresh exact-head review found a defect in the ask-range hold (fixed).** `clamp` held an infinite weight at the end of the range, where the rounding used to refuse it by name. The hold now touches finite weights only, and a new test fails on `inf refused` with the fix set aside. The merged trainer crate (`uor-r4-float-train`) differs from the training pin `721a4784f` on this non-finite path only. Finite trajectories do not change, so the sealed runs stand.
 - **The fresh pre-run review of the rerun passed with minors,** all fixed or measured before launch: the seal pull now starts by itself, the margin's low side is measured (smallest 9.44 at 14,336), the launcher needs its seal root named, a failed copy is set aside. One nit is left: `job-339.sh`'s header comment, so its pinned hash doesn't move.
 
 ## What changed
@@ -125,7 +125,7 @@ Neither arm crosses the cost ceiling, a mean d below −58,212. The dev curve's 
 **It shows,** for this configuration (b64L, d3mwcap6, 16,384 steps, two seeds), that the ask heads, the 32-row question carry and the found-copy pull do not put asked values into served replies: at most 2 of 256 first lines. The carry is present and changes up to 87 replies, and its removal moves the asked count by 0.
 
 **It does not show that the carry cannot work.** A negative closes this configuration only. The asked count is at the floor, so "`−C` within 4" is close to the only reading available: two counts near 0 cannot separate. **TRAIN's distances are not counted** (the sheet names this for row 4c): the mix's `mw-balp` part comes from the panel's generator family, and D3's part is not counted, so whether 32 rows reach the question in training is unknown.
-**It does not say why stopping went.** L-a loses it as well as L-aC, and this run has no arm that separates the ask heads, the pull and the trainer commit.
+**It does not say why stopping went.** L-a loses it as well as L-aC, and this run has no arm that separates the ask heads, the pull and the trainer commit. L-aC adds the carry on top of those.
 
 **It does not measure float-to-integer parity on these asking checkpoints.** "All passed" above means the registered checks; claude-336's parity was on a different model.
 
@@ -148,7 +148,7 @@ First round: four 5090 pods at $0.563/h, about $5.20, plus the first L-aC seed 1
 
 ## Next
 
-**Row 4c's next step is a decision review, between a question-row placement on chat windows (the `both` placement that passed at both seeds on the recall task) and TRAIN's distance count.** It belongs to the next unit, read against the whole project. My view going in: count TRAIN's distances first, since it is laptop work and says whether 32 rows reach the question at all. The review should weigh the lost stopping, which the outcome map does not cover. It is the larger gap for a usable reply, it appears without the carry, and no arm here separates the ask heads, the pull and the trainer commit.
+**Row 4c's next step is a decision review, between a question-row placement on chat windows (the `both` placement that passed at both seeds on the recall task) and TRAIN's distance count.** It belongs to the next unit, read against the whole project. My view going in: count TRAIN's distances first, since it is laptop work and says whether 32 rows reach the question at all. The review should weigh the lost stopping, which the outcome map does not cover. It is the larger gap for a usable reply, it appears without the carry, and no arm here separates the ask heads, the pull and the trainer commit (L-aC adds the carry).
 
 **Small follow-ups:** publish mw-balp's 35 paraphrase files; make `test-watch` marker-driven.
 
@@ -159,7 +159,7 @@ First round: four 5090 pods at $0.563/h, about $5.20, plus the first L-aC seed 1
 ## Still open
 
 - **Row 4c's decision review:** a question-row placement on chat windows, or TRAIN's distance count first. The next unit.
-- **Stopping:** both arms lost it against claude-322. No arm here separates the ask heads, the pull and the trainer commit, so the cause is open. A no-ask control at the new commit would settle the last of these.
+- **Stopping:** both arms lost it against claude-322. No arm here separates the ask heads, the pull and the trainer commit, and L-aC adds the carry, so the cause is open. A no-ask control at the new commit would settle the last of these.
 - **TRAIN's distances are not counted.** Whether 32 rows reach the question in training is unknown.
 - **mw-balp's 35 paraphrase files** are not published, and **`test-watch`** still depends on signal timing.
 
