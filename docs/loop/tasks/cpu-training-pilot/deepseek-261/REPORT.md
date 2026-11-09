@@ -80,6 +80,13 @@ with **5 ignored** in **48.98 s**. The timed process wall was **51.80 s** at
   lints.
 - `rustfmt --edition 2024 --check` on `fbs.rs` and `hamming.rs`: passed.
 - `git diff --check`: passed.
+- `uor-harness loop pr-check --local`: passed; scope, banned presence,
+  commit order, REPORT, owner paths, rule sources, rendered lock and read path
+  were green, with only the existing FILEMAP advisory.
+- `uor-harness loop gates --full`: all 11 gates green in 18.76 s.
+- `uor-harness check`: 371 rules, 0 errors and 336 pre-existing warnings in
+  96.45 s. The branch-name warnings include stale cached PR state outside this
+  unit.
 
 ## Skills used
 
