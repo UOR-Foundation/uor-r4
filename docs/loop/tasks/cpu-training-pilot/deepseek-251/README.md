@@ -5,10 +5,11 @@ contain the held ask write. It validates the saved hold representation and
 reports whether the learned gain or type-write row moved.
 
 ```sh
+CARGO_TARGET_DIR=target/deepseek-carry-hold-audit \
 cargo build --release --offline --locked -p uor-r4-cpu-train \
   --bin cpu-carry-hold-audit
 
-target/release/cpu-carry-hold-audit \
+target/deepseek-carry-hold-audit/release/cpu-carry-hold-audit \
   --checkpoint CHECKPOINT \
   --expected-model-sha256 MODEL_SHA256 \
   --expected-hamming-sha256 HAMMING_SHA256 \

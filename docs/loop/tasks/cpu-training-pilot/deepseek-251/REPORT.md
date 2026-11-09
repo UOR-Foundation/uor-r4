@@ -19,6 +19,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   several malformed-hold controls were untested and the retained synthetic
   report's test-harness provenance was unclear. [deepseek-252](../deepseek-252/ORDER.md)
   repairs all three.
+- The second fresh review confirmed the code/tests and found three final
+  receipt issues: stale build-target bytes, an unbound release path in the
+  exact command and no retained store inventory receipt. [deepseek-253](../deepseek-253/ORDER.md)
+  fixes them.
 - This audit verifies checkpoint structure and learned table movement. It does
   not execute the held write and does not prove that a selected value reaches
   `H4`.
@@ -52,6 +56,10 @@ The audit measured:
   `0.01171875`;
 - type-write mean absolute value `0.1875`;
 - 32 ask cells, 28 target-nearest cells and two regressed cells.
+
+The retained [store inventory receipt](evidence/store-runs-inventory.txt)
+records an HTTP 404 for the `runs/` root and exit 1, confirming that no B2 run
+tree was published at the measurement time.
 
 Two fresh report outputs were byte-identical. The retained synthetic report
 SHA-256 is
@@ -99,7 +107,7 @@ delivery instructions were followed directly.
 - Exact command for each checkpoint:
 
   ```sh
-  target/release/cpu-carry-hold-audit \
+  target/deepseek-carry-hold-audit/release/cpu-carry-hold-audit \
     --checkpoint "$CKPT" \
     --expected-model-sha256 "$MODEL_SHA256" \
     --expected-hamming-sha256 "$HAMMING_SHA256" \

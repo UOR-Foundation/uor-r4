@@ -21,6 +21,10 @@ The first fresh review found three delivery issues:
 - Regenerated the synthetic report and labeled it explicitly as test-harness
   output. REPORT now records both the embedded test executable hash and the
   separate release executable hash.
+- The second fresh review confirmed those repairs and found three receipt
+  issues outside the implementation. [deepseek-253](../deepseek-253/REPORT.md)
+  refreshes the target bytes, binds the release path and retains the store
+  `NOT_RUN` receipt.
 
 ## Measurements
 
