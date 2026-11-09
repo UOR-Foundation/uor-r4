@@ -12,7 +12,7 @@ describe('Studio application build', () => {
     });
 
     it('defaults only the built typed entry and rejects a missing preview guard', () => {
-        const plugin = config.plugins.find((candidate) => candidate && typeof candidate === 'object' && 'name' in candidate && candidate.name === 'studio-default-typed-entry') as { transform: EntryTransform };
+        const plugin = config.plugins?.find((candidate) => candidate && typeof candidate === 'object' && 'name' in candidate && candidate.name === 'studio-default-typed-entry') as { transform: EntryTransform };
         expect(plugin).toBeDefined();
         const source = "if (new URLSearchParams(globalThis.location?.search || '').get('typed') === '1') { import('../../src/main.ts'); }";
         const transformed = plugin.transform(source, '/fixture/web/studio/assets/js/typed_entry.js');
