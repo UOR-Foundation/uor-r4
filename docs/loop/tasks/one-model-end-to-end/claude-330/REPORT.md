@@ -49,7 +49,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - The ask heads keep the asked position in 479–512 of 512 rows at both depths, with the other kept on 0–4.
 - **It locks on, not by slow memorization.** B1-a's far-bucket hits by checkpoint:
   - seed 1: 0, 2/0, 9/7, then 512/512 from step 1,536;
-  - seed 2: 0/1, 1/0, 3/2, 508/507, then 512/512 from step 2,048.
+  - seed 2: 1/1, 1/0, 3/2, 508/507, then 512/512 from step 2,048.
   - The pull distance falls from 0.49–0.51 at step 0 to 0.09–0.12 at step 4,096.
 - **The default paths are untouched (I-1).** The base `e4b2977e6` and the pin print the same digest on both seeds, `bc02586d4abfd94ab05ce312cb1c6b166bf2c3f2e595cdaf06bc22e66fc09663`.
 - **B0 and I-R pass on both seeds.**
