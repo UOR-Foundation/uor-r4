@@ -10,9 +10,9 @@
 //! the reply text without the v2 leading space.
 //!
 //! The default `one-user-turn/v1` rendering is unchanged. `--rendering
-//! per-turn/v1` keeps each `Context` as its own user turn, and
-//! `--teacher-forced 1` ranks each reference reply token, including EOS, with
-//! the same integer nearest read that generation uses. `--paired-first 1` (with
+//! per-turn/v1` keeps each `Context` as its own user turn. `--teacher-forced 1`
+//! ranks each reference reply token, including EOS, on the CPU port, the same
+//! nearest read CPU generation uses. `--paired-first 1` (with
 //! `--teacher-forced 1`) also ranks, at the first reply position, the first
 //! reference token of the other case in the same pair beside the asked one's.
 //!
@@ -1835,12 +1835,13 @@ mod tests {
             fs::write(path, &bytes).unwrap();
             sha256(&bytes)
         };
+        let readout_target = 42;
         let sidecar_path = temp.0.join("readout.json");
-        let sidecar_sha256 = write_sidecar(&sidecar_path, 42, &artifact_sha256);
-        let args = |out: &Path, sidecar: &Path| {
+        let sidecar_sha256 = write_sidecar(&sidecar_path, readout_target, &artifact_sha256);
+        let args = |engine: &str, out: &Path, sidecar: &Path| {
             [
                 "--engine",
-                "integer",
+                engine,
                 "--content-readout",
                 sidecar.to_str().unwrap(),
                 "--artifact",
@@ -1865,15 +1866,27 @@ mod tests {
         };
 
         let out = temp.0.join("report.json");
-        run_with_args(args(&out, &sidecar_path)).unwrap();
+        run_with_args(args("integer", &out, &sidecar_path)).unwrap();
         let report: serde_json::Value = serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();
         assert_eq!(report["inputs"]["content_readout_sha256"], sidecar_sha256);
         assert_eq!(report["settings"]["content_readout"], "attached");
+        let rows = report["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 256);
+        assert!(
+            rows.iter()
+                .all(|row| row["reply_ids"] == serde_json::json!([readout_target])),
+            "each first served token must be the attached readout target"
+        );
 
         let wrong_artifact_sidecar = temp.0.join("wrong-artifact.json");
-        write_sidecar(&wrong_artifact_sidecar, 42, &"0".repeat(64));
+        write_sidecar(&wrong_artifact_sidecar, readout_target, &"0".repeat(64));
         let wrong_artifact_out = temp.0.join("wrong-artifact-report.json");
-        let error = run_with_args(args(&wrong_artifact_out, &wrong_artifact_sidecar)).unwrap_err();
+        let error = run_with_args(args(
+            "integer",
+            &wrong_artifact_out,
+            &wrong_artifact_sidecar,
+        ))
+        .unwrap_err();
         assert!(error.contains("sidecar binds artifact"), "{error}");
         assert!(!wrong_artifact_out.exists());
 
@@ -1884,9 +1897,16 @@ mod tests {
             &artifact_sha256,
         );
         let wrong_vocab_out = temp.0.join("wrong-vocab-report.json");
-        let error = run_with_args(args(&wrong_vocab_out, &wrong_vocab_sidecar)).unwrap_err();
+        let error =
+            run_with_args(args("integer", &wrong_vocab_out, &wrong_vocab_sidecar)).unwrap_err();
         assert!(error.contains("outside vocabulary"), "{error}");
         assert!(!wrong_vocab_out.exists());
+
+        let cpu_out = temp.0.join("cpu-report.json");
+        let error = run_with_args(args("cpu", &cpu_out, &sidecar_path)).unwrap_err();
+        assert!(error.contains("--content-readout is applied"), "{error}");
+        assert!(error.contains("--engine integer"), "{error}");
+        assert!(!cpu_out.exists());
     }
 
     /// The panel marks the reply start before the prompt's last token, as `StackChat` does. On the
