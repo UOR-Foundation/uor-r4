@@ -5,6 +5,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 ## What did not work
 
 - Two README paragraphs still called eb832431a/700756-byte artifacts current although live gh-pages is `ab752d59586c595f9409d8c9ba59026a51d4a613` with 794677-byte artifact `e03b6cd564e37d7ed4832aec2a51d730b2b7a83e373ca170aca0282aa0be3821`.
+- Agent-74 subsequently found a third current-identity statement in the README publishing section calling `454bb30fc` live. `kimi-13` replaces it with `ab752d595`, its 794677-byte artifact and `e03b6cd5…`, and labels 454bb30fc/d8e67c66 as history.
 - The previous Playwright config inherited a development-dist server command. A stage-root server was actually used, but the retained configuration did not prove it. The prior 45/45 result therefore needed replacement with explicit root evidence rather than a stronger claim.
 - `stage-browser-load.json` held a nonzero Chrome-cleanup `ENOTEMPTY` result beside the clean `stage-browser-load.log`, leaving the authoritative result ambiguous.
 - The `models.json` byte-identity sentence had no live/local hash in the packet. The earlier REPORT also listed completed final policy/gates as open.
@@ -39,7 +40,7 @@ Adversarial review reception, source/evidence identity checking, explicit-root b
 
 ## Still open
 
-Fresh exact-head review, required GitHub checks, protected queue acceptance and actual merge, fresh-main typed dry run and explicit staged-browser verification, guarded gh-pages publish, Pages deployment and hard-reloaded public verification, evidence preservation, then branch/worktree/build-output cleanup. Full agent runtime, hosted native workflows, live R4 API and useful-model behavior remain unestablished.
+Final live-identity correction in kimi-13, then fresh exact-head review, required GitHub checks, protected queue acceptance and actual merge, fresh-main typed dry run and explicit staged-browser verification, guarded gh-pages publish, Pages deployment and hard-reloaded public verification, evidence preservation, then branch/worktree/build-output cleanup. Full agent runtime, hosted native workflows, live R4 API and useful-model behavior remain unestablished.
 
 ## Plain summary
 

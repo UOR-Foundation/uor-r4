@@ -193,9 +193,10 @@ find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
 ```
 
 So a built Studio published once to `gh-pages` / `gh-pages-preview` **persists across every later
-book deploy**. The current live app at `/studio/` is gh-pages `454bb30fc`, with the M1-capable
-integer wasm bundle and both M1 seeds in `models.json` verified by HTTP and hash checks. The earlier
-`d8e67c66` publish was pre-M1. Publishing a newer page means replacing that directory once.
+book deploy**. The current live app at `/studio/` is gh-pages `ab752d595`, with a 794,677-byte
+M1-capable wasm bundle at SHA-256 `e03b6cd5…` and both M1 seeds in `models.json` verified by HTTP
+and hash checks. The earlier `454bb30fc` publish served M1, and `d8e67c66` was pre-M1; those are
+historical identities, not the current publish. Publishing a newer page means replacing that directory once.
 
 **The publisher.** `scripts/studio/build-and-publish.sh` does the whole unit:
 
