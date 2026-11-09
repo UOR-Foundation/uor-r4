@@ -7,7 +7,7 @@ import { Icon } from './ui/Icon.js';
 interface DesktopPanelProps { actions: DesktopActions; files: WorkspaceApi; idPrefix?: string }
 interface ChangesPanelProps extends DesktopPanelProps { copy(text: string): void | Promise<void> }
 
-function useWorkspacePath(files: WorkspaceApi) {
+export function useWorkspacePath(files: WorkspaceApi) {
     const [path, setPath] = useState(() => desktopRepositoryPath(files));
     const [revision, setRevision] = useState(0);
     useEffect(() => {
@@ -47,38 +47,4 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '' }: ChangesPan
         <pre id={id('gitDiffOutput')} class="desktop-output" aria-label="Git diff">{displayDiff}</pre></section>;
 }
 
-export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelProps) {
-    const { path, revision, updatePath } = useWorkspacePath(files);
-    const latestRevision = useRef(revision); latestRevision.current = revision;
-    const enableOperation = useRef(0); const runOperation = useRef(0); const [enabled, setEnabled] = useState(false); const [enabling, setEnabling] = useState(false); const [running, setRunning] = useState(false); const [command, setCommand] = useState(''); const [consent, setConsent] = useState(''); const [output, setOutput] = useState('');
-    const id = (name: string) => `${idPrefix}${name}`;
-    useEffect(() => { enableOperation.current += 1; runOperation.current += 1; setEnabling(false); setRunning(false); setOutput(''); return () => { enableOperation.current += 1; runOperation.current += 1; }; }, [revision]);
-    async function enable() {
-        if (!actions.available || enabling || running) return;
-        const request = ++enableOperation.current; setEnabling(true);
-        try {
-            const result = await actions.enableTerminal(); if (request !== enableOperation.current) return;
-            const accepted = result?.enabled === true; setEnabled(accepted); setConsent(accepted ? 'Terminal is enabled for this app session. Every command still needs separate native approval.' : 'Terminal enablement was cancelled.');
-        } catch (error) { if (request !== enableOperation.current) return; setEnabled(false); setConsent(`Could not enable terminal: ${String(error instanceof Error ? error.message : error)}`); }
-        finally { if (request === enableOperation.current) setEnabling(false); }
-    }
-    async function run() {
-        const cwd = path.trim(); const allowedCommand = command.trim(); if (!cwd || !allowedCommand || !enabled || !actions.available || running || enabling) return;
-        const request = ++runOperation.current; const startedRevision = latestRevision.current; setRunning(true); setOutput('Waiting for native command approval…');
-        try {
-            const result = await actions.runTerminalCommand(cwd, allowedCommand);
-            if (request !== runOperation.current || startedRevision !== latestRevision.current) return;
-            setOutput(result === null ? 'Command approval was cancelled; nothing ran.' : String(result || '(no output)'));
-        } catch (error) { if (request !== runOperation.current || startedRevision !== latestRevision.current) return; setOutput(`Command failed: ${String(error instanceof Error ? error.message : error)}`); }
-        finally { if (request === runOperation.current) setRunning(false); }
-    }
-    const runDisabled = !actions.available || !enabled || enabling || running || !path.trim() || !command.trim();
-    const emptyGuidance = !path.trim() ? 'Choose a project folder and enter an allowed command.' : !command.trim() ? 'Enter an allowed command.' : '';
-    return <section aria-label="Terminal" class="desktop-panel terminal-panel"><header class="panel-heading"><div><h1>Terminal</h1><p>Run only the exact command approved by the host.</p></div><span class="panel-icon"><Icon name="terminal" /></span></header>
-        <p id={id('terminalConsentState')} class="panel-summary">{consent || (actions.available ? 'Enable terminal for this app session. Every command still needs separate native approval.' : 'Guarded terminal actions are unavailable in this browser build.')}</p>
-        <button id={id('btnTerminalEnable')} type="button" disabled={!actions.available || enabling || running} onClick={() => void enable()}>{enabling ? 'Enabling…' : 'Enable terminal'}</button>
-        <label>Working directory<input id={id('terminalCwd')} aria-label="Working directory" value={path} onInput={(event) => updatePath(event.currentTarget.value)} /></label>
-        <label>Command<input id={id('terminalCommand')} aria-label="Terminal command" value={command} onInput={(event) => setCommand(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !runDisabled) { event.preventDefault(); void run(); } }} /></label>
-        <button id={id('btnRunTerminal')} type="button" disabled={runDisabled} onClick={() => void run()}>{running ? 'Waiting for approval…' : 'Run command'}</button>
-        <pre id={id('terminalOutput')} class="desktop-output" aria-label="Terminal output">{output || emptyGuidance}</pre></section>;
-}
+export { TerminalPanel } from './TerminalSession.js';

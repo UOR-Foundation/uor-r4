@@ -19,6 +19,8 @@ The owner rejected the green standalone Studio placeholder and reaffirmed the ac
 
 The neutral shared desktop workbench, Playwright visual acceptance, persistent multi-step agent runtime, parallel projects/tasks, approvals and steering, project memory, scheduling/Dispatch, side-by-side editor/diff/browser surfaces and a persistent interactive PTY terminal, connector and computer-use workflows, and honest local/hosted capability boundaries. Claude owns the model API; this item does not edit or reimplement it.
 
+The persistent PTY is implemented and measured at unsigned development scope: host-approved `/bin/zsh` sessions accept direct keyboard input and `read` replies, preserve cwd, resize, and close/reap, with bounded input/output/session counts and no Run command button. Its source ORDER and current REPORT are `docs/loop/tasks/studio-ide-harness/kimi-4/`. Static web remains explicitly unsupported, and the shared agent runtime, task orchestration, and R4 API adapter are still open.
+
 ## Done when
 
 - The green placeholder is replaced by a reviewed neutral Claude-style shell in both themes and at desktop/mobile sizes, with Playwright evidence for every view.

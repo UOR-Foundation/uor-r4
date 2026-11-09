@@ -11,6 +11,8 @@
     "build": "vite build && node src/stage-dist.mjs"
   },
   "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "preact": "11.1.1"
   },
   "devDependencies": {

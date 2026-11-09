@@ -48,7 +48,13 @@ Sources: [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs), [`web/studio/inde
 
 The desktop interface is now the neutral Claude-desktop-inspired cowork workbench, with project/session navigation, compact transcript/composer, real pane switching and splitting, and light/dark responsive layouts. The app identifier is `org.uor.r4.desktop.cowork`, separating the recovered app from the rejected green app's saved state. Launch locally with `bash scripts/studio/open-cowork.sh`: it prepares the current frontend, builds with mandatory `--features gui`, verifies the cowork identity, and opens that exact app visibly. Output defaults to `target/cowork`; `CARGO_TARGET_DIR` overrides it, and `UOR_COWORK_NO_OPEN=1` skips opening. A default headless build is not desktop evidence.
 
-The unsigned development package passes its resource contract. Native Workspace and Split interactions were exercised, and New session creates an actual session row. Browser acceptance is 43/43, typed tests 441/441, plain-JS 113/113, and offline worker/WASM checks pass. Full agent/runtime parity, production publication, a signed release, useful conversation, and the R4 model API integration remain unverified.
+The unsigned development package passes its resource contract. Native Workspace and Split interactions were exercised, and New session creates an actual session row. Browser acceptance is 43/43, typed tests 441/441, plain-JS 113/113, and offline worker/WASM checks pass. The launcher prepares `src-tauri/runtime/studio` before building; a plain `cargo build` can otherwise embed an older staged frontend and is not evidence of the current UI. Full agent/runtime parity, production publication, a signed release, useful conversation, and the R4 model API integration remain unverified.
+
+### Interactive PTY terminal
+
+The Terminal view uses a persistent host-approved PTY with xterm, direct keyboard input, raw-byte streaming, resize, and close/reaping. It does not show the old Run command button or request approval per keystroke. App-session enablement and approval of the exact working directory/shell remain mandatory; the default shell is `/bin/zsh`. At most eight sessions, 64 KiB per input, and 1 MiB retained output per session are enforced. Stale sessions, out-of-grant paths, and post-close input are refused. Static browser previews explicitly report the native service as unavailable.
+
+The loopback acceptance uses isolated HOME and workspace fixtures, real `/bin/zsh` input, `printf`, `read` plus an answer, `pwd`, `stty size`, `exit`, and closed-input refusal. Its raw events use the same camel-case JSON contract as the TypeScript adapter. This is unsigned development-terminal evidence, not a hosted terminal service, arbitrary shell grant, detached-process-containment guarantee, or full agent runtime.
 
 ## Mounted Studio acceptance (8 November 2026)
 

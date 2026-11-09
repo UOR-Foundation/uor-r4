@@ -1,0 +1,172 @@
+import { useEffect, useRef, useState } from 'preact/hooks';
+import type { Terminal as XTerm } from '@xterm/xterm';
+import '@xterm/xterm/css/xterm.css';
+import type { DesktopActions, TerminalSnapshot } from '../adapters/desktopActions.js';
+import type { WorkspaceApi } from '../adapters/workflow.js';
+import { useWorkspacePath } from './DesktopTools.js';
+import { Icon } from './ui/Icon.js';
+
+interface DesktopPanelProps { actions: DesktopActions; files: WorkspaceApi; idPrefix?: string }
+type TerminalLike = Pick<XTerm, 'open' | 'write' | 'onData' | 'onResize' | 'loadAddon' | 'focus' | 'dispose' | 'options'>;
+interface TerminalRuntime {
+    id: string | null;
+    terminal: TerminalLike | null;
+    observer: ResizeObserver | null;
+    poller: number | null;
+    cursor: number;
+    reading: boolean;
+    disposed: boolean;
+    closeRequested: boolean;
+    truncationNotified: boolean;
+}
+
+function bytesFromHex(value: string): Uint8Array {
+    const bytes = new Uint8Array(value.length / 2);
+    for (let index = 0; index < value.length; index += 2) bytes[index / 2] = Number.parseInt(value.slice(index, index + 2), 16);
+    return bytes;
+}
+
+export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelProps) {
+    const { path, revision, updatePath } = useWorkspacePath(files);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const runtime = useRef<TerminalRuntime>({ id: null, terminal: null, observer: null, poller: null, cursor: 0, reading: false, disposed: false, closeRequested: false, truncationNotified: false });
+    const [session, setSession] = useState<TerminalSnapshot | null>(null);
+    const [opening, setOpening] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const [consent, setConsent] = useState('');
+    const id = (name: string) => `${idPrefix}${name}`;
+
+    function closeSession() {
+        const current = runtime.current;
+        current.disposed = true;
+        if (current.poller !== null) window.clearInterval(current.poller);
+        current.poller = null;
+        current.observer?.disconnect();
+        current.observer = null;
+        current.terminal?.dispose();
+        current.terminal = null;
+        if (current.id && !current.closeRequested) {
+            current.closeRequested = true;
+            setClosing(true);
+            void actions.closeTerminal(current.id).catch((error) => {
+                if (!current.disposed) setConsent(`Could not close the PTY: ${String(error instanceof Error ? error.message : error)}`);
+            }).finally(() => setClosing(false));
+        }
+        current.id = null;
+        setSession(null);
+    }
+
+    useEffect(() => {
+        closeSession();
+        if (revision > 0) setConsent('Workspace changed. Open a shell in the new project folder.');
+    }, [revision]);
+
+    useEffect(() => () => closeSession(), []);
+
+    useEffect(() => {
+        if (!session) return;
+        let cancelled = false;
+        const sessionId = session.sessionId;
+        const current = runtime.current;
+        current.id = sessionId;
+        current.disposed = false;
+        current.closeRequested = false;
+        current.cursor = session.cursor;
+        const mount = async () => {
+            const [{ Terminal }, { FitAddon }] = await Promise.all([import('@xterm/xterm'), import('@xterm/addon-fit')]);
+            if (cancelled || current.disposed || !containerRef.current) return;
+            const element = containerRef.current;
+            const style = getComputedStyle(element);
+            const terminal = new Terminal({ cols: 80, rows: 24, fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontSize: 13, screenReaderMode: true, theme: { background: style.backgroundColor, foreground: style.color, cursor: style.color } });
+            const fit = new FitAddon();
+            terminal.open(element);
+            terminal.loadAddon(fit);
+            fit.fit();
+            current.terminal = terminal;
+            terminal.onData((data) => {
+                if (current.disposed || current.id !== sessionId) return;
+                void actions.inputTerminal(sessionId, data).catch((error) => {
+                    if (!current.disposed) setConsent(`Terminal input failed: ${String(error instanceof Error ? error.message : error)}`);
+                });
+            });
+            terminal.onResize(({ cols, rows }) => {
+                if (current.disposed || current.id !== sessionId) return;
+                void actions.resizeTerminal(sessionId, rows, cols).catch((error) => {
+                    if (!current.disposed) setConsent(`Terminal resize failed: ${String(error instanceof Error ? error.message : error)}`);
+                });
+            });
+            terminal.focus();
+            if (typeof ResizeObserver === 'function') {
+                current.observer = new ResizeObserver(() => { if (!current.disposed) fit.fit(); });
+                current.observer.observe(element);
+            }
+        };
+        void mount().catch((error) => { if (!cancelled) setConsent(`Could not mount the terminal: ${String(error instanceof Error ? error.message : error)}`); });
+        const read = async () => {
+            if (current.disposed || current.reading || current.id !== sessionId) return;
+            current.reading = true;
+            try {
+                const snapshot = await actions.readTerminal(sessionId, current.cursor);
+                if (current.disposed || current.id !== sessionId) return;
+                current.cursor = snapshot.cursor;
+                for (const event of snapshot.events) {
+                    if (event.type === 'output' && event.dataHex) current.terminal?.write(bytesFromHex(event.dataHex));
+                    if (event.type === 'exit') setConsent(event.code === null || event.code === undefined ? 'Shell ended.' : `Shell exited with code ${event.code}.`);
+                    if (event.type === 'error') setConsent(event.message || 'PTY error.');
+                }
+                if (snapshot.truncated && !current.truncationNotified) {
+                    current.truncationNotified = true;
+                    setConsent('PTY output history is capped at 1 MiB; older output is discarded.');
+                }
+                if (!snapshot.active) {
+                    setSession(snapshot);
+                    if (current.poller !== null) window.clearInterval(current.poller);
+                    current.poller = null;
+                }
+            } catch (error) {
+                if (!current.disposed) setConsent(`Could not read PTY output: ${String(error instanceof Error ? error.message : error)}`);
+            } finally {
+                current.reading = false;
+            }
+        };
+        void read();
+        current.poller = window.setInterval(() => { void read(); }, 50);
+        return () => { cancelled = true; };
+    }, [session?.sessionId]);
+
+    async function open() {
+        if (opening || session || !actions.available) return;
+        const cwd = path.trim();
+        if (!cwd) {
+            setConsent('Choose a project folder before opening an interactive PTY.');
+            return;
+        }
+        setOpening(true);
+        try {
+            const enabled = await actions.enableTerminal();
+            if (enabled?.enabled !== true) {
+                setConsent('Terminal enablement was cancelled; no PTY was started.');
+                return;
+            }
+            const snapshot = await actions.openTerminal(cwd, 24, 80);
+            setSession(snapshot);
+            setConsent(`Interactive PTY · ${snapshot.shell} · ${snapshot.cwd}`);
+        } catch (error) {
+            const detail = String(error instanceof Error ? error.message : error);
+            setConsent(detail.includes('TerminalConsentRequired') || detail.includes('cancelled') ? 'Shell opening was cancelled; no PTY was started.' : `Could not open the PTY: ${detail}`);
+        } finally {
+            setOpening(false);
+        }
+    }
+
+    return <section aria-label="Terminal" class="desktop-panel terminal-panel">
+        <header class="panel-heading"><div><h1>Terminal</h1><p>Persistent PTY with direct input and live output.</p></div><span class="panel-icon"><Icon name="terminal" /></span></header>
+        <p id={id('terminalConsentState')} role="status" aria-live="polite" class="panel-summary">{consent || (actions.available ? 'Open a shell for a persistent interactive PTY.' : 'Interactive PTY is unavailable in this browser build.')}</p>
+        <label>Working directory<input id={id('terminalCwd')} aria-label="Working directory" value={path} disabled={Boolean(session) || opening} onInput={(event) => updatePath(event.currentTarget.value)} /></label>
+        <div class="panel-actions">
+            {!session && <button id={id('btnTerminalOpen')} type="button" disabled={!actions.available || opening} onClick={() => void open()}>{opening ? 'Opening…' : 'Open terminal'}</button>}
+            {session && <button id={id('btnTerminalClose')} type="button" disabled={closing} onClick={closeSession}>{closing ? 'Closing…' : 'Close shell'}</button>}
+        </div>
+        <div id={id('terminalOutput')} ref={containerRef} class="terminal-screen" role="group" aria-label="Interactive PTY terminal" data-session-id={session?.sessionId} onClick={() => runtime.current.terminal?.focus()} />
+    </section>;
+}

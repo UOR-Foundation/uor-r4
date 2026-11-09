@@ -9,7 +9,7 @@ The current panel calls `native_run_terminal_command` once and displays text; it
 ## Files in scope
 
 - `src-tauri/Cargo.{toml,lock}`, `src-tauri/src/{lib,main,terminal}.rs`, and `src-tauri/tests/interactive_terminal.rs`.
-- `web/studio/src/{components/DesktopTools.tsx,components/DesktopTools.test.tsx,components/TerminalSession.tsx,components/TerminalSession.test.tsx,components/StudioApp.tsx,adapters/desktopActions.ts,studio.css}`, `web/studio/assets/js/desktop_actions.js`, `web/studio/tests/e2e/terminal.spec.ts`, and `web/studio/package{,-lock}.json`.
+- `web/studio/src/{components/DesktopTools.tsx,components/DesktopTools.test.tsx,components/TerminalSession.tsx,components/TerminalSession.test.tsx,components/StudioApp.tsx,components/StudioApp.test.tsx,adapters/desktopActions.ts,studio.css}`, `web/studio/assets/js/desktop_actions.js`, `web/studio/tests/e2e/terminal.spec.ts`, `web/studio/verify_interactive_terminal.mjs`, `web/studio/verify_studio_page_load.mjs` (opt-in retained-tab acceptance only), and `web/studio/package{,-lock}.json`.
 - `docs/superpowers/{specs,plans}/2026-11-08-interactive-terminal*.md`, this task folder, `docs/roadmap/items/studio-ide-harness.md`, `docs/products/{desktop-client,harness-parity}.md`, `docs/integration/current-state.md`, `docs/research/notebook/m4-serving.md`, and `web/studio/README.md`.
 - Ignored fixture/evidence under `local/kimi/harness-parity/`.
 

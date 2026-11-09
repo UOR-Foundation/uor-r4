@@ -145,6 +145,11 @@
 .panel-summary { padding: .55rem .65rem; border: 1px solid var(--harness-border); border-radius: 8px; background: var(--harness-panel); color: var(--harness-muted); }
 .desktop-panel > label, .models-panel label, .project-form label { margin-block: .55rem; }
 .desktop-output { max-inline-size: 100%; max-block-size: 32rem; min-block-size: 160px; overflow: auto; border: 1px solid var(--harness-border); border-radius: 8px; background: var(--harness-code); padding: .75rem; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .78rem; }
+.terminal-panel { display: flex; flex-direction: column; }
+.terminal-screen { flex: 1; min-block-size: 240px; block-size: min(60vh, 36rem); overflow: hidden; border: 1px solid var(--harness-border); border-radius: 8px; background: var(--harness-code); color: var(--harness-text); padding: .35rem; }
+.terminal-screen .xterm { block-size: 100%; }
+.terminal-screen .xterm-viewport { overflow-y: auto; }
+.terminal-screen .xterm-screen { outline: none; }
 .models-panel section { margin-block-end: .75rem; padding: .75rem; border: 1px solid var(--harness-border); border-radius: 9px; background: var(--harness-panel); }
 .models-panel li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-block-end: .45rem; padding-block-end: .45rem; border-block-end: 1px solid var(--harness-border); }
 .models-panel li strong { inline-size: 100%; }
