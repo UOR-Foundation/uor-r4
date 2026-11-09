@@ -31,6 +31,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - `scripts/studio/build-and-publish.sh --typed --target gh-pages --keep-worktree --stage-dir <evidence>/stage`: full verification PASS; retained commit `1684785face01e02d4f79a34e49c0d1b954d0f40`, previous/rollback head `ab752d59586c595f9409d8c9ba59026a51d4a613`.
 - `python3 -m unittest scripts.tests.test_typed_runtime scripts.tests.test_tauri_runtime`: **15/15 PASS**. Typed/plain-JS, desktop default/GUI, staged Playwright and 11/11 gates PASS as above.
 - `uor-harness loop pr-check --local` at 25c63: scope/ORDER-first PASS, **FAIL only missing REPORT**. It is rerun at the report head; no earlier failure is hidden.
+- Final report/scope heads pass local policy and **11/11** gates. The scope list now includes both new design/plan files, while the historical base-scope advisory still names them outside the base item; protected queue acceptance remains a separate required check. `cargo xtask roadmap check` independently fails four unrelated existing problems: `float-kernel-fusion.md` missing `## What is missing`, `infra-desktop-client-tauri.md` using unsupported status `in_progress`, and their two stale `issues.json` ids. Those files were not changed or represented as passing.
 - Modern web guidance was searched for static publication; no directly applicable guide was retrieved. Existing typed allowlist and browser checks were used instead.
 
 ## Skills used
