@@ -74,7 +74,7 @@ The ask arms take `--hamming-read 4 --hamming-ask 1 --hamming-attract 1`.
 - **The carried arms run 16,384 steps from the start.** claude-334's held arms needed the extension to be read, and each extension was a second run. Here there is no extension, so no arm is read early.
 - **B0 is dropped.** claude-334 passed it at both seeds (B0-a 1.0, B0-n ≤ 0.005). It checks the exact copy, which this unit does not touch with the carry off. I-1 checks those default paths bit for bit, and B1-a checks the ask instrument the map reads.
 - **Readings**, as claude-334's, plus:
-  - on the carried arms, `R^{−C}` and the trace under `−C`;
+  - on the carried arms, `R^{−C}`, the recall under the cut. The trace is taken on the plain forward only (`in_space_long.rs:12967–12993`), so no branch reads a trace under a cut;
   - `c` per checkpoint for the 16 question tokens, the 4 header tokens and the 512 value tokens (each as mean, minimum and maximum), and the mean of the rest (`RecallReading::hamming_carry_gain`).
 - claude-334's stream ranks are recorded where the code writes them, and are descriptive only: **no stream rank decides a branch** (claude-334's lesson).
 
@@ -99,7 +99,7 @@ The branches read the **scored-row trace** of the readout read: `position == "sc
 1. **A carried arm passes, and its `−C` fails the bar:** the carried question reaches the scored row and answers there.
    - **If B2-aC passes:** the scored loss alone trains the carry.
    - **If only the `both` arms pass:** the carry answers once the question is also trained at its own row.
-   - Either way the REPORT reads `c` (expected largest on the question tokens) and `−C`'s trace (expected lost).
+   - Either way the REPORT reads `c` (expected largest on the question tokens) and the plain scored-row trace (expected kept).
    - **Next:** serve the carry at the decode step and in the export. It needs only the last `h` rows' ids. Then a language run with the carry, under its own sheet.
 2. **A carried arm passes, and its `−C` passes too:** the answer does not come through the carry.
    - The arm differs from claude-334's failing B2-aq in the pull's placement and in its length.
