@@ -45,7 +45,9 @@ initializer experiment, not an artifact-schema or serving change.
 
 - `crates/uor-r4-cpu-train/Cargo.toml`
 - `crates/uor-r4-cpu-train/src/lib.rs`
+- `crates/uor-r4-cpu-train/src/ask_offset_audit.rs`
 - `crates/uor-r4-cpu-train/src/ask_offset_solver.rs`
+- `crates/uor-r4-cpu-train/src/bin/cpu-ask-offset-audit.rs`
 - `crates/uor-r4-cpu-train/src/bin/cpu-ask-offset-solver.rs`
 - `docs/loop/tasks/cpu-training-pilot/deepseek-246/**`
 - `docs/labs/cpu-training-pilot-ask-offset-solver-2026-11-09/resource-ledger.json`

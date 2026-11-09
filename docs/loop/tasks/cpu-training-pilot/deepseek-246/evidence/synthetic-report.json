@@ -7,14 +7,14 @@
     "zero_target_nearest": 30,
     "zero_total_bits": 8
   },
-  "candidate_hamming_sha256": "ac67ea16710d09d8d98c0391ab549f166f93304c40a401f2f1a7350d42929d35",
+  "candidate_hamming_sha256": "ef785c378684f997d24d91b026840854803c61c1a1d61b26ec35bbbc650d0d4a",
   "checkpoint": {
     "ask_heads": 1,
     "depths": [
       2,
       6
     ],
-    "hamming_sha256": "ae901772f76ed6ee3a0d5b19cd4775d315ff283c905ff8778b3abb5c73e581c7",
+    "hamming_sha256": "f5891af995d5d3a46853d70133f64dc601d95b5ec175d5e9357e42855fda9e88",
     "heads": 2,
     "model_sha256": "2a7a8ed21c2a3b5d07c3a4c9e2a35a30c53fa91f0c261bb8da18fde546b49549",
     "vocab": 64,
@@ -352,7 +352,7 @@
   ],
   "hardware": {
     "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
-    "executable_sha256": "3228f4997e9e6f4a1eae31a581ba086b2fa6f88d345444226e871c25fa58adb7"
+    "executable_sha256": "dbd89cb862cc855b85b9ec0caa347146659d6e088335bf11736f795ac0a2f8eb"
   },
   "pull_corpus": {
     "path": null,

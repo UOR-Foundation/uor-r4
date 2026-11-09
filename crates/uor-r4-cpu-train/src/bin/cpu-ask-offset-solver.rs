@@ -111,34 +111,104 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
         .iter()
         .flat_map(|relation| relation.cells.iter())
         .collect::<Vec<_>>();
+    let audit_trained_total_bits = checked_sum(
+        audit_cells.iter().map(|cell| u64::from(cell.trained_bits)),
+        "audited trained bits",
+    )?;
+    let audit_zero_total_bits = checked_sum(
+        audit_cells.iter().map(|cell| u64::from(cell.zero_bits)),
+        "audited zero bits",
+    )?;
     let audit_summary = serde_json::json!({
         "cells": audit_cells.len(),
         "trained_exact_codes": audit_cells.iter().filter(|cell| cell.trained_bits == 0).count(),
         "trained_target_nearest": audit_cells.iter().filter(|cell| cell.trained_target_nearest).count(),
         "zero_target_nearest": audit_cells.iter().filter(|cell| cell.zero_target_nearest).count(),
-        "trained_total_bits": audit_cells.iter().map(|cell| u64::from(cell.trained_bits)).sum::<u64>(),
-        "zero_total_bits": audit_cells.iter().map(|cell| u64::from(cell.zero_bits)).sum::<u64>(),
+        "trained_total_bits": audit_trained_total_bits,
+        "zero_total_bits": audit_zero_total_bits,
     });
     let candidate_sha = uor_r4_discrete::corpus::sha256(&solved.hamming_bytes);
+    let zero_weighted_bits = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.zero_weighted_bits),
+        "zero weighted bits",
+    )?;
+    let solved_weighted_bits = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.solved_weighted_bits),
+        "solved weighted bits",
+    )?;
+    let improvement_bits = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.improvement_bits),
+        "improvement bits",
+    )?;
+    let candidate_evaluations = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.candidate_evaluations),
+        "candidate evaluations",
+    )?;
+    let coordinate_evaluations = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.coordinate_evaluations),
+        "coordinate evaluations",
+    )?;
+    let total_evaluations = checked_sum(
+        solved
+            .readings
+            .iter()
+            .map(|reading| reading.total_evaluations),
+        "total evaluations",
+    )?;
+    let search_starts = checked_sum(
+        solved.readings.iter().map(|reading| reading.search_starts),
+        "search starts",
+    )?;
     let summary = serde_json::json!({
         "questions": solved.readings.iter().map(|reading| reading.question).collect::<std::collections::BTreeSet<_>>().len(),
         "depths": solved.readings.iter().map(|reading| reading.depth).collect::<std::collections::BTreeSet<_>>().len(),
         "readings": solved.readings.len(),
-        "zero_weighted_bits": solved.readings.iter().map(|reading| reading.zero_weighted_bits).sum::<u64>(),
-        "solved_weighted_bits": solved.readings.iter().map(|reading| reading.solved_weighted_bits).sum::<u64>(),
-        "improvement_bits": solved.readings.iter().map(|reading| reading.improvement_bits).sum::<u64>(),
+        "zero_weighted_bits": zero_weighted_bits,
+        "solved_weighted_bits": solved_weighted_bits,
+        "improvement_bits": improvement_bits,
         "improved_readings": solved.readings.iter().filter(|reading| reading.improvement_bits > 0).count(),
-        "candidate_evaluations": solved.readings.iter().map(|reading| reading.candidate_evaluations).sum::<u64>(),
-        "coordinate_evaluations": solved.readings.iter().map(|reading| reading.coordinate_evaluations).sum::<u64>(),
-        "total_evaluations": solved.readings.iter().map(|reading| reading.total_evaluations).sum::<u64>(),
-        "search_starts": solved.readings.iter().map(|reading| reading.search_starts).sum::<u64>(),
+        "candidate_evaluations": candidate_evaluations,
+        "coordinate_evaluations": coordinate_evaluations,
+        "total_evaluations": total_evaluations,
+        "search_starts": search_starts,
         "budget_exhausted_readings": solved.readings.iter().filter(|reading| reading.budget_exhausted).count(),
     });
+    let corpus_zero_weighted_bits = checked_sum(
+        corpus_audit
+            .iter()
+            .map(|reading| reading.zero_weighted_bits),
+        "corpus-audit zero weighted bits",
+    )?;
+    let corpus_candidate_weighted_bits = checked_sum(
+        corpus_audit
+            .iter()
+            .map(|reading| reading.candidate_weighted_bits),
+        "corpus-audit candidate weighted bits",
+    )?;
+    let corpus_improvement_bits = checked_sum(
+        corpus_audit.iter().map(|reading| reading.improvement_bits),
+        "corpus-audit improvement bits",
+    )?;
     let corpus_audit_summary = serde_json::json!({
         "readings": corpus_audit.len(),
-        "zero_weighted_bits": corpus_audit.iter().map(|reading| reading.zero_weighted_bits).sum::<u64>(),
-        "candidate_weighted_bits": corpus_audit.iter().map(|reading| reading.candidate_weighted_bits).sum::<u64>(),
-        "improvement_bits": corpus_audit.iter().map(|reading| reading.improvement_bits).sum::<u64>(),
+        "zero_weighted_bits": corpus_zero_weighted_bits,
+        "candidate_weighted_bits": corpus_candidate_weighted_bits,
+        "improvement_bits": corpus_improvement_bits,
         "improved_readings": corpus_audit.iter().filter(|reading| reading.improvement_bits > 0).count(),
     });
     let report = serde_json::json!({
@@ -199,6 +269,13 @@ fn validate_sha256(value: &str, name: &str) -> Result<()> {
         return Err(format!("--expected-{name}-sha256 is not a SHA-256"));
     }
     Ok(())
+}
+
+fn checked_sum(values: impl IntoIterator<Item = u64>, what: &str) -> Result<u64> {
+    values
+        .into_iter()
+        .try_fold(0u64, u64::checked_add)
+        .ok_or_else(|| format!("{what} overflow"))
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
@@ -425,7 +502,7 @@ mod tests {
                         _ => unreachable!(),
                     },
                     Dtype::F32,
-                    vec![width],
+                    vec![width / 4, 4],
                     f32_bytes(&rotation),
                 ));
             }
@@ -483,6 +560,8 @@ mod tests {
         assert!(validate_sha256(&"a".repeat(64), "model").is_ok());
         assert!(validate_sha256(&"a".repeat(63), "model").is_err());
         assert_eq!(DEFAULT_MAX_EVALUATIONS, 200_000);
+        assert_eq!(checked_sum([1, 2, 3], "test").unwrap(), 6);
+        assert!(checked_sum([u64::MAX, 1], "test").is_err());
     }
 
     #[test]

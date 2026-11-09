@@ -12,7 +12,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   the objective, candidate construction, sidecar and audit path; it is not
   evidence of learned generalization.
 - The release control uses synthetic identity rotations and a deterministic
-  two-target corpus. Its 44 ms wall measures local search throughput only, not
+  two-target corpus. Its 40 ms wall measures local search throughput only, not
   quality on a trained checkpoint.
 - The first validation pass covered malformed pull corpora but did not yet pin
   the malformed and non-finite checkpoint cases required by this order. Those
@@ -24,6 +24,12 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   checkpoint inventory was only the subset needed by this solver. A public
   helper also had unchecked token addition. All four are repaired and covered
   by tests at this head.
+- Review against Claude-330's actual save path found two more compatibility
+  defects hidden by the first fixtures. Candle saves rotations as
+  `(width/4,4)`, not flattened `(width,)`, and the real loader uses the fixed
+  Hamming depths `[2,6]` and rejects two-token copy keys on four-coordinate
+  head halves. The solver and existing audit now validate those actual shapes
+  and invariants.
 - Repository-wide `cargo fmt --all -- --check` is already red across many
   untouched files. The two new Rust files and their edited module are
   targeted-format clean; this unit did not reformat unrelated code.
@@ -59,22 +65,28 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   header metadata is canonicalized for deterministic fresh-process bytes.
 - The checkpoint reader now requires the complete Claude-330 per-depth
   query/key/value rotations, margins and weights, plus valid scalar or mixed
-  copy keys. Empty or zero-weight pulls, out-of-vocab tokens, bad shapes,
-  invalid head geometry, partial depths, checked-overflow failures, non-finite
-  values, type-spin mixing and invalid copy-key records fail closed.
+  copy keys in the actual `[width/4,4]` quaternion layout. It requires the
+  fixed depths `[2,6]`, rejects unknown tensor names and enforces the
+  two-token key's eight-coordinate half rule. Empty or zero-weight pulls,
+  out-of-vocab tokens, bad shapes, invalid head geometry, partial depths,
+  checked-overflow failures, non-finite values, type-spin mixing and invalid
+  copy-key records fail closed.
 - Output names are normalized through their real parent directories so aliases
   collide before solving. Candidate and report bytes are written to synced
   sibling temporaries and promoted without replacement. If the second
-  promotion fails, the first promoted output is removed.
+  promotion fails, the first promoted output is removed. This is rollback for
+  ordinary synchronous failure; two separate final paths cannot be one
+  crash-atomic filesystem operation, and process termination between promotions
+  can leave the candidate without its report.
 - The CLI reopens the candidate with `TrainedAskOffsets`, audits the fixed B2
-  relation map, independently re-audits every selected pull from the serialized
-  candidate and writes candidate/report hashes plus per-cell
-  zero/solved/improvement readings.
+  relation map, verifies preserved candidate metadata and non-ask tensor bytes,
+  then re-audits every selected pull from the serialized candidate. It writes
+  candidate/report hashes plus per-cell zero/solved/improvement readings.
 - No serving, artifact-schema, training-default, GPU or Claude-owned file was
   changed.
-- Size: `pr-check` reports 11 changed paths: code 4 files `+1,977/-0`,
-  documentation 3 files `+241/-0`, and other/evidence/claim files 4 files
-  `+1,026/-0` (`+3,244/-0` total). The ORDER gave no line estimate. Inline unit
+- Size: `pr-check` reports 14 changed paths: code 6 files `+2,199/-6`,
+  documentation 3 files `+263/-0`, and other/evidence/claim files 5 files
+  `+1,077/-0` (`+3,539/-6` total). The ORDER gave no line estimate. Inline unit
   tests are counted in the code class.
 
 ## Measurements
@@ -86,25 +98,31 @@ total objective evaluations, all during candidate selection; no cell exhausted
 its budget. The selected-corpus audit reproduced the same 8-to-0 result across
 all 32 readings. The existing relation audit then measured **32/32** exact
 codes and **32/32** target-nearest cells, versus **30/32** target-nearest for
-the zero offsets. A fresh-output repeat was byte-identical.
+the zero offsets. A fresh-output repeat was byte-identical. The selected-corpus
+verification makes another 64 objective calls after solving; those audit calls
+are outside the solver-search budget and are not included in
+`total_evaluations`.
 
 - Synthetic report SHA-256:
-  `dbcb43538888810d52aad1386c86e519501cf6200dbe047f6aaf0c1f8ccdb2e8`
+  `806019427e00b9c873cf717591e34c1dad3193809ed6bac6d9a104bccfc8584f`
 - Candidate Hamming sidecar SHA-256:
-  `ac67ea16710d09d8d98c0391ab549f166f93304c40a401f2f1a7350d42929d35`
+  `ef785c378684f997d24d91b026840854803c61c1a1d61b26ec35bbbc650d0d4a`
 - Synthetic model input SHA-256:
   `2a7a8ed21c2a3b5d07c3a4c9e2a35a30c53fa91f0c261bb8da18fde546b49549`
 - Synthetic Hamming input SHA-256:
-  `ae901772f76ed6ee3a0d5b19cd4775d315ff283c905ff8778b3abb5c73e581c7`
+  `f5891af995d5d3a46853d70133f64dc601d95b5ec175d5e9357e42855fda9e88`
 - Default pull corpus SHA-256:
   `5b0b129803110a3efb90d063ca6c84bcdc9ac6ac0079ad2ccf733a09c61a80e0`
 - Binary SHA-256 recorded by the retained report:
-  `3228f4997e9e6f4a1eae31a581ba086b2fa6f88d345444226e871c25fa58adb7`
+  `dbd89cb862cc855b85b9ec0caa347146659d6e088335bf11736f795ac0a2f8eb`
+- Resource measurement SHA-256:
+  `078bbc59d79476912fd5ed7fc5f0cc7174b7a326cd6e9e4ec18b3dc47f2a2168`
+  ([measurement](evidence/resource-measurement.json)).
 
 The isolated release control used width 256, two depths, 16 questions and two
 targets per question. It completed **393,344** total objective evaluations in
-**44 ms** across 16 workers, with no exhausted cell. Maximum resident set size
-was 56,736 KiB for the benchmark and 236,160 KiB for the evidence test. This is
+**40 ms** across 16 workers, with no exhausted cell. Maximum resident set size
+was 56,220 KiB for the benchmark and 236,444 KiB for the evidence test. This is
 a throughput measurement, not a trained-model or capability result.
 
 Resources are recorded in the
@@ -119,16 +137,18 @@ projection gives `107,567.677487699 s`.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver`: 4 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 472 passed,
-  5 ignored.
+  5 ignored in 47.58 s.
+- `cargo test --offline --locked -p uor-r4-cpu-train --bin
+  cpu-ask-offset-audit`: 4 passed.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `RAYON_NUM_THREADS=16 cargo test --release --offline --locked -p
   uor-r4-cpu-train --lib release_width_256_two_depth_solver_benchmark --
-  --ignored --nocapture`: passed at 393,344 total evaluations and 44 ms.
+  --ignored --nocapture`: passed at 393,344 total evaluations and 40 ms.
 - The evidence-retaining binary test described above reproduced the retained
-  report and candidate sidecar in 5.90 s, peak RSS 236,160 KiB.
+  report and candidate sidecar in 5.85 s, peak RSS 236,444 KiB.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
-  cpu-ask-offset-solver`: passed with only pre-existing warnings in untouched
-  files.
+  cpu-ask-offset-solver --bin cpu-ask-offset-audit`: passed with only
+  pre-existing warnings in untouched files.
 - Targeted `rustfmt --check` and `git diff --check`: passed.
 - `uor-harness loop report --check`, `loop pr-check --local` and
   `loop gates --full`: passed.

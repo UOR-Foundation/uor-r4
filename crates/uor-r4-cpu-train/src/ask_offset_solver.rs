@@ -198,6 +198,29 @@ impl AskOffsetSolveBasis {
         {
             return Err("ask heads and the type spin are mutually exclusive".to_owned());
         }
+        for name in hamming_tensors.names() {
+            if matches!(name, "heads" | "copy_key" | "copy_keys") {
+                continue;
+            }
+            let recognized = name
+                .strip_prefix('d')
+                .and_then(|name| name.split_once('.'))
+                .is_some_and(|(depth, part)| {
+                    depth.parse::<usize>().is_ok()
+                        && matches!(
+                            part,
+                            "query_rotation"
+                                | "key_rotation"
+                                | "value_rotation"
+                                | "margin"
+                                | "weight"
+                                | "ask"
+                        )
+                });
+            if !recognized {
+                return Err(format!("unknown Claude-330 Hamming tensor {name}"));
+            }
+        }
 
         let mut depths = BTreeSet::new();
         for name in hamming_tensors.names() {
@@ -212,13 +235,20 @@ impl AskOffsetSolveBasis {
         if depths.is_empty() {
             return Err("checkpoint carries no Hamming depths".to_owned());
         }
+        let depths = depths.into_iter().collect::<Vec<_>>();
+        if depths != [2, 6] {
+            return Err(format!(
+                "Claude-330 Hamming depths are [2, 6], not {depths:?}"
+            ));
+        }
 
         let mut reads = Vec::with_capacity(depths.len());
         for depth in depths {
+            let quaternion_shape = vec![width / 4, 4];
             for (part, shape) in [
-                ("query_rotation", vec![width]),
-                ("key_rotation", vec![width]),
-                ("value_rotation", vec![width]),
+                ("query_rotation", quaternion_shape.clone()),
+                ("key_rotation", quaternion_shape.clone()),
+                ("value_rotation", quaternion_shape.clone()),
                 ("margin", vec![heads]),
                 ("weight", vec![2, width]),
             ] {
@@ -241,7 +271,7 @@ impl AskOffsetSolveBasis {
                 .map_err(|error| format!("{key_name}: {error}"))?;
             reads.push(SolveRead {
                 depth,
-                key_rotation: f32_values(&key_rotation, &key_name, &[width])?,
+                key_rotation: f32_values(&key_rotation, &key_name, &quaternion_shape)?,
             });
         }
         let has_copy_key = hamming_tensors.names().contains(&"copy_key");
@@ -262,6 +292,9 @@ impl AskOffsetSolveBasis {
             if !matches!(value, 1 | 2) {
                 return Err(format!("copy_key {value} is not 1 or 2"));
             }
+            if value == 2 && !head_width.is_multiple_of(8) {
+                return Err("copy_key 2 requires heads of whole 8-coordinate blocks".to_owned());
+            }
         }
         if has_copy_keys {
             let values = u32_values(
@@ -273,6 +306,11 @@ impl AskOffsetSolveBasis {
             )?;
             if values.iter().any(|&value| !matches!(value, 1 | 2)) {
                 return Err("copy_keys carries a value other than 1 or 2".to_owned());
+            }
+            if values.contains(&2) && !head_width.is_multiple_of(8) {
+                return Err(
+                    "copy_keys naming 2 requires heads of whole 8-coordinate blocks".to_owned(),
+                );
             }
             if values.windows(2).all(|pair| pair[0] == pair[1]) {
                 return Err("copy_keys is uniform; record a scalar copy_key".to_owned());
@@ -429,6 +467,51 @@ impl AskOffsetSolveBasis {
                 ))
             })
             .collect::<Result<BTreeMap<_, _>, String>>()?;
+        let candidate_metadata = safetensors_metadata(hamming)?;
+        if candidate_metadata != self.metadata {
+            return Err("candidate Hamming metadata differs from the source".to_owned());
+        }
+        let expected_non_ask = self
+            .original_tensors
+            .iter()
+            .map(|tensor| tensor.name.as_str())
+            .collect::<BTreeSet<_>>();
+        let candidate_non_ask = tensors
+            .names()
+            .into_iter()
+            .filter(|name| !name.ends_with(".ask"))
+            .collect::<BTreeSet<_>>();
+        if candidate_non_ask != expected_non_ask {
+            return Err("candidate Hamming tensor inventory differs from the source".to_owned());
+        }
+        for original in &self.original_tensors {
+            let candidate = tensors
+                .tensor(&original.name)
+                .map_err(|error| format!("{}: {error}", original.name))?;
+            if candidate.dtype() != original.dtype
+                || candidate.shape() != original.shape
+                || candidate.data() != original.data
+            {
+                return Err(format!(
+                    "candidate tensor {} differs from the source",
+                    original.name
+                ));
+            }
+        }
+        let expected_asks = self
+            .reads
+            .iter()
+            .map(|read| format!("d{}.ask", read.depth))
+            .collect::<BTreeSet<_>>();
+        let candidate_asks = tensors
+            .names()
+            .into_iter()
+            .filter(|name| name.ends_with(".ask"))
+            .map(str::to_owned)
+            .collect::<BTreeSet<_>>();
+        if candidate_asks != expected_asks {
+            return Err("candidate ask tensor inventory differs from the source depths".to_owned());
+        }
         let mut groups: BTreeMap<u32, Vec<&AskPull>> = BTreeMap::new();
         for pull in &corpus.pulls {
             groups.entry(pull.question).or_default().push(pull);
@@ -640,12 +723,13 @@ impl AskOffsetSolveBasis {
                 .iter()
                 .try_fold(0u64, |sum, (_, weight)| sum.checked_add(u64::from(*weight)))
                 .ok_or_else(|| "weighted median overflows".to_owned())?;
+            let halfway = total / 2 + total % 2;
             let mut cumulative = 0u64;
             let median = values
                 .iter()
                 .find_map(|(value, weight)| {
                     cumulative += u64::from(*weight);
-                    (cumulative.saturating_mul(2) >= total).then_some(*value)
+                    (cumulative >= halfway).then_some(*value)
                 })
                 .ok_or_else(|| "weighted median is empty".to_owned())?;
             let value = median - question_value;
@@ -896,19 +980,19 @@ mod tests {
                     (
                         format!("d{depth}.query_rotation"),
                         Dtype::F32,
-                        vec![width],
+                        vec![width / 4, 4],
                         f32_bytes(&rotation),
                     ),
                     (
                         format!("d{depth}.key_rotation"),
                         Dtype::F32,
-                        vec![width],
+                        vec![width / 4, 4],
                         f32_bytes(&rotation),
                     ),
                     (
                         format!("d{depth}.value_rotation"),
                         Dtype::F32,
-                        vec![width],
+                        vec![width / 4, 4],
                         f32_bytes(&rotation),
                     ),
                     (
@@ -923,14 +1007,14 @@ mod tests {
                         vec![2, width],
                         f32_bytes(&vec![0.0; 2 * width]),
                     ),
+                    (
+                        format!("d{depth}.ask"),
+                        Dtype::F32,
+                        vec![vocab, width],
+                        f32_bytes(&vec![0.0; vocab * width]),
+                    ),
                 ]
             })
-            .chain([(
-                "d2.ask".to_owned(),
-                Dtype::F32,
-                vec![vocab, width],
-                f32_bytes(&vec![0.0; vocab * width]),
-            )])
             .collect()
     }
 
@@ -1013,6 +1097,21 @@ mod tests {
             .readings
             .iter()
             .all(|reading| reading.total_evaluations == 1 && reading.budget_exhausted));
+        let candidate_cutoff = basis.solve(&corpus, 4).unwrap();
+        assert!(candidate_cutoff.readings.iter().all(|reading| {
+            reading.candidate_evaluations == 4
+                && reading.coordinate_evaluations == 0
+                && reading.total_evaluations == 4
+                && reading.budget_exhausted
+                && reading.solved_weighted_bits == 4
+        }));
+        let coordinate_cutoff = basis.solve(&corpus, 5).unwrap();
+        assert!(coordinate_cutoff.readings.iter().all(|reading| {
+            reading.candidate_evaluations == 4
+                && reading.coordinate_evaluations == 1
+                && reading.total_evaluations == 5
+                && reading.budget_exhausted
+        }));
         assert!(basis.solve(&corpus, 0).is_err());
         assert!(first
             .readings
@@ -1111,7 +1210,7 @@ mod tests {
             tensors.extend(complete_read_tensors(
                 width,
                 head_count as usize,
-                &[2],
+                &[2, 6],
                 vocab,
             ));
             tensor_file_owned(tensors, None)
@@ -1144,7 +1243,7 @@ mod tests {
             vec![1],
             u32_bytes(&[heads as u32]),
         )];
-        nonfinite_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+        nonfinite_tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
         let rotation = nonfinite_tensors
             .iter_mut()
             .find(|(name, ..)| name == "d2.key_rotation")
@@ -1162,13 +1261,18 @@ mod tests {
             vec![1],
             u32_bytes(&[heads as u32]),
         )];
-        partial_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
-        partial_tensors.push(("d4.layer".to_owned(), Dtype::U32, vec![1], u32_bytes(&[7])));
+        partial_tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
+        partial_tensors.push((
+            "d8.query_rotation".to_owned(),
+            Dtype::F32,
+            vec![width / 4, 4],
+            f32_bytes(&vec![1.0; width]),
+        ));
         let partial_hamming = tensor_file_owned(partial_tensors, None);
         assert!(AskOffsetSolveBasis::from_bytes(&model, &partial_hamming)
             .err()
-            .expect("partial depth")
-            .contains("d4.query_rotation"));
+            .expect("unexpected depth")
+            .contains("Claude-330 Hamming depths are [2, 6]"));
 
         let mut type_spin_tensors = vec![(
             "heads".to_owned(),
@@ -1176,11 +1280,11 @@ mod tests {
             vec![1],
             u32_bytes(&[heads as u32]),
         )];
-        type_spin_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+        type_spin_tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
         type_spin_tensors.push((
             "d2.step_rotation".to_owned(),
             Dtype::F32,
-            vec![width],
+            vec![width / 4, 4],
             f32_bytes(&vec![1.0; width]),
         ));
         let type_spin_hamming = tensor_file_owned(type_spin_tensors, None);
@@ -1206,7 +1310,7 @@ mod tests {
                 vec![1],
                 u32_bytes(&[heads as u32]),
             )];
-            tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+            tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
             tensors
         };
 
@@ -1217,6 +1321,20 @@ mod tests {
                 .err()
                 .expect("missing query rotation")
                 .contains("d2.query_rotation")
+        );
+
+        let mut unknown_tensor = complete();
+        unknown_tensor.push((
+            "d2.unknown".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[1]),
+        ));
+        assert!(
+            AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(unknown_tensor, None))
+                .err()
+                .expect("unknown Hamming tensor")
+                .contains("unknown Claude-330 Hamming tensor d2.unknown")
         );
 
         let mut nonfinite_margin = complete();
@@ -1243,6 +1361,15 @@ mod tests {
         .expect("invalid copy key")
         .contains("copy_key 3 is not 1 or 2"));
 
+        let mut narrow_copy_key = complete();
+        narrow_copy_key.push(("copy_key".to_owned(), Dtype::U32, vec![1], u32_bytes(&[2])));
+        assert!(
+            AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(narrow_copy_key, None))
+                .err()
+                .expect("copy key 2 on a four-coordinate head")
+                .contains("whole 8-coordinate blocks")
+        );
+
         let basis =
             AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(complete(), None)).unwrap();
         let corpus = AskPullCorpus {
@@ -1253,6 +1380,16 @@ mod tests {
                 weight: 1,
             }],
         };
+        let mut changed_margin_candidate = complete();
+        let margin = changed_margin_candidate
+            .iter_mut()
+            .find(|(name, ..)| name == "d2.margin")
+            .unwrap();
+        margin.3 = f32_bytes(&vec![3.0; heads]);
+        assert!(basis
+            .audit_candidate(&tensor_file_owned(changed_margin_candidate, None), &corpus)
+            .unwrap_err()
+            .contains("candidate tensor d2.margin differs from the source"));
         let mut nonfinite_candidate = complete();
         let ask = nonfinite_candidate
             .iter_mut()
