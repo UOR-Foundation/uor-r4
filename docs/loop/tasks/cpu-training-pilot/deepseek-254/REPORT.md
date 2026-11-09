@@ -11,6 +11,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   `uor-r4-integer` and `uor-r4-discrete` already carry warnings under the
   current toolchain. The scoped `--no-deps` run passed with only pre-existing
   crate warnings and no warning in either changed file.
+- The first fresh exact-head review rejected the manifest containment. The
+  validated canonical path was discarded, workers resolved it again, and child
+  files were not root-bound. [deepseek-255](../deepseek-255/ORDER.md) repairs
+  this before merge.
 - The grouped readings validate checkpoint contents. They cannot show that the
   held write reaches `H4`, preserve B2, or serve in integers.
 
@@ -23,14 +27,19 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   requires that set to match the checkpoint's `[2,6]` ask depths.
 - `cpu-carry-hold-audit` schema `/2` keeps the single-checkpoint interface and
   adds `--manifest MANIFEST --workers N --out REPORT`. Batch mode binds every
-  model and Hamming hash, expected hold row count and contained relative path;
-  rejects duplicate id, label/seed, path and hash-pair identities; audits with
-  a bounded 1-32 worker pool; preserves manifest order; and writes only a new
-  report.
-- Tests cover grouped statistics, per-depth weights, a missing depth-6 weight,
-  all duplicate identity classes, path traversal, wrong schema, wrong hashes,
-  wrong row count, worker bounds, source-order preservation, output
-  replacement and byte-identical repeats.
+  model and Hamming hash, expected hold row count and contained relative path.
+  The repair retains the validated root and canonical checkpoint paths, rejects
+  canonical path aliases, opens each child file as a regular in-root descriptor,
+  and checks the opened Linux file descriptor before reading it. It rejects
+  duplicate id, label/seed, canonical path and hash-pair identities; audits
+  with a bounded 1-32 worker pool; preserves manifest order; and writes only a
+  new report.
+- Tests cover grouped statistics including the rest-token mean, per-depth
+  weights, a missing depth-6 weight, every duplicate identity class, canonical
+  path aliases, path traversal, an out-of-root child symlink, mixed
+  single/batch arguments, wrong schema, wrong hashes, wrong row count, worker
+  bounds, source-order preservation, output replacement and byte-identical
+  repeats.
 - No Claude-owned float-training file, serving schema, export path, GPU state
   or artifact was changed.
 - Size: `pr-check` reports tests 0 files, code 2 files `+749/-105`, docs 4
@@ -53,17 +62,16 @@ source order `aqh-s2`, then `aqh-s1`.
 Evidence:
 
 - [single report](evidence/synthetic-single.json), SHA-256
-  `e651e9cf734be9fb5a97b454203ed3b9da01ba19f92880b434409e87dca359b6`;
+  `d86bb7d74276c318f2079c3e7229ddef4410902b05774bee31d1e9bd7d5c1fc3`;
 - [batch report](evidence/synthetic-batch.json), SHA-256
-  `d64210ae0da0462c86e1360521c67dfdc31206feedd13dacbb6176d5a7e90614`;
+  `c0a6a9c4d18ea2c0039463740129b803b30a1fe8f0120b7d88ceb1b9196ef3f5`;
 - retained reports are test-harness output, not release-CLI output. Their
   embedded executable SHA-256 is
-  `794d908bfffd3ea9569d2efd78e117fb49898a4ad7b546f9a491fd37cb120cad`.
+  `a8c666e108189f90eadb10c48d0867b77c77690d9de32e8add6c94cefbb3e3a5`.
 
-The full CPU library suite passed 480 tests with 5 ignored in 43.94 s. The
-process took 44.05 s at 2,302% CPU with 769,352 KiB peak RSS. The release build
-completed in 44.22 s; its executable SHA-256 is
-`b39ac6f7ee4cc0df98c7b9840bd2b50f8c6c6620cfaf84ad93c37038b16ede17`.
+The full CPU library suite passed 480 tests with 5 ignored in 44.05 s. The
+release build completed after the repair; its executable SHA-256 is
+`d061fc03b2f6a8debd39524a054916ca3d923adc530cf7fc9256fb8c467c3c13`.
 
 Resources are in the
 [D84 ledger](../../../../labs/cpu-training-pilot-carry-hold-grouped-2026-11-09/resource-ledger.json).
@@ -74,7 +82,7 @@ cumulative `114,767.677487699 s`. GPU cost is zero.
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 5 passed.
+- Focused binary tests: 6 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with 10 pre-existing crate warnings

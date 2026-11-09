@@ -1,12 +1,14 @@
 //! Read-only CPU audit of Claude-334's saved carry-hold checkpoint fields.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
 use uor_r4_cpu_train::ask_offset_audit::{
     AskHoldSummary, AskOffsetRelationReading, TrainedAskOffsets,
 };
@@ -80,6 +82,12 @@ enum Invocation {
     },
 }
 
+#[derive(Debug)]
+struct ValidatedManifest {
+    root: PathBuf,
+    checkpoints: Vec<PathBuf>,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("cpu-carry-hold-audit: {error}");
@@ -105,6 +113,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
     require_new_output(&out)?;
     let reading = audit_checkpoint(
         checkpoint,
+        None,
         &args["expected-model-sha256"],
         &args["expected-hamming-sha256"],
         expected_rows,
@@ -150,25 +159,27 @@ fn run_batch(manifest_path: &Path, out: &Path, workers: usize) -> Result<()> {
     let manifest_sha256 = uor_r4_discrete::corpus::sha256(&bytes);
     let manifest: CarryHoldManifest = serde_json::from_slice(&bytes)
         .map_err(|error| format!("{}: {error}", manifest_path.display()))?;
-    validate_manifest(manifest_path, &manifest)?;
+    let validated = validate_manifest(manifest_path, &manifest)?;
     let executable_sha256 = executable_sha256()?;
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(workers)
         .build()
         .map_err(|error| format!("worker pool: {error}"))?;
+    let root = &validated.root;
     let arms = pool.install(|| {
         manifest
             .arms
             .par_iter()
-            .map(|arm| {
-                let checkpoint = resolve_checkpoint(manifest_path, &arm.checkpoint)?;
+            .zip(validated.checkpoints.par_iter())
+            .map(|(arm, checkpoint)| {
                 Ok(serde_json::json!({
                     "id": arm.id,
                     "label": arm.label,
                     "seed": arm.seed,
                     "checkpoint": arm.checkpoint,
                     "reading": audit_checkpoint(
-                        &checkpoint,
+                        checkpoint,
+                        Some(root),
                         &arm.model_sha256,
                         &arm.hamming_sha256,
                         arm.expected_hold_rows,
@@ -211,16 +222,15 @@ fn run_batch(manifest_path: &Path, out: &Path, workers: usize) -> Result<()> {
 
 fn audit_checkpoint(
     checkpoint: &Path,
+    root: Option<&Path>,
     expected_model_sha256: &str,
     expected_hamming_sha256: &str,
     expected_rows: usize,
 ) -> Result<CheckpointReading> {
     let model_path = checkpoint.join("model.safetensors");
     let hamming_path = checkpoint.join("hamming_read.safetensors");
-    let model =
-        std::fs::read(&model_path).map_err(|error| format!("{}: {error}", model_path.display()))?;
-    let hamming = std::fs::read(&hamming_path)
-        .map_err(|error| format!("{}: {error}", hamming_path.display()))?;
+    let model = read_checkpoint_file(&model_path, root)?;
+    let hamming = read_checkpoint_file(&hamming_path, root)?;
     let model_sha = uor_r4_discrete::corpus::sha256(&model);
     let hamming_sha = uor_r4_discrete::corpus::sha256(&hamming);
     validate_sha256(expected_model_sha256, "model")?;
@@ -287,6 +297,56 @@ fn audit_checkpoint(
         ask,
         relations,
     })
+}
+
+fn read_checkpoint_file(path: &Path, root: Option<&Path>) -> Result<Vec<u8>> {
+    let Some(root) = root else {
+        return std::fs::read(path).map_err(|error| format!("{}: {error}", path.display()));
+    };
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    if !canonical.starts_with(root) {
+        return Err(format!(
+            "{} resolves outside the manifest directory",
+            path.display()
+        ));
+    }
+    let mut file =
+        File::open(&canonical).map_err(|error| format!("{}: {error}", canonical.display()))?;
+    if !file
+        .metadata()
+        .map_err(|error| format!("{}: {error}", canonical.display()))?
+        .is_file()
+    {
+        return Err(format!("{} is not a regular file", canonical.display()));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let opened = PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()))
+            .canonicalize()
+            .map_err(|error| format!("opened {}: {error}", canonical.display()))?;
+        if !opened.starts_with(root) {
+            return Err(format!(
+                "opened {} resolves outside the manifest directory",
+                canonical.display()
+            ));
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return Err(
+            "manifest checkpoint containment needs Linux /proc/self/fd; use single-checkpoint mode"
+                .to_owned(),
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)
+            .map_err(|error| format!("{}: {error}", canonical.display()))?;
+        Ok(bytes)
+    }
 }
 
 fn summarize_ask(relations: &[AskOffsetRelationReading]) -> AskSummary {
@@ -374,6 +434,12 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Invocation> {
             workers,
         });
     }
+    if all
+        .keys()
+        .any(|name| !SINGLE_FLAGS.contains(&name.as_str()))
+    {
+        return Err("single-checkpoint mode accepts only --checkpoint, the two SHA-256 pins, --expected-hold-rows and --out".to_owned());
+    }
     for name in SINGLE_FLAGS {
         if !all.contains_key(name) {
             return Err(format!("--{name} is required"));
@@ -392,7 +458,7 @@ fn parse_hold_rows(value: &str) -> Result<usize> {
     Ok(rows)
 }
 
-fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<()> {
+fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<ValidatedManifest> {
     if manifest.schema != MANIFEST_SCHEMA {
         return Err(format!(
             "manifest schema is {:?}, not {MANIFEST_SCHEMA}",
@@ -411,6 +477,7 @@ fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<()> {
     let mut labels_seeds = BTreeSet::new();
     let mut paths_seen = BTreeSet::new();
     let mut hashes_seen = BTreeSet::new();
+    let mut checkpoints = Vec::with_capacity(manifest.arms.len());
     for arm in &manifest.arms {
         if arm.id.is_empty() || arm.label.is_empty() {
             return Err("arm id and label must not be empty".to_owned());
@@ -429,7 +496,8 @@ fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<()> {
         if !labels_seeds.insert((arm.label.as_str(), arm.seed)) {
             return Err(format!("duplicate label/seed {}/{}", arm.label, arm.seed));
         }
-        if !paths_seen.insert(arm.checkpoint.as_str()) {
+        let resolved = resolve_checkpoint(&root, &arm.checkpoint)?;
+        if !paths_seen.insert(resolved.clone()) {
             return Err(format!("duplicate checkpoint path {}", arm.checkpoint));
         }
         if !hashes_seen.insert((arm.model_sha256.as_str(), arm.hamming_sha256.as_str())) {
@@ -438,20 +506,15 @@ fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<()> {
                 arm.id
             ));
         }
-        let resolved = resolve_checkpoint(path, &arm.checkpoint)?;
-        if !resolved.starts_with(&root) {
-            return Err(format!(
-                "arm {} checkpoint {} escapes the manifest directory",
-                arm.id, arm.checkpoint
-            ));
-        }
+        checkpoints.push(resolved);
     }
-    Ok(())
+    Ok(ValidatedManifest { root, checkpoints })
 }
 
-fn resolve_checkpoint(manifest: &Path, checkpoint: &str) -> Result<PathBuf> {
+fn resolve_checkpoint(root: &Path, checkpoint: &str) -> Result<PathBuf> {
     let relative = Path::new(checkpoint);
-    if relative.is_absolute()
+    if relative.as_os_str().is_empty()
+        || relative.is_absolute()
         || relative
             .components()
             .any(|part| matches!(part, std::path::Component::ParentDir))
@@ -460,10 +523,23 @@ fn resolve_checkpoint(manifest: &Path, checkpoint: &str) -> Result<PathBuf> {
             "checkpoint path {checkpoint:?} must be a contained relative path"
         ));
     }
-    let root = manifest.parent().unwrap_or_else(|| Path::new("."));
-    root.join(relative)
+    let resolved = root
+        .join(relative)
         .canonicalize()
-        .map_err(|error| format!("{}: {error}", root.join(relative).display()))
+        .map_err(|error| format!("{}: {error}", root.join(relative).display()))?;
+    if !resolved.starts_with(root) {
+        return Err(format!(
+            "checkpoint path {checkpoint:?} resolves outside the manifest directory"
+        ));
+    }
+    if !resolved
+        .metadata()
+        .map_err(|error| format!("{}: {error}", resolved.display()))?
+        .is_dir()
+    {
+        return Err(format!("{} is not a directory", resolved.display()));
+    }
+    Ok(resolved)
 }
 
 fn require_new_output(out: &Path) -> Result<()> {
@@ -701,6 +777,14 @@ mod tests {
             report["checkpoint"]["hold"]["value_gain"],
             serde_json::json!({"mean": 6.0 / 512.0, "min": 0.0, "max": 4.0})
         );
+        assert!(
+            (report["checkpoint"]["hold"]["rest_gain_mean"]
+                .as_f64()
+                .unwrap()
+                - 0.25 / 568.0)
+                .abs()
+                < 1e-15
+        );
         assert_eq!(
             report["checkpoint"]["hold"]["type_weight_by_depth"],
             serde_json::json!([
@@ -808,6 +892,12 @@ mod tests {
         assert!(parse_args(
             ["--manifest", "m", "--out", "o", "--workers", "33"]
                 .into_iter()
+                .map(str::to_owned)
+        )
+        .is_err());
+        assert!(parse_args(
+            base.into_iter()
+                .chain(["--workers", "8"])
                 .map(str::to_owned)
         )
         .is_err());
@@ -919,6 +1009,7 @@ mod tests {
         duplicate_path["id"] = serde_json::json!("ah-s2");
         duplicate_path["label"] = serde_json::json!("B2-aH");
         duplicate_path["seed"] = serde_json::json!(2);
+        duplicate_path["checkpoint"] = serde_json::json!("./checkpoint");
         std::fs::write(
             &manifest_path,
             bytes(serde_json::json!([arm.clone(), duplicate_path])),
@@ -967,5 +1058,44 @@ mod tests {
         assert!(run_batch(&manifest_path, &dir.0.join("three.json"), 1)
             .unwrap_err()
             .contains("manifest schema"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn batch_rejects_child_symlinks_outside_the_manifest_root() {
+        use std::os::unix::fs::symlink;
+
+        let dir = TestDir::new("symlink-escape");
+        let manifest_root = dir.0.join("manifest-root");
+        let outside = dir.0.join("outside-checkpoint");
+        let arm_dir = manifest_root.join("arm");
+        std::fs::create_dir(&manifest_root).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::create_dir(&arm_dir).unwrap();
+        let (model, hamming) = write_checkpoint(&outside, 1.0);
+        for name in ["model.safetensors", "hamming_read.safetensors"] {
+            symlink(outside.join(name), arm_dir.join(name)).unwrap();
+        }
+        let manifest_path = manifest_root.join("manifest.json");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": MANIFEST_SCHEMA,
+                "arms": [{
+                    "id": "aqh-s1",
+                    "label": "B2-aqH",
+                    "seed": 1,
+                    "checkpoint": "arm",
+                    "model_sha256": model,
+                    "hamming_sha256": hamming,
+                    "expected_hold_rows": 8
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(run_batch(&manifest_path, &dir.0.join("escaped.json"), 1)
+            .unwrap_err()
+            .contains("resolves outside the manifest directory"));
     }
 }
