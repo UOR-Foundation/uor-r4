@@ -47,13 +47,14 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         current.observer = null;
         current.terminal?.dispose();
         current.terminal = null;
-        current.disposed = true;
         const sessionId = current.id;
         const previousSession = session;
         if (!sessionId) {
+            current.disposed = !mounted.current;
             setSession(null);
             return;
         }
+        current.disposed = true;
         if (current.closeRequested) return;
         current.closeRequested = true;
         setClosing(true);
@@ -88,7 +89,8 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         let cancelled = false;
         const sessionId = session.sessionId;
         const current = runtime.current;
-        if (current.disposed) return () => { cancelled = true; };
+        const replacing = current.id !== sessionId;
+        if (current.disposed && !replacing) return () => { cancelled = true; };
         current.id = sessionId;
         current.disposed = false;
         current.closeRequested = false;

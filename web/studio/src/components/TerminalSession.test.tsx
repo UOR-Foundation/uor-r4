@@ -160,6 +160,16 @@ describe('interactive PTY terminal', () => {
         expect(invoke.mock.calls.filter(([name]) => name === 'native_open_terminal')).toHaveLength(1);
     });
 
+    it('opens the first shell after empty initial cleanup settles during enablement', async () => {
+        let resolveEnable!: (value: unknown) => void;
+        const invoke = nativeMock({ native_enable_terminal: () => new Promise((resolve) => { resolveEnable = resolve; }) });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
+        await act(async () => { resolveEnable({ enabled: true }); await Promise.resolve(); });
+        expect(invoke).toHaveBeenCalledWith('native_open_terminal', expect.objectContaining({ cwd: '/granted/project' }));
+        await vi.waitFor(() => expect(terminals.length).toBe(1));
+    });
+
     it('closes a shell whose opening completes after the panel unmounts', async () => {
         let resolveOpen!: (value: unknown) => void;
         const close = vi.fn(async () => ({ active: false }));
