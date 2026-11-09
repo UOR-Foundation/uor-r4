@@ -30,7 +30,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - `cargo test --manifest-path src-tauri/Cargo.toml --test mcp_protocol`: PASS, including the exact hanging-call identity and fixture thread join.
 - `cargo test --manifest-path src-tauri/Cargo.toml --bin uor-desktop-client studio_root`: **2/2**, including regular-file refusal.
 - `CARGO_TARGET_DIR="$PWD/target/acceptance-tests" cargo test --manifest-path src-tauri/Cargo.toml`: complete default PASS; the same with `--features gui`: complete GUI PASS.
-- Final loopback, full repository gates, fresh exact-head review, GitHub checks and protected merge are pending and are not inferred from these checks.
+- `node web/studio/verify_studio_loopback.mjs` at clean `d39953a7d4ebab479673eba50e06481151b740bc`: PASS, 15 initial/12 reopened requests, zero external/raw-TypeScript/runtime errors, exact session/transcript restoration, native edit/save, guarded approval and refusal. Host SHA-256 `430ac620f81ac73e67f9bf4aa63f70bff4f9f9add8285f24f390d1d7f92e9dd4`; dist SHA-256 `30358639f919fc55fb8fa75b6daf6df71e33e10ac9da7cb5b02452ce51fade55`.
+- `UOR_LAB=kimi uor-harness loop gates --full`: **11/11 PASS** at `d39953a7d4ebab479673eba50e06481151b740bc`; logs `local/kimi/gates/1794203482-58704/`. Independent review, GitHub checks and protected merge are pending, not inferred.
 
 ## Skills used
 
@@ -38,7 +39,7 @@ Fresh independent exact-head review, systematic root-cause investigation, red-fi
 
 ## Still open
 
-Current-head loopback and full `loop gates --full`, a fresh exact-head reviewer, PR/body and required GitHub checks, protected merge and fresh-main verification. No production publish, signed release, full Cowork parity, useful-chat result, or fresh packaged-GUI acceptance is claimed for this unit.
+A fresh exact-head reviewer, PR/body and required GitHub checks, protected merge and fresh-main verification remain. No production publish, signed release, full Cowork parity, useful-chat result, or fresh packaged-GUI acceptance is claimed for this unit.
 
 ## Plain summary
 
