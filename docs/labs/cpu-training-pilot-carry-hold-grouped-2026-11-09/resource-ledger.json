@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-carry-hold-grouped-resource/1",
   "status": "COMPLETE_RECORD_REAL_NOT_RUN",
   "experiment": "CPU grouped hold-gain and multi-checkpoint audit",
-  "updated_utc": "2026-11-09T06:08:05Z",
+  "updated_utc": "2026-11-09T06:10:00Z",
   "previous_ledger": "cpu-training-pilot-carry-hold-audit-2026-11-09/resource-ledger.json",
   "previous_admitted_cumulative_projection_seconds": 111167.677487699,
   "cost_kind": "local CPU measured floor plus explicit unmeasured-stage projection",
@@ -43,7 +43,7 @@
     "release_executable_sha256": "b39ac6f7ee4cc0df98c7b9840bd2b50f8c6c6620cfaf84ad93c37038b16ede17"
   },
   "storage": {
-    "task_and_ledger_bytes": 57166,
+    "task_and_ledger_bytes": 67724,
     "debug_build_target_bytes": 4650044552,
     "release_build_target_bytes": 303994666,
     "free_bytes_at_measurement": 156377317376,

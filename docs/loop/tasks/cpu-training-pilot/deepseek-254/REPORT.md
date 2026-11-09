@@ -33,8 +33,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   replacement and byte-identical repeats.
 - No Claude-owned float-training file, serving schema, export path, GPU state
   or artifact was changed.
-- Size: code 2 files, `+749/-105`; the generated evidence adds two JSON reports
-  and this delivery adds the ORDER, README and REPORT.
+- Size: `pr-check` reports tests 0 files, code 2 files `+749/-105`, docs 4
+  files `+249/-0`, generated 0 files and other 4 files `+1864/-0`.
 
 ## Measurements
 
@@ -80,7 +80,8 @@ cumulative `114,767.677487699 s`. GPU cost is zero.
 - Scoped Clippy with `--no-deps`: passed with 10 pre-existing crate warnings
   and none from the changed files.
 - Release build: passed.
-- Report policy, local policy and full gates: pending this record.
+- `loop report --check` and `loop pr-check --local`: passed.
+- All 11 `loop gates --full` gates: green.
 
 ## Skills used
 
