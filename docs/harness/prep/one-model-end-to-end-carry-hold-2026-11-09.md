@@ -1,6 +1,18 @@
 # Prep sheet: the carry lever, a held stream write (one-model-end-to-end, claude-331, 9 Nov 2026)
 
-TEST FITNESS: PENDING. claude-332's round 1 read NOT_FIT (one major); its fixes are applied below, and round 2, by a different fresh non-author reviewer, is owed before any code.
+TEST FITNESS: NOT_FIT after claude-332's two rounds, by different fresh non-author reviewers (claude-332's stop rule applies: no code or run under that unit). Round 2's fixes are applied below but not reviewed.
+- **claude-332 round 2, at `e20d6a47f`:** NOT_FIT. It confirmed the slot layout, the header and scored row, the trunk's causal width-4 convolution and scan, and the payload's construction. Applied:
+  - **Major 1:** rows where no ask head found a candidate have `y = u = 0`, so every scaled distance is 0 and the rank would come from the tie-break alone. With claude-330's 376–512 of 512 rows kept, a right payload could have averaged near rank 67 and read as "any other pattern". The ranks are now taken over the found rows only, beside the found fraction, and I-V pins a zero vector.
+  - **Major 2:** an extension had no exit, so outcome 1 could match again after it. The extension now runs once, and an arm still undertrained at 16,384 is a named configuration result with a next step. "Near 1" and "near chance" are read at 16,384 for an extended arm.
+  - **Minor:** I-H3 runs at a hand-set nonzero `g`, `w_y` and `a`, since every gradient it checks is 0 at the start.
+  - **Minor:** I-H1 compares the gradients of the parameters both runs share.
+  - **Nit:** the weight is `max(0, m − d) / max(m, 1)`.
+  - **Not verified in round 2 (its budget):**
+    - `sources[1]` is the raw table;
+    - the nearest readout compares the final point against raw `p_v`;
+    - `flock_read_hamming.rs:73–75`, `99–106`, `832`, `1226` and `1557–1561` (round 1 checked these at `126ab2256`, with the code unchanged since);
+    - `rate_select` reads `RATE_TABLE`;
+    - I-R2's sealed numbers.
 - **claude-332 round 1, at `126ab2256`:** NOT_FIT. Every cited code line was checked true. The bar, the arms, the outcome map and I-H1 to I-H5 were found consistent and testable. The cost was checked at about 40 minutes per seed. Applied:
   - **Major:** (r1y) was ranked by raw distance. The ask payload is margin-weighted, so it shrinks toward 0 (`flock_read_hamming.rs:1643–1656`, `1713–1715`), and a right payload could read as a payload fault. It is now ranked at the best non-negative scale against `p_v`, and I-V pins a `0.3 · p_v` case.
   - **Minor:** I-H1 names where the hold sits (before the `q16` rounding at `geometric_stack_native.rs:1693`), what it compares, and which side of the rounding the ranks read.
@@ -73,7 +85,7 @@ Under `--hamming-hold h` (requires `--hamming-ask 1`), the **stream read's ask w
 **The carry readings (continuous).** Recall cannot fall below chance, so the cuts need readings that can. For every held-out query, a **value rank** is the rank of the asked value's table point among the 512 value tokens' table points, by Euclidean distance from a vector, ties broken by token id. 1 is best and 256.5 is chance. The vectors:
 - **At the `Q` row, the depth-2 read's write, three ways** (the stream is `x + w_c ⊙ c + w_y ⊙ y`, and `x` holds `Q`'s own point plus two layers, so the whole stream can hide a right payload):
   - (r1y) the ask payload `y`, ranked against the raw table points `p_v` at the best non-negative scale, `min_{α ≥ 0} |y − α p_v|`.
-    - **How the payload is built:** each kept candidate's table point is weighted by `max(0, m − d)/m` (`flock_read_hamming.rs:1643–1650`). The sum is divided by the number of candidates inside the margin (`:1652–1656`), then averaged over the ask heads that found one (`:1713–1715`).
+    - **How the payload is built:** each kept candidate's table point is weighted by `max(0, m − d) / max(m, 1)` (`flock_read_hamming.rs:1643–1650`). The sum is divided by the number of candidates inside the margin (`:1652–1656`), then averaged over the ask heads that found one (`:1713–1715`).
     - **Why the scale:** a right payload is therefore `α · p_v` with `α < 1` unless the match is exact. A raw-distance rank could read it as a small value token;
   - (r1u) the write `u = w_y ⊙ y`, against the **written value points** `q_v = w_y ⊙ p_v` (the type weight row, lane by lane, `flock_read_hamming.rs:1717–1737`). Each value's distance is `min_{α ≥ 0} |u − α q_v|`, with the closed form `α* = max(0, ⟨u, q_v⟩ / ⟨q_v, q_v⟩)`. So neither a small `w_y` nor a lane-wise scale with mixed signs reads as a wrong value;
   - (r1s) the whole stream just after the write.
@@ -84,6 +96,10 @@ Under `--hamming-hold h` (requires `--hamming-ask 1`), the **stream read's ask w
 - (r1s) at the `Q` row is descriptive: it shows how much the residual hides, and no outcome is read from it.
 
 Each is reported as the mean rank per checkpoint, with and without `−aS` and `−H`.
+- **The found rows only.** Where no ask head found a candidate inside its margin, `y = 0` and `u = 0`. Every scaled distance is then 0, and the rank would come from the token-id tie-break alone.
+  - So (r1y), (r1u) and (r1h) are taken over the rows where the vector is nonzero.
+  - Each is reported beside the **found fraction**: the share of rows it was taken over.
+  - A found fraction below 0.5 is read on its own, as the read not finding (outcome 4's first branch), before any rank is read.
 
 ## Steps: the arms
 
@@ -122,7 +138,12 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 0. **B0, I-R1 or I-R2 fails:** an instrument fault. Repair it and rerun; nothing else is read.
 **Undertrained**, the test used below: a held arm misses its bar and either its `R_ask` still rises by more than 0.05 between its last two checkpoints, or the hold never grew (the mean `|g|` over the 16 question tokens is below 0.01 at step 4,096).
 
-1. **Undertrained, with no held arm passing:** neither held arm passes, and at least one is undertrained. Extend each undertrained arm to 16,384 steps under this sheet, then read the map again. An arm that passes is never held back by the other arm being undertrained. That case goes to outcome 2 or 3, and the undertrained arm is extended beside it.
+1. **Undertrained, with no held arm passing:** neither held arm passes, and at least one is undertrained. Extend each undertrained arm to 16,384 steps under this sheet, then read the map again at step 16,384. **The extension runs once.**
+   - An arm still undertrained at 16,384 is not extended again.
+   - It is recorded as a configuration result for `h = 8` and this `lr`: the hold did not train in this budget.
+   - **Next:** the hold's start (a nonzero `g` start, or a learning rate of its own), tested on B2 first.
+
+   An arm that passes is never held back by the other arm being undertrained. That case goes to outcome 2 or 3, and the undertrained arm is extended beside it.
 2. **B2-aH passes:** the hold carries the value, and the scored loss alone trains the choice through it. Attribute it with `R^{−H}` and `R^{−aS}` (each expected to fail the bar) and `g` (expected highest on the question tokens). **Next:** a language run with ask heads and the hold on claude-325's bare-answer recipe, under its own sheet.
 2a. **(read with 2) B2-aqH beside a passing B2-aH:** reported either way. If it is undertrained, it is extended to 16,384 steps; it does not change outcome 2.
 3. **B2-aqH passes, B2-aH fails:**
@@ -138,7 +159,7 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
      - **Next:** a diagnostic sheet that cuts at the first rank on the path (r1y → r1u → r1h → r1hs → r2) whose mean passes 64.
      - No lever is chosen for it in advance.
 
-"Near 1" means mean rank ≤ 8; "near chance" means mean rank ≥ 128. Both are read at step 4,096 at both seeds. The same readings are reported for B2-aq, the unheld base, whichever outcome lands.
+"Near 1" means mean rank ≤ 8; "near chance" means mean rank ≥ 128. Both are read at both seeds, at step 4,096, or at step 16,384 for an arm that was extended. The same readings are reported for B2-aq, the unheld base, whichever outcome lands.
 
 **Seeds:** two seeds that split run a third; at least 2 of 3 must agree. Every cell, rank, `g` value and ablation is reported either way.
 
@@ -147,14 +168,15 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 - **I-1 (default paths):** claude-330's printed digest (`i1_digest::ask_default_forward_digest`) is equal at the base and the head. Two new digests are equal at the base and the head too: one with `--hamming-ask 1` and no hold, and one of a no-read forward. The no-read digest is what lets I-R1 reuse claude-330's sealed B1-n as the twin.
 - **I-H1 (the hold starts off):** with `g = 0`, the forward and the gradient with `--hamming-hold 8` equal the forward and gradient without it.
   - **Where the hold sits:** the held term is added inside the stream read's combine, so before the `q16` rounding that wraps the read's return (`geometric_stack_native.rs:1693`).
-  - **What is compared:** the stream after that rounding, element by element, and every gradient. Values must be equal as numbers, so `−0.0` and `+0.0` count as equal.
+  - **What is compared:** the stream after that rounding, element by element, and the gradient of every parameter both runs share (`g` exists only in the held run). Values must be equal as numbers, so `−0.0` and `+0.0` count as equal.
   - **The ranks:** (r1s) and (r1hs) read the combine's output before the rounding.
 - **I-H2 (the hold's rows):** on a hand-built input with one nonzero ask write at row `t`, the added term is `g[x_t] · u_t` at rows `t + 1` to `t + h`. It is zero at row `t` itself, at `t + h + 1`, before `t`, and in every other window of the batch.
-- **I-H3 (the gradient):** a loss at row `t + 4` alone gives nonzero gradients to `g[x_t]` and `a[x_t]`, and none to `g` of tokens that appear only after `t + 4`.
+- **I-H3 (the gradient):** at a nonzero `g`, `w_y` and `a`, set by hand (at the zero start every one of these gradients is 0, as the mechanism section says), a loss at row `t + 4` alone gives nonzero gradients to `g[x_t]` and `a[x_t]`, and none to `g` of tokens that appear only after `t + 4`.
 - **I-H4 (save, load and refusals):** `g` round-trips through save and load. The decode step and the export each refuse a read with a hold, with an error that names it.
 - **I-H5 (the cuts):** `−aS` removes every depth-2 ask write and every held term, leaves the copy heads' picks unchanged, and leaves the readout read's ask heads on. `−H` removes every held term and leaves the direct write bit for bit.
 - **I-V (the value ranks):** on hand-built vectors, each rank equals a brute-force sort of the 512 distances, ties broken by token id. Two cases are pinned:
   - a residual `x` that dominates the stream: (r1y) and (r1u) read 1 while (r1s) reads far from 1;
+  - a zero vector (no head found): the row is left out of the rank, and the found fraction counts it as not found;
   - a payload shrunk by the margin weights: `y = 0.3 · p_v`, among value points of uneven size, reads 1 on (r1y), while a raw-distance rank of the same `y` does not;
   - a `w_y` with mixed signs and uneven lane sizes: (r1u) and (r1h) still read 1, and so does (r1hs) when the stream at `H4` is that held term plus a residual small against it. On the same vectors, a raw-point rank of the stream reads far from 1. That pins why (r1hs) is ranked against `q_v`.
 - **I-4, I-6, I-7:** as claude-330's sheet, with I-7 run on B2-aqH.
