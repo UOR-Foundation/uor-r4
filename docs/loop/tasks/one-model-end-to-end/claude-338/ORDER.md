@@ -18,7 +18,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 **The change, in the lab instrument `docs/labs/one-model-end-to-end/instrument/src/bin/served-reply-panel.rs`:**
 1. **The scorer refuses an artifact whose Hamming image asks or carries** on the CPU-port path, by name. It never scores one silently.
 2. **`--engine integer`** decodes through the integer session. The CPU port stays the default.
-3. **Parity, the instrument check:** on claude-322's sealed seed-1 artifact (`86e51d5e…`, no ask table), `--engine integer` and the default give byte-identical output JSON on all 256 rows of `m2-fresh256`.
+3. **Parity, the instrument check:** on claude-322's sealed seed-1 artifact (`86e51d5e…`, no ask table), `--engine integer` and the default give identical output JSON on all 256 rows of `m2-fresh256`, once the four timing fields (`wall_milliseconds`, `tokens_per_second`, `decode_milliseconds`, `decode_tokens_per_second`) and the integer run's `settings.engine` are removed.
 4. **Each new path has a test, and each test fails with its fix set aside.**
 
 **Claim check:**
