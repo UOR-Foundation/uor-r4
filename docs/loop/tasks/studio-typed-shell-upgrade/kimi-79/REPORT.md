@@ -28,7 +28,8 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - The same with `--features gui`: complete GUI PASS, retained in `gui-tests.log`.
 - `cargo test --manifest-path src-tauri/Cargo.toml --test desktop_client_controls every_static_root_refuses_source_typescript_and_source_maps -- --exact --nocapture`: PASS after the demonstrated mixed-case failure.
 - `cargo test --manifest-path src-tauri/Cargo.toml --test mcp_protocol remote_auth_timeout_and_size_caps_fail_explicitly -- --exact --nocapture`: PASS with the complete request/envelope/header assertion.
-- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS. Final record-only policy, full-gate, loopback and independent review are recorded after they execute.
+- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS.
+- `c17105e704e1ee9b02271062a13fc23747649604`, tree `bb371ee36c6819ff62fa4aeddfaa55fcc3b716a6`, is the record-only head following source/acceptance head `988155ae5`. Its `pr-check-local.log` is PASS with disclosed scope/filemap/commit-order advisories; its `full-gates.log` is **11/11 PASS**. The clean loopback at this head repeats exact transcript/session identity and native edit/save, with host SHA-256 `430ac620f81ac73e67f9bf4aa63f70bff4f9f9add8285f24f390d1d7f92e9dd4` and dist SHA-256 `30358639f919fc55fb8fa75b6daf6df71e33e10ac9da7cb5b02452ce51fade55`. Evidence is under `local/kimi/studio-final-acceptance/c17105e704e1ee9b02271062a13fc23747649604/`. Subsequent commits that only record this verification do not change production source; the PR and exact-head reviewer identify the final record-only HEAD explicitly.
 
 ## Skills used
 
@@ -36,8 +37,8 @@ Fresh exact-head adversarial review, red-first mixed-case and complete-MCP-envel
 
 ## Still open
 
-Final record-only `pr-check --local`, full repository gates and loopback with retained output; fresh exact-head approval; required GitHub checks; protected merge; and fresh-main verification. No production publication, signed release, full Cowork parity, useful-chat result, or fresh packaged-GUI acceptance is claimed.
+Fresh exact-head approval, required GitHub checks, protected merge and fresh-main verification. No production publication, signed release, full Cowork parity, useful-chat result, or fresh packaged-GUI acceptance is claimed.
 
 ## Plain summary
 
-The code-level mixed-case source boundary is fixed. The remaining work is proof of delivery: the final head and tree are named, fixture assertions cover the complete request, and suite/policy/gate evidence is retained in the main checkout rather than only the worktree.
+The mixed-case source boundary and full fixture assertion are fixed. Source head `988155ae5`, record head `c17105e70`, and the merge base are explicit, with retained suite/policy/gate/loopback evidence in the main checkout. Only independent review and protected delivery remain.
