@@ -535,9 +535,9 @@ fn check_copy_keys(copy_keys: &[usize], heads: usize, width: usize) -> Result<()
     copy_keys.iter().try_for_each(|&k| check_copy_key(k, heads, width))
 }
 
-/// The token two before each of `ids`' rows, in windows of `time`: `x_{s−2}`, or, where a window
-/// has fewer tokens before `s`, the one before it, `x_{s−1}`, or at the window's first position
-/// its own (never a candidate). The integer session's `CopyHeads` keys by the same rule.
+/// [`pull_pairs`]'s answer: the `(row, s)` pairs and, per pull with any, the range of its pairs.
+pub(crate) type PullPairs = (Vec<(u32, u32)>, Vec<std::ops::Range<usize>>);
+
 /// The found-copy pull's candidates (claude-330): for each `(row, target)`, the `(row, s)` pairs
 /// of the earlier positions `s` of the row's window holding `target`, `1 ≤ s < t` in the window,
 /// in ascending `s`; and, for each pull with any, the range of its pairs. A pull with none has no
@@ -546,7 +546,7 @@ pub(crate) fn pull_pairs(
     ids: &[u32],
     time: usize,
     pulls: &[(usize, u32)],
-) -> Result<(Vec<(u32, u32)>, Vec<std::ops::Range<usize>>)> {
+) -> Result<PullPairs> {
     let mut pairs = Vec::new();
     let mut spans = Vec::new();
     for &(row, target) in pulls {
@@ -567,6 +567,9 @@ pub(crate) fn pull_pairs(
     Ok((pairs, spans))
 }
 
+/// The token two before each of `ids`' rows, in windows of `time`: `x_{s−2}`, or, where a window
+/// has fewer tokens before `s`, the one before it, `x_{s−1}`, or at the window's first position
+/// its own (never a candidate). The integer session's `CopyHeads` keys by the same rule.
 fn two_back(ids: &[u32], time: usize) -> Vec<u32> {
     (0..ids.len())
         .map(|r| match r % time {
@@ -841,20 +844,12 @@ impl HammingReads {
         table: &Tensor,
         pulls: &[(usize, u32)],
     ) -> Result<Option<Tensor>> {
-        if !self.has_ask() {
-            return Err(invalid("the found-copy pull needs the ask heads"));
-        }
-        if time == 0 || ids.len() % time != 0 {
-            return Err(invalid("the found-copy pull needs whole windows"));
-        }
-        let (pairs, spans) = pull_pairs(ids, time, pulls)?;
-        if spans.is_empty() {
+        let Some(parts) = self.pull_parts(ids, time, table, pulls)? else {
             return Ok(None);
-        }
+        };
         let mut total: Option<Tensor> = None;
         let mut count = 0usize;
-        for read in &self.reads {
-            let (sum, n) = read.pull_bits(ids, table, &pairs, &spans)?;
+        for (sum, n) in parts {
             total = Some(match total {
                 None => sum,
                 Some(t) => t.add(&sum)?,
@@ -862,6 +857,52 @@ impl HammingReads {
             count += n;
         }
         Ok(total.map(|t| t.affine(1.0 / count as f64, 0.0)).transpose()?)
+    }
+
+    /// The sheet's pull-distance reading (claude-330): [`Self::ask_pull`]'s mean distance at each
+    /// depth on its own, as plain numbers, over the same `(row, target)`s. `None` when no row has
+    /// a copy.
+    pub fn ask_pull_depths(
+        &self,
+        ids: &[u32],
+        time: usize,
+        table: &Tensor,
+        pulls: &[(usize, u32)],
+    ) -> Result<Option<Vec<f64>>> {
+        let Some(parts) = self.pull_parts(ids, time, table, pulls)? else {
+            return Ok(None);
+        };
+        parts
+            .into_iter()
+            .map(|(sum, n)| Ok(f64::from(sum.to_scalar::<f32>()?) / n as f64))
+            .collect::<Result<Vec<_>>>()
+            .map(Some)
+    }
+
+    /// Each depth's [`HammingRead::pull_bits`]: its sum and its term count, or `None` when no row
+    /// has a copy.
+    fn pull_parts(
+        &self,
+        ids: &[u32],
+        time: usize,
+        table: &Tensor,
+        pulls: &[(usize, u32)],
+    ) -> Result<Option<Vec<(Tensor, usize)>>> {
+        if !self.has_ask() {
+            return Err(invalid("the found-copy pull needs the ask heads"));
+        }
+        if time == 0 || !ids.len().is_multiple_of(time) {
+            return Err(invalid("the found-copy pull needs whole windows"));
+        }
+        let (pairs, spans) = pull_pairs(ids, time, pulls)?;
+        if spans.is_empty() {
+            return Ok(None);
+        }
+        self.reads
+            .iter()
+            .map(|read| read.pull_bits(ids, table, &pairs, &spans))
+            .collect::<Result<Vec<_>>>()
+            .map(Some)
     }
 
     /// The same reads with their copy heads keyed on `copy_key` tokens before a position: 1, the
@@ -3881,19 +3922,28 @@ mod tests {
         let pull = |pulls: &[(usize, u32)]| reads.ask_pull(&ids, 8, table, pulls).unwrap();
         let scalar = |t: Tensor| t.to_scalar::<f32>().unwrap();
         assert_eq!(scalar(pull(&[(6, 7)]).unwrap()), 0.0, "the exact match at s = 3");
-        let mut expected = 0.0f32;
+        let mut depths = Vec::new();
         for read in &reads.reads {
             let rows = Tensor::from_vec(vec![1u32, 3, 5], 3, &device).unwrap();
             let rows = table.index_select(&rows, 0).unwrap();
             let c = codes(&as_trained(|| HammingRead::rotate(&read.key_rotation, &rows)).unwrap());
+            let mut depth = 0.0f32;
             for h in 2..4 {
                 let bits = |k: usize| (h * 64..(h + 1) * 64).filter(|&i| c[0][i] != c[k][i]).count();
-                expected += bits(1).min(bits(2)) as f32 / 64.0;
+                depth += bits(1).min(bits(2)) as f32 / 64.0;
             }
+            depths.push(depth / 2.0);
         }
-        expected /= (2 * reads.reads.len()) as f32;
+        let expected = depths.iter().sum::<f32>() / depths.len() as f32;
         let seven = scalar(pull(&[(7, 7)]).unwrap());
         assert!(expected > 0.0 && (seven - expected).abs() < 1e-6, "{seven} vs {expected}");
+        // The reading: each depth's own mean, on the same rows.
+        let read_out = reads.ask_pull_depths(&ids, 8, table, &[(7, 7), (4, 9)]).unwrap().unwrap();
+        assert_eq!(read_out.len(), depths.len());
+        for (got, want) in read_out.iter().zip(&depths) {
+            assert!((*got - f64::from(*want)).abs() < 1e-6, "{got} vs {want}");
+        }
+        assert!(reads.ask_pull_depths(&ids, 8, table, &[(4, 9)]).unwrap().is_none());
         // Row 4's target is nowhere in the window; row 1 has no earlier candidate.
         assert!(pull(&[(4, 9), (1, 7)]).is_none());
         assert_eq!(scalar(pull(&[(7, 7), (4, 9), (1, 7)]).unwrap()), seven);
@@ -3939,9 +3989,11 @@ mod tests {
                 .map(|r| r.ask.as_ref().unwrap().as_tensor().flatten_all().unwrap().to_vec1().unwrap())
                 .collect()
         };
+        // λ = 0: the runner builds no pull rows (`in_space_long`'s `attract_plan`, pinned there),
+        // so there is no term, and the question rows stay where they are.
         let before = rows(&reads);
-        ask_step(&reads, &pull().affine(0.0, 0.0).unwrap().backward().unwrap(), 64.0);
-        assert_eq!(rows(&reads), before, "λ = 0 moves nothing");
+        assert!(reads.ask_pull(&ids, 8, &table, &[]).unwrap().is_none());
+        assert_eq!(rows(&reads), before);
         let mut steps = 0;
         while pull().to_scalar::<f32>().unwrap() > 0.0 {
             assert!(steps < 100, "still {} after 100 steps", pull().to_scalar::<f32>().unwrap());
