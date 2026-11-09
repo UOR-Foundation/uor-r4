@@ -4,13 +4,13 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## What did not work
 
-- Current-state named only the earlier `d399` head and treated `3c7176d5f`-and-later as record-only without naming the actual source/assertion head `988155ae5` or final `b9750be6` record-only head. It also linked the pre-work ORDER rather than the binding REPORT.
-- `c17105e7` policy/gate logs existed only in the worktree, and were cited instead of the final durable b975 logs. Notebook counts lacked the correct `988155ae5` source/assertion attribution. Desktop/README links stopped at the older report.
+- Current-state named only the earlier `d399` head and treated `3c7176d5f`-and-later as record-only without naming the actual source/assertion head `988155ae5` or distinguishing intermediate `b9750be6` from the final exact delivery identity. It also linked the pre-work ORDER rather than the binding REPORT.
+- `c17105e7` policy/gate logs existed only in the worktree, and were cited instead of the durable b975 intermediate logs. Notebook counts lacked the correct `988155ae5` source/assertion attribution. Desktop/README links stopped at the older report.
 
 ## What changed
 
-- Current-state, notebook, desktop/README and kimi-79's summary now distinguish `d399` earlier acceptance, `988155ae56dc0fdd872b7428018ead566179fe3f` source/assertion (tree `e6542fb375518c1b38639cff825b9ac65f7b3594`), intermediate record-only `c17105e7`, and final record-only `b9750be6`/tree `77487ea04c695bc38526b1acbdd89b469cc22695`. The binding reference is `kimi-79/REPORT.md`.
-- c171's local-policy and full-gate logs were copied byte-identically into `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/c17105e704e1ee9b02271062a13fc23747649604/`. Final policy/gate citations use the durable b975 copies instead.
+- Current-state, notebook, desktop/README and kimi-79's summary now distinguish `d399` earlier acceptance, `988155ae56dc0fdd872b7428018ead566179fe3f` source/assertion (tree `e6542fb375518c1b38639cff825b9ac65f7b3594`), and intermediate record-only `c17105e7` and `b9750be6`/tree `77487ea04c695bc38526b1acbdd89b469cc22695`. The final identity is bound in this REPORT and the PR, with fresh gate and loopback logs.
+- c171's local-policy and full-gate logs were copied byte-identically into `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/c17105e704e1ee9b02271062a13fc23747649604/`. b975 policy/gate citations use its durable copies and explicitly identify it as intermediate evidence.
 - This repair is documentation/evidence only: no production code, model/API/engine/worker/tokenizer or new feature claim was added.
 
 ## Measurements

@@ -41,4 +41,4 @@ Fresh exact-head approval, required GitHub checks, protected merge and fresh-mai
 
 ## Plain summary
 
-The mixed-case source boundary and full fixture assertion are fixed. Source/assertion head `988155ae5`, intermediate record-only head `c17105e70`, final record-only head `b9750be65`, and the merge base are explicit, with retained suite/policy/gate/loopback evidence in the main checkout. Only independent review and protected delivery remain.
+The mixed-case source boundary and full fixture assertion are fixed. Source/assertion head `988155ae5`, intermediate record-only heads `c17105e70` and `b9750be65`, the final delivery identity in the PR and kimi-80 REPORT, and the merge base are explicit, with retained suite/policy/gate/loopback evidence in the main checkout. Only independent review and protected delivery remain.
