@@ -15027,10 +15027,27 @@ mod tests {
     #[test]
     #[ignore]
     fn the_recall_readings_leave_training_alone() {
-        let device = Device::new_cuda(0).unwrap();
         // The sheet's B2-h: the FBS trunk's flags, `--hamming-read 4`, the two-class task with
         // its 4-token header.
-        let config = LongConfig {
+        let form = RecallForm { query: true, header: 4, ..RecallForm::default() };
+        readings_leave_training_alone(i7_trunk(), form, 5, "328");
+    }
+
+    /// claude-330's I-7: the same on B1-a, the ask heads and the found-copy pull on, with the six
+    /// ablations (`−aQ` the sixth) and each depth's pull distance in every reading.
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore]
+    fn the_recall_readings_leave_ask_training_alone() {
+        let config = LongConfig { hamming_ask: true, hamming_attract: 1.0, ..i7_trunk() };
+        let form = RecallForm { query: true, ..RecallForm::default() };
+        readings_leave_training_alone(config, form, 6, "330");
+    }
+
+    /// The I-7 trunk: the FBS trunk's flags, `--hamming-read 4`, 1,024 steps, readings every 512.
+    #[cfg(feature = "cuda")]
+    fn i7_trunk() -> LongConfig {
+        LongConfig {
             objective: PointObjective::Nearest,
             steps: 1024,
             batch: 16,
@@ -15042,13 +15059,25 @@ mod tests {
             retain_rates: true,
             hamming_read: 4,
             ..config(0, None)
-        };
+        }
+    }
+
+    /// I-7's body: `config` on the recall task in `form` trains alike with the readings on and
+    /// off, and every reading carries `ablations` ablations and the trace.
+    #[cfg(feature = "cuda")]
+    fn readings_leave_training_alone(
+        config: LongConfig,
+        form: RecallForm,
+        ablations: usize,
+        unit: &str,
+    ) {
+        let device = Device::new_cuda(0).unwrap();
         let run = |readings: bool| {
             let out = std::env::temp_dir()
-                .join(format!("claude-328-i7-{readings}-{}", std::process::id()));
+                .join(format!("claude-{unit}-i7-{readings}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&out);
             RECALL_STEP_LOSSES.with(|l| l.borrow_mut().clear());
-            let form = RecallForm { query: true, header: 4, readings, ..RecallForm::default() };
+            let form = RecallForm { readings, ..form };
             run_recall(&out, &config, RECALL_QUERY_EPISODES, form, &device).unwrap();
             let losses: Vec<u64> =
                 RECALL_STEP_LOSSES.with(|l| l.borrow().iter().map(|v| v.to_bits()).collect());
@@ -15070,13 +15099,17 @@ mod tests {
         assert_eq!(on_losses, off_losses, "every step's loss");
         assert!(!on_files.is_empty());
         assert_eq!(on_files, off_files, "the final weights");
-        // The readings ran at steps 0, 512 and 1,024, each with five ablations and the trace.
+        // The readings ran at steps 0, 512 and 1,024, each with its ablations and the trace, and
+        // with the ask heads on, each depth's pull distance.
         let lines: Vec<serde_json::Value> =
             on_lines.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(lines.len(), 3);
         for line in &lines {
-            assert_eq!(line["readings"]["ablations"].as_array().unwrap().len(), 5);
+            assert_eq!(line["readings"]["ablations"].as_array().unwrap().len(), ablations);
             assert!(!line["readings"]["trace"].as_array().unwrap().is_empty());
+            if config.hamming_ask {
+                assert_eq!(line["hamming_pull_distance"].as_array().unwrap().len(), 2);
+            }
         }
     }
 
