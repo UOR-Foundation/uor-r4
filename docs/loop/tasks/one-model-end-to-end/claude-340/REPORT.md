@@ -33,8 +33,10 @@ On the laptop, no GPU. Both binaries built from the same tree, before with the f
 
 | Check | s1 | s2 |
 |---|---|---|
-| I-c, `--engine integer`, four timing fields and `settings.engine` removed, before and after | `5a27775c…` both, equal to the sheet | `7eb8dbf5…` both, equal to the sheet |
-| Rank modes, CPU port, `--teacher-forced 1 --paired-first 1`, same fields removed | `116d1fdf…` both, byte-equal | `f7f677f5…` both, byte-equal |
+| I-c, `--engine integer`, stripped, before and after | `5a27775c…` both, equal to the sheet | `7eb8dbf5…` both, equal to the sheet |
+| Rank modes, CPU port, `--teacher-forced 1 --paired-first 1`, stripped, before and after | `116d1fdf…` both, byte-equal | `f7f677f5…` both, byte-equal |
+
+**The strip,** one `jq -S` applied to run 1 of each report, the same for every row: it deletes `wall_milliseconds`, `tokens_per_second`, `decode_milliseconds` and `decode_tokens_per_second` at every level of the report, which includes `teacher_forced` and `paired_first`, and it deletes `settings.engine`, which only an integer run writes.
 
 **Rank-mode wall time, milliseconds, median of 3, before and after interleaved:**
 
@@ -43,7 +45,7 @@ On the laptop, no GPU. Both binaries built from the same tree, before with the f
 | `teacher_forced.wall_milliseconds` | 14,429 | 5,374 | 14,435 | 5,292 |
 | `paired_first.wall_milliseconds` | 13,538 | 4,347 | 13,533 | 4,249 |
 
-**Parses:** a 256-row rank run went from 512 forward parses inside those timers (one per row in each mode) to none. The run builds one forward before any timer. A CPU-port run still parses the bytes twice up front, once for the integer model (its shape and head check) and once for the forward, both before any timer.
+**Parses:** a 256-row rank run went from 512 forward parses inside those timers (one per row in each mode) to none. The run builds one forward before any timer. A CPU-port run still parses the bytes more than once up front (the integer model, the engine refusal's Hamming read and the forward), all before any timer.
 
 **`--engine integer` decode tokens per second, the unchanged reference, 3 runs each, interleaved:**
 
