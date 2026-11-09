@@ -417,6 +417,7 @@ fn write_new_pair(
     Ok(())
 }
 
+#[cfg(test)]
 fn retain_evidence(root: &Path, hamming: &[u8], report: &[u8]) -> Result<()> {
     std::fs::create_dir(root).map_err(|error| format!("{}: {error}", root.display()))?;
     write_new_pair(

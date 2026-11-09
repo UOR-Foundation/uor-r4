@@ -1,6 +1,6 @@
 {
   "schema": "uor-r4.cpu-ask-offset-solver-measurement/1",
-  "measured_utc": "2026-11-09T02:16:10Z",
+  "measured_utc": "2026-11-09T02:30:11Z",
   "tool": "/usr/bin/time -v",
   "host": {
     "cpu": "AMD Ryzen 9 9950X",
@@ -11,11 +11,11 @@
   "evidence_test": {
     "command": "RAYON_NUM_THREADS=16 UOR_KEEP_ASK_OFFSET_SOLVER_EVIDENCE=<fresh-evidence-dir> target/debug/deps/cpu_ask_offset_solver-37b221f1fe61d77a --exact tests::synthetic_checkpoint_writes_solved_sidecar_report_and_repeat --nocapture",
     "tests_passed": 1,
-    "elapsed_seconds": 5.97,
-    "user_seconds": 5.85,
+    "elapsed_seconds": 5.96,
+    "user_seconds": 5.84,
     "system_seconds": 0.13,
     "cpu_percent": 100,
-    "max_rss_kib": 236100,
+    "max_rss_kib": 236360,
     "file_system_outputs_blocks": 0,
     "retention_root": "created exclusively with create_dir and published through write_new_pair"
   },
@@ -24,12 +24,12 @@
     "tests_passed": 1,
     "solver_evaluations": 393344,
     "exhausted_readings": 0,
-    "reported_solver_wall_ms": 41,
-    "process_elapsed_seconds": 0.05,
-    "user_seconds": 0.43,
+    "reported_solver_wall_ms": 37,
+    "process_elapsed_seconds": 0.04,
+    "user_seconds": 0.40,
     "system_seconds": 0.01,
-    "cpu_percent": 869,
-    "max_rss_kib": 60108,
+    "cpu_percent": 895,
+    "max_rss_kib": 60716,
     "file_system_outputs_blocks": 0
   },
   "discarded_cargo_measurement": {
@@ -38,13 +38,13 @@
     "max_rss_kib": 1175464
   },
   "artifacts": {
-    "synthetic_report_sha256": "1904418708b5bae93470b0fe892dec112bb7c5491a4cc1cf10b7c0e3beb21c32",
+    "synthetic_report_sha256": "39ed4fcea8e8a73ba8507e5eb90c5340fdec237c7a4187918e2df83e850a7704",
     "candidate_hamming_sha256": "ef785c378684f997d24d91b026840854803c61c1a1d61b26ec35bbbc650d0d4a",
-    "solver_evidence_binary_sha256": "20bcf337eff525ae2badc6bec033b42115f15c1c726b0051495c891be59c8af2"
+    "solver_evidence_binary_sha256": "62d88fa129231fd10d429f2a27c6278315c2873f803045bb3f677895b4da7426"
   },
   "storage": {
     "retained_evidence_bytes_after_this_file": 24865,
-    "worktree_build_target_bytes": 6924712857,
-    "free_bytes_at_measurement": 155021807616
+    "worktree_build_target_bytes": 6930091758,
+    "free_bytes_at_measurement": 155012734976
   }
 }

@@ -206,7 +206,7 @@ impl AskOffsetSolveBasis {
                 .strip_prefix('d')
                 .and_then(|name| name.split_once('.'))
                 .is_some_and(|(depth, part)| {
-                    depth.parse::<usize>().is_ok()
+                    canonical_depth(depth).is_some()
                         && matches!(
                             part,
                             "query_rotation"
@@ -227,7 +227,7 @@ impl AskOffsetSolveBasis {
             if let Some((depth, _)) = name
                 .strip_prefix('d')
                 .and_then(|name| name.split_once('.'))
-                .and_then(|(depth, part)| depth.parse::<usize>().ok().map(|depth| (depth, part)))
+                .and_then(|(depth, part)| canonical_depth(depth).map(|depth| (depth, part)))
             {
                 depths.insert(depth);
             }
@@ -798,6 +798,16 @@ fn unit_weight() -> u32 {
     1
 }
 
+fn canonical_depth(depth: &str) -> Option<usize> {
+    if depth.is_empty()
+        || !depth.bytes().all(|byte| byte.is_ascii_digit())
+        || (depth.len() > 1 && depth.starts_with('0'))
+    {
+        return None;
+    }
+    depth.parse().ok()
+}
+
 fn pull_weight(pulls: &[&AskPull]) -> Result<u64, String> {
     pulls
         .iter()
@@ -1295,6 +1305,26 @@ mod tests {
                 .err()
                 .expect("partial ask depths")
                 .contains("ask tables cover depths")
+        );
+
+        let mut aliased_tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[heads as u32]),
+        )];
+        aliased_tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
+        aliased_tensors.push((
+            "d02.key_rotation".to_owned(),
+            Dtype::F32,
+            vec![width / 4, 4],
+            f32_bytes(&vec![1.0; width]),
+        ));
+        assert!(
+            AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(aliased_tensors, None))
+                .err()
+                .expect("noncanonical depth")
+                .contains("unknown Claude-330 Hamming tensor d02.key_rotation")
         );
 
         let mut type_spin_tensors = vec![(

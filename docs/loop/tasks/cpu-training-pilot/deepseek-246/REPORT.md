@@ -12,7 +12,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   the objective, candidate construction, sidecar and audit path; it is not
   evidence of learned generalization.
 - The release control uses synthetic identity rotations and a deterministic
-  two-target corpus. Its 41 ms wall measures local search throughput only, not
+  two-target corpus. Its 37 ms wall measures local search throughput only, not
   quality on a trained checkpoint.
 - The first validation pass covered malformed pull corpora but did not yet pin
   the malformed and non-finite checkpoint cases required by this order. Those
@@ -37,6 +37,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   either none or every depth; evidence is retained by hash rather than as a
   committed binary; and retention claims a fresh root and uses the same
   no-replacement pair writer as the CLI.
+- The next review found that numeric parsing also accepted noncanonical depth
+  aliases such as `d02.key_rotation`, and that the test-only evidence helper
+  added a production-build warning. Canonical `d2`/`d6` names are now enforced,
+  and the helper is compiled only for tests.
 - Repository-wide `cargo fmt --all -- --check` is already red across many
   untouched files. The two new Rust files and their edited module are
   targeted-format clean; this unit did not reformat unrelated code.
@@ -74,10 +78,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   query/key/value rotations, margins and weights, plus valid scalar or mixed
   copy keys in the actual `[width/4,4]` quaternion layout. It requires the
   fixed depths `[2,6]`, rejects unknown tensor names and enforces the
-  two-token key's eight-coordinate half rule. Existing ask tables must cover
-  either none or every depth. Empty or zero-weight pulls, out-of-vocab tokens,
-  bad shapes, invalid head geometry, partial depths, checked-overflow failures,
-  non-finite values, type-spin mixing and invalid copy-key records fail closed.
+  canonical numeric depth spelling and the two-token key's eight-coordinate half
+  rule. Existing ask tables must cover either none or every depth. Empty or
+  zero-weight pulls, out-of-vocab tokens, bad shapes, invalid head geometry,
+  partial depths, checked-overflow failures, non-finite values, type-spin mixing
+  and invalid copy-key records fail closed.
 - Output names are normalized through their real parent directories so aliases
   collide before solving. Candidate and report bytes are written to synced
   sibling temporaries and promoted without replacement. If the second
@@ -95,9 +100,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   safetensors sidecar is not committed under the charter's binary hygiene rule.
 - No serving, artifact-schema, training-default, GPU or Claude-owned file was
   changed.
-- Size: `pr-check` reports 13 changed paths: code 6 files `+2,243/-6`,
-  documentation 3 files `+277/-0`, and other/evidence/claim files 4 files
-  `+1,079/-0` (`+3,599/-6` total). The ORDER gave no line estimate. Inline unit
+- Size: `pr-check` reports 13 changed paths: code 6 files `+2,274/-6`,
+  documentation 3 files `+282/-0`, and other/evidence/claim files 4 files
+  `+1,079/-0` (`+3,635/-6` total). The ORDER gave no line estimate. Inline unit
   tests are counted in the code class.
 
 ## Measurements
@@ -115,7 +120,7 @@ objective calls after solving; those audit calls are outside the solver-search
 budget and are not included in `total_evaluations`.
 
 - Synthetic report SHA-256:
-  `1904418708b5bae93470b0fe892dec112bb7c5491a4cc1cf10b7c0e3beb21c32`
+  `39ed4fcea8e8a73ba8507e5eb90c5340fdec237c7a4187918e2df83e850a7704`
 - Generated candidate Hamming sidecar SHA-256 (not committed):
   `ef785c378684f997d24d91b026840854803c61c1a1d61b26ec35bbbc650d0d4a`
 - Synthetic model input SHA-256:
@@ -125,16 +130,16 @@ budget and are not included in `total_evaluations`.
 - Default pull corpus SHA-256:
   `5b0b129803110a3efb90d063ca6c84bcdc9ac6ac0079ad2ccf733a09c61a80e0`
 - Binary SHA-256 recorded by the retained report:
-  `20bcf337eff525ae2badc6bec033b42115f15c1c726b0051495c891be59c8af2`
+  `62d88fa129231fd10d429f2a27c6278315c2873f803045bb3f677895b4da7426`
 - Resource measurement SHA-256:
-  `9e443dd9e2e6bb60f16c70d57e413be45b3103398146c001b785d0246f2cfcd2`
+  `12345a560898bf82b8da3da4ae89756971f5cf445c1736e53c567ed42b6785b1`
   ([measurement](evidence/resource-measurement.json)).
 
 The isolated release control used width 256, two depths, 16 questions and two
 targets per question. It completed **393,344** total objective evaluations in
-**41 ms** across 16 workers, with no exhausted cell. Maximum resident set size
-was 60,108 KiB for the benchmark and 236,100 KiB for the evidence test. The
-full library suite peaked at 772,512 KiB. This is a throughput measurement, not
+**37 ms** across 16 workers, with no exhausted cell. Maximum resident set size
+was 60,716 KiB for the benchmark and 236,360 KiB for the evidence test. The
+full library suite peaked at 755,468 KiB. This is a throughput measurement, not
 a trained-model or capability result.
 
 Resources are recorded in the
@@ -149,16 +154,16 @@ projection gives `107,567.677487699 s`.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver`: 4 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 472 passed,
-  5 ignored in 43.09 s; the timed process took 43.17 s and peaked at 772,512 KiB.
+  5 ignored in 43.12 s; the timed process took 43.21 s and peaked at 755,468 KiB.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-audit`: 4 passed.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `RAYON_NUM_THREADS=16` on the release test binary with
   `--ignored --nocapture --exact
   ask_offset_solver::tests::release_width_256_two_depth_solver_benchmark`:
-  passed at 393,344 total evaluations and 41 ms.
+  passed at 393,344 total evaluations and 37 ms.
 - The evidence-retaining binary test, run with 16 workers into a fresh root,
-  reproduced detached report and candidate outputs in 5.97 s, peak RSS 236,100
+  reproduced detached report and candidate outputs in 5.96 s, peak RSS 236,360
   KiB.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver --bin cpu-ask-offset-audit`: passed with only
