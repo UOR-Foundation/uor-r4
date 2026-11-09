@@ -5,7 +5,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## What did not work, first
 
 - **B2 fails on both seeds: the chosen value does not reach a scored position four tokens after the question.**
-  - At step 4,096, every B2 arm answers the asked value on at most 2 of 512 queries in a far bucket, the same as its no-read twin:
+  - At step 4,096, B2-a and B2-aq answer the asked value on at most 2 of 512 queries in a far bucket, and their no-read twin B2-n on at most 5:
     - B2-a: 0 / 2 at seed 1, 0 / 1 at seed 2;
     - B2-aq: 1 / 1 and 0 / 1;
     - B2-n: 0 / 2 and 5 / 1.
@@ -26,7 +26,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - The mask reset is guarded on the laptop by `the_ablation_guard_clears_every_mask_and_cut`, which passed in I-0 at the pin. `−aQ` sets an empty mask, so it adds nothing for that test to see.
   - The other 14 CUDA gates fail as they must, and the 8 host gates fail as they must on the laptop.
 - **The first launch was lost to an instrument fault (L-007: not a mechanism result).**
-  - I-1 built the base checkout into the pin's cargo target. Cargo leaves a workspace member's absolute path out of its artifact hash, so it reused the base's test binary for the pin: "Finished in 0.06 s", the same binary hash `092ee3c6f32e4c6e` in both logs, and 442 tests run, the pin's new ones absent.
+  - I-1 built the base checkout into the pin's cargo target. Cargo leaves a workspace member's absolute path out of its artifact hash, so it reused the base's test binary for the pin: "Finished in 0.06 s", the same binary hash `092ee3c6f32e4c6e` in both logs, and 442 tests counted (426 run), the pin's new ones absent.
   - Both pods stopped at I-0 and were sealed to `runs/s1` and `runs/s2`, which are kept as they are (L-002). They cost $0.12.
   - **Fixed:** the base builds into its own target, and two guards stop the job unless the crate compiled from the right checkout. The rerun went to `runs-2`.
 - **Deviations from the sheet, named:**
@@ -49,7 +49,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - The ask heads keep the asked position in 479–512 of 512 rows at both depths, with the other kept on 0–4.
 - **It locks on, not by slow memorization.** B1-a's far-bucket hits by checkpoint:
   - seed 1: 0, 2/0, 9/7, then 512/512 from step 1,536;
-  - seed 2: 0, 1/1, 3/2, 508/507, then 512/512 from step 2,048.
+  - seed 2: 0/1, 1/0, 3/2, 508/507, then 512/512 from step 2,048.
   - The pull distance falls from 0.49–0.51 at step 0 to 0.09–0.12 at step 4,096.
 - **The default paths are untouched (I-1).** The base `e4b2977e6` and the pin print the same digest on both seeds, `bc02586d4abfd94ab05ce312cb1c6b166bf2c3f2e595cdaf06bc22e66fc09663`.
 - **B0 and I-R pass on both seeds.**
@@ -85,7 +85,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **Pods:** two Vast RTX 5090 pods at $0.563/h: `vast-59809744` (seed 1, $0.67) and `vast-59809724` (seed 2, $0.51). Nine arms each, 4,096 steps, batch 16. All 18 exited 0.
   - The first launch's two pods cost $0.12. **The unit's GPU total is $1.30.** Every pod is down.
-- **Training speed, context tokens per second, step 4,096** (seed 2; seed 1 within 1%, except B0-h above):
+- **Training speed, context tokens per second, step 4,096** (seed 2; seed 1 within 1%, except B0-h above and B0-n, 4% slower at 74,381 against 77,461):
   - ask arms (B0-a, B1-a, B1-a0, B2-a, B2-aq): 40,187–43,226;
   - claude-328's read B0-h: 37,213;
   - no-read twins: 77,461–88,133.
@@ -129,8 +129,8 @@ Closes nothing: #3407 stays open.
   - I-0 (`cargo test --release --locked -p uor-r4-float-train --features cuda --lib`: 436 passed, 0 failed, 17 ignored, then the unit's 15 named tests);
   - I-1, I-7 and the build.
   - Seed 1's pod also ran the 15 CUDA gates (`gates.txt`: 14 fire, `i7-m1` named above) and the re-aimed `i7-m1` (`gatefix-330.sh`).
-- **On the laptop:** the 8 host gates at the pin (`local/claude/claude-330/host-gates-pin.out`, 8 of 8 fail as they must), and the CUDA type check under the stub nvcc. `cargo test --lib` of `uor-r4-float-train` at the head: LAPTOP_TESTS.
-- `loop report --check`; `loop pr-check --local`; `loop gates --full`: GATES_FULL.
+- **On the laptop:** the 8 host gates at the pin (`local/claude/claude-330/host-gates-pin.out`, 8 of 8 fail as they must), and the CUDA type check under the stub nvcc. `cargo test --lib` of `uor-r4-float-train` at the head: 324 passed, 0 failed, 0 ignored, compiled from this worktree (`local/claude/claude-330/head-lib.out`).
+- `loop gates --full` at `38df2a575`: 11 of 11 GREEN (`local/claude/claude-330/head-gates.out`); the later commit changes only this REPORT and the notebook row. `loop report --check` and `loop pr-check --local` pass at the head.
 - The fresh exact-head review is posted with `loop review` before the queue.
 
 ## Skills used
