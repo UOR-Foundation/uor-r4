@@ -11,6 +11,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - The review also found that two raw `|w_y|` spans split the notebook row into
   ten cells; the harness could no longer read the intended Number, Bar and
   Verdict columns.
+- The fourth exact-head review passed the code, controls and bounded claims,
+  then found that the final size commit added one byte to this report without
+  refreshing the resource ledger. Its exact receipt was stale by one byte.
+  [deepseek-258](../deepseek-258/ORDER.md) repairs it.
 
 ## What changed
 
@@ -45,8 +49,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing warnings.
 - Release build: passed.
-- Report policy, local policy, all 11 gates and a fourth fresh review: pending
-  this record.
+- Report policy, local policy and all 11 gates passed before the fourth review.
+  That review requested changes only for the one-byte stale resource receipt;
+  deepseek-258 repairs it.
 
 ## Skills used
 
