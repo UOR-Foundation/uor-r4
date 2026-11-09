@@ -83,8 +83,8 @@ projection gives `109,367.677487699 s`.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-arm-regression`: 3 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 478 passed,
-  5 ignored in 48.33 s; the timed process took 48.42 s at 2,057% CPU and
-  peaked at 727,808 KiB.
+  5 ignored in 45.29 s; the timed process took 45.38 s at 2,309% CPU and
+  peaked at 757,424 KiB.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
   cpu-ask-arm-regression --lib`: passed with only pre-existing warnings.

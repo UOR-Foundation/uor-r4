@@ -17,10 +17,10 @@
   "lab_cumulative_projection_seconds": 109367.677487699,
   "projection": {
     "measured_real_regression_seconds": 0.13,
-    "measured_library_tests_seconds": 48.42,
+    "measured_library_tests_seconds": 45.38,
     "builds_and_checks_allowance_seconds": 900,
     "review_and_delivery_allowance_seconds": 300,
-    "retry_and_setup_allowance_seconds": 551.46,
+    "retry_and_setup_allowance_seconds": 554.49,
     "wall_limit_seconds": 1800
   },
   "measured": {
@@ -33,9 +33,9 @@
     "real_regression_peak_rss_kib": 195536,
     "library_tests_passed": 478,
     "library_tests_ignored": 5,
-    "library_tests_seconds": 48.42,
-    "library_tests_cpu_percent": 2057,
-    "library_tests_peak_rss_kib": 727808,
+    "library_tests_seconds": 45.29,
+    "library_tests_cpu_percent": 2309,
+    "library_tests_peak_rss_kib": 757424,
     "one_worker_arm_content_matches": true,
     "repeat_8_worker_report_byte_identical": true,
     "mutated_expected_value_exit": 2,
@@ -60,9 +60,9 @@
     }
   },
   "storage": {
-    "task_and_ledger_bytes": 35644,
+    "task_and_ledger_bytes": 35848,
     "worktree_build_target_bytes": 5174254438,
-    "free_bytes_at_measurement": 152943087616,
+    "free_bytes_at_measurement": 152941514752,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
