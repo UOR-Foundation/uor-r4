@@ -25,6 +25,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   identities were accepted, source failures were classified as regressions,
   the notebook overgeneralized B2-a, and the ledger omitted temporary inputs.
   The [repair ORDER](../deepseek-248/ORDER.md) fixes all five.
+- A second fresh review confirmed those repairs but found three record
+  residuals: archive failure behavior was described as retained, 18,191
+  downloaded metadata bytes were omitted and the ledger timestamp preceded its
+  measurements. [deepseek-249](../deepseek-249/ORDER.md) fixes them.
 
 ## What changed
 

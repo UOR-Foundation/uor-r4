@@ -44,11 +44,12 @@ target/release/cpu-ask-arm-regression \
   --out NEW-REPORT.json
 ```
 
-The runner verifies the archive hashes before auditing any checkpoint. It
-checks all checkpoint hashes and summaries in parallel and exits `2` after
-writing the report if any observed summary differs from its expectation. A
-missing archive, unreadable checkpoint or checkpoint-hash mismatch is written
-as a source failure and exits `1`. Existing output paths are refused.
+The runner verifies the archive hashes before auditing any checkpoint. An
+archive failure aborts before report generation and exits `1`. It then checks
+all checkpoint hashes and summaries in parallel. An unreadable checkpoint or
+checkpoint-hash mismatch is written as a per-arm source failure and exits `1`.
+An observed summary that differs from its expectation writes the report and
+exits `2`. Existing output paths are refused.
 
 ## What the readings mean
 

@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-ask-arm-regression-resource/1",
   "status": "COMPLETE",
   "experiment": "hash-pinned real-checkpoint ask-selection regression",
-  "updated_utc": "2026-11-09T03:53:03Z",
+  "updated_utc": "2026-11-09T04:28:17Z",
   "previous_ledger": "cpu-training-pilot-ask-offset-solver-2026-11-09/resource-ledger.json",
   "previous_admitted_cumulative_projection_seconds": 107567.677487699,
   "cost_kind": "local CPU measured floor plus explicit unmeasured-stage projection",
@@ -65,12 +65,13 @@
     }
   },
   "storage": {
-    "task_and_ledger_bytes": 42981,
+    "task_and_ledger_bytes": 46863,
     "downloaded_archive_bytes": 178013963,
     "extracted_checkpoint_tree_bytes": 378392745,
-    "temporary_input_bytes": 556406708,
+    "downloaded_store_metadata_bytes": 18191,
+    "temporary_input_bytes": 556424899,
     "worktree_build_target_bytes": 5800592549,
-    "free_bytes_at_measurement": 149049577472,
+    "free_bytes_at_measurement": 149049872384,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true

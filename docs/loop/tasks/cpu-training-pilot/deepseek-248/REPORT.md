@@ -63,7 +63,9 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-A second fresh exact-head review is still owed.
+The second fresh exact-head review returned CHANGES on three residual
+documentation and storage details. [deepseek-249](../deepseek-249/REPORT.md)
+repairs them and owes the final review.
 
 ## Plain summary
 
