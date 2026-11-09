@@ -76,6 +76,8 @@ projection gives `111,167.677487699 s`.
 - Release build: passed.
 - `loop report --check`, `loop pr-check --local` and `loop gates --full`: passed;
   all 11 gates were green.
+- `uor-harness check`: 365 rules, 0 errors and 331 pre-existing warnings outside
+  this unit.
 
 ## Skills used
 
