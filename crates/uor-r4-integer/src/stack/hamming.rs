@@ -376,7 +376,7 @@ mod candidate_range_tests {
 }
 
 /// The exponent of a carry gain `c`: Q16.
-pub const ASK_CARRY_GAIN_EXP: i32 = -16;
+pub const ASK_CARRY_GAIN_EXP: i32 = crate::fbs_snapshot::HAMMING_CARRY_GAIN_EXP;
 
 /// The longest carry reach served: with `|table + a| ≤ 2^16` at Q12 and `|c| < 2^31` at Q16, each
 /// carried term is below `2^47` at Q28, so `2^12` of them and the row's own point stay below

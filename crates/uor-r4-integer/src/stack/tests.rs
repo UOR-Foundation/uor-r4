@@ -7476,3 +7476,34 @@ fn malformed_hamming_ask_heads_are_refused() {
     assert!(adder(&[None]).contains("hamming.asks"));
     assert!(adder(&[None, None]).contains("not all off"));
 }
+
+/// claude-336: `quantize_hamming_ask` stores a question table at Q12 in i16 and a carry's gains
+/// at Q16 in i32, half away from zero as `fixed_value` rounds, and refuses by name a value that
+/// does not fit or is not finite; its integers are what `AskImage::checked` takes.
+#[test]
+fn hamming_ask_tables_quantize_as_stored() {
+    use crate::fbs_snapshot::{fixed_value, quantize_hamming_ask, FbsHammingAskRead, FbsHammingCarry};
+    let (vocab, width) = (2, 4);
+    let half = 2f32.powi(-13);
+    let table = vec![half, -half, 1.0, -8.0, 0.3, 7.999, 0.0, -0.25];
+    let gain = vec![1.5 * 2f32.powi(-16), -2.75];
+    let ask = FbsHammingAskRead { table: table.clone(), carry: Some(FbsHammingCarry { rows: 3, gain: gain.clone() }) };
+    let (q, carry) = quantize_hamming_ask(6, &ask).expect("fits");
+    assert_eq!(&q[..4], &[1, -1, 4096, -32768], "half a step rounds away from zero");
+    for (&k, &v) in q.iter().zip(&table) {
+        assert_eq!(f64::from(k) / 4096.0, fixed_value(v, -12), "{v}");
+    }
+    let (rows, gains) = carry.clone().expect("carries");
+    assert_eq!((rows, gains.clone()), (3, vec![2, -180_224]));
+    let image = super::AskImage::checked(Some(q), carry, vocab, width).expect("checked").expect("asks");
+    assert_eq!(image.carry, Some((3, gains)));
+    for (what, table, gain, named) in [
+        ("past i16", vec![8.0], None, "hamming_read.d6.ask[0] = 8"),
+        ("not finite", vec![0.0, f32::NAN], None, "hamming_read.d6.ask[1]"),
+        ("past i32", vec![0.0], Some(vec![0.0, 0.0, 40_000.0]), "hamming_read.d6.carry_gain[2]"),
+    ] {
+        let ask = FbsHammingAskRead { table, carry: gain.map(|gain| FbsHammingCarry { rows: 1, gain }) };
+        let e = quantize_hamming_ask(6, &ask).expect_err(what);
+        assert!(e.contains(named), "{what}: {e}");
+    }
+}
