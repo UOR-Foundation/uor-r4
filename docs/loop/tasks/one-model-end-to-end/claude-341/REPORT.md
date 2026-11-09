@@ -7,7 +7,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## What did not work, first
 
 - **This test was red on `main` and nothing noticed.** The instrument crate has its own `[workspace]`, so no required check runs it. #3898 merged with this test failing and the crate still has no required check. This unit does not add one.
-- **Engine agreement is shown on one synthetic fixture only:** five prompts, 12 tokens each, one artifact with an ask on both Hamming reads and a 3-row carry on the readout. No real trained artifact was decoded through both engines here. DeepSeek's own parity tests (deepseek-261) are the wider evidence.
+- **Engine agreement is shown on one synthetic fixture only:** four prompts that decode, up to 12 tokens each, plus one past the context that stops at once, on one artifact with an ask on both Hamming reads and a 3-row carry on the readout. No real trained artifact was decoded through both engines here. DeepSeek's own parity tests (deepseek-261) are the wider evidence.
 - **The refusal is now a choice with no measured reason behind it.** See "Decision" below.
 - **The first negative check of the refusal text proved nothing.** My edit broke the build, so no test ran. It was discarded and redone; the result below is from the run that compiled.
 - **The bench was not read.** `local/bench/INBOX.md` does not exist in the main checkout.
@@ -47,9 +47,10 @@ Host, `--offline --locked --features cpu-parity`:
 | Full `served-reply-panel` suite, before | `d4154488f` | 27 passed, 1 failed, at `served-reply-panel.rs:1612` |
 | Full suite, after | this head's code | **28 passed, 0 failed** |
 | `both_engines_read_the_ask_heads` | CPU crate from `a8e51c0f4`, the parent of #3898 | **fails** at the asking-artifact parity assertion |
+| `both_engines_read_the_ask_heads` | current CPU crate with only the readout carry switched off | **fails** at the asking-artifact parity assertion |
 | `each_engine_refuses_what_it_does_not_score` | old refusal text put back | **fails**, printing the old message |
 
-Both failures compiled and ran the named test. The older-crate run used a throwaway detached checkout under `local/`, since removed; no file in `crates/uor-r4-cpu-train` was edited. After the restore the source was byte-identical and the suite was rebuilt: 28 passed.
+All three failures compiled and ran the named test. The two CPU-crate runs used throwaway detached checkouts under `local/`, since removed; no tracked file in `crates/uor-r4-cpu-train` was edited. After the restore the source was byte-identical and the suite was rebuilt: 28 passed.
 
 `rustfmt --check` is clean. Clippy on the binary and its tests reports nothing in this file.
 
