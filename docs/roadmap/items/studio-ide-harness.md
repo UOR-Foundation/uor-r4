@@ -19,7 +19,7 @@ The owner rejected the green standalone Studio placeholder and reaffirmed the ac
 
 Persistent multi-step agent runtime, parallel projects/tasks, approvals and steering, project memory, scheduling/Dispatch, complete side-by-side editor/diff/browser workflows, connector and computer-use workflows, and honest local/hosted capability boundaries remain missing. Claude owns the model API; this item does not edit or reimplement it.
 
-The neutral workbench, Playwright visual acceptance, and persistent PTY are implemented at unsigned development scope. Host-approved `/bin/zsh` sessions accept direct keyboard input and `read` replies, preserve cwd, resize, and close/reap, with bounded input/output/session counts and no Run command button. The current evidence-reconciliation ORDER and REPORT are `docs/loop/tasks/studio-ide-harness/kimi-8/`; the workspace-origin implementation is `kimi-7`. Protected delivery is pending. Static web remains explicitly unsupported, and the shared agent runtime, task orchestration, and R4 API adapter are still open.
+The neutral workbench, Playwright visual acceptance, and persistent PTY are implemented at unsigned development scope. Host-approved `/bin/zsh` sessions accept direct keyboard input and `read` replies, preserve cwd, resize, and close/reap, with bounded input/output/session counts and no Run command button. The current record-correction ORDER and REPORT are `docs/loop/tasks/studio-ide-harness/kimi-9/`; they follow evidence reconciliation in `kimi-8` and the workspace-origin implementation in `kimi-7`. Protected delivery is pending. Static web remains explicitly unsupported, and the shared agent runtime, task orchestration, and R4 API adapter are still open.
 
 ## Done when
 

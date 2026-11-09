@@ -1,6 +1,6 @@
 # REPORT: close remaining PTY identity races and reconcile delivery evidence, kimi-6
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Order: [ORDER.md](ORDER.md). Base: `6fa2baf377e74080e57cb64330f091b701059e01`, tree `36d5b6701c9d3ee9bfdbecde9a21de011b4c0aca`; initial merged main `1e5e84a1d497222099a97e22da024b07759750a8`, latest merged main `f75725d3071abb9488e058ac158a04d8d093014d`. Fresh reviewer agent-67 returned CHANGES, recorded on PR #3890 at the base head. The PR remains draft and unqueued. This is the historical kimi-6 record; the active repair is kimi-7, with its final identity reconciliation in kimi-8.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Order: [ORDER.md](ORDER.md). Base: `6fa2baf377e74080e57cb64330f091b701059e01`, tree `36d5b6701c9d3ee9bfdbecde9a21de011b4c0aca`; initial merged main `1e5e84a1d497222099a97e22da024b07759750a8`, latest merged main `f75725d3071abb9488e058ac158a04d8d093014d`. Fresh reviewer agent-67 returned CHANGES, recorded on PR #3890 at the base head. The PR remains draft and unqueued. This is the historical kimi-6 record; the active repair is kimi-7, with identity reconciliation in kimi-8 and the remaining record corrections in kimi-9.
 
 ## What did not work
 
@@ -33,7 +33,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 ## Checks run at the head
 
-- `cargo test -p uor-r4-integer --lib --features serving-wasm`: **499/499 PASS**. The unsupported-default and optional all-target attempts are retained separately as instrument/environment negatives, not represented as passing or as terminal failures.
+- `cargo test -p uor-r4-integer --lib --features serving-wasm`: **499 passed, 1 ignored; 0 failed**. The unsupported-default and optional all-target attempts are retained separately as instrument/environment negatives, not represented as passing or as terminal failures.
 - `CARGO_TARGET_DIR="$PWD/target/cowork-tests" cargo test --manifest-path src-tauri/Cargo.toml` and the same command with `--features gui`: complete default **11/3/21/4/7/13/8**, GUI **13/3/25/4/8/13/9**, PASS serially.
 - `npm test --prefix web/studio`: **450/450 across 52 files PASS**, including terminal **18/18**. TypeScript and Vite build, **113/113** plain-JS, **45/45** Playwright, **6/6** launcher, worker/page/static/runtime, desktop and **7/7** WASM checks PASS.
 - `node web/studio/verify_interactive_terminal.mjs` and `node web/studio/verify_studio_loopback.mjs`: PASS at 35117 with exact identities above.
