@@ -182,3 +182,35 @@ That is inside the caps and one GPU unit. Outcome 1's extension would add about 
 - **Stop** at a B0 or I-R failure, or at any non-finite loss.
 - **Watchers:** one is armed on every pod (L-004), with the lease renewed by it.
 - **Scripts:** pinned by SHA-256 in a D67 pre-run review section added before any pod.
+
+## Pre-run review (D67, claude-330, 8 Nov 2026)
+
+**[claude] Verdict: FIT TO RUN**, from a fresh non-author reviewer who read this sheet, the pod scripts, the laptop gate outputs and the code at the pin `7275fb01e0c457fea3731ff3291c3a0efb1f3e01`. It found no blocker. Before the review, the author found one gap and fixed it: I-7 on B1-a had no test, so the pin adds `the_recall_readings_leave_ask_training_alone`, which runs claude-328's I-7 body with the ask heads and the pull on.
+
+**Its findings, and what was done:**
+- **Three gates unproven (major):** the reviewer could not confirm that `ia4-combine`, `ia2-depth-mean` and `i4-window-offset-keys` are seen by their tests.
+  - **`ia4-combine`:** the author read it: it adds the type mean onto the residual instead of moving the residual to it, so I-A4's window-0 row reads `before + v`, not `v`.
+  - **`ia2-depth-mean`:** each depth's count is spans × ask heads, which is 2 on I-A2's rows, so the undivided sum is twice the mean.
+  - **`i4-window-offset-keys`:** window 1's question meets window 0's keys in the three-window copy test.
+  - All three are read from `gates.txt` before any guard is claimed.
+- **Minor, fixed:** the sealed loss line moved out of `ir-lines.jsonl` into `ir-loss.txt`, and the gate count is no longer hard-coded.
+- **Minor, fixed:** the eight host gates were rerun once at the pin on a quiet tree (`host-gates-pin.out`).
+
+**Deviations the REPORT names:**
+- **The CUDA gates run on seed 1's pod only.** They test the code, not the seed.
+- **The host gates** (I-A1's margin, I-A2's window start, I-A3's λ = 0, I-A5's three, the ask refusals) ran on the laptop.
+- **I-1 at the base** appends the pin's `I1-DIGEST` block to the base commit's read and compares the two printed digests.
+- **A seed-3 pod, if seeds 1 and 2 split, has no I-R.** claude-328 sealed seeds 1 and 2 only, so a seed-3 pod reads B0's bar alone and records I-R as `NOT_AVAILABLE`.
+- **A gate that does not fail stops nothing.** The binary is built first, and that gate's guard is read as unproven.
+
+**Scripts, by SHA-256** (in `local/claude/claude-330/`; `mutate-328.sh` is claude-328's, unchanged):
+
+| Script | SHA-256 |
+|---|---|
+| `job-330.sh` | `a1a60323fe1d0702feb433c8a493ede8769d6f96c8c68aac74fe8ffbbf9c2d5b` |
+| `chain-330.sh` | `110145dde3e26e6c90c08f906948950071a86ac08c2efdf4986d11831b974251` |
+| `seal-330.sh` | `302257b9a16168199c71204d64c9f00fea9f17ee7ca8d901289039a6320575c1` |
+| `mutate-330.sh` | `746fd39d32fc8c781c9a45dfe70e1c8192d207aa667f042e925bb83c5ba9424f` |
+| `mutate-328.sh` | `6c6647e4b7882d39db24e189e2a3b29ca595317394b9d9e707e26bd20f6745c8` |
+| `watch-330.sh` | `3ebc07a18f2dc85b2edd4b11fd4d307126db27feb255833e7db299dac6619e4b` |
+| `seed-330.sh` | `a9cc06f41c4ee2c32390a9f0b2bd351b3146591bcd8a269ed73ed37ef752cf30` |
