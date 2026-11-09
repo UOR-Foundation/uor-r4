@@ -15346,15 +15346,34 @@ mod tests {
         readings_leave_training_alone(i7_trunk(), form, 5, "328");
     }
 
-    /// claude-330's I-7: the same on B1-a, the ask heads and the found-copy pull on, with the six
-    /// ablations (`−aQ` the sixth) and each depth's pull distance in every reading.
+    /// claude-330's I-7: the same on B1-a, the ask heads and the found-copy pull on, with seven
+    /// ablations (`−aQ` the sixth; claude-334's `−aS`, on every ask read, the seventh) and each
+    /// depth's pull distance in every reading.
     #[cfg(feature = "cuda")]
     #[test]
     #[ignore]
     fn the_recall_readings_leave_ask_training_alone() {
         let config = LongConfig { hamming_ask: true, hamming_attract: 1.0, ..i7_trunk() };
         let form = RecallForm { query: true, ..RecallForm::default() };
-        readings_leave_training_alone(config, form, 6, "330");
+        readings_leave_training_alone(config, form, 7, "330");
+    }
+
+    /// claude-334's I-7 (the carry-hold sheet): the same on B2-aqH, the ask heads with the pull at
+    /// the question and the hold over 8 rows, whose readings add `−aS`, `−H` (eight ablations), the
+    /// row capture and the three rank cuts.
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore]
+    fn the_recall_readings_leave_held_training_alone() {
+        let config = LongConfig {
+            hamming_ask: true,
+            hamming_attract: 1.0,
+            hamming_attract_at_question: true,
+            hamming_hold: 8,
+            ..i7_trunk()
+        };
+        let form = RecallForm { query: true, header: 4, ..RecallForm::default() };
+        readings_leave_training_alone(config, form, 8, "334");
     }
 
     /// The I-7 trunk: the FBS trunk's flags, `--hamming-read 4`, 1,024 steps, readings every 512.
@@ -15423,6 +15442,17 @@ mod tests {
             if config.hamming_ask {
                 assert_eq!(line["hamming_pull_distance"].as_array().unwrap().len(), 2);
             }
+            // claude-334: a held read's readings carry the three rank cuts and the hold's gain.
+            if config.hamming_hold > 0 {
+                let cuts: Vec<&str> = line["readings"]["ranks"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| r["cut"].as_str().unwrap())
+                    .collect();
+                assert_eq!(cuts, ["plain", "-aS", "-H"]);
+                assert!(line["hamming_hold_gain"]["question"]["mean"].is_number());
+            }
         }
     }
 
@@ -15441,6 +15471,19 @@ mod tests {
             }
             assert_eq!(fh::class_ablation(), [[false; 2]; 2], "{ablation:?}");
             assert!(!fh::row_cut_set(), "{ablation:?}");
+        }
+        // claude-334: the hold cut and the row capture the readings set are cleared too, so
+        // neither reaches training (the pod's I-7 on B2-aqH reads the same end to end).
+        for ablation in [Ablation::AskStream, Ablation::HoldOff] {
+            {
+                let _undo = UndoAblation;
+                fh::set_class_ablation(ablation.classes());
+                fh::set_hold_off(ablation.hold_off());
+                fh::set_row_capture(Some(vec![0]));
+            }
+            assert_eq!(fh::class_ablation(), [[false; 2]; 2], "{ablation:?}");
+            assert!(!fh::hold_off(), "{ablation:?}");
+            assert!(fh::take_row_capture().is_none(), "{ablation:?}");
         }
     }
 
