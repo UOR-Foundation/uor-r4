@@ -43,7 +43,7 @@
     "library_tests_passed": 472,
     "library_tests_ignored": 5,
     "threads": 16,
-    "max_peak_rss_kib": 236100,
+    "max_peak_rss_kib": 755468,
     "benchmark_peak_rss_kib": 60716,
     "library_tests_peak_rss_kib": 755468
   },
