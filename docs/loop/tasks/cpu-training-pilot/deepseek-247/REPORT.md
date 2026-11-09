@@ -55,8 +55,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   tarball, generated model artifact or executable is committed.
 - No float-training, carry, serving, schema, GPU or other-lab file changed.
 - Size: `pr-check` reports 15 changed paths: code 4 files `+1,082/-0`,
-  documentation 8 files `+497/-0`, and other text evidence 3 files `+806/-0`
-  (`+2,385/-0` total). The ORDER gave no line estimate.
+  documentation 8 files `+501/-0`, and other text evidence 3 files `+806/-0`
+  (`+2,389/-0` total). The ORDER gave no line estimate.
 
 ## Measurements
 
