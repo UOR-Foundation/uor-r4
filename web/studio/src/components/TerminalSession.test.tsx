@@ -115,6 +115,7 @@ describe('interactive PTY terminal', () => {
         await openTerminal();
         act(() => { document.dispatchEvent(new CustomEvent('uor-files-changed', { detail: { rootPath: '/new/project' } })); });
         expect(invoke).toHaveBeenCalledWith('native_close_terminal', { sessionId: '/old/project' });
+        await vi.waitFor(() => expect(button('Open terminal').disabled).toBe(false));
         act(() => { button('Open terminal').click(); });
         await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith('native_open_terminal', expect.objectContaining({ cwd: '/new/project' })));
     });
@@ -153,9 +154,44 @@ describe('interactive PTY terminal', () => {
         await act(async () => { resolveRead({ sessionId: 'session-a', cursor: 1, active: true, events: [{ type: 'output', sessionId: 'session-a', sequence: 1, dataHex: hex('stale') }] }); await Promise.resolve(); });
         expect(terminals[0].write).not.toHaveBeenCalled();
         expect((document.getElementById('terminalCwd') as HTMLInputElement).value).toBe('');
+        await vi.waitFor(() => expect(button('Open terminal').disabled).toBe(false));
         await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
         expect(document.getElementById('terminalConsentState')?.textContent).toContain('Choose a project folder');
         expect(invoke.mock.calls.filter(([name]) => name === 'native_open_terminal')).toHaveLength(1);
+    });
+
+    it('closes a shell whose opening completes after the panel unmounts', async () => {
+        let resolveOpen!: (value: unknown) => void;
+        const close = vi.fn(async () => ({ active: false }));
+        const invoke = nativeMock({
+            native_open_terminal: () => new Promise((resolve) => { resolveOpen = resolve; }),
+            native_close_terminal: close,
+        });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await act(async () => { button('Open terminal').click(); await Promise.resolve(); });
+        act(() => { render(null, host); });
+        await act(async () => { resolveOpen({ sessionId: 'unmounted-shell', cursor: 0, active: true, events: [] }); await Promise.resolve(); });
+        expect(close).toHaveBeenCalledWith({ sessionId: 'unmounted-shell' });
+        expect(terminals).toHaveLength(0);
+    });
+
+    it('retains the session and visible error when close fails, then permits retry', async () => {
+        let failures = 0;
+        const close = vi.fn(async () => {
+            failures += 1;
+            if (failures === 1) throw new Error('reap failed');
+            return { active: false };
+        });
+        const invoke = nativeMock({ native_close_terminal: close });
+        act(() => { render(<TerminalPanel actions={createDesktopActions({ invoke })} files={workspace('/granted/project')} />, host); });
+        await openTerminal();
+        act(() => { button('Close shell').click(); });
+        await vi.waitFor(() => expect(document.getElementById('terminalConsentState')?.textContent).toContain('reap failed'));
+        expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBe('session-a');
+        expect(button('Close shell').disabled).toBe(false);
+        act(() => { button('Close shell').click(); });
+        await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(2));
+        await vi.waitFor(() => expect(document.getElementById('terminalOutput')?.dataset.sessionId).toBeUndefined());
     });
 
     it('does not open a shell without a granted working directory', async () => {

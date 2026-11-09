@@ -30,6 +30,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
     const { path, revision, updatePath } = useWorkspacePath(files);
     const containerRef = useRef<HTMLDivElement>(null);
     const runtime = useRef<TerminalRuntime>({ id: null, terminal: null, observer: null, poller: null, cursor: 0, reading: false, disposed: false, closeRequested: false, truncationNotified: false });
+    const mounted = useRef(true);
     const latestRevision = useRef(revision);
     latestRevision.current = revision;
     const [session, setSession] = useState<TerminalSnapshot | null>(null);
@@ -40,22 +41,36 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
 
     function closeSession() {
         const current = runtime.current;
-        current.disposed = true;
         if (current.poller !== null) window.clearInterval(current.poller);
         current.poller = null;
         current.observer?.disconnect();
         current.observer = null;
         current.terminal?.dispose();
         current.terminal = null;
-        if (current.id && !current.closeRequested) {
-            current.closeRequested = true;
-            setClosing(true);
-            void actions.closeTerminal(current.id).catch((error) => {
-                if (!current.disposed) setConsent(`Could not close the PTY: ${String(error instanceof Error ? error.message : error)}`);
-            }).finally(() => setClosing(false));
+        current.disposed = true;
+        const sessionId = current.id;
+        const previousSession = session;
+        if (!sessionId) {
+            setSession(null);
+            return;
         }
-        current.id = null;
+        if (current.closeRequested) return;
+        current.closeRequested = true;
+        setClosing(true);
         setSession(null);
+        void actions.closeTerminal(sessionId).then(() => {
+            if (current.id !== sessionId) return;
+            current.id = null;
+            current.disposed = true;
+            setSession(null);
+        }).catch((error) => {
+            if (current.id !== sessionId) return;
+            current.closeRequested = false;
+            if (mounted.current) {
+                setSession(previousSession);
+                setConsent(`Could not close the PTY: ${String(error instanceof Error ? error.message : error)}`);
+            }
+        }).finally(() => setClosing(false));
     }
 
     useEffect(() => {
@@ -63,13 +78,17 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         if (revision > 0) setConsent('Workspace changed. Open a shell in the new project folder.');
     }, [revision]);
 
-    useEffect(() => () => closeSession(), []);
+    useEffect(() => () => {
+        mounted.current = false;
+        closeSession();
+    }, []);
 
     useEffect(() => {
         if (!session) return;
         let cancelled = false;
         const sessionId = session.sessionId;
         const current = runtime.current;
+        if (current.disposed) return () => { cancelled = true; };
         current.id = sessionId;
         current.disposed = false;
         current.closeRequested = false;
@@ -137,38 +156,41 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
     }, [session?.sessionId]);
 
     async function open() {
-        if (opening || session || !actions.available) return;
+        if (opening || closing || session || !actions.available) return;
         const cwd = path.trim();
         if (!cwd) {
             setConsent('Choose a project folder before opening an interactive PTY.');
             return;
         }
         const requestedRevision = latestRevision.current;
+        const current = runtime.current;
+        current.disposed = false;
         setOpening(true);
         try {
             const enabled = await actions.enableTerminal();
             if (enabled?.enabled !== true) {
-                setConsent('Terminal enablement was cancelled; no PTY was started.');
+                if (!current.disposed) setConsent('Terminal enablement was cancelled; no PTY was started.');
                 return;
             }
-            if (requestedRevision !== latestRevision.current) return;
+            if (current.disposed || requestedRevision !== latestRevision.current) return;
             const snapshot = await actions.openTerminal(cwd, 24, 80);
-            if (requestedRevision !== latestRevision.current) {
+            if (current.disposed || requestedRevision !== latestRevision.current) {
                 try {
                     await actions.closeTerminal(snapshot.sessionId);
-                    setConsent('Workspace changed before the shell opened; the stale shell was closed.');
+                    if (!current.disposed) setConsent('Workspace changed before the shell opened; the stale shell was closed.');
                 } catch (error) {
-                    setConsent(`Could not close the stale PTY: ${String(error instanceof Error ? error.message : error)}`);
+                    if (!current.disposed) setConsent(`Could not close the stale PTY: ${String(error instanceof Error ? error.message : error)}`);
                 }
                 return;
             }
             setSession(snapshot);
             setConsent(`Interactive PTY · ${snapshot.shell} · ${snapshot.cwd}`);
         } catch (error) {
+            if (current.disposed) return;
             const detail = String(error instanceof Error ? error.message : error);
             setConsent(detail.includes('TerminalConsentRequired') || detail.includes('cancelled') ? 'Shell opening was cancelled; no PTY was started.' : `Could not open the PTY: ${detail}`);
         } finally {
-            setOpening(false);
+            if (!current.disposed) setOpening(false);
         }
     }
 
@@ -177,7 +199,7 @@ export function TerminalPanel({ actions, files, idPrefix = '' }: DesktopPanelPro
         <p id={id('terminalConsentState')} role="status" aria-live="polite" class="panel-summary">{consent || (actions.available ? 'Open a shell for a persistent interactive PTY.' : 'Interactive PTY is unavailable in this browser build.')}</p>
         <label>Working directory<input id={id('terminalCwd')} aria-label="Working directory" value={path} disabled={Boolean(session) || opening} onInput={(event) => updatePath(event.currentTarget.value)} /></label>
         <div class="panel-actions">
-            {!session && <button id={id('btnTerminalOpen')} type="button" disabled={!actions.available || opening} onClick={() => void open()}>{opening ? 'Opening…' : 'Open terminal'}</button>}
+            {!session && <button id={id('btnTerminalOpen')} type="button" disabled={!actions.available || opening || closing} onClick={() => void open()}>{opening ? 'Opening…' : 'Open terminal'}</button>}
             {session && <button id={id('btnTerminalClose')} type="button" disabled={closing} onClick={closeSession}>{closing ? 'Closing…' : 'Close shell'}</button>}
         </div>
         <div id={id('terminalOutput')} ref={containerRef} class="terminal-screen" role="group" aria-label="Interactive PTY terminal" data-session-id={session?.sessionId} onClick={() => runtime.current.terminal?.focus()} />

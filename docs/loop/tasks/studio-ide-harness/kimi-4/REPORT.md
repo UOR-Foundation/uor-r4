@@ -25,20 +25,20 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 ## Measurements
 
-- Earlier default Rust: **11/2/20/3/7/13/8** and GUI Rust: **13/2/24/8/13/9**, with interactive **3/3** in each mode. After the shell-approval-consumption repair, default Rust is **11/2/20/4/7/13/8** (library/main/controls/interactive/MCP/review/sidecar) and GUI Rust is **13/2/24/4/8/13/9**, PASS, including actual PTY input/read reply/cwd/resize/close, one-shell-per-approval refusal and renewal, distinct session-cap refusal, JSON, and `Send + Sync` contracts.
+- Earlier default Rust: **11/2/20/3/7/13/8** and GUI Rust: **13/2/24/8/13/9**, with interactive **3/3** in each mode. After the shell-approval-consumption repair, default Rust was **11/2/20/4/7/13/8** and GUI Rust was **13/2/24/4/8/13/9**. The merged ec49 head has default **11/3/21/4/7/13/8** and GUI **13/3/25/4/8/13/9**, PASS (library/main/controls/interactive/MCP/review/sidecar), including actual PTY input/read reply/cwd/resize/close, one-shell-per-approval refusal and renewal, distinct session-cap refusal, JSON, and `Send + Sync` contracts. The kimi-5 lifecycle repair adds two frontend tests without changing those Rust counts.
 - Frontend: **442/442** Vitest across **52 files**, **113/113** plain-JS tests, **45/45** Playwright checks, TypeScript and Vite build PASS, rerun serially. Stale-open component regression: **RED → GREEN 10/10**.
 - Earlier real isolated loopback `/bin/zsh`: `READY`, `ANSWER:fixture-answer`, granted `pwd`, `stty size` = **24 133**, exit 0, and later-input refusal. Initial requests **15**, external/raw-TypeScript/runtime errors **0/0/0**. Evidence: `local/kimi/harness-parity/fe5fa9115b06f682cf382a31d7fabc543d6c1a48/interactive-terminal.{json,png}`; pre-commit host `286e1d7619abc3fefc4d9b6c399df756f7273e6c6506ec2aa8e1d84d27a1cd14`, dist `ec1dd0d807add48f05e89c484f98d2dfb9643e43dd0a7c7b764da1436bfbd98e`. It is not represented as final-head evidence.
-- Earlier unsigned native GUI at the same host identity: `NATIVE_READY`, exact isolated `pwd`, and `Close shell` reaped PID `18600` (`ps` returned no row). Screenshot `local/kimi/harness-parity/native-interactive-terminal.jpg`, SHA-256 `a613f296596fbfb6d88bcd0ddc8deac9fb9b7edbe99524376d1d493d95c989bd`. Final current-head host/evidence is below.
+- Earlier unsigned native GUI at the same host identity: `NATIVE_READY`, exact isolated `pwd`, and `Close shell` reaped PID `18600` (`ps` returned no row). Screenshot `local/kimi/harness-parity/native-interactive-terminal.jpg`, SHA-256 `a613f296596fbfb6d88bcd0ddc8deac9fb9b7edbe99524376d1d493d95c989bd`. Earlier native host evidence follows. The ec49 native and loopback results are recorded below; the kimi-5 lifecycle repair is the new candidate.
 
 - Final-release native acceptance at `975ebff87657106914f8078c5a5e7dc75ad00329`, tree `1e246dd3f3233331503b6cd051f22db899179409`, used the actual `org.uor.r4.desktop.cowork` bundle with only an isolated fixture grant and a single pre-approved `/bin/zsh`. The real native enablement sheet was then approved for that fixture. `NATIVE_READY`, the exact fixture `pwd`, a subsequent `read` answer `ANSWER:fixture-answer`, and `stty size` = **24 80** were observed. Close shell returned Open terminal and `ps -p 77421` returned no row for the previously observed shell child. Executable SHA-256 `3609fc9846d6ba420dfd06807cb1b3902235620aaf70a096c699423fe32d38a7`; screenshot SHA-256 `db1cce2b9eb16879892b3714226837cdbe94650d602c625dc12b0ca57a69ecda`. Full observation and limits: `local/kimi/harness-parity/975ebff87657106914f8078c5a5e7dc75ad00329/native-terminal.md`. No detached-descendant containment claim follows.
 - Dependencies are exactly the three declared MIT packages: `portable-pty`, `@xterm/xterm`, and `@xterm/addon-fit`, with lockfile updates. No ttyd, CDN, public socket, or other dependency was added.
 
 ## Checks run at the head
 
-- `CARGO_TARGET_DIR="$PWD/target/cowork-tests" cargo test --manifest-path src-tauri/Cargo.toml`: complete default PASS; the same with `--features gui`: complete GUI PASS.
-- `npm test --prefix web/studio`: **442/442**. `npm run typecheck` and `npm run build`: PASS. `node --test web/studio/assets/js/*.test.mjs`: **113/113**. `npm run test:e2e --prefix web/studio`: **45/45**.
+- At ec49, `CARGO_TARGET_DIR="$PWD/target/cowork-tests" cargo test --manifest-path src-tauri/Cargo.toml` passed default **11/3/21/4/7/13/8** and, with `--features gui`, **13/3/25/4/8/13/9**. `full-gates.log` is **11/11 GREEN**.
+- `npm test --prefix web/studio` passed **442/442** before the two new lifecycle regressions; `kimi-5` passes **444/444**. TypeScript and Vite build PASS. `node --test web/studio/assets/js/*.test.mjs` passes **113/113**. `npm run test:e2e --prefix web/studio` passes **45/45**. Launcher, worker/page/static/runtime, desktop and **7/7** WASM checks pass.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS.
-- Current committed-head loopback, repository gates, fresh exact-head review and protected delivery are recorded only after they execute.
+- The ec49 clean loopback and interactive PTY passed with exact identities. The ec49 native acceptance returned `NATIVE_FINAL`, exact fixture cwd, `ANSWER:fixture-answer`, `stty size` = **24 80**, and exit 0, then cancelled a distinct second-shell approval with no new shell. Executable SHA-256 `07b5c67ffc5f92a8cb0794dc736bd5acc3094d9570508c29eeb0b4499fffaf45`; see `local/kimi/harness-parity/ec49e32b4d5af2f12cd6b84328584336c6b182ba/native-acceptance.md`. [kimi-5](../kimi-5/REPORT.md) owns the new lifecycle repair and its candidate checks.
 
 ## Skills used
 
@@ -46,7 +46,7 @@ Systematic root-cause investigation, red-first PTY/JSON/concurrency/stale-open/a
 
 ## Still open
 
-Current-head acceptance, repository gates, fresh adversarial review, PR/GitHub checks, protected merge and fresh-main verification. The shared persistent agent runtime, parallel projects/tasks, memory, scheduling/Dispatch, browser/computer workflows, and Claude-owned R4 API adapter remain separate work. No public ttyd endpoint, detached-process-containment guarantee, production publication, signed release, useful-model result, or full Cowork parity is established.
+Fresh exact-head review after the kimi-5 repair, required GitHub checks, protected merge and fresh-main verification. The shared persistent agent runtime, parallel projects/tasks, memory, scheduling/Dispatch, browser/computer workflows, and Claude-owned R4 API adapter remain separate work. No public ttyd endpoint, detached-process-containment guarantee, production publication, signed release, useful-model result, or full Cowork parity is established.
 
 ## Plain summary
 
