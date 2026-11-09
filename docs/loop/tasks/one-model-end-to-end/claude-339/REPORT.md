@@ -131,14 +131,16 @@ Neither arm crosses the cost ceiling, a mean d below −58,212. The dev curve's 
 
 **The 8,192 and 12,288 points are the trend only.** The outcome comes from step-016384.
 
-## Checks run
+## Checks run at the head
+
+At the head: the host tests at the end of this list, and CI on the PR. The script gates are earlier, as dated.
 
 - **On the scripts the registered `runs-3` pods ran, on the laptop at 17:22Z to 17:28Z, after their last edit at 17:19Z and not at this PR's head** (job `4e1272b8…`, chain `5eb46601…`, seal `e1ca7e1b…`, the pinned hashes checked on every pod):
   - job mutations 37 of 37 caught;
   - test-gates 81/81, test-seal 18/18;
   - test-read 45/45 with the trunk check's negative gate.
 - **test-watch ran earlier, at about 15:12Z, and is timing-sensitive:** one run caught 9 of 10. The miss was the mutant that drops `end()`'s own `trap '' TERM INT HUP`, under a laptop load average of about 7. Two reruns caught 10 of 10. The test sends its signals 0.4 s and 0.7 s into a 2 s hold, so under load the first can land before the window. The job is unchanged, and this is a test that can pass by luck, named here.
-- **Host test of `hamming-base-copy`:** `cargo test -p uor-r4-float-train --bin hamming-base-copy`, 1 passed. The other code in this PR is the ask-range hold in `fbs_export.rs` and `in_space_long.rs`, with its test, `an_ask_weight_past_the_served_range_is_held_at_its_end`, 1 passed on the host.
+- **Host test of `hamming-base-copy`:** `cargo test -p uor-r4-float-train --bin hamming-base-copy`, 1 passed. The other code in this PR is the ask-range hold in `fbs_export.rs` and `in_space_long.rs`, with its two tests, `an_ask_weight_past_the_served_range_is_held_at_its_end` and `every_ask_is_held_and_a_weight_not_finite_is_still_refused`, 2 passed on the host.
 
 ## Cost
 
