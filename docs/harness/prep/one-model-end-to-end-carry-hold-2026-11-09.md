@@ -1,7 +1,12 @@
 # Prep sheet: the carry lever, a held stream write (one-model-end-to-end, claude-331, 9 Nov 2026)
 
-TEST FITNESS: PENDING. claude-331 read NOT_FIT after two rounds. claude-332 applied that unit's exact-head review findings and owes a fresh non-author FIT before any code.
-- **claude-332, before its FIT:** claude-331's exact-head review (PR 3880, at `8270dc5b7`) found one major, three minors and two nits. The sheet's ones are applied below:
+TEST FITNESS: PENDING. claude-332's round 1 read NOT_FIT (one major); its fixes are applied below, and round 2, by a different fresh non-author reviewer, is owed before any code.
+- **claude-332 round 1, at `126ab2256`:** NOT_FIT. Every cited code line was checked true. The bar, the arms, the outcome map and I-H1 to I-H5 were found consistent and testable. The cost was checked at about 40 minutes per seed. Applied:
+  - **Major:** (r1y) was ranked by raw distance. The ask payload is margin-weighted, so it shrinks toward 0 (`flock_read_hamming.rs:1643–1656`, `1713–1715`), and a right payload could read as a payload fault. It is now ranked at the best non-negative scale against `p_v`, and I-V pins a `0.3 · p_v` case.
+  - **Minor:** I-H1 names where the hold sits (before the `q16` rounding at `geometric_stack_native.rs:1693`), what it compares, and which side of the rounding the ranks read.
+  - **Minor:** `y` is described as the code builds it, not as a plain mean.
+  - **Minor:** (r1hs)'s swamping branch says it reads swamping in projection, not that the trunk cannot decode the value.
+- **claude-332, before its round 1:** claude-331's exact-head review (PR 3880, at `8270dc5b7`) found one major, three minors and two nits. The sheet's ones are applied below:
   - **Major:** (r1hs) was ranked against the raw table points. With a mixed-sign `w_y`, (r1h) near 1 and (r1hs) near chance would wrongly read as `H4`'s stream swamping the held term. It now ranks against `q_v` at the best non-negative scale, like (r1u) and (r1h), and I-V pins the case.
   - **Minor:** the export already refuses ask heads (`fbs_export.rs:402–405`, and `round_hamming_as_exported` at `:527–529`), so only the decode step needs a new clause.
   - **Minor:** outcome 1 came before outcome 2, so a passing B2-aH beside an undertrained B2-aqH would have read "extend". Outcome 1 now applies only when no held arm passes. An undertrained arm beside a passing one is extended, and read under outcomes 2 and 3.
@@ -67,7 +72,9 @@ Under `--hamming-hold h` (requires `--hamming-ask 1`), the **stream read's ask w
 
 **The carry readings (continuous).** Recall cannot fall below chance, so the cuts need readings that can. For every held-out query, a **value rank** is the rank of the asked value's table point among the 512 value tokens' table points, by Euclidean distance from a vector, ties broken by token id. 1 is best and 256.5 is chance. The vectors:
 - **At the `Q` row, the depth-2 read's write, three ways** (the stream is `x + w_c ⊙ c + w_y ⊙ y`, and `x` holds `Q`'s own point plus two layers, so the whole stream can hide a right payload):
-  - (r1y) the ask payload `y`, the mean of the kept table points (`flock_read_hamming.rs:1579–1585`, `1660`);
+  - (r1y) the ask payload `y`, ranked against the raw table points `p_v` at the best non-negative scale, `min_{α ≥ 0} |y − α p_v|`.
+    - **How the payload is built:** each kept candidate's table point is weighted by `max(0, m − d)/m` (`flock_read_hamming.rs:1643–1650`). The sum is divided by the number of candidates inside the margin (`:1652–1656`), then averaged over the ask heads that found one (`:1713–1715`).
+    - **Why the scale:** a right payload is therefore `α · p_v` with `α < 1` unless the match is exact. A raw-distance rank could read it as a small value token;
   - (r1u) the write `u = w_y ⊙ y`, against the **written value points** `q_v = w_y ⊙ p_v` (the type weight row, lane by lane, `flock_read_hamming.rs:1717–1737`). Each value's distance is `min_{α ≥ 0} |u − α q_v|`, with the closed form `α* = max(0, ⟨u, q_v⟩ / ⟨q_v, q_v⟩)`. So neither a small `w_y` nor a lane-wise scale with mixed signs reads as a wrong value;
   - (r1s) the whole stream just after the write.
 - **At `H4`:**
@@ -125,7 +132,7 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
    - **(r1y) is near chance:** the ask payload at the `Q` row is not the value, though the trace keeps its position. That is a payload fault, instrument-side until the trace and the payload are reconciled. Repair it and rerun.
    - **(r1y) is near 1 and (r1u) is near chance:** the payload is right, and the write's weight `w_y` loses it, in this configuration (§4.1, §4.2). **Next:** the stream combine, tested on B2 first.
    - **(r1u) is near 1, and (r1h) at `H4` is near chance:** the write is right, and the hold does not deliver it to `H4`. Read `g`: a hold that stays small, or that is dominated by the header and value rows' writes, is a configuration result for `h = 8` and this `lr`. **Next:** the hold's form (a carried register, overwritten only by a found write), tested on B2 first.
-   - **(r1h) is near 1, and (r1hs) at `H4` is near chance:** the held term carries the value, and `H4`'s own stream swamps it. **Next:** the hold's scale against the residual (the stream combine), tested on B2 first.
+   - **(r1h) is near 1, and (r1hs) at `H4` is near chance:** the held term carries the value, and `H4`'s own stream swamps it in projection: the residual's projection on every `q_v` sets (r1hs)'s noise floor. That does not show the trunk cannot decode it, and the REPORT says so. **Next:** the hold's scale against the residual (the stream combine), tested on B2 first.
    - **(r1hs) is near 1, and (r2) at `H4` is near chance:** the value reaches `H4`'s stream, and the trunk layers after the read lose it. **Next:** move the stream read later (to the last depth), or hold into the readout read, tested on B2 first.
    - **Any other pattern** (for example, ranks that are neither near 1 nor near chance, or seeds that disagree on the branch) is named from the readings, and recorded as a configuration result.
      - **Next:** a diagnostic sheet that cuts at the first rank on the path (r1y → r1u → r1h → r1hs → r2) whose mean passes 64.
@@ -138,13 +145,17 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 ## Instrument checks
 
 - **I-1 (default paths):** claude-330's printed digest (`i1_digest::ask_default_forward_digest`) is equal at the base and the head. Two new digests are equal at the base and the head too: one with `--hamming-ask 1` and no hold, and one of a no-read forward. The no-read digest is what lets I-R1 reuse claude-330's sealed B1-n as the twin.
-- **I-H1 (the hold starts off):** with `g = 0`, the forward and the gradient with `--hamming-hold 8` equal the forward and gradient without it, bit for bit.
+- **I-H1 (the hold starts off):** with `g = 0`, the forward and the gradient with `--hamming-hold 8` equal the forward and gradient without it.
+  - **Where the hold sits:** the held term is added inside the stream read's combine, so before the `q16` rounding that wraps the read's return (`geometric_stack_native.rs:1693`).
+  - **What is compared:** the stream after that rounding, element by element, and every gradient. Values must be equal as numbers, so `−0.0` and `+0.0` count as equal.
+  - **The ranks:** (r1s) and (r1hs) read the combine's output before the rounding.
 - **I-H2 (the hold's rows):** on a hand-built input with one nonzero ask write at row `t`, the added term is `g[x_t] · u_t` at rows `t + 1` to `t + h`. It is zero at row `t` itself, at `t + h + 1`, before `t`, and in every other window of the batch.
 - **I-H3 (the gradient):** a loss at row `t + 4` alone gives nonzero gradients to `g[x_t]` and `a[x_t]`, and none to `g` of tokens that appear only after `t + 4`.
 - **I-H4 (save, load and refusals):** `g` round-trips through save and load. The decode step and the export each refuse a read with a hold, with an error that names it.
 - **I-H5 (the cuts):** `−aS` removes every depth-2 ask write and every held term, leaves the copy heads' picks unchanged, and leaves the readout read's ask heads on. `−H` removes every held term and leaves the direct write bit for bit.
 - **I-V (the value ranks):** on hand-built vectors, each rank equals a brute-force sort of the 512 distances, ties broken by token id. Two cases are pinned:
   - a residual `x` that dominates the stream: (r1y) and (r1u) read 1 while (r1s) reads far from 1;
+  - a payload shrunk by the margin weights: `y = 0.3 · p_v`, among value points of uneven size, reads 1 on (r1y), while a raw-distance rank of the same `y` does not;
   - a `w_y` with mixed signs and uneven lane sizes: (r1u) and (r1h) still read 1, and so does (r1hs) when the stream at `H4` is that held term plus a residual small against it. On the same vectors, a raw-point rank of the stream reads far from 1. That pins why (r1hs) is ranked against `q_v`.
 - **I-4, I-6, I-7:** as claude-330's sheet, with I-7 run on B2-aqH.
 - **I-R1, I-R2:** as in the bar.
