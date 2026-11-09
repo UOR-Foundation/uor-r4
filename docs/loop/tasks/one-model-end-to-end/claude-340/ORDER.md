@@ -4,7 +4,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## Goal
 
-**Parse the served artifact once per scorer run in every path of `served-reply-panel`, so no timer in the report holds an artifact parse and the rank modes stop paying one parse per row.**
+**Parse the served artifact only before the timers in every path of `served-reply-panel`, so no timer in the report holds an artifact parse and the rank modes stop paying one parse per row.**
 
 **What the code holds at this base, which narrows the gap claude-311 named:**
 - claude-311 named the per-row parse at `served-reply-panel.rs:204`, the greedy loop.
@@ -42,7 +42,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 1. **I-c parity holds, as the unchanged-output check.** Under `--engine integer`, claude-322's two sealed artifacts score, with the timing fields removed, to the stripped report hashes in the language-carry sheet: s1 `5a27775c…`, s2 `7eb8dbf5…`. That path already parsed once at this base.
 2. **The rank modes' scored output is unchanged.** `--teacher-forced 1 --paired-first 1` on the CPU port gives the same report before and after, with the timing fields removed.
-3. **The once-per-run parse is shown for the rank modes.** The test above passes, and fails with a parse put back in a row.
+3. **The rank modes hold no per-row parse.** The test above passes, and fails with a parse put back in a row.
 4. **The rank modes' wall time before and after is in the REPORT,** with the integer path's tokens per second as the unchanged reference.
 5. A fresh exact-head review passes the PR, which merges and is verified on `main`.
 

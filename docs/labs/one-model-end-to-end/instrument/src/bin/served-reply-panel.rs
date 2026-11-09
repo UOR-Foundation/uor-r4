@@ -2202,8 +2202,8 @@ mod tests {
         .is_err());
     }
 
-    /// A run parses the artifact once: each parser has one call site in the non-test code, and it
-    /// sits before the first timer. The row functions take a built forward, never the bytes.
+    /// No row parses the artifact: each parser has one call site in the non-test code, and it sits
+    /// before the first timer. The row functions take a built forward, never the bytes.
     #[test]
     fn the_artifact_is_parsed_once_before_every_timer() {
         let source = include_str!("served-reply-panel.rs");

@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). ORDER: [ORDER.md](ORDER.md). Code head `ce4b8ea99dd98ab8c314ea4b31b513ec97cd9f95`, which merges `main` at `5643a45c5` into the unit's base `59494646cdae3e2f8874939680324ed8cd5affd5`.
 
-**In one line:** `served-reply-panel`'s two rank modes now parse the artifact once per run instead of once per row in each mode, and take about 2.7 to 3.2 times less wall time on a 2 MB artifact, with every scored field unchanged.
+**In one line:** `served-reply-panel`'s two rank modes no longer parse the artifact per row, only before the run's timers, and take about 2.7 to 3.2 times less wall time on a 2 MB artifact, with every scored field unchanged.
 
 ## What did not work, first
 
@@ -33,8 +33,8 @@ On the laptop, no GPU. Both binaries built from the same tree, before with the f
 
 | Check | s1 | s2 |
 |---|---|---|
-| I-c, `--engine integer`, timing fields removed, before and after | `5a27775c…` both, equal to the sheet | `7eb8dbf5…` both, equal to the sheet |
-| Rank modes, CPU port, `--teacher-forced 1 --paired-first 1`, timing fields removed | `116d1fdf…` both, byte-equal | `f7f677f5…` both, byte-equal |
+| I-c, `--engine integer`, four timing fields and `settings.engine` removed, before and after | `5a27775c…` both, equal to the sheet | `7eb8dbf5…` both, equal to the sheet |
+| Rank modes, CPU port, `--teacher-forced 1 --paired-first 1`, same fields removed | `116d1fdf…` both, byte-equal | `f7f677f5…` both, byte-equal |
 
 **Rank-mode wall time, milliseconds, median of 3, before and after interleaved:**
 
@@ -43,7 +43,7 @@ On the laptop, no GPU. Both binaries built from the same tree, before with the f
 | `teacher_forced.wall_milliseconds` | 14,429 | 5,374 | 14,435 | 5,292 |
 | `paired_first.wall_milliseconds` | 13,538 | 4,347 | 13,533 | 4,249 |
 
-**Parses:** a 256-row rank run went from 512 forward parses inside those timers (one per row in each mode) to none. The run builds one forward before any timer.
+**Parses:** a 256-row rank run went from 512 forward parses inside those timers (one per row in each mode) to none. The run builds one forward before any timer. A CPU-port run still parses the bytes twice up front, once for the integer model (its shape and head check) and once for the forward, both before any timer.
 
 **`--engine integer` decode tokens per second, the unchanged reference, 3 runs each, interleaved:**
 
@@ -78,7 +78,7 @@ Closes nothing: #3407 stays open.
 
 ## Plain summary
 
-The grading program has two modes that rank the right answer against every other word. Each mode re-read the whole model file for every test conversation, so a run read it up to 512 times. It now reads the file once and copies the loaded model for each conversation.
+The grading program has two modes that rank the right answer against every other word. Each mode re-read the whole model file for every test conversation, so a run read it more than 500 times. It now reads the file only at the start of the run and copies the loaded model for each conversation.
 
 Those two modes run about 2.7 to 3.2 times faster on a small model, and their grades are identical, byte for byte. The measured speed of the served model does not change: that path was already fixed by two earlier units, which this work confirmed.
 
