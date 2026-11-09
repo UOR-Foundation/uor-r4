@@ -23,7 +23,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - the payload and combine (`flock_read_hamming.rs:1640–1740`);
   - the export's existing refusals (`fbs_export.rs:402–405`, `527–529`).
 - **The design held.** None of four FIT rounds and one exact-head review faulted the lever itself: a per-token scalar `g`, starting at 0, over `h = 8` rows. None found a breach of §3.2 or §3.3. Every finding was about a reading, a check or the outcome map.
-- **Fewer and narrower findings per round:** three majors, then two, then one, then two. Each later round's majors were about rows and scales that the code fixes exactly.
+- **Narrower findings per round, though not fewer.** The majors per review were three (claude-331 round 1), two (round 2), one (its exact-head review), one (this unit's round 1) and two (round 2). The later ones were about single readings and one outcome-map exit, not the lever or the arms.
 
 ## What changed
 
@@ -54,7 +54,7 @@ None beyond the loop's own steps. Each FIT round ran as a fresh, read-only revie
 
 - **The lab decision for claude-333 (this unit's bound is spent; the line goes on under this decision, logged here for Casey).**
   - **Build the code first,** behind `--hamming-hold` and the readings flags, default off. That covers the hold, `−aS`, `−H`, the six value ranks over the found rows, and the found fraction. I-1, I-H1 to I-H5 and I-V are unit tests, each with a mutation that makes it fail. Builds and finite tests need no FIT (§4.5).
-  - **Then a fresh FIT reads the sheet and the code together.** Each of the five majors since claude-331 was a reading's scale, rows or reference that text left open and code settles exactly. A FIT of a sheet with its tests already written checks the readings as they are computed.
+  - **Then a fresh FIT reads the sheet and the code together.** Of the six majors since claude-331's round 2, five were a reading's scale, rows or reference: (r1u), the whole-stream read at `H4`, (r1hs), (r1y), and the empty rows. Text left these open, and code that computes them settles them exactly. The sixth, the extension's exit, was outcome-map logic, which code does not settle; the FIT still has to read it. A FIT of a sheet with its tests already written checks the readings as they are computed.
   - **Then the D67 pre-run review** and the two-seed run, about $1.
   - **The cost of this choice:** if the FIT then changes a reading, the code changes with it, in the same unit. Nothing runs on a GPU before FIT.
 - **First, the facts round 2 did not reach:**
