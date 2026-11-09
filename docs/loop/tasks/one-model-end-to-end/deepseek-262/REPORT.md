@@ -14,6 +14,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   `format.rs:250` warning predates this work.
 - The first full gate run hit the harness's known transient `Text file busy`
   race in its fake-`gh` test. The clean rerun passed all 11 gates.
+- The first GitHub `ci` run failed before creating any job or log. Reopening
+  the PR at the same reviewed head produced a clean run with ten successful
+  checks, but the merge queue retained the stale pre-job suite and reported
+  all five required checks as expected. This receipt-only commit gives the
+  queue a fresh head and check suite; product code is byte-identical.
 - The sealed Claude-335 t1 archive downloaded and verified at SHA-256
   `aa6fb485…`, but it contains training checkpoints and no exported
   `UORLUT01`. Producing an artifact from that checkpoint needs the CUDA
@@ -81,6 +86,9 @@ The sealed store archive was read only for the real-artifact probe:
   rerun.
 - `uor-harness check`: 360 rules, 0 errors and 326 pre-existing warnings in
   96.28 s.
+- GitHub Actions on the fresh check suite: 10 successful, 15 skipped, 0
+  pending or failing, including all five required checks and the five-minute
+  repository-wide harness job.
 
 ## Skills used
 
