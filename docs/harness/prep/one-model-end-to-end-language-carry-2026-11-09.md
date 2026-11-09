@@ -311,3 +311,12 @@ claude-322's, with:
 - **The launcher needs its seal root named,** so no cell can seal to an old root by default.
 - **A failed copy is set aside** rather than blocking a retry.
 - **The REPORT counts the held weights:** the entries at −32,768 and 32,767 in each `step-016384` ask table, so the saturation is visible.
+
+**How the rerun started (9 Nov, about 17:50Z to 18:17Z).** The negatives first.
+- **The first relaunch never answered SSH.** `uor-pod` deleted `vast-59924022` at 900 s. Nothing ran on it.
+- **The second relaunch failed I-xg because of my own launcher (instrument).** On `vast-59926331`, the laptop's `read-339.sh` refused to write to the I-xg folder the first round had left, so it compared nothing and reported FAIL. Each launch now names its own `IXG_OUT`.
+  - That FAIL made the job seal. The NOT_RUN seal it put in `runs-3/L-aC/s1` is moved byte-identical to `runs-3-void-ixg-collision/L-aC/s1`, so `runs-3/` holds only the rerun's own runs. It is not a reading of any arm.
+- **One more launch failed before SSH.** L-a seed 2's first try ended `up exit=1`, with its pod (`vast-59928452`) stopped while loading. The launcher tried again, and the stopped pod is deleted.
+- **The store has room again.** With the owner's approval (#2028 6747419800), 784 files (15.4 GB) were deleted and the history squashed. Writes worked again about 18:05Z, so the seals go to the store and read back as Step 5 says. `autopull-339.sh` stays armed for a `seal=4`.
+
+**What runs:** all four from step 0 at the pin above, sealing to `runs-3/`. L-aC seed 1 (`vast-59927559`) passed I-xg against `86e51d5e…` at 18:12:56Z, and the other three started after it: L-a seed 1 (`vast-59928444`), L-aC seed 2 (`vast-59928474`), L-a seed 2 (`vast-59928489`).
