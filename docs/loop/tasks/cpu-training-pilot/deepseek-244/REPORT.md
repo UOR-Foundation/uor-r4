@@ -12,10 +12,15 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   exact `(depth, head)` cells retained for each relation.
 - The first fitter allocated two width-sized vectors on every candidate
   evaluation. It now reuses point buffers for the entire bounded fit.
+- A fresh review found that the first weighted-retention pass used the saved
+  type-head margins. Ask heads start with copy-head margins of `head_width / 4`
+  bits, not the trained type margin. The oracle now reports ask-initialized and
+  type-margin weights separately. The corrected ask-weight totals are `0/64`
+  before fitting and `40/64` after fitting on each seed.
 - The shared-offset search reached zero Hamming bits on `0/16` relations. It
-  retained the target in only `49/64` and `48/64` cells on the two seeds, and
-  every one of those cells had nonzero selector weight. It is not a learned ask
-  query yet.
+  retained the target in the nearest list in `49/64` and `48/64` cells, but only
+  `40/64` and `40/64` had nonzero ask-initialized selector weight. It is not a
+  learned ask query yet.
 - Global `cargo fmt -p uor-r4-cpu-train -- --check` failed on pre-existing
   ordering elsewhere in `src/lib.rs`. Only the new files were formatted; they
   pass `rustfmt --check`.
@@ -32,13 +37,14 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   nonzero selector weight, and refuses replaced reports.
 - Exposed the existing sign-code helpers inside the CPU crate only. No serving
   schema, training branch, serving default or Claude-owned file changed.
-- Added four library tests and three binary tests for copy-query equivalence,
+- Added five library tests and three binary tests for an independently signed
+  copy-query parity check,
   exact targeting, deterministic bounded fitting, nearest retention,
   positive-weight retention, malformed/read-less artifacts, the valid B2
   tail/H4 geometry and SHA-256 argument validation.
 - Changed 3 tracked source files and added 2 source files, plus the REPORT,
   two evidence reports, one resource ledger and one notebook row. The change is
-  about 790 code/test lines; the ORDER gave no line estimate.
+  about 950 code/test lines; the ORDER gave no line estimate.
 
 ## Measurements
 
@@ -47,7 +53,7 @@ The inputs were Claude-322 seed 1
 and seed 2
 `8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae`.
 The release executable was
-`4547e619d54c393f3176d86c14c67486139ba216e0c79c63450824b8611deeae`.
+`1620773790737878288e753900ae1e808553cc9820ebd6326c6a352b2de449db`.
 Each run used 16 Rayon workers and this command, substituting the seed, hash
 and output:
 
@@ -57,28 +63,35 @@ RAYON_NUM_THREADS=16 target/release/cpu-ask-head-oracle \
   --out <report.json>
 ```
 
-| Seed | Before: nearest / weighted | Exact: nearest / weighted | Fitted: nearest / weighted | Start bits mean | Fitted bits min / median / max | Fit evaluations | Budget exhausted |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 3 / 3 of 64 | 64 / 64 of 64 | 49 / 49 of 64 | 122.375 | 10 / 57.5 / 112 | 82,432 | 0 |
-| 2 | 2 / 2 of 64 | 64 / 64 of 64 | 48 / 48 of 64 | 126.5625 | 12 / 30.5 / 116 | 83,968 | 0 |
+| Seed | Nearest list: before / exact / fitted | Ask-init weight: before / exact / fitted | Saved type margin: before / exact / fitted |
+|---|---:|---:|---:|
+| 1 | 3 / 64 / 49 of 64 | 0 / 64 / 40 of 64 | 3 / 64 / 49 of 64 |
+| 2 | 2 / 64 / 48 of 64 | 0 / 64 / 40 of 64 | 2 / 64 / 48 of 64 |
+
+| Seed | Start bits mean | Fitted bits min / median / max | Fit evaluations | Budget exhausted |
+|---|---:|---:|---:|---:|
+| 1 | 122.375 | 10 / 57.5 / 112 | 82,432 | 0 |
+| 2 | 126.5625 | 12 / 30.5 / 116 | 83,968 | 0 |
 
 Exact offset to the found-copy key produced zero bits for all `16/16`
-relations and retained the target with nonzero weight in all `64/64` cells on
-both seeds. The bounded shared fit retained the target for `15/16` relations on
-seed 1 and `14/16` on seed 2. Across relations, fitted retention by cell was:
+relations and retained the target with nonzero ask-initialized weight in all
+`64/64` cells on both seeds. The bounded shared fit put the target in the
+nearest list for `15/16` relations on seed 1 and `14/16` on seed 2. With
+ask-initialized margins it contributed nonzero weight in `13/16` and `11/16`
+relations. Across relations, fitted ask-weight retention by cell was:
 
 | Seed | depth-2 head 2 | depth-2 head 3 | depth-6 head 2 | depth-6 head 3 |
 |---|---:|---:|---:|---:|
-| 1 | 15 / 16 | 10 / 16 | 15 / 16 | 9 / 16 |
-| 2 | 13 / 16 | 12 / 16 | 12 / 16 | 11 / 16 |
+| 1 | 13 / 16 | 7 / 16 | 13 / 16 | 7 / 16 |
+| 2 | 10 / 16 | 10 / 16 | 11 / 16 | 9 / 16 |
 
 Both fresh-process reports were byte-identical on repeat. Seed report hashes
-are `3176ccb6…98b2` and `6583fa66…d18e`; complete per-relation cells and
+are `d72f2d03…ca33` and `61f9dd0e…4484`; complete per-relation cells and
 per-depth/per-head starting, exact and fitted Hamming bits are in
 [`seed-1.json`](evidence/seed-1.json) and
 [`seed-2.json`](evidence/seed-2.json).
 
-The two `time -v` runs each took about `0.01-0.02 s` wall with 8,944 KiB maximum
+The two `time -v` runs each took about `0.02 s` wall with 9,008 KiB maximum
 RSS. This is a coarse sub-second timing, not a throughput qualification.
 Resources are recorded in the
 [D84 ledger](../../../../labs/cpu-training-pilot-ask-head-oracle-2026-11-08/resource-ledger.json).
@@ -88,10 +101,10 @@ The previous admitted total `102,167.677487699 s` plus this unit's
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib
-  ask_head::tests`: 4 passed.
+  ask_head::tests`: 5 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-head-oracle`: 3 passed.
-- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 460 passed,
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 461 passed,
   4 ignored.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `cargo build --release --offline --locked -p uor-r4-cpu-train --bin

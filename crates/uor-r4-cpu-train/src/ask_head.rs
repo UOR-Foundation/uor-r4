@@ -18,7 +18,8 @@ use crate::hamming::{head_code, unit_rotations};
 pub struct AskHeadKept {
     pub depth: usize,
     pub head: usize,
-    pub margin_q16: i32,
+    pub ask_margin_q16: i32,
+    pub artifact_type_margin_q16: i32,
     pub query: u64,
     pub key: u64,
     pub kept: Vec<AskKeptPosition>,
@@ -60,7 +61,7 @@ struct AskRead {
 #[derive(Clone, Copy)]
 struct AskHead {
     head: usize,
-    margin_q16: i32,
+    artifact_type_margin_q16: i32,
 }
 
 pub struct AskHeadOracle {
@@ -98,8 +99,10 @@ impl AskHeadOracle {
             return Err("ask-head oracle needs an even positive head count".to_owned());
         }
         let head_width = width / heads;
-        if head_width == 0 || !head_width.is_multiple_of(4) {
-            return Err("ask-head width is not a positive quaternion multiple".to_owned());
+        if head_width == 0 || !head_width.is_multiple_of(4) || head_width > 64 {
+            return Err(
+                "ask-head width is not a positive quaternion multiple within one word".to_owned(),
+            );
         }
         let copy = heads / 2;
         let mut reads = Vec::with_capacity(image.reads.len());
@@ -110,7 +113,7 @@ impl AskHeadOracle {
                 heads: (copy..heads)
                     .map(|head| AskHead {
                         head,
-                        margin_q16: read.margin[head],
+                        artifact_type_margin_q16: read.margin[head],
                     })
                     .collect(),
             });
@@ -328,7 +331,8 @@ impl AskHeadOracle {
                 kept.push(AskHeadKept {
                     depth: read.depth,
                     head: head.head,
-                    margin_q16: head.margin_q16,
+                    ask_margin_q16: ((self.head_width / 4) << 16) as i32,
+                    artifact_type_margin_q16: head.artifact_type_margin_q16,
                     query,
                     key: self.key_code(read, *head, *question)?,
                     kept: candidates
@@ -407,6 +411,33 @@ mod tests {
         export_fbs_trunk_uorlut01(&snapshot).unwrap()
     }
 
+    fn identity_hamming_artifact() -> Vec<u8> {
+        let mut snapshot = synthetic_fbs_trunk_with(
+            244,
+            FbsSynth {
+                vocab: 512,
+                d: 64,
+                mlp: 96,
+                layers: 2,
+                context: 24,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.5,
+                decay_step: 0.25,
+            },
+        );
+        snapshot.readout_nearest = true;
+        let mut hamming = synthetic_hamming(snapshot.width, 2, 4, 244);
+        for read in &mut hamming.reads {
+            for unit in read.key_rotation.chunks_exact_mut(4) {
+                unit.copy_from_slice(&[1.0, 0.0, 0.0, 0.0]);
+            }
+        }
+        snapshot.hamming = Some(hamming);
+        export_fbs_trunk_uorlut01(&snapshot).unwrap()
+    }
+
     #[test]
     fn malformed_and_read_less_artifacts_are_refused() {
         assert!(AskHeadOracle::from_artifact(&[]).is_err());
@@ -451,6 +482,38 @@ mod tests {
     }
 
     #[test]
+    fn zero_offset_matches_an_independently_signed_copy_query() {
+        let artifact = identity_hamming_artifact();
+        let served = served_copy_codes_uorlut01(&artifact).unwrap().unwrap();
+        let oracle = AskHeadOracle::from_artifact(&artifact).unwrap();
+        let zero = oracle.zero_offset();
+        let point = &served.table[41 * oracle.width()..][..oracle.width()];
+        let head_width = oracle.width() / oracle.head_count();
+        let kept = oracle.kept_at_question(&[3, 41], &zero).unwrap();
+        for codes in &served.codes {
+            assert_eq!(codes.len(), served.vocab * (oracle.head_count() / 2));
+        }
+        for read in &oracle.reads {
+            for head in &read.heads {
+                let query = oracle.ask_query_code(read, *head, 41, &zero).unwrap();
+                let mut copy = 0u64;
+                for coordinate in 0..head_width {
+                    if point[head.head * head_width + coordinate] >= 0 {
+                        copy |= 1u64 << coordinate;
+                    }
+                }
+                assert_eq!(
+                    query, copy,
+                    "depth {} head {} differs from the copy query",
+                    read.depth, head.head
+                );
+            }
+            let first = kept.iter().find(|head| head.depth == read.depth).unwrap();
+            assert_eq!(first.ask_margin_q16, ((head_width / 4) << 16) as i32);
+        }
+    }
+
+    #[test]
     fn offset_fit_is_deterministic_bounded_and_non_improving() {
         let oracle = AskHeadOracle::from_artifact(&artifact()).unwrap();
         let first = oracle.fit_offset_to_key(41, 17, 50_000).unwrap();
@@ -463,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn fitted_offset_retains_the_value_position_after_its_key() {
+    fn exact_offset_retains_the_value_position_after_its_key() {
         let oracle = AskHeadOracle::from_artifact(&artifact()).unwrap();
         let (question, key, value) = (41u32, 17u32, 300u32);
         let mut tokens = vec![3; 12];

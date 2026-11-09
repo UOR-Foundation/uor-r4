@@ -48,6 +48,9 @@ struct RelationReading {
     target_weighted_before_cells: usize,
     target_weighted_exact_cells: usize,
     target_weighted_fitted_cells: usize,
+    target_type_margin_weighted_before_cells: usize,
+    target_type_margin_weighted_exact_cells: usize,
+    target_type_margin_weighted_fitted_cells: usize,
     start_cell_bits: Vec<AskCellBits>,
     exact_cell_bits: Vec<AskCellBits>,
     fitted_cell_bits: Vec<AskCellBits>,
@@ -57,6 +60,9 @@ struct RelationReading {
     weighted_before: Vec<RetainedCell>,
     weighted_exact: Vec<RetainedCell>,
     weighted_fitted: Vec<RetainedCell>,
+    type_margin_weighted_before: Vec<RetainedCell>,
+    type_margin_weighted_exact: Vec<RetainedCell>,
+    type_margin_weighted_fitted: Vec<RetainedCell>,
     start_bits: u64,
     exact_bits: u64,
     fitted_bits: u64,
@@ -108,6 +114,11 @@ fn run() -> Result<()> {
             let weighted_before = weighted_cells(&before, VALUE_POSITION);
             let weighted_exact = weighted_cells(&exact_kept, VALUE_POSITION);
             let weighted_fitted = weighted_cells(&fitted_kept, VALUE_POSITION);
+            let type_margin_weighted_before = artifact_type_weighted_cells(&before, VALUE_POSITION);
+            let type_margin_weighted_exact =
+                artifact_type_weighted_cells(&exact_kept, VALUE_POSITION);
+            let type_margin_weighted_fitted =
+                artifact_type_weighted_cells(&fitted_kept, VALUE_POSITION);
             Ok(RelationReading {
                 relation,
                 question,
@@ -121,6 +132,9 @@ fn run() -> Result<()> {
                 target_weighted_before_cells: weighted_before.len(),
                 target_weighted_exact_cells: weighted_exact.len(),
                 target_weighted_fitted_cells: weighted_fitted.len(),
+                target_type_margin_weighted_before_cells: type_margin_weighted_before.len(),
+                target_type_margin_weighted_exact_cells: type_margin_weighted_exact.len(),
+                target_type_margin_weighted_fitted_cells: type_margin_weighted_fitted.len(),
                 start_cell_bits: oracle.cell_bits_to_key(question, relation, &zero)?,
                 exact_cell_bits: oracle.cell_bits_to_key(question, relation, &exact)?,
                 fitted_cell_bits: oracle.cell_bits_to_key(question, relation, &fit.offset)?,
@@ -130,6 +144,9 @@ fn run() -> Result<()> {
                 weighted_before,
                 weighted_exact,
                 weighted_fitted,
+                type_margin_weighted_before,
+                type_margin_weighted_exact,
+                type_margin_weighted_fitted,
                 start_bits: fit.start_bits,
                 exact_bits: oracle.total_bits_to_key(question, relation, &exact)?,
                 fitted_bits: fit.end_bits,
@@ -171,6 +188,9 @@ fn run() -> Result<()> {
             "target_weighted_before_cells": readings.iter().map(|r| r.target_weighted_before_cells).sum::<usize>(),
             "target_weighted_exact_cells": readings.iter().map(|r| r.target_weighted_exact_cells).sum::<usize>(),
             "target_weighted_fitted_cells": readings.iter().map(|r| r.target_weighted_fitted_cells).sum::<usize>(),
+            "target_type_margin_weighted_before_cells": readings.iter().map(|r| r.target_type_margin_weighted_before_cells).sum::<usize>(),
+            "target_type_margin_weighted_exact_cells": readings.iter().map(|r| r.target_type_margin_weighted_exact_cells).sum::<usize>(),
+            "target_type_margin_weighted_fitted_cells": readings.iter().map(|r| r.target_type_margin_weighted_fitted_cells).sum::<usize>(),
             "relations_with_target_before": readings.iter().filter(|r| r.target_kept_before_cells > 0).count(),
             "relations_with_target_exact": readings.iter().filter(|r| r.target_kept_exact_cells > 0).count(),
             "relations_with_target_fitted": readings.iter().filter(|r| r.target_kept_fitted_cells > 0).count(),
@@ -240,7 +260,23 @@ fn weighted_cells(heads: &[AskHeadKept], target: usize) -> Vec<RetainedCell> {
         .filter(|head| {
             head.kept.iter().any(|position| {
                 position.position as usize == target
-                    && copy_weight_q31(head.margin_q16, position.distance) > 0
+                    && copy_weight_q31(head.ask_margin_q16, position.distance) > 0
+            })
+        })
+        .map(|head| RetainedCell {
+            depth: head.depth,
+            head: head.head,
+        })
+        .collect()
+}
+
+fn artifact_type_weighted_cells(heads: &[AskHeadKept], target: usize) -> Vec<RetainedCell> {
+    heads
+        .iter()
+        .filter(|head| {
+            head.kept.iter().any(|position| {
+                position.position as usize == target
+                    && copy_weight_q31(head.artifact_type_margin_q16, position.distance) > 0
             })
         })
         .map(|head| RetainedCell {
@@ -343,7 +379,8 @@ mod tests {
         let head = |head, distance| AskHeadKept {
             depth: 2,
             head,
-            margin_q16: 4 << 16,
+            ask_margin_q16: 4 << 16,
+            artifact_type_margin_q16: 8 << 16,
             query: 0,
             key: 0,
             kept: vec![uor_r4_cpu_train::AskKeptPosition {
@@ -356,6 +393,10 @@ mod tests {
         assert_eq!(
             weighted_cells(&heads, VALUE_POSITION),
             vec![RetainedCell { depth: 2, head: 2 }]
+        );
+        assert_eq!(
+            artifact_type_weighted_cells(&heads, VALUE_POSITION).len(),
+            2
         );
     }
 }

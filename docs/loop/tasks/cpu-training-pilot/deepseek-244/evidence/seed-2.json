@@ -3,7 +3,7 @@
   "claim": "CPU ask-query/found-copy geometry oracle at the B2 query row only; not a B2, carried-value, capability or serving result",
   "hardware": {
     "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
-    "executable_sha256": "4547e619d54c393f3176d86c14c67486139ba216e0c79c63450824b8611deeae",
+    "executable_sha256": "1620773790737878288e753900ae1e808553cc9820ebd6326c6a352b2de449db",
     "rayon_threads": 16
   },
   "relations": [
@@ -125,9 +125,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 528,
       "weighted_before": [],
       "weighted_exact": [
@@ -278,16 +318,44 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 1,
       "target_position": 89,
-      "target_weighted_before_cells": 1,
+      "target_type_margin_weighted_before_cells": 1,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 1,
+      "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
-      "target_weighted_fitted_cells": 1,
-      "value": 529,
-      "weighted_before": [
+      "target_weighted_fitted_cells": 0,
+      "type_margin_weighted_before": [
         {
           "depth": 2,
           "head": 3
         }
       ],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 3
+        }
+      ],
+      "value": 529,
+      "weighted_before": [],
       "weighted_exact": [
         {
           "depth": 2,
@@ -306,12 +374,7 @@
           "head": 3
         }
       ],
-      "weighted_fitted": [
-        {
-          "depth": 2,
-          "head": 3
-        }
-      ]
+      "weighted_fitted": []
     },
     {
       "ask_cells": 4,
@@ -431,9 +494,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 530,
       "weighted_before": [],
       "weighted_exact": [
@@ -591,9 +694,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 531,
       "weighted_before": [],
       "weighted_exact": [
@@ -743,9 +886,41 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 2,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 2,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
-      "target_weighted_fitted_cells": 2,
+      "target_weighted_fitted_cells": 1,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 2
+        }
+      ],
       "value": 532,
       "weighted_before": [],
       "weighted_exact": [
@@ -767,10 +942,6 @@
         }
       ],
       "weighted_fitted": [
-        {
-          "depth": 2,
-          "head": 2
-        },
         {
           "depth": 6,
           "head": 2
@@ -895,9 +1066,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 533,
       "weighted_before": [],
       "weighted_exact": [
@@ -1055,9 +1266,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 534,
       "weighted_before": [],
       "weighted_exact": [
@@ -1215,9 +1466,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 535,
       "weighted_before": [],
       "weighted_exact": [
@@ -1375,9 +1666,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 536,
       "weighted_before": [],
       "weighted_exact": [
@@ -1535,9 +1866,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
-      "target_weighted_fitted_cells": 4,
+      "target_weighted_fitted_cells": 3,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 537,
       "weighted_before": [],
       "weighted_exact": [
@@ -1570,10 +1941,6 @@
         {
           "depth": 6,
           "head": 2
-        },
-        {
-          "depth": 6,
-          "head": 3
         }
       ]
     },
@@ -1695,9 +2062,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 538,
       "weighted_before": [],
       "weighted_exact": [
@@ -1855,9 +2262,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 4,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 539,
       "weighted_before": [],
       "weighted_exact": [
@@ -2008,16 +2455,44 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 1,
       "target_position": 89,
-      "target_weighted_before_cells": 1,
+      "target_type_margin_weighted_before_cells": 1,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 1,
+      "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
-      "target_weighted_fitted_cells": 1,
-      "value": 540,
-      "weighted_before": [
+      "target_weighted_fitted_cells": 0,
+      "type_margin_weighted_before": [
         {
           "depth": 2,
           "head": 2
         }
       ],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        }
+      ],
+      "value": 540,
+      "weighted_before": [],
       "weighted_exact": [
         {
           "depth": 2,
@@ -2036,12 +2511,7 @@
           "head": 3
         }
       ],
-      "weighted_fitted": [
-        {
-          "depth": 2,
-          "head": 2
-        }
-      ]
+      "weighted_fitted": []
     },
     {
       "ask_cells": 4,
@@ -2144,9 +2614,32 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 0,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 0,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 0,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [],
       "value": 541,
       "weighted_before": [],
       "weighted_exact": [
@@ -2287,9 +2780,49 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 4,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 4,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
-      "target_weighted_fitted_cells": 4,
+      "target_weighted_fitted_cells": 0,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
       "value": 542,
       "weighted_before": [],
       "weighted_exact": [
@@ -2310,24 +2843,7 @@
           "head": 3
         }
       ],
-      "weighted_fitted": [
-        {
-          "depth": 2,
-          "head": 2
-        },
-        {
-          "depth": 2,
-          "head": 3
-        },
-        {
-          "depth": 6,
-          "head": 2
-        },
-        {
-          "depth": 6,
-          "head": 3
-        }
-      ]
+      "weighted_fitted": []
     },
     {
       "ask_cells": 4,
@@ -2430,9 +2946,32 @@
       "target_kept_exact_cells": 4,
       "target_kept_fitted_cells": 0,
       "target_position": 89,
+      "target_type_margin_weighted_before_cells": 0,
+      "target_type_margin_weighted_exact_cells": 4,
+      "target_type_margin_weighted_fitted_cells": 0,
       "target_weighted_before_cells": 0,
       "target_weighted_exact_cells": 4,
       "target_weighted_fitted_cells": 0,
+      "type_margin_weighted_before": [],
+      "type_margin_weighted_exact": [
+        {
+          "depth": 2,
+          "head": 2
+        },
+        {
+          "depth": 2,
+          "head": 3
+        },
+        {
+          "depth": 6,
+          "head": 2
+        },
+        {
+          "depth": 6,
+          "head": 3
+        }
+      ],
+      "type_margin_weighted_fitted": [],
       "value": 543,
       "weighted_before": [],
       "weighted_exact": [
@@ -2488,8 +3027,11 @@
     "target_kept_before_cells": 2,
     "target_kept_exact_cells": 64,
     "target_kept_fitted_cells": 48,
-    "target_weighted_before_cells": 2,
+    "target_type_margin_weighted_before_cells": 2,
+    "target_type_margin_weighted_exact_cells": 64,
+    "target_type_margin_weighted_fitted_cells": 48,
+    "target_weighted_before_cells": 0,
     "target_weighted_exact_cells": 64,
-    "target_weighted_fitted_cells": 48
+    "target_weighted_fitted_cells": 40
   }
 }

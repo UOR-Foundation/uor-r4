@@ -16,7 +16,7 @@
   "admitted_cumulative_projection_seconds": 103967.677487699,
   "lab_cumulative_projection_seconds": 103967.677487699,
   "projection": {
-    "measured_probe_seconds": 0.03,
+    "measured_probe_seconds": 0.04,
     "builds_and_tests_allowance_seconds": 600,
     "review_and_delivery_allowance_seconds": 300,
     "retry_and_setup_allowance_seconds": 899.96,
@@ -26,23 +26,23 @@
     "seed_runs": 2,
     "determinism_repeats": 2,
     "rayon_threads_per_run": 16,
-    "max_peak_rss_kib": 8944,
-    "probe_seconds": 0.03,
+    "max_peak_rss_kib": 9008,
+    "probe_seconds": 0.04,
     "relation_fits": 32,
     "fit_evaluations": 166400
   },
   "artifacts": {
     "seed_1_model_uorlut": "86e51d5ee2c00a4041bcde4d2183884e351099f28f155fb1e6a7516f13064dfe",
     "seed_2_model_uorlut": "8838cd1044ae7152934d8ec09016e268f2dabb0c702dd45e6ab06d7b5198bdae",
-    "ask_head_oracle_binary": "4547e619d54c393f3176d86c14c67486139ba216e0c79c63450824b8611deeae",
-    "seed_1_report": "3176ccb6eda4d4cbb90a334891f023b607f65e92c215fad0bd2586a7c30e98b2",
-    "seed_2_report": "6583fa663c5f6c63736b7ad16da534ce4d5ffbfa1eb2c72927ec7f554cd5d18e"
+    "ask_head_oracle_binary": "1620773790737878288e753900ae1e808553cc9820ebd6326c6a352b2de449db",
+    "seed_1_report": "d72f2d0313954752d60d38b32b44ba873e094b5fc53d6612c92034dbd434ca33",
+    "seed_2_report": "61f9dd0e56e9e4d7d5fa4478db9356344303cc97e386e78c6ca149b4f4df4484"
   },
   "storage": {
-    "local_evidence_and_inputs_bytes": 570889217,
-    "tracked_evidence_bytes": 91508,
-    "build_target_bytes": 6309592304,
-    "free_bytes_at_measurement": 155573735424,
+    "local_evidence_and_inputs_bytes": 571094941,
+    "tracked_evidence_bytes": 114216,
+    "build_target_bytes": 6598323559,
+    "free_bytes_at_measurement": 155292557312,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
