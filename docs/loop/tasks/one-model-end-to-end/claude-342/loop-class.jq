@@ -34,5 +34,9 @@ def onset($ids; $p):
     period_1: ($l | map(select(.p == 1)) | length),
     period_2: ($l | map(select(.p == 2)) | length),
     period_3_to_8: ($l | map(select(.p >= 3)) | length),
-    median_onset: (if ($l | length) > 0 then ($l | map(.onset) | sort | .[length / 2 | floor]) else null end)
+    median_onset: (if ($l | length) > 0 then ($l | map(.onset) | sort | .[length / 2 | floor]) else null end),
+    onset_at_most_5: ($l | map(select(.onset <= 5)) | length),
+    onset_max: ($l | map(.onset) | max),
+    no_stop: ($r | map(select(.stop != "eos")) | length),
+    looping_that_stopped: ($l | map(select(.stop == "eos")) | length)
   }

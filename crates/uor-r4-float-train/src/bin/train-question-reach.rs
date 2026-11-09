@@ -371,6 +371,35 @@ mod tests {
     }
 
     #[test]
+    fn a_reply_first_row_sits_on_both_sides_of_a_reach() {
+        // Questions of 2, 3 and 1 words, one scored row each: their first words are 8, 9, 7 back.
+        let mut tokens = Vec::new();
+        for words in [&[8u16, 8][..], &[8, 8, 8], &[8]] {
+            tokens.push(0);
+            tokens.extend(turn(words));
+            tokens.push(9);
+        }
+        let mask: Vec<u8> = tokens
+            .iter()
+            .enumerate()
+            .map(|(row, _)| u8::from(tokens.get(row + 1).is_none_or(|&next| next == 0)))
+            .collect();
+        let reach = count(&tokens, &mask, 0).unwrap();
+        assert_eq!(reach.replies_not_placed, 0);
+        assert_eq!(reach.asked_first.rows, 3);
+        // Reach 8 holds the rows 8 and 7 back and not the one 9 back.
+        assert_eq!(reach.asked_first.start[1], 2);
+        assert_eq!(
+            (
+                reach.asked_lengths[1],
+                reach.asked_lengths[2],
+                reach.asked_lengths[3]
+            ),
+            (1, 1, 1)
+        );
+    }
+
+    #[test]
     fn a_header_straight_after_user_has_no_question_to_place() {
         let mut tokens = vec![0];
         tokens.extend(turn(&[]));
