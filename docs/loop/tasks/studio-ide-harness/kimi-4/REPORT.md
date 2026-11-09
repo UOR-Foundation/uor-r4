@@ -36,7 +36,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 ## Checks run at the head
 
 - At ec49, `CARGO_TARGET_DIR="$PWD/target/cowork-tests" cargo test --manifest-path src-tauri/Cargo.toml` passed default **11/3/21/4/7/13/8** and, with `--features gui`, **13/3/25/4/8/13/9**. `full-gates.log` is **11/11 GREEN**.
-- `npm test --prefix web/studio` passed **442/442** before the two new lifecycle regressions; `kimi-5` passes **444/444**. TypeScript and Vite build PASS. `node --test web/studio/assets/js/*.test.mjs` passes **113/113**. `npm run test:e2e --prefix web/studio` passes **45/45**. Launcher, worker/page/static/runtime, desktop and **7/7** WASM checks pass.
+- `npm test --prefix web/studio` passed **442/442** before the two new lifecycle regressions; `kimi-5` passes **445/445**. TypeScript and Vite build PASS. `node --test web/studio/assets/js/*.test.mjs` passes **113/113**. `npm run test:e2e --prefix web/studio` passes **45/45**. Launcher, worker/page/static/runtime, desktop and **7/7** WASM checks pass.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS.
 - The ec49 clean loopback and interactive PTY passed with exact identities. The ec49 native acceptance returned `NATIVE_FINAL`, exact fixture cwd, `ANSWER:fixture-answer`, `stty size` = **24 80**, and exit 0, then cancelled a distinct second-shell approval with no new shell. Executable SHA-256 `07b5c67ffc5f92a8cb0794dc736bd5acc3094d9570508c29eeb0b4499fffaf45`; see `local/kimi/harness-parity/ec49e32b4d5af2f12cd6b84328584336c6b182ba/native-acceptance.md`. [kimi-5](../kimi-5/REPORT.md) owns the new lifecycle repair and its candidate checks.
 
