@@ -33,7 +33,7 @@
 
 **Files:**
 - Create: `docs/loop/tasks/studio-ide-harness/kimi-16/ORDER.md`, `docs/loop/tasks/studio-ide-harness/kimi-16/REPORT.md`, `docs/superpowers/plans/2026-11-09-studio-default-cutover.md`.
-- Modify: `web/studio/index.html`, `web/studio/vite.config.ts`, `web/studio/src/bootstrap.ts`, `web/studio/src/bootstrap.test.ts`, `web/studio/src/viteConfig.test.ts`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, `web/studio/README.md`.
+- Modify: `web/studio/index.html`, `web/studio/vite.config.ts`, `web/studio/src/bootstrap.ts`, `web/studio/src/bootstrap.test.ts`, `web/studio/src/main.test.ts`, `web/studio/src/viteConfig.test.ts`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, `web/studio/README.md`.
 - Modify after actual publication: `docs/integration/current-state.md`, `docs/products/web-client.md`, `docs/products/harness-parity.md`, `docs/research/notebook/m4-serving.md`, `docs/roadmap/items/studio-ide-harness.md`, `docs/roadmap/items/studio-typed-shell-upgrade.md`.
 
 **Interfaces:**
