@@ -7,8 +7,8 @@
 use serde::{Deserialize, Serialize};
 use uor_r4_integer::bitcode::popcount_swar;
 use uor_r4_integer::stack::{
-    copy_weight_q31, AskImage, HammingImage, HammingReadImage, StackHamming, COPY_MEAN_EXP,
-    HAMMING_WEIGHT_EXP,
+    AskImage, COPY_MEAN_EXP, HAMMING_WEIGHT_EXP, HammingImage, HammingReadImage, StackHamming,
+    copy_weight_q31,
 };
 
 const RESIDUAL_EXP: i32 = -16;
@@ -808,20 +808,21 @@ mod tests {
                 carry: Some((4, gains.clone())),
             }),
         };
-        let tokens = [1, 2, 3, 4];
+        let tokens = [1, 2, 3, 4, 2, 3];
         let asked = |token: u32, coordinate: usize| {
             let at = token as usize * width + coordinate;
             i64::from(table[at]) + i64::from(ask_table[at])
         };
-        let without = types.asked_point(&table, &tokens, 3, false).unwrap();
-        let with = types.asked_point(&table, &tokens, 3, true).unwrap();
+        let last = tokens.len() - 1;
+        let without = types.asked_point(&table, &tokens, last, false).unwrap();
+        let with = types.asked_point(&table, &tokens, last, true).unwrap();
         for coordinate in 0..width {
-            let mut expected = asked(4, coordinate) << 16;
-            for lag in 1..=3 {
-                expected +=
-                    i64::from(gains[tokens[3 - lag] as usize]) * asked(tokens[3 - lag], coordinate);
+            let mut expected = asked(tokens[last], coordinate) << 16;
+            for lag in 1..=4 {
+                expected += i64::from(gains[tokens[last - lag] as usize])
+                    * asked(tokens[last - lag], coordinate);
             }
-            assert_eq!(without[coordinate], asked(4, coordinate) << 16);
+            assert_eq!(without[coordinate], asked(tokens[last], coordinate) << 16);
             assert_eq!(with[coordinate], expected);
         }
     }

@@ -1,6 +1,6 @@
 # ORDER: cpu-training-pilot, deepseek-261 (CPU Hamming ask and carry)
 
-Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3472). Base: `5643a45c5`.
+Lab: deepseek. Item: [cpu-training-pilot](../../../../roadmap/items/cpu-training-pilot.md) (#3506). Base: `5643a45c5`.
 
 ## Goal
 
