@@ -44,6 +44,10 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - `python3 scripts/audit_zero_matmul_wasm.py web/studio/pkg/uor_r4_integer_bg.wasm --serving --call-graph --tap`: 7/7.
 - `CARGO_TARGET_DIR=<generated-target> cargo tauri build --bundles app --features gui`: pass; packaged contract passes. Code-signature verification is not claimed as noted above.
 
+## Skills used
+
+Owner-reviewed planning, isolated worktrees, red-first component/browser repairs, systematic build/native diagnosis, responsive and accessibility guidance, and verification before completion. Playwright supplies browser acceptance; a fresh exact-head delivery review remains required before merge.
+
 ## Modern Web Guidance
 
 - **`css-layout`**: I used grid for the workbench skeleton, flex for toolbars/panes, intrinsic tracks, and logical properties so the layout can reflow instead of relying on fixed panel sizes (“Reach for intrinsic sizing (`min-content`, `max-content`, `fit-content()`) and flexible tracks (`fr`, `minmax()`) before fixed `width`/`height`”).

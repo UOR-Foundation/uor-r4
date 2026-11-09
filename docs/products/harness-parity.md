@@ -37,7 +37,7 @@ Reference: [Claude Desktop](https://docs.anthropic.com/en/docs/claude-code/deskt
 | Session export/resume | Exact transcript, project, task, attachments, and event cursor survive restart | Existing session migration and worker parity remain covered | Full task/event resume NOT_RUN | NOT_RUN |
 | Static preview honesty | Static Pages clearly disables unsupported service/host actions and never claims full parity | Local dist explicitly marks browser/native/service-only controls unavailable; zero external requests in the existing runtime trap | Hosted GitHub Pages NOT_RUN | **PARTIAL (local static preview verified)** |
 | R4 model API integration | Merged Claude-owned API completes the streaming/tool-call contract with exact identities | NOT_RUN | NOT_RUN | NOT_RUN |
-| Packaged desktop | The complete matrix repeats in the unsigned development Tauri app | Packaged resource contract passes; fresh native window acceptance remains separately gated | Fresh cowork-identity native window NOT_RUN | NOT_RUN |
+| Packaged desktop | The complete matrix repeats in the unsigned development Tauri app | Packaged resource contract passes; cowork identity and GUI symbols verified | `local/kimi/harness-parity/native-agent.jpg` and `native-split.jpg`: Workspace, Split, and New session pass in the unsigned development app; complete native matrix NOT_RUN | **PARTIAL (development native shell only)** |
 | Hosted production | The reviewed shell and service are verified at their public/owner-provided endpoints | NOT_RUN | NOT_RUN | NOT_RUN |
 
 ## Acceptance accounting
