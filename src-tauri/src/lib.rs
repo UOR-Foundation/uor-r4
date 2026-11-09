@@ -1391,7 +1391,19 @@ fn run_bounded_process(
             }
         }
     }
-    let mut exited = child
+    if readers_disconnected && !killed {
+        while child
+            .try_wait()
+            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+            .is_none()
+        {
+            if Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+    let exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
@@ -1845,6 +1857,29 @@ mod bounded_process_tests {
             .expect("output cap must terminate without a timeout claim");
         assert!(output.truncated, "output cap was not reported");
         assert!(!output.timed_out, "output cap was mislabeled as a timeout");
+    }
+
+    #[test]
+    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg("exec 1>&- 2>&-; sleep 0.1; exit 0");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
+            .expect("closed pipes before normal exit must remain bounded");
+        assert!(
+            !output.timed_out,
+            "normal exit after closing pipes was mislabeled as a timeout"
+        );
+        assert!(output.status.success());
+    }
+
+    #[test]
+    fn closed_pipes_with_a_live_child_still_time_out() {
+        let mut command = Command::new("/bin/sh");
+        command.arg("-c").arg("exec 1>&- 2>&-; sleep 5");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+            .expect("closed pipes must not hide a live-child timeout");
+        assert!(output.timed_out);
+        assert!(!output.status.success());
     }
 }
 
