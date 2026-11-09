@@ -50,9 +50,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   full-path download layout, and a compact report. No checkpoint,
   tarball, generated model artifact or executable is committed.
 - No float-training, carry, serving, schema, GPU or other-lab file changed.
-- Size: `pr-check` reports 11 changed paths: code 4 files `+1,011/-0`,
-  documentation 4 files `+268/-0`, and other text evidence 3 files `+797/-0`
-  (`+2,076/-0` total). The ORDER gave no line estimate.
+- Size: `pr-check` reports 13 changed paths: code 4 files `+1,082/-0`,
+  documentation 6 files `+395/-0`, and other text evidence 3 files `+805/-0`
+  (`+2,282/-0` total). The ORDER gave no line estimate.
 
 ## Measurements
 
