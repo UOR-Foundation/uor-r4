@@ -49,6 +49,9 @@ impl HttpFixture {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         stream
+                            .set_nonblocking(false)
+                            .expect("blocking fixture stream");
+                        stream
                             .set_read_timeout(Some(Duration::from_secs(1)))
                             .expect("fixture read timeout");
                         let mut raw = Vec::new();
@@ -82,7 +85,15 @@ impl HttpFixture {
                                 }
                             }
                         }
-                        let split = header_end.unwrap_or(raw.len());
+                        let complete = header_end
+                            .is_some_and(|split| raw.len() >= split.saturating_add(content_length));
+                        if !complete {
+                            stream
+                                .write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                                .expect("write incomplete-request refusal");
+                            continue;
+                        }
+                        let split = header_end.expect("complete request headers");
                         let head = String::from_utf8_lossy(&raw[..split]).into_owned();
                         let body = &raw
                             [split..split + content_length.min(raw.len().saturating_sub(split))];
@@ -108,7 +119,7 @@ impl HttpFixture {
                                 headers: headers.clone(),
                                 body: message.clone(),
                             });
-                        if options.delay_ms > 0 {
+                        if options.delay_ms > 0 && message["method"] == "tools/call" {
                             std::thread::sleep(Duration::from_millis(options.delay_ms));
                         }
                         if headers.get("authorization").map(String::as_str) != Some("Bearer secret")
@@ -295,8 +306,11 @@ fn remote_auth_timeout_and_size_caps_fail_explicitly() {
         timeout: Duration::from_millis(15),
         ..McpLimits::default()
     };
-    let error =
-        McpRemoteSession::connect(&slow.url, "secret", short).expect_err("timeout must fail");
+    let session = McpRemoteSession::connect(&slow.url, "secret", short)
+        .expect("ordinary initialize and notification complete before the hanging tool call");
+    let error = session
+        .call_tool("read_file", &json!({}))
+        .expect_err("hanging tool call must time out");
     assert!(error.contains("timed out"), "{error}");
     drop(slow);
 
