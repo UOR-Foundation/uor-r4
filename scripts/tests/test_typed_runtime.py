@@ -56,6 +56,11 @@ class TypedRuntimeContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('typed: web/studio/dist', result.stdout)
 
+    def test_cowork_identity_separates_recovered_workbench_state(self):
+        config = (REPO / 'src-tauri/tauri.conf.json').read_text(encoding='utf-8')
+        self.assertIn('"identifier": "org.uor.r4.desktop.cowork"', config)
+        self.assertNotIn('"identifier": "org.uor.r4.desktop"', config)
+
 
 if __name__ == '__main__':
     unittest.main()
