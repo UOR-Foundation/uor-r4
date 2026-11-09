@@ -52,6 +52,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - `docs/research/notebook/float-training.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
 - `docs/labs/one-model-end-to-end/**` (only if an instrument check needs a change)
+- `crates/uor-r4-float-train/src/{fbs_export.rs,in_space_long.rs}` (added 9 Nov for the ask-range repair, the sheet's row 0a)
 
 ## Done when
 
