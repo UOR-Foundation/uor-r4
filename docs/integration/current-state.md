@@ -1,3 +1,7 @@
+## 2026-11-08 — Neutral cowork workbench recovered in browser and native app (kimi)
+
+The rejected green Studio placeholder is replaced by a neutral Claude-desktop-inspired workbench: project/session navigation, environment/project/permission/model controls, compact transcript/composer, collapsible context/build tasks, and real pane switching/splitting with light/dark responsive layouts. The new `org.uor.r4.desktop.cowork` identity separates the recovered app from the rejected installation's saved state. `cargo tauri build --bundles app --features gui` is required; the default headless build is not desktop evidence. Browser acceptance is 43/43, typed 441/441, plain-JS 113/113, offline worker/WASM checks pass, and native Workspace/Split/New session interactions pass. This is development-shell evidence only: full agent/runtime parity, the R4 model API integration, signed release, production publication, and useful conversation remain unverified. [Report](../loop/tasks/studio-ide-harness/kimi-2/REPORT.md).
+
 ## 2026-11-06 — Reference-free closure stops on sparse candidate power (deepseek)
 
 A label-free closure rule chose the earliest complete branch with no deeper

@@ -7,6 +7,12 @@ integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) runn
 Worker. It is served from the project's documentation site at **`/studio/`**
 (<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `eb832431a`; `233b97fb9` was the previous publish.
 
+### Neutral cowork workbench recovery (8 November 2026)
+
+The typed Studio now uses a neutral Claude-desktop-inspired workbench rather than the rejected green placeholder: project/session navigation, environment/project/permission/model controls, compact transcript and composer, collapsible context/build tasks, and real chat/editor/diff/terminal/browser panes with an accessible splitter. Mobile uses a project drawer and a secondary-view transition rather than hiding split content. Light and dark themes work at 1440×900 and 390×852; all 43 combined Playwright checks pass, alongside 441 typed tests and 113 plain-JS tests. Browser preview remains explicitly service-dependent and does not simulate support.
+
+The recovered native app uses the separate `org.uor.r4.desktop.cowork` identity so it cannot inherit the rejected app's restored state. Build it with `CARGO_TARGET_DIR=<generated-target> cargo tauri build --bundles app --features gui`; omitting `--features gui` produces a headless executable, not a verified desktop app. Packaged resource checks pass, and native Workspace, Split, and New session interactions were exercised. This is development-shell evidence, not full Cowork parity, a signed release, a production publish, useful conversation, or an R4 API integration result.
+
 ### Conversation-first Studio and native runner (4 November 2026)
 
 The source now opens into one quiet dark conversation column instead of the former panel-heavy IDE. First run automatically loads the bundled synthetic demo; the empty state offers working offline-demo, model-choice and native-setup actions. Connections, Workspace, sessions and diagnostics remain available outside the main chat flow. System typography, rounded message bubbles, a floating composer, mobile-safe 16px input text and compact phone controls are covered by browser inspection at 1440×900 and 390×852 plus focused regressions. Enter/Shift+Enter, IME-safe submission, ArrowUp/Down history, long pastes, attachments, image decomposition and exact metrics retain their existing paths.
