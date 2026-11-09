@@ -12,12 +12,18 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   the objective, candidate construction, sidecar and audit path; it is not
   evidence of learned generalization.
 - The release control uses synthetic identity rotations and a deterministic
-  two-target corpus. Its 47 ms wall measures local search throughput only, not
+  two-target corpus. Its 44 ms wall measures local search throughput only, not
   quality on a trained checkpoint.
 - The first validation pass covered malformed pull corpora but did not yet pin
   the malformed and non-finite checkpoint cases required by this order. Those
   controls, deterministic metadata serialization and output-path collision
   refusal were added before delivery.
+- Fresh exact-head review then found four material gaps: two-file output was not
+  transactional under failures, custom pull corpora were identified only by
+  path, the evaluation cap omitted candidate scoring, and the accepted
+  checkpoint inventory was only the subset needed by this solver. A public
+  helper also had unchecked token addition. All four are repaired and covered
+  by tests at this head.
 - Repository-wide `cargo fmt --all -- --check` is already red across many
   untouched files. The two new Rust files and their edited module are
   targeted-format clean; this unit did not reformat unrelated code.
@@ -32,7 +38,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   `d{depth}.key_rotation`; it needs no trunk forward.
 - The default corpus is the fixed B2 relation map `key -> key + 16`, tokens
   `16..32` to `32..48`. An optional weighted JSON corpus accepts repeated and
-  multiple targets per question.
+  multiple targets per question. Its raw bytes are SHA-256 bound in the report;
+  `--expected-pulls-sha256` can require a pre-registered value.
 - For each question/depth, candidates are the zero offset, every distinct
   exact target offset and a weighted coordinate median. Up to four best starts
   run a deterministic coordinate search at steps
@@ -41,49 +48,64 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   the heads after `hamilton_gate_f32` rotation and sign packing. There is no
   dense matrix multiplication or softmax in this path.
 - Independent question/depth cells run through the existing Rayon pool.
-  Source-order collection produces stable readings and tensor order.
+  Ordered parallel collection and explicit sorting produce stable readings;
+  tensor names are sorted before serialization.
+- `--max-evaluations` now bounds every objective call per question/depth. A
+  reading records candidate, coordinate and total objective evaluations,
+  search starts and whether the budget stopped candidate selection or search.
 - The output is a new complete `hamming_read.safetensors`: all original
   tensors and metadata are preserved, existing ask tables are replaced and
   every solved depth receives a full F32 `(vocab,width)` ask table. Safetensors
   header metadata is canonicalized for deterministic fresh-process bytes.
-- Both input files are SHA-256 pinned. Empty or zero-weight pulls, out-of-vocab
-  tokens, bad shapes, invalid head geometry, partial depths, finite overflow,
-  non-finite values, type-spin mixing, output replacement and colliding output
-  paths fail closed.
+- The checkpoint reader now requires the complete Claude-330 per-depth
+  query/key/value rotations, margins and weights, plus valid scalar or mixed
+  copy keys. Empty or zero-weight pulls, out-of-vocab tokens, bad shapes,
+  invalid head geometry, partial depths, checked-overflow failures, non-finite
+  values, type-spin mixing and invalid copy-key records fail closed.
+- Output names are normalized through their real parent directories so aliases
+  collide before solving. Candidate and report bytes are written to synced
+  sibling temporaries and promoted without replacement. If the second
+  promotion fails, the first promoted output is removed.
 - The CLI reopens the candidate with `TrainedAskOffsets`, audits the fixed B2
-  relation map and writes candidate/report hashes plus per-cell
+  relation map, independently re-audits every selected pull from the serialized
+  candidate and writes candidate/report hashes plus per-cell
   zero/solved/improvement readings.
 - No serving, artifact-schema, training-default, GPU or Claude-owned file was
   changed.
-- Size: `pr-check` reports 10 changed paths: code 4 files `+1,399/-0`,
-  documentation 3 files `+217/-0`, and other/evidence 3 files `+545/-0`
-  (`+2,161/-0` total including this final REPORT revision). The ORDER gave no
-  line estimate. Inline unit tests are counted in the code class.
+- Size: `pr-check` reports 11 changed paths: code 4 files `+1,977/-0`,
+  documentation 3 files `+241/-0`, and other/evidence/claim files 4 files
+  `+1,026/-0` (`+3,244/-0` total). The ORDER gave no line estimate. Inline unit
+  tests are counted in the code class.
 
 ## Measurements
 
 The retained synthetic checkpoint has 64 tokens, width 8, two Hamming depths
 and one copy/ask head pair. Over 16 questions and two depths it reduced total
-weighted search bits from **8 to 0**, improved **2/32** readings and used **32**
-counted search evaluations. The existing audit then measured **32/32** exact
+weighted search bits from **8 to 0**, improved **2/32** readings and used **96**
+total objective evaluations, all during candidate selection; no cell exhausted
+its budget. The selected-corpus audit reproduced the same 8-to-0 result across
+all 32 readings. The existing relation audit then measured **32/32** exact
 codes and **32/32** target-nearest cells, versus **30/32** target-nearest for
 the zero offsets. A fresh-output repeat was byte-identical.
 
 - Synthetic report SHA-256:
-  `c074fc98bf85fd1345e3fa0fa27391e34ddf62c685e68641297c2e25e788ef2f`
+  `dbcb43538888810d52aad1386c86e519501cf6200dbe047f6aaf0c1f8ccdb2e8`
 - Candidate Hamming sidecar SHA-256:
-  `bbe3df9be314b1e41675a8900e793b592f07a87ff7402f5f0987d17edc08b0f7`
+  `ac67ea16710d09d8d98c0391ab549f166f93304c40a401f2f1a7350d42929d35`
 - Synthetic model input SHA-256:
   `2a7a8ed21c2a3b5d07c3a4c9e2a35a30c53fa91f0c261bb8da18fde546b49549`
 - Synthetic Hamming input SHA-256:
-  `f553318d6491bbf33e2910507500aae096ddd825b7ef5068b37f8fe8e89a3f90`
+  `ae901772f76ed6ee3a0d5b19cd4775d315ff283c905ff8778b3abb5c73e581c7`
+- Default pull corpus SHA-256:
+  `5b0b129803110a3efb90d063ca6c84bcdc9ac6ac0079ad2ccf733a09c61a80e0`
 - Binary SHA-256 recorded by the retained report:
-  `bd204cbc928dc5b05b67a522458c41c202a541580fe321484ab6c4f3c7d6dd8a`
+  `3228f4997e9e6f4a1eae31a581ba086b2fa6f88d345444226e871c25fa58adb7`
 
 The isolated release control used width 256, two depths, 16 questions and two
-targets per question. It completed **393,312** counted evaluations in **47 ms**
-across 16 workers. This is a throughput measurement, not a trained-model or
-capability result.
+targets per question. It completed **393,344** total objective evaluations in
+**44 ms** across 16 workers, with no exhausted cell. Maximum resident set size
+was 56,736 KiB for the benchmark and 236,160 KiB for the evidence test. This is
+a throughput measurement, not a trained-model or capability result.
 
 Resources are recorded in the
 [D84 ledger](../../../../labs/cpu-training-pilot-ask-offset-solver-2026-11-09/resource-ledger.json).
@@ -93,21 +115,23 @@ projection gives `107,567.677487699 s`.
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib ask_offset_solver::tests
-  -- --skip release_width_256_two_depth_solver_benchmark`: 5 passed.
+  -- --skip release_width_256_two_depth_solver_benchmark`: 7 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-ask-offset-solver`: 3 passed.
-- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 470 passed,
+  cpu-ask-offset-solver`: 4 passed.
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 472 passed,
   5 ignored.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `RAYON_NUM_THREADS=16 cargo test --release --offline --locked -p
   uor-r4-cpu-train --lib release_width_256_two_depth_solver_benchmark --
-  --ignored --nocapture`: passed at 393,312 evaluations and 47 ms.
+  --ignored --nocapture`: passed at 393,344 total evaluations and 44 ms.
 - The evidence-retaining binary test described above reproduced the retained
-  report and candidate sidecar in 6.04 s.
+  report and candidate sidecar in 5.90 s, peak RSS 236,160 KiB.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
   cpu-ask-offset-solver`: passed with only pre-existing warnings in untouched
   files.
 - Targeted `rustfmt --check` and `git diff --check`: passed.
+- `uor-harness loop report --check`, `loop pr-check --local` and
+  `loop gates --full`: passed.
 - `cargo fmt --all -- --check`: failed on pre-existing formatting outside this
   unit.
 

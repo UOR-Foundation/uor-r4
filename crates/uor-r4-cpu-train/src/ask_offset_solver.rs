@@ -43,14 +43,41 @@ pub struct AskOffsetSolveReading {
     pub zero_weighted_bits: u64,
     pub solved_weighted_bits: u64,
     pub improvement_bits: u64,
-    pub evaluations: u64,
+    pub candidate_evaluations: u64,
+    pub coordinate_evaluations: u64,
+    pub total_evaluations: u64,
+    pub search_starts: u64,
+    pub budget_exhausted: bool,
     pub offset_changed_coordinates: usize,
     pub offset_abs_sum_q16: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AskCorpusAuditReading {
+    pub question: u32,
+    pub depth: usize,
+    pub pulls: usize,
+    pub pull_weight: u64,
+    pub target_keys: usize,
+    pub zero_weighted_bits: u64,
+    pub candidate_weighted_bits: u64,
+    pub improvement_bits: u64,
 }
 
 pub struct SolvedAskOffsets {
     pub hamming_bytes: Vec<u8>,
     pub readings: Vec<AskOffsetSolveReading>,
+}
+
+struct SolvedQuestion {
+    offset: Vec<f32>,
+    zero_bits: u64,
+    solved_bits: u64,
+    candidate_evaluations: u64,
+    coordinate_evaluations: u64,
+    search_starts: u64,
+    budget_exhausted: bool,
 }
 
 #[derive(Clone)]
@@ -90,17 +117,23 @@ impl AskPullCorpus {
         Ok(corpus)
     }
 
-    pub fn b2_relations(relations: Range<u32>, query_shift: u32) -> Self {
-        Self {
-            schema: PULL_CORPUS_SCHEMA.to_owned(),
-            pulls: relations
-                .map(|key| AskPull {
-                    question: key + query_shift,
+    pub fn b2_relations(relations: Range<u32>, query_shift: u32) -> Result<Self, String> {
+        let pulls = relations
+            .map(|key| {
+                let question = key
+                    .checked_add(query_shift)
+                    .ok_or_else(|| format!("question token for key {key} overflows"))?;
+                Ok(AskPull {
+                    question,
                     key,
                     weight: 1,
                 })
-                .collect(),
-        }
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(Self {
+            schema: PULL_CORPUS_SCHEMA.to_owned(),
+            pulls,
+        })
     }
 
     fn validate(&self, vocab: usize) -> Result<(), String> {
@@ -182,14 +215,68 @@ impl AskOffsetSolveBasis {
 
         let mut reads = Vec::with_capacity(depths.len());
         for depth in depths {
-            let name = format!("d{depth}.key_rotation");
-            let rotation = hamming_tensors
-                .tensor(&name)
-                .map_err(|error| format!("{name}: {error}"))?;
+            for (part, shape) in [
+                ("query_rotation", vec![width]),
+                ("key_rotation", vec![width]),
+                ("value_rotation", vec![width]),
+                ("margin", vec![heads]),
+                ("weight", vec![2, width]),
+            ] {
+                let name = format!("d{depth}.{part}");
+                let tensor = hamming_tensors
+                    .tensor(&name)
+                    .map_err(|error| format!("{name}: {error}"))?;
+                f32_values(&tensor, &name, &shape)?;
+            }
+            let ask_name = format!("d{depth}.ask");
+            if hamming_tensors.names().contains(&ask_name.as_str()) {
+                let ask = hamming_tensors
+                    .tensor(&ask_name)
+                    .map_err(|error| format!("{ask_name}: {error}"))?;
+                f32_values(&ask, &ask_name, &[vocab, width])?;
+            }
+            let key_name = format!("d{depth}.key_rotation");
+            let key_rotation = hamming_tensors
+                .tensor(&key_name)
+                .map_err(|error| format!("{key_name}: {error}"))?;
             reads.push(SolveRead {
                 depth,
-                key_rotation: f32_values(&rotation, &name, &[width])?,
+                key_rotation: f32_values(&key_rotation, &key_name, &[width])?,
             });
+        }
+        let has_copy_key = hamming_tensors.names().contains(&"copy_key");
+        let has_copy_keys = hamming_tensors.names().contains(&"copy_keys");
+        if has_copy_key && has_copy_keys {
+            return Err("checkpoint records both copy_key and copy_keys".to_owned());
+        }
+        if has_copy_key {
+            let value = *u32_values(
+                &hamming_tensors
+                    .tensor("copy_key")
+                    .map_err(|error| format!("copy_key: {error}"))?,
+                "copy_key",
+                &[1],
+            )?
+            .first()
+            .ok_or_else(|| "copy_key is empty".to_owned())?;
+            if !matches!(value, 1 | 2) {
+                return Err(format!("copy_key {value} is not 1 or 2"));
+            }
+        }
+        if has_copy_keys {
+            let values = u32_values(
+                &hamming_tensors
+                    .tensor("copy_keys")
+                    .map_err(|error| format!("copy_keys: {error}"))?,
+                "copy_keys",
+                &[heads / 2],
+            )?;
+            if values.iter().any(|&value| !matches!(value, 1 | 2)) {
+                return Err("copy_keys carries a value other than 1 or 2".to_owned());
+            }
+            if values.windows(2).all(|pair| pair[0] == pair[1]) {
+                return Err("copy_keys is uniform; record a scalar copy_key".to_owned());
+            }
         }
 
         let mut names = hamming_tensors.names().to_vec();
@@ -247,34 +334,36 @@ impl AskOffsetSolveBasis {
         let cells = tasks
             .into_par_iter()
             .map(|(read_index, read, question, pulls)| {
-                let (offset, evaluations, zero_bits, solved_bits) =
+                let solved =
                     self.solve_question(read, question, pulls, max_evaluations_per_cell)?;
                 let offset_changed_coordinates =
-                    offset.iter().filter(|&&value| value != 0.0).count();
-                let offset_abs_sum_q16 = offset_abs_sum_q16(&offset)?;
+                    solved.offset.iter().filter(|&&value| value != 0.0).count();
+                let offset_abs_sum_q16 = offset_abs_sum_q16(&solved.offset)?;
                 Ok((
                     read_index,
                     question,
-                    offset,
+                    solved.offset,
                     AskOffsetSolveReading {
                         question,
                         depth: read.depth,
                         pulls: pulls.len(),
-                        pull_weight: pulls
-                            .iter()
-                            .try_fold(0u64, |total, pull| {
-                                total.checked_add(u64::from(pull.weight))
-                            })
-                            .ok_or_else(|| "pull weight total overflows".to_owned())?,
+                        pull_weight: pull_weight(pulls)?,
                         target_keys: pulls
                             .iter()
                             .map(|pull| pull.key)
                             .collect::<BTreeSet<_>>()
                             .len(),
-                        zero_weighted_bits: zero_bits,
-                        solved_weighted_bits: solved_bits,
-                        improvement_bits: zero_bits.saturating_sub(solved_bits),
-                        evaluations,
+                        zero_weighted_bits: solved.zero_bits,
+                        solved_weighted_bits: solved.solved_bits,
+                        improvement_bits: solved.zero_bits.saturating_sub(solved.solved_bits),
+                        candidate_evaluations: solved.candidate_evaluations,
+                        coordinate_evaluations: solved.coordinate_evaluations,
+                        total_evaluations: solved
+                            .candidate_evaluations
+                            .checked_add(solved.coordinate_evaluations)
+                            .ok_or_else(|| "evaluation total overflows".to_owned())?,
+                        search_starts: solved.search_starts,
+                        budget_exhausted: solved.budget_exhausted,
                         offset_changed_coordinates,
                         offset_abs_sum_q16,
                     },
@@ -303,18 +392,100 @@ impl AskOffsetSolveBasis {
         })
     }
 
+    pub fn audit_candidate(
+        &self,
+        hamming: &[u8],
+        corpus: &AskPullCorpus,
+    ) -> Result<Vec<AskCorpusAuditReading>, String> {
+        corpus.validate(self.vocab)?;
+        let tensors =
+            SafeTensors::deserialize(hamming).map_err(|error| format!("hamming_read: {error}"))?;
+        let heads = *u32_values(
+            &tensors
+                .tensor("heads")
+                .map_err(|error| format!("heads: {error}"))?,
+            "heads",
+            &[1],
+        )?
+        .first()
+        .ok_or_else(|| "heads is empty".to_owned())? as usize;
+        if heads != self.heads {
+            return Err(format!(
+                "candidate heads {heads} differs from source heads {}",
+                self.heads
+            ));
+        }
+        let asks = self
+            .reads
+            .iter()
+            .map(|read| {
+                let name = format!("d{}.ask", read.depth);
+                let tensor = tensors
+                    .tensor(&name)
+                    .map_err(|error| format!("{name}: {error}"))?;
+                Ok((
+                    read.depth,
+                    f32_values(&tensor, &name, &[self.vocab, self.width])?,
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, String>>()?;
+        let mut groups: BTreeMap<u32, Vec<&AskPull>> = BTreeMap::new();
+        for pull in &corpus.pulls {
+            groups.entry(pull.question).or_default().push(pull);
+        }
+        let tasks = self
+            .reads
+            .iter()
+            .flat_map(|read| {
+                groups
+                    .iter()
+                    .map(move |(&question, pulls)| (read, question, pulls))
+            })
+            .collect::<Vec<_>>();
+        let mut readings = tasks
+            .into_par_iter()
+            .map(|(read, question, pulls)| {
+                let ask = asks
+                    .get(&read.depth)
+                    .ok_or_else(|| format!("depth {} ask table disappeared", read.depth))?;
+                let offset = &ask[question as usize * self.width..][..self.width];
+                let zero = vec![0.0f32; self.width];
+                let zero_bits = self.objective(read, question, &zero, pulls)?;
+                let candidate_bits = self.objective(read, question, offset, pulls)?;
+                Ok(AskCorpusAuditReading {
+                    question,
+                    depth: read.depth,
+                    pulls: pulls.len(),
+                    pull_weight: pull_weight(pulls)?,
+                    target_keys: pulls
+                        .iter()
+                        .map(|pull| pull.key)
+                        .collect::<BTreeSet<_>>()
+                        .len(),
+                    zero_weighted_bits: zero_bits,
+                    candidate_weighted_bits: candidate_bits,
+                    improvement_bits: zero_bits.saturating_sub(candidate_bits),
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        readings.sort_by_key(|reading| (reading.question, reading.depth));
+        Ok(readings)
+    }
+
     fn solve_question(
         &self,
         read: &SolveRead,
         question: u32,
         pulls: &[&AskPull],
         max_evaluations: u64,
-    ) -> Result<(Vec<f32>, u64, u64, u64), String> {
+    ) -> Result<SolvedQuestion, String> {
         let zero = vec![0.0f32; self.width];
+        let mut candidate_evaluations = 1;
         let zero_bits = self.objective(read, question, &zero, pulls)?;
         let question_point = self.table_row(question);
         let targets = pulls.iter().map(|pull| pull.key).collect::<BTreeSet<_>>();
-        let mut candidates = vec![zero.clone()];
+        let mut candidates = vec![(zero.clone(), zero_bits)];
+        let mut budget_exhausted = false;
         for key in &targets {
             let key_point = self.table_row(*key);
             let offset = question_point
@@ -323,30 +494,47 @@ impl AskOffsetSolveBasis {
                 .map(|(&question, &key)| key - question)
                 .collect::<Vec<_>>();
             ensure_finite(&offset, "exact candidate")?;
-            candidates.push(offset);
+            if candidate_evaluations >= max_evaluations {
+                budget_exhausted = true;
+                break;
+            }
+            let bits = self.objective(read, question, &offset, pulls)?;
+            candidate_evaluations += 1;
+            candidates.push((offset, bits));
         }
-        candidates.push(self.weighted_median_offset(question, pulls)?);
-        let mut candidates = candidates
-            .into_iter()
-            .map(|offset| {
+        if !budget_exhausted {
+            let offset = self.weighted_median_offset(question, pulls)?;
+            if candidate_evaluations >= max_evaluations {
+                budget_exhausted = true;
+            } else {
                 let bits = self.objective(read, question, &offset, pulls)?;
-                Ok((offset, bits))
-            })
-            .collect::<Result<Vec<_>, String>>()?;
+                candidate_evaluations += 1;
+                candidates.push((offset, bits));
+            }
+        }
         candidates
             .sort_by(|(a, a_bits), (b, b_bits)| a_bits.cmp(b_bits).then_with(|| offset_cmp(a, b)));
         candidates.dedup_by(|(a, _), (b, _)| a == b);
 
-        let mut evaluations = 0u64;
-        let mut best = zero.clone();
-        let mut best_bits = zero_bits;
+        let mut coordinate_evaluations = 0u64;
+        let mut search_starts = 0u64;
+        let (mut best, mut best_bits) = candidates
+            .first()
+            .cloned()
+            .ok_or_else(|| "candidate set is empty".to_owned())?;
         for (start, start_bits) in candidates.into_iter().take(4) {
-            if evaluations >= max_evaluations {
+            if budget_exhausted
+                || candidate_evaluations
+                    .checked_add(coordinate_evaluations)
+                    .ok_or_else(|| "evaluation total overflows".to_owned())?
+                    >= max_evaluations
+            {
+                budget_exhausted = true;
                 break;
             }
             let mut offset = start;
             let mut bits = start_bits;
-            evaluations += 1;
+            search_starts += 1;
             if bits == 0 {
                 best = offset;
                 best_bits = 0;
@@ -357,7 +545,12 @@ impl AskOffsetSolveBasis {
                     let mut improved = false;
                     for coordinate in 0..self.width {
                         for delta in [step, -step] {
-                            if evaluations >= max_evaluations {
+                            if candidate_evaluations
+                                .checked_add(coordinate_evaluations)
+                                .ok_or_else(|| "evaluation total overflows".to_owned())?
+                                >= max_evaluations
+                            {
+                                budget_exhausted = true;
                                 break;
                             }
                             let previous = offset[coordinate];
@@ -366,8 +559,8 @@ impl AskOffsetSolveBasis {
                                 continue;
                             }
                             offset[coordinate] = candidate;
-                            evaluations += 1;
                             let candidate_bits = self.objective(read, question, &offset, pulls)?;
+                            coordinate_evaluations += 1;
                             if candidate_bits < bits {
                                 bits = candidate_bits;
                                 improved = true;
@@ -376,7 +569,7 @@ impl AskOffsetSolveBasis {
                             }
                         }
                     }
-                    if !improved || evaluations >= max_evaluations {
+                    if !improved || budget_exhausted {
                         break;
                     }
                 }
@@ -386,7 +579,15 @@ impl AskOffsetSolveBasis {
                 best_bits = bits;
             }
         }
-        Ok((best, evaluations, zero_bits, best_bits))
+        Ok(SolvedQuestion {
+            offset: best,
+            zero_bits,
+            solved_bits: best_bits,
+            candidate_evaluations,
+            coordinate_evaluations,
+            search_starts,
+            budget_exhausted,
+        })
     }
 
     fn objective(
@@ -506,6 +707,15 @@ fn unit_weight() -> u32 {
     1
 }
 
+fn pull_weight(pulls: &[&AskPull]) -> Result<u64, String> {
+    pulls
+        .iter()
+        .try_fold(0u64, |total, pull| {
+            total.checked_add(u64::from(pull.weight))
+        })
+        .ok_or_else(|| "pull weight total overflows".to_owned())
+}
+
 fn f32_values(tensor: &TensorView<'_>, name: &str, shape: &[usize]) -> Result<Vec<f32>, String> {
     if tensor.dtype() != Dtype::F32 || tensor.shape() != shape {
         return Err(format!(
@@ -610,7 +820,8 @@ fn offset_cmp(a: &[f32], b: &[f32]) -> std::cmp::Ordering {
 fn offset_abs_sum_q16(offset: &[f32]) -> Result<u64, String> {
     offset.iter().try_fold(0u64, |sum, &value| {
         let q16 = (f64::from(value).abs() * 65_536.0).round();
-        if !q16.is_finite() || q16 > u64::MAX as f64 {
+        // `u64::MAX as f64` rounds up to 2^64, which is already exclusive.
+        if !q16.is_finite() || q16 >= 18_446_744_073_709_551_616.0 {
             return Err("ask offset magnitude is unrepresentable".to_owned());
         }
         sum.checked_add(q16 as u64)
@@ -631,17 +842,32 @@ mod tests {
     }
 
     fn tensor_file(tensors: Vec<(&str, Dtype, Vec<usize>, Vec<u8>)>) -> Vec<u8> {
-        tensor_file_with_metadata(tensors, None)
+        tensor_file_owned(
+            tensors
+                .into_iter()
+                .map(|(name, dtype, shape, data)| (name.to_owned(), dtype, shape, data))
+                .collect(),
+            None,
+        )
     }
 
     fn tensor_file_with_metadata(
         tensors: Vec<(&str, Dtype, Vec<usize>, Vec<u8>)>,
         metadata: Option<std::collections::HashMap<String, String>>,
     ) -> Vec<u8> {
-        let tensors = tensors
-            .into_iter()
-            .map(|(name, dtype, shape, data)| (name.to_owned(), dtype, shape, data))
-            .collect::<Vec<_>>();
+        tensor_file_owned(
+            tensors
+                .into_iter()
+                .map(|(name, dtype, shape, data)| (name.to_owned(), dtype, shape, data))
+                .collect(),
+            metadata,
+        )
+    }
+
+    fn tensor_file_owned(
+        tensors: Vec<(String, Dtype, Vec<usize>, Vec<u8>)>,
+        metadata: Option<std::collections::HashMap<String, String>>,
+    ) -> Vec<u8> {
         let views = tensors
             .iter()
             .map(|(name, dtype, shape, data)| {
@@ -654,6 +880,60 @@ mod tests {
         serialize(views, metadata).unwrap()
     }
 
+    fn complete_read_tensors(
+        width: usize,
+        heads: usize,
+        depths: &[usize],
+        vocab: usize,
+    ) -> Vec<(String, Dtype, Vec<usize>, Vec<u8>)> {
+        let rotation = (0..width / 4)
+            .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
+            .collect::<Vec<_>>();
+        depths
+            .iter()
+            .flat_map(|depth| {
+                [
+                    (
+                        format!("d{depth}.query_rotation"),
+                        Dtype::F32,
+                        vec![width],
+                        f32_bytes(&rotation),
+                    ),
+                    (
+                        format!("d{depth}.key_rotation"),
+                        Dtype::F32,
+                        vec![width],
+                        f32_bytes(&rotation),
+                    ),
+                    (
+                        format!("d{depth}.value_rotation"),
+                        Dtype::F32,
+                        vec![width],
+                        f32_bytes(&rotation),
+                    ),
+                    (
+                        format!("d{depth}.margin"),
+                        Dtype::F32,
+                        vec![heads],
+                        f32_bytes(&vec![2.0; heads]),
+                    ),
+                    (
+                        format!("d{depth}.weight"),
+                        Dtype::F32,
+                        vec![2, width],
+                        f32_bytes(&vec![0.0; 2 * width]),
+                    ),
+                ]
+            })
+            .chain([(
+                "d2.ask".to_owned(),
+                Dtype::F32,
+                vec![vocab, width],
+                f32_bytes(&vec![0.0; vocab * width]),
+            )])
+            .collect()
+    }
+
     fn fixture() -> (Vec<u8>, Vec<u8>, AskPullCorpus) {
         let (vocab, width) = (64usize, 8usize);
         let mut table = vec![1.0f32; vocab * width];
@@ -664,29 +944,14 @@ mod tests {
             vec![vocab, width],
             f32_bytes(&table),
         )]);
-        let rotation = (0..width / 4)
-            .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
-            .collect::<Vec<_>>();
-        let hamming = tensor_file(vec![
-            (
-                "heads",
-                Dtype::U32,
-                vec![1],
-                [2u32].into_iter().flat_map(u32::to_le_bytes).collect(),
-            ),
-            (
-                "d2.key_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-            (
-                "d6.key_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-        ]);
+        let mut tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            [2u32].into_iter().flat_map(u32::to_le_bytes).collect(),
+        )];
+        tensors.extend(complete_read_tensors(width, 2, &[2, 6], vocab));
+        let hamming = tensor_file_owned(tensors, None);
         let corpus = AskPullCorpus {
             schema: PULL_CORPUS_SCHEMA.to_owned(),
             pulls: vec![AskPull {
@@ -708,6 +973,21 @@ mod tests {
             assert_eq!(reading.zero_weighted_bits, 4);
             assert_eq!(reading.solved_weighted_bits, 0);
             assert_eq!(reading.improvement_bits, 4);
+            assert!(!reading.budget_exhausted);
+            assert!(reading.candidate_evaluations >= 3);
+            assert_eq!(
+                reading.total_evaluations,
+                reading.candidate_evaluations + reading.coordinate_evaluations
+            );
+        }
+        let corpus_audit = basis
+            .audit_candidate(&solved.hamming_bytes, &corpus)
+            .unwrap();
+        assert_eq!(corpus_audit.len(), 2);
+        for reading in &corpus_audit {
+            assert_eq!(reading.zero_weighted_bits, 4);
+            assert_eq!(reading.candidate_weighted_bits, 0);
+            assert_eq!(reading.improvement_bits, 4);
         }
         let parsed = TrainedAskOffsets::from_bytes(&model, &solved.hamming_bytes).unwrap();
         let audit = parsed.audit_relations(16..32, 16).unwrap();
@@ -718,10 +998,11 @@ mod tests {
     #[test]
     fn repeated_solve_is_byte_identical_and_multiple_targets_do_not_regress() {
         let (model, hamming, mut corpus) = fixture();
+        corpus.pulls[0].weight = 3;
         corpus.pulls.push(AskPull {
             question: 33,
             key: 18,
-            weight: 3,
+            weight: 1,
         });
         let basis = AskOffsetSolveBasis::from_bytes(&model, &hamming).unwrap();
         let first = basis.solve(&corpus, 20_000).unwrap();
@@ -731,7 +1012,7 @@ mod tests {
         assert!(limited
             .readings
             .iter()
-            .all(|reading| reading.evaluations <= 1));
+            .all(|reading| reading.total_evaluations == 1 && reading.budget_exhausted));
         assert!(basis.solve(&corpus, 0).is_err());
         assert!(first
             .readings
@@ -741,6 +1022,22 @@ mod tests {
             .readings
             .iter()
             .any(|reading| reading.target_keys == 2));
+        assert!(first
+            .readings
+            .iter()
+            .all(|reading| reading.zero_weighted_bits == 12));
+        assert!(first
+            .readings
+            .iter()
+            .all(|reading| reading.solved_weighted_bits == 4));
+        let corpus_audit = basis
+            .audit_candidate(&first.hamming_bytes, &corpus)
+            .unwrap();
+        assert!(corpus_audit.iter().all(|reading| {
+            reading.zero_weighted_bits == 12
+                && reading.candidate_weighted_bits == 4
+                && reading.improvement_bits == 8
+        }));
     }
 
     #[test]
@@ -777,6 +1074,24 @@ mod tests {
     }
 
     #[test]
+    fn relation_mapping_and_q16_overflow_are_refused() {
+        assert!(AskPullCorpus::b2_relations(u32::MAX - 1..u32::MAX, 2)
+            .unwrap_err()
+            .contains("overflows"));
+        assert_eq!(
+            AskPullCorpus::b2_relations(16..18, 16)
+                .unwrap()
+                .pulls
+                .iter()
+                .map(|pull| pull.question)
+                .collect::<Vec<_>>(),
+            vec![32, 33]
+        );
+        assert!(offset_abs_sum_q16(&[281_474_976_710_656.0]).is_err());
+        assert!(offset_abs_sum_q16(&[281_474_943_156_224.0]).is_ok());
+    }
+
+    #[test]
     fn malformed_and_nonfinite_checkpoints_are_refused() {
         let (vocab, width, heads) = (4usize, 8usize, 2usize);
         let table = vec![0.5f32; vocab * width];
@@ -786,19 +1101,20 @@ mod tests {
             vec![vocab, width],
             f32_bytes(&table),
         )]);
-        let rotation = (0..width / 4)
-            .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
-            .collect::<Vec<_>>();
         let valid_hamming = |head_count: u32| {
-            tensor_file(vec![
-                ("heads", Dtype::U32, vec![1], u32_bytes(&[head_count])),
-                (
-                    "d2.key_rotation",
-                    Dtype::F32,
-                    vec![width],
-                    f32_bytes(&rotation),
-                ),
-            ])
+            let mut tensors = vec![(
+                "heads".to_owned(),
+                Dtype::U32,
+                vec![1],
+                u32_bytes(&[head_count]),
+            )];
+            tensors.extend(complete_read_tensors(
+                width,
+                head_count as usize,
+                &[2],
+                vocab,
+            ));
+            tensor_file_owned(tensors, None)
         };
         assert!(AskOffsetSolveBasis::from_bytes(&model, &valid_hamming(heads as u32)).is_ok());
 
@@ -822,56 +1138,131 @@ mod tests {
             .expect("one head")
             .contains("1 heads over width 8 is invalid"));
 
-        let mut nonfinite_rotation = rotation.clone();
-        nonfinite_rotation[0] = f32::INFINITY;
-        let nonfinite_hamming = tensor_file(vec![
-            ("heads", Dtype::U32, vec![1], u32_bytes(&[heads as u32])),
-            (
-                "d2.key_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&nonfinite_rotation),
-            ),
-        ]);
+        let mut nonfinite_tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[heads as u32]),
+        )];
+        nonfinite_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+        let rotation = nonfinite_tensors
+            .iter_mut()
+            .find(|(name, ..)| name == "d2.key_rotation")
+            .unwrap();
+        rotation.3 = f32_bytes(&vec![f32::INFINITY; width]);
+        let nonfinite_hamming = tensor_file_owned(nonfinite_tensors, None);
         assert!(AskOffsetSolveBasis::from_bytes(&model, &nonfinite_hamming)
             .err()
             .expect("non-finite rotation")
             .contains("d2.key_rotation[0] is not finite"));
 
-        let partial_hamming = tensor_file(vec![
-            ("heads", Dtype::U32, vec![1], u32_bytes(&[heads as u32])),
-            (
-                "d2.key_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-            ("d4.layer", Dtype::U32, vec![1], u32_bytes(&[7])),
-        ]);
+        let mut partial_tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[heads as u32]),
+        )];
+        partial_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+        partial_tensors.push(("d4.layer".to_owned(), Dtype::U32, vec![1], u32_bytes(&[7])));
+        let partial_hamming = tensor_file_owned(partial_tensors, None);
         assert!(AskOffsetSolveBasis::from_bytes(&model, &partial_hamming)
             .err()
             .expect("partial depth")
-            .contains("d4.key_rotation"));
+            .contains("d4.query_rotation"));
 
-        let type_spin_hamming = tensor_file(vec![
-            ("heads", Dtype::U32, vec![1], u32_bytes(&[heads as u32])),
-            (
-                "d2.key_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-            (
-                "d2.step_rotation",
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-        ]);
+        let mut type_spin_tensors = vec![(
+            "heads".to_owned(),
+            Dtype::U32,
+            vec![1],
+            u32_bytes(&[heads as u32]),
+        )];
+        type_spin_tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+        type_spin_tensors.push((
+            "d2.step_rotation".to_owned(),
+            Dtype::F32,
+            vec![width],
+            f32_bytes(&vec![1.0; width]),
+        ));
+        let type_spin_hamming = tensor_file_owned(type_spin_tensors, None);
         assert!(AskOffsetSolveBasis::from_bytes(&model, &type_spin_hamming)
             .err()
             .expect("type spin")
             .contains("mutually exclusive"));
+    }
+
+    #[test]
+    fn required_hamming_inventory_copy_keys_and_candidate_asks_are_validated() {
+        let (vocab, width, heads) = (4usize, 8usize, 2usize);
+        let model = tensor_file(vec![(
+            "embedding.weight",
+            Dtype::F32,
+            vec![vocab, width],
+            f32_bytes(&vec![0.5; vocab * width]),
+        )]);
+        let complete = || {
+            let mut tensors = vec![(
+                "heads".to_owned(),
+                Dtype::U32,
+                vec![1],
+                u32_bytes(&[heads as u32]),
+            )];
+            tensors.extend(complete_read_tensors(width, heads, &[2], vocab));
+            tensors
+        };
+
+        let mut missing_query = complete();
+        missing_query.retain(|(name, ..)| name != "d2.query_rotation");
+        assert!(
+            AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(missing_query, None))
+                .err()
+                .expect("missing query rotation")
+                .contains("d2.query_rotation")
+        );
+
+        let mut nonfinite_margin = complete();
+        let margin = nonfinite_margin
+            .iter_mut()
+            .find(|(name, ..)| name == "d2.margin")
+            .unwrap();
+        margin.3 = f32_bytes(&vec![f32::NAN; heads]);
+        assert!(AskOffsetSolveBasis::from_bytes(
+            &model,
+            &tensor_file_owned(nonfinite_margin, None)
+        )
+        .err()
+        .expect("non-finite margin")
+        .contains("d2.margin[0] is not finite"));
+
+        let mut invalid_copy_key = complete();
+        invalid_copy_key.push(("copy_key".to_owned(), Dtype::U32, vec![1], u32_bytes(&[3])));
+        assert!(AskOffsetSolveBasis::from_bytes(
+            &model,
+            &tensor_file_owned(invalid_copy_key, None)
+        )
+        .err()
+        .expect("invalid copy key")
+        .contains("copy_key 3 is not 1 or 2"));
+
+        let basis =
+            AskOffsetSolveBasis::from_bytes(&model, &tensor_file_owned(complete(), None)).unwrap();
+        let corpus = AskPullCorpus {
+            schema: PULL_CORPUS_SCHEMA.to_owned(),
+            pulls: vec![AskPull {
+                question: 3,
+                key: 1,
+                weight: 1,
+            }],
+        };
+        let mut nonfinite_candidate = complete();
+        let ask = nonfinite_candidate
+            .iter_mut()
+            .find(|(name, ..)| name == "d2.ask")
+            .unwrap();
+        ask.3 = f32_bytes(&vec![f32::NAN; vocab * width]);
+        assert!(basis
+            .audit_candidate(&tensor_file_owned(nonfinite_candidate, None), &corpus)
+            .unwrap_err()
+            .contains("d2.ask[0] is not finite"));
     }
 
     #[test]
@@ -887,23 +1278,30 @@ mod tests {
                 tensor.data().to_vec(),
             )
         });
-        let metadata = Some(std::collections::HashMap::from([
-            ("z-last".to_owned(), "2".to_owned()),
-            ("a-first".to_owned(), "1".to_owned()),
-        ]));
-        let hamming = tensor_file_with_metadata(tensors.collect(), metadata);
-        let basis = AskOffsetSolveBasis::from_bytes(&model, &hamming).unwrap();
-        let solved = basis.solve(&corpus, 10_000).unwrap();
+        let tensors = tensors.collect::<Vec<_>>();
+        let mut metadata_a = std::collections::HashMap::new();
+        metadata_a.insert("z-last".to_owned(), "2".to_owned());
+        metadata_a.insert("a-first".to_owned(), "1".to_owned());
+        let mut metadata_b = std::collections::HashMap::new();
+        metadata_b.insert("a-first".to_owned(), "1".to_owned());
+        metadata_b.insert("z-last".to_owned(), "2".to_owned());
+        let hamming_a = tensor_file_with_metadata(tensors.clone(), Some(metadata_a));
+        let hamming_b = tensor_file_with_metadata(tensors, Some(metadata_b));
+        let basis_a = AskOffsetSolveBasis::from_bytes(&model, &hamming_a).unwrap();
+        let basis_b = AskOffsetSolveBasis::from_bytes(&model, &hamming_b).unwrap();
+        let solved_a = basis_a.solve(&corpus, 10_000).unwrap();
+        let solved_b = basis_b.solve(&corpus, 10_000).unwrap();
+        assert_eq!(solved_a.hamming_bytes, solved_b.hamming_bytes);
         assert_eq!(
-            safetensors_metadata(&solved.hamming_bytes).unwrap(),
+            safetensors_metadata(&solved_a.hamming_bytes).unwrap(),
             Some(std::collections::HashMap::from([
                 ("z-last".to_owned(), "2".to_owned()),
                 ("a-first".to_owned(), "1".to_owned()),
             ]))
         );
         assert_eq!(
-            canonicalize_safetensors_header(solved.hamming_bytes.clone()).unwrap(),
-            solved.hamming_bytes
+            canonicalize_safetensors_header(solved_a.hamming_bytes.clone()).unwrap(),
+            solved_a.hamming_bytes
         );
     }
 
@@ -920,11 +1318,8 @@ mod tests {
             vec![vocab, width],
             f32_bytes(&table),
         )]);
-        let rotation = (0..width / 4)
-            .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
-            .collect::<Vec<_>>();
         let mut tensors = vec![(
-            "heads",
+            "heads".to_owned(),
             Dtype::U32,
             vec![1],
             [heads as u32]
@@ -932,18 +1327,10 @@ mod tests {
                 .flat_map(u32::to_le_bytes)
                 .collect(),
         )];
-        let rotation_names = [format!("d2.key_rotation"), format!("d6.key_rotation")];
-        for depth in [2usize, 6] {
-            tensors.push((
-                rotation_names[if depth == 2 { 0 } else { 1 }].as_str(),
-                Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ));
-        }
-        let hamming = tensor_file(tensors);
+        tensors.extend(complete_read_tensors(width, heads, &[2, 6], vocab));
+        let hamming = tensor_file_owned(tensors, None);
         let basis = AskOffsetSolveBasis::from_bytes(&model, &hamming).unwrap();
-        let mut corpus = AskPullCorpus::b2_relations(16..32, 16);
+        let mut corpus = AskPullCorpus::b2_relations(16..32, 16).unwrap();
         let second_targets = corpus
             .pulls
             .iter()
@@ -962,12 +1349,17 @@ mod tests {
             .iter()
             .all(|reading| reading.solved_weighted_bits <= reading.zero_weighted_bits));
         eprintln!(
-            "width=256 depths=2 questions=16 evaluations={} wall_ms={}",
+            "width=256 depths=2 questions=16 evaluations={} exhausted={} wall_ms={}",
             solved
                 .readings
                 .iter()
-                .map(|reading| reading.evaluations)
+                .map(|reading| reading.total_evaluations)
                 .sum::<u64>(),
+            solved
+                .readings
+                .iter()
+                .filter(|reading| reading.budget_exhausted)
+                .count(),
             elapsed.as_millis()
         );
     }

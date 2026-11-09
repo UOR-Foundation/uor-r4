@@ -1,9 +1,11 @@
 //! Offline CPU solver for Claude-330's checkpoint-compatible ask tables.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use uor_r4_cpu_train::ask_offset_audit::TrainedAskOffsets;
 use uor_r4_cpu_train::ask_offset_solver::{AskOffsetSolveBasis, AskPullCorpus};
@@ -12,6 +14,7 @@ const SCHEMA: &str = "uor-r4.cpu-ask-offset-solver/1";
 const DEFAULT_MAX_EVALUATIONS: u64 = 200_000;
 const RELATIONS: std::ops::Range<u32> = 16..32;
 const QUERY_SHIFT: u32 = 16;
+static TEMP_SERIAL: AtomicU64 = AtomicU64::new(0);
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -49,8 +52,8 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
             "hamming_read.safetensors SHA-256 differs: got {hamming_sha}"
         ));
     }
-    let out = PathBuf::from(&args["out"]);
-    let hamming_out = PathBuf::from(&args["hamming-out"]);
+    let out = resolve_output_path(Path::new(&args["out"]))?;
+    let hamming_out = resolve_output_path(Path::new(&args["hamming-out"]))?;
     if out == hamming_out {
         return Err("--out and --hamming-out must be distinct".to_owned());
     }
@@ -66,13 +69,30 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
             hamming_out.display()
         ));
     }
-    let corpus = match args.get("pulls") {
+    let (corpus, pull_source, pull_path, pull_sha) = match args.get("pulls") {
         Some(path) => {
             let bytes = std::fs::read(path).map_err(|error| format!("{path}: {error}"))?;
-            AskPullCorpus::from_json(&bytes)?
+            let corpus = AskPullCorpus::from_json(&bytes)?;
+            let sha = uor_r4_discrete::corpus::sha256(&bytes);
+            (corpus, "file", Some(path.clone()), sha)
         }
-        None => AskPullCorpus::b2_relations(RELATIONS, QUERY_SHIFT),
+        None => {
+            let corpus = AskPullCorpus::b2_relations(RELATIONS, QUERY_SHIFT)?;
+            let bytes = serde_json::to_vec(&corpus).map_err(|error| error.to_string())?;
+            (
+                corpus,
+                "default-b2",
+                None,
+                uor_r4_discrete::corpus::sha256(&bytes),
+            )
+        }
     };
+    if let Some(expected) = args.get("expected-pulls-sha256") {
+        validate_sha256(expected, "pulls")?;
+        if pull_sha != *expected {
+            return Err(format!("pull corpus SHA-256 differs: got {pull_sha}"));
+        }
+    }
     let max_evaluations = args
         .get("max-evaluations")
         .map(|value| {
@@ -84,6 +104,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
         .unwrap_or(DEFAULT_MAX_EVALUATIONS);
     let basis = AskOffsetSolveBasis::from_bytes(&model, &hamming)?;
     let solved = basis.solve(&corpus, max_evaluations)?;
+    let corpus_audit = basis.audit_candidate(&solved.hamming_bytes, &corpus)?;
     let audited = TrainedAskOffsets::from_bytes(&model, &solved.hamming_bytes)?;
     let relations = audited.audit_relations(RELATIONS, QUERY_SHIFT)?;
     let audit_cells = relations
@@ -107,7 +128,18 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
         "solved_weighted_bits": solved.readings.iter().map(|reading| reading.solved_weighted_bits).sum::<u64>(),
         "improvement_bits": solved.readings.iter().map(|reading| reading.improvement_bits).sum::<u64>(),
         "improved_readings": solved.readings.iter().filter(|reading| reading.improvement_bits > 0).count(),
-        "evaluations": solved.readings.iter().map(|reading| reading.evaluations).sum::<u64>(),
+        "candidate_evaluations": solved.readings.iter().map(|reading| reading.candidate_evaluations).sum::<u64>(),
+        "coordinate_evaluations": solved.readings.iter().map(|reading| reading.coordinate_evaluations).sum::<u64>(),
+        "total_evaluations": solved.readings.iter().map(|reading| reading.total_evaluations).sum::<u64>(),
+        "search_starts": solved.readings.iter().map(|reading| reading.search_starts).sum::<u64>(),
+        "budget_exhausted_readings": solved.readings.iter().filter(|reading| reading.budget_exhausted).count(),
+    });
+    let corpus_audit_summary = serde_json::json!({
+        "readings": corpus_audit.len(),
+        "zero_weighted_bits": corpus_audit.iter().map(|reading| reading.zero_weighted_bits).sum::<u64>(),
+        "candidate_weighted_bits": corpus_audit.iter().map(|reading| reading.candidate_weighted_bits).sum::<u64>(),
+        "improvement_bits": corpus_audit.iter().map(|reading| reading.improvement_bits).sum::<u64>(),
+        "improved_readings": corpus_audit.iter().filter(|reading| reading.improvement_bits > 0).count(),
     });
     let report = serde_json::json!({
         "schema": SCHEMA,
@@ -120,8 +152,13 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
             "ask_heads": audited.ask_head_count(),
             "depths": audited.depths().collect::<Vec<_>>(),
         },
+        "pull_corpus": {
+            "source": pull_source,
+            "path": pull_path,
+            "sha256": pull_sha,
+            "schema": corpus.schema,
+        },
         "settings": {
-            "pull_corpus": args.get("pulls"),
             "max_evaluations_per_question_depth": max_evaluations,
             "audit_relations": RELATIONS,
             "query_shift": QUERY_SHIFT,
@@ -132,6 +169,8 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
         },
         "summary": summary,
         "audit_after_solve": audit_summary,
+        "corpus_audit_after_solve": corpus_audit_summary,
+        "corpus_audit_readings": corpus_audit,
         "candidate_hamming_sha256": candidate_sha,
         "readings": solved.readings,
         "claim": "offline checkpoint ask-offset initializer; not a trained ask-head model, B2 result, artifact schema or serving result"
@@ -139,8 +178,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
     let summary = report["summary"].clone();
     let mut report_bytes = serde_json::to_vec_pretty(&report).map_err(|error| error.to_string())?;
     report_bytes.push(b'\n');
-    write_new(&hamming_out, &solved.hamming_bytes)?;
-    write_new(&out, &report_bytes)?;
+    write_new_pair(&hamming_out, &solved.hamming_bytes, &out, &report_bytes)?;
     println!(
         "{}",
         serde_json::json!({
@@ -149,6 +187,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
             "hamming_out": hamming_out,
             "report_sha256": uor_r4_discrete::corpus::sha256(&report_bytes),
             "candidate_hamming_sha256": candidate_sha,
+            "pull_corpus_sha256": pull_sha,
             "summary": summary,
         })
     );
@@ -163,10 +202,11 @@ fn validate_sha256(value: &str, name: &str) -> Result<()> {
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 7] = [
+    const FLAGS: [&str; 8] = [
         "checkpoint",
         "expected-model-sha256",
         "expected-hamming-sha256",
+        "expected-pulls-sha256",
         "out",
         "hamming-out",
         "pulls",
@@ -219,13 +259,85 @@ fn executable_sha256() -> Result<String> {
     Ok(uor_r4_discrete::corpus::sha256(&bytes))
 }
 
-fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|error| format!("{}: {error}", path.display()))?;
-    file.write_all(bytes).map_err(|error| error.to_string())
+fn resolve_output_path(path: &Path) -> Result<PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("{} has no output file name", path.display()))?;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent =
+        std::fs::canonicalize(parent).map_err(|error| format!("{}: {error}", parent.display()))?;
+    Ok(parent.join(name))
+}
+
+fn write_temp_new(path: &Path, bytes: &[u8]) -> Result<PathBuf> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("{} has no output file name", path.display()))?;
+    for _ in 0..100 {
+        let serial = TEMP_SERIAL.fetch_add(1, Ordering::Relaxed);
+        let mut temporary_name = OsString::from(".");
+        temporary_name.push(name);
+        temporary_name.push(format!(".uor-tmp-{}-{serial}", std::process::id()));
+        let temporary = path.with_file_name(temporary_name);
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("{}: {error}", temporary.display())),
+        };
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+            let _ = std::fs::remove_file(&temporary);
+            return Err(format!("{}: {error}", temporary.display()));
+        }
+        return Ok(temporary);
+    }
+    Err(format!(
+        "{}: could not allocate a temporary sibling",
+        path.display()
+    ))
+}
+
+fn promote_new(temporary: &Path, final_path: &Path) -> Result<()> {
+    std::fs::hard_link(temporary, final_path)
+        .map_err(|error| format!("{}: {error}", final_path.display()))?;
+    if let Err(error) = std::fs::remove_file(temporary) {
+        let _ = std::fs::remove_file(final_path);
+        return Err(format!("{}: {error}", temporary.display()));
+    }
+    Ok(())
+}
+
+fn write_new_pair(
+    first_path: &Path,
+    first_bytes: &[u8],
+    second_path: &Path,
+    second_bytes: &[u8],
+) -> Result<()> {
+    let first_temporary = write_temp_new(first_path, first_bytes)?;
+    let second_temporary = match write_temp_new(second_path, second_bytes) {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = std::fs::remove_file(&first_temporary);
+            return Err(error);
+        }
+    };
+    if let Err(error) = promote_new(&first_temporary, first_path) {
+        let _ = std::fs::remove_file(&first_temporary);
+        let _ = std::fs::remove_file(&second_temporary);
+        return Err(error);
+    }
+    if let Err(error) = promote_new(&second_temporary, second_path) {
+        let _ = std::fs::remove_file(&second_temporary);
+        let _ = std::fs::remove_file(first_path);
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -299,21 +411,46 @@ mod tests {
         let rotation = (0..width / 4)
             .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
             .collect::<Vec<_>>();
-        let hamming = tensor_file(vec![
-            ("heads", Dtype::U32, vec![1], u32_bytes(&[heads as u32])),
-            (
-                "d2.key_rotation",
+        let mut tensors = vec![("heads", Dtype::U32, vec![1], u32_bytes(&[heads as u32]))];
+        for depth in [2usize, 6] {
+            for part in ["query_rotation", "key_rotation", "value_rotation"] {
+                tensors.push((
+                    match (depth, part) {
+                        (2, "query_rotation") => "d2.query_rotation",
+                        (2, "key_rotation") => "d2.key_rotation",
+                        (2, "value_rotation") => "d2.value_rotation",
+                        (6, "query_rotation") => "d6.query_rotation",
+                        (6, "key_rotation") => "d6.key_rotation",
+                        (6, "value_rotation") => "d6.value_rotation",
+                        _ => unreachable!(),
+                    },
+                    Dtype::F32,
+                    vec![width],
+                    f32_bytes(&rotation),
+                ));
+            }
+            tensors.push((
+                match depth {
+                    2 => "d2.margin",
+                    6 => "d6.margin",
+                    _ => unreachable!(),
+                },
                 Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-            (
-                "d6.key_rotation",
+                vec![heads],
+                f32_bytes(&vec![2.0; heads]),
+            ));
+            tensors.push((
+                match depth {
+                    2 => "d2.weight",
+                    6 => "d6.weight",
+                    _ => unreachable!(),
+                },
                 Dtype::F32,
-                vec![width],
-                f32_bytes(&rotation),
-            ),
-        ]);
+                vec![2, width],
+                f32_bytes(&vec![0.0; 2 * width]),
+            ));
+        }
+        let hamming = tensor_file(tensors);
         std::fs::write(dir.join("model.safetensors"), &model).unwrap();
         std::fs::write(dir.join("hamming_read.safetensors"), &hamming).unwrap();
         (
@@ -382,12 +519,43 @@ mod tests {
             .err()
             .expect("colliding outputs")
             .contains("must be distinct"));
+        let alias_parent = dir.0.join("alias-parent");
+        std::fs::create_dir(&alias_parent).unwrap();
+        let mut alias = args.clone();
+        alias.insert(
+            "out".to_owned(),
+            alias_parent
+                .join("..")
+                .join("alias-output")
+                .display()
+                .to_string(),
+        );
+        alias.insert(
+            "hamming-out".to_owned(),
+            dir.0.join("alias-output").display().to_string(),
+        );
+        assert!(run_with(&alias)
+            .err()
+            .expect("aliased outputs")
+            .contains("must be distinct"));
+        let mut wrong_corpus_hash = args.clone();
+        wrong_corpus_hash.insert("expected-pulls-sha256".to_owned(), "0".repeat(64));
+        assert!(run_with(&wrong_corpus_hash)
+            .err()
+            .expect("wrong corpus hash")
+            .contains("pull corpus SHA-256 differs"));
         run_with(&args).unwrap();
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&args["out"]).unwrap()).unwrap();
         assert_eq!(report["schema"], SCHEMA);
         assert_eq!(report["summary"]["questions"], 16);
         assert_eq!(report["summary"]["solved_weighted_bits"], 0);
+        assert_eq!(report["summary"]["budget_exhausted_readings"], 0);
+        assert_eq!(report["pull_corpus"]["source"], "default-b2");
+        assert_eq!(
+            report["corpus_audit_after_solve"]["candidate_weighted_bits"],
+            report["summary"]["solved_weighted_bits"]
+        );
         assert_eq!(
             report["audit_after_solve"]["trained_target_nearest"],
             report["audit_after_solve"]["cells"]
@@ -416,5 +584,23 @@ mod tests {
             )
             .unwrap();
         }
+    }
+
+    #[test]
+    fn pair_write_rolls_back_when_the_second_final_was_created() {
+        let dir = TestDir::new("pair-write");
+        let first = dir.0.join("candidate.safetensors");
+        let second = dir.0.join("report.json");
+        std::fs::write(&second, b"existing").unwrap();
+        assert!(write_new_pair(&first, b"candidate", &second, b"report").is_err());
+        assert!(!first.exists());
+        assert_eq!(std::fs::read(&second).unwrap(), b"existing");
+        assert!(std::fs::read_dir(&dir.0).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains(".uor-tmp-")
+        }));
     }
 }
