@@ -46,7 +46,7 @@ Sources: [`src-tauri/src/lib.rs`](../../src-tauri/src/lib.rs), [`web/studio/inde
 
 ## Recovered cowork workbench (8 November 2026)
 
-The desktop interface is now the neutral Claude-desktop-inspired cowork workbench, with project/session navigation, compact transcript/composer, real pane switching and splitting, and light/dark responsive layouts. The app identifier is `org.uor.r4.desktop.cowork`, separating the recovered app from the rejected green app's saved state. Build with `cargo tauri build --bundles app --features gui`; a default headless build is not desktop evidence.
+The desktop interface is now the neutral Claude-desktop-inspired cowork workbench, with project/session navigation, compact transcript/composer, real pane switching and splitting, and light/dark responsive layouts. The app identifier is `org.uor.r4.desktop.cowork`, separating the recovered app from the rejected green app's saved state. Launch locally with `bash scripts/studio/open-cowork.sh`: it prepares the current frontend, builds with mandatory `--features gui`, verifies the cowork identity, and opens that exact app visibly. Output defaults to `target/cowork`; `CARGO_TARGET_DIR` overrides it, and `UOR_COWORK_NO_OPEN=1` skips opening. A default headless build is not desktop evidence.
 
 The unsigned development package passes its resource contract. Native Workspace and Split interactions were exercised, and New session creates an actual session row. Browser acceptance is 43/43, typed tests 441/441, plain-JS 113/113, and offline worker/WASM checks pass. Full agent/runtime parity, production publication, a signed release, useful conversation, and the R4 model API integration remain unverified.
 
