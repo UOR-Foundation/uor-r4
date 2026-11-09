@@ -384,6 +384,12 @@ mod tests {
             .unwrap_err()
             .contains("model.safetensors SHA-256 differs"));
 
+        let mut bad_hamming = args(&dir, &checkpoint, &model, &hamming);
+        bad_hamming.insert("expected-hamming-sha256".to_owned(), "0".repeat(64));
+        assert!(run_with(&bad_hamming)
+            .unwrap_err()
+            .contains("hamming_read.safetensors SHA-256 differs"));
+
         let mut bad_rows = args(&dir, &checkpoint, &model, &hamming);
         bad_rows.insert("expected-hold-rows".to_owned(), "7".to_owned());
         assert!(run_with(&bad_rows)

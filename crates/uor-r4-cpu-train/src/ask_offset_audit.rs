@@ -661,6 +661,18 @@ mod tests {
         weight_shape: [usize; 2],
         weight: Vec<f32>,
     ) -> Vec<u8> {
+        custom_hold_file(
+            rows.map(|rows| (Dtype::U32, vec![1], u32_bytes([rows]))),
+            vec![(hold_name, gain_shape, gain.to_vec())],
+            Some((weight_shape, weight)),
+        )
+    }
+
+    fn custom_hold_file(
+        rows: Option<(Dtype, Vec<usize>, Vec<u8>)>,
+        holds: Vec<(&str, usize, Vec<f32>)>,
+        weight: Option<([usize; 2], Vec<f32>)>,
+    ) -> Vec<u8> {
         let (vocab, width) = (64usize, 8usize);
         let rotation = (0..width / 4)
             .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
@@ -680,18 +692,6 @@ mod tests {
                 f32_bytes(vec![0.0; vocab * width]),
             ),
             (
-                "d2.weight",
-                Dtype::F32,
-                weight_shape.to_vec(),
-                f32_bytes(weight),
-            ),
-            (
-                hold_name,
-                Dtype::F32,
-                vec![gain_shape],
-                f32_bytes(gain.to_vec()),
-            ),
-            (
                 "d6.key_rotation",
                 Dtype::F32,
                 vec![width / 4, 4],
@@ -704,8 +704,14 @@ mod tests {
                 f32_bytes(vec![0.0; vocab * width]),
             ),
         ];
-        if let Some(rows) = rows {
-            tensors.push(("hold_rows", Dtype::U32, vec![1], u32_bytes([rows])));
+        for (name, shape, gain) in holds {
+            tensors.push((name, Dtype::F32, vec![shape], f32_bytes(gain)));
+        }
+        if let Some((shape, weight)) = weight {
+            tensors.push(("d2.weight", Dtype::F32, shape.to_vec(), f32_bytes(weight)));
+        }
+        if let Some((dtype, shape, data)) = rows {
+            tensors.push(("hold_rows", dtype, shape, data));
         }
         file(tensors)
     }
@@ -800,6 +806,63 @@ mod tests {
             TrainedAskOffsets::from_bytes(&model_file(), &bad_weight_shape)
                 .unwrap_err()
                 .contains("not F32 [2, 8]")
+        );
+
+        let bad_rows_dtype = custom_hold_file(
+            Some((Dtype::F32, vec![1], f32_bytes([8.0]))),
+            vec![("d2.hold", 64, gain.clone())],
+            Some(([2, 8], weight.clone())),
+        );
+        assert!(
+            TrainedAskOffsets::from_bytes(&model_file(), &bad_rows_dtype)
+                .unwrap_err()
+                .contains("hold_rows is F32")
+        );
+
+        let bad_rows_shape = custom_hold_file(
+            Some((Dtype::U32, vec![2], u32_bytes([8, 8]))),
+            vec![("d2.hold", 64, gain.clone())],
+            Some(([2, 8], weight.clone())),
+        );
+        assert!(
+            TrainedAskOffsets::from_bytes(&model_file(), &bad_rows_shape)
+                .unwrap_err()
+                .contains("not U32 [1]")
+        );
+
+        let missing_weight = custom_hold_file(
+            Some((Dtype::U32, vec![1], u32_bytes([8]))),
+            vec![("d2.hold", 64, gain.clone())],
+            None,
+        );
+        assert!(
+            TrainedAskOffsets::from_bytes(&model_file(), &missing_weight)
+                .unwrap_err()
+                .contains("d2.weight")
+        );
+
+        let mut nonfinite_weight = weight.clone();
+        nonfinite_weight[0] = f32::NAN;
+        let nonfinite_weight = custom_hold_file(
+            Some((Dtype::U32, vec![1], u32_bytes([8]))),
+            vec![("d2.hold", 64, gain.clone())],
+            Some(([2, 8], nonfinite_weight)),
+        );
+        assert!(
+            TrainedAskOffsets::from_bytes(&model_file(), &nonfinite_weight)
+                .unwrap_err()
+                .contains("d2.weight[0] is not finite")
+        );
+
+        let multiple_holds = custom_hold_file(
+            Some((Dtype::U32, vec![1], u32_bytes([8]))),
+            vec![("d2.hold", 64, gain.clone()), ("d6.hold", 64, gain.clone())],
+            Some(([2, 8], weight.clone())),
+        );
+        assert!(
+            TrainedAskOffsets::from_bytes(&model_file(), &multiple_holds)
+                .unwrap_err()
+                .contains("more than one hold tensor")
         );
 
         let mut nonfinite = gain.clone();

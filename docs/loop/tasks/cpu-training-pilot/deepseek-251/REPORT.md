@@ -15,6 +15,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   was corrected to carry the requested wrong shape explicitly.
 - The first final `loop gates --full` run hit the harness's known transient
   `Text file busy` race in its fake-`gh` test; the clean rerun passed.
+- The first fresh review found that the REPORT lacked the exact next command,
+  several malformed-hold controls were untested and the retained synthetic
+  report's test-harness provenance was unclear. [deepseek-252](../deepseek-252/ORDER.md)
+  repairs all three.
 - This audit verifies checkpoint structure and learned table movement. It does
   not execute the held write and does not prove that a selected value reaches
   `H4`.
@@ -51,8 +55,12 @@ The audit measured:
 
 Two fresh report outputs were byte-identical. The retained synthetic report
 SHA-256 is
-`35e268864711564736812e1dd3bb284cb0ffb890b15be15d51e1ada51ee8cf58`;
-the release binary SHA-256 is
+`a5f9dacaf19cbe63eafcdf9b64df20638263a38d68d6b3073cacd043ec22211f`.
+It was generated through the binary test harness, whose embedded executable
+SHA-256 is
+`1d039786750aa9ae9a8f788d5937e227d3d79cae50bce57a6f74ce8154cbb779`;
+it is not release-CLI output. The separately built release executable SHA-256
+is
 `224dd54bf8aea4a6e993787a3d1bea4413590a322516560dc91a0120b2447a8b`.
 
 Full CPU library tests passed 480 with 5 ignored in 47.06 s; process wall was
@@ -88,6 +96,17 @@ delivery instructions were followed directly.
 
 - Run the binary on each sealed B2-aqH and B2-aH checkpoint after Claude-334
   publishes them.
+- Exact command for each checkpoint:
+
+  ```sh
+  target/release/cpu-carry-hold-audit \
+    --checkpoint "$CKPT" \
+    --expected-model-sha256 "$MODEL_SHA256" \
+    --expected-hamming-sha256 "$HAMMING_SHA256" \
+    --expected-hold-rows 8 \
+    --out "$NEW_REPORT"
+  ```
+
 - Interpret zero gain as hold-not-trained. Interpret moved gain with failed
   carry as a write/trunk-carry problem. Neither is a B2 verdict by itself.
 - Implement no serving or export path from this result.
