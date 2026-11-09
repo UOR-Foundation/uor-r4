@@ -46,7 +46,10 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-A third fresh exact-head review is still owed.
+The third fresh exact-head review approved all code, evidence and reading
+repairs. It found only that the ledger timestamp and task-byte total predated
+the final documentation commit; [deepseek-250](../deepseek-250/REPORT.md)
+re-measures them.
 
 ## Plain summary
 

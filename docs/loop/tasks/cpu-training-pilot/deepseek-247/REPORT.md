@@ -29,6 +29,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   residuals: archive failure behavior was described as retained, 18,191
   downloaded metadata bytes were omitted and the ledger timestamp preceded its
   measurements. [deepseek-249](../deepseek-249/ORDER.md) fixes them.
+- A third fresh review confirmed every code/evidence repair and found only that
+  the final documentation changed the task-byte total after the ledger update.
+  [deepseek-250](../deepseek-250/ORDER.md) re-measures the final tree.
 
 ## What changed
 
