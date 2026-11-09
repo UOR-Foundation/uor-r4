@@ -52,6 +52,8 @@ A reply "loops" here when its last 24 token ids repeat with a period of 1 to 8 (
 | **A decode-time stop at the role header** | 0 of 256 replies carry `\n\nAssistant:`, so it has nothing to end. | Rejected. |
 | **Parity, then a cause ladder** | L-a differs from claude-322 in the ask heads, the pull, the trainer commit (20 commits touch the trainer crate between the pins) and the serving path for asks. None is separated. | **Next.** |
 
+**What deepseek-264 already covers (merged while this PR was open).** On real L-aC pairs it found the CPU port and the integer engine equal (8 of 8 reports) and reproduced the `−C` artifacts byte for byte (4 of 4). That compares two engines running the same exported file, so it lowers the odds of an arithmetic bug in one engine. It does not compare the trained float with that file, and it was not run on L-a, so the parity step stands.
+
 **The steps,** under one sheet, FIT and pre-run review. Parity first, at about the $0.07 of pod time a parity run took in claude-336. That run traced 8 fixed 192-token sequences, which would miss a fault that shows on short contexts, so this one must compare float and integer on the panel's own prompts and on their decode, where the loops start. Disagreement means any Hamming question or key bit that differs from the float trace rounded as exported, row by row, with the float fed the integer's decoded reply ids, so it cannot run free past a first flip. Rounding alone moved 21 of 3,072 depth-2 type decisions against the unrounded float in claude-336, and that is not a fault. Then, on L-a's recipe, TRAIN, seeds and step count, at pin `721a4784f` (the merged crate differs from it on the non-finite path only):
 
 | arm | flags | what it isolates |
