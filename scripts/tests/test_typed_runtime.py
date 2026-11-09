@@ -33,6 +33,29 @@ class TypedRuntimeContractTests(unittest.TestCase):
             rejected = run('bash', str(RUNTIME), '--verify', str(dest), '--typed')
             self.assertNotEqual(rejected.returncode, 0, rejected.stdout + rejected.stderr)
 
+    def test_typed_pages_staging_uses_dist_and_preserves_legacy_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            typed_dest = Path(tmp) / 'typed'
+            result = run('bash', str(REPO / 'scripts/stage-studio-site.sh'), '--typed', str(REPO / 'web/studio'), str(typed_dest))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((typed_dest / 'index.html').is_file())
+            self.assertTrue((typed_dest / 'models.json').is_file())
+            self.assertTrue((typed_dest / 'assets/js/lifecycle_persistence.js').is_file())
+            self.assertTrue(any((typed_dest / 'assets').glob('index-*.js')))
+            self.assertTrue(any((typed_dest / 'assets').glob('index-*.css')))
+            self.assertTrue(any((typed_dest / 'assets').glob('uor_r4_integer_bg-*.wasm')))
+            for name in ['uor_r4_integer.js', 'uor_r4_integer_bg.wasm', 'synthetic-stack.lut', 'tokenizer.json']:
+                self.assertTrue((typed_dest / 'pkg' / name).is_file(), name)
+            for forbidden in ['index.css', 'package.json', 'tsconfig.json', 'vite.config.ts', 'README.md', 'src', 'tests', 'node_modules', 'pkg/README.md', 'pkg/uor_r4_integer.d.ts', 'pkg/package.json']:
+                self.assertFalse((typed_dest / forbidden).exists(), forbidden)
+            self.assertEqual(list(typed_dest.rglob('*.map')), [])
+
+            legacy_dest = Path(tmp) / 'legacy'
+            legacy = run('bash', str(REPO / 'scripts/stage-studio-site.sh'), str(REPO / 'web/studio'), str(legacy_dest))
+            self.assertEqual(legacy.returncode, 0, legacy.stdout + legacy.stderr)
+            self.assertTrue((legacy_dest / 'index.css').is_file())
+            self.assertFalse((legacy_dest / 'assets/js/lifecycle_persistence.js').exists())
+
     def test_native_runner_local_uses_typed_dist_without_download(self):
         source = RUNNER.read_text(encoding='utf-8')
         self.assertIn('--local', source)
