@@ -12,14 +12,13 @@ first lines** and **0 complete rows**; the exact `−C` also has 0 asked-value f
 The carry changes ranks and continuations, but not in a way that produces the registered
 recall behavior so far.
 
-Seed 2's sealed checkpoint, exported independently after its seal, is slightly different
-but does not change that diagnosis. Both carried and `−C` have **2 asked-value first
-lines**, 0 complete rows and 0 EOS stops. The carry changes 39 generation rows, 172
-first-target ranks and 207 paired-first ranks, but neither arm reaches the value reliably.
+The official seed-2 pair is slightly different but does not change that diagnosis. Both
+carried and `−C` have **2 asked-value first lines**, 0 complete rows and 0 EOS stops. The
+carry changes 44 generation rows, 168 first-target ranks and 207 paired-first ranks, but
+neither arm reaches the value reliably.
 
-This is a diagnostic over the published seed-1 points and an independent seed-2 export.
-The two-seed outcome remains Claude's registered read; this unit does not substitute for
-it.
+This is a diagnostic over the published final read. The two-seed outcome remains Claude's
+registered read; this unit does not substitute for it.
 
 ## What changed
 
@@ -53,13 +52,17 @@ their published `SHA256SUMS` files verified. The final carried artifact at step 
 | 12,288 | 53 / 256 | 0 / 256 | 0 / 256 | 127 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
 | 16,384 | 87 / 256 | 136 / 256 | 156 / 256 | 128 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
 
-Seed 2 at 16,384 was exported independently from `runs-3/L-aC/s2`'s sealed
-`step-016384` snapshot, using the requested raw gates and transition and the sealed run
-config. The carried artifact hashes to `852c4721…`, and the exact cut hashes to
-`e3fd234c…`. The audit changes 39 / 256 generation rows, 172 / 256 first-target ranks and
-207 / 256 paired-first ranks. Asked-better is 128 / 256 on both arms. The first-line count
-is 2 asked / 3 other / 0 both for carried and the same for `−C`; both are 0 complete and
-0 EOS at 256 cap stops.
+Seed 2's official artifacts are in the read store. The carried artifact hashes to
+`2741d938…`, and the exact cut hashes to `391392f5…`. The audit changes 44 / 256
+generation rows, 168 / 256 first-target ranks and 207 / 256 paired-first ranks.
+Asked-better is 128 / 256 on both arms. The first-line count is 2 asked / 3 other / 0 both
+for carried and the same for `−C`; both are 0 complete and 0 EOS at 256 cap stops.
+
+A direct `fbs-export` from the raw sealed snapshot made a different diagnostic artifact
+(`852c4721…`) and therefore read 39 changed rows. That export bypassed the official read
+path's source transform, is not the published artifact, and was discarded. The audit in
+this report uses the published pair and verifies both entries in the read store's
+`SHA256SUMS`.
 
 At every published seed-1 point:
 
@@ -82,12 +85,11 @@ asked-value first lines and 0 complete replies.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
 - Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
   and 16,384, with both published hashes supplied and verified.
-- Seed 2's independently exported final pair: **1 / 1 passed**, with report identity and
-  panel metadata checked. Its hashes are diagnostic until Claude publishes the official
-  artifact.
-- CPU panel versus stored integer report: **6 / 6 comparisons passed** across carried and
+- Official seed-2 final pair: **1 / 1 passed**, with both published hashes, report identity
+  and panel metadata checked. The audit receipt hashes to `84ba5993…`.
+- CPU panel versus stored integer report: **8 / 8 comparisons passed** across carried and
   `−C`.
-- Published store `SHA256SUMS`: **3 / 3 pairs verified**.
+- Published store `SHA256SUMS`: **4 / 4 pairs verified**.
 - Strict Clippy for both binaries and changed-file rustfmt: passed.
 - `uor-harness loop gates --full`: **11 / 11 green**.
 - `uor-harness check`: **362 rules, 0 errors, 327 warnings**. The warnings are
