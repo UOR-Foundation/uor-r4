@@ -146,6 +146,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/cpu-ask-rank-modes": {
+    "branch": "deepseek/cpu-ask-rank-modes",
+    "claimed_at": "2026-11-09T14:12:16-05:00",
+    "head": "7970da0fc",
+    "lab": "deepseek",
+    "note": "CPU ask/carry generation and rank modes in the reply panel"
+  },
   "deepseek/cpu-corpus-resume": {
     "branch": "deepseek/cpu-corpus-resume",
     "claimed_at": "2026-11-02T05:18:19-05:00",
@@ -166,6 +173,13 @@
     "head": "b1e377b18",
     "lab": "deepseek",
     "note": ""
+  },
+  "deepseek/cpu-hamming-ask": {
+    "branch": "deepseek/cpu-hamming-ask",
+    "claimed_at": "2026-11-09T12:19:40-05:00",
+    "head": "64c1c69b3",
+    "lab": "deepseek",
+    "note": "CPU Hamming ask heads and readout carry parity"
   },
   "deepseek/cpu-m2-evidence": {
     "branch": "deepseek/cpu-m2-evidence",
