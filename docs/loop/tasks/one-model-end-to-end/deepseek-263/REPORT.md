@@ -10,6 +10,11 @@ did not yet have its required headings. That was a documentation-format
 failure; no implementation or test failed. The sections below now carry the
 required report.
 
+`main` then advanced through claude-341, which corrected the older ask test
+while retaining the CPU refusal. The merge forward keeps claude-341's parity
+intent and supersedes its stale refusal with this unit's carried generation and
+rank controls.
+
 The real-artifact arm did not run: claude-339 is still an open draft and has
 not published an exported language-run artifact. The earlier claude-335 test
 archive contains checkpoints but no `UORLUT01`. The synthetic comparison is
