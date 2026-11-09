@@ -7265,3 +7265,79 @@ fn the_decision_trace_refuses_what_is_off_rs_path() {
     assert!(model.session().set_decision_trace(&none).is_ok(), "no read, no code: a trace");
     refused(&no_reads, &with(vec![], vec![code(0, 1, 0, CodeRole::Query)]), "a code on a model without reads");
 }
+
+/// claude-336: a synthetic read's ask heads, with a random question table and, if `reach > 0`,
+/// random carry gains over `vocab` tokens.
+fn ask_control(vocab: usize, width: usize, seed: u64, reach: usize) -> (super::TypeHeads, Vec<i16>, super::AskImage) {
+    let (record, read, table) = copy_control(vocab, width, 4, seed);
+    let mut rng = Lcg(seed ^ 0xa5c);
+    let a: Vec<i16> = (0..vocab * width).map(|_| ((rng.next() % 8192) as i32 - 4096) as i16).collect();
+    let carry = (reach > 0).then(|| (reach, (0..vocab).map(|_| (rng.next() % 131_072) as i32 - 65_536).collect()));
+    let ask = super::AskImage::checked(Some(a), carry, vocab, width).unwrap().unwrap();
+    let heads = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(ask.clone());
+    (heads, table, ask)
+}
+
+#[test]
+fn ask_head_queries_match_the_f64_question() {
+    let (vocab, width) = (64, 64);
+    for (seed, reach) in [(336u64, 0usize), (337, 0), (338, 3), (339, 5)] {
+        let (record, read, _) = copy_control(vocab, width, 4, seed);
+        let (heads, table, ask) = ask_control(vocab, width, seed, reach);
+        let mut rng = Lcg(seed ^ 0x9);
+        let tokens: Vec<u32> = (0..24).map(|_| (rng.next() % vocab as u64) as u32).collect();
+        let asked = |v: u32, i: usize| f64::from(table[v as usize * width + i]) + f64::from(ask.table[v as usize * width + i]);
+        let (start, head_width) = (4, width / record.heads);
+        for t in start..tokens.len() {
+            let mut point: Vec<f64> = (0..width).map(|i| asked(tokens[t], i) / 4096.0).collect();
+            if let Some((h, gains)) = &ask.carry {
+                for s in 1..=(*h).min(t - start) {
+                    let (v, g) = (tokens[t - s], f64::from(gains[tokens[t - s] as usize]) / 65_536.0);
+                    for (i, p) in point.iter_mut().enumerate() {
+                        *p += g * asked(v, i) / 4096.0;
+                    }
+                }
+            }
+            let expected: Vec<u64> = (2..4).map(|h| f64_code(&read.key_rotation, &point, h, head_width)).collect();
+            assert_eq!(heads.ask_queries(&table, &tokens, t, start).unwrap(), expected, "seed {seed}, reach {reach}, row {t}");
+        }
+    }
+}
+
+#[test]
+fn a_carried_term_reaches_the_next_rows_of_its_window_only() {
+    let (vocab, width, reach, start) = (64, 64, 3, 3);
+    let (_, table, ask) = ask_control(vocab, width, 340, reach);
+    let (record, read, _) = copy_control(vocab, width, 4, 340);
+    // Only token 7 carries, at gain 1; it sits at row 1 (before the window) and row 5 (inside).
+    let mut gains = vec![0i32; vocab];
+    gains[7] = 1 << 16;
+    let carried = super::AskImage { table: ask.table.clone(), carry: Some((reach, gains)) };
+    let plain = super::AskImage { table: ask.table.clone(), carry: None };
+    let heads = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(carried);
+    let bare = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(plain);
+    let tokens: Vec<u32> = vec![1, 7, 2, 3, 4, 7, 5, 6, 8, 9, 10, 11];
+    let seven: Vec<i64> = (0..width).map(|i| (i64::from(table[7 * width + i]) + i64::from(ask.table[7 * width + i])) << 16).collect();
+    for t in start..tokens.len() {
+        let with = heads.asked_point(&table, &tokens, t, start).unwrap();
+        let without = bare.asked_point(&table, &tokens, t, start).unwrap();
+        let diff: Vec<i64> = with.iter().zip(&without).map(|(a, b)| a - b).collect();
+        let reached = (6..=5 + reach).contains(&t);
+        let expected = if reached { seven.clone() } else { vec![0; width] };
+        assert_eq!(diff, expected, "row {t}: carried {reached}");
+    }
+}
+
+#[test]
+fn malformed_ask_heads_are_refused() {
+    let (vocab, width) = (8, 8);
+    let a = || Some(vec![0i16; vocab * width]);
+    let refused = |table: Option<Vec<i16>>, carry: Option<(usize, Vec<i32>)>| super::AskImage::checked(table, carry, vocab, width).is_err();
+    assert!(super::AskImage::checked(None, None, vocab, width).unwrap().is_none());
+    assert!(super::AskImage::checked(a(), Some((2, vec![1; vocab])), vocab, width).unwrap().is_some());
+    assert!(refused(Some(vec![0; vocab * width - 1]), None), "short question table");
+    assert!(refused(a(), Some((2, vec![1; vocab + 1]))), "long gains");
+    assert!(refused(a(), Some((0, vec![1; vocab]))), "no reach");
+    assert!(refused(a(), Some((super::ASK_CARRY_MAX + 1, vec![1; vocab]))), "reach past the bound");
+    assert!(refused(None, Some((2, vec![1; vocab]))), "gains without a question table");
+}

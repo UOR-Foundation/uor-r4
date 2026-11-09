@@ -105,7 +105,7 @@ pub use format::{
     MEMORY_REPLY_KEY_LEN, MEMORY_WEIGHT_EXP, STACK_FBS_MEMORY_SCHEMA,
 };
 pub use hamming::{
-    copy_weight_q31, hamming_trace_window, read_hamming_uorlut01, served_copy_codes_uorlut01,
+    copy_weight_q31, AskImage, ASK_CARRY_GAIN_EXP, ASK_CARRY_MAX, hamming_trace_window, read_hamming_uorlut01, served_copy_codes_uorlut01,
     CopyHeads, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, ServedCopyCodes,
     TypeHeads, COPY_MEAN_EXP,
 };

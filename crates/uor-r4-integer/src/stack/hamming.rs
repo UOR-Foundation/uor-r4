@@ -355,6 +355,59 @@ mod candidate_range_tests {
     }
 }
 
+/// The exponent of a carry gain `c`: Q16.
+pub const ASK_CARRY_GAIN_EXP: i32 = -16;
+
+/// The longest carry reach served: with `|table + a| ≤ 2^16` at Q12 and `|c| < 2^31` at Q16, each
+/// carried term is below `2^47` at Q28, so `2^12` of them and the row's own point stay below
+/// `2^60` and the asked point is exact in `i64`.
+pub const ASK_CARRY_MAX: usize = 1 << 12;
+
+/// A read's ask heads (claude-330) and, on the readout read, its question carry (claude-335), as
+/// the integer engine serves them (claude-336).
+///
+/// The question table `a` is stored at the token table's own scale, Q12 in `i16`, so `table + a`
+/// is an exact Q12 sum; a gain `c` is Q16 in `i32`, so a carried term `c · (table + a)` is an
+/// exact Q28 product, and the asked point is summed at Q28 with nothing rounded before the sign.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AskImage {
+    /// `vocab * width` question entries at Q12.
+    pub table: Vec<i16>,
+    /// The carry's reach `h` (`1 ≤ h ≤ ASK_CARRY_MAX`) and its `vocab` gains at Q16, or `None`.
+    pub carry: Option<(usize, Vec<i32>)>,
+}
+
+impl AskImage {
+    /// The ask heads of a read over `vocab` rows of `width`, refusing a question table or a carry
+    /// at the wrong length, a carry with no reach or past [`ASK_CARRY_MAX`], and a carry with no
+    /// question table: a gain multiplies `table + a`, which a read without `a` does not ask with.
+    pub fn checked(
+        table: Option<Vec<i16>>,
+        carry: Option<(usize, Vec<i32>)>,
+        vocab: usize,
+        width: usize,
+    ) -> Result<Option<Self>, StackError> {
+        let Some(table) = table else {
+            return match carry {
+                None => Ok(None),
+                Some(_) => Err(StackError::Numerics("hamming.ask.carry: a carry gain needs the question table".into())),
+            };
+        };
+        if table.len() != vocab * width {
+            return Err(StackError::TableLength { name: "hamming.ask.table".into(), len: table.len(), expected: vocab * width });
+        }
+        if let Some((reach, gains)) = &carry {
+            if *reach == 0 || *reach > ASK_CARRY_MAX {
+                return Err(StackError::Numerics(format!("hamming.ask.carry: reach {reach} is outside 1..={ASK_CARRY_MAX}")));
+            }
+            if gains.len() != vocab {
+                return Err(StackError::TableLength { name: "hamming.ask.carry".into(), len: gains.len(), expected: vocab });
+            }
+        }
+        Ok(Some(Self { table, carry }))
+    }
+}
+
 /// One read's type heads, built for serving (claude-195): the float read's heads `h ≥ heads / 2`.
 ///
 /// A type head asks with the code of the hook's input `p_t` through the query rotation, and its
@@ -373,6 +426,10 @@ pub struct TypeHeads {
     margins: Vec<i32>,
     query: Vec<[i64; 4]>,
     value: Vec<[i64; 4]>,
+    /// The key rotation, through which an ask head asks (claude-336).
+    key: Vec<[i64; 4]>,
+    /// The ask heads' question table and carry, or `None` for a read that asks from `p_t`.
+    ask: Option<AskImage>,
 }
 
 impl TypeHeads {
@@ -389,7 +446,46 @@ impl TypeHeads {
             margins: read.margin[copy..].to_vec(),
             query: units(&read.query_rotation),
             value: units(&read.value_rotation),
+            key: units(&read.key_rotation),
+            ask: None,
         }
+    }
+
+    /// These type heads asking with `ask`'s question table and, if it has one, its carry.
+    pub fn with_ask(mut self, ask: AskImage) -> Self {
+        self.ask = Some(ask);
+        self
+    }
+
+    /// The ask heads' point at row `t` of `tokens`, whose window starts at row `start`, at Q28:
+    /// `(table + a)[x_t]`, plus `Σ_{s=1..min(h, t − start)} c[x_{t−s}] · (table + a)[x_{t−s}]`
+    /// with the carry. Exact: [`ASK_CARRY_MAX`] bounds it below `2^60`. `None` without ask heads.
+    pub fn asked_point(&self, table: &[i16], tokens: &[u32], t: usize, start: usize) -> Option<Vec<i64>> {
+        let ask = self.ask.as_ref()?;
+        let width = self.width;
+        let asked = |v: u32, i: usize| -> i64 {
+            let at = v as usize * width + i;
+            i64::from(table[at]) + i64::from(ask.table[at])
+        };
+        let mut point: Vec<i64> = (0..width).map(|i| asked(tokens[t], i) << 16).collect();
+        if let Some((reach, gains)) = &ask.carry {
+            for s in 1..=(*reach).min(t - start) {
+                let v = tokens[t - s];
+                let gain = i64::from(gains[v as usize]);
+                for (i, p) in point.iter_mut().enumerate() {
+                    *p += gain * asked(v, i);
+                }
+            }
+        }
+        Some(point)
+    }
+
+    /// Each ask head's question code at row `t` (window from `start`): the sign code of
+    /// [`Self::asked_point`] through the key rotation, or `None` without ask heads.
+    pub fn ask_queries(&self, table: &[i16], tokens: &[u32], t: usize, start: usize) -> Option<Vec<u64>> {
+        let point = self.asked_point(table, tokens, t, start)?;
+        let head_width = self.width / self.heads;
+        Some((self.copy..self.heads).map(|h| head_code(&self.key, &point, h, head_width)).collect())
     }
 
     /// Type head `j`'s key code for vocabulary entry `token`.
