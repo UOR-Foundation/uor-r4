@@ -104,7 +104,7 @@ Read top to bottom; the first row that matches decides.
 | 4u | recall not moved, and at both seeds L-aC's rise in first-line count from `step-012288` to `step-016384` is at least 8 above L-a's rise at the same seed | **Not learned yet** (B2-aC's shape), and the rise is the carry's, not the shared recipe's. Next: L-aC alone at 32,768 steps, two seeds, under its own sheet and cost. That run is a different LR schedule: `--lr-end 0` decays linearly over the whole run, so the step-16,384 point of a 32,768-step run is at half the learning rate, not at its end. That sheet reads its trend against its own steps, not this run's. |
 | 4 | recall not moved, otherwise | **No recall gain from the ask heads and the carry at 16,384 steps,** for this configuration only. Next: a decision review in the REPORT, reading the trend, the `−C` cut and the pull distance together. |
 
-A seed that is NOT_RUN reruns once, sealing to `runs-2/` (L-002).
+A seed that is NOT_RUN reruns once, sealing to `runs-2/` (L-002), on a fresh pod: the job refuses an existing `run/`, and the seal an existing `oh-seal/` (pre-run review, minor 2).
 
 ## Instrument checks
 
@@ -199,4 +199,26 @@ claude-322's, with:
 
 ## Pre-run review
 
-Pending.
+[claude] D67 pre-run review, 9 Nov 2026: three fresh reviewers (delegate:reviewer, Opus), each given the sheet and the scripts only, in `local/claude/claude-339/`.
+
+- **Round 1** read job-339's config check (arm_want against the trainer's Config at fbf15e56, keys left out at 0 or false), I-pull (`pull.jsonl` is written at every checkpoint, so the smoke at eval-every 32 has four lines), the snapshot steps (EVERY 1,024, so 8,192, 12,288 and 16,384 are checkpoints), the I-xg handshake, seed-339's $0.70/h refusal and pin check, and seal-339's root guard (four distinct roots). It found two minor issues, both fixed: the no-file I-pull test now checks its reason, and a `runs-2` rerun goes on a fresh pod (Stop rule above). It ran out of context before the rest.
+- **Round 2a** (watcher, launcher, job's remaining parts, chain): **PASS**, with three minor findings.
+  - M2 is fixed: a failed `uor-pod run` is now reported, not hidden by the pipe.
+  - M1 is declined: I-t's projected wall is used + 1.05 × rate × 16,384 + 300, so wall − used is the remaining projected time. The watcher's time notice, the time already up + 1.5 × that, is the sheet's rule.
+  - M3 is declined: renewing while ssh is down would keep a dead pod billing (inherited from claude-322).
+  - It found that `score_one` scores through the CUDA `train-in-space --score-rows`, which loads the asks and the carry, so the CPU scorer's refusal does not apply.
+- **Round 2b** (`read-339.sh`): **FAIL** on its serve mode.
+  - **B1:** bash 3.2 treats an empty array as unbound under `set -u`, so the default-engine call stops `serve`.
+  - **M1:** `score/` is not fresh, and a scorer refusal can read an old report.
+  - **M2:** I-cut does not check that the cut's header shows no carry.
+  - **M3:** a missing step-016384 still exits 0.
+  - Its `ixg` mode, the only part used during the runs, was reviewed sound: the config pin, the refusal to overwrite, and the comparison with `86e51d5e…`.
+  - So the serve-mode findings gate the readings, not the launch. They are fixed and tested before any reading; the record of that goes in the REPORT.
+- **Tests:** test-gates 81/81, test-read 28/28, test-seal and test-watch pass. The watch mutations are 10/10 caught. In the job mutations, ipull-no-file-ok and ixg-no-timeout are now caught, after the I-pull reason check and an 8 s watchdog on the no-verdict wait. The full mutation run is re-run before the REPORT.
+
+**Pins** (SHA-256 of the shipped scripts, the same files both rounds read; `seed-339.sh` refuses any other):
+- job-339.sh `f553a7659106b8f09410fd8774549ce6aff6311ec440d85751c3df66e03029df`
+- chain-339.sh `2e4a9c66afa3f4876ab03719f63a75add3f1769eb6289e0878d172a5d1b88a52`
+- seal-339.sh `9594f63f720dd7c1cedb92df539b8282939719c6f5c1dad886c4e7affca5cb92`
+
+**Verdict: PASS for the launch.** The whole chain is present: the pin fbf15e56 is in the repo, the TRAIN mix, panels and claude-322's seal are in the HF store, and claude-322's laptop export matches. A pass unlocks rows 1 to 4u; a fail sends the cell to rows 0a to 0c. The FIT is above; the lease stays inside the caps (4 pods at no more than $0.70/h each against $8/h). L-aC seed 1 goes first; the other three cells start after its I-xg PASS.
