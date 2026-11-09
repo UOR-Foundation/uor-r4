@@ -123,7 +123,7 @@ claude-339's, with:
 - **I-nopull failing:** NOT_RUN for that arm and seed (instrument).
 - **A snapshot failing** at an intermediate step: the trend loses that point, and the REPORT says so. At `step-016384` it is row 0c.
 - **A healthy run is never cancelled for cost.** The watcher logs notices and takes a pod down only on the four checks below.
-- **The four teardown checks (the owner's rule for claude-339's pods, per pod):** the chain ended `job=0 seal=0`; all 40 required files are in the seal's list (claude-339's 41, without `pull.jsonl`); the store's `SHA256SUMS` read from the laptop equals the pod's; and no GPU process remains. Any other ending holds that pod alone, leased, so the reaper cannot delete the only copy. The hold ends when the session or the pull releases it, or after 6 h with a notice.
+- **The four teardown checks (the owner's rule for claude-339's pods, per pod):** the chain ended `job=0 seal=0`; all 45 required files are in the seal's list (claude-339's 41 without `pull.jsonl`, plus I-xa's smoke checkpoint and snapshot); the store's `SHA256SUMS` read from the laptop equals the pod's; and no GPU process remains. Any other ending holds that pod alone, leased, so the reaper cannot delete the only copy. The hold ends when the session or the pull releases it, or after 6 h with a notice.
 - **A stall (30 unchanged checks) logs a notice and pauses renewal,** as earlier watchers did, so a hung pod does not bill forever. At least 3.5 h of the last lease remain for the session to read the notice.
 
 ## Changes from claude-339's sheet
@@ -150,4 +150,12 @@ The non-author FIT returned **FIT WITH CHANGES**, one blocker and eight others, 
 
 ## Pre-run review
 
-**Round 1, two fresh reviews of the scripts (9 Nov), each PASS WITH CHANGES, no pod launched.** The pod scripts' review had no blocker; its findings were the watcher's teardown rule and the unsealed path that could lose the only copy. The read path's review had two blockers: `verdict` read a row without `serve` having passed, and NOT_RUN cells got a row. Both are fixed, with tests and mutations in `local/claude/claude-344/gt/`. Round 2 and the launcher's pins are recorded here before any pod.
+**Round 1, two fresh reviews of the scripts (9 Nov), each PASS WITH CHANGES, no pod launched.** The pod scripts' review had no blocker; its findings were the watcher's teardown rule and the unsealed path that could lose the only copy. The read path's review had two blockers: `verdict` read a row without `serve` having passed, and NOT_RUN cells got a row. Both are fixed, with tests and mutations in `local/claude/claude-344/gt/`.
+
+**Round 2, one fresh review of the changed teardown and read code (9 Nov), PASS WITH CHANGES, no pod launched.** Five findings were fixed: the GPU check could read an empty answer as "no GPU process"; the pull ignored a required-files check that could not run; a log tail containing `seal=0` could be read as a sealed chain; the required list lacked I-xa's smoke checkpoint and snapshot (now 45 names); and a renewal was skipped during an ssh outage. A sixth was not a defect: `carry_ok` already refuses an empty ask array, and a test now pins that.
+
+**The positive control passed** (`control-344.sh`): claude-322's two artifacts by hash, all four sealed reports, EOS 109, 86, 6 and 0, the dev curves exact against themselves, and `verdict` refusing without `SERVE_OK` and printing row 4 with it. It ran the final `read-344.sh` (`32b6c4b5133f…`). The two N0 I-xa lines failed as expected, since claude-322 sealed no smoke snapshot.
+
+**Script tests at the launch:** gates, seal, watch, pull, hold and read pass. Mutations caught: job 34 of 34, watch 10 of 10, read 31 of 31, hold 13 of 13.
+
+**This review's decision, for the D67 record:** the whole-project chain is claude-301's recipe, claude-322's sealed reference and claude-339's sealed L-a; TRAIN and every tool are in the store or pinned by SHA-256; a pass or a fail each unlocks a named row above; the caps allow four pods at at most $0.70/h; and the FIT is applied. Launcher pins, SHA-256 of the shipped scripts: `job-344.sh` `2d26daf7da2bbb30c5e9145bf6cd59fba5391856a462b71cd755e16f71bfd788`, `chain-344.sh` `2c74bcdc2296215272f086b52b33ac8c9efe426c2bd39b66f2abe18b4459449a`, `seal-344.sh` `eed91faaec6d8f6cd354e16b7cdf6cbbf0b55cb6e502ecc98dca3041250ccbb0`.
