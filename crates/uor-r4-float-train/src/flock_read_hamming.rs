@@ -4995,8 +4995,9 @@ mod tests {
         assert_ne!(run(&carried).0, plain, "a moved gain moves the readout");
     }
 
-    /// claude-335, I-C2: one nonzero question point `u` at row `t` reaches the asked points of
-    /// rows `t + 1` to `t + h` of its own window as `c[x_t] · u`, exactly, and nothing else: row
+    /// claude-335, I-C2: one nonzero question point `u + a[x_t]` at row `t` (and `a[x_t]` alone
+    /// at the other window's rows of `x_t`, checked by a brute-force sum) reaches the asked points
+    /// of rows `t + 1` to `t + h` of its own window as `c[x_t] · (u + a[x_t])`, exactly, and nothing else: row
     /// `t` keeps its own point unscaled, and no row before it, past `t + h`, or in the batch's
     /// other window gets any, also when the window ends inside the carry. Under `−C` only row `t`
     /// is nonzero.
@@ -5025,23 +5026,41 @@ mod tests {
             .map(|i| if i < time { i as u32 } else { ((i * 3) % 16) as u32 })
             .collect();
         let u: Vec<f32> = (0..width).map(|k| (k % 7) as f32 * 0.5 - 1.0).collect();
+        // The question table's row of `t`'s token, so the carry must carry `point + a`, not the
+        // point alone (claude-335 FIT round 1, minor 1).
+        let ua: Vec<f32> = (0..width).map(|k| (k % 5) as f32 * 0.25 - 0.5).collect();
         for t in [3usize, 13] {
             let mut current = vec![0.0f32; batch * time * width];
             current[t * width..(t + 1) * width].copy_from_slice(&u);
+            let mut table = vec![0.0f32; 16 * width];
+            let token = ids[t] as usize;
+            table[token * width..(token + 1) * width].copy_from_slice(&ua);
+            ask.set(&Tensor::from_vec(table, (16, width), &device).unwrap()).unwrap();
+            // Every row's own question, `point + a[x_r]`: `t`'s, and the rows of the other
+            // window that hold `t`'s token.
+            let own: Vec<Vec<f32>> = (0..batch * time)
+                .map(|r| {
+                    let point = if r == t { u.clone() } else { vec![0.0; width] };
+                    let a = if ids[r] as usize == token { ua.clone() } else { vec![0.0; width] };
+                    point.iter().zip(&a).map(|(p, q)| p + q).collect()
+                })
+                .collect();
             let current = Tensor::from_vec(current, (batch * time, width), &device).unwrap();
             for off in [false, true] {
                 set_carry_off(off);
                 let asked = read.asked(&current, ask, &ids, time).unwrap().to_vec2::<f32>().unwrap();
                 set_carry_off(false);
-                let g = gains[ids[t] as usize];
                 for (r, row) in asked.iter().enumerate() {
-                    let want: Vec<f32> = if r == t {
-                        u.clone()
-                    } else if !off && r > t && r <= t + rows && r < time {
-                        u.iter().map(|v| g * v).collect()
-                    } else {
-                        vec![0.0; width]
-                    };
+                    // The brute-force sum over the `rows` rows before `r` in its own window.
+                    let mut want = own[r].clone();
+                    if !off {
+                        for s in 1..=rows.min(r % time) {
+                            let g = gains[ids[r - s] as usize];
+                            for (w, v) in want.iter_mut().zip(&own[r - s]) {
+                                *w += g * v;
+                            }
+                        }
+                    }
                     assert_eq!(*row, want, "point at {t}, row {r}, carry off {off}");
                 }
             }

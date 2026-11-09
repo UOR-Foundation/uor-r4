@@ -1,18 +1,36 @@
 # Prep sheet: the question carry (one-model-end-to-end, claude-335, 9 Nov 2026)
 
-TEST FITNESS: pending. The code under review is `95e4c6f0f` (claude-335's code commit, on PR 3888), with this sheet beside it.
+The code under review is `95e4c6f0f` (claude-335's code commit, on PR 3888), with this sheet beside it.
+- **claude-335 FIT round 1, sheet slice, at `60ddeeab5`:** FIT, no blocker, no major. Seven minors and a nit, all applied:
+  - the question table's steps and seed-2 numbers, with B2-aqH's 16,384 line added;
+  - branch 3c compares the question row at the same step (4,096), and names a choice that fades with length;
+  - the `both` pull's `λ/2` split, stated and named in branch 1;
+  - the bar's steps by row;
+  - B2-aqC decides branch 3;
+  - seed 3's arm list;
+  - 3c read whatever the scored row reads.
+
+- **claude-335 FIT round 1, mechanism slice, at `60ddeeab5`:** FIT, no blocker, no major. It checked the carried sum's rows and windows, the pull's flat row indexing, the cut, the refusals, save and load, the default path (bit-identical by reading), and each CUDA mutation against its test. Applied:
+  - **Minor:** no test pinned that the forward carries `point + a` rather than the point alone. I-C2 now sets `a[x_t]` nonzero and checks a brute-force sum, with the gate `c-carry-no-a`.
+  - **Nit:** the sheet's place for the snapshot export's refusal is corrected.
+  - **Nit, not applied:** `with_carry` accepts any `vocab`. The load refuses a mismatch, and the run passes `SHEET_VOCAB` for both, so it cannot arise here.
+
+TEST FITNESS: **FIT** (round 1, both slices), with every finding applied or answered above.
 
 ## The question
 
 [claude-334](../../loop/tasks/one-model-end-to-end/claude-334/REPORT.md) closed the hold for `h = 8`: a held depth-2 stream write does not carry the chosen value to B2's scored row. On both seeds, at 4,096 and at 16,384 steps, every B2 arm answers at most 2 of 512 queries in a far bucket.
 
-Its sealed traces show where the read loses the question. These are the readout read (depth 6), ask heads (`copy == false`), last checkpoint:
+Its sealed traces show where the read loses the question. These are the readout read (depth 6), ask heads (`copy == false`), range over heads and buckets:
 
-| Arm (seed 1 / seed 2) | `kept_ask` at `query` (the `Q` row), of 512 | `kept_ask` at `scored`, of 512 |
+| Arm (seed 1 / seed 2), step | `kept_ask` at `query` (the `Q` row), of 512 | `kept_ask` at `scored`, of 512 |
 |---|---|---|
-| B1-a (answers 512 / 512) | 512 / 512, every head and bucket | 512 / 512, every head and bucket |
-| B2-aq | 410–512 / 479–512 | 0 / 0 |
-| B2-aqH | 512 / 475–512 | 0 / 0 |
+| B1-a (answers 512 / 512), 4,096 | 512 / 479–512 | 512 / 479–512 |
+| B2-aq, 4,096 | 410–512 / 479–512 | 0 / 0 |
+| B2-aqH, 4,096 | 512 / 475–512 | 0 / 0 |
+| B2-aqH, 16,384 | 343–464 / 355–391 | 0 / 0 |
+
+The question-row choice weakens with length in B2-aqH, which branch 3c below accounts for.
 
 `kept_ask` counts the queries where the head keeps the asked value's position among its picks, with weight above 0 (`count_trace`, `in_space_long.rs:12689`).
 
@@ -45,9 +63,9 @@ Under `--hamming-carry-question h` (it requires `--hamming-ask 1`), each ask hea
 - **No squashing:** `c` is a raw scalar, with no bound and no normalization.
 - **Not served in this unit:**
   - The decode step refuses a carried read by name (`:1836–1840`). So does the decode cache, which refuses it in `geometric_stack_native.rs`.
-  - Both export paths refuse it by name, before any other clause, in `fbs_export.rs`.
+  - Both export paths refuse it by name in `fbs_export.rs`: `round_hamming_as_exported` before any other clause, and `fbs_hamming_snapshot` after its depth and width check and before every per-depth clause.
 
-**`--hamming-attract-at both`.** The pull sits at the question rows and the scored rows together (`attract_plan`, `in_space_long.rs:3107`, gives `[header, 0]`; `attract_rows_at`, `:3072`). `scored` and `question` are unchanged.
+**`--hamming-attract-at both`.** The pull sits at the question rows and the scored rows together (`attract_plan`, `in_space_long.rs:3107`, gives `[header, 0]`; `attract_rows_at`, `:3072`). `scored` and `question` are unchanged. The pull's loss is the mean over all its terms (`flock_read_hamming.rs:1113–1122`), so under `both` each placement carries about `λ/2`, while B2-aC's scored rows carry the whole `λ`. The logged pull distance under `both` is the pooled mean of the two placements.
 
 **The cut `−C`.** An evaluation-time cut that drops the carried term alone (`set_carry_off`; `Ablation::CarryOff`, `in_space_long.rs:12454`, pushed for carried arms at `:12910`). It leaves `c`, `a` and every other read untouched (I-C4). A pass is attributed to the carry only if the arm's `−C` recall fails the bar.
 
@@ -58,7 +76,7 @@ Under `--hamming-carry-question h` (it requires `--hamming-ask 1`), each ask hea
 **Common to every arm**, as claude-334's sheet:
 - `--objective nearest --retain-rates 1 --decay-mult 1 --batch 16 --lr 0.001 --lr-end 0 --recall-eval-windows 256 --recall-readings 1`;
 - context 192;
-- seeds 1 and 2, with seed 3 if the two seeds split.
+- seeds 1 and 2, with seed 3 if the two seeds split. Seed 3 runs the whole arm list below, behind the same probe ladder.
 
 The ask arms take `--hamming-read 4 --hamming-ask 1 --hamming-attract 1`.
 
@@ -78,7 +96,9 @@ The ask arms take `--hamming-read 4 --hamming-ask 1 --hamming-attract 1`.
   - `c` per checkpoint for the 16 question tokens, the 4 header tokens and the 512 value tokens (each as mean, minimum and maximum), and the mean of the rest (`RecallReading::hamming_carry_gain`).
 - claude-334's stream ranks are recorded where the code writes them, and are descriptive only: **no stream rank decides a branch** (claude-334's lesson).
 
-## Bar (pre-registered), at step 16,384, both far buckets, both seeds
+## Bar (pre-registered), both far buckets, both seeds
+
+The instrument rows are read on the 4,096-step arms at step 4,096; the B2 and attribution rows at step 16,384.
 
 | Check | Passes when |
 |---|---|
@@ -98,13 +118,13 @@ The branches read the **scored-row trace** of the readout read: `position == "sc
 0. **I-R1, I-R2, I-T or I-T0 fails:** an instrument fault. Repair it and rerun; nothing else is read.
 1. **A carried arm passes, and its `−C` fails the bar:** the carried question reaches the scored row and answers there.
    - **If B2-aC passes:** the scored loss alone trains the carry.
-   - **If only the `both` arms pass:** the carry answers once the question is also trained at its own row.
+   - **If only the `both` arms pass:** the carry answers once the question is also trained at its own row. The `both` arms also put half the pull's weight on the scored rows, so the REPORT names the placement and the scored-row weight together as the difference, not the placement alone.
    - Either way the REPORT reads `c` (expected largest on the question tokens) and the plain scored-row trace (expected kept).
    - **Next:** serve the carry at the decode step and in the export. It needs only the last `h` rows' ids. Then a language run with the carry, under its own sheet.
 2. **A carried arm passes, and its `−C` passes too:** the answer does not come through the carry.
    - The arm differs from claude-334's failing B2-aq in the pull's placement and in its length.
    - **Next:** B2-aq with `--hamming-attract-at both` at 16,384 and no carry, under its own sheet. No credit goes to the carry.
-3. **No carried arm passes.** Split by B2-aqC's readings, then B2-aqC8's where they differ:
+3. **No carried arm passes.** B2-aqC's readings decide the branch. B2-aqC8's and B2-aC's are reported beside it, each with the branch it would read, and change nothing:
    - **3a. Kept at the scored row, and the recall fails:** the carried question names the key at `H4`, and the readout combine does not turn the kept value into the answer.
      - The REPORT reads `weight_ask` against `weight_oth`.
      - **Next:** the readout combine at a carried question, tested on B2 first.
@@ -112,9 +132,10 @@ The branches read the **scored-row trace** of the readout read: `position == "sc
      - If its upper bound (`max(|min|, |max|)`) is below 0.01, **the carry never grew**: a configuration result for this `lr` and budget. **Next:** the carry's start (a nonzero start or a learning rate of its own), tested on B2 first.
      - Otherwise, **it grew and does not deliver**: a configuration result for this form. **Next:** the carry's form, a carried question that replaces the row's own rather than adding to it, tested on B2 first.
      - If `|mean| < 0.01 ≤` the upper bound, the REPORT names the case as undecided, and takes the form branch.
-   - **3c. Lost at the question row:** the readout read's ask heads do not choose at `Q`, so there is nothing to carry.
-     - If B2-aq's question-row trace at depth 6 is also below `0.5 · rows` in this run, it is an instrument fault (I-R2 should have caught it). Repair it and rerun.
-     - Otherwise it is a configuration result: the carried pull disturbs the question's own choice. **Next:** the pull's placement weights (the question rows against the scored rows), tested on B2 first.
+   - **3c. Lost at the question row** (whatever the scored row reads): the readout read's ask heads do not choose at `Q`, so there is nothing to carry. Read the arm's own question-row trace at step 4,096 against B2-aq's step-4,096 line, at the same step:
+     - If B2-aq's question row is also below `0.5 · rows` at 4,096, it is an instrument fault (I-R2 should have caught it). Repair it and rerun.
+     - If the carried arm's question row is kept at 4,096 and lost at 16,384, the choice fades with length, as B2-aqH's did in claude-334 (512 / 475–512 at 4,096, 343–464 / 355–391 at 16,384, with no carry). It is a configuration result of the length, not of the carry. **Next:** the question-row choice over a long run (its margin or the pull's weight there), tested on B2 first.
+     - Otherwise (lost at 4,096 where B2-aq keeps it): a configuration result, in which the carried pull disturbs the question's own choice. **Next:** the pull's placement weights (the question rows against the scored rows), tested on B2 first.
    - **3d. Any other pattern** (entries that are neither kept nor lost, or seeds that disagree on the branch after seed 3): named from the readings and recorded as a configuration result.
      - **Next:** a diagnostic sheet, with no lever chosen in advance.
 
@@ -150,6 +171,7 @@ The branches read the **scored-row trace** of the readout read: `position == "sc
     - the pull asking without the carry;
     - the carried term detached in the pull;
     - `−C` ignored.
+  - **A ninth, from FIT round 1** (`mutate-335b.sh c-carry-no-a`): the forward carries the token point alone, not `point + a`. I-C2 now sets `a[x_t]` nonzero and checks a brute-force sum, so this mutation must fail it. The test pod t1 ran at `310e7d031`, before the change; the run pods run the strengthened I-C2 and this gate at the run pin before any arm trains, and stop if either misses.
 - **I-R1, I-R2, I-T, I-T0:** as in the bar.
 
 ## Probe ladder
