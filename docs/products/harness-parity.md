@@ -15,7 +15,7 @@ Reference: [Claude Desktop](https://docs.anthropic.com/en/docs/claude-code/deskt
 | Capability | Required observable acceptance | Fixture evidence | Live evidence | Status |
 |---|---|---|---|---|
 | Neutral shared shell | Every view matches the reviewed neutral Claude-style hierarchy; no green placeholder theme | Playwright and direct screenshot review across agent/workspace/changes/terminal/models/guide/split | Local Vite app at 1440×900 and 390×852, both themes; native app is separately gated below | **PASS (visual shell only)** |
-| Light/dark and responsive | 1440×900 and 390×852, both themes, keyboard/focus and no unintended overflow | Playwright and direct screenshot review across all seven surfaces plus mobile split open/close | Local Vite app; all 43 combined Playwright checks pass | **PASS (browser shell only)** |
+| Light/dark and responsive | 1440×900 and 390×852, both themes, keyboard/focus and no unintended overflow | Playwright and direct screenshot review across all seven surfaces plus mobile split open/close | Local Vite app; all 45 combined Playwright checks pass | **PASS (browser shell only)** |
 | Projects | Create from scratch/existing folder; instructions, files, tasks, and instructions/memory | New-project modal and real folder callback are covered only | Full project model NOT_RUN | NOT_RUN |
 | Project memory | View/edit/delete project memory; optional account-memory behavior is explicit | NOT_RUN | NOT_RUN | NOT_RUN |
 | Parallel sessions/tasks | Independent project folders, transcripts, event cursors, artifacts, and approvals run concurrently | Independent create/resume is covered only | Concurrent agent tasks NOT_RUN | NOT_RUN |

@@ -1,17 +1,45 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cdpConnect, launchChrome, trapPageLoad } from './verify_studio_page_load.mjs';
 
 const repo = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const evidenceRoot = resolve(repo, '../..', 'local/kimi/studio-final-acceptance');
+const evidenceBase = resolve(repo, '../..', 'local/kimi/studio-final-acceptance');
+const hostBinary = resolve(repo, 'target/kimi-final-acceptance/debug/uor-desktop-client');
+const distRoot = resolve(repo, 'web/studio/dist');
+const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sourceIdentity = {
+    head: git('rev-parse', 'HEAD'),
+    tree: git('rev-parse', 'HEAD^{tree}'),
+    status: git('status', '--porcelain').split('\n').filter(Boolean),
+    hostBinary: { path: hostBinary, sha256: sha256(await readFile(hostBinary)) },
+    dist: await (async () => {
+        execFileSync('bash', ['scripts/studio/runtime-files.sh', '--verify', distRoot, '--typed'], { cwd: repo, stdio: 'pipe' });
+        const files = {};
+        const visit = async (directory) => {
+            const entries = await readdir(directory, { withFileTypes: true });
+            entries.sort((a, b) => a.name.localeCompare(b.name));
+            for (const entry of entries) {
+                const path = join(directory, entry.name);
+                if (entry.isSymbolicLink()) throw new Error(`dist symlink is not evidence: ${path}`);
+                if (entry.isDirectory()) await visit(path);
+                else if (entry.isFile()) files[relative(distRoot, path).split(sep).join('/')] = sha256(await readFile(path));
+            }
+        };
+        await visit(distRoot);
+        return { root: distRoot, files, combinedSha256: sha256(JSON.stringify(files)) };
+    })(),
+};
+const evidenceRoot = resolve(evidenceBase, sourceIdentity.head);
 await mkdir(evidenceRoot, { recursive: true });
+await writeFile(resolve(evidenceRoot, 'identity.json'), JSON.stringify({ capturedAt: new Date().toISOString(), ...sourceIdentity }, null, 2) + '\n');
 const workspace = await mkdtemp(join(evidenceRoot, 'browser-workspace-'));
 const profileDir = await mkdtemp(join(tmpdir(), 'uor-loopback-browser-'));
-const hostBinary = resolve(repo, 'target/kimi-final-acceptance/debug/uor-desktop-client');
 const origin = 'http://127.0.0.1:8765';
 let host;
 let chrome;
@@ -29,6 +57,46 @@ async function evaluate(expression) {
     const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, attached.sessionId);
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
+}
+
+async function terminalCdpSession() {
+    const { targetInfos } = await cdp.send('Target.getTargets');
+    const target = targetInfos.find((entry) => entry.url.startsWith(origin) && entry.url.includes('typed=1'));
+    if (!target) throw new Error('terminal target is unavailable');
+    return (await cdp.send('Target.attachToTarget', { targetId: target.targetId, flatten: true })).sessionId;
+}
+
+async function typeTerminal(command) {
+    await evaluate(`document.querySelector('.xterm-helper-textarea')?.focus()`);
+    const session = await terminalCdpSession();
+    for (const key of command) {
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key, text: key }, session);
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key }, session);
+    }
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, session);
+    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 }, session);
+}
+
+async function readTerminal(sessionId) {
+    return evaluate(`(async()=>{
+        const snapshot = await window.__TAURI__.core.invoke('native_read_terminal', { sessionId: ${JSON.stringify(sessionId)}, after: 0 });
+        return {
+            active: snapshot.active,
+            text: snapshot.events.filter((event) => event.type === 'output').map((event) => {
+                const bytes = new Uint8Array(event.dataHex.match(/.{2}/g).map((pair) => Number.parseInt(pair, 16)));
+                return new TextDecoder().decode(bytes);
+            }).join(''),
+        };
+    })()`);
+}
+
+async function waitTerminal(sessionId, predicate, label) {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+        const snapshot = await readTerminal(sessionId);
+        if (predicate(snapshot)) return snapshot;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    throw new Error(`terminal condition failed: ${label}; ${JSON.stringify(await readTerminal(sessionId))}`);
 }
 
 async function openTypedPage() {
@@ -56,6 +124,8 @@ async function main() {
         '--grant', workspace,
         '--enable-terminal',
         '--approve-command', workspace, 'pwd',
+        '--approve-shell', workspace, '/bin/zsh',
+        '--terminal-home', workspace,
     ], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
     let hostLog = '';
     host.stdout.on('data', (chunk) => { hostLog += chunk.toString(); });
@@ -78,7 +148,7 @@ async function main() {
     const completeSessionFlow = flow?.created
         && flow.beforeSend?.idMatches && flow.beforeSend?.markerMatches
         && flow.answerReady && flow.firstTranscript?.includes('17+25')
-        && flow.firstTranscript?.includes('assistant\n\n42\n')
+        && flow.firstTranscript?.includes('R4 Harness\n\n42\n')
         && flow.otherHasAnswer === false
         && flow.otherResume?.idMatches && flow.otherResume?.markerMatches
         && flow.restoredResume?.idMatches && flow.restoredResume?.markerMatches
@@ -154,35 +224,75 @@ async function main() {
         let selfEnableRefused = false;
         try { await window.__TAURI__.core.invoke('native_set_terminal_enabled', { enabled: true }); } catch (_error) { selfEnableRefused = true; }
         if (!selfEnableRefused) throw new Error('page RPC enabled terminal without host approval');
-        await click('Terminal');
-        await click('Enable terminal');
-        await pause(100);
-        const command = root.querySelector('input[aria-label="Terminal command"]');
-        command.value = 'pwd';
-        command.dispatchEvent(new Event('input', { bubbles: true }));
-        await waitFor(() => button('Run command')?.disabled === false);
-        await click('Run command');
-        await waitFor(() => document.getElementById('terminalOutput')?.textContent.trim());
-        const output = document.getElementById('terminalOutput')?.textContent || '';
-        if (output.trim() !== ${JSON.stringify(workspace)}) {
-            const diagnostic = {
-                consent: document.getElementById('terminalConsentState')?.textContent,
-                cwd: root.querySelector('input[aria-label="Working directory"]')?.value,
-                command: command.value,
-                runDisabled: button('Run command')?.disabled,
-                output,
-            };
-            throw new Error('approved pwd output mismatch: ' + JSON.stringify(diagnostic));
-        }
-        await click('Run command');
-        await pause(200);
-        const second = document.getElementById('terminalOutput')?.textContent || '';
-        if (!second.includes('cancelled')) throw new Error('one-shot approval was reused: ' + second);
-        return { attached, summary, output, second, selfEnableRefused };
+        return { attached, summary, selfEnableRefused };
     })()`);
+
+    const clickLabel = async (label) => evaluate(`(()=>{
+        const root = document.getElementById('studio-typed-root');
+        const button = Array.from(root.querySelectorAll('button')).find((entry) => entry.textContent === ${JSON.stringify(label)});
+        if (!button) throw new Error('missing button in active workbench: ' + ${JSON.stringify(label)});
+        button.click();
+    })()`);
+    await clickLabel('Terminal');
+    const legacyControls = await evaluate(`Array.from(document.querySelectorAll('button')).filter((button) => button.textContent === 'Run command' || button.textContent === 'Enable terminal').map((button) => ({
+        id: button.id,
+        inTypedRoot: Boolean(button.closest('#studio-typed-root')),
+        rendered: button.getClientRects().length > 0,
+    }))`);
+    if (legacyControls.some((control) => control.inTypedRoot || control.rendered)) {
+        throw new Error('a legacy terminal control is active or visible: ' + JSON.stringify(legacyControls));
+    }
+    await clickLabel('Open terminal');
+    let sessionId = '';
+    for (let attempt = 0; attempt < 200 && !sessionId; attempt += 1) {
+        sessionId = await evaluate(`document.getElementById('terminalOutput')?.dataset.sessionId || ''`);
+        if (!sessionId) await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    if (!sessionId) throw new Error('interactive PTY did not mount: ' + await evaluate(`document.getElementById('terminalConsentState')?.textContent`));
+    await evaluate(`document.querySelector('.xterm-helper-textarea')?.focus()`);
+    await typeTerminal("printf 'READY\\n'");
+    await waitTerminal(sessionId, (snapshot) => snapshot.text.includes('READY'), 'first shell output');
+    await typeTerminal('read answer');
+    await typeTerminal('fixture-answer');
+    await typeTerminal("printf 'ANSWER:%s\\n' \"$answer\"");
+    await waitTerminal(sessionId, (snapshot) => snapshot.text.includes('ANSWER:fixture-answer'), 'read reply');
+    await typeTerminal('pwd');
+    await waitTerminal(sessionId, (snapshot) => snapshot.text.includes(workspace), 'working directory');
+    await typeTerminal('stty size');
+    const sized = await waitTerminal(sessionId, (snapshot) => /\d+ \d+/.test(snapshot.text), 'terminal dimensions');
+    const size = sized.text.match(/\d+ \d+/)?.[0] || '';
+    const rendered = await evaluate(`document.querySelector('.xterm-rows')?.textContent || ''`);
+    if (!rendered.includes('ANSWER:fixture-answer')) throw new Error('xterm did not render the shell response');
+    await typeTerminal('exit');
+    await waitTerminal(sessionId, (snapshot) => !snapshot.active, 'shell exit');
+    await clickLabel('Close shell');
+    const closedInputRejected = await evaluate(`(async()=>{
+        try { await window.__TAURI__.core.invoke('native_terminal_input', { sessionId: ${JSON.stringify(sessionId)}, data: 'exit\\n' }); return false; }
+        catch (_) { return true; }
+    })()`);
+    if (!closedInputRejected) throw new Error('closed PTY accepted later input');
+    await clickLabel('Open terminal');
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+    const second = await evaluate(`document.getElementById('terminalConsentState')?.textContent || ''`);
+    const secondSessionId = await evaluate(`document.getElementById('terminalOutput')?.dataset.sessionId || ''`);
+    const rawRefusal = await evaluate(`(async()=>{
+        try { await window.__TAURI__.core.invoke('native_open_terminal', { cwd: ${JSON.stringify(workspace)}, rows: 24, cols: 80 }); return 'opened'; }
+        catch (error) { return String(error); }
+    })()`);
+    if (second !== 'Shell opening was cancelled; no PTY was started.' || secondSessionId || !rawRefusal.includes('TerminalConsentRequired')) {
+        throw new Error('second-shell authorization boundary failed: ' + JSON.stringify({ second, secondSessionId, rawRefusal }));
+    }
+    Object.assign(workflow, { output: sized.text, size, sessionId, second, rawRefusal, closedInputRejected, rendered, legacyControls });
 
     const saved = await readFile(join(workspace, 'untitled.md'), 'utf8');
     if (saved !== 'Loopback native edit/save acceptance.\n') throw new Error('native save disk bytes differ: ' + JSON.stringify(saved));
+    const initialSession = await evaluate(`(()=>({
+        id: window.__studioUi.activeSessionId(),
+        messages: window.__studioUi.getConversationMessages(),
+    }))()`);
+    if (!initialSession.id || !Array.isArray(initialSession.messages)) {
+        throw new Error('initial session identity/transcript was not captured: ' + JSON.stringify(initialSession));
+    }
 
     const reopened = await trapPageLoad(cdp, origin, '/?typed=1');
     if (!reopened.loaded || reopened.external.length || reopened.rawTypeScript.length || reopened.runtimeErrors.length) {
@@ -194,14 +304,15 @@ async function main() {
         const attachments = window.__studioUi.getAttachments();
         const active = window.__studioFiles.activeFile();
         return {
-            exactTranscript: messages.some((message) => message.content.includes('17+25')) && messages.some((message) => message.content.includes('42')),
+            exactTranscript: JSON.stringify(messages) === JSON.stringify(${JSON.stringify(initialSession.messages)}),
+            sessionIdMatches: window.__studioUi.activeSessionId() === ${JSON.stringify(initialSession.id)},
             attachment: attachments.some((entry) => entry.name === 'untitled.md' && entry.content === 'Loopback native edit/save acceptance.\\n'),
             editor: active?.path === 'untitled.md' && active.content === 'Loopback native edit/save acceptance.\\n',
             rootPath: window.__studioFiles.treeSummary().rootPath,
             artifactText: document.getElementById('studio-typed-root').textContent.includes('Artifact: unselected') ? 'unselected' : 'selected-or-ready',
         };
     })()`);
-    if (!restored.exactTranscript || !restored.attachment || !restored.editor || restored.rootPath !== '') {
+    if (!restored.exactTranscript || !restored.sessionIdMatches || !restored.attachment || !restored.editor || restored.rootPath !== '') {
         throw new Error('reopened state or per-process grant state is wrong: ' + JSON.stringify(restored));
     }
     const reselectedRoot = await evaluate(`(async()=>{
@@ -224,8 +335,16 @@ async function main() {
     await writeFile(join(evidenceRoot, 'loopback-acceptance.png'), Buffer.from(screenshot.data, 'base64'));
     const report = {
         verdict: 'LOOPBACK STUDIO ACCEPTANCE PASSED',
+        completedAt: new Date().toISOString(),
+        identity: {
+            head: sourceIdentity.head,
+            tree: sourceIdentity.tree,
+            hostBinarySha256: sourceIdentity.hostBinary.sha256,
+            distCombinedSha256: sourceIdentity.dist.combinedSha256,
+            path: resolve(evidenceRoot, 'identity.json'),
+        },
         workspace,
-        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length, sessionFlow: flow },
+        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length, sessionFlow: flow, sessionIdentity: initialSession },
         workflow,
         saved,
         reopened: { requests: reopened.requested, external: reopened.external, rawTypeScript: reopened.rawTypeScript, runtimeErrors: reopened.runtimeErrors.length, restored },

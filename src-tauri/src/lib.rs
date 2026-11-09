@@ -1414,10 +1414,17 @@ fn run_bounded_process(
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    let exited = child
+    let mut exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
+    while !exited && readers_disconnected && !killed && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        exited = child
+            .try_wait()
+            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+            .is_some();
+    }
     if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
@@ -1771,12 +1778,14 @@ mod bounded_process_tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create TERM-ignoring fixture");
         let pid_path = root.join("sleep.pid");
+        let ready_path = root.join("ready");
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg(format!(
-            "nohup sh -c 'trap \"\" TERM; sleep 30' >/dev/null 2>&1 & echo $! > '{}'; exec 1>&- 2>&-; trap \"\" TERM; sleep 30",
-            pid_path.display()
+            "mkfifo '{1}'; nohup sh -c 'trap \"\" TERM; echo ready > \"{1}\"; sleep 30' >/dev/null 2>&1 & echo $! > '{0}'; read _ < '{1}'; exec 1>&- 2>&-; trap \"\" TERM; sleep 30",
+            pid_path.display(),
+            ready_path.display()
         ));
-        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
             .expect("bounded shell with TERM-ignoring descendant");
         assert!(output.timed_out);
         let pid = fs::read_to_string(&pid_path)
@@ -1802,12 +1811,14 @@ mod bounded_process_tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create grandchild fixture");
         let pid_path = root.join("sleep.pid");
+        let ready_path = root.join("ready");
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg(format!(
-            "nohup sleep 30 >/dev/null 2>&1 & echo $! > '{}'; wait",
-            pid_path.display()
+            "mkfifo '{1}'; nohup sh -c 'echo ready > \"{1}\"; exec sleep 30' >/dev/null 2>&1 & echo $! > '{0}'; read _ < '{1}'; wait",
+            pid_path.display(),
+            ready_path.display()
         ));
-        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
             .expect("bounded shell with descendant");
         assert!(output.timed_out);
         let pid = fs::read_to_string(&pid_path)
@@ -2665,9 +2676,8 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
-    if canonical_root.file_name().and_then(|name| name.to_str()) == Some("dist")
-        && (rel.ends_with(".ts") || rel.ends_with(".tsx"))
-    {
+    let extension = rel.to_ascii_lowercase();
+    if extension.ends_with(".ts") || extension.ends_with(".tsx") || extension.ends_with(".map") {
         return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
     }
     let canonical_candidate = match fs::canonicalize(&candidate) {

@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::json;
@@ -1540,6 +1540,76 @@ fn typed_dist_loopback_and_read_only_approval() {
         b"{}",
     );
     assert_eq!(origin_status, 403);
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn every_static_root_refuses_source_typescript_and_source_maps() {
+    let root = unique_temp_dir("static-renamed-root").join("mounted");
+    fs::create_dir_all(root.join("assets")).expect("create assets");
+    fs::create_dir_all(root.join("src")).expect("create source");
+    fs::write(root.join("assets/index.js"), "export const answer = 42;")
+        .expect("write valid asset");
+    fs::write(root.join("assets/index.js.map"), "{}").expect("write source map");
+    fs::write(root.join("src/main.ts"), "export const forbidden = true;")
+        .expect("write TypeScript");
+    fs::write(root.join("src/main.tsx"), "export const forbidden = true;").expect("write TSX");
+    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    backend
+        .native_grant_folder(&root)
+        .expect("grant renamed root");
+    let host = "127.0.0.1:8765";
+    let serve = |backend: &mut DesktopBackend, root: &Path, path: &str| {
+        let token = generate_launch_token();
+        handle_studio_http_request(
+            backend,
+            root,
+            host,
+            &token,
+            "GET",
+            path,
+            &[("Host".to_string(), host.to_string())],
+            &[],
+        )
+        .0
+    };
+    assert_eq!(serve(&mut backend, &root, "/assets/index.js"), 200);
+    for path in [
+        "/src/main.ts",
+        "/src/main.tsx",
+        "/assets/index.js.map",
+        "/src/main.TS",
+        "/src/main.Ts",
+        "/src/main.TSX",
+        "/src/main.Tsx",
+        "/assets/index.js.MAP",
+    ] {
+        assert_eq!(serve(&mut backend, &root, path), 404, "served {path}");
+    }
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../web/studio")
+        .canonicalize()
+        .expect("canonical default source root");
+    backend
+        .native_grant_folder(&source_root)
+        .expect("grant default source root read-only");
+    for path in [
+        "/src/main.ts",
+        "/src/main.TS",
+        "/src/main.Ts",
+        "/src/main.tsx",
+        "/src/main.TSX",
+        "/src/main.Tsx",
+        "/src/components/StudioApp.TSX",
+        "/assets/index.js.map",
+        "/assets/index.js.MAP",
+    ] {
+        assert_eq!(
+            serve(&mut backend, &source_root, path),
+            404,
+            "served {path}"
+        );
+    }
     let _ = fs::remove_dir_all(&root);
 }
 
