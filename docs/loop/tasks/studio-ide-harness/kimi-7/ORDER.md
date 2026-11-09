@@ -22,5 +22,5 @@ No model/API/engine/worker/tokenizer implementation, new dependency, public serv
 
 - Red-first tests prove a workspace change with no pending close followed by two rejected closes never restores the old active session and shows only retry/error before cleanup; unmount after a rejected close invokes one bounded retry; and old read/input/resize rejections cannot overwrite a new session or prevent its first read.
 - All existing and new terminal/typed tests pass. Normal same-workspace close failure still retains visible identity without remounting, and one approval per shell with existing bounds remains intact.
-- Current records point to 35117/kimi-6 and say 499 passed, 1 ignored. Actual red logs are preserved beside the final-head green evidence. Complete merged acceptance, packaged native workflow, all 11 gates and local policy pass at the final candidate.
+- Current records point to c663/kimi-7 and say 499 passed, 1 ignored. Actual red logs are preserved beside the final-head green evidence. Complete merged acceptance, packaged native workflow, all 11 gates and local policy pass at the final candidate.
 - Obtain a new fresh exact-head review, required GitHub checks, protected queue acceptance of the head scope, actual merge and fresh-main verification before cleanup. Do not queue on agent-68's CHANGES or any earlier candidate.

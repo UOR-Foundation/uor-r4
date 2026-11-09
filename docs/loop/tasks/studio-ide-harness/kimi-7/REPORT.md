@@ -24,7 +24,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - `retries a rejected close once after unmount`: **RED one close call → GREEN two close calls for the same session**.
 - `drops stale read input and resize completions after a new shell opens`: **RED second session's first read not called → GREEN second read called and no stale error displayed**.
 - All terminal tests **21/21**, complete typed suite **453/453 across 52 files**, plain-JS **113/113**, Playwright **45/45**, launcher **6/6**, worker/page/static/runtime checks and **7/7** WASM pass. TypeScript and Vite build pass.
-- Integer library **499 passed, 1 ignored**. Complete serial default **11/3/21/4/7/13/8** and GUI **13/3/25/4/8/13/9** pass. Repository gates **11/11** and local policy PASS with disclosed advisories, including historical scope/commit-order and the explicitly scoped manifest exception.
+- Integer library **499 passed, 1 ignored**. Complete serial default **11/3/21/4/7/13/8** and GUI **13/3/25/4/8/13/9** pass. Repository gates **11/11** and local policy PASS with disclosed historical full-change-surface scope/commit-order and FILEMAP advisories; the narrow manifest exception is not a general waiver, and protected queue acceptance remains outstanding.
 - Lifecycle implementation is `dde958250ce8c98a28ac99a7698538eda0d3d872`; report/pointer and merge commits add no application-code changes. Acceptance source is `c66377b8fa77bbd225e52acba6539885dedc0c4a`, tree `16a6f5e6392310b6dae71f213e826226e61b9919`. Final record-only head/tree belongs in the PR and durable identity.
 - Interactive loopback at c663 returned `ANSWER:fixture-answer`, exact fixture cwd, `21 133`, exit and closed-input refusal, with 15 initial requests and zero external/raw-TypeScript/runtime errors. Host SHA `bc9a4d1463079881d0c34b092e3cf3355fa682f791f30cadaf2f1f1a70b67b08`, dist `aa571a0c49a94bdf22e3c5d7caeb21bd6378a5167ec78fe18f9b8e9474a1abe7`.
 - Combined loopback restored exact transcript/session identity and native edit/save, with 15 initial/12 reopened requests and zero external/raw-TypeScript/runtime errors. Host SHA `d95ed5507d99e0b489b0d088c01b6acfbb99ae74103f13b5652261dad619a88b`, dist `c81c44ea0506da8b6c7f15c4d4a8569347e1bba7478175f7fbe59dbc19440d78`.
@@ -47,7 +47,7 @@ Adversarial review reception, systematic root-cause investigation, red-first tes
 
 ## Still open
 
-Final record-only head gates/policy, fresh exact-head review, required GitHub checks, protected queue acceptance of the head scope, actual merge, and fresh-main verification. Full persistent runtime, parallel tasks, memory, Dispatch, browser/computer workflows, live R4 API, production publication, signed release and useful-model capability remain unestablished.
+Fresh exact-head review, required GitHub checks, protected queue acceptance of the head scope, actual merge, and fresh-main verification. Full persistent runtime, parallel tasks, memory, Dispatch, browser/computer workflows, live R4 API, production publication, signed release and useful-model capability remain unestablished.
 
 ## Plain summary
 
