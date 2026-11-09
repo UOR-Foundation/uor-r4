@@ -11,8 +11,7 @@ Lab: kimi. Item: studio-typed-shell-upgrade (#3500), predecessor PR #3879. Order
 
 ## Measurements
 
-- Complete default Rust suites: **9/3/21/7/13/8** (library/main/controls/MCP/review/sidecar), PASS.
-- Complete GUI Rust suites: **11/3/25/8/13/9**, PASS.
+- Before the current-main merge, default Rust suites were **9/3/21/7/13/8** and GUI suites **11/3/25/8/13/9**. After retaining both distinct closed-pipe tests and correcting the merged `exited` binding, the serial merged-head suites are **11/3/21/7/13/8** default and **13/3/25/8/13/9** GUI (library/main/controls/MCP/review/sidecar), PASS. Concurrent overloaded runs retained timing failures and are not hidden by these later serial passes.
 - The remote timeout test completes ordinary initialize/notification before its original 15 ms hanging tool call; the 1024-byte response cap still fails explicitly. Stdio retains its 25 ms hanging-call assertion and cleanup checks.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS after formatting.
 - Predecessor typed/plain-JS/runtime and fresh identity-bound loopback results are in `../kimi-75/REPORT.md`.
