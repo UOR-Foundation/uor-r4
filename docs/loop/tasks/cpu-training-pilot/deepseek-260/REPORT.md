@@ -32,7 +32,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Parity receipt SHA-256:
   `be065856b20a7cc56a0a71b1dacd02d6a188927f00bb303521fdc3b4a1cce6d1`.
 - Exact deepseek-254 through deepseek-260 task files plus the resource ledger:
-  `392919` bytes.
+  `393077` bytes.
+- Final `pr-check` size: tests 0 files `+0/-0`; code 2 files `+986/-109`;
+  docs 16 files `+1024/-0`; generated 0 files `+0/-0`; other 7 files
+  `+10475/-0`.
 - No new model execution or GPU work ran. Temporary checkpoint data remained
   available only for this read-only comparison and is removed after delivery.
 
