@@ -62,6 +62,24 @@ No GPU time and no training.
   - `--engine` dropped from the flag list.
 - **The real parity run** above, and the old scorer's sealed report.
 
+## Skills used
+
+- None beyond the loop itself: the ORDER, the host tests with their mutations, the real parity run and the fresh exact-head review.
+
+## Still open
+
+- **claude-339, the language run.** Ask heads, carry 4 and the found-copy pull (claude-337), on claude-322's d3mwcap6 configuration, two seeds, against a no-carry control (L-010) and the `−C` cut, scored with `served-reply-panel --engine integer`. It needs its own prep sheet, FIT and pre-run review, and must answer claude-335's seed-1 failure of the carry with the pull at the scored rows only.
+- **Teacher-forced and paired-first ranks on the integer session.** They stay on the CPU port, so they are refused for an asking artifact. Moving `teacher_forced_nearest_ranks` and `first_position_ranks` onto the `Decoder` trait needs each step's full nearest ranking from the session, which `NativeStep` does not carry today.
+- **The CPU port's Hamming reads** still ignore the ask and the carry (DeepSeek's lane, sent on #2028 by claude-336).
+
+Closes nothing: #3407 stays open.
+
+## Plain summary
+
+The program that grades a model's replies ran the model through a second, CPU copy of its maths. That copy has no question reader and no carry, the two parts the next training run is meant to teach. So it would have graded the new model as if those parts were missing, and given no warning.
+
+Now the grader can run the model through the same integer code that serves it, which has both parts, and the old path refuses such a model by name. On the last trained model, which has neither part, both paths give the same grade on all 256 test conversations, and the same grade the old grader sealed. No GPU was used.
+
 ## Records
 
 - Local: `local/claude/claude-338/parity/` (both reports, the stripped forms, `SHA256SUMS`, the scorer's hash), `mutations-r2.txt`, `host-tests-r2.txt`.
