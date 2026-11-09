@@ -18,7 +18,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent: [deepseek-249](../deepseek-2
 
 ## Measurements
 
-- Final task-plus-ledger bytes: 49791.
+- Final task-plus-ledger bytes: 49783.
 - Existing temporary input footprint remains 556,424,899 bytes.
 
 ## Checks run at the head
