@@ -304,3 +304,10 @@ claude-322's, with:
 - **The seal step while that holds:** the chain ends `seal=4`, with the seal complete on the pod and the pod up. `pull-seal-339.sh` copies `oh-seal/` to `local/claude/claude-339/seal-laptop/ROOT/ARM/sS/`, checks `SHA256SUMS` and the tar's list, and only then takes the pod down. If any check fails, the pod stays up. `fetch-339.sh` reads a laptop seal in place of the store's.
 - **If the store has room again by then,** the seal goes to the store and reads back as Step 5 says.
 - The laptop seals go up to the store once it has room. The REPORT names which seals are on the laptop only.
+
+**The rerun's fresh review (9 Nov):** PASS with minors, from a non-author reviewer who read the code. The fixes, before launch:
+- **The seal pull now starts by itself** (`autopull-339.sh`, started by the launcher in its own screen), so a pod whose seal the store refused doesn't sit idle waiting for the session. It reacts only to `seal=4` on its own pod, and tries three times.
+- **The margin's low side is measured.** The rounding refuses a margin at or below 0. The smallest margin across the four runs at `step-014336` is 9.44, down from 9.83 at `step-012288` on the same table. At that rate it stays near 9 at 16,384.
+- **The launcher needs its seal root named,** so no cell can seal to an old root by default.
+- **A failed copy is set aside** rather than blocking a retry.
+- **The REPORT counts the held weights:** the entries at −32,768 and 32,767 in each `step-016384` ask table, so the saturation is visible.
