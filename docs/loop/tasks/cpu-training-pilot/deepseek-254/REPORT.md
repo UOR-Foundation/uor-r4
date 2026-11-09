@@ -42,8 +42,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   repeats.
 - No Claude-owned float-training file, serving schema, export path, GPU state
   or artifact was changed.
-- Size: `pr-check` reports tests 0 files, code 2 files `+749/-105`, docs 4
-  files `+249/-0`, generated 0 files and other 4 files `+1864/-0`.
+- Size: `pr-check` reports tests 0 files, code 2 files `+885/-111`, docs 6
+  files `+382/-0`, generated 0 files and other 4 files `+1861/-0`.
 
 ## Measurements
 
