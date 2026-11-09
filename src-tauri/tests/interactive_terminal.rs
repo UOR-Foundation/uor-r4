@@ -147,6 +147,36 @@ fn approved_pty_supports_multiple_inputs_resize_and_close() {
 }
 
 #[test]
+fn pty_shell_approval_is_consumed_per_open() {
+    let root = workspace("approval-consume");
+    let mut backend = isolated_backend(&root);
+    let shell = Path::new("/bin/sh");
+    backend
+        .host_approve_terminal_shell(&root, shell)
+        .expect("approve one fixture shell");
+    let first = backend
+        .open_terminal(&root, Some(shell), 24, 80)
+        .expect("open approved fixture shell");
+    backend
+        .close_terminal(&first.session_id)
+        .expect("close first fixture shell");
+    assert!(matches!(
+        backend.open_terminal(&root, Some(shell), 24, 80),
+        Err(DesktopClientError::TerminalConsentRequired)
+    ));
+    backend
+        .host_approve_terminal_shell(&root, shell)
+        .expect("approve a separate fixture shell");
+    let second = backend
+        .open_terminal(&root, Some(shell), 24, 80)
+        .expect("open separately approved fixture shell");
+    backend
+        .close_terminal(&second.session_id)
+        .expect("close second fixture shell");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn pty_enforces_grants_input_output_and_session_bounds() {
     let root = workspace("bounds");
     let mut backend = isolated_backend(&root);
@@ -176,13 +206,19 @@ fn pty_enforces_grants_input_output_and_session_bounds() {
         .expect("close output flood");
     let mut sessions = BTreeSet::new();
     for _ in 0..8 {
+        backend
+            .host_approve_terminal_shell(&root, shell)
+            .expect("approve each intended shell");
         let opened = backend
             .open_terminal(&root, Some(shell), 24, 80)
             .expect("within session cap");
         sessions.insert(opened.session_id.clone());
     }
     assert_eq!(sessions.len(), 8);
-    assert!(backend.open_terminal(&root, Some(shell), 24, 80).is_err());
+    assert!(matches!(
+        backend.open_terminal(&root, Some(shell), 24, 80),
+        Err(DesktopClientError::SessionLimitReached)
+    ));
     for session in sessions {
         backend.close_terminal(&session).expect("close capped PTY");
     }

@@ -402,7 +402,7 @@ impl DesktopBackend {
         let shell = canonical_shell(shell.unwrap_or_else(|| Path::new("/bin/zsh")))?;
         if !self
             .host_approved_shells
-            .contains(&(cwd.clone(), shell.clone()))
+            .remove(&(cwd.clone(), shell.clone()))
         {
             return Err(DesktopClientError::TerminalConsentRequired);
         }
