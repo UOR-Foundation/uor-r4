@@ -36,6 +36,8 @@ The release executable remains
 - Targeted library tests: 6 passed.
 - Regression binary tests: 3 passed.
 - Additional malformed-hold and both-hash controls: passed.
+- `loop report --check` and `loop pr-check --local`: passed.
+- `loop gates --full`: pending the accounting commit.
 
 ## Skills used
 
@@ -43,8 +45,7 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-Final full-suite, policy, gates and second fresh review are recorded after they
-run.
+A second fresh exact-head review is still owed.
 
 ## Plain summary
 

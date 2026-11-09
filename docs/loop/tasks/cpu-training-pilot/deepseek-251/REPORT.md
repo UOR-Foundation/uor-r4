@@ -38,9 +38,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   stream-only placement, wrong gain/weight shapes, nonfinite gain, expected-row
   refusal, wrong hashes, output replacement and deterministic repeats.
 - No float-training, Claude-owned, serving, export or GPU file changed.
-- Size: `pr-check` reports 9 changed paths: code 3 files `+695/-0`,
-  documentation 4 files `+197/-0`, and other text evidence 2 files `+645/-0`
-  (`+1,537/-0` total). The ORDER gave no line estimate.
+- Size: `pr-check` reports 11 changed paths: code 3 files `+764/-0`,
+  documentation 6 files `+304/-0`, and other text evidence 2 files `+646/-0`
+  (`+1,714/-0` total). The ORDER gave no line estimate.
 
 ## Measurements
 
