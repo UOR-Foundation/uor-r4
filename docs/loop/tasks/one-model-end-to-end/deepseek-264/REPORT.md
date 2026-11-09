@@ -35,7 +35,8 @@ Added `real-artifact-audit` to the one-model instrument. It:
 - compares CPU and integer panel reports after removing only timing fields and engine identity;
 - finds generation divergence by case id and token index;
 - compares teacher-forced and paired-first reports by case id using the fields the panel
-  actually serializes;
+  actually serializes, after checking both rank inventories against the CPU generation
+  report;
 - reports carry-gain distribution and first-target rank changes.
 
 The command is reusable on the remaining 16,384 cells without code changes.

@@ -50,8 +50,8 @@ It refuses unless:
   and all six reports hold exactly the expected row count with the same settings,
   rendering and non-artifact inputs;
 - CPU and integer reports equal after only timing fields and `settings.engine`;
-- ranked reports have the same cases as their generation rows and compare by case id, not
-  row position.
+- ranked reports have the same cases as the CPU generation reports and compare by case id,
+  not row position.
 
 It writes a receipt with artifact identities and sizes, ask depths, carry rows, report
 equality, first `reply_ids` divergence, and carried-versus-`−C` teacher/paired rank deltas.

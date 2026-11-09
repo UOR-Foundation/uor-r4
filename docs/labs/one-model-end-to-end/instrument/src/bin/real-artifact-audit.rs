@@ -100,6 +100,8 @@ fn run() -> Result<()> {
     require_report_parity("carried CPU/integer", &carried_cpu, &carried_integer)?;
     require_report_parity("−C CPU/integer", &minus_c_cpu, &minus_c_integer)?;
     let generation = generation_delta(&carried_cpu, &minus_c_cpu)?;
+    let carried_generation = rows_by_id(&carried_cpu, None)?;
+    let minus_c_generation = rows_by_id(&minus_c_cpu, None)?;
 
     let ranks = match (&args.carried_rank, &args.minus_c_rank) {
         (Some(carried), Some(minus_c)) => {
@@ -130,7 +132,12 @@ fn run() -> Result<()> {
                     &minus_c,
                 ],
             )?;
-            Some(rank_delta(&carried, &minus_c)?)
+            Some(rank_delta(
+                &carried,
+                &minus_c,
+                &carried_generation,
+                &minus_c_generation,
+            )?)
         }
         (None, None) => None,
         _ => return Err("--carried-rank and --minus-c-rank must be given together".to_owned()),
@@ -611,23 +618,24 @@ fn generation_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
     }))
 }
 
-fn rank_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
-    let carried_generation = rows_by_id(carried, None)?;
-    let minus_generation = rows_by_id(minus_c, None)?;
-    require_same_ids("rank generation", &carried_generation, &minus_generation)?;
-
+fn rank_delta(
+    carried: &Value,
+    minus_c: &Value,
+    carried_generation: &BTreeMap<String, Value>,
+    minus_c_generation: &BTreeMap<String, Value>,
+) -> Result<Value> {
     let carried_teacher = rows_by_id(carried, Some("teacher_forced"))?;
     let minus_teacher = rows_by_id(minus_c, Some("teacher_forced"))?;
     require_same_ids("teacher-forced", &carried_teacher, &minus_teacher)?;
     require_same_ids(
         "carried teacher-forced/generation",
         &carried_teacher,
-        &carried_generation,
+        carried_generation,
     )?;
     require_same_ids(
         "minus-C teacher-forced/generation",
         &minus_teacher,
-        &minus_generation,
+        minus_c_generation,
     )?;
     let mut teacher_changed = Vec::new();
     let mut first_target_changed = Vec::new();
@@ -663,12 +671,12 @@ fn rank_delta(carried: &Value, minus_c: &Value) -> Result<Value> {
     require_same_ids(
         "carried paired-first/generation",
         &carried_paired,
-        &carried_generation,
+        carried_generation,
     )?;
     require_same_ids(
         "minus-C paired-first/generation",
         &minus_paired,
-        &minus_generation,
+        minus_c_generation,
     )?;
     let mut paired_changed = Vec::new();
     for (id, carried_row) in &carried_paired {
@@ -910,7 +918,10 @@ mod tests {
                 "rows": [{"id": "a", "asked_rank": 5, "other_rank": 5, "raw_asked_rank": 5, "raw_other_rank": 5}]
             }
         });
-        let delta = rank_delta(&carried, &minus_c).unwrap();
+        let carried_generation = rows_by_id(&carried, None).unwrap();
+        let minus_c_generation = rows_by_id(&minus_c, None).unwrap();
+        let delta =
+            rank_delta(&carried, &minus_c, &carried_generation, &minus_c_generation).unwrap();
         assert_eq!(delta["changed_by_cut"], true);
         assert_eq!(delta["teacher_forced"]["changed_rows"], 1);
         assert_eq!(delta["paired_first"]["changed_rows"], 1);
@@ -919,7 +930,8 @@ mod tests {
     #[test]
     fn rank_delta_refuses_a_report_without_rank_sections() {
         let generation_only = json!({"rows": [{"id": "a"}]});
-        assert!(rank_delta(&generation_only, &generation_only).is_err());
+        let generation = rows_by_id(&generation_only, None).unwrap();
+        assert!(rank_delta(&generation_only, &generation_only, &generation, &generation).is_err());
     }
 
     #[test]
