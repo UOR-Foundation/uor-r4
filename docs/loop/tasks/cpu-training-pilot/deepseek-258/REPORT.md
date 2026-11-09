@@ -32,7 +32,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Evidence hashes and release executable identity are unchanged from
   deepseek-254 through deepseek-257.
 - `pr-check` size: tests 0 files `+0/-0`; code 2 files `+937/-109`; docs 12
-  files `+713/-0`; generated 0 files `+0/-0`; other 4 files `+1864/-0`.
+  files `+719/-0`; generated 0 files `+0/-0`; other 4 files `+1864/-0`.
 - External GPU cost remains `$0`; no pod, store upload or paid API was used.
 
 ## Checks run at the head
