@@ -32,6 +32,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   stream-only placement, wrong gain/weight shapes, nonfinite gain, expected-row
   refusal, wrong hashes, output replacement and deterministic repeats.
 - No float-training, Claude-owned, serving, export or GPU file changed.
+- Size: `pr-check` reports 9 changed paths: code 3 files `+695/-0`,
+  documentation 4 files `+190/-0`, and other text evidence 2 files `+645/-0`
+  (`+1,530/-0` total). The ORDER gave no line estimate.
 
 ## Measurements
 
@@ -69,8 +72,8 @@ projection gives `111,167.677487699 s`.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy: passed with only pre-existing warnings.
 - Release build: passed.
-- `loop report --check`, `loop pr-check --local` and `loop gates --full`:
-  recorded after this head is finalized.
+- `loop report --check`, `loop pr-check --local` and `loop gates --full`: passed;
+  all 11 gates were green.
 
 ## Skills used
 
