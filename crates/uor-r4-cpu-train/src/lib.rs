@@ -9,6 +9,8 @@ use std::collections::BTreeSet;
 
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
+pub mod ask_offset_audit;
+mod ask_head;
 mod content_readout;
 mod checkpoint_grade;
 mod continuation_closure;
@@ -45,6 +47,7 @@ mod suffix_fallback;
 mod suffix_memory;
 mod train;
 
+pub use ask_head::{AskCellBits, AskHeadKept, AskHeadOracle, AskKeptPosition, AskOffsetFit};
 pub use content_readout::{
     audit_content_stop_phase_content_prefix, audit_content_stop_trajectory_content_prefix,
     content_continuation_gate_fires, content_continuation_gate_prediction,
@@ -139,6 +142,9 @@ pub use gain_train::{
     ServedGainMove, ServedGainStep, TerminationGainConfig, TerminationGainEvaluation,
     TerminationGainReading, TerminationGainStep, CPU_PORT_ROOT_TRAINER_SCHEMA,
     CPU_SERVED_GAIN_TRAINER_SCHEMA, CPU_TERMINATION_GAIN_TRAINER_SCHEMA, NEAREST_RIVAL_COUNT,
+};
+pub use hamming::{
+    CpuHammingHeadKind, CpuHammingHeadTrace, CpuHammingPositionTrace, CpuHammingReadTrace,
 };
 pub use geometric_candidate_anchor::{
     calibrate_expanded_candidate_union, compare_anchored_candidate_rows,
