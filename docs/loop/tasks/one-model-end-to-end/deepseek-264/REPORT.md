@@ -12,8 +12,14 @@ first lines** and **0 complete rows**; the exact `−C` also has 0 asked-value f
 The carry changes ranks and continuations, but not in a way that produces the registered
 recall behavior so far.
 
-This is a diagnostic over the published seed-1 points. The two-seed outcome remains
-Claude's registered read; this unit does not substitute for it.
+Seed 2's sealed checkpoint, exported independently after its seal, is slightly different
+but does not change that diagnosis. Both carried and `−C` have **2 asked-value first
+lines**, 0 complete rows and 0 EOS stops. The carry changes 39 generation rows, 172
+first-target ranks and 207 paired-first ranks, but neither arm reaches the value reliably.
+
+This is a diagnostic over the published seed-1 points and an independent seed-2 export.
+The two-seed outcome remains Claude's registered read; this unit does not substitute for
+it.
 
 ## What changed
 
@@ -45,7 +51,15 @@ their published `SHA256SUMS` files verified. The final carried artifact at step 
 | 12,288 | 53 / 256 | 0 / 256 | 0 / 256 | 127 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
 | 16,384 | 87 / 256 | 136 / 256 | 156 / 256 | 128 / 256 vs 127 / 256 | 0 / 256 vs 0 / 256 |
 
-At every point:
+Seed 2 at 16,384 was exported independently from `runs-3/L-aC/s2`'s sealed
+`step-016384` snapshot, using the requested raw gates and transition and the sealed run
+config. The carried artifact hashes to `852c4721…`, and the exact cut hashes to
+`e3fd234c…`. The audit changes 39 / 256 generation rows, 172 / 256 first-target ranks and
+207 / 256 paired-first ranks. Asked-better is 128 / 256 on both arms. The first-line count
+is 2 asked / 3 other / 0 both for carried and the same for `−C`; both are 0 complete and
+0 EOS at 256 cap stops.
+
+At every published seed-1 point:
 
 - CPU generation equals the integer `serve_step` panel report on every non-timing field.
 - Every non-carry artifact section and ask table is preserved.
@@ -66,6 +80,9 @@ asked-value first lines and 0 complete replies.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
 - Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
   and 16,384, with both published hashes supplied and verified.
+- Seed 2's independently exported final pair: **1 / 1 passed**, with report identity and
+  panel metadata checked. Its hashes are diagnostic until Claude publishes the official
+  artifact.
 - CPU panel versus stored integer report: **6 / 6 comparisons passed** across carried and
   `−C`.
 - Published store `SHA256SUMS`: **3 / 3 pairs verified**.
@@ -82,7 +99,8 @@ panel inputs, pinned tokenizer and existing panel scorer.
 
 ## Still open
 
-1. Audit the final L-aC seed-2 pair and both L-a guards when their artifacts arrive.
+1. Reconcile seed 2's independent export with Claude's official published artifact when it
+   arrives; audit both L-a guards once their reports are available.
 2. Apply the registered two-seed outcome map in claude-339; this unit supplies diagnostics.
 3. Explain why the carry changes later ranks but not the first asked-value choice.
 4. Re-run the same receipt against a direct `uor-chat` loopback transcript if the final
