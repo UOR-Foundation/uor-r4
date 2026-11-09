@@ -44,6 +44,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - `crates/uor-r4-float-train/src/in_space_long.rs`
 - `crates/uor-r4-float-train/src/geometric_stack_native.rs`
 - `crates/uor-r4-float-train/src/bin/train-in-space.rs`
+- `crates/uor-r4-float-train/src/fbs_export.rs` (added at work: the export's by-name refusal of the carry lives there; the item's scope already holds it)
 - `docs/harness/prep/one-model-end-to-end*`
 - `docs/loop/tasks/one-model-end-to-end/**`
 - `docs/research/notebook/float-training.md`
