@@ -10,7 +10,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - The first fitted mobile browser captures produced duplicated mosaics. Native-scale reloads produced clean images, independently matching Playwright mobile output; no application fix is claimed for a capture-state artifact.
 - The public `models.json` is 1,346 bytes with SHA-256 `fa33aa230b37b1d788983f9adb910f35d4562679db5351a5cf32e758d0c5ed79`, containing only the synthetic demo and identical before/after this cutover. Older text implied a current five-model/M1-card catalog. Records now describe the actual synthetic-only catalog; no model/catalog change or M1-card restoration is claimed.
 
-## Verified deployment
+## Measurements
 
 - PR #3903 is **MERGED** as `4160a5347717d7e6786848895b758bfc5dc663f7`, tree `ace49417fef35d3ea321b2332cc2bb9cbc07cbb6`. Its first-parent diff is the approved 19 Studio/record files; Studio source matches reviewed head `ca8700bf0b8180bd91af581262a83192a18e1193` byte-for-byte. Independent model work in the merge was not edited.
 - Fresh-main checks: **455/455** typed tests across 52 files, **47/47** Playwright checks, **15/15** runtime contracts after generated-input preparation, **11/11** full gates, static page/worker checks, both runtime routes and migration cases, and direct **7/7** staged WASM checks.
@@ -31,6 +31,10 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - All **11** full repository gate commands passed at record implementation `7524cd6195a78c186814e854c4e537e837b5a390` / `1076ece577a3804023f6b52cb4ce351326adc726`; see `record-implementation-gates.log`.
 - `git diff --check` and the scoped file audit pass. This PR has eight scoped files including ORDER/REPORT, no generated binaries and no owner-path changes. Automatic claim was not forced past the item's pre-existing shared roadmap metadata.
 - After this REPORT-only commit, `loop report --check`, `loop pr-check --local`, and `loop gates --full` results are retained as `record-final-report.log`, `record-final-policy.log`, and `record-final-gates.log`, with `identity.txt` and clean status under `local/kimi/default-cutover/fresh-main/`. Fresh exact-head approval, required GitHub checks and actual protected merge are verified separately, not inferred from this record.
+
+## Skills used
+
+Protected branch delivery, exact artifact and runtime acceptance, real built-in-browser and Playwright inspection, scope control, systematic instrument diagnosis, and verification-before-completion. Fresh-context delivery review is required before merge.
 
 ## Still open
 
