@@ -315,10 +315,28 @@ fn remote_auth_timeout_and_size_caps_fail_explicitly() {
         .iter()
         .find(|request| request.body["method"] == "tools/call")
         .expect("hanging tools/call did not reach the fixture");
-    assert_eq!(hanging.body["params"]["name"], "read_file");
+    assert_eq!(
+        hanging.body,
+        json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_file","arguments":{}}})
+    );
     assert_eq!(
         hanging.headers.get("authorization").map(String::as_str),
         Some("Bearer secret")
+    );
+    assert_eq!(
+        hanging.headers.get("content-type").map(String::as_str),
+        Some("application/json")
+    );
+    assert_eq!(
+        hanging.headers.get("mcp-session-id").map(String::as_str),
+        Some("session-test")
+    );
+    assert_eq!(
+        hanging
+            .headers
+            .get("mcp-protocol-version")
+            .map(String::as_str),
+        Some("2025-03-26")
     );
     drop(requests);
     drop(slow);

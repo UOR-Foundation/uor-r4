@@ -1,3 +1,7 @@
+## 2026-11-09 — Studio acceptance boundary and fixture review repaired (kimi)
+
+The static host now refuses `.ts`, `.tsx`, and `.map` ASCII-case-insensitively on every root. `/src/main.TS` returned 200 before the mixed-case guard and returns 404 after it; regular-file `--studio-root` is refused. The MCP fixture proves the full authorized hanging `tools/call` JSON-RPC body and protocol/session headers, tolerates intended disconnects, and exposes unexpected fixture panics without changing the original 15 ms/25 ms limits. Source/acceptance head `d39953a7d4ebab479673eba50e06481151b740bc` has clean exact session/transcript and native edit/save evidence, plus 11/11 full repository gates. Default suites are 11/3/21/7/13/8 and GUI suites 13/3/25/8/13/9. `3c7176d5f` and later record-only changes preserve that source identity rather than relabeling it as a different final head. [kimi-78](../loop/tasks/studio-typed-shell-upgrade/kimi-78/REPORT.md) records the repair; [kimi-79](../loop/tasks/studio-typed-shell-upgrade/kimi-79/ORDER.md) binds final-head logs and review. No production publication, signed release, fresh packaged-GUI acceptance, full Cowork parity, or useful-model behavior is claimed.
+
 ## 2026-11-06 — Reference-free closure stops on sparse candidate power (deepseek)
 
 A label-free closure rule chose the earliest complete branch with no deeper

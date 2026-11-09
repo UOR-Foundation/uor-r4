@@ -1596,7 +1596,13 @@ fn every_static_root_refuses_source_typescript_and_source_maps() {
     for path in [
         "/src/main.ts",
         "/src/main.TS",
+        "/src/main.Ts",
+        "/src/main.tsx",
+        "/src/main.TSX",
+        "/src/main.Tsx",
         "/src/components/StudioApp.TSX",
+        "/assets/index.js.map",
+        "/assets/index.js.MAP",
     ] {
         assert_eq!(
             serve(&mut backend, &source_root, path),
