@@ -28,6 +28,11 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - New candidate: `uor-harness loop pr-check --local`, `uor-harness loop gates --full`, `node web/studio/verify_studio_loopback.mjs`, and `git diff --check` are the required next checks, not results inferred from 3e33.
 - Source implementation is unchanged since 988155ae5; web/studio/README.md is the only subsequent change under the product trees.
 - No source or capability claim is substituted for the evidence-chain repair.
+- The first candidate invocation stopped at local policy because this REPORT lacked the required `## Skills used` heading. Full gates and loopback did not run in that invocation. The heading is added here; the failed log is retained at `56becabea49f2657af6f1fa7da83a73fdd9b600f/pr-check-local.log`.
+
+## Skills used
+
+Fresh-context adversarial review reception, exact source/tree identity binding, evidence preservation and limitation disclosure, contradictory-record repair, report-format validation, and verification before completion. No model or production implementation change was introduced.
 
 ## Still open
 
