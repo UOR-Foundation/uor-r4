@@ -11,12 +11,25 @@ The exports use the existing laptop snapshot path (`hamming-base-copy`, then `cp
 
 | cell | step | artifact | asked first line | other first line | complete rows | complete-distinct pairs | EOS | BOS | cap | context | collapse | distinct replies | most common reply |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| L-a-s2 | step-016384 | carried | 0 | 0 | 0 | 0 | 0 | 0 | 256 | 0 | 0 | 97 | 31 |
 | L-aC-s1 | step-008192 | carried | 0 | 0 | 0 | 0 | 18 | 0 | 238 | 0 | 14 | 137 | 14 |
 | L-aC-s1 | step-008192 | exact -C | 0 | 0 | 0 | 0 | 39 | 0 | 217 | 0 | 25 | 135 | 25 |
 | L-aC-s1 | step-012288 | carried | 0 | 4 | 0 | 0 | 0 | 0 | 256 | 0 | 0 | 44 | 104 |
 | L-aC-s1 | step-012288 | exact -C | 0 | 4 | 0 | 0 | 2 | 0 | 254 | 0 | 2 | 43 | 95 |
 
 ## Files and hashes
+
+### L-a-s2 step-016384
+
+Store: `results/claude/one-model-end-to-end-language-carry-2026-11-09/early/L-a-s2/step-016384/` (fetch with `scripts/pod/uor-store get`).
+
+```text
+df3c8f60999fe1161d02f7931d1c12b4a0a236ff32c4f8cc187506640277feb1 served.uorlut
+f2b5dcc065cd5ea91e382c5064bd2de1e9069f5158b1af5e8a8ca608654bd9b3 score.json
+208299672e43354532c7e630386250dd2661e5b9679070b410fa04eaaf708a96 pod.snapshot.json
+cd0b7958c1c12fc6e77b30ffb1f704603536c4307c8c3ee727e885d7b51f8035 served.snapshot.json
+scorer served-reply-panel at main, b4aa8d85b72f17619234dee1a34b8949f4860bee53210c0e8823e24f63982b43
+```
 
 ### L-aC-s1 step-008192
 
