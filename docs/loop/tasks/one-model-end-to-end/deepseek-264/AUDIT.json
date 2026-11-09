@@ -1,0 +1,58 @@
+{
+  "schema": "uor-r4.real-artifact-audit-summary/1",
+  "source_pr": 3894,
+  "cell": "L-aC-s1",
+  "steps": {
+    "008192": {
+      "carried_sha256": "d94669b12a0d5740fbe7b6a29692242653c4e8e1cf24e11dbaf57d6b3df7ec98",
+      "minus_c_sha256": "b0d02801af4c25ab8b8b8c0fd5eb6254b93ee5e921e9d04275bdfb17acf693e2",
+      "reproduced_minus_c_byte_equal": true,
+      "cpu_equals_integer": true,
+      "generation_changed_rows": 157,
+      "first_generation_divergence_index": 6,
+      "first_target_changed_rows": 223,
+      "paired_first_changed_rows": 254,
+      "carried_asked_better": 126,
+      "minus_c_asked_better": 125,
+      "carried_first_target_top1": 0,
+      "minus_c_first_target_top1": 0
+    },
+    "012288": {
+      "carried_sha256": "eae9838150790cc4cfe35b46dcab6d002ece1de3154cf4266abfcd83dc7ccb98",
+      "minus_c_sha256": "d88a6f6eea24e42e6973bcce51e810115b8c8e0f7ae131115984eedb3818862c",
+      "reproduced_minus_c_byte_equal": true,
+      "cpu_equals_integer": true,
+      "generation_changed_rows": 53,
+      "first_generation_divergence_index": 9,
+      "first_target_changed_rows": 0,
+      "paired_first_changed_rows": 0,
+      "carried_asked_better": 127,
+      "minus_c_asked_better": 127,
+      "carried_first_target_top1": 0,
+      "minus_c_first_target_top1": 0
+    },
+    "016384": {
+      "carried_sha256": "ba221c27f846fc171856280135964e6a66a7a4ff5d7733b763570fa1d196b6e7",
+      "minus_c_sha256": "6e85e4e201e09771b56aa54d0ed680120ed00fbb082caaf7a8459681296da5e6",
+      "reproduced_minus_c_byte_equal": true,
+      "cpu_equals_integer": true,
+      "generation_changed_rows": 87,
+      "first_generation_divergence_index": 1,
+      "first_target_changed_rows": 136,
+      "paired_first_changed_rows": 156,
+      "carried_asked_better": 128,
+      "minus_c_asked_better": 127,
+      "carried_first_target_top1": 0,
+      "minus_c_first_target_top1": 0,
+      "carried_asked_first_line": 0,
+      "carried_complete_rows": 0
+    }
+  },
+  "hamming": {
+    "depths": [2, 6],
+    "asks": [true, true],
+    "carry_depth": 6,
+    "carry_rows": 32,
+    "carry_gains": 4096
+  }
+}
