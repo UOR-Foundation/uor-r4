@@ -1,17 +1,45 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cdpConnect, launchChrome, trapPageLoad } from './verify_studio_page_load.mjs';
 
 const repo = resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const evidenceRoot = resolve(repo, '../..', 'local/kimi/studio-final-acceptance');
+const evidenceBase = resolve(repo, '../..', 'local/kimi/studio-final-acceptance');
+const hostBinary = resolve(repo, 'target/kimi-final-acceptance/debug/uor-desktop-client');
+const distRoot = resolve(repo, 'web/studio/dist');
+const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const sourceIdentity = {
+    head: git('rev-parse', 'HEAD'),
+    tree: git('rev-parse', 'HEAD^{tree}'),
+    status: git('status', '--porcelain').split('\n').filter(Boolean),
+    hostBinary: { path: hostBinary, sha256: sha256(await readFile(hostBinary)) },
+    dist: await (async () => {
+        execFileSync('bash', ['scripts/studio/runtime-files.sh', '--verify', distRoot, '--typed'], { cwd: repo, stdio: 'pipe' });
+        const files = {};
+        const visit = async (directory) => {
+            const entries = await readdir(directory, { withFileTypes: true });
+            entries.sort((a, b) => a.name.localeCompare(b.name));
+            for (const entry of entries) {
+                const path = join(directory, entry.name);
+                if (entry.isSymbolicLink()) throw new Error(`dist symlink is not evidence: ${path}`);
+                if (entry.isDirectory()) await visit(path);
+                else if (entry.isFile()) files[relative(distRoot, path).split(sep).join('/')] = sha256(await readFile(path));
+            }
+        };
+        await visit(distRoot);
+        return { root: distRoot, files, combinedSha256: sha256(JSON.stringify(files)) };
+    })(),
+};
+const evidenceRoot = resolve(evidenceBase, sourceIdentity.head);
 await mkdir(evidenceRoot, { recursive: true });
+await writeFile(resolve(evidenceRoot, 'identity.json'), JSON.stringify({ capturedAt: new Date().toISOString(), ...sourceIdentity }, null, 2) + '\n');
 const workspace = await mkdtemp(join(evidenceRoot, 'browser-workspace-'));
 const profileDir = await mkdtemp(join(tmpdir(), 'uor-loopback-browser-'));
-const hostBinary = resolve(repo, 'target/kimi-final-acceptance/debug/uor-desktop-client');
 const origin = 'http://127.0.0.1:8765';
 let host;
 let chrome;
@@ -183,6 +211,13 @@ async function main() {
 
     const saved = await readFile(join(workspace, 'untitled.md'), 'utf8');
     if (saved !== 'Loopback native edit/save acceptance.\n') throw new Error('native save disk bytes differ: ' + JSON.stringify(saved));
+    const initialSession = await evaluate(`(()=>({
+        id: window.__studioUi.activeSessionId(),
+        messages: window.__studioUi.getConversationMessages(),
+    }))()`);
+    if (!initialSession.id || !Array.isArray(initialSession.messages)) {
+        throw new Error('initial session identity/transcript was not captured: ' + JSON.stringify(initialSession));
+    }
 
     const reopened = await trapPageLoad(cdp, origin, '/?typed=1');
     if (!reopened.loaded || reopened.external.length || reopened.rawTypeScript.length || reopened.runtimeErrors.length) {
@@ -194,14 +229,15 @@ async function main() {
         const attachments = window.__studioUi.getAttachments();
         const active = window.__studioFiles.activeFile();
         return {
-            exactTranscript: messages.some((message) => message.content.includes('17+25')) && messages.some((message) => message.content.includes('42')),
+            exactTranscript: JSON.stringify(messages) === JSON.stringify(${JSON.stringify(initialSession.messages)}),
+            sessionIdMatches: window.__studioUi.activeSessionId() === ${JSON.stringify(initialSession.id)},
             attachment: attachments.some((entry) => entry.name === 'untitled.md' && entry.content === 'Loopback native edit/save acceptance.\\n'),
             editor: active?.path === 'untitled.md' && active.content === 'Loopback native edit/save acceptance.\\n',
             rootPath: window.__studioFiles.treeSummary().rootPath,
             artifactText: document.getElementById('studio-typed-root').textContent.includes('Artifact: unselected') ? 'unselected' : 'selected-or-ready',
         };
     })()`);
-    if (!restored.exactTranscript || !restored.attachment || !restored.editor || restored.rootPath !== '') {
+    if (!restored.exactTranscript || !restored.sessionIdMatches || !restored.attachment || !restored.editor || restored.rootPath !== '') {
         throw new Error('reopened state or per-process grant state is wrong: ' + JSON.stringify(restored));
     }
     const reselectedRoot = await evaluate(`(async()=>{
@@ -224,8 +260,16 @@ async function main() {
     await writeFile(join(evidenceRoot, 'loopback-acceptance.png'), Buffer.from(screenshot.data, 'base64'));
     const report = {
         verdict: 'LOOPBACK STUDIO ACCEPTANCE PASSED',
+        completedAt: new Date().toISOString(),
+        identity: {
+            head: sourceIdentity.head,
+            tree: sourceIdentity.tree,
+            hostBinarySha256: sourceIdentity.hostBinary.sha256,
+            distCombinedSha256: sourceIdentity.dist.combinedSha256,
+            path: resolve(evidenceRoot, 'identity.json'),
+        },
         workspace,
-        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length, sessionFlow: flow },
+        initial: { requests: typed.requested, external: typed.external, rawTypeScript: typed.rawTypeScript, runtimeErrors: typed.runtimeErrors.length, sessionFlow: flow, sessionIdentity: initialSession },
         workflow,
         saved,
         reopened: { requests: reopened.requested, external: reopened.external, rawTypeScript: reopened.rawTypeScript, runtimeErrors: reopened.runtimeErrors.length, restored },

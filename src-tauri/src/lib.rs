@@ -2584,9 +2584,7 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
-    if canonical_root.file_name().and_then(|name| name.to_str()) == Some("dist")
-        && (rel.ends_with(".ts") || rel.ends_with(".tsx"))
-    {
+    if rel.ends_with(".ts") || rel.ends_with(".tsx") || rel.ends_with(".map") {
         return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
     }
     let canonical_candidate = match fs::canonicalize(&candidate) {

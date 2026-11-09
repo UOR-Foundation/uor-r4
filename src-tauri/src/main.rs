@@ -51,13 +51,24 @@ fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(),
     Ok(())
 }
 
-fn studio_root(args: &[String]) -> std::path::PathBuf {
-    args.iter()
-        .position(|arg| arg == "--studio-root")
-        .and_then(|index| args.get(index + 1))
-        .filter(|path| !path.starts_with("--"))
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio"))
+fn studio_root(args: &[String]) -> Result<std::path::PathBuf, String> {
+    let root = match args.iter().position(|arg| arg == "--studio-root") {
+        Some(index) => args
+            .get(index + 1)
+            .filter(|path| !path.starts_with("--"))
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| "--studio-root requires a directory value".to_string())?,
+        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio"),
+    };
+    let canonical = std::fs::canonicalize(&root)
+        .map_err(|error| format!("invalid studio root {}: {error}", root.display()))?;
+    if !canonical.is_dir() {
+        return Err(format!(
+            "studio root is not a directory: {}",
+            root.display()
+        ));
+    }
+    Ok(canonical)
 }
 
 fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(), String> {
@@ -152,7 +163,10 @@ fn main() {
             .filter(|s| !s.starts_with("--"))
             .map(String::as_str)
             .unwrap_or("127.0.0.1:1420");
-        let studio_root = studio_root(&args);
+        let studio_root = studio_root(&args).unwrap_or_else(|error| {
+            eprintln!("studio-root error: {error}");
+            std::process::exit(2);
+        });
         if let Err(err) = run_serve_studio(addr, &studio_root, &args) {
             eprintln!("serve-studio error: {err}");
             std::process::exit(1);
@@ -195,9 +209,45 @@ mod tests {
 
     #[test]
     fn studio_root_honors_the_explicit_dist_and_preserves_the_default() {
-        assert!(studio_root(&[]).ends_with("web/studio"));
-        let args = vec!["--studio-root".to_string(), "web/studio/dist".to_string()];
-        assert!(studio_root(&args).ends_with("web/studio/dist"));
+        assert!(studio_root(&[])
+            .expect("default root")
+            .ends_with("web/studio"));
+        let parent = std::env::temp_dir().join(format!("uor-explicit-dist-{}", std::process::id()));
+        let root = parent.join("dist");
+        let _ = std::fs::remove_dir_all(&parent);
+        std::fs::create_dir_all(&root).expect("create explicit dist");
+        let args = vec!["--studio-root".to_string(), root.display().to_string()];
+        assert_eq!(
+            studio_root(&args).expect("explicit dist"),
+            root.canonicalize().expect("canonical dist")
+        );
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn studio_root_rejects_missing_invalid_and_noncanonical_values() {
+        for args in [
+            vec!["--studio-root".to_string()],
+            vec!["--studio-root".to_string(), "--enable-terminal".to_string()],
+            vec![
+                "--studio-root".to_string(),
+                "missing-studio-root".to_string(),
+            ],
+        ] {
+            assert!(
+                studio_root(&args).is_err(),
+                "accepted invalid root: {args:?}"
+            );
+        }
+        let root = std::env::temp_dir().join(format!("uor-studio-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create non-dist root");
+        let args = vec!["--studio-root".to_string(), root.display().to_string()];
+        assert_eq!(
+            studio_root(&args).expect("non-dist root"),
+            root.canonicalize().expect("canonical root")
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
