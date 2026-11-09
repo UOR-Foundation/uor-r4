@@ -1089,15 +1089,7 @@ fn start_hamming(
         crate::flock_read::FlockAdamW,
     )>,
 > {
-    if config.hamming_attract < 0.0 || !config.hamming_attract.is_finite() {
-        return Err(invalid("--hamming-attract is a weight of at least 0"));
-    }
-    if config.hamming_attract > 0.0 && !config.hamming_ask {
-        return Err(invalid("--hamming-attract pulls the ask heads; turn them on with --hamming-ask 1"));
-    }
-    if config.hamming_attract_at_question && config.hamming_attract == 0.0 {
-        return Err(invalid("--hamming-attract-at question places the pull; set --hamming-attract"));
-    }
+    check_pull_flags(config)?;
     if let Some(directory) = &config.init_from {
         return checkpoint_hamming(config, directory, device);
     }
@@ -3032,6 +3024,22 @@ fn attract_rows(windows: &[&CausalWindow], back: usize) -> Result<Vec<(usize, u3
         start += window.input_ids.len();
     }
     Ok(rows)
+}
+
+/// claude-330: the found-copy pull's flags agree: a weight of at least 0, on the ask heads, and a
+/// placement only with a weight. [`start_hamming`] and [`run_recall`] (before its `config.json`)
+/// both check them.
+fn check_pull_flags(config: &LongConfig) -> Result<()> {
+    if config.hamming_attract < 0.0 || !config.hamming_attract.is_finite() {
+        return Err(invalid("--hamming-attract is a weight of at least 0"));
+    }
+    if config.hamming_attract > 0.0 && !config.hamming_ask {
+        return Err(invalid("--hamming-attract pulls the ask heads; turn them on with --hamming-ask 1"));
+    }
+    if config.hamming_attract_at_question && config.hamming_attract == 0.0 {
+        return Err(invalid("--hamming-attract-at question places the pull; set --hamming-attract"));
+    }
+    Ok(())
 }
 
 /// claude-330: where the found-copy pull sits under `config` and `form`: `None` when it is off
@@ -12689,6 +12697,7 @@ pub fn run_recall(
     }
     // claude-330: where the found-copy pull sits, if it is on; the pull-distance reading sits at
     // the same rows (the scored rows when the pull is off).
+    check_pull_flags(config)?;
     let attract = attract_plan(config, form)?;
     let attract_back = attract.unwrap_or(0);
     if out.exists() {

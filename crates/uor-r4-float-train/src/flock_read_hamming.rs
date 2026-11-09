@@ -535,6 +535,15 @@ fn check_copy_keys(copy_keys: &[usize], heads: usize, width: usize) -> Result<()
     copy_keys.iter().try_for_each(|&k| check_copy_key(k, heads, width))
 }
 
+/// claude-330: every asking token has a row in the ask table, so a lookup never reads past it.
+fn check_ask_ids(ask: &Var, ids: &[u32]) -> Result<()> {
+    let rows = ask.as_tensor().dim(0)?;
+    match ids.iter().find(|&&id| id as usize >= rows) {
+        Some(id) => Err(invalid(format!("token {id} has no row in the {rows}-row ask table"))),
+        None => Ok(()),
+    }
+}
+
 /// [`pull_pairs`]'s answer: the `(row, s)` pairs and, per pull with any, the range of its pairs.
 pub(crate) type PullPairs = (Vec<(u32, u32)>, Vec<std::ops::Range<usize>>);
 
@@ -1147,6 +1156,15 @@ impl HammingReads {
                     .transpose()?,
             });
         }
+        // The ask heads are all or nothing: a save with them at some depths only would load as a
+        // read that the pull refuses and the forward still half uses.
+        let asked = reads.iter().filter(|r| r.ask.is_some()).count();
+        if asked != 0 && asked != reads.len() {
+            return Err(invalid(format!(
+                "the saved Hamming read has ask heads at {asked} of its {} depths",
+                reads.len()
+            )));
+        }
         let reads = Self { reads }.with_copy_key(copy_key)?;
         match tensors.get("copy_keys") {
             None => Ok(Some(reads)),
@@ -1250,6 +1268,7 @@ impl HammingRead {
     /// The ask heads' question points (claude-330): each row's detached token point plus its
     /// token's row of the question table, the only part that learns.
     fn asked(&self, current: &Tensor, ask: &Var, ids: &[u32]) -> Result<Tensor> {
+        check_ask_ids(ask, ids)?;
         let index = Tensor::from_vec(ids.to_vec(), ids.len(), current.device())?;
         Ok(current.add(&ask.as_tensor().index_select(&index, 0)?)?)
     }
@@ -1276,6 +1295,7 @@ impl HammingRead {
         let tokens = |rows: Vec<u32>| Tensor::from_vec(rows, n, device);
         // The asking row's own token, and the token before each candidate, which its key names.
         let asking: Vec<u32> = pairs.iter().map(|&(t, _)| ids[t as usize]).collect();
+        check_ask_ids(ask, &asking)?;
         let named: Vec<u32> = pairs.iter().map(|&(_, s)| ids[s as usize - 1]).collect();
         let current = table.index_select(&tokens(asking.clone())?, 0)?;
         let keyed = table.index_select(&tokens(named)?, 0)?;
@@ -3830,7 +3850,20 @@ mod tests {
         reads.reads[1].ask.as_ref().expect("rows").set(&ones)?;
         reads.save(&dir)?;
         let loaded = HammingReads::load(&dir, &Device::Cpu)?.expect("saved reads");
+        // Ask heads at one depth only are refused on load.
+        let mut half = reads.clone();
+        half.reads[0].ask = None;
         std::fs::remove_dir_all(&dir)?;
+        std::fs::create_dir(&dir)?;
+        half.save(&dir)?;
+        let refused = HammingReads::load(&dir, &Device::Cpu).err().map(|e| e.to_string());
+        std::fs::remove_dir_all(&dir)?;
+        assert!(refused.as_deref().is_some_and(|e| e.contains("ask heads at 1 of its 2 depths")), "{refused:?}");
+        // A token past the table has no row to ask with.
+        let ask = reads.reads[0].ask.as_ref().expect("rows");
+        assert!(check_ask_ids(ask, &[0, 15]).is_ok());
+        let past = check_ask_ids(ask, &[3, 16]).err().map(|e| e.to_string());
+        assert!(past.as_deref().is_some_and(|e| e.contains("token 16 has no row")), "{past:?}");
         assert!(loaded.has_ask());
         let sum = |r: &HammingRead| -> Result<f32> {
             let rows = r.ask.as_ref().expect("rows").as_tensor().flatten_all()?;
