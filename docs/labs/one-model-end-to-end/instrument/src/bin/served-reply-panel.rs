@@ -248,7 +248,10 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
     }
     let windows_out = args.get("windows-out").map(PathBuf::from);
     if let Some(path) = windows_out.as_ref().filter(|path| path.exists()) {
-        return Err(format!("{} exists; reports are never replaced", path.display()));
+        return Err(format!(
+            "{} exists; reports are never replaced",
+            path.display()
+        ));
     }
     let cap: usize = match args.get("reply-tokens") {
         Some(value) => value
