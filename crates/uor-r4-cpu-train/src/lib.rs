@@ -10,7 +10,9 @@ use std::collections::BTreeSet;
 use uor_r4_discrete::normalization_mechanism::{identify_orbit_root, orbit_root_coords};
 
 pub mod ask_offset_audit;
+pub mod ask_offset_regression;
 mod ask_head;
+pub mod ask_offset_solver;
 mod content_readout;
 mod checkpoint_grade;
 mod continuation_closure;
