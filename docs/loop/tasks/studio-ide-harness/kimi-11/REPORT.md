@@ -22,14 +22,16 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 - **15/15** typed/legacy runtime contracts pass, including real typed staging and publisher dry-run behavior. Full default desktop **11/3/21/4/7/13/8** and GUI **13/3/25/4/8/13/9** pass. Typed **453/453 across 52 files**, plain-JS **113/113**, staged Playwright **45/45**, and repository gates **11/11 GREEN** pass.
 - Full dry-run source `25c63d42d58275c8fb4836f8c6defe6fd6a7c5f2` produced local publish commit `1684785face01e02d4f79a34e49c0d1b954d0f40`. `git ls-remote` before/after is identical: `ab752d59586c595f9409d8c9ba59026a51d4a613`; nothing was pushed.
-- The retained staged root passed typed allowlist/catalog checks and 7/7 WASM audit, then 14 requests with zero external/raw-TypeScript/runtime errors. Exact arithmetic `42`, neutral navigation, both themes and desktop/mobile layouts passed in the exact staged output, not merely the development dist.
+- The retained staged root passed typed allowlist/catalog checks and a direct staged-copy 7/7 WASM audit (`staged-wasm-audit.log`). `stage-playwright-explicit.config.ts` explicitly starts `ruby -run -ehttpd <retained-stage> -p 4174`, and `stage-playwright-explicit.log` records **45/45** against that root. The authoritative clean browser-load is `stage-browser-load.log`, with 14 requests and zero external/raw-TypeScript/runtime errors. Exact arithmetic `42`, neutral navigation, both themes and desktop/mobile layouts passed in the exact staged output, not merely the development dist.
+- The earlier `stage-browser-load-cleanup-failed.json` is explicitly retained as a failed Chrome-cleanup attempt with `ENOTEMPTY`; it is not the authoritative browser result. The clean corrected log above is separate.
 - The static terminal-unavailable screenshot and all staged Playwright outputs are preserved under `local/kimi/typed-publish/25c63d42d58275c8fb4836f8c6defe6fd6a7c5f2/`.
 
 ## Checks run at the head
 
 - Task 1 red: missing `--typed` source path → green; Task 2 red: missing help flag → real dry-run green. Final task-completion runs each passed all 15 runtime contracts.
 - `scripts/studio/build-and-publish.sh --typed --target gh-pages --keep-worktree --stage-dir <evidence>/stage`: full verification PASS; retained commit `1684785face01e02d4f79a34e49c0d1b954d0f40`, previous/rollback head `ab752d59586c595f9409d8c9ba59026a51d4a613`.
-- `python3 -m unittest scripts.tests.test_typed_runtime scripts.tests.test_tauri_runtime`: **15/15 PASS**. Typed/plain-JS, desktop default/GUI, staged Playwright and 11/11 gates PASS as above.
+- `python3 -m unittest scripts.tests.test_typed_runtime scripts.tests.test_tauri_runtime`: **15/15 PASS**. Typed/plain-JS, desktop default/GUI, staged Playwright and 11/11 gates PASS as above. One separate typed run had all 453 assertions pass but Vitest flagged one unhandled `document is not defined` Inspector teardown error; its red log is retained, and the complete rerun passed 453/453 plus 113/113 plain-JS without the error. No unrelated Inspector source was changed.
+- `local/kimi/typed-publish/live-models-identity.txt` records the actual live/local commands and outputs: both `models.json` files are 4,365 bytes with SHA-256 `96e296b74530e8488a6c525c59b4dfbd9f980f519ce39c1c338ed7a5cd12554a`.
 - `uor-harness loop pr-check --local` at 25c63: scope/ORDER-first PASS, **FAIL only missing REPORT**. It is rerun at the report head; no earlier failure is hidden.
 - Final report/scope heads pass local policy and **11/11** gates. The scope list now includes both new design/plan files, while the historical base-scope advisory still names them outside the base item; protected queue acceptance remains a separate required check. `cargo xtask roadmap check` independently fails four unrelated existing problems: `float-kernel-fusion.md` missing `## What is missing`, `infra-desktop-client-tauri.md` using unsupported status `in_progress`, and their two stale `issues.json` ids. Those files were not changed or represented as passing.
 - Modern web guidance was searched for static publication; no directly applicable guide was retrieved. Existing typed allowlist and browser checks were used instead.
@@ -40,7 +42,7 @@ Systematic debugging, brainstorming and plan writing, inline execution with a du
 
 ## Still open
 
-Final report-head policy and complete gates, fresh exact-head review, required checks, protected merge, fresh-main typed dry run and publication, Pages deployment and hard-reloaded public verification, evidence preservation, then branch/worktree/build-output cleanup. Full agent runtime, parallel tasks, memory, steering/orchestration, Dispatch, browser/computer use, connectors, live R4 API and signed production release remain unbuilt.
+Evidence reconciliation in kimi-12, then fresh exact-head review, required checks, protected merge, fresh-main typed dry run and publication, Pages deployment and hard-reloaded public verification, evidence preservation, then branch/worktree/build-output cleanup. Full agent runtime, parallel tasks, memory, steering/orchestration, Dispatch, browser/computer use, connectors, live R4 API and signed production release remain unbuilt.
 
 ## Plain summary
 
