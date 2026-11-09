@@ -2,6 +2,7 @@
 
 TEST FITNESS: PENDING. claude-332 read NOT_FIT after two rounds. claude-333 applied that unit's exact-head review findings and built the hold (merged as `d7cc2b93`); claude-334 built the cuts, the row capture and the value ranks (`2eb579ed5`). It owes a fresh non-author FIT that reads this sheet together with that code, before any GPU run.
 - **claude-334 FIT round 1, at `2eb579ed5`:** NOT FIT, on unchecked items only (the reviewer's budget ran out); no blocker, no major. One minor and one nit, applied: I-V's count of pinned cases ("four", not "two"), and this status line naming the code under review.
+- **claude-334 FIT round 2, at `5b0ba15bc`:** no blocker, no major; the reviewer verified the six ranks' references, scales, found-row filter, Q-to-H4 pairing and field names, and ran out of budget before the rest, which three narrow reviewers finish. One minor, applied: the branches read the plain ranks, since a cut's ranks sit at tie-break chance by construction.
 - **claude-333, before its FIT:** claude-332's exact-head review (PR 3881, at `8caddc8a2`) found four minors and two nits. Applied:
   - the undertrained test is read at the arm's last checkpoint, including an extended arm's;
   - every extension, under any outcome, runs once;
@@ -171,6 +172,8 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
      - No lever is chosen for it in advance.
 
 "Near 1" means mean rank ≤ 8; "near chance" means mean rank ≥ 128. Both are read at both seeds, at step 4,096, or at step 16,384 for an arm that was extended. The same readings are reported for B2-aq, the unheld base, whichever outcome lands.
+
+The branches read the **plain** ranks only. Under `−aS` and `−H`, the term a cut removes is zero at found rows (the found flag is set before the cut), so its rank (r1u and r1h under `−aS`, r1h under `−H`) comes from the id tie-break alone, about 256 on average: chance by construction, not a measured distance. Those cut ranks, and the `−aS` and `−H` recalls, are attribution context, never a branch input.
 
 **Seeds:** two seeds that split run a third; at least 2 of 3 must agree. Every cell, rank, `g` value and ablation is reported either way.
 
