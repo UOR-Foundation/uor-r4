@@ -1,6 +1,6 @@
-# ORDER: preserve normal process exits in the bounded native host, kimi-70 repair
+# ORDER: preserve normal process exits in the bounded native host, kimi-76
 
-Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Base: `35f55d334e654047821b4fe66226e8e4ea3d3069`, tree `40f4e1084d8c09945a2e851789c6ab0c6024a742`.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500). Base: `35f55d334e654047821b4fe66226e8e4ea3d3069`, tree `40f4e1084d8c09945a2e851789c6ab0c6024a742`.
 
 ## Finding and evidence
 
