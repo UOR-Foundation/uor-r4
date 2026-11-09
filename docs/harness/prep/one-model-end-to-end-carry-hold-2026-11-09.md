@@ -1,6 +1,7 @@
 # Prep sheet: the carry lever, a held stream write (one-model-end-to-end, claude-331, 9 Nov 2026)
 
-TEST FITNESS: PENDING. claude-332 read NOT_FIT after two rounds. claude-333 applied that unit's exact-head review findings and is writing the code. It owes a fresh non-author FIT that reads this sheet together with the code, before any GPU.
+TEST FITNESS: PENDING. claude-332 read NOT_FIT after two rounds. claude-333 applied that unit's exact-head review findings and built the hold (merged as `d7cc2b93`); claude-334 built the cuts, the row capture and the value ranks (`2eb579ed5`). It owes a fresh non-author FIT that reads this sheet together with that code, before any GPU run.
+- **claude-334 FIT round 1, at `2eb579ed5`:** NOT FIT, on unchecked items only (the reviewer's budget ran out); no blocker, no major. One minor and one nit, applied: I-V's count of pinned cases ("four", not "two"), and this status line naming the code under review.
 - **claude-333, before its FIT:** claude-332's exact-head review (PR 3881, at `8caddc8a2`) found four minors and two nits. Applied:
   - the undertrained test is read at the arm's last checkpoint, including an extended arm's;
   - every extension, under any outcome, runs once;
@@ -184,7 +185,7 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 - **I-H3 (the gradient):** at a nonzero `g`, `w_y` and `a`, set by hand (at the zero start every one of these gradients is 0, as the mechanism section says), a loss at row `t + 4` alone gives nonzero gradients to `g[x_t]` and `a[x_t]`, and none to `g` of tokens that appear only after `t + 4`.
 - **I-H4 (save, load and refusals):** `g` round-trips through save and load. The decode step and the export each refuse a read with a hold, with an error that names it.
 - **I-H5 (the cuts):** `−aS` removes every depth-2 ask write and every held term, leaves the copy heads' picks unchanged, and leaves the readout read's ask heads on. `−H` removes every held term and leaves the direct write bit for bit.
-- **I-V (the value ranks):** on hand-built vectors, each rank equals a brute-force sort of the 512 distances, ties broken by token id. Two cases are pinned:
+- **I-V (the value ranks):** on hand-built vectors, each rank equals a brute-force sort of the 512 distances, ties broken by token id. Four cases are pinned:
   - a residual `x` that dominates the stream: (r1y) and (r1u) read 1 while (r1s) reads far from 1;
   - a zero vector (no head found): the row is left out of the rank, and the found fraction counts it as not found;
   - a payload shrunk by the margin weights: `y = 0.3 · p_v`, among value points of uneven size, reads 1 on (r1y), while a raw-distance rank of the same `y` does not;
