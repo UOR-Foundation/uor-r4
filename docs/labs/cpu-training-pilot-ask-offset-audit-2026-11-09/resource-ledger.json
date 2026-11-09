@@ -29,13 +29,13 @@
     "real_claude_330_checkpoint_runs": 0
   },
   "artifacts": {
-    "ask_offset_audit_binary": "95890a136a9ad1def49399bd21e2aa98d7007acd339eab4cac4d78d9ed6fe718",
-    "synthetic_report": "85b2538692736cb24f3aa6fbcd443ea8f47352ee999c7e5f173451a9750efe61"
+    "ask_offset_audit_binary": "6dd1b936cfb9193f3bc48bceb8eecfe9a7d3549752927c39dff26297303ece7c",
+    "synthetic_report": "f988f85ff2ee3f5556e6abd760c236b8bad82b8f4f43605b59fca0bbfede4227"
   },
   "storage": {
     "tracked_evidence_bytes": 9522,
-    "build_target_bytes": 6446115209,
-    "free_bytes_at_measurement": 155421941760,
+    "build_target_bytes": 6453249300,
+    "free_bytes_at_measurement": 155408941056,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true

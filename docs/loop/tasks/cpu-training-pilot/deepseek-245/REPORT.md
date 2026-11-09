@@ -31,14 +31,14 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   include per-cell and per-depth aggregates.
 - Added tests for a controlled improvement/regression fixture, missing ask
   tables, non-finite values, partial depths, zero-width heads, empty relation
-  ranges, deterministic repeat reports, both wrong-file-hash paths and argument
-  parsing.
+  ranges, finite values whose sum or rotation becomes non-finite, deterministic
+  repeat reports, both wrong-file-hash paths and argument parsing.
 - Added an ask-head serving design gate naming the proposed Q12 integer table,
   artifact marker/exponent, i32 pre-rotation sum, refusal invariants and the
   float/artifact/CPU/integer parity sequence. No schema or serving code changed.
 - Changed 2 tracked source files and added 2 source files, plus the task,
-  serving design, resource ledger and one notebook row. The code is about 880
-  lines; the ORDER gave no line estimate.
+  serving design, resource ledger and one notebook row. Policy measures about
+  1,000 code additions; the ORDER gave no line estimate.
 
 ## Measurements
 
@@ -52,9 +52,9 @@ non-nearest. This checks direction and failure detection, not learning.
 The full synthetic report test, including a fresh-output repeat, took `5.88 s`
 wall with 228,240 KiB maximum RSS. The outputs were byte-identical.
 The release binary SHA-256 is
-`95890a136a9ad1def49399bd21e2aa98d7007acd339eab4cac4d78d9ed6fe718`.
+`6dd1b936cfb9193f3bc48bceb8eecfe9a7d3549752927c39dff26297303ece7c`.
 The retained synthetic report SHA-256 is
-`85b2538692736cb24f3aa6fbcd443ea8f47352ee999c7e5f173451a9750efe61`
+`f988f85ff2ee3f5556e6abd760c236b8bad82b8f4f43605b59fca0bbfede4227`
 ([report](evidence/synthetic-report.json)).
 Real Claude-330 seed runs, offset values and target-nearest counts remain
 unavailable.

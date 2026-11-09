@@ -190,24 +190,33 @@ impl TrainedAskOffsets {
                     .zip(offset)
                     .map(|(&point, &offset)| point + offset)
                     .collect::<Vec<_>>();
+                if let Some(coordinate) = trained_query.iter().position(|value| !value.is_finite())
+                {
+                    return Err(format!(
+                        "token {question} depth {} query coordinate {coordinate} is not finite after adding its ask offset",
+                        read.depth
+                    ));
+                }
                 let key_points = keys
                     .iter()
                     .map(|&key| self.table_row(key))
                     .collect::<Vec<_>>();
                 for head in self.heads / 2..self.heads {
-                    let zero = self.head_code(read, zero_query, head);
-                    let trained = self.head_code(read, &trained_query, head);
+                    let zero = self.head_code(read, zero_query, head)?;
+                    let trained = self.head_code(read, &trained_query, head)?;
                     let target_index = relation as usize - keys[0] as usize;
-                    let distances = |query| {
+                    let distances = |query| -> Result<Vec<u64>, String> {
                         key_points
                             .iter()
                             .map(|point| {
-                                u64::from(popcount_swar(query ^ self.head_code(read, point, head)))
+                                Ok(u64::from(popcount_swar(
+                                    query ^ self.head_code(read, point, head)?,
+                                )))
                             })
-                            .collect::<Vec<_>>()
+                            .collect()
                     };
-                    let zero_distances = distances(zero);
-                    let trained_distances = distances(trained);
+                    let zero_distances = distances(zero)?;
+                    let trained_distances = distances(trained)?;
                     let zero_target = zero_distances[target_index];
                     let trained_target = trained_distances[target_index];
                     let rank = |values: &[u64]| {
@@ -253,14 +262,20 @@ impl TrainedAskOffsets {
         Ok(out)
     }
 
-    fn head_code(&self, read: &TrainedAskRead, point: &[f32], head: usize) -> u64 {
+    fn head_code(&self, read: &TrainedAskRead, point: &[f32], head: usize) -> Result<u64, String> {
         let head_width = self.width / self.heads;
         let start = head * head_width;
         let rotated = hamilton_gate_f32(
             &read.key_rotation[start..start + head_width],
             &point[start..start + head_width],
         );
-        pack_signs_f32(&rotated)[0]
+        if let Some(coordinate) = rotated.iter().position(|value| !value.is_finite()) {
+            return Err(format!(
+                "depth {} head {head} rotated coordinate {coordinate} is not finite",
+                read.depth
+            ));
+        }
+        Ok(pack_signs_f32(&rotated)[0])
     }
 
     fn table_row(&self, token: u32) -> &[f32] {
@@ -488,6 +503,36 @@ mod tests {
             .audit_relations(16..16, 16)
             .unwrap_err()
             .contains("range is empty"));
+
+        let (vocab, width) = (64usize, 8usize);
+        let mut table = vec![1.0f32; vocab * width];
+        table[33 * width..34 * width].fill(f32::MAX);
+        let model = file(vec![(
+            "embedding.weight",
+            Dtype::F32,
+            vec![vocab, width],
+            f32_bytes(table),
+        )]);
+        let rotation = (0..width / 4)
+            .flat_map(|_| [1.0f32, 0.0, 0.0, 0.0])
+            .collect::<Vec<_>>();
+        let mut ask = vec![0.0f32; vocab * width];
+        ask[33 * width..34 * width].fill(f32::MAX);
+        let hamming = file(vec![
+            ("heads", Dtype::U32, vec![1], u32_bytes([2])),
+            (
+                "d2.key_rotation",
+                Dtype::F32,
+                vec![width],
+                f32_bytes(rotation),
+            ),
+            ("d2.ask", Dtype::F32, vec![vocab, width], f32_bytes(ask)),
+        ]);
+        let offsets = TrainedAskOffsets::from_bytes(&model, &hamming).unwrap();
+        assert!(offsets
+            .audit_relations(16..32, 16)
+            .unwrap_err()
+            .contains("not finite after adding"));
     }
 
     fn model_file() -> Vec<u8> {

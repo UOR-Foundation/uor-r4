@@ -52,7 +52,7 @@
   ],
   "hardware": {
     "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
-    "executable_sha256": "d2080a1aa62140cbd1726e4a0d364af6f66235553450f6857f4bd59182843d9a"
+    "executable_sha256": "54e9279b2d0e26e6471b37abd08eefda236e1afa91f82d580892f178d02b461a"
   },
   "relations": [
     {
