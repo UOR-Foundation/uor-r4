@@ -10,7 +10,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - The first fitted mobile browser captures produced duplicated mosaics. Native-scale reloads produced clean images, independently matching Playwright mobile output; no application fix is claimed for a capture-state artifact.
 - The public `models.json` is 1,346 bytes with SHA-256 `fa33aa230b37b1d788983f9adb910f35d4562679db5351a5cf32e758d0c5ed79`, containing only the synthetic demo and identical before/after this cutover. Older text implied a current five-model/M1-card catalog. Records now describe the actual synthetic-only catalog; no model/catalog change or M1-card restoration is claimed.
 
-## Measurements
+## What changed
 
 - PR #3903 is **MERGED** as `4160a5347717d7e6786848895b758bfc5dc663f7`, tree `ace49417fef35d3ea321b2332cc2bb9cbc07cbb6`. Its first-parent diff is the approved 19 Studio/record files; Studio source matches reviewed head `ca8700bf0b8180bd91af581262a83192a18e1193` byte-for-byte. Independent model work in the merge was not edited.
 - Fresh-main checks: **455/455** typed tests across 52 files, **47/47** Playwright checks, **15/15** runtime contracts after generated-input preparation, **11/11** full gates, static page/worker checks, both runtime routes and migration cases, and direct **7/7** staged WASM checks.
@@ -20,7 +20,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - Isolated public runtime: **14 requests, zero external/raw-TypeScript/runtime errors**, one shell, `legacyMcp=0`, `typedMcp=1`, `typedMcpAfterWorkflow=0`, artifact ready, exact `17 + 25 = 42`, and isolated/restored transcripts. `public-runtime.json`, `live-acceptance.json`, and public desktop/mobile screenshots are under `local/kimi/default-cutover/fresh-main/`.
 - No GPU, paid compute, real credential/profile, second deployment, model/API/application change or useful-model result belongs to this record unit.
 
-## What changed in this PR
+## Measurements
 
 - Current-state, web-client, parity, serving-notebook and Studio roadmap records now name the actual merge, publish commit, successful Pages run, rollback head and live evidence. Static preview is a completed default-route result only; hosted native workflows and full Cowork/API parity remain open.
 - Historical typed-preview entries remain identifiable. Current publish and catalog references no longer contradict the deployed `4a435ab8…`/synthetic-only read-back.
