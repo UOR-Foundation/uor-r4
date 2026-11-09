@@ -19,6 +19,8 @@
     "measured_solver_benchmark_seconds": 0.037,
     "measured_library_tests_seconds": 43.12,
     "measured_evidence_test_seconds": 5.96,
+    "post_merge_library_tests_seconds": 37.91,
+    "post_merge_process_seconds": 38.01,
     "builds_and_checks_allowance_seconds": 900,
     "review_and_delivery_allowance_seconds": 300,
     "retry_and_setup_allowance_seconds": 550.883,
@@ -45,7 +47,8 @@
     "threads": 16,
     "max_peak_rss_kib": 755468,
     "benchmark_peak_rss_kib": 60716,
-    "library_tests_peak_rss_kib": 755468
+    "library_tests_peak_rss_kib": 755468,
+    "post_merge_library_tests_peak_rss_kib": 734648
   },
   "artifacts": {
     "synthetic_report_sha256": "39ed4fcea8e8a73ba8507e5eb90c5340fdec237c7a4187918e2df83e850a7704",

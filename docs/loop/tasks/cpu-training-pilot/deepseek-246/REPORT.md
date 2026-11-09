@@ -101,8 +101,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - No serving, artifact-schema, training-default, GPU or Claude-owned file was
   changed.
 - Size: `pr-check` reports 13 changed paths: code 6 files `+2,274/-6`,
-  documentation 3 files `+282/-0`, and other/evidence/claim files 4 files
-  `+1,079/-0` (`+3,635/-6` total). The ORDER gave no line estimate. Inline unit
+  documentation 3 files `+285/-0`, and other/evidence/claim files 4 files
+  `+1,082/-0` (`+3,641/-6` total). The ORDER gave no line estimate. Inline unit
   tests are counted in the code class.
 
 ## Measurements
@@ -155,6 +155,9 @@ projection gives `107,567.677487699 s`.
   cpu-ask-offset-solver`: 4 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 472 passed,
   5 ignored in 43.12 s; the timed process took 43.21 s and peaked at 755,468 KiB.
+- After merging `origin/main` at `35f55d334`, the same library suite again
+  passed 472 tests with 5 ignored in 37.91 s; the timed process took 38.01 s and
+  peaked at 734,648 KiB. Both binaries' four-test suites also passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-offset-audit`: 4 passed.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
