@@ -211,3 +211,44 @@ That is about 1.9 h per pod. Two pods in parallel, one per seed, at the $0.70/h 
 - **Watchers:** one is armed on every pod (L-004), with the lease renewed by it.
 - **Scripts:** pinned by SHA-256 in a D67 pre-run review section added before any pod.
 - **Builds:** each checkout builds into its own cargo target, and the job checks the "Compiling … (<checkout>/crates/uor-r4-float-train)" line before trusting a test verdict (claude-330's fix, with claude-334's exemption for the pin's own checkout after I-0).
+
+## D67 pre-run review (claude-335, 9 Nov 2026)
+
+**Verdict: PASS-WITH-MINORS (launch)**, from a fresh read-only reviewer that read this sheet at the run pin, the six run scripts, their claude-334 templates, and the code. It found no blocker and no major. Both minors are applied:
+- the B2 bar, the `−C` row and the undertrained test are recorded for every carried arm that trained, whatever stopped the run;
+- a bar line requires the arm to have trained, not just to have exited.
+
+The two field shapes it left unverified are settled:
+- `hamming_pull_distance` has one entry per ask depth whatever the placement (`in_space_long.rs:13171`);
+- `hamming_carry_gain` is written on every reading of a carried read (`:13231`).
+
+t1's carried smoke shows both on every line, and the job's `trained_ok` accepts it.
+
+- **The run pin:** `0ca41675a7eafe9d36c9213c5da9bbc2f8ebed25`. The head after it changes this sheet only.
+- **The test pod t1** (vast-59852185, at `310e7d031`, $0.17):
+  - EXIT 0;
+  - I-1 MATCH at the base and the pin;
+  - all 8 CUDA gates FAILS_AS_IT_MUST;
+  - the B2-aqC smoke ok, with 8 ablations (`−C` last), ranks `plain`, `−aS`, and `c` on the question tokens rising from 0 to 0.012 in 32 steps.
+
+  Sealed at `results/claude/one-model-end-to-end-question-carry-2026-11-09/tests/t1`:
+  - `question-carry-tests.tar.gz`: `aa6fb48538a4d3037785fce85e6b908a0eacc2f1f99f4682a83ab6b025eaa309`
+  - `question-carry-tests.list`: `4478db7372771b8681bdfaf367f40a72e938e289ed5bd61f719a3f50b396d6b9`
+- **Before any arm trains, the run pods:**
+  - run the strengthened I-C2 in I-0;
+  - run its five gates at the run pin (`c-carry-no-a`, `-forward`, `-own-row`, `-far`, `-window`), all applying once (1+1) at the pin;
+  - stop with exit 5 on any gate that does not fail as it must.
+
+  `c-carry-own-row` now matches only `held_term`'s loop. The strengthened test added a second `for s in 1..=rows.min`.
+- **Scripts** (`local/claude/claude-335/`, SHA-256):
+  - `rjob-335.sh` `6ec70d39a4f4f1cd7c263fd295a83d64427e227e2d37a97b9ec13888758bb263`
+  - `rchain-335.sh` `c8c384734b5e881608d59ca3063f3174649d3f82eaa91eef02ed838684400361`
+  - `rseal-335.sh` `256c131905a9ead3e414f5619bf9b3539db38c55a172fd75fb39abe42e892961`
+  - `mutate-335b.sh` `063838d685bb1916cde07d0f293f8cb1dfa8e2fa1b450c42db2b965be326cdf7`
+  - `rseed-335.sh` `1fbc91bfd552c314ac11afdef57a90703c48185ee273dd9308d6740e00589208`
+  - `rwatch-335.sh` `604a5f4350b7e96d0b3143464cf6274c6fed58a9406458da1199bc232865203a`
+- **Cost:** the reviewer puts it at 2.3–2.9 h per pod with the gate rebuilds. That is inside the 3 h lease, which the watcher renews hourly, and the 4 h notice. Two pods at ≤ $0.70/h come to at most about $4.2, inside the caps.
+- **What a pass and a fail unlock:**
+  - A carried arm that passes with `−C` failing (branch 1) unlocks serving the carry at decode and export, then a language run.
+  - Any other branch names its next sheet in the outcome map above.
+  - An instrument fault (branch 0) repairs the instrument and reruns.
