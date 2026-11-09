@@ -46,8 +46,16 @@ The fresh exact-head review found five material issues in deepseek-247:
 
 - Targeted regression library tests: 6 passed.
 - Regression binary tests: 3 passed.
+- Full CPU library suite: 478 passed, 5 ignored in 42.23 s; process wall was
+  42.32 s at 2,408% CPU and 692,448 KiB peak RSS.
+- `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
+- Scoped Clippy: passed with only pre-existing warnings.
+- Release binary rebuild: passed.
 - Repaired real checkpoint manifest: 8/8 passed.
 - Source and regression exit-code controls: passed as described above.
+- 8-worker repeat was byte-identical; one-worker content matched.
+- `loop report --check`, `loop pr-check --local` and `loop gates --full`:
+  passed; all 11 gates were green.
 
 ## Skills used
 
@@ -55,8 +63,7 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-Final full-suite, policy, gates and second fresh review are recorded in the
-parent REPORT after they run.
+A second fresh exact-head review is still owed.
 
 ## Plain summary
 
