@@ -9,7 +9,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## What changed
 
-- Current-state, notebook, desktop/README and kimi-79's summary now distinguish `d399` earlier acceptance, `988155ae56dc0fdd872b7428018ead566179fe3f` source/assertion (tree `e6542fb375518c1b38639cff825b9ac65f7b3594`), and intermediate record-only `c17105e7` and `b9750be6`/tree `77487ea04c695bc38526b1acbdd89b469cc22695`. The final identity is bound in this REPORT and the PR, with fresh gate and loopback logs.
+- Current-state, notebook, desktop/README and kimi-79's summary distinguish `d399` earlier acceptance and `988155ae56dc0fdd872b7428018ead566179fe3f` source/assertion (tree `e6542fb375518c1b38639cff825b9ac65f7b3594`) from record-only deltas. `c17105e7`, `b9750be6`/tree `77487ea04c695bc38526b1acbdd89b469cc22695`, and `3e33a175bcf928e1e42e7bbe8c7a149709095da3`/tree `fc3df19e7e556d5f3c43b385a0525d6184f96255` are intermediate record-only heads. Agent-64 identified the remaining contradictory labels; [kimi-81](../kimi-81/REPORT.md) corrects them. The final identity is in the PR body and main-checkout `local/kimi/studio-final-acceptance/<final-head>/identity.json`, not this report.
 - c171's local-policy and full-gate logs were copied byte-identically into `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/c17105e704e1ee9b02271062a13fc23747649604/`. b975 policy/gate citations use its durable copies and explicitly identify it as intermediate evidence.
 - This repair is documentation/evidence only: no production code, model/API/engine/worker/tokenizer or new feature claim was added.
 
@@ -36,4 +36,4 @@ Fresh exact-head approval, required GitHub checks, protected merge and fresh-mai
 
 ## Plain summary
 
-All active records now name the same source/assertion and record-only heads, and every cited log is durable in the main checkout. The final record-only commit is reviewed and gated before protected delivery rather than relying on the earlier d399 identity.
+Agent-64 found that the attempted alignment still left contradictory labels in kimi-79 and an unsupported final-binding claim here. [kimi-81](../kimi-81/REPORT.md) corrects those findings. The final identity is in the PR body and main-checkout identity.json; no self-hash is claimed here. The separate raw mixed-case RED log was not retained.
