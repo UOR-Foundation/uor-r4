@@ -14063,6 +14063,7 @@ pub fn summarize_profile(rows: &[ProfileRow]) -> ProfileSummary {
 pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Device) -> Result<()> {
     // claude-337: the pull's question placements are refused before anything is read or written.
     refuse_pull_placement_outside_recall(config)?;
+    check_pull_flags(config)?;
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 {
         return Err(invalid("steps, batch and eval-every must be positive"));
     }
@@ -18102,15 +18103,21 @@ mod tests {
             assert!(err.contains(&format!("--hamming-attract-at {place}")) && err.contains("--recall"), "{err}");
         }
         assert!(refuse_pull_outside_recall(&base).is_err(), "the other runners still refuse it");
-        // run_long itself refuses them first, before it reads its data root.
+        // run_long itself refuses them, and a weight below 0, first, before it reads its data root
+        // or writes `config.json`.
         let missing = std::env::temp_dir().join(format!("claude-337-none-{}", std::process::id()));
-        let both = LongConfig { hamming_attract_at_both: true, ..base.clone() };
-        let refusal = run_long(&missing, &missing.join("out"), &both, &Device::Cpu)
-            .err()
-            .map(|e| e.to_string())
-            .unwrap_or_default();
-        assert!(refusal.contains("--hamming-attract-at both"), "{refusal}");
-        assert!(!missing.exists());
+        for (expect, c) in [
+            ("--hamming-attract-at question", LongConfig { hamming_attract_at_question: true, ..base.clone() }),
+            ("--hamming-attract-at both", LongConfig { hamming_attract_at_both: true, ..base.clone() }),
+            ("a weight of at least 0", LongConfig { hamming_attract: -1.0, ..base.clone() }),
+        ] {
+            let refusal = run_long(&missing, &missing.join("out"), &c, &Device::Cpu)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default();
+            assert!(refusal.contains(expect), "{refusal}");
+            assert!(!missing.exists());
+        }
     }
 
     /// claude-337: a language run's `config.json` records the pull's weight, and leaves it out at 0.
