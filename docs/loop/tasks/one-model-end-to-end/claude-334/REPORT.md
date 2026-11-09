@@ -25,14 +25,17 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
     | 512 value tokens | 0.000 / −0.001 | −0.004 / −0.002 |
 
   - The held term's own rank at the scored row `H4`, (r1h), does not settle near 1. It reads 74.2 / 13.4 at 4,096 and 12.4 / 174.0 at 16,384, so four times the steps moved seed 2 to chance.
-  - With the held term added, the stream at `H4`, (r1hs), reads at chance on every held line: 252.6–263.3.
-- **The stream read's write is hidden by the residual in every arm, including the one that answers.**
-  - (r1s), the whole stream at the `Q` row just after the write, reads 248.5–263.3 on every line with ranks, B1-a included, at both seeds. B1-a answers 512 / 512.
-  - The sheet made (r1s) descriptive only. It is the reading that says the depth-2 stream is the wrong place to carry the value, so that choice hid the main signal. This is a lesson about the design, not a measurement fault.
-- **(r2) is not an instrument for "the trunk loses the value".**
-  - (r2) is the final point before the readout read. On B1-a it reads 261.7 / 256.1, at chance, while B1-a answers every query.
-  - In B1 the answer is scored at the question row itself, and the readout read fetches it there. The value enters at the readout read, after the point (r2) ranks.
-  - So (r2) near chance does not show a loss. The sheet's last branch, "(r1hs) near 1, (r2) near chance: the trunk loses it", could not have been read as it stands.
+  - With the held term added, B2-aqH's stream at `H4`, (r1hs), reads at chance at both lengths and seeds: 252.6–263.3.
+- **A nearest-point rank cannot see the written value in the depth-2 stream, even in the arm that answers.**
+  - (r1s), the whole stream at the `Q` row just after the write, reads 245.1–259.3 on the found lines (B1-a, B2-aq, B2-aqH) at both seeds. B1-a answers 512 / 512.
+  - B2-aH reads 187.3–300.3, but only on its 3–23 found rows.
+  - On the held arms, (r1s) as built ranks the stream with the held term at `Q` already added (the code review's finding, `in_space_long.rs:12540`). B1-a and B2-aq hold nothing, so their (r1s) is the write alone, and it is at chance there too.
+  - This does not show the trunk cannot decode the value from the stream: the sheet itself says a swamped projection does not show that. It does show the ranks cannot tell a carried value from a lost one there.
+  - The sheet made (r1s) descriptive only. That choice hid this from the outcome map. It is a lesson about the design, not a measurement fault.
+- **On B1, (r2) at chance sits beside a correct answer.**
+  - (r2) is the final point before the readout read. On B1-a it reads 261.7 / 256.1 while B1-a answers every query.
+  - B1 is scored at the question's own position (`RecallQuery::scored_offset`, `in_space_long.rs:12016`; the window's doc, `in_space_long.rs:12036`). So the readout read at that row can fetch the value, and the value enters after the point (r2) ranks.
+  - So, on this task, (r2) near chance is not evidence of a loss in the trunk by itself.
 - **B2-aH's ask heads find almost nothing, so its hold has nothing to carry.**
   - B2-aH's found fraction at the `Q` row is 1.4% (seed 1) and 0.3% (seed 2) at 16,384. Its question-token `g` stays at 0.000 at both lengths.
   - That matches claude-330's B2-a: with the pull at the scored rows, the ask heads do not learn to choose.
@@ -64,9 +67,11 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 ## Outcome (the sheet's map, first match wins)
 
 - **Outcome 0** (an instrument fails): no; B0, I-R1 and I-R2 pass on both seeds.
-- **Outcome 1** (undertrained, no held arm passing): **yes at step 4,096.** B2-aH was undertrained there, and the sheet extends every held arm and B2-n once, so all three were extended to 16,384.
+- **Outcome 1** (undertrained, no held arm passing): **yes at step 4,096.** B2-aH was undertrained there: its question-token `g` stays within ±0.009, below the 0.01 test. B2-aqH was not undertrained (question `g` 0.275 / 0.311).
+  - The map extends each undertrained arm. The D67 pre-run review (the sheet's "Major (4a)") extends both held arms and B2-n once, to 16,384 steps at every seed, whatever the 4,096 bar says, because each pod sees one seed. All three were extended.
+  - Unextended, B2-aqH's (r1h) at 4,096 reads 74.2 / 13.4, which is also "any other pattern" below, so the extension does not change the outcome.
   - **Read again at step 16,384:**
-    - B2-aH is still undertrained: its question-token `g` is 0.000. The map records this as a configuration result for `h = 8` and this `lr`: the hold did not train in this budget. Its ask heads also find nothing (above), which is why.
+    - B2-aH is still undertrained: its question-token `g` is 0.000. The map records this as a configuration result for `h = 8` and this `lr`: the hold on the question tokens did not grow in this budget. Its header weights did grow (mean 0.385 / −0.203, extremes 1.18 / −1.40). Its ask heads find almost nothing (above), so there is little to hold.
     - B2-aqH is not undertrained: `g` grew, and `R_ask` did not rise.
 - **Outcome 4** (both held arms fail), split on B2-aqH at 16,384:
   - Found fraction at `Q` ≥ 0.5, (r1y) near 1 and (r1u) near 1, at both seeds.
@@ -74,13 +79,13 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - At seed 1 it is **12.4, neither near 1 nor near chance.**
   - **The seeds disagree on the branch, so this is the map's "any other pattern":** a configuration result for `h = 8`, `lr` 0.001, named from the readings.
   - **The map's next step** is a diagnostic sheet that cuts at the first rank on the path whose mean passes 64. That rank is (r1h) at seed 2 and (r1hs) at seed 1, and the map chooses no lever in advance.
-- **Seeds:** they agree on the bar at both lengths and differ only on this branch, so no seed 3 runs.
+- **Seeds:** the sheet runs seed 3 "if the two seeds split". **The lab's reading:** the seeds agree on the bar at both lengths and on the outcome ("any other pattern"), and differ only inside it, on which rank first passes 64. A third seed could not change the outcome, so none runs. That is my reading of the sheet, not its rule.
 
 ## The lab decision on the next lever (D67, logged for Casey)
 
-- **What the readings exclude:**
-  - Any carry into the depth-2 stream (this hold, or a carried register in the same place) adds the value into a stream where (r1s) and (r1hs) read at chance, B1-a's included. A register that held the value exactly would be added to the same hidden stream.
-  - The working read is B1's: the readout read at the scored row asks and fetches the value itself.
+- **The lab's judgement, from the readings (not something they exclude):**
+  - A carry into the depth-2 stream (this hold, or a carried register in the same place) adds the value where the nearest-point ranks (r1s, r1hs) cannot see it, B1-a's included. So a second carry there could not be read by these instruments either, whether it works or not.
+  - The read that works is B1's: the readout read at the scored row asks and fetches the value itself.
 - **Decision:** claude-335 carries the **question** to the scored row and lets the readout read's ask heads ask with it there. That is the form B1 passes, 512 / 512. The ranks are taken against what the readout reads, and a host gate requires them to read near 1 on a B1-a-shaped case before any pod.
   - A carried register for the value, overwritten only by a found write, runs beside it as a second arm, so the two placements are compared in one run against B2-n.
   - Casey agreed to "the carried register, with the fixed rank checked on B1 first" as the next unit, in chat on 9 Nov. Carrying the question is my addition after reading the full ranks, and the arms test both.
@@ -132,7 +137,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **It shows:**
   - A learned per-token hold, summing the last 8 rows' ask writes into the depth-2 stream, does not carry a chosen value four tokens to a scored row, at either length, on either seed.
   - It learns to weight the question rows.
-  - The stream it adds into hides the value at the write row itself, even in B1, where the answer is right.
+  - A nearest-point rank cannot see the value in the stream it adds into, even at the write row and even in B1, where the answer is right.
 - **It does not show:**
   - that no carry works;
   - anything about a carry into the readout read, about language text or about the served integer path. No held model is exported or served: the export and the decode step refuse the hold.
@@ -154,6 +159,10 @@ Closes nothing: #3407 stays open.
 - **claude-335: the question carry into the readout read, and a value register beside it, on B2**, under its own sheet. The ranks are re-taken against what the readout reads and gated on a B1-a-shaped host case first. Under claude-326's lab decision, no language run on this line starts before a read passes B2.
 - **(r1s) promoted from descriptive to a gated reading** in the next sheet.
 - **Minors carried from claude-330:** an I-7 configuration where `−c2` matters; no end-to-end `run_recall` test with ask heads on the laptop.
+- **Minors from this unit's code review, not fixed here** (no sealed number changes):
+  - a rank of an all-zero point (the `−aS` (r1u) and (r1h) cells, the `−H` (r1h) cell) prints the id tie-break's mean, about 256, rather than "none";
+  - (r1s) on held arms includes the held term at `Q`;
+  - loading now refuses a held checkpoint whose gain count differs from its ask rows, which claude-333's could have loaded.
 
 ## Plain summary
 
@@ -161,6 +170,6 @@ The model can find the right fact at the question: it picks the right value near
 
 This unit tried a short memory that adds up the last eight words' found facts and passes the sum forward. The memory learned to favour the question word, as intended, but the answer stayed at chance: at most 2 right of 512, the same as a model with no memory, even after four times the training.
 
-The readings show why. The place where the memory adds the fact is a channel where the fact is already drowned out, even in the test the model gets 100% right. That test works because a later lookup fetches the answer directly at the row being scored.
+The readings suggest why. In the channel where the memory adds the fact, our measurements cannot pick the fact out, even in the test the model gets 100% right. That test works because a later lookup fetches the answer directly at the row being scored.
 
-The next unit carries the question forward to that later lookup, instead of carrying the answer through the drowned channel. Five rented GPUs ran it for $2.19.
+The next unit carries the question forward to that later lookup, instead of carrying the answer through that channel. Five rented GPUs ran it for $2.19.
