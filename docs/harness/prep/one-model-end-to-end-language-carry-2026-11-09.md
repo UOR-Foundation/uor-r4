@@ -235,21 +235,22 @@ claude-322's, with:
 - **The reading:** the laptop's export of that snapshot gave `9b01ed62…`, not `86e51d5e…`. The job stopped before its full run, as the stop rule says, and sealed to `runs/L-aC/s1/` (NOT_RUN: "I-xg, no PASS from the laptop"). The watcher took the pod down.
 
 **Classified: an instrument fault in the export path, not a mechanism result.**
-- **The two snapshots differ in one entry.** The pod's snapshot and claude-322's laptop snapshot of the same checkpoint are equal in every key but `layers`, and in `layers` in one quantized entry: one projection's `rec_out` atom (31 for 30) and its state (42 for 7).
+- **The two snapshots differ in four quantized entries.** The pod's snapshot and claude-322's laptop snapshot of the same checkpoint are equal in every key but `layers`. In `layers`, four quantized entries (8 values) differ, among them one projection's `rec_out` atom (31 for 30) and its state (42 for 7). In the artifacts, four trunk sections differ: `l1.rec_out.fbs`, `l4.mlp_down.fbs`, `l4.rec_out.fbs` and `l5.rec_gate.fbs` (fresh review, finding 3, corrected).
 - **Why:** `fbs-snapshot` loads the model on the GPU (`Device::new_cuda(0)`) and builds the trunk tables from it there. claude-322's served snapshot was built on the laptop by `cpu-fbs-export`. Where two nearest atoms are almost tied, the two hosts' arithmetic can choose differently.
 - **The laptop path reproduces exactly.** `cpu-fbs-export` built at the pin's crates gives claude-322's snapshot `c9fe1d91…` and artifact `86e51d5e…` byte for byte.
 
 **The repair: the laptop snapshot,** with I-xg's bar unchanged.
 - **The tool:** `cpu-fbs-export` refuses an ask checkpoint ("Hamming tensor inventory differs"). So `hamming-base-copy` (new, in this PR) writes a copy of `hamming_read.safetensors` with the base inventory only. It keeps `heads`, `copy_key` or `copy_keys`, and the five reads per depth, byte for byte. It leaves out `carry_rows`, `d{depth}.ask` and `d{depth}.carry`, and refuses any other name.
 - **The splice:** the ask entries come from the pod snapshot. `fbs-snapshot` builds them through `HammingReads::load(dir, &Device::Cpu)`, not on the GPU.
-- **The check:** at every served step (`read-339.sh`'s `laptop_snap`), the pod snapshot's own export must have the same header and the same bytes in every `hamming.*` section as the served artifact. The count of differing trunk sections is said.
+- **The check:** at every served step (`read-339.sh`'s `laptop_snap`), the pod snapshot's own export must have the same header and the same bytes in every `hamming.*` section as the served artifact, and every served trunk section must equal `cpu-fbs-export`'s own artifact, so the splice touched no trunk number. The count of trunk sections that differ from the pod's is said. The served pair is written under staging names and moved into place only after every check passes, so a refused artifact never sits under the served name, where the `−C` block would read it.
 
 **Shown before any rerun, on the first pod's seals:**
 - **claude-322's checkpoint, with the first pod's real GPU snapshot:** the repaired I-xg passes, `86e51d5e…`, and records the pod path's `9b01ed62…`.
 - **L-aC's smoke `step-000064`** (asks on both reads, carry 32 rows): the served artifact equals the pod path's byte for byte (`c0c2edd4…`), with 0 trunk sections differing. The served snapshot keeps the pod's `hamming_ask` unchanged, and I-xa passes end to end (integer engine scores it, the default refuses it by name).
   - The pod snapshot's JSON prints its floats through f64 when it carries asks (`serde_json::to_value`). So a `jq` comparison flags every float as different. The artifacts, which read f32, are equal.
 - **The negatives:** a pod snapshot with one base read changed fails the check, at I-xg and at `laptop_snap`.
-- **Tests:** test-read 42/42, test-seal passes; `hamming-base-copy`'s unit test passes.
+- **Tests:** test-read 45/45, test-seal passes; `hamming-base-copy`'s unit test passes. The negative gate: with the trunk check removed, a fake `cpu-fbs-export` that moves one embed number passes, and both its tests fail.
+- **Fresh review** (delegate:reviewer, spec and diff only): PASS with minors. Findings 1 (a refused artifact under the served name), 3 (this section's diagnosis) and 4 (no served-trunk check) are fixed above. Finding 2: `serve` reads one ROOT, so the four seals are fetched into one assembled local root, `ROOT/ARM/sS/oh/run`, with L-aC seed 1 from `runs-2/` and the other three from `runs/`; the NOT_RUN `runs/L-aC/s1` stays sealed and is named in the REPORT. The nits (`UP_FORCE=0` still forces, `seed-339.sh` overwriting `ixg/`) are left: no launch sets either.
 
 **What changes:**
 - `read-339.sh`'s `ixg` mode and every served export (I-xa, the trend, `−C`) use the laptop snapshot. The `−C` cut is taken from the served snapshot of `step-016384`.
@@ -257,6 +258,8 @@ claude-322's, with:
 - The pod scripts and their pins (job, chain, seal) are unchanged.
 
 **The order is unchanged:** L-aC seed 1 first, and the other three after its I-xg PASS.
+
+**The rerun (9 Nov):** L-aC seed 1 relaunched on `vast-59899989` ($0.563/h), sealing to `runs-2/`. I-xg passed at 14:39:34Z on the repaired path: the new pod's GPU snapshot is byte-identical to the first pod's (`6a424749…`), the pod path again gives `9b01ed62…` (recorded only), and the laptop snapshot gives `86e51d5e…`. L-a seed 1, L-aC seed 2 and L-a seed 2 then launched on three more pods at $0.563/h each, four pods and $2.24/h in all.
 
 **Pins added:**
 - `cpu-fbs-export` `6748a09f4c253d7d0af5144ade990024d373d5d0756b30a2d44895e76bd19865`
