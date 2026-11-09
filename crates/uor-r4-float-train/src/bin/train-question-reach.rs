@@ -90,6 +90,9 @@ fn count(tokens: &[u16], mask: &[u8], bos: u16) -> Result<Reach, String> {
     let mut asked: Option<(usize, usize)> = None;
     for (row, (&token, &flag)) in tokens.iter().zip(mask).enumerate() {
         if token == bos {
+            if flag > 1 {
+                return Err(format!("mask value {flag} at row {row}"));
+            }
             reach.documents += 1;
             question = None;
             last_scored = false;
@@ -257,9 +260,17 @@ fn run(dir: &Path) -> Result<serde_json::Value, String> {
     if at != total {
         return Err(format!("the roots cover {at} of {total} tokens"));
     }
-    Ok(
-        serde_json::json!({"schema": "uor-r4-train-question-reach/v1", "tokens": total, "roots": roots}),
-    )
+    Ok(serde_json::json!({
+        "schema": "uor-r4-train-question-reach/v1",
+        "notes": {
+            "all_scored_rows, first_row_of_each_reply": "against the unscored run before the row; to_question_end is the run's last row, the header's colon on a chat root",
+            "asked_all_scored_rows, asked_first_row_of_each_reply": "against the question read from the tokens; to_question_end is the question's last word",
+            "rows 0": "no data: its per_mille and medians are 0 for that reason",
+            "lengths": "a question of 8191 rows or more counts as 8191 in its median",
+        },
+        "tokens": total,
+        "roots": roots,
+    }))
 }
 
 fn main() {
@@ -317,26 +328,58 @@ mod tests {
         tokens.extend(turn(&[7, 7]));
         tokens.extend([9; 20]); // the capped reply, kept as context
         let asked_turn = tokens.len();
-        tokens.extend(turn(&[8, 8, 8]));
+        tokens.extend(turn(&[8, 8]));
         let scored = tokens.len();
-        tokens.extend([9, 9]);
+        tokens.extend([9, 9, 9]);
         let mut mask = vec![0; scored];
-        mask.extend([1, 1]);
+        mask.extend([1, 1, 1]);
         let reach = count(&tokens, &mask, 0).unwrap();
         // The run starts at row 1; the question's first word is three rows into the second turn.
         let first_word = asked_turn + USER_MARKER.len();
         let last_word = scored - ASSISTANT_HEADER.len() - 1;
-        assert_eq!(scored - first_word, 9);
+        assert_eq!(scored - first_word, 8);
         assert_eq!(scored - last_word, 7);
         assert_eq!((reach.replies_not_placed, reach.scored_not_placed), (0, 0));
-        assert_eq!((reach.asked_all.rows, reach.asked_first.rows), (2, 1));
-        // Reach 8 holds the last word of both rows and neither first word; 16 holds all.
-        assert_eq!((reach.asked_all.start[1], reach.asked_all.end[1]), (0, 2));
-        assert_eq!((reach.asked_all.start[2], reach.asked_all.end[2]), (2, 2));
-        assert_eq!(median(&reach.asked_lengths), 3);
-        // The run-based count measures from the first turn, 30-odd rows back.
+        assert_eq!((reach.asked_all.rows, reach.asked_first.rows), (3, 1));
+        // The three rows are 8, 9, 10 back from the first word and 7, 8, 9 from the last, so
+        // reach 8 sits on both boundaries: one first word and two last words. 16 holds them all.
+        assert_eq!((reach.asked_all.start[1], reach.asked_all.end[1]), (1, 2));
+        assert_eq!((reach.asked_all.start[2], reach.asked_all.end[2]), (3, 3));
+        assert_eq!(
+            (reach.asked_first.start[0], reach.asked_first.end[0]),
+            (0, 0)
+        );
+        assert_eq!(
+            (reach.asked_first.start[1], reach.asked_first.end[1]),
+            (1, 1)
+        );
+        assert_eq!(median(&reach.asked_lengths), 2);
+        // The run-based count measures from the first turn, 42 to 44 rows back.
         assert_eq!(reach.all.start[3], 0);
-        assert_eq!(reach.all.start[4], 2);
+        assert_eq!(reach.all.start[4], 3);
+    }
+
+    #[test]
+    fn the_run_based_distances_sit_on_their_boundary() {
+        // A 3-row run and a 5-row reply: 3 to 7 back from its start, 1 to 5 from its end.
+        let tokens = [0, 5, 5, 5, 9, 9, 9, 9, 9];
+        let mask = [0, 0, 0, 0, 1, 1, 1, 1, 1];
+        let reach = count(&tokens, &mask, 0).unwrap();
+        assert_eq!((reach.all.start[0], reach.all.end[0]), (2, 4));
+        assert_eq!((reach.all.start[1], reach.all.end[1]), (5, 5));
+        assert_eq!((reach.first.start[0], reach.first.end[0]), (1, 1));
+    }
+
+    #[test]
+    fn a_header_straight_after_user_has_no_question_to_place() {
+        let mut tokens = vec![0];
+        tokens.extend(turn(&[]));
+        let mut mask = vec![0; tokens.len()];
+        tokens.push(9);
+        mask.push(1);
+        let reach = count(&tokens, &mask, 0).unwrap();
+        assert_eq!((reach.replies_not_placed, reach.scored_not_placed), (1, 1));
+        assert_eq!(reach.asked_first.rows, 0);
     }
 
     #[test]
@@ -370,5 +413,6 @@ mod tests {
         assert_eq!(reach.all.end[..3], [1, 1, 1]);
         assert!(count(&[5], &[2], 0).unwrap_err().contains("mask value 2"));
         assert!(count(&[5], &[], 0).unwrap_err().contains("mask rows"));
+        assert!(count(&[0], &[2], 0).unwrap_err().contains("mask value 2"));
     }
 }

@@ -2,21 +2,82 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). ORDER: [ORDER.md](ORDER.md). Base `67972456d`. No GPU was used and no model was trained.
 
-**In one line:** By the rule fixed before the count, 32 rows does not reach the question in TRAIN, at 1.2% of oasst2's scored rows and 76.3% of the capped mw-balp's against a bar of 80%. But the same data puts the question's first word within 32 rows at 93.1% of mw-balp's reply first rows, so a longer carry is not the next step. The decision is a control ladder at the new trainer commit, to find what took the stopping away.
+**In one line:** By the rule fixed before the count, 32 rows does not reach the question in TRAIN (1.2% of oasst2's scored rows, 76.3% of the capped mw-balp's, bar 80%). The bigger finding is in the sealed replies of claude-339: 243 to 255 of 256 fall into a repeated-token loop by about their third to fifth token. So the next unit checks the serving path, then runs a cause ladder at the new trainer commit.
 
 ## What did not work, first
 
-- **The count as first built measured the wrong thing on the capped roots (instrument, repaired).** It treated a whole unscored run as the question. `reply-cap` keeps a capped reply as unscored context, so on `cap1` to `cap6` one run can hold several whole turns: the first-turn run averages 84.9 rows (a one-off count over `cap1`'s tokens, not in the JSON), against a question of 11 (median). That first count read 34.3% for `cap1`.
-  - **The repair:** the tool also reads the question from the tokens, from the word after the last `User:` before a reply to the word before the `\nAssistant:` header. It placed every reply on `oasst2` and `cap1` (0 not placed). The run-based numbers stay in the JSON and below, as the ORDER asked for them. The rule and its bar did not change, but I changed the instrument after seeing its first output, and the reader should weigh that.
 - **By the pre-stated rule, 32 does not reach the question on either dialogue root.** At least 80% of a root's scored rows needed the question's start within 32 rows. `oasst2` has 1.2% and `cap1` has 76.3%, so both miss. The run-based count misses too (0.8% and 34.3%).
-- **The rule counts every scored row, and that weakens what it can say about the carry.** `oasst2`'s replies run to hundreds of rows, and a row deep in a long reply is far from the question whether or not it needs it. The rule cannot say which rows need the question. So its "does not reach" is recorded as stated, and the decision below does not rest on it alone.
-- **Windows are ignored.** The count is an upper bound on what a 192-token training window can see.
-- **Most of TRAIN has no question at all.** The three wiki roots hold 24,181,749 of the mix's 33,364,756 scored rows (72.5%), with no `User:` turn before them. Only 13.7% of all scored rows (4,582,684) have a question's first word within 32 rows. A question exists only in the other 27.5%.
-- **The six capped roots are one set of counts.** `cap1` to `cap6` have the same token and mask hashes, so their counts are the same by construction and the mix weighs that one data set six times.
+- **The count as first built measured the wrong thing on the capped roots (instrument, repaired).** It treated a whole unscored run as the question. `reply-cap` keeps a capped reply as unscored context, so on `cap1` to `cap6` one run can hold several whole turns: the first-turn run averages 84.9 rows (a one-off count over `cap1`'s tokens, not in the JSON), against a question of 11 (median). That first count read 34.3% for `cap1`.
+  - **The repair:** the tool also reads the question from the tokens, from the word after the last `User:` before a reply to the word before the `\nAssistant:` header. It placed every reply on `oasst2` and `cap1` (0 not placed). The run-based numbers stay in the JSON, as the ORDER asked for them. The rule and its bar did not change, and both definitions miss, but I changed the instrument after seeing its first output.
+- **The rule counts every scored row, and that limits what it can say about the carry.** `oasst2`'s replies run to hundreds of rows, and a row deep in a long reply is far from the question whether or not it needs it. The rule cannot say which rows need the question.
+- **The count does not settle the carry's reach.** The first-row figures are at a reply's first row, and the value comes later (about 7 rows on the panel), so the share at the value's row is unmeasured and can be well under 93.1%. On human chat a longer carry would reach more: `oasst2`'s reply first rows go from 47.7% at 32 to 79.8% at 64. Windows are also ignored, so all of this is an upper bound on what a 192-token window sees.
+- **Most scored rows have no question.** The three wiki roots hold 24,181,749 of the mix's 33,364,756 scored rows (72.5%; by tokens they are 33.1% of the mix), with no `User:` turn before them. Only 13.7% of scored rows (4,582,684) have a question's first word within 32 rows.
+- **The six capped roots are one set of counts.** `cap1` to `cap6` have the same token and mask hashes, so the mix weighs that one data set six times.
+- **The first fresh reviews sent this back.** The code review found no wrong number, but the distances behind the decision had no test that could fail. The claims and decision review found the ladder could not separate a serving-path fault, the read table had dropped half of the stopping bar, and the log was incomplete. All are fixed below.
 
-## The count
+## The sealed replies loop (laptop, claude-339's scores)
 
-Tool: `train-question-reach` over TRAIN d3mwcap6, whose `tokens.u16` and `response_mask.u8` match the manifest's hashes (`0273173e…`, `da506e85…`). Whole output: [train-question-reach.json](train-question-reach.json). It took about 4 s on the laptop. Percent of rows whose question's first word (read from the tokens) is within that reach:
+A reply "loops" here when its last 24 token ids repeat with a period of 1 to 8 ([`loop-class.jq`](loop-class.jq); inputs hashed in [`loop-class.txt`](loop-class.txt)). All at step 16,384 unless named.
+
+| artifact | EOS | looping | period 1 | median onset (reply token) |
+|---|---|---|---|---|
+| claude-322 s1 | 109 | 130 | 89 | 11 |
+| claude-322 s2 | 86 | 140 | 90 | 11 |
+| L-a s1 | 6 | 243 | 228 | 3 |
+| L-a s2 | 0 | 255 | 190 | 5 |
+| L-aC s1 | 2 | 247 | 205 | 3 |
+| L-aC s2 | 0 | 248 | 221 | 3 |
+| L-aC `−C` s1 | 4 | 240 | 195 | 3 |
+| L-aC `−C` s2 | 0 | 247 | 225 | 3 |
+
+- **Replies now fall into a loop at once.** The top reply at L-a seed 1 is ` Your friend's name name name name…` on 172 of 256 rows. claude-322 loops too, on 130 and 140 rows, but about 8 tokens later and with far more stops.
+- **It is not the role-header failure.** claude-321 lost stopping by writing `\n\nAssistant:` instead of EOS. In L-a and L-aC, 0 of 256 replies carry that string at step 16,384.
+- **It is there by step 8,192** (L-a: 234 and 248 of 256 looping), so more steps at this recipe are not indicated.
+- **Why it happens is not known.** L-a's sealed held-out comparison against claude-322 reads `mixed` (d +3,222 inside the band, +7,795 ahead), so its language prediction is not worse while its served replies loop. That is weak evidence, but it fits a loss that shows only when served. claude-339 did not measure float-to-integer parity on these asking checkpoints. A training cause, such as the pull teaching a copy of the token just written, is an untested alternative.
+
+## The decision
+
+**Decided: the next unit (1) checks float-to-integer parity on L-a's sealed `step-016384`, then (2) runs a cause ladder at pin `721a4784f`.** This goes outside the two options row 4c names, and the log says so. It is my own decision review (§5.1), logged as `[claude] owner log:` on #3407, and Casey can reverse it. No bar changes.
+
+**What this step is for.** Step 4 is one model trained, served and scored end to end. This moves no milestone by itself. It decides whether the ask heads, the only mechanism that has passed the recall task, can stay on language.
+
+**Pivot note (§4.4).** claude-321, claude-322 and claude-339 each left the panel's complete rows at 0, the line's headline. So the ask-head line gets one decisive step: this ladder. Full success only restores claude-322's stopping, still with 0 complete rows. That is still the right spend, because a reply that loops from its third token cannot be complete, and every later recall reading needs replies that do not. If the ask heads themselves read as the cause at both seeds, with parity clean, there are no more tuning runs at this recipe, and the next unit is a pivot decision on the recall route.
+
+| option | what the evidence says | call |
+|---|---|---|
+| **A longer carry** | Not ruled out by the count: `oasst2` would gain. But the panel's question is within 26 rows, so 32 was in reach of the panel while row 4c still read, and the served replies are looping before any value could be emitted. | Later. It can't be read until replies stop looping. |
+| **A question-row placement** | The most direct recall lever left (B2-aC: seed 2 passed, seed 1 did not). It needs new trainer code: `--hamming-attract-at question` and `both` are refused on a language run. | After the ladder. |
+| **A stronger EOS share** | Named by the sheet's row 3 for a different reading. TRAIN is the same as claude-322's, which stopped on 109 and 86, so the share does not explain this loss. | Rejected for now. |
+| **A decode-time stop at the role header** | 0 of 256 replies carry `\n\nAssistant:`, so it has nothing to end. | Rejected. |
+| **Parity, then a cause ladder** | L-a differs from claude-322 in the ask heads, the pull, the trainer commit (20 commits touch the trainer crate between the pins) and the serving path for asks. None is separated. | **Next.** |
+
+**The steps,** under one sheet, FIT and pre-run review. Parity first, at about the $0.07 of pod time it took in claude-336. Then, on L-a's recipe, TRAIN, seeds and step count, at pin `721a4784f` (the merged crate differs from it on the non-finite path only):
+
+| arm | flags | what it isolates |
+|---|---|---|
+| **N0** | no ask heads, no pull, no carry | the trainer commit, against claude-322, also read against claude-322's sealed dev curve at the same seeds (an exact match clears the commit far more strongly than a floor) |
+| **N1** | ask heads, no pull, no carry | the ask heads, against N0 |
+| L-a (sealed) | ask heads and pull | the pull, against N1 (not paired with it, as claude-339's sheet warns of separate runs) |
+
+**How it will read.** "Holds" is claude-339's whole stopping bar: at least 64 EOS at each seed and no collapse. The first matching row decides. The next sheet owns the final wording, and its bars may not be weaker than these.
+
+| # | reading | next |
+|---|---|---|
+| P | float and integer disagree on L-a's asks | **`blocked`:** a serving fault. Repair and re-serve the sealed checkpoints before any ask reading stands. N0 can still run. |
+| 1 | N0 does not hold, at both seeds | The commit lost it. Bisect the 20 commits. No ask run until N0 holds. |
+| 2 | one seed holds and the other does not, on N0 or N1 | **Mixed:** no direction read. Report both seeds and take a second decision review. |
+| 3 | N0 holds, N1 does not at either seed, but N1 is at least 32 EOS above L-a at both | Partial: both the ask heads and the pull cost stopping. A decision review weighs the two. |
+| 4 | N0 holds, N1 does not at both seeds | The ask heads did, with parity clean. The pivot decision above. |
+| 5 | N0 and N1 hold, at both seeds | The pull did. The placement work starts from the ask heads and changes the pull. |
+
+## What changed
+
+- `crates/uor-r4-float-train/src/bin/train-question-reach.rs` (new), its six tests and four negative gates.
+- [`train-question-reach.json`](train-question-reach.json), [`loop-class.jq`](loop-class.jq), [`loop-class.txt`](loop-class.txt), this REPORT, the ORDER's hash note and the notebook row.
+
+## Measurements
+
+Tool: `train-question-reach` over TRAIN d3mwcap6, whose `tokens.u16` and `response_mask.u8` match the manifest's hashes (`0273173e…`, `da506e85…`). About 4 s on the laptop. Percent of rows whose question's first word (read from the tokens) is within that reach:
 
 | root | rows | 4 | 8 | 16 | **32** | 64 | 128 | median question |
 |---|---|---|---|---|---|---|---|---|
@@ -25,51 +86,29 @@ Tool: `train-question-reach` over TRAIN d3mwcap6, whose `tokens.u16` and `respon
 | `cap1`, all scored rows | 991,367 | 0 | 0 | 9.9 | **76.3** | 92.2 | 100.0 | 11 |
 | `cap1`, reply first rows | 70,672 | 0 | 0 | 48.4 | **93.1** | 99.9 | 100.0 | |
 
-- A row's distance counts from the question's first word, so the 6-token `\nAssistant:` header and the words before it sit between. Every reply first row reaches the question's last word within 8 rows.
+- A row's distance counts from the question's first word. Every reply first row reaches the question's last word within 8 rows (it is always 7 back, past the 6-token header).
 - The panel's question is 6 to 13 tokens (median 10), and its first word is at most 26 rows back from the row emitting the value (claude-339's sheet). `cap1`'s median question of 11 matches that family.
-- `oasst2`'s questions are longer (median 28), and they are what 32 rows can only half reach at a reply's first row.
-
-## The decision
-
-**Decided: the next training unit is a cause ladder at the new trainer commit. Not a longer carry, and not a question-row placement yet.** It is my own decision review (§5.1), logged as `[claude] owner log:` on #3407, and Casey can reverse it.
-
-| option | what the evidence says | call |
-|---|---|---|
-| **A longer carry** | The panel's questions are in reach at 26 rows, and 93.1% of `cap1`'s reply first rows are within 32. Only `oasst2`'s longer questions argue for it. claude-335's `h = 8` also passed on the recall task. | Not next. |
-| **A question-row placement on chat windows** | The most direct recall lever left, since the scored placement split on the recall task (B2-aC: seed 2 passed, seed 1 did not). It needs new trainer code: `--hamming-attract-at question` and `both` are refused on a language run. A run now would start from a recipe where nearly every reply runs to the 64-token cap. | Next after the ladder, on a recipe that stops. |
-| **A cause ladder** | L-a (no carry) stops on 6 and 0 of 256, against claude-322's 109 and 86, and has first-line counts of 2 and 0 against 14 and 2. It differs in the ask heads, the pull and the trainer commit (20 commits touch the trainer crate between the pins). No run separates them. | **Next.** |
-
-**The ladder**, on L-a's recipe, TRAIN and step count, two seeds, under its own sheet, FIT and pre-run review, at about the cost of claude-339's four pods ($5.86 for that round):
-
-| arm | flags | what it isolates |
-|---|---|---|
-| **N0** | no ask heads, no pull, no carry | the trainer commit, against claude-322 |
-| **N1** | ask heads, no pull, no carry | the ask heads, against N0 |
-| L-a (sealed) | ask heads and pull | the pull, against N1 |
-
-**How it will read,** using claude-339's floor of 64 EOS at both seeds:
-- **N0 under the floor:** the commit lost it. Bisect the 20 commits before any ask run.
-- **N0 above, N1 under:** the ask heads did.
-- **N0 and N1 above:** the pull did. The placement work then starts from the ask heads and changes the pull.
 
 ## Checks run at the head
 
-Run at the code head before this REPORT; the REPORT and the notebook row change no code.
+Run on the final code; the later commits change only text and evidence files.
 
-- `cargo test --offline -p uor-r4-float-train --bin train-question-reach`: 4 passed.
+- `cargo test --offline -p uor-r4-float-train --bin train-question-reach`: 6 passed.
+- **Negative gates:** four lines broken one at a time, each failing exactly the test meant to catch it, and the file restored: the first-row asked distances, the question's last word, the run-based end distance, and the `first < header` guard.
 - `train-question-reach` exits 0 on TRAIN. It refuses a mismatch against the manifest's scored count or a bad mask value.
-- **Self-checks in the output:** 0 replies not placed on `oasst2` and `cap1`, and per-root scored counts equal to the manifest's (the tool errors otherwise). The per-root scored rows sum to the mix's 33,364,756.
+- **Self-checks in the output:** 0 replies not placed on `oasst2` and `cap1`, and per-root scored counts equal to the manifest's. The per-root scored rows sum to the mix's 33,364,756.
 - **The tool** builds no model and no tensor, and it uses no GPU.
 
 ## Skills used
 
-- None beyond the loop itself: the ORDER, the fresh exact-head review and the decision review.
+- None beyond the loop itself: the ORDER, the fresh exact-head reviews and the decision review.
 
 ## Still open
 
-- **The ladder** (N0 and N1, two seeds each): the next unit, under its own sheet.
+- **Parity on L-a's sealed checkpoint, then the ladder** (N0 and N1, two seeds each): the next unit, under its own sheet.
+- **Why replies loop:** unknown until the parity and the ladder read.
 - **The question-row placement:** needs new trainer code, and comes after the ladder.
-- **Windows:** this count ignores them. If the placement work needs the windowed figure, the trainer's window rule can give it.
+- **A windowed count at the value's row** is not measured, if the carry's reach comes back as the question.
 - **mw-balp's 35 paraphrase files** are not published, and **`test-watch`** still depends on signal timing.
 
 Closes nothing: #3407 stays open.
@@ -78,6 +117,8 @@ Closes nothing: #3407 stays open.
 
 We wanted to know whether a 32-token memory is long enough to hold the question while the model writes its answer. So we counted, in the training data, how far back each question sits.
 
-In the synthetic conversations that resemble our test, the start of the question is within 32 tokens at the beginning of 93% of replies. In real human chat it is 48%, because people ask longer questions, and 72.5% of the training text is encyclopedia prose with no question at all. By the strict rule we set beforehand, 32 tokens does not reach (76.3% against 80% on the synthetic data), but a longer memory is not what the evidence points to first.
+In the synthetic conversations that resemble our test, the start of the question is within 32 tokens at the beginning of 93% of replies. In real human chat it is 48%, because people ask longer questions, and 72.5% of the positions the model is graded on are encyclopedia prose with no question at all. By the strict rule we set beforehand, 32 tokens does not reach (76.3% against 80% on the synthetic data).
 
-The more urgent problem is that our last model stopped knowing when to stop talking, and we don't know which change caused that. So the next step is a small controlled experiment: take the new pieces out one at a time and see which one lost it. Nothing was trained in this step.
+Reading the last model's answers turned up something more urgent. Almost all of them get stuck within a few words, repeating one word ("name name name…") until the length limit. The model before it did this much later and less often, and that is why stopping disappeared.
+
+So the next step is a small controlled experiment. First we check that the model serves the same as it trained, then we take the new pieces out one at a time to see which one caused the looping. Nothing was trained in this step.
