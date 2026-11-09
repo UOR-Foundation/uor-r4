@@ -33,7 +33,7 @@
 
 **Files:**
 - Create: `docs/loop/tasks/studio-ide-harness/kimi-16/ORDER.md`, `docs/loop/tasks/studio-ide-harness/kimi-16/REPORT.md`, `docs/superpowers/plans/2026-11-09-studio-default-cutover.md`.
-- Modify: `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/README.md`.
+- Modify: `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, `web/studio/README.md`.
 - Modify after actual publication: `docs/integration/current-state.md`, `docs/products/web-client.md`, `docs/products/harness-parity.md`, `docs/research/notebook/m4-serving.md`, `docs/roadmap/items/studio-ide-harness.md`, `docs/roadmap/items/studio-typed-shell-upgrade.md`.
 
 **Interfaces:**
@@ -46,7 +46,7 @@ Add a real Playwright case to `web/studio/tests/e2e/shell.spec.ts`:
 
 ```ts
 await page.goto('/?publish=cutover#theme=light');
-await expect(page).toHaveURL('/?typed=1&publish=cutover#theme=light');
+await expect(page).toHaveURL('/?typed=1&publish=cutover&theme=light#theme=light');
 await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
 await expect(page.locator('#app')).toBeHidden();
 await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -61,7 +61,7 @@ Expected: FAIL because the plain root retains the legacy URL and `#app` remains 
 
 - [ ] **Step 3: Implement the early default redirect in `web/studio/index.html`**
 
-Before any stylesheet, persistence, or legacy application script runs, return immediately for `typed=0`, `typed=1`, or `legacy=1`. Otherwise set `typed=1` and call `window.location.replace(window.location.pathname + '?' + params.toString() + window.location.hash)`. Do not edit `bootstrap.ts`, `lifecycle_persistence.js`, the native URL, or the publisher.
+Before any stylesheet, persistence, or legacy application script runs, return immediately for `typed=0`, `typed=1`, or `legacy=1`. Otherwise translate an existing theme hash into the existing `theme` query when no explicit theme selection is present, delete the old typed value, and call `window.location.replace(window.location.pathname + '?typed=1&' + params.toString() + window.location.hash)`. Do not edit `bootstrap.ts`, `lifecycle_persistence.js`, the native URL, or the publisher. Legacy screenshot fixtures explicitly use `?legacy=1` so their original coverage remains intact.
 
 Update `web/studio/README.md` to describe default typed mounting and the explicit legacy fallbacks without claiming a full runtime cutover.
 

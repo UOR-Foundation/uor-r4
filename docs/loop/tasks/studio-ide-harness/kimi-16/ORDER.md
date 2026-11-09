@@ -14,7 +14,7 @@ The automatic `loop claim` check was unavailable because the item's existing sco
 
 ## Files in scope
 
-- `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, and `web/studio/README.md`.
+- `web/studio/index.html`, `web/studio/tests/e2e/shell.spec.ts`, `web/studio/tests/e2e/visual.spec.ts`, and `web/studio/README.md`.
 - `docs/loop/tasks/studio-ide-harness/kimi-16/**` and `docs/superpowers/plans/2026-11-09-studio-default-cutover.md`.
 - `docs/integration/current-state.md`, `docs/products/web-client.md`, `docs/products/harness-parity.md`, `docs/research/notebook/m4-serving.md`, and the two existing Studio item records.
 - `scripts/tests/test_typed_runtime.py` only if an existing expectation needs to describe the new default truthfully.
