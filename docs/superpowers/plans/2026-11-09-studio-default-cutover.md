@@ -65,7 +65,7 @@ Keep the source `typed_entry.js` preview guard unchanged, and use the scoped `st
 
 Update `web/studio/README.md` to describe default typed mounting and the explicit legacy fallbacks without claiming a full runtime cutover.
 
-- [ ] **Step 4: Run focused and full checks**
+- [x] **Step 4: Run focused and full checks**
 
 Rerun the focused case, then `npm test`, `npm run typecheck`, `npm run test:e2e`, and `python3 -m unittest scripts.tests.test_typed_runtime scripts.tests.test_tauri_runtime`. Require every result to pass. Build `web/studio/dist`, verify the typed staged output and direct WASM checks, and inspect real default/legacy desktop and mobile navigation with zero runtime errors.
 
