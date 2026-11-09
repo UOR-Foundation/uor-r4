@@ -1168,7 +1168,7 @@
   "claim": "read-only multi-checkpoint grouped gain and ask-selection audit; not B2, carry, capability or serving evidence",
   "hardware": {
     "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
-    "executable_sha256": "a8c666e108189f90eadb10c48d0867b77c77690d9de32e8add6c94cefbb3e3a5"
+    "executable_sha256": "4f76ce2a931df0fa1660f1ef4843ecc868dfcf733eebd59ded62688cf5ce3311"
   },
   "manifest_sha256": "51051cfd6b2cd5380fdc3854b81be8cbbdfdcbe99796c47bd3823c289f632f3b",
   "schema": "uor-r4.cpu-carry-hold-batch/1",

@@ -13,6 +13,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
   raw path strings rather than canonical identities guarded duplicates,
   single-checkpoint mode silently ignored `--workers`, and the recorded diff
   size was stale by one line.
+- The second exact-head review confirmed the containment repair, then found
+  that a basename-only manifest path canonicalized an empty parent. It also
+  caught stale resource-ledger bytes and notebook counts.
 
 ## What changed
 
@@ -36,26 +39,27 @@ The retained synthetic reports are unchanged in their readings; only the test
 executable identity changed:
 
 - single SHA-256:
-  `d86bb7d74276c318f2079c3e7229ddef4410902b05774bee31d1e9bd7d5c1fc3`;
+  `1a7f8b1c9de422b5208071f3c636a21d70f2843774e35cb6cc91791624bf2752`;
 - batch SHA-256:
-  `c0a6a9c4d18ea2c0039463740129b803b30a1fe8f0120b7d88ceb1b9196ef3f5`;
+  `0c734bfc131c04838e93717af5a56006591469bda802b4e1003b2c1b4cac51d2`;
 - release executable SHA-256:
-  `d061fc03b2f6a8debd39524a054916ca3d923adc530cf7fc9256fb8c467c3c13`.
+  `12d7ab2b98fb14e992088a13646dc664cddfdf8cadb1d350f2deffe9f0eb018c`.
 
-Focused binary tests passed 6/6. The full CPU library suite passed 480 tests
-with 5 ignored in 44.05 s.
+Focused binary tests passed 7/7. The full CPU library suite passed 480 tests
+with 5 ignored in 44.86 s.
 
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 6 passed.
+- Focused binary tests: 7 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing crate warnings.
 - Release build: passed.
 - `loop report --check` and `loop pr-check --local`: passed.
 - All 11 `loop gates --full` gates: green.
-- A second fresh exact-head review: pending this record.
+- The second fresh review requested changes; [deepseek-256](../deepseek-256/ORDER.md)
+  repairs its findings.
 
 ## Skills used
 

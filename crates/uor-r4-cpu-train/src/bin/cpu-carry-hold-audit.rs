@@ -468,11 +468,7 @@ fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<Valida
     if manifest.arms.is_empty() {
         return Err("manifest carries no arms".to_owned());
     }
-    let root = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .canonicalize()
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let root = manifest_root(path)?;
     let mut ids = BTreeSet::new();
     let mut labels_seeds = BTreeSet::new();
     let mut paths_seen = BTreeSet::new();
@@ -509,6 +505,14 @@ fn validate_manifest(path: &Path, manifest: &CarryHoldManifest) -> Result<Valida
         checkpoints.push(resolved);
     }
     Ok(ValidatedManifest { root, checkpoints })
+}
+
+fn manifest_root(path: &Path) -> Result<PathBuf> {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .canonicalize()
+        .map_err(|error| format!("{}: {error}", path.display()))
 }
 
 fn resolve_checkpoint(root: &Path, checkpoint: &str) -> Result<PathBuf> {
@@ -901,6 +905,16 @@ mod tests {
                 .map(str::to_owned)
         )
         .is_err());
+    }
+
+    #[test]
+    fn basename_manifest_uses_the_current_directory() {
+        let current = std::env::current_dir().unwrap().canonicalize().unwrap();
+        assert_eq!(manifest_root(Path::new("MANIFEST.json")).unwrap(), current);
+        assert_eq!(
+            manifest_root(Path::new("./MANIFEST.json")).unwrap(),
+            current
+        );
     }
 
     #[test]
