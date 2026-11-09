@@ -1220,7 +1220,8 @@ fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, u
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 11] = [
+    const FLAGS: [&str; 12] = [
+        "engine",
         "artifact",
         "tokenizer",
         "inputs",
@@ -1427,6 +1428,8 @@ mod tests {
         assert_eq!(engine_switch(&args("cpu")), Ok(Engine::Cpu));
         assert_eq!(engine_switch(&args("integer")), Ok(Engine::Integer));
         assert!(engine_switch(&args("float")).is_err());
+        let given = parse_args(["--engine", "integer"].map(String::from).into_iter()).unwrap();
+        assert_eq!(engine_switch(&given), Ok(Engine::Integer));
     }
 
     /// Without an ask table the engines are one decoder: the same replies and stops through the
