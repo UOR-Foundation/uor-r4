@@ -1,3 +1,5 @@
+import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -55,6 +57,37 @@ class TypedRuntimeContractTests(unittest.TestCase):
             self.assertEqual(legacy.returncode, 0, legacy.stdout + legacy.stderr)
             self.assertTrue((legacy_dest / 'index.css').is_file())
             self.assertFalse((legacy_dest / 'assets/js/lifecycle_persistence.js').exists())
+
+    def test_publisher_exposes_opt_in_typed_mode(self):
+        publisher = REPO / 'scripts/studio/build-and-publish.sh'
+        help_result = run('bash', str(publisher), '--help')
+        self.assertEqual(help_result.returncode, 0, help_result.stdout + help_result.stderr)
+        self.assertIn('--typed', help_result.stdout)
+
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            try:
+                result = subprocess.run([
+                    'bash', str(publisher), '--typed', '--no-build', '--skip-verify',
+                    '--target', 'gh-pages-preview', '--stage-dir', str(tmp / 'staged'), '--keep-worktree',
+                ], cwd=REPO, text=True, capture_output=True, env={**os.environ, 'TMPDIR': tmp_name})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('typed Vite dist', result.stdout)
+                self.assertIn('DRY RUN: nothing pushed', result.stdout)
+                staged = tmp / 'staged'
+                self.assertTrue((staged / 'index.html').is_file())
+                self.assertTrue((staged / 'models.json').is_file())
+                self.assertTrue((staged / 'assets/js/lifecycle_persistence.js').is_file())
+                self.assertTrue(any((staged / 'assets').glob('index-*.js')))
+                self.assertTrue(any((staged / 'assets').glob('index-*.css')))
+                self.assertTrue(any((staged / 'assets').glob('uor_r4_integer_bg-*.wasm')))
+                self.assertFalse((staged / 'index.css').exists())
+                self.assertEqual(list(staged.rglob('*.map')), [])
+            finally:
+                for site in tmp.glob('studio-publish.*/site'):
+                    if site.exists():
+                        run('git', 'worktree', 'remove', '--force', str(site))
+                shutil.rmtree(tmp, ignore_errors=True)
 
     def test_native_runner_local_uses_typed_dist_without_download(self):
         source = RUNNER.read_text(encoding='utf-8')
