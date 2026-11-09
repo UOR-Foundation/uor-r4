@@ -8,6 +8,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Active records then cited that report for a self-referential final hash. The final identity instead belongs in the PR body and durable identity.json, which are written after the actual commit is known.
 - Final `identity.json`, `loopback-acceptance.json`, and `loopback-acceptance.png` exist in the main checkout. They were not all duplicated into the worktree; claiming both was inaccurate.
 - The mixed-case RED=200 → GREEN=404 observation is retained in `kimi-78/REPORT.md`; no separate raw red log was retained. Do not present it as independently durable raw output. The regression and complete green logs are the retained executable evidence.
+- At intermediate `f986f5a7c0682731db411f5fa0fc3832b482bdd4`, local policy and all **11/11** full gates passed. The first loopback invocation then refused to start because its expected binary had been removed by the earlier generated-target cleanup: `local/kimi/studio-final-acceptance/f986f5a7c0682731db411f5fa0fc3832b482bdd4/loopback.log` retains the ENOENT. Rebuilding that expected binary at the same exact source head succeeded. `loopback-success.log` passes at that head/tree, with 15 initial/12 reopened requests, zero external/raw-TypeScript/runtime errors, and exact session/file restoration. This setup failure is not called a product regression or hidden by the later pass.
 
 ## What changed
 
