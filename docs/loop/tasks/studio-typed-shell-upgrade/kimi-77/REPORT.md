@@ -13,14 +13,18 @@ Lab: kimi. Item: studio-typed-shell-upgrade (#3500), predecessor PR #3879. Order
 
 Only `src-tauri/tests/mcp_protocol.rs`, test code in `src-tauri/src/lib.rs`, and this record/ORDER were changed by this repair. Accepted fixture sockets explicitly block under their one-second bound; incomplete requests are refused before credential evaluation. Descendant readiness is synchronized, and both distinct closed-pipe tests are retained under distinct names. Production MCP/process code, R4 API/model/engine/worker/tokenizer and application visuals were not changed.
 
-## Checks run at the head
-
 ## Measurements
 
 - Before the current-main merge, default Rust suites were **9/3/21/7/13/8** and GUI suites **11/3/25/8/13/9**. After retaining both distinct closed-pipe tests and correcting the merged `exited` binding, the serial merged-head suites are **11/3/21/7/13/8** default and **13/3/25/8/13/9** GUI (library/main/controls/MCP/review/sidecar), PASS. Concurrent overloaded runs retained timing failures and are not hidden by these later serial passes.
 - The remote timeout test completes ordinary initialize/notification before its original 15 ms hanging tool call; the 1024-byte response cap still fails explicitly. Stdio retains its 25 ms hanging-call assertion and cleanup checks.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS after formatting.
 - Predecessor typed/plain-JS/runtime and fresh identity-bound loopback results are in `../kimi-75/REPORT.md`.
+
+## Checks run at the head
+
+- `CARGO_TARGET_DIR="$PWD/target/acceptance-tests" cargo test --manifest-path src-tauri/Cargo.toml`: PASS at the corrected merged source.
+- The same command with `--features gui`: PASS at the corrected merged source.
+- `node web/studio/verify_studio_loopback.mjs`: exact session/transcript and native workflow acceptance PASS at `7e3afedb753deb9ea2128b4ae3d39624c6b0bad2`.
 
 ## Skills used
 
