@@ -5,7 +5,7 @@
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
-(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `eb832431a`; `233b97fb9` was the previous publish.
+(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `ab752d595`; `eb832431a` was the previous publish. The publisher now accepts an opt-in `--typed` flag that builds `web/studio/dist` and stages it through the typed allowlist while preserving the legacy default; protected merge and actual typed publication are separate pending steps.
 
 ### Neutral cowork workbench recovery (8 November 2026)
 
