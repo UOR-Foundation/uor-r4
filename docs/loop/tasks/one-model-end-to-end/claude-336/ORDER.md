@@ -52,6 +52,10 @@ What the ask heads compute, read from the float forward (`flock_read_hamming.rs:
 - `crates/uor-r4-integer/src/fbs_snapshot.rs`
 - **Added at claim (lab decision, logged here):** `crates/uor-r4-float-train/src/bin/fbs-snapshot.rs`, `crates/uor-r4-integer/src/stack/mod.rs` and `crates/uor-r4-integer/src/stack/session.rs`, only if the read's image cannot reach the session without them. The item's file gains them in this PR. `integer-hamming-read`, which held them, is done; `turn-memory-integer` and `point-key-integer` list `session.rs` and are not claimed.
 - `docs/loop/tasks/one-model-end-to-end/**`, `docs/research/notebook/float-training.md`, `docs/roadmap/items/one-model-end-to-end.md`
+- **Added in the unit (lab decision, logged here and in the [REPORT](REPORT.md)):**
+  - `crates/uor-r4-integer/src/bin/fbs-export.rs`, the command that turns the snapshot into an artifact. It reads the ask block under its own JSON key.
+  - Of the conditional files above, `bin/fbs-snapshot.rs` and `stack/mod.rs` were used and `stack/session.rs` was not.
+  - The item's scope gains the three files used.
 
 ## Done when
 
