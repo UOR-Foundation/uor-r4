@@ -12,6 +12,8 @@ returned CHANGES on three residual record issues:
 - The temporary input total omitted 18,191 bytes of `SHA256SUMS` and `.list`
   metadata downloaded beside the archives.
 - The ledger's `updated_utc` preceded the final measurements it recorded.
+- The first full-gate run hit a transient `Text file busy` race in the harness's
+  fake-`gh` loop-drive test. The clean rerun at the same head passed.
 
 ## What changed
 
@@ -34,7 +36,9 @@ returned CHANGES on three residual record issues:
 
 - README behavior checked against the archive-verification and CLI error paths.
 - Ledger arithmetic: archive + extracted + metadata equals 556,424,899.
-- JSON syntax and `git diff --check`: pending final head check.
+- JSON syntax, ledger arithmetic and `git diff --check`: passed.
+- `loop report --check` and `loop pr-check --local`: passed.
+- `loop gates --full`: all 11 gates green on the clean rerun.
 
 ## Skills used
 
@@ -42,7 +46,7 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-Final policy, gates and third fresh review are recorded after they run.
+A third fresh exact-head review is still owed.
 
 ## Plain summary
 
