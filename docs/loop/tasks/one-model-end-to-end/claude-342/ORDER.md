@@ -28,6 +28,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 **Result (at claim):** pass.
 - claude-339 merged as `67972456d9ded94737a0a7bb1d0b36798560024b` and was verified on fresh `main`.
 - No open claude PR.
+- TRAIN's two hashes match the manifest (`0273173e…`, `da506e85…`), checked after this ORDER was first committed and before the count.
 - `loop next` offers only DeepSeek's CPU-repair direction, so this ORDER is hand-written under Casey's harness exception, as claude-331 to claude-339 were.
 
 ## Files in scope
