@@ -1,6 +1,10 @@
 # Prep sheet: the carry lever, a held stream write (one-model-end-to-end, claude-331, 9 Nov 2026)
 
-TEST FITNESS: not yet read. A fresh non-author FIT is owed before any code.
+TEST FITNESS: NOT FIT in round 1, by a fresh non-author reviewer, at `35776f884`: no blocker, three majors and four minors, all applied below. Round 2, a fresh FIT of this text, is owed before any code.
+- **Major 1:** the value rank at the `Q` row is now read three ways: on the payload `y`, on the write `u` by direction, and on the whole stream. The whole stream mixes in the residual and `w_y` starts at 0, so on its own it could read a right payload as wrong.
+- **Major 2:** two readings at `H4`, of the held term and of the stream after the read plus the hold, and an eval-time cut `−H` (`g := 0`) beside `−aS`. Outcome 4's split is now conditional on them.
+- **Major 3:** I-R2 also matches claude-330's question-row trace, since its hits sit at chance and cannot check the question placement.
+- **Minors:** the hold's zero start gradient, `|w_y|` logged, and a hold that never grew read as undertrained; `g` for the value tokens; the refusals as a new clause; a no-read digest in I-1 behind the reuse of B1-n.
 
 ## The question
 
@@ -34,18 +38,27 @@ Under `--hamming-hold h` (requires `--hamming-ask 1`), the **stream read's ask w
 - `g` is a new learned table: **one scalar per token, for the stream depth only, starting at 0.** It is saved as `d2.hold`.
 - At `g = 0` the forward equals the forward without the hold, bit for bit.
 - **What it learns.** The scored loss at `H4` reaches `g[Q(K_j)]` through `u` at the `Q` row. It also reaches `a[Q(K_j)]` and `w_y` through the held term. The header tokens' `g` is pushed away from what hurts, since their writes carry the previous slot's answer.
+- **It starts with no gradient.** `g = 0`, `w_y = 0` (`flock_read_hamming.rs:1226`) and `a = 0` (`:832`). The gradient to `g` is `⟨∂L, u⟩`, so it is zero until the direct path moves `w_y` off 0. claude-330's ask arms moved it to 0.017–0.394 by step 512. `|w_y|` and `g` are logged at every checkpoint, so a hold that never moved is read as such (outcome 1), not as a carry failure.
 - **`h = 8` is pre-registered.** It covers B2's 4-token header with room to spare, so the hold does not encode the header's length. No other `h` is run in this unit.
 - **No dense matrix multiplication:** a per-token scalar table, a shifted causal sum and a lane-wise scale.
 - **No squashing:** `g` is a raw scalar, with no bound and no normalization.
-- **Refused:** the decode step (`from > 0`, `flock_read_hamming.rs:1557–1561`) and the integer export (`fbs_export.rs:389`) refuse a read with a hold. This unit serves nothing.
+- **Refused:** the decode step and the integer export each refuse a read with a hold, through a new clause. Today `flock_read_hamming.rs:1557–1561` refuses only instrument cuts in the decode step (`from > 0`), and `fbs_export.rs:389` refuses unexported read forms. This unit serves nothing.
 
 **The cut `−aS` (the ask stream write off).** A new ablation with `classes() = [[false, true], [false, false]]`. It drops the depth-2 ask heads at every row, and so the hold, through the existing class mask (`flock_read_hamming.rs:99–106`, `1717–1723`). It is chained after the existing readings like `−aQ`, so runs without ask heads write identical readings.
 
-**The carry reading (continuous).** Recall cannot fall below chance, so the cut needs a reading that can. For every held-out query, the **value rank** is the rank of the asked value's table point, among the 512 value tokens' table points, by Euclidean distance from:
-- (r1) the stream at the `Q` row, just after the depth-2 read's write;
-- (r2) the final point at `H4`, before the readout read.
+**The cut `−H` (the hold off).** An eval-time cut that sets `g := 0` on a held checkpoint and leaves the direct write. `−aS` removes the direct write too, so only `−H` attributes a result to the hold alone.
 
-Each is reported as the mean rank (1 is best, 256.5 is chance) per depth position, per checkpoint, with and without `−aS`.
+**The carry readings (continuous).** Recall cannot fall below chance, so the cuts need readings that can. For every held-out query, a **value rank** is the rank of the asked value's table point among the 512 value tokens' table points, by Euclidean distance from a vector, ties broken by token id. 1 is best and 256.5 is chance. The vectors:
+- **At the `Q` row, the depth-2 read's write, three ways** (the stream is `x + w_c ⊙ c + w_y ⊙ y`, and `x` holds `Q`'s own point plus two layers, so the whole stream can hide a right payload):
+  - (r1y) the ask payload `y`, the mean of the kept table points (`flock_read_hamming.rs:1579–1585`, `1660`);
+  - (r1u) the write `u = w_y ⊙ y`, by direction: the rank of the value point by distance from `u / |w_y|_mean`, so a small `w_y` does not read as a wrong value;
+  - (r1s) the whole stream just after the write.
+- **At `H4`:**
+  - (r1h) the held term `Σ_s g[x_{H4−s}] · u_{H4−s}`, scaled the same way (held arms only);
+  - (r1hs) the stream just after the depth-2 read plus the hold;
+  - (r2) the final point, before the readout read.
+
+Each is reported as the mean rank per checkpoint, with and without `−aS` and `−H`.
 
 ## Steps: the arms
 
@@ -66,8 +79,9 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 | **B0-n, B2-n** | B0, B2 | none (the no-read twins, L-010) |
 
 **Readings**, as claude-330's, plus:
-- `R^{−aS}` and the carry readings (r1) and (r2), with and without `−aS`, on B2-aq, B2-aqH and B2-aH;
-- `g` for the 16 question tokens, the 4 header tokens and the mean of the rest, per checkpoint.
+- `R^{−aS}`, `R^{−H}` (held arms) and the carry readings, with and without each cut, on B2-aq, B2-aqH and B2-aH;
+- `g` per checkpoint for the 16 question tokens, the 4 header tokens and the 512 value tokens (each as mean, minimum and maximum), and the mean of the rest;
+- `|w_y|` per depth per checkpoint.
 
 ## Bar (pre-registered), at step 4,096, both far buckets, both seeds
 
@@ -75,18 +89,20 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 |---|---|
 | **B0 (instrument)** | `R(B0-a) ≥ 0.95` and `R(B0-n) ≤ 0.02` |
 | **I-R1 (instrument)** | B1-a passes claude-330's B1 rule at both seeds: `R_ask ≥ 0.50`, `R_ask ≥ R_oth + 0.25`, `R_ask ≥ R_ask(B1-n) + 0.10`. B1-n is not rerun: claude-330's sealed B1-n line at the same seed is the twin |
-| **I-R2 (instrument)** | B2-aq's step-4,096 line has the same `rows` as claude-330's sealed `runs-2/s{seed}/…/B2-aq-s{seed}/recall.jsonl`, and each bucket's `hits` is within `0.02 · rows` of it. The timing fields are ignored |
+| **I-R2 (instrument)** | B2-aq's step-4,096 line, against claude-330's sealed `runs-2/s{seed}/…/B2-aq-s{seed}/recall.jsonl` at the same seed: the same `rows`; each bucket's `hits` within `0.02 · rows`; and, since those hits sit at chance, **the question-row trace too**: for each depth and ask head, the count of rows whose kept positions include the asked position at `Q(K_j)` is within `0.05 · rows` of the sealed count (claude-330: 376–512 of 512). The timing fields are ignored |
 | **B2 (carry)** | the B1 rule for B2-aqH, and separately for B2-aH, each against B2-n |
 
 ## Outcome map (read in order, first match wins)
 
 0. **B0, I-R1 or I-R2 fails:** an instrument fault. Repair it and rerun; nothing else is read.
-1. **Undertrained:** a held arm's `R_ask` still rises by more than 0.05 between its last two checkpoints and misses its bar. Extend it to 16,384 steps under this sheet.
-2. **B2-aH passes:** the hold carries the value, and the scored loss alone trains the choice through it. Attribute it with `R^{−aS}` (expected to fail the bar) and `g` (expected highest on the question tokens). **Next:** a language run with ask heads and the hold on claude-325's bare-answer recipe, under its own sheet.
+1. **Undertrained:** a held arm misses its bar and either its `R_ask` still rises by more than 0.05 between its last two checkpoints, or the hold never grew (the mean `|g|` over the 16 question tokens is below 0.01 at step 4,096). Extend it to 16,384 steps under this sheet.
+2. **B2-aH passes:** the hold carries the value, and the scored loss alone trains the choice through it. Attribute it with `R^{−H}` and `R^{−aS}` (each expected to fail the bar) and `g` (expected highest on the question tokens). **Next:** a language run with ask heads and the hold on claude-325's bare-answer recipe, under its own sheet.
 3. **B2-aqH passes, B2-aH fails:** the hold carries the value once the choice is trained at the question row, but the scored loss does not train the choice through the hold. **Next:** the pull at every row (the language form, where both placements are present) on B2, under its own sheet.
 4. **Both held arms fail.** Split by the carry readings on B2-aqH, first match wins:
-   - **(r1) is near 1 at the `Q` row, and (r2) at `H4` stays near chance:** the write holds the value, and the trunk's layers after the read lose it, even with the hold delivering it. **Next:** move the stream read later (to the last depth) or hold into the readout read, tested on B2 first.
-   - **(r1) is near chance:** the stream write itself does not carry the value: the combine (`w_y`, the payload) is the loss, in this configuration (§4.1, §4.2). **Next:** the stream combine, tested on B2 first.
+   - **(r1y) is near chance:** the ask payload at the `Q` row is not the value, though the trace keeps its position. That is a payload fault, instrument-side until the trace and the payload are reconciled. Repair it and rerun.
+   - **(r1y) is near 1 and (r1u) is near chance:** the payload is right, and the write's weight `w_y` loses it, in this configuration (§4.1, §4.2). **Next:** the stream combine, tested on B2 first.
+   - **(r1u) is near 1, and (r1hs) at `H4` is near chance:** the write is right, and it does not reach `H4`'s stream even through the hold. Read `g` and (r1h): a hold that stays small is a configuration result for `h = 8` and this `lr`. **Next:** the hold's form (a carried register, overwritten only by a found write), tested on B2 first.
+   - **(r1hs) is near 1, and (r2) at `H4` is near chance:** the value reaches `H4`'s stream, and the trunk layers after the read lose it. **Next:** move the stream read later (to the last depth), or hold into the readout read, tested on B2 first.
    - **Any other pattern** is named from the readings.
 
 "Near 1" means mean rank ≤ 8; "near chance" means mean rank ≥ 128. Both are read at step 4,096 at both seeds. The same readings are reported for B2-aq, the unheld base, whichever outcome lands.
@@ -95,13 +111,13 @@ The forms and the ask arms' flags are claude-330's, unchanged. The ask arms are 
 
 ## Instrument checks
 
-- **I-1 (default paths):** claude-330's printed digest (`i1_digest::ask_default_forward_digest`) is equal at the base and the head. A new digest, with `--hamming-ask 1` and no hold, is equal at the base and the head too.
+- **I-1 (default paths):** claude-330's printed digest (`i1_digest::ask_default_forward_digest`) is equal at the base and the head. Two new digests are equal at the base and the head too: one with `--hamming-ask 1` and no hold, and one of a no-read forward. The no-read digest is what lets I-R1 reuse claude-330's sealed B1-n as the twin.
 - **I-H1 (the hold starts off):** with `g = 0`, the forward and the gradient with `--hamming-hold 8` equal the forward and gradient without it, bit for bit.
 - **I-H2 (the hold's rows):** on a hand-built input with one nonzero ask write at row `t`, the added term is `g[x_t] · u_t` at rows `t + 1` to `t + h`. It is zero at row `t` itself, at `t + h + 1`, before `t`, and in every other window of the batch.
 - **I-H3 (the gradient):** a loss at row `t + 4` alone gives nonzero gradients to `g[x_t]` and `a[x_t]`, and none to `g` of tokens that appear only after `t + 4`.
 - **I-H4 (save, load and refusals):** `g` round-trips through save and load. The decode step and the export each refuse a read with a hold, with an error that names it.
-- **I-H5 (the cut):** `−aS` removes every depth-2 ask write and every held term, leaves the copy heads' picks unchanged, and leaves the readout read's ask heads on.
-- **I-V (the value rank):** on a hand-built stream, the rank equals a brute-force sort of the 512 distances, ties broken by token id.
+- **I-H5 (the cuts):** `−aS` removes every depth-2 ask write and every held term, leaves the copy heads' picks unchanged, and leaves the readout read's ask heads on. `−H` removes every held term and leaves the direct write bit for bit.
+- **I-V (the value ranks):** on hand-built vectors, each rank equals a brute-force sort of the 512 distances, ties broken by token id. One case has a residual `x` that dominates the stream: (r1y) and (r1u) then read 1 while (r1s) reads far from 1.
 - **I-4, I-6, I-7:** as claude-330's sheet, with I-7 run on B2-aqH.
 - **I-R1, I-R2:** as in the bar.
 
