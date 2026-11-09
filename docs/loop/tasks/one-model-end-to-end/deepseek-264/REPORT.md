@@ -73,21 +73,23 @@ At every published seed-1 point:
 - The readout carry has 32 rows and 4,096 gains at depth 6.
 
 The cut changes later teacher-forced ranks, but the first-position ranking remains
-effectively tied. At 12,288, for example, 165 teacher-forced rows change in the full
-serialized rank data while no first-target rank and no paired-first rank changes. At
-16,384 the carry moves the paired comparison by one row while both artifacts remain at 0
-asked-value first lines and 0 complete replies.
+effectively tied. At 12,288, for example, 159 target/EOS-rank rows change (165 with
+raw-nearest diagnostics) while no first-target rank and no paired-first rank changes. At
+16,384, 198 target/EOS-rank rows change (199 with raw-nearest diagnostics); the carry
+moves the paired comparison by one row while both artifacts remain at 0 asked-value first
+lines and 0 complete replies.
 
 ## Checks run at the head
 
-- `real-artifact-audit` tests: **6 passed**, including same-engine rejection,
+- `real-artifact-audit` tests: **7 passed**, including same-engine rejection,
   malformed-engine rejection, wrong-artifact rejection, partial-inventory rejection,
-  cross-arm metadata rejection and missing-rank-section rejection.
+  cross-arm metadata rejection, missing-rank-section rejection and a rank inventory that
+  diverges from the CPU generation report.
 - Existing `served-reply-panel` suite with `cpu-parity`: **29 passed**.
 - Real artifact audits after the review repairs: **3 / 3 passed** at steps 8,192, 12,288
   and 16,384, with both published hashes supplied and verified.
 - Official seed-2 final pair: **1 / 1 passed**, with both published hashes, report identity
-  and panel metadata checked. The audit receipt hashes to `84ba5993…`.
+  and panel metadata checked. The audit receipt hashes to `4932d7b0…`.
 - CPU panel versus stored integer report: **8 / 8 comparisons passed** across carried and
   `−C`.
 - Published store `SHA256SUMS`: **4 / 4 pairs verified**.

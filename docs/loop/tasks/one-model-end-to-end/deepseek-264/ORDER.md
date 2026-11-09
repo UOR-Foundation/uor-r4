@@ -51,7 +51,8 @@ It refuses unless:
   rendering and non-artifact inputs;
 - CPU and integer reports equal after only timing fields and `settings.engine`;
 - ranked reports have the same cases as the CPU generation reports and compare by case id,
-  not row position.
+  not row position. `changed_by_cut` is true only for a target/EOS or paired-rank change;
+  raw-nearest and diagnostic-field changes are counted separately.
 
 It writes a receipt with artifact identities and sizes, ask depths, carry rows, report
 equality, first `reply_ids` divergence, and carried-versus-`−C` teacher/paired rank deltas.

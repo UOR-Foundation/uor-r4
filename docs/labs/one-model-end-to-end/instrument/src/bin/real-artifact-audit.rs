@@ -638,20 +638,29 @@ fn rank_delta(
         minus_c_generation,
     )?;
     let mut teacher_changed = Vec::new();
+    let mut teacher_rank_changed = Vec::new();
     let mut first_target_changed = Vec::new();
     for (id, carried_row) in &carried_teacher {
         let minus_row = &minus_teacher[id];
-        if [
+        let rank_changed = [
             "target_ranks",
             "raw_target_ranks",
-            "raw_nearest_tokens",
             "eos_rank",
             "raw_eos_rank",
-            "point_key_overrides",
-            "chosen_target_mismatches",
         ]
         .into_iter()
-        .any(|field| carried_row.get(field) != minus_row.get(field))
+        .any(|field| carried_row.get(field) != minus_row.get(field));
+        if rank_changed {
+            teacher_rank_changed.push(id.clone());
+        }
+        if rank_changed
+            || [
+                "raw_nearest_tokens",
+                "point_key_overrides",
+                "chosen_target_mismatches",
+            ]
+            .into_iter()
+            .any(|field| carried_row.get(field) != minus_row.get(field))
         {
             teacher_changed.push(id.clone());
         }
@@ -704,13 +713,15 @@ fn rank_delta(
         })
     };
     Ok(json!({
-        "changed_by_cut": !teacher_changed.is_empty() || !paired_changed.is_empty(),
+        "changed_by_cut": !teacher_rank_changed.is_empty() || !paired_changed.is_empty(),
         "teacher_forced": {
             "carried": first(carried),
             "minus_c": first(minus_c),
             "changed_rows": teacher_changed.len(),
+            "rank_changed_rows": teacher_rank_changed.len(),
             "first_target_changed_rows": first_target_changed.len(),
             "first_changed_id": teacher_changed.first(),
+            "first_rank_changed_id": teacher_rank_changed.first(),
         },
         "paired_first": {
             "carried": carried["paired_first"]["totals"].clone(),
@@ -932,6 +943,21 @@ mod tests {
         let generation_only = json!({"rows": [{"id": "a"}]});
         let generation = rows_by_id(&generation_only, None).unwrap();
         assert!(rank_delta(&generation_only, &generation_only, &generation, &generation).is_err());
+    }
+
+    #[test]
+    fn rank_delta_refuses_rank_cases_missing_from_the_cpu_generation_report() {
+        let generation_report = json!({"rows": [{"id": "a"}]});
+        let generation = rows_by_id(&generation_report, None).unwrap();
+        let rank_report = json!({
+            "teacher_forced": {"rows": [{"id": "a"}, {"id": "b"}]},
+            "paired_first": {"rows": [{"id": "a"}, {"id": "b"}]}
+        });
+        assert!(
+            rank_delta(&rank_report, &rank_report, &generation, &generation)
+                .unwrap_err()
+                .contains("different case inventories")
+        );
     }
 
     #[test]
