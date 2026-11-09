@@ -13,6 +13,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - Initial red acceptance failed seven checks for the missing neutral shell/workflows, then an additional split-pane check. Later visual review exposed a hidden prompt, dark-only light theme, duplicate pane selectors, and a mobile Split no-op. These were fixed in production rather than by weakening old assertions.
 - Fresh package attempts first hit `No space left on device`; two screenshot captures also failed with `ENOSPC`. Only regenerable Kimi build caches were cleared (11.3 GiB plus the two residual generated target directories), not source, model artifacts, screenshots, reports, or other labs' outputs. The clean builds and captures then passed.
 - No real browser profile, credential, external test endpoint, model training, GPU run, useful-chat result, actual system-quota condition, accessibility certification, or production deployment was used.
+- The first local report/policy attempt exposed a missing `Skills used` section and two task ORDERs from the preserved acceptance history. The report section is repaired. The earlier acceptance unit is being delivered separately first; this branch will merge its resulting `main` before its own exact-head review. The full 11 repository gates are green before that merge, not a substitute for the final-head policy check.
 
 ## What changed
 
