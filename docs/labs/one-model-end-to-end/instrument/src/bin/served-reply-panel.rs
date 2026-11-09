@@ -21,7 +21,10 @@
 //! image asks or carries. `--engine integer` decodes through
 //! `IntegerStackSession::step_native`, which serves both (claude-338), and records
 //! `settings.engine`; the teacher-forced and paired-first ranks stay on the CPU
-//! port, so it refuses them.
+//! port, so it refuses them. Two limits, named rather than refused: neither
+//! engine applies a content readout's vote (`step_native` returns before it,
+//! where `serve_step` applies it), and the integer engine scores an artifact
+//! with turn memory, which the CPU port refuses, with no test of that path here.
 
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};

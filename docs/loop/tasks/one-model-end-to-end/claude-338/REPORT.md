@@ -48,6 +48,8 @@ No GPU time and no training.
 
 - **It shows** that the scorer reads what an integer artifact serves. On an artifact without ask heads, both engines give the same replies, stops and totals. On an asking artifact, only the integer session decodes the ask heads; the CPU port can no longer score one silently.
 - **It does not show** that the integer engine is right on a trained asking artifact. That rests on claude-336's match of the session against the float trace, and on claude-339's run.
+- **It does not show the served model's score for an artifact with a content readout.** `step_native` returns before the content readout's vote, which `serve_step` (the browser path) applies. Both engines skip it, as the scorer did before this unit, so they agree with each other but not with `serve_step` on such an artifact (fresh review, finding 2).
+- **It does not test turn memory under the integer engine.** The CPU port refuses an artifact with turn memory; the integer session accepts one, and no test here pins its reply-start moves against the panel (fresh review, finding 1).
 - **It does not move the panel:** s1 still scores 0 complete and 0 good pairs, as in claude-322.
 
 ## Checks run at the head
@@ -61,6 +63,7 @@ No GPU time and no training.
   - the integer context misread by 64;
   - `--engine` dropped from the flag list.
 - **The real parity run** above, and the old scorer's sealed report.
+- **The in-unit fresh review**, round 1, one reviewer given the spec and the diff only: APPROVE, with two low findings (the content readout and turn memory above). Both are named in the module doc and here rather than refused; no second round for a doc-only delta.
 
 ## Skills used
 
@@ -70,6 +73,7 @@ No GPU time and no training.
 
 - **claude-339, the language run.** Ask heads, carry 4 and the found-copy pull (claude-337), on claude-322's d3mwcap6 configuration, two seeds, against a no-carry control (L-010) and the `−C` cut, scored with `served-reply-panel --engine integer`. It needs its own prep sheet, FIT and pre-run review, and must answer claude-335's seed-1 failure of the carry with the pull at the scored rows only.
 - **Teacher-forced and paired-first ranks on the integer session.** They stay on the CPU port, so they are refused for an asking artifact. Moving `teacher_forced_nearest_ranks` and `first_position_ranks` onto the `Decoder` trait needs each step's full nearest ranking from the session, which `NativeStep` does not carry today.
+- **Content readout and turn memory under `--engine integer`:** refuse them, or route the decode through `serve_step` and test turn memory, before scoring such an artifact.
 - **The CPU port's Hamming reads** still ignore the ask and the carry (DeepSeek's lane, sent on #2028 by claude-336).
 
 Closes nothing: #3407 stays open.
