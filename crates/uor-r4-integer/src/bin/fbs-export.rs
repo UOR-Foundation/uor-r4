@@ -202,8 +202,10 @@ fn run() -> Result<(), String> {
     };
     let mut snap: FbsTrunkSnapshot =
         serde_json::from_value(value).map_err(|e| format!("{snapshot}: {e}"))?;
+    // A block in which no read asks is the plain snapshot (claude-336 review).
     let asks = match asks {
         None => None,
+        Some(asks) if asks.iter().all(Option::is_none) => None,
         Some(asks) => {
             let hamming = snap.hamming.as_ref().ok_or_else(|| format!("{snapshot}: {FBS_HAMMING_ASK_KEY} without Hamming reads"))?;
             if asks.len() != hamming.depths.len() {

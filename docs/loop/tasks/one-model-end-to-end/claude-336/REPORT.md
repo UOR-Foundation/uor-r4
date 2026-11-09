@@ -8,7 +8,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **The parity windows are not B2 windows.**
   - The ORDER asked for the trace "on B2 windows". B2's windows are made inside the trainer (`train-in-space`), with no data root to read them from. `fbs-snapshot --hamming-trace` takes either the D11 readout's 8 fixed full-context sequences (`fbs_export.rs` `fbs_float_readout`: token `(37 s + 11 t + 1) mod vocab`, 192 tokens each) or `--dev DATA_ROOT`, a language corpus.
-  - So the check ran on the 8 fixed sequences. It shows that the integer engine computes the trained `a` and `c` as the rounded float does, on every row and every lag up to `h = 4`. It says nothing about B2's answers.
+  - So the check ran on the 8 fixed sequences. It shows that the integer engine computes the trained `a` and `c` as the rounded float does, on every row, with the carry at `h = 4`, so every lag from 1 to 4 enters the sum from row 4 of each window on. It says nothing about B2's answers, and the carry control removes the whole carry at once, not one lag at a time.
   - B2's answer under the integer session is the next unit's question: a B2 decode through `fbs-toks`, or a B2 window writer for `fbs-snapshot`.
 - **The parity check ran on a GPU pod, not on the laptop as the ORDER said.**
   - `fbs-snapshot` opens a CUDA device for the float forward. So the float side ran on one Vast RTX 5090 (`vast-59878078`, $0.563/h, 455 s up to down, about $0.07). The integer side ran on the laptop.
@@ -19,6 +19,12 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - The rounded float trace, which the integer must match, agrees on all of them (below). So these 21 + 3 differences are the export's Q12 rounding of the read tables, measured once here and not hidden.
 - **Deviations from the ORDER, named:**
   - **No new schema string.** The ORDER said "behind a new schema version". The artifact keeps `lut-stack/6`. The new record fields (`asks`, `carry_rows`) and the two section kinds (`hamming.d{depth}.ask`, `hamming.d{depth}.carry`) are optional, so a read without them exports byte-identically. Their presence makes every older engine refuse the artifact through `deny_unknown_fields`. This follows `copy_key`'s precedent; the lab's call is that a schema bump would add nothing that refusal does not already give.
+    - The review named the residual risk: a reader that takes an asking artifact for a plain one. `add_point_key_uorlut01` does bump its schema.
+- **One such reader exists, and a schema bump would not have caught it.**
+  - `crates/uor-r4-cpu-train/src/hamming.rs` (DeepSeek's crate, D84) is an independent CPU port of `lut-stack/6`. It takes `HammingImage` from the integer crate's reader, which now accepts and validates the ask sections, and builds its type heads from each read without reading `HammingReadImage::ask` (`hamming.rs:303`).
+  - So, given an asking artifact, cpu-train would serve the old question, silently.
+  - No asking artifact exists outside this unit's local folder, so nothing is served wrong today.
+  - This unit does not edit cpu-train (another lab's crate). The fix belongs there: refuse a read whose image carries `ask`, until the port serves it. It is sent to DeepSeek on #2028.
   - **One file outside the ORDER's list:** `crates/uor-r4-integer/src/bin/fbs-export.rs`, the command that turns the snapshot into an artifact. The ask block reaches it under its own JSON key `hamming_ask` (`FBS_HAMMING_ASK_KEY`), because `FbsTrunkSnapshot` denies unknown fields and cpu-train builds its structs literally, so a new field could not be added to them. Of the conditional files, `bin/fbs-snapshot.rs` and `stack/mod.rs` were needed and `stack/session.rs` was not: the session already passes its whole window, so `start = 0` serves the carry with no session change. The item's scope gains the three files used.
 - **The float carry sums f32 products; the integer sum is exact.** The integer computes the question at Q28 in `i64` (`(table + a) << 16 + c(Q16) · (table + a)(Q12)`). The float forward adds `c · (table + a)` in f32. Near a sign at zero they could differ. No query bit flipped on the 8 windows, so none was seen.
 - **Instrument faults (L-007, not mechanism results):**
@@ -104,7 +110,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 - **It shows:**
   - A trained model with ask heads and the question carry exports through D11 and runs in the integer session.
-  - Its Hamming choices equal the float's as exported, on every row of 8 full-context windows, including every carry lag up to `h = 4`.
+  - Its Hamming choices equal the float's as exported, on every row of 8 full-context windows, including the carry at `h = 4`: every lag from 1 to 4 enters the sum from row 4 of each window on.
   - Both the ask table and the carry change the integer choices when removed, so the match is not a match of an unused part.
 - **It does not show:**
   - whether the integer session answers B2: the windows are the fixed sequences, not B2's;
@@ -115,7 +121,13 @@ Closes nothing: #3407 stays open.
 
 ## Checks run at the head
 
-- `uor-r4-integer --lib --features serving-wasm`: 499 passed, 0 failed, 1 ignored. `uor-r4-float-train --lib`: 336 passed, 0 failed. Both at the code head `917908c2b`; the later commit changes only docs.
+- `uor-r4-integer --lib --features serving-wasm`: 499 passed, 0 failed, 1 ignored. `uor-r4-float-train --lib`: 336 passed, 0 failed. Both run again after the review fixes.
+- **The in-unit fresh review:** three reviewers, given the spec and the diff only. Slice A (integer serving, about 390 lines) and slice B (float export and the tests, about 480 lines) each returned APPROVE-WITH-MINORS; the claims check returned CLAIMS-OK-WITH-FIXES. Fixed in this PR:
+  - `round_hamming_as_exported` refuses a carry on a read that does not ask, as the export does. The test now asserts it, and with the check set aside the test fails, at its `expect_err`.
+  - `fbs-export` takes a `hamming_ask` block in which no read asks as the plain snapshot. Checked by hand: `[null, null]` exports byte-identically to the snapshot without the key (sha256 `66d11f8c…`), where before it was refused ("not all off"). The real export is unchanged (`0f9e3431…`).
+  - A doc comment moved back to its test.
+  - Two wordings narrowed: the carry's lags, and the plain summary's controls.
+  - Left as named: the schema string (above); the integer side owns the ask table's vocab check (`AskImage::checked`); the ask snapshot's JSON is written through `serde_json::Value`, so its key order differs from the plain snapshot's (the no-ask path is unchanged); one `pub use` line's order.
 - `cargo check` passes:
   - `uor-r4-cpu-train --all-targets`;
   - `uor-r4-float-train --lib` and `--bin fbs-snapshot`;
@@ -131,6 +143,7 @@ Closes nothing: #3407 stays open.
 ## Still open
 
 - **B2's answer through the integer session:** a B2 decode in `fbs-toks`, or a B2 window writer for `fbs-snapshot`. Then a language run with the carry, under its own sheet.
+- **cpu-train's Hamming port ignores the ask heads** (above). DeepSeek's crate should refuse an image whose read carries `ask` until it serves it. This was sent to DeepSeek on #2028.
 - **The float cached decode step for the carry:** out of scope. Float decodes a carried read uncached.
 - **Rounding's 21 of 3,072 depth-2 type decisions:** the export's Q12 rounding of the read tables moves them against the unrounded float. It is the export gap of the read, recorded, not a parity fault.
 - **Formatting:** the touched files were not `rustfmt`-clean at the base, and this unit adds hunks (counts above). This is for a formatting pass, if the project takes one up.
@@ -139,6 +152,6 @@ Closes nothing: #3407 stays open.
 
 The model that learned to carry a question forward (claude-335) can now be turned into the integer form that runs on ordinary devices, and run there. Before this unit, the export refused it.
 
-On eight test texts of 192 tokens each, the integer version picks the same memory entries as the training version at every position, once the training version's numbers are rounded the way the export stores them. With the new parts removed, the two disagree on most positions, so the match comes from the new parts. One rented GPU did the float side in under eight minutes for about seven cents.
+On eight test texts of 192 tokens each, the integer version picks the same memory entries as the training version at every position, once the training version's numbers are rounded the way the export stores them. With either new part removed, most of the choices that part feeds disagree, while the choices that never used it stay the same. So the match comes from the new parts being served right, not from parts they do not touch. One rented GPU did the float side in under eight minutes for about seven cents.
 
 The next step is to check the integer version on the recall task itself, then try the carry on real text.

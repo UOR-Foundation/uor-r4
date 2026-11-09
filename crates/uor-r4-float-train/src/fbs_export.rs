@@ -599,6 +599,9 @@ pub fn round_hamming_as_exported(reads: &HammingReads) -> Result<()> {
                 "a Hamming read that holds its ask write (--hamming-hold, claude-333) has no exported form to round to",
             ));
         }
+        if read.carry.is_some() && read.ask.is_none() {
+            return Err(invalid(format!("hamming_read d{depth} carries a question it does not ask")));
+        }
         // claude-336: the question table at Q12 in i16 and the carry's gains at Q16 in i32, as
         // `fbs-export` stores them (`quantize_hamming_ask`).
         for (table, var, exp, limit) in [
@@ -1491,8 +1494,6 @@ mod tests {
         }
     }
 
-    /// claude-235: the exponents the rounding uses are the integer format's own; claude-252 adds
-    /// the memory's.
     /// claude-336: ask heads (claude-330) and the readout read's question carry (claude-335)
     /// export beside the snapshot, and round as `fbs-export` stores them. Without them the
     /// snapshot is the plain one and has no ask entry; with them each read's entry holds its
@@ -1569,12 +1570,17 @@ mod tests {
         table[5] = 9.0;
         wide.reads[0].ask.as_ref().unwrap().set(&Tensor::from_vec(table, (vocab, width), &device)?)?;
         refuse(&wide, "hamming_read.d2.ask[5]");
+        let mut bare = reads.clone();
+        bare.reads[1].ask = None;
+        refuse(&bare, "hamming_read d6 carries a question it does not ask");
         let held = HammingReads::new(heads, width, &device)?.with_ask(vocab)?.with_hold(2, vocab)?;
         let message = fbs_hamming_snapshot_with_ask(&held, HAMMING_READOUT_DEPTH, width).expect_err("the hold").to_string();
         assert!(message.contains("--hamming-hold"), "{message}");
         Ok(())
     }
 
+    /// claude-235: the exponents the rounding uses are the integer format's own; claude-252 adds
+    /// the memory's.
     #[test]
     fn the_hamming_exponents_are_the_integer_formats() {
         let format = include_str!("../../uor-r4-integer/src/stack/format.rs");
