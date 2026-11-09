@@ -43,8 +43,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   refusal, wrong hashes, output replacement and deterministic repeats.
 - No float-training, Claude-owned, serving, export or GPU file changed.
 - Size: `pr-check` reports 14 changed paths: code 3 files `+764/-0`,
-  documentation 8 files `+399/-0`, and other text evidence 3 files `+649/-0`
-  (`+1,812/-0` total). The ORDER gave no line estimate.
+  documentation 8 files `+398/-0`, and other text evidence 3 files `+649/-0`
+  (`+1,811/-0` total). The ORDER gave no line estimate.
 
 ## Measurements
 
