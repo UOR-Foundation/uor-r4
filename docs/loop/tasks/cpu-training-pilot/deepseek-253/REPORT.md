@@ -28,8 +28,7 @@ The second fresh review approved the parser, statistics and tests but found:
 ## Checks run at the head
 
 - Store inventory receipt retained.
-- Final JSON, report policy, local policy and full gates are recorded after
-  the accounting commit.
+- Final JSON, report policy, local policy and all 11 full gates passed.
 
 ## Skills used
 
