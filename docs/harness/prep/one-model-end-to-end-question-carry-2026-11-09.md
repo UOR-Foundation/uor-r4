@@ -15,7 +15,7 @@ The code under review is `95e4c6f0f` (claude-335's code commit, on PR 3888), wit
   - **Nit:** the sheet's place for the snapshot export's refusal is corrected.
   - **Nit, not applied:** `with_carry` accepts any `vocab`. The load refuses a mismatch, and the run passes `SHEET_VOCAB` for both, so it cannot arise here.
 
-TEST FITNESS: **FIT** (round 1, both slices), with every finding applied or answered above.
+TEST FITNESS: FIT (round 1, both slices), with every finding applied or answered above.
 
 ## The question
 
