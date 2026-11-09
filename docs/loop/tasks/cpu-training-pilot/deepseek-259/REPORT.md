@@ -12,6 +12,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
   merged Claude report records successful reads of both seed tarballs.
 - The Linux nonregular-file test covered a directory but not a FIFO. The
   production open used `O_NONBLOCK`, yet no test protected that property.
+- The seventh review found that this repair changed the deepseek-255 and
+  deepseek-256 reports even though they were absent from the declared file
+  scope. It also found that the exact `recall.jsonl` comparison was prose
+  only, with no committed expected-versus-observed receipt.
 
 ## What changed
 
@@ -28,6 +32,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Added a Linux FIFO regression with a ten-second bounded wait. It proves the
   nonblocking open fails closed without letting a blocking regression hang
   the test.
+- [deepseek-260](../deepseek-260/ORDER.md) re-scopes the 255/256 report
+  corrections and adds the exact gain/type-weight parity receipt.
 
 ## Measurements
 
@@ -52,6 +58,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
   `e1287b9b7f31766ab0545654fa6c4c4fb8b303f41ffcceadceb7c5d4e0b78c24`;
   report
   `497140c6a6730521b3337c8f155cd31771aade953203eb1ee4eab7d51ee58865`.
+- Exact parity receipt:
+  [real-eight-gain-parity.json](../deepseek-254/evidence/real-eight-gain-parity.json),
+  SHA-256
+  `be065856b20a7cc56a0a71b1dacd02d6a188927f00bb303521fdc3b4a1cce6d1`;
+  all eight expected/observed arms compare equal.
 - Test executable
   `87d481a87f003b19aa675a04d720ae058ca32bf08650b1b3e9080055d12cb665`;
   release executable
@@ -67,7 +78,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Release build: passed.
 - Report policy, local policy and all 11 gates: passed at the final receipt
   head.
-- A seventh fresh exact-head review is requested after the final receipt.
+- The seventh review requested changes; deepseek-260 repairs them. An eighth
+  fresh exact-head review is requested after the final receipt.
 
 ## Skills used
 

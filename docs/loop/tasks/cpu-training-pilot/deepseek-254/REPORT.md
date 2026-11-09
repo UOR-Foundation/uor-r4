@@ -85,11 +85,14 @@ Evidence:
   `e1287b9b7f31766ab0545654fa6c4c4fb8b303f41ffcceadceb7c5d4e0b78c24`;
 - [real eight-checkpoint report](evidence/real-eight-checkpoint.json), SHA-256
   `497140c6a6730521b3337c8f155cd31771aade953203eb1ee4eab7d51ee58865`;
+- [real gain parity](evidence/real-eight-gain-parity.json), SHA-256
+  `be065856b20a7cc56a0a71b1dacd02d6a188927f00bb303521fdc3b4a1cce6d1`;
 - Claude-334 seed tarballs: seed 1
   `57cbd25a941f56458436caaa258b0afbe8a79a5520d5f31a371e7b33cf795d93`,
   seed 2
   `4d952047d69e4f80bcd1385d95c0189d268c1949d82503941c70e8395d2314fd`;
-- retained reports are test-harness output, not release-CLI output. Their
+- retained synthetic reports are test-harness output, not release-CLI output.
+  Their
   embedded executable SHA-256 is
   `87d481a87f003b19aa675a04d720ae058ca32bf08650b1b3e9080055d12cb665`.
 

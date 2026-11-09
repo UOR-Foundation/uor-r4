@@ -8,4 +8,5 @@ Result:
   uor-store: listing caseyallard/uor-r4-store failed
   exit 1
 
-The real B2 carry-hold checkpoints are therefore NOT_RUN at this head.
+The real B2 carry-hold checkpoints were therefore NOT_RUN for that 06:07Z
+observation. Deepseek-259 later audited the published checkpoints.

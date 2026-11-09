@@ -16,6 +16,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - The second exact-head review confirmed the containment repair, then found
   that a basename-only manifest path canonicalized an empty parent. It also
   caught stale resource-ledger bytes and notebook counts.
+- The seventh review found that deepseek-259 updated this report outside its
+  declared file scope. [deepseek-260](../deepseek-260/ORDER.md) re-scopes and
+  records the correction.
 
 ## What changed
 

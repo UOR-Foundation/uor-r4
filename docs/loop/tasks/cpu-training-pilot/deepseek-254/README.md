@@ -63,6 +63,8 @@ arms in parallel and writes only to a new path.
 
 Deepseek-259 used this mode on Claude-334's eight sealed held checkpoints:
 both arms, both seeds and both saved steps. All grouped gains and per-depth
-type-weight means matched the training log exactly.
+type-weight means matched the training log exactly. Deepseek-260 retains the
+expected-versus-observed values and recall-file hashes in
+`evidence/real-eight-gain-parity.json`.
 
 No result from this tool is B2, carry, capability, export or serving evidence.

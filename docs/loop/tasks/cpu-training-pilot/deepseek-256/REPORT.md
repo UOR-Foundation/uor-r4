@@ -15,6 +15,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
   was blocking before its regular-file check and that the notebook's raw
   `|w_y|` text split its Markdown row. [deepseek-257](../deepseek-257/ORDER.md)
   repairs both.
+- The seventh review found that deepseek-259 updated this report outside its
+  declared file scope. [deepseek-260](../deepseek-260/ORDER.md) re-scopes and
+  records the correction.
 
 ## What changed
 
