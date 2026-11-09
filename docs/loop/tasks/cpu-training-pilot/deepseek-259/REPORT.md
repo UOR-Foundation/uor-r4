@@ -44,7 +44,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - Exact deepseek-254 through deepseek-259 task files plus the resource ledger:
   `371366` bytes.
 - Final `pr-check` size: tests 0 files `+0/-0`; code 2 files `+986/-109`;
-  docs 14 files `+884/-0`; generated 0 files `+0/-0`; other 6 files
+  docs 14 files `+888/-0`; generated 0 files `+0/-0`; other 6 files
   `+9955/-0`.
 - Focused binary tests: 9 passed. Full CPU library suite: 480 passed, 5
   ignored.
