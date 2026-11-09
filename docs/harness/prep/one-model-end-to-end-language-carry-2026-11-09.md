@@ -153,6 +153,7 @@ Registered before any pod. claude-322's, with these changes:
      - The other three pods start only after a PASS. A FAIL stops all four before any full run (row 0c).
 4. **On each pod:** I-p, I-0, the build, the inputs, I-3, the smoke, I-m, I-f, I-pull, I-xa's snapshot, I-t. Then 16,384 steps. Then the three snapshots, and the no-memory scoring of `step-016384` with I-5.
 5. **Seal** to `results/claude/one-model-end-to-end-language-carry-2026-11-09/runs/{L-aC,L-a}/s{1,2}/`, each root empty first (L-002). Read back, then take the pod down.
+   - The rerun seals to `runs-3/`, and to the laptop while the store is full. See [the ask-range repair](#ask-range-repair-row-0a).
 6. **On the laptop:** I-xg, I-xa, I-c. Then serve every snapshot, cut `−C`, I-cut, the panel, the first-line counts and the trend. Then grade and pair.
 
 ## Minimum test power
@@ -177,6 +178,7 @@ claude-322's, with:
 - **I-pull failing:** NOT_RUN for that arm and seed (instrument).
 - **I-xg failing:** stop before any full run. The export path is the fault (row 0c).
 - **A snapshot failing** at an intermediate step: the trend loses that point, and the REPORT says so. At `step-016384` it is row 0c.
+- **A table past its stored range:** row 0a. The ask tables are held at their range since `721a4784f`; see [the ask-range repair](#ask-range-repair-row-0a).
 
 ## Changes from claude-322's sheet
 
@@ -265,3 +267,40 @@ claude-322's, with:
 - `cpu-fbs-export` `6748a09f4c253d7d0af5144ade990024d373d5d0756b30a2d44895e76bd19865`
 - `hamming-base-copy` `b085a8a7d2f0fabe92ebb3c129f3fd565f63ab58dec0887bef05c856539a9da3`
 - claude-322's checkpoint files, pinned in `ixg` mode.
+
+## Ask-range repair (row 0a)
+
+[claude] 9 Nov 2026. The negative first.
+
+**All four full runs stopped before step 16,384,** each on the same refusal, so no cell has a `step-016384`. Each sealed or was copied as NOT_RUN (EXIT 6), and none is a reading of the arms.
+
+| Cell | Seal | Train exit | Last checkpoint | Train seconds | The refusal |
+|---|---|---|---|---|---|
+| L-aC s1 | `runs-2/` | 1 | `step-014336` | 7,619 | `d6.ask[51596] = -8.000233` |
+| L-a s1 | `runs/` | 1 | `step-014336` | 7,443 | `d6.ask[4235] = -8.000174` |
+| L-aC s2 | `runs/` | 1 | `step-014336` | 7,713 | `d2.ask[4266] = 7.9999156` |
+| L-a s2 | laptop (the store was full) | 1 | `step-014336` | 7,519 | `d6.ask[4240] = -8.000165` |
+
+**Classified: a format-range fault, not a mechanism result (row 0a, L-007).**
+- **What it is:** training as served rounds every table to its integer each step. An ask table is Q12 in `i16`, so it stores −8 to 32767/4096. The float weights the optimizer holds drift, and a few reach the end of that range. The first to pass it stops the run.
+- **Measured** on L-aC s1 (1,048,576 weights per ask table): `d6` rms 1.337 at step 12,288 and 1.410 at 14,336. Weights at |v| ≥ 7: 783, then 2,045. At |v| ≥ 7.9: 0, then 18.
+- **It is not the carry:** the no-carry arm stopped the same way, at the same step.
+- **Only the ask tables are near their range.** On L-a s2's `step-014336`, the largest |v| per table: ask 7.92 to 7.93 (limit 8); weight 6.13 (limit 128); margin 19.2 (limit 32,768); rotations 1.24 (limit 128). The trunk's tables reached 16,384 in claude-322, which had no asks.
+
+**The repair (commit `721a4784f`):** training as served holds each ask weight inside the range its export can store, before it rounds (`hold_hamming_ask_in_exported_range`).
+- A weight past the end sits at the end, and is served and trained as that value. The served model is what the export stores.
+- This is the format's own range, the same saturation any fixed-point store has. It is not a squashing function: inside the range every value is unchanged.
+- The export and the snapshot still refuse a value past the range, since a saved table should never hold one.
+- A test pins it (`an_ask_weight_past_the_served_range_is_held_at_its_end`), and fails with the hold set aside, on this same refusal.
+
+**What changes for the rerun:**
+- **Pin:** the job, chain and launcher pin `721a4784f265efea6b490d5c3100779e4c4b1607`. Against the old pin, `crates/` differ by the hold, its test and `hamming-base-copy` (added for I-xg, row 0c, and used on the laptop only).
+- **All four cells rerun,** under this sheet and these bars, unchanged. Row 0a is "repair and rerun that arm and seed". A run that resumed from `step-014336` would be a different training path from the one registered, so each restarts from step 0.
+- **Seal root:** `runs-3/` for all four (L-002: `runs/` and `runs-2/` hold the NOT_RUN seals and stay).
+- **The order is unchanged:** L-aC seed 1 first, the other three after its I-xg PASS. I-xg's bar and pin (`86e51d5e…`) are unchanged.
+- **Cost:** a full run is about 7,600 s × 16,384 / 14,700 ≈ 8,500 s, plus setup and scoring, about 3 h. Four pods at $0.563 to $0.70/h: **about $7 to $8.50.** The first round cost about $5.20 on its four full pods.
+
+**The store is full (a second fault, an instrument one).** At 17:13Z `uor-store put` was refused: "Private storage limit reached". Reads still work, so pods still start.
+- **The seal step while that holds:** the chain ends `seal=4`, with the seal complete on the pod and the pod up. `pull-seal-339.sh` copies `oh-seal/` to `local/claude/claude-339/seal-laptop/ROOT/ARM/sS/`, checks `SHA256SUMS` and the tar's list, and only then takes the pod down. If any check fails, the pod stays up. `fetch-339.sh` reads a laptop seal in place of the store's.
+- **If the store has room again by then,** the seal goes to the store and reads back as Step 5 says.
+- The laptop seals go up to the store once it has room. The REPORT names which seals are on the laptop only.
