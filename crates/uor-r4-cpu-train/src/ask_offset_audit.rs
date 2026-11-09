@@ -83,7 +83,7 @@ impl TrainedAskOffsets {
             return Err(format!("width {width} is not divisible by {heads} heads"));
         }
         let head_width = width / heads;
-        if !head_width.is_multiple_of(4) || head_width > 64 {
+        if head_width == 0 || !head_width.is_multiple_of(4) || head_width > 64 {
             return Err(format!(
                 "head width {head_width} is not a quaternion multiple within one word"
             ));
@@ -170,6 +170,9 @@ impl TrainedAskOffsets {
         relations: Range<u32>,
         query_shift: u32,
     ) -> Result<Vec<AskOffsetRelationReading>, String> {
+        if relations.is_empty() {
+            return Err("relation token range is empty".to_owned());
+        }
         let keys = relations.collect::<Vec<_>>();
         let mut out = Vec::with_capacity(keys.len());
         for &relation in &keys {
@@ -460,6 +463,31 @@ mod tests {
         assert!(TrainedAskOffsets::from_bytes(&model, &hamming)
             .unwrap_err()
             .contains("ask tables cover depths"));
+    }
+
+    #[test]
+    fn zero_head_width_and_empty_relations_are_refused() {
+        let model = file(vec![(
+            "embedding.weight",
+            Dtype::F32,
+            vec![64, 0],
+            Vec::new(),
+        )]);
+        let hamming = file(vec![
+            ("heads", Dtype::U32, vec![1], u32_bytes([2])),
+            ("d2.key_rotation", Dtype::F32, vec![0], Vec::new()),
+            ("d2.ask", Dtype::F32, vec![64, 0], Vec::new()),
+        ]);
+        assert!(TrainedAskOffsets::from_bytes(&model, &hamming)
+            .unwrap_err()
+            .contains("head width 0"));
+
+        let (model, hamming) = fixture(0.0, -1.0, true);
+        let offsets = TrainedAskOffsets::from_bytes(&model, &hamming).unwrap();
+        assert!(offsets
+            .audit_relations(16..16, 16)
+            .unwrap_err()
+            .contains("range is empty"));
     }
 
     fn model_file() -> Vec<u8> {

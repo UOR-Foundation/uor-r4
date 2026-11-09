@@ -16,24 +16,26 @@
   "admitted_cumulative_projection_seconds": 105767.677487699,
   "lab_cumulative_projection_seconds": 105767.677487699,
   "projection": {
-    "measured_synthetic_probe_seconds": 2.95,
+    "measured_synthetic_probe_seconds": 5.88,
     "builds_and_tests_allowance_seconds": 900,
     "review_and_delivery_allowance_seconds": 300,
-    "retry_and_setup_allowance_seconds": 597.05,
+    "retry_and_setup_allowance_seconds": 594.12,
     "wall_limit_seconds": 1800
   },
   "measured": {
     "synthetic_checkpoint_reports": 1,
-    "synthetic_probe_seconds": 2.95,
-    "max_peak_rss_kib": 227928,
+    "synthetic_probe_seconds": 5.88,
+    "max_peak_rss_kib": 228240,
     "real_claude_330_checkpoint_runs": 0
   },
   "artifacts": {
-    "ask_offset_audit_binary": "e677b3dff0a15cd47cf4be4300cb8ff461d11bcbebeaead7a0974f0ba7c1ea4b"
+    "ask_offset_audit_binary": "95890a136a9ad1def49399bd21e2aa98d7007acd339eab4cac4d78d9ed6fe718",
+    "synthetic_report": "85b2538692736cb24f3aa6fbcd443ea8f47352ee999c7e5f173451a9750efe61"
   },
   "storage": {
-    "build_target_bytes": 4982430578,
-    "free_bytes_at_measurement": 156890263552,
+    "tracked_evidence_bytes": 9522,
+    "build_target_bytes": 6446115209,
+    "free_bytes_at_measurement": 155421941760,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true

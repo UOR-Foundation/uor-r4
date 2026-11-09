@@ -35,6 +35,24 @@ struct CellAggregate {
     offset_changed_coordinates: usize,
 }
 
+#[derive(Debug, Serialize)]
+struct DepthAggregate {
+    depth: usize,
+    cells: usize,
+    relations_per_cell: usize,
+    zero_exact_codes: usize,
+    trained_exact_codes: usize,
+    zero_total_bits: u64,
+    trained_total_bits: u64,
+    improvement_bits: i64,
+    improved_relations: usize,
+    regressed_relations: usize,
+    zero_target_nearest: usize,
+    trained_target_nearest: usize,
+    offset_abs_sum_q16: u64,
+    offset_changed_coordinates: usize,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("cpu-ask-offset-audit: {error}");
@@ -80,6 +98,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
     let trained = TrainedAskOffsets::from_bytes(&model, &hamming)?;
     let relations = trained.audit_relations(RELATION_TOKENS, QUERY_SHIFT)?;
     let cells = aggregate_cells(&relations);
+    let depth_summaries = aggregate_depths(&cells);
     let all = relations
         .iter()
         .flat_map(|relation| relation.cells.iter())
@@ -119,6 +138,7 @@ fn run_with(args: &BTreeMap<String, String>) -> Result<()> {
             "executable_sha256": executable_sha256()?,
         },
         "summary": summary,
+        "depth_summaries": depth_summaries,
         "cells": cells,
         "relations": relations,
         "claim": "read-only float-checkpoint ask-offset geometry audit; not B2, retention, capability or serving evidence"
@@ -181,6 +201,35 @@ fn aggregate_cells(
                 .iter()
                 .filter(|cell| cell.offset_changed_coordinates > 0)
                 .count(),
+            offset_abs_sum_q16: cells.iter().map(|cell| cell.offset_abs_sum_q16).sum(),
+            offset_changed_coordinates: cells
+                .iter()
+                .map(|cell| cell.offset_changed_coordinates)
+                .sum(),
+        })
+        .collect()
+}
+
+fn aggregate_depths(cells: &[CellAggregate]) -> Vec<DepthAggregate> {
+    let mut grouped: BTreeMap<usize, Vec<&CellAggregate>> = BTreeMap::new();
+    for cell in cells {
+        grouped.entry(cell.depth).or_default().push(cell);
+    }
+    grouped
+        .into_iter()
+        .map(|(depth, cells)| DepthAggregate {
+            depth,
+            cells: cells.len(),
+            relations_per_cell: cells.first().map_or(0, |cell| cell.relations),
+            zero_exact_codes: cells.iter().map(|cell| cell.zero_exact_codes).sum(),
+            trained_exact_codes: cells.iter().map(|cell| cell.trained_exact_codes).sum(),
+            zero_total_bits: cells.iter().map(|cell| cell.zero_total_bits).sum(),
+            trained_total_bits: cells.iter().map(|cell| cell.trained_total_bits).sum(),
+            improvement_bits: cells.iter().map(|cell| cell.improvement_bits).sum(),
+            improved_relations: cells.iter().map(|cell| cell.improved_relations).sum(),
+            regressed_relations: cells.iter().map(|cell| cell.regressed_relations).sum(),
+            zero_target_nearest: cells.iter().map(|cell| cell.zero_target_nearest).sum(),
+            trained_target_nearest: cells.iter().map(|cell| cell.trained_target_nearest).sum(),
             offset_abs_sum_q16: cells.iter().map(|cell| cell.offset_abs_sum_q16).sum(),
             offset_changed_coordinates: cells
                 .iter()
@@ -408,8 +457,57 @@ mod tests {
         assert_eq!(report["schema"], SCHEMA);
         assert_eq!(report["summary"]["relations"], 16);
         assert_eq!(report["summary"]["regressed_cells"], 1);
+        assert_eq!(report["depth_summaries"][0]["depth"], 2);
+        assert_eq!(report["depth_summaries"][0]["regressed_relations"], 1);
         assert!(run_with(&args)
             .unwrap_err()
             .contains("reports are never replaced"));
+
+        let repeat = dir.0.join("report-repeat.json");
+        let mut repeat_args = args.clone();
+        repeat_args.insert("out".to_owned(), repeat.display().to_string());
+        run_with(&repeat_args).unwrap();
+        assert_eq!(
+            std::fs::read(&out).unwrap(),
+            std::fs::read(&repeat).unwrap()
+        );
+
+        if let Ok(path) = std::env::var("UOR_KEEP_ASK_OFFSET_AUDIT_EVIDENCE") {
+            std::fs::write(path, std::fs::read(&out).unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn both_wrong_file_hashes_are_refused() {
+        let dir = TestDir::new("hashes");
+        let checkpoint = dir.0.join("checkpoint");
+        std::fs::create_dir(&checkpoint).unwrap();
+        let (model_sha, hamming_sha) = write_checkpoint(&checkpoint);
+
+        let bad_model = BTreeMap::from([
+            ("checkpoint".to_owned(), checkpoint.display().to_string()),
+            ("expected-model-sha256".to_owned(), "0".repeat(64)),
+            ("expected-hamming-sha256".to_owned(), hamming_sha.clone()),
+            (
+                "out".to_owned(),
+                dir.0.join("bad-model.json").display().to_string(),
+            ),
+        ]);
+        assert!(run_with(&bad_model)
+            .unwrap_err()
+            .contains("model.safetensors SHA-256 differs"));
+
+        let bad_hamming = BTreeMap::from([
+            ("checkpoint".to_owned(), checkpoint.display().to_string()),
+            ("expected-model-sha256".to_owned(), model_sha),
+            ("expected-hamming-sha256".to_owned(), "0".repeat(64)),
+            (
+                "out".to_owned(),
+                dir.0.join("bad-hamming.json").display().to_string(),
+            ),
+        ]);
+        assert!(run_with(&bad_hamming)
+            .unwrap_err()
+            .contains("hamming_read.safetensors SHA-256 differs"));
     }
 }

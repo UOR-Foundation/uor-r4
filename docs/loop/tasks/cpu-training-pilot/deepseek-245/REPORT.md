@@ -27,10 +27,12 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   head/width geometry, and writes only to a new report path.
 - For all 16 relation/query pairs and every ask head/depth, it reports zero and
   trained Hamming distance to the target key, bit improvement, target rank
-  among the 16 relation keys, nearest-key status and offset magnitude.
+  among the 16 relation keys, nearest-key status and offset magnitude. Reports
+  include per-cell and per-depth aggregates.
 - Added tests for a controlled improvement/regression fixture, missing ask
-  tables, non-finite values, partial depths, exact report generation, input
-  hashes and argument parsing.
+  tables, non-finite values, partial depths, zero-width heads, empty relation
+  ranges, deterministic repeat reports, both wrong-file-hash paths and argument
+  parsing.
 - Added an ask-head serving design gate naming the proposed Q12 integer table,
   artifact marker/exponent, i32 pre-rotation sum, refusal invariants and the
   float/artifact/CPU/integer parity sequence. No schema or serving code changed.
@@ -47,9 +49,13 @@ relation 16's unchanged question, zero and trained offsets both measure
 bits, records `-4` improvement and moves the target from nearest to
 non-nearest. This checks direction and failure detection, not learning.
 
-The full synthetic report test took `2.95 s` wall with 227,928 KiB maximum RSS.
+The full synthetic report test, including a fresh-output repeat, took `5.88 s`
+wall with 228,240 KiB maximum RSS. The outputs were byte-identical.
 The release binary SHA-256 is
-`e677b3dff0a15cd47cf4be4300cb8ff461d11bcbebeaead7a0974f0ba7c1ea4b`.
+`95890a136a9ad1def49399bd21e2aa98d7007acd339eab4cac4d78d9ed6fe718`.
+The retained synthetic report SHA-256 is
+`85b2538692736cb24f3aa6fbcd443ea8f47352ee999c7e5f173451a9750efe61`
+([report](evidence/synthetic-report.json)).
 Real Claude-330 seed runs, offset values and target-nearest counts remain
 unavailable.
 
@@ -63,10 +69,10 @@ The previous admitted total `103,967.677487699 s` plus this unit's
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib
-  ask_offset_audit::tests`: 3 passed.
+  ask_offset_audit::tests`: 4 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
-  cpu-ask-offset-audit`: 3 passed.
-- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 464 passed,
+  cpu-ask-offset-audit`: 4 passed.
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 465 passed,
   4 ignored.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `cargo build --release --offline --locked -p uor-r4-cpu-train --bin
