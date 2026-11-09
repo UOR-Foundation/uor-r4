@@ -21,13 +21,20 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 ## Measurements
 
 - Five new red-first regressions fail before implementation for their intended reasons: pre-effect unmount leak, rejected stale close without retry, cross-workspace session restoration, missing second truncation notice, and first output lost before mount.
-- After the repair and compatibility corrections, `src/components/TerminalSession.test.tsx` passes **18/18** and TypeScript passes. Complete typed suite count and the remaining acceptance results are recorded below after execution; no previous count is relabeled as the new candidate result.
+- After the repair and compatibility corrections, `src/components/TerminalSession.test.tsx` passes **18/18** and TypeScript passes. The complete typed suite is **450/450 across 52 files**, plain-JS **113/113**, Playwright **45/45**, launcher **6/6**, worker/page/static/runtime checks and **7/7** WASM, all measured after the lifecycle repair.
+- Complete serial default **11/3/21/4/7/13/8** and GUI **13/3/25/4/8/13/9** pass. Lifecycle implementation is `e449ae6270ccfc12939405fe66fe8e83f06cd7a8`; `c67eaa2a5fdd93fc0fa3128f2fc512e685555680`, tree `a43fbb11925acb56c86193c0d562a220a138b71c`, adds the scope/evidence corrections and is the acceptance source. Final report-only head/tree belongs in the PR and durable identity.
+- Interactive loopback at c67 returned `ANSWER:fixture-answer`, exact fixture cwd, `24 133`, exit and closed-input refusal, with 15 initial requests and zero external/raw-TypeScript/runtime errors. Host SHA `af58c744e94c9375749fd56a0adf86ab3f61ae8f53bbd35c2ef2f0f8a0fb3f37`, dist `ba21724f166d6720fdbca7edac3772b31247e6178cc67eea5d22f3aecba2a349`.
+- Combined loopback restored exact transcript/session identity and native edit/save, with 15 initial/12 reopened requests and zero external/raw-TypeScript/runtime errors. Host SHA `19ed991e93b41506bb5f9e24658726398f660137e18430b97dac6bd6c4dfc1d9`, dist `4da4dea2e67461b4295291f16472e8ae0d9975004309461a31273e26bfca7ee0`.
+- Packaged native executable SHA-256 `3b2612c06770f42ae6435e6cef392e3adb94a08bece22dff172c24cf8680c9d2`. Native first output included `NATIVE_FINAL`; `read` returned `ANSWER:fixture-answer`, exact fixture cwd and `24 80`, then exit 0. A distinct second-shell approval was cancelled with no new PTY. App and sidecar were absent after normal quit.
+- Previously missing `58d14a29…` negatives, `interactive-terminal-clean.log` and the agent-67 CHANGES review are preserved in the main checkout and project store. File-based storage cannot retain empty fixture directories; a complete archive was uploaded, downloaded, extracted and compared byte-for-byte. Individual logs also match.
 
 ## Checks run at the head
 
-- `npm test --prefix web/studio -- src/components/TerminalSession.test.tsx`: **18/18 PASS**.
-- `npm run typecheck --prefix web/studio`: PASS.
-- The committed lifecycle repair is `e449ae6270ccfc12939405fe66fe8e83f06cd7a8`. Complete serial default/GUI suites, all frontend/browser checks, real loopback and native acceptance, repository gates and local policy are being rerun at that source. Final report-only head/tree belongs in the PR and durable identity.
+- `CARGO_TARGET_DIR="$PWD/target/cowork-tests" cargo test --manifest-path src-tauri/Cargo.toml` and the same command with `--features gui`: complete default **11/3/21/4/7/13/8**, GUI **13/3/25/4/8/13/9**, PASS serially.
+- `npm test --prefix web/studio`: **450/450 across 52 files PASS**, including terminal **18/18**. TypeScript and Vite build, **113/113** plain-JS, **45/45** Playwright, **6/6** launcher, worker/page/static/runtime, desktop and **7/7** WASM checks PASS.
+- `node web/studio/verify_interactive_terminal.mjs` and `node web/studio/verify_studio_loopback.mjs`: PASS at c67 with exact identities above.
+- `UOR_COWORK_NO_OPEN=1 CARGO_TARGET_DIR="$PWD/local/kimi/cowork-parity-target" bash scripts/studio/open-cowork.sh`: PASS, 21.37 MiB unsigned package, followed by the actual native workflow above.
+- Evidence is `local/kimi/harness-parity/c67eaa2a5fdd93fc0fa3128f2fc512e685555680/`, including `native-acceptance.md` and three native screenshots; combined identity is in the main checkout's `local/kimi/studio-final-acceptance/c67eaa2a5fdd93fc0fa3128f2fc512e685555680/identity.json`. Final gates and policy run at the report-only head. Earlier `6fa2baf377…`, `da6cbaf4…`, `3e201b987…` and `58d14a29…` evidence is intermediate.
 
 ## Skills used
 
@@ -35,8 +42,8 @@ Adversarial review reception, systematic lifecycle root-cause investigation, red
 
 ## Still open
 
-Complete candidate acceptance and native checks, evidence upload/readback, fresh exact-head review, required GitHub checks, protected queue/merge, and fresh-main verification. Full persistent agent runtime, parallel tasks, project memory, scheduling/Dispatch, browser/computer workflows, live R4 API integration, production publication, signed release, and useful-model capability remain unestablished.
+Final report-only head gates/policy, fresh exact-head review, required GitHub checks, protected queue/merge, and fresh-main verification. Full persistent agent runtime, parallel tasks, project memory, scheduling/Dispatch, browser/computer workflows, live R4 API integration, production publication, signed release, and useful-model capability remain unestablished.
 
 ## Plain summary
 
-The terminal now records opened shells before an async cleanup can lose them, keeps failed closes retryable without restoring stale workspaces, and reads output only after the terminal exists. Evidence and current records are being aligned with the repaired source. Protected delivery remains pending; this is not full Cowork parity.
+The terminal records opened shells before an async cleanup can lose them, keeps failed closes retryable without restoring stale workspaces, and reads output only after the terminal exists. The repaired lifecycle has complete browser, loopback and packaged native evidence, with prior negatives preserved. Protected delivery remains pending; this is not full Cowork parity.
