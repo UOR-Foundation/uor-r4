@@ -6,36 +6,113 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 
 - `uor-harness loop claim cpu-training-pilot --lab-topic real-ask-regression`
   refused on the known umbrella-scope false overlap with an unrelated open
-  one-model-end-to-end order. This unit uses a hand-written ORDER and leaves
-  the policy gate to prove its actual changed-path scope.
-- The first push was blocked because this REPORT did not yet exist at the
-  head. The branch remains local; no work or external state was lost.
+  one-model-end-to-end order. That order and this unit share no file; this
+  ORDER is hand-written and the policy gate checks the actual delivery.
+- The first push was blocked because the ORDER landed before its REPORT. The
+  REPORT skeleton was added before the draft PR; no product code existed at
+  that point.
+- A workspace-wide `cargo fmt --all -- <files>` invocation formatted unrelated
+  files in this fresh worktree. Those accidental modifications were identified
+  from the clean worktree's status and reverted exactly; all later formatting
+  used `rustfmt` on the two new files only.
+- Strict `clippy -D warnings` still fails on ten pre-existing warnings in
+  `prompt_reply_rank.rs` and `suffix_arbitration.rs`. The normal scoped Clippy
+  run passes and neither new file adds a warning.
+- The regression proves the stored ask-selection geometry only. It does not
+  measure carry from the question row to `H4`, B2, answer quality or serving.
 
 ## What changed
 
-Implementation is in progress. The ORDER is committed and this REPORT stub
-exists so the branch can satisfy the loop's commit-order policy. No product
-code, measurement or claim has landed yet.
+- Added `ask_offset_regression`, a strict manifest model for multiple
+  checkpoints. It validates the source store/path, archive and checkpoint
+  hashes, unique arm ids and archive references, plain relative paths,
+  relation settings and expected relation counts before work starts.
+- Added `cpu-ask-arm-regression`. It verifies every sealed archive by streaming
+  SHA-256, audits independent checkpoint pairs through a bounded Rayon pool,
+  preserves manifest order, compares every summary field and writes one
+  deterministic report only to a new path. A field mismatch exits `2` after
+  the report; malformed source evidence exits `1`.
+- Added tests for a passing real-shape checkpoint, deterministic repeats,
+  named expected-field mismatch, wrong checkpoint hash, wrong archive hash,
+  missing Hamming data, manifest order, unsafe paths, duplicate ids, duplicate
+  archives and argument refusal.
+- Added the eight real Claude-330 checkpoint cases already measured: B1-a,
+  B1-a0, B2-a and B2-aq at seeds 1 and 2. The manifest pins both store archives
+  and all eight `model.safetensors` / `hamming_read.safetensors` hashes.
+- Added reproduction instructions and a compact report. No checkpoint,
+  tarball, generated model artifact or executable is committed.
+- No float-training, carry, serving, schema, GPU or other-lab file changed.
 
 ## Measurements
 
-None yet.
+The release run verified archives `e2e67a8e…` (89,069,111 bytes) and
+`2e8ec2b3…` (88,944,852 bytes), then audited all eight checkpoint pairs with
+**8 workers** in **0.13 s**. It consumed **199% CPU**, peaked at **195,536 KiB**
+RSS and passed **8/8** arms.
+
+| Arm | Seed 1 / seed 2 target nearest | Reading |
+|---|---:|---|
+| B1-a | 64 / 64 | Found-copy pull trains selection |
+| B1-a0 | 9 / 1 | Task loss alone is near chance |
+| B2-a | 0 / 3 | Scored-row pull does not train question selection |
+| B2-aq | 64 / 64 | Question-row pull trains selection |
+
+- A fresh 8-worker report was byte-identical.
+- A one-worker run matched every report field except `workers`.
+- Changing B2-a seed 2's expected target-nearest count from 3 to 4 produced a
+  named mismatch and exit `2`, while the other seven arms still passed.
+- Manifest SHA-256:
+  `5a5ad55c7759942b82ff5b94d658453433faa22fdf3bd8000c67b6933766b136`.
+- Regression report SHA-256:
+  `cbd9127570e17186aec945b751dac76ab10bd67e437a570e72cf0be402e5f070`.
+- Release executable SHA-256:
+  `1646ccdc6259709e397404ce72de4fd785857072fe67602cc9d0d62009b46815`.
+
+Resources are in the
+[D84 ledger](../../../../labs/cpu-training-pilot-real-ask-regression-2026-11-09/resource-ledger.json).
+The previous admitted total `107,567.677487699 s` plus this unit's 1,800-second
+projection gives `109,367.677487699 s`.
 
 ## Checks run at the head
 
-None yet beyond the pre-push policy run that reported the missing REPORT.
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib
+  ask_offset_regression::tests`: 6 passed.
+- `cargo test --offline --locked -p uor-r4-cpu-train --bin
+  cpu-ask-arm-regression`: 3 passed.
+- `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 478 passed,
+  5 ignored in 48.33 s; the timed process took 48.42 s at 2,057% CPU and
+  peaked at 727,808 KiB.
+- `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
+- `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
+  cpu-ask-arm-regression --lib`: passed with only pre-existing warnings.
+- `cargo build --release --offline --locked -p uor-r4-cpu-train --bin
+  cpu-ask-arm-regression`: passed.
+- Targeted `rustfmt --check` and `git diff --check`: passed.
 
 ## Skills used
 
-No system-provided Codex skill applied. The project's loop and CPU-research
-instructions are being followed directly.
+No system-provided Codex skill applied. The repository's CPU-research, task
+loop and delivery instructions were followed directly.
 
 ## Still open
 
-All ORDER done-when items remain open.
+- Claude-333's carry code and value-rank readings remain in PR #3882 and are
+  intentionally outside this order.
+- Once carry code produces checkpoints, this runner can prove that the ask-table
+  split did not drift; a separate carry evaluator must locate any remaining
+  loss between the question and `H4`.
+- The downloaded checkpoint data stays only in the gitignored local scratch
+  root and is removed after delivery.
 
 ## Plain summary
 
-This branch will turn the already-measured real checkpoint audit into a
-repeatable CPU regression. No model, GPU, serving path or Claude-owned file is
-being changed.
+This unit turns the earlier one-off audit into a reusable test. It first checks
+the exact sealed archives and checkpoint files, then asks the same
+question-key geometry question for four trained arms on two seeds, in
+parallel. It expects the saved answer counts exactly and names the field when
+one changes.
+
+The result confirms that the model can learn the question-key offsets when the
+training pull is placed at the question row. It does not make the selected
+value survive the next four token positions. That carry remains the current
+model blocker for Claude's separate track.
