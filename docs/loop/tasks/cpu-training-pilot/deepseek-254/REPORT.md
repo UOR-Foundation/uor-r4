@@ -44,8 +44,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   repeats and a bounded FIFO refusal.
 - No Claude-owned float-training file, serving schema, export path, GPU state
   or artifact was changed.
-- Size: `pr-check` reports tests 0 files, code 2 files `+937/-109`, docs 10
-  files `+610/-0`, generated 0 files and other 4 files `+1864/-0`.
+- Size at the deepseek-254 head: `pr-check` reported tests 0 files, code 2
+  files `+937/-109`, docs 10 files `+610/-0`, generated 0 files and other 4
+  files `+1864/-0`.
 
 ## Measurements
 
