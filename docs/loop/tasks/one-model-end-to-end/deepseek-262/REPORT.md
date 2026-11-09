@@ -12,6 +12,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   integer crate, including `format.rs`. Clippy reports no warning in this
   unit's new code after filtering the changed files; the remaining
   `format.rs:250` warning predates this work.
+- The first full gate run hit the harness's known transient `Text file busy`
+  race in its fake-`gh` test. The clean rerun passed all 11 gates.
 - The sealed Claude-335 t1 archive downloaded and verified at SHA-256
   `aa6fb485…`, but it contains training checkpoints and no exported
   `UORLUT01`. Producing an artifact from that checkpoint needs the CUDA
@@ -73,6 +75,12 @@ The sealed store archive was read only for the real-artifact probe:
 - Clippy on the library and `fbs-toks`: no warning in the new code; strict
   package-wide `-D warnings` remains blocked by pre-existing lints elsewhere.
 - `git diff --check`: passed.
+- `uor-harness loop pr-check --local`: passed; only the existing claim-scope,
+  FILEMAP and pre-existing harness advisories remain.
+- `uor-harness loop gates --full`: all 11 gates green in 7.97 s on the clean
+  rerun.
+- `uor-harness check`: 360 rules, 0 errors and 326 pre-existing warnings in
+  96.28 s.
 
 ## Skills used
 
