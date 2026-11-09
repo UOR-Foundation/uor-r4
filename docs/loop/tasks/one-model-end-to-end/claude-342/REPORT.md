@@ -30,7 +30,7 @@ A reply "loops" here when its last 24 token ids repeat with a period of 1 to 8 (
 | L-aC `−C` s1 | 4 | 240 | 195 | 3 |
 | L-aC `−C` s2 | 0 | 247 | 225 | 3 |
 
-- **Replies now fall into a loop at once.** The top reply at L-a seed 1 is ` Your friend's name name name name…` on 172 of 256 rows. claude-322 loops too, on 130 and 140 rows, but about 8 tokens later and with far more stops.
+- **Replies now fall into a loop at once.** The top reply at L-a seed 1 is ` Your friend's name name name name…` on 172 of 256 rows. claude-322 loops too, on 130 and 140 rows, but 6 to 8 tokens later and with far more stops.
 - **It is not the role-header failure.** claude-321 lost stopping by writing `\n\nAssistant:` instead of EOS. In L-a and L-aC, 0 of 256 replies carry that string at step 16,384.
 - **It is there by step 8,192** (L-a: 234 and 248 of 256 looping), so more steps at this recipe are not indicated.
 - **Why it happens is not known.** L-a's sealed held-out comparison against claude-322 reads `mixed` (d +3,222 inside the band, +7,795 ahead), so its language prediction is not worse while its served replies loop. That is weak evidence, but it fits a loss that shows only when served. claude-339 did not measure float-to-integer parity on these asking checkpoints. A training cause, such as the pull teaching a copy of the token just written, is an untested alternative.
