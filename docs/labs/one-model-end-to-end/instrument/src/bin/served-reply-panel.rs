@@ -510,10 +510,7 @@ fn run() -> Result<()> {
     if engine == Engine::Integer {
         // Recorded only off the default, so a CPU-port report is byte-for-byte what it was.
         report["settings"]["engine"] = "integer".into();
-        if let Some(sha256) = content_readout_sha256 {
-            report["inputs"]["content_readout_sha256"] = sha256.into();
-            report["settings"]["content_readout"] = "attached".into();
-        }
+        record_content_readout(&mut report, content_readout_sha256.as_deref());
     }
     if teacher_forced {
         let mut teacher_report = teacher_forced_report(teacher_rows)?;
@@ -1096,6 +1093,13 @@ fn attach_content_readout(
     Ok(sha256(&bytes))
 }
 
+fn record_content_readout(report: &mut serde_json::Value, sha256: Option<&str>) {
+    if let Some(sha256) = sha256 {
+        report["inputs"]["content_readout_sha256"] = sha256.into();
+        report["settings"]["content_readout"] = "attached".into();
+    }
+}
+
 /// Refuses what an engine would score silently wrong: the CPU port on an artifact whose Hamming
 /// image asks (a carry needs an ask, so this covers the carry), and the integer engine with the
 /// teacher-forced ranks, which stay on the CPU port.
@@ -1598,6 +1602,36 @@ mod tests {
         ));
         let bytes = serde_json::to_vec(&sidecar).unwrap();
         fs::write(&path, &bytes).unwrap();
+        let wrong_artifact = attach_content_readout(
+            &mut IntegerStackModel::parse(&plain).unwrap(),
+            &"0".repeat(64),
+            &path,
+        )
+        .unwrap_err();
+        assert!(
+            wrong_artifact.contains("sidecar binds artifact"),
+            "{wrong_artifact}"
+        );
+
+        let out_of_vocab_path = path.with_extension("out-of-vocab.json");
+        let mut out_of_vocab = readout.clone();
+        out_of_vocab.rows[0].target = vocab;
+        let out_of_vocab_bytes = serde_json::to_vec(&serde_json::json!({
+            "schema": STACK_CONTENT_READOUT_SCHEMA,
+            "artifact_sha256": sha256(&plain),
+            "readout": out_of_vocab,
+        }))
+        .unwrap();
+        fs::write(&out_of_vocab_path, &out_of_vocab_bytes).unwrap();
+        let wrong_vocab = attach_content_readout(
+            &mut IntegerStackModel::parse(&plain).unwrap(),
+            &sha256(&plain),
+            &out_of_vocab_path,
+        )
+        .unwrap_err();
+        assert!(wrong_vocab.contains("outside vocabulary"), "{wrong_vocab}");
+        fs::remove_file(&out_of_vocab_path).unwrap();
+
         let mut candidate = IntegerStackModel::parse(&plain).unwrap();
         let sidecar_sha256 =
             attach_content_readout(&mut candidate, &sha256(&plain), &path).unwrap();
@@ -1606,6 +1640,21 @@ mod tests {
         let decoded = generate(&mut IntegerDecoder::new(&candidate), &prompt, 1).unwrap();
         assert_eq!(decoded.0, vec![target]);
         assert_ne!(target, native);
+    }
+
+    #[test]
+    fn content_readout_identity_is_recorded_only_when_attached() {
+        let mut report = serde_json::json!({
+            "inputs": {},
+            "settings": {"engine": "integer"},
+        });
+        record_content_readout(&mut report, None);
+        assert!(report["inputs"].get("content_readout_sha256").is_none());
+        assert!(report["settings"].get("content_readout").is_none());
+
+        record_content_readout(&mut report, Some("sidecar-sha256"));
+        assert_eq!(report["inputs"]["content_readout_sha256"], "sidecar-sha256");
+        assert_eq!(report["settings"]["content_readout"], "attached");
     }
 
     /// The panel marks the reply start before the prompt's last token, as `StackChat` does. On the
