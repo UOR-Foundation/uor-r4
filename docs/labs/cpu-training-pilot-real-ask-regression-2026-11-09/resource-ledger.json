@@ -60,9 +60,9 @@
     }
   },
   "storage": {
-    "task_and_ledger_bytes": 27526,
-    "worktree_build_target_bytes": 5555275566,
-    "free_bytes_at_measurement": 152561033216,
+    "task_and_ledger_bytes": 35644,
+    "worktree_build_target_bytes": 5174254438,
+    "free_bytes_at_measurement": 152943087616,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
