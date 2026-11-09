@@ -14,7 +14,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 **The work:**
 1. **A prep sheet:** `docs/harness/prep/one-model-end-to-end-language-carry-2026-11-09.md`. It covers question, arms, readings, bars, the outcome map, instrument checks, steps, cost and stop rule, with a non-author FIT before any pod.
 2. **Arms, on claude-322's (b64L) recipe and TRAIN d3mwcap6:**
-   - **L-aC:** `--hamming-ask 1 --hamming-carry-question 4 --hamming-attract 1`, the pull at the scored rows.
+   - **L-aC:** `--hamming-ask 1 --hamming-carry-question 32 --hamming-attract 1`, the pull at the scored rows. The reach is 32, not 4: the sheet's FIT measured the question and header at up to 19 rows before the reply (the sheet's Arms section).
    - **L-a:** `--hamming-ask 1 --hamming-attract 1`, no carry. This is the no-carry control (L-010).
    - claude-322's sealed b64L-d3mwcap6 serves as the no-ask line.
    - Two seeds per arm, unless the sheet's FIT says otherwise.

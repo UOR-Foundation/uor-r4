@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-339. The run is judged by the served-reply score, under "Yes, pipeline first" (#2028 6709947526).
 
-TEST FITNESS: pending (a fresh non-author review before any pod).
+TEST FITNESS: FIT WITH CHANGES, round 1 (a fresh non-author review, 9 Nov 2026). It had 8 findings, all applied below and listed under "FIT changes" at the end.
 
 **Why.**
 - **Recall is the gap now.** claude-322's (b64L-d3mwcap6) stops on 109 and 86 of 256 replies without collapsing (9 and 6), but 0 rows are complete at both seeds. Its most common stopped reply names the wrong relation and cuts the value short. The reply's first line holds the asked-for value in only 14 and 2 rows.
@@ -36,11 +36,22 @@ At (b64L)'s recipe and pin, on claude-322's TRAIN (D3 + the reply-capped `mw-bal
 
 | Arm | flags beyond the recipe | what it isolates |
 |---|---|---|
-| **L-aC** | `--hamming-ask 1 --hamming-carry-question 4 --hamming-attract 1` | the full mechanism, pulled at the scored rows |
+| **L-aC** | `--hamming-ask 1 --hamming-carry-question 32 --hamming-attract 1` | the full mechanism, pulled at the scored rows |
 | **L-a** | `--hamming-ask 1 --hamming-attract 1` | the no-carry control (L-010): the ask heads and the pull, with no carry |
 | L-aC `−C` | L-aC's checkpoint, served with its carry removed (below) | the carry's share, at the same weights |
 | claude-322 | none (sealed: artifacts `86e51d5e…`, `8838cd10…`; grades `24d69af0…`, `4407e2c2…`) | the no-ask line, at the same recipe and TRAIN |
 
+- **The carry's reach is 32, not claude-335's 4.** The carry adds the last `h` rows' points at the readout read, each weighted by a learned per-token gain that starts at 0.
+  - On the recall task the question sat four rows before the answer. Here it does not.
+  - Measured on m2-fresh256 with the pin's tokenizer (`token-counts`, mode text):
+    - the question (`query_ids`) is 6 to 13 tokens (median 10);
+    - the `\nAssistant:` header after it is 6 tokens;
+    - a reply's lead-in before the value (" Your current job is") is 7 tokens.
+  - So at the last prompt row, the question's key word ("job") is 8 rows back, and the question's first token up to 19 rows back. At the row that emits the value, it is up to 26 rows back.
+  - `h = 4` would carry only the header, so 32 covers the panel's worst case with room to spare. The per-token gains let the model weight the question's words and leave the filler at 0.
+  - **TRAIN's distances are not counted.** The mix's `mw-balp` part comes from the same generator family as the panel; D3's part is not counted. The REPORT names this if the carry reads as unused (row 4c).
+  - **Cost:** claude-335 measured +1% for doubling `h` from 4 to 8. Three more doublings would be about +3% more by that slope; that is an extrapolation, and I-t records the real value.
+  - claude-335's B2-aqC8 (`h = 8`) also passed at both seeds, so a longer reach is not untested.
 - **Seeds 1 and 2** for L-aC and L-a: four runs, one RTX 5090 pod each.
 - **`−C` is a data cut, not a new run.** `jq` removes `carry` from every `hamming_ask` entry of L-aC's snapshot, and `fbs-export --run-config` exports it again. The question table and every other section are unchanged. That is checked by I-cut.
 
@@ -67,8 +78,9 @@ At seeds 1 and 2, on each arm's served `step-016384` (and `−C`), from `served-
 Fixed before any run.
 - **The panel's bar:** at least 104 complete and 52 good pairs, at both seeds. Every model so far has 0.
 - **Recall moved,** the bar this sheet adds: at both seeds, L-aC's first-line asked count is **at least 16 above** both L-a's at that seed and claude-322's at that seed (14 and 2), **and** at least 16 above its own `−C` cut.
-  - 16 rows is about 6% of 256. At claude-322's rates (about 3% of rows), one row's binomial spread over 256 is about 2.7 rows, so 16 is about 6 spreads.
-  - Seed-to-seed spreads have been far larger (claude-321: 25 and 76), which is why both seeds must meet it, against same-seed controls.
+  - 16 rows is about 6% of 256. At claude-322's rates (about 3% of rows), one count's binomial spread over 256 is about 2.7 rows, so the spread of a difference of two counts is about 3.9. 16 is about 4 of those.
+  - Seed-to-seed spreads have been far larger (claude-321: 25 and 76), which is why both seeds must meet it.
+  - **The paired control is `−C`:** the same checkpoint served without its carry, so seed and weights are shared exactly. L-a and claude-322 are guards against a gain that comes from the ask heads or the pull alone. A seed number does not pair separate runs.
 - **Stopping held:** at least 64 EOS stops at each seed (claude-322's lower seed, 86, less about one claude-322 seed spread), and no collapse (one text on 64 or more EOS-stopped rows).
 - **The held-out cost**, a decision rule, not a bar: claude-322's ceiling, a mean pooled d against (b64L-D3) below −58,212.
 
@@ -84,8 +96,8 @@ Read top to bottom; the first row that matches decides.
 | 1 | the panel's bar met at both seeds on L-aC | **The served model answers.** Next: the outcome map's next scale, under its own sheet. |
 | 2 | recall moved and stopping held on L-aC | **The carry puts the asked value into served replies on language.** Next: the panel's complete rows. The REPORT reads why replies hold the value but are not complete (the wrong relation, the value cut short, no EOS), and the next lever follows that. |
 | 3 | recall moved, stopping not held | **The carry carries the value, at the cost of stopping.** Next: a decision review between a stronger EOS share in TRAIN and a decode-time stop, with this arm as the base. |
-| 4u | recall not moved, and L-aC's first-line count at `step-016384` is above its count at `step-012288` by at least 8 at both seeds | **Not learned yet** (B2-aC's shape). Next: L-aC alone at 32,768 steps, two seeds, under its own sheet and cost. |
-| 4c | recall not moved, and L-aC's `−C` cut reads within 4 of L-aC itself at both seeds | **The carry is not used on language at this recipe.** Next: a decision review between a question-row placement on chat windows (the `both` placement that passed at both seeds) and a carry reach longer than 4. |
+| 4c | recall not moved, and L-aC's `−C` cut reads within 4 of L-aC itself at both seeds | **The carry is not used on language at this recipe.** Next: a decision review between a question-row placement on chat windows (the `both` placement that passed at both seeds) and TRAIN's distance count (above), which says whether 32 rows reach the question in training. |
+| 4u | recall not moved, and at both seeds L-aC's rise in first-line count from `step-012288` to `step-016384` is at least 8 above L-a's rise at the same seed | **Not learned yet** (B2-aC's shape), and the rise is the carry's, not the shared recipe's. Next: L-aC alone at 32,768 steps, two seeds, under its own sheet and cost. That run is a different LR schedule: `--lr-end 0` decays linearly over the whole run, so the step-16,384 point of a 32,768-step run is at half the learning rate, not at its end. That sheet reads its trend against its own steps, not this run's. |
 | 4 | recall not moved, otherwise | **No recall gain from the ask heads and the carry at 16,384 steps,** for this configuration only. Next: a decision review in the REPORT, reading the trend, the `−C` cut and the pull distance together. |
 
 A seed that is NOT_RUN reruns once, sealing to `runs-2/` (L-002).
@@ -94,12 +106,20 @@ A seed that is NOT_RUN reruns once, sealing to `runs-2/` (L-002).
 
 Registered before any pod. claude-322's, with these changes:
 - **I-0, I-p, I-3, I-1, I-m, I-f, I-t, I-5, I-4, the watcher:** as claude-322's, at the new pin, TRAIN unchanged (417,421 windows).
-  - Each `config.json` must name `hamming_ask` true, `hamming_attract` 1, and `hamming_carry_question` 4 (L-aC) or none (L-a).
-  - The watcher's notice time is 28,800 s (I-t's expected doubling, below). It stops nothing (D67).
+  - Each `config.json` must name `hamming_ask` true, `hamming_attract` 1, and `hamming_carry_question` 32 (L-aC) or none (L-a).
+  - **The watcher's notice time** is set on each pod from I-t's measured step time: 1.5 × (step time × 16,384), and never under 28,800 s. It stops nothing (D67).
+- **I-5a, the asks in the no-memory scoring:** `--score-rows` serves the asks it was trained with. Checked in code at the pin:
+  - `score_rows` calls `load_reads` (`in_space_long.rs:8912`);
+  - `load_reads` restores `HammingReads::load`, which loads each read's `d{depth}.ask` (`flock_read_hamming.rs:1417`) and the readout read's `d{depth}.carry` with `carry_rows`.
+  - On the pod, I-5 also records `carry_rows` from `step-016384`'s saved tensors. It must be 32 (L-aC) or absent (L-a).
 - **I-pull, from the smoke:** `pull.jsonl` exists after the smoke and its mean copy rows per step is above 0. A pull that never runs is an instrument NOT_RUN.
 - **I-xg, the GPU export control, once on the first pod before its full run:** `fbs-snapshot` of claude-322's sealed seed-1 `step-016384` (fetched from the store), then `fbs-export --run-config --raw-gates --raw-transition` on the laptop, must give claude-322's artifact `86e51d5e…`. This shows that the export path this run must use (below) serves what claude-322's did.
-- **I-xa, the ask export, on the smoke's `step-000064`:** its snapshot has a `hamming_ask` entry per read; the readout's entry has `carry.rows` 4 (L-aC) or none (L-a); `fbs-export` accepts it; and `served-reply-panel --engine integer` scores it while the default engine refuses it by name.
-- **I-cut:** the `−C` artifact differs from L-aC's in the carry section only. The check is `read_hamming_uorlut01`'s reads on both: same question tables, carry `None` on the cut.
+- **I-xa, the ask export, on the smoke's `step-000064`:** its snapshot has a `hamming_ask` entry per read; the readout's entry has `carry.rows` 32 (L-aC) or none (L-a); `fbs-export` accepts it; and `served-reply-panel --engine integer` scores it while the default engine refuses it by name.
+- **I-cut:** the `−C` artifact differs from L-aC's in the carry sections only.
+  - **The sections:** every artifact section other than `hamming.d{depth}.carry` is byte-equal between the two, compared section by section. `read_hamming_uorlut01` on both gives the same question tables, and carry `None` on the cut.
+  - **The snapshots:** every key other than the `carry` field of each `hamming_ask` entry is unchanged (`jq` equality after deleting that field from both).
+  - **Provenance, recorded beside the cut:** the input snapshot's sha256, the `jq` filter's text and sha256, and the cut snapshot's and cut artifact's sha256.
+  - **Where the carry comes from:** `fbs-export` takes the carry from the snapshot's `hamming_ask` entries (`quantize_hamming_ask`, `fbs-export.rs:219`). It does not compare it with the run config's `hamming_carry_question`, which still says 32 for the cut. So the snapshot, not the config, is what the cut changes, and I-cut checks the artifact.
 - **I-c, on the laptop before any reading:** claude-322's two artifacts score, under `--engine integer`, to claude-322's sealed reports without the timing fields (claude-338's parity, repeated at the pin).
 
 **Why the export moves to the pod:** `cpu-fbs-export` (DeepSeek's CPU exporter, which claude-322 served through) does not read ask heads. Exporting an asking checkpoint through it would drop them silently, the fault claude-338 closed in the scorer. `fbs-snapshot` reads the routes through the model's CUDA projection, so it runs on the pod. `fbs-export` (CPU) then runs on the laptop.
@@ -125,14 +145,17 @@ Registered before any pod. claude-322's, with these changes:
 
 ## Minimum test power
 
-- **The first-line count** is the deciding reading. claude-322's 14 and 2 set the floor, and claude-321's 25 / 76 the seed spread. The bar compares same-seed arms at 16 rows, and needs both seeds.
-- **The trend's 8 rows** (row 4u) is half the bar, over 4,096 steps.
+- **The first-line count** is the deciding reading. claude-322's 14 and 2 set the floor, and claude-321's 25 / 76 the seed spread. The bar is 16 rows, about 4 spreads of a difference (3.9), against the paired `−C` cut and both guards, at both seeds.
+- **The trend's 8 rows** (row 4u) is half the bar, over 4,096 steps, on the difference of two rises (L-aC's against L-a's).
 - **Stopping and collapse** as claude-322's: within 32 of the floor is "near".
 - **The held-out pair** uses `scale-probe pair`'s band, as before.
 
 ## Cost
 
-- **Step time:** claude-335 measured the ask heads at about half the no-read speed (43,852 against 89,873 context tokens a second), and the carry at about 3% more. So each run should take about 2 × claude-322's 8,046 s, about 16,100 s or 4.5 h. I-t records the real value.
+- **Step time, an estimate:** claude-335 measured the ask heads at about half the no-read speed (43,852 against 89,873 context tokens a second), and the carry at about 3% more at `h = 4`.
+  - That was on the recall task's own baseline, not on (b64L)'s 4-read language recipe. So the factor of 2 is carried over, not measured here.
+  - At that factor, each run takes about 2 × claude-322's 8,046 s, about 16,100 s or 4.5 h, plus `h = 32`'s few percent.
+  - I-t records the real value on each pod, and the watcher's notice is set from it.
 - **Four pods at $0.563–0.70/h × about 4.9 h** (with setup and scoring): **$11 to $14.** The budget notice, not a cap, is 4 × 6 h × $0.70 = $16.80.
 - The snapshots add three `fbs-snapshot` runs per pod, a few minutes each.
 
@@ -152,6 +175,18 @@ claude-322's, with:
 5. **The first-line count decides** rows 2 to 4. A new recall bar is added; the stopping floor is lowered to 64 against this TRAIN's own 86.
 6. **The checkpoint trend and the `−C` cut** are new readings.
 7. **Four pods,** and a cost about four times claude-322's.
+8. **The carry's reach** is 32, from the panel's measured question and header lengths.
+
+## FIT changes (round 1, all applied)
+
+1. **The carry's reach:** measured on the panel; `h` raised from 4 to 32; TRAIN's distances named as not counted; row 4c reworded.
+2. **Row 4u** compares L-aC's rise with L-a's rise, and row 4c now comes before it.
+3. **I-5a added:** the no-memory scoring loads the asks and the carry, checked in code, and `carry_rows` is recorded on the pod.
+4. **I-cut** compares every non-carry section byte for byte and every non-carry snapshot key, records the cut's provenance, and names that `fbs-export` takes the carry from the snapshot.
+5. **Row 4u's next unit** names the different LR schedule of a 32,768-step run.
+6. **The "same-seed" justification is dropped:** `−C` is the paired control, and L-a and claude-322 are guards.
+7. **The spread of a difference** is about 3.9, so 16 is about 4 spreads, not 6.
+8. **The step-time factor** is called an estimate, and the watcher's notice is set from I-t.
 
 ## Pre-run review
 
