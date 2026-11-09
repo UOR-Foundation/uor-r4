@@ -20,18 +20,25 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   run passes and neither new file adds a warning.
 - The regression proves the stored ask-selection geometry only. It does not
   measure carry from the question row to `H4`, B2, answer quality or serving.
+- The first fresh exact-head review returned CHANGES. The reproduction root
+  disagreed with `uor-store`'s path-preserving download, duplicate checkpoint
+  identities were accepted, source failures were classified as regressions,
+  the notebook overgeneralized B2-a, and the ledger omitted temporary inputs.
+  The [repair ORDER](../deepseek-248/ORDER.md) fixes all five.
 
 ## What changed
 
 - Added `ask_offset_regression`, a strict manifest model for multiple
   checkpoints. It validates the source store/path, archive and checkpoint
-  hashes, unique arm ids and archive references, plain relative paths,
-  relation settings and expected relation counts before work starts.
+  hashes, unique arm ids, archive references, checkpoint paths and checkpoint
+  hash pairs, plus plain relative paths, relation settings and expected
+  relation counts before work starts.
 - Added `cpu-ask-arm-regression`. It verifies every sealed archive by streaming
   SHA-256, audits independent checkpoint pairs through a bounded Rayon pool,
   preserves manifest order, compares every summary field and writes one
   deterministic report only to a new path. A field mismatch exits `2` after
-  the report; malformed source evidence exits `1`.
+  the report; malformed source evidence is retained in the report and exits
+  `1`.
 - Added tests for a passing real-shape checkpoint, deterministic repeats,
   named expected-field mismatch, wrong checkpoint hash, wrong archive hash,
   missing Hamming data, manifest order, unsafe paths, duplicate ids, duplicate
@@ -39,7 +46,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 - Added the eight real Claude-330 checkpoint cases already measured: B1-a,
   B1-a0, B2-a and B2-aq at seeds 1 and 2. The manifest pins both store archives
   and all eight `model.safetensors` / `hamming_read.safetensors` hashes.
-- Added reproduction instructions and a compact report. No checkpoint,
+- Added reproduction instructions whose root agrees with `uor-store`'s
+  full-path download layout, and a compact report. No checkpoint,
   tarball, generated model artifact or executable is committed.
 - No float-training, carry, serving, schema, GPU or other-lab file changed.
 - Size: `pr-check` reports 11 changed paths: code 4 files `+1,011/-0`,
@@ -50,7 +58,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 
 The release run verified archives `e2e67a8e…` (89,069,111 bytes) and
 `2e8ec2b3…` (88,944,852 bytes), then audited all eight checkpoint pairs with
-**8 workers** in **0.13 s**. It consumed **199% CPU**, peaked at **195,536 KiB**
+**8 workers** in **0.10 s**. It consumed **221% CPU**, peaked at **183,260 KiB**
 RSS and passed **8/8** arms.
 
 | Arm | Seed 1 / seed 2 target nearest | Reading |
@@ -64,12 +72,14 @@ RSS and passed **8/8** arms.
 - A one-worker run matched every report field except `workers`.
 - Changing B2-a seed 2's expected target-nearest count from 3 to 4 produced a
   named mismatch and exit `2`, while the other seven arms still passed.
+- Replacing one checkpoint path with a missing path produced one source
+  failure, zero regression failures and exit `1`.
 - Manifest SHA-256:
   `5a5ad55c7759942b82ff5b94d658453433faa22fdf3bd8000c67b6933766b136`.
 - Regression report SHA-256:
-  `cbd9127570e17186aec945b751dac76ab10bd67e437a570e72cf0be402e5f070`.
+  `3f497f58059c152954599433b8ccc860a89e7bb74e327b3472873b9be4dbbc9b`.
 - Release executable SHA-256:
-  `1646ccdc6259709e397404ce72de4fd785857072fe67602cc9d0d62009b46815`.
+  `2b53623d48b15ce9b8fa0ab4f0bee4863a6d9364ca22914ce9fe942b28bb92b6`.
 
 Resources are in the
 [D84 ledger](../../../../labs/cpu-training-pilot-real-ask-regression-2026-11-09/resource-ledger.json).
@@ -83,8 +93,8 @@ projection gives `109,367.677487699 s`.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-ask-arm-regression`: 3 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib`: 478 passed,
-  5 ignored in 45.29 s; the timed process took 45.38 s at 2,309% CPU and
-  peaked at 757,424 KiB.
+  5 ignored in 42.23 s; the timed process took 42.32 s at 2,408% CPU and
+  peaked at 692,448 KiB.
 - `cargo check --offline --locked -p uor-r4-cpu-train --all-targets`: passed.
 - `cargo clippy --offline --locked --no-deps -p uor-r4-cpu-train --bin
   cpu-ask-arm-regression --lib`: passed with only pre-existing warnings.
@@ -103,8 +113,8 @@ loop and delivery instructions were followed directly.
 
 ## Still open
 
-- Claude-333's carry code and value-rank readings remain in PR #3882 and are
-  intentionally outside this order.
+- Claude-333 Unit A merged as `d7cc2b930`. Its CUDA checks, Unit B readings and
+  carry run remain in the next Claude unit and are outside this order.
 - Once carry code produces checkpoints, this runner can prove that the ask-table
   split did not drift; a separate carry evaluator must locate any remaining
   loss between the question and `H4`.
@@ -119,7 +129,7 @@ question-key geometry question for four trained arms on two seeds, in
 parallel. It expects the saved answer counts exactly and names the field when
 one changes.
 
-The result confirms that the model can learn the question-key offsets when the
-training pull is placed at the question row. It does not make the selected
-value survive the next four token positions. That carry remains the current
-model blocker for Claude's separate track.
+The result reproduces B2-aq's question-row selection and B2-a's scored-row
+failure, while preserving B1-a's positive found-copy result. It does not make
+the selected value survive the next four token positions. That carry remains
+the current model blocker for Claude's separate track.

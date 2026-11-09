@@ -147,6 +147,17 @@ impl AskArmRegressionReport {
     pub fn failures(&self) -> usize {
         self.arms.iter().filter(|arm| !arm.passed).count()
     }
+
+    pub fn source_failures(&self) -> usize {
+        self.arms.iter().filter(|arm| arm.error.is_some()).count()
+    }
+
+    pub fn regression_failures(&self) -> usize {
+        self.arms
+            .iter()
+            .filter(|arm| arm.error.is_none() && !arm.mismatches.is_empty())
+            .count()
+    }
 }
 
 pub fn parse_manifest(bytes: &[u8]) -> Result<AskArmRegressionManifest, String> {
@@ -284,6 +295,8 @@ fn validate_manifest(manifest: &AskArmRegressionManifest) -> Result<(), String> 
         }
     }
     let mut ids = BTreeSet::new();
+    let mut checkpoint_paths = BTreeSet::new();
+    let mut checkpoint_pairs = BTreeSet::new();
     for arm in &manifest.arms {
         validate_id(&arm.id)?;
         if arm.label.trim().is_empty() {
@@ -298,6 +311,18 @@ fn validate_manifest(manifest: &AskArmRegressionManifest) -> Result<(), String> 
         validate_relative_path(&arm.checkpoint, "checkpoint path")?;
         validate_sha256(&arm.model_sha256, "model")?;
         validate_sha256(&arm.hamming_sha256, "hamming")?;
+        if !checkpoint_paths.insert(arm.checkpoint.as_str()) {
+            return Err(format!(
+                "checkpoint path {:?} is duplicated",
+                arm.checkpoint
+            ));
+        }
+        if !checkpoint_pairs.insert((arm.model_sha256.as_str(), arm.hamming_sha256.as_str())) {
+            return Err(format!(
+                "arm {:?} repeats checkpoint hashes model={} hamming={}",
+                arm.id, arm.model_sha256, arm.hamming_sha256
+            ));
+        }
         if !archive_paths.contains(arm.archive.as_str()) {
             return Err(format!(
                 "arm {:?} names unlisted archive {:?}",
@@ -595,8 +620,17 @@ mod tests {
     }
 
     fn checkpoint(root: &Path) -> (String, String, AskArmSummary) {
+        checkpoint_named(root, "checkpoint", 1.0)
+    }
+
+    fn checkpoint_named(
+        root: &Path,
+        name: &str,
+        unused_token_value: f32,
+    ) -> (String, String, AskArmSummary) {
         let (vocab, width, heads) = (64usize, 8usize, 2usize);
         let mut table = vec![1.0f32; vocab * width];
+        table[..width].fill(unused_token_value);
         table[18 * width..19 * width].fill(-1.0);
         let model = file(vec![(
             "embedding.weight",
@@ -619,7 +653,7 @@ mod tests {
             ),
             ("d2.ask", Dtype::F32, vec![vocab, width], f32_bytes(ask)),
         ]);
-        let dir = root.join("checkpoint");
+        let dir = root.join(name);
         std::fs::create_dir(&dir).unwrap();
         std::fs::write(dir.join("model.safetensors"), &model).unwrap();
         std::fs::write(dir.join("hamming_read.safetensors"), &hamming).unwrap();
@@ -689,6 +723,8 @@ mod tests {
         let report = run_ask_arm_regression(&dir.0, &bytes, 2, TEST_EXECUTABLE).unwrap();
         assert!(!report.passed);
         assert_eq!(report.failures(), 1);
+        assert_eq!(report.source_failures(), 0);
+        assert_eq!(report.regression_failures(), 1);
         assert!(report.arms[0]
             .mismatches
             .iter()
@@ -702,6 +738,8 @@ mod tests {
         let bytes = manifest(&dir.0, "0".repeat(64), hamming, summary);
         let report = run_ask_arm_regression(&dir.0, &bytes, 1, TEST_EXECUTABLE).unwrap();
         assert!(!report.passed);
+        assert_eq!(report.source_failures(), 1);
+        assert_eq!(report.regression_failures(), 0);
         assert!(report.arms[0]
             .error
             .as_deref()
@@ -713,10 +751,16 @@ mod tests {
         let dir = TestDir::new("multiple");
         let (model, hamming, summary) = checkpoint(&dir.0);
         let bytes = manifest(&dir.0, model, hamming, summary);
+        let (second_model, second_hamming, second_summary) =
+            checkpoint_named(&dir.0, "checkpoint-2", 2.0);
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let mut second = value["arms"][0].clone();
         second["id"] = serde_json::json!("arm-seed-2");
         second["seed"] = serde_json::json!(2);
+        second["checkpoint"] = serde_json::json!("checkpoint-2");
+        second["model_sha256"] = serde_json::json!(second_model);
+        second["hamming_sha256"] = serde_json::json!(second_hamming);
+        second["expected"] = serde_json::to_value(second_summary).unwrap();
         value["arms"] = serde_json::json!([value["arms"][0].clone(), second]);
         let report = run_ask_arm_regression(
             &dir.0,
@@ -736,6 +780,7 @@ mod tests {
         );
 
         std::fs::remove_file(dir.0.join("checkpoint/hamming_read.safetensors")).unwrap();
+        std::fs::remove_file(dir.0.join("checkpoint-2/hamming_read.safetensors")).unwrap();
         let report = run_ask_arm_regression(
             &dir.0,
             &serde_json::to_vec(&value).unwrap(),
@@ -744,6 +789,8 @@ mod tests {
         )
         .unwrap();
         assert!(!report.passed);
+        assert_eq!(report.source_failures(), 2);
+        assert_eq!(report.regression_failures(), 0);
         assert!(report.arms.iter().all(|arm| {
             arm.error
                 .as_deref()
@@ -796,6 +843,23 @@ mod tests {
         assert!(parse_manifest(&serde_json::to_vec(&value).unwrap())
             .unwrap_err()
             .contains("is duplicated"));
+
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let mut second = value["arms"][0].clone();
+        second["id"] = serde_json::json!("arm-seed-2");
+        value["arms"] = serde_json::json!([value["arms"][0].clone(), second]);
+        assert!(parse_manifest(&serde_json::to_vec(&value).unwrap())
+            .unwrap_err()
+            .contains("checkpoint path"));
+
+        let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let mut second = value["arms"][0].clone();
+        second["id"] = serde_json::json!("arm-seed-2");
+        second["checkpoint"] = serde_json::json!("checkpoint-2");
+        value["arms"] = serde_json::json!([value["arms"][0].clone(), second]);
+        assert!(parse_manifest(&serde_json::to_vec(&value).unwrap())
+            .unwrap_err()
+            .contains("repeats checkpoint hashes"));
 
         let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         value["archives"] =

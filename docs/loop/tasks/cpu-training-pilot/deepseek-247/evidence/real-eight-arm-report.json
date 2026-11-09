@@ -1,7 +1,7 @@
 {
   "schema": "uor-r4.cpu-ask-arm-regression/1",
   "manifest_sha256": "5a5ad55c7759942b82ff5b94d658453433faa22fdf3bd8000c67b6933766b136",
-  "executable_sha256": "1646ccdc6259709e397404ce72de4fd785857072fe67602cc9d0d62009b46815",
+  "executable_sha256": "2b53623d48b15ce9b8fa0ab4f0bee4863a6d9364ca22914ce9fe942b28bb92b6",
   "source_store": "caseyallard/uor-r4-store",
   "remote_root": "results/claude/one-model-end-to-end-question-keyed-read-2026-11-08/runs-2",
   "settings": {

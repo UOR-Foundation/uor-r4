@@ -12,20 +12,24 @@ The repository does not carry a checkpoint or tarball.
 
 ## Reproduce
 
-Download the sealed run into a scratch root:
+Download the sealed run into a scratch root. `uor-store` preserves the
+complete remote path, so the extracted run lives below
+`SCRATCH/results/claude/.../runs-2`:
 
 ```sh
+SCRATCH=ROOT
+RUN_ROOT="$SCRATCH/results/claude/one-model-end-to-end-question-keyed-read-2026-11-08/runs-2"
 scripts/pod/uor-store get \
   results/claude/one-model-end-to-end-question-keyed-read-2026-11-08/runs-2/ \
-  ROOT
+  "$SCRATCH"
 ```
 
 Extract each seed archive without replacing an existing directory:
 
 ```sh
-mkdir ROOT/s1/extracted ROOT/s2/extracted
-tar -xzf ROOT/s1/question-keyed-read-s1.tar.gz -C ROOT/s1/extracted
-tar -xzf ROOT/s2/question-keyed-read-s2.tar.gz -C ROOT/s2/extracted
+mkdir "$RUN_ROOT/s1/extracted" "$RUN_ROOT/s2/extracted"
+tar -xzf "$RUN_ROOT/s1/question-keyed-read-s1.tar.gz" -C "$RUN_ROOT/s1/extracted"
+tar -xzf "$RUN_ROOT/s2/question-keyed-read-s2.tar.gz" -C "$RUN_ROOT/s2/extracted"
 ```
 
 Build and run:
@@ -35,15 +39,16 @@ cargo build --release --offline --locked -p uor-r4-cpu-train \
   --bin cpu-ask-arm-regression
 target/release/cpu-ask-arm-regression \
   --manifest docs/loop/tasks/cpu-training-pilot/deepseek-247/real-checkpoint-regression.json \
-  --root ROOT \
+  --root "$RUN_ROOT" \
   --workers 8 \
   --out NEW-REPORT.json
 ```
 
 The runner verifies the archive hashes before auditing any checkpoint. It
 checks all checkpoint hashes and summaries in parallel and exits `2` after
-writing the report if any expected field differs. Existing output paths are
-refused.
+writing the report if any observed summary differs from its expectation. A
+missing archive, unreadable checkpoint or checkpoint-hash mismatch is written
+as a source failure and exits `1`. Existing output paths are refused.
 
 ## What the readings mean
 

@@ -15,6 +15,8 @@ type Result<T> = std::result::Result<T, String>;
 fn main() {
     match run() {
         Ok(report) => {
+            let source_failures = report.source_failures();
+            let regression_failures = report.regression_failures();
             println!(
                 "{}",
                 serde_json::json!({
@@ -22,11 +24,16 @@ fn main() {
                     "passed": report.passed,
                     "arms": report.arms.len(),
                     "failures": report.failures(),
+                    "source_failures": source_failures,
+                    "regression_failures": regression_failures,
                     "workers": report.workers,
                     "manifest_sha256": report.manifest_sha256,
                 })
             );
-            if !report.passed {
+            if source_failures > 0 {
+                std::process::exit(1);
+            }
+            if regression_failures > 0 {
                 std::process::exit(2);
             }
         }
