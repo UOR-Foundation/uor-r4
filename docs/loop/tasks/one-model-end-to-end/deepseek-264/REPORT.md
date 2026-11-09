@@ -41,6 +41,10 @@ Added `real-artifact-audit` to the one-model instrument. It:
 
 The command is reusable on the remaining 16,384 cells without code changes.
 
+At the code head `8f376d24c`, the size line was **2 code files +979/−0, 3 docs files
++202/−0, 0 tests, 0 generated, 2 other files +112/−0**. The roadmap item has no numeric
+line estimate, so a size ratio is unavailable.
+
 ## Measurements
 
 All three seed-1 L-aC artifact pairs were independently downloaded from the store and
