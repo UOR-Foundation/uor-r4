@@ -7,7 +7,7 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 - Fresh reviewer agent-59 returned CHANGES: historical GUI evidence was not consistently distinguished from current source checks; reopen asserted substrings rather than exact session/transcript identity; loopback evidence lacked source/host/dist identity; renamed/default roots could serve source TypeScript and invalid `--studio-root` values silently fell back.
 - The renamed-root TypeScript regression returned **200** before repair and **404** afterward. Valid roots still work; missing, flag-like, nonexistent and non-directory explicit roots fail rather than silently falling back.
 - The first complete default run at `759da8585` failed `remote_auth_timeout_and_size_caps_fail_explicitly`; later descendant fixtures also lacked their expected PID files. A full typed run under competing builds timed out once in `studioNativeTheme.test.ts` without an assertion mismatch. These were measurement/fixture failures, not model or application negatives.
-- The historical package executable `c8ddeb4039c1721139c990a06c3d188620596cdbb3cdd654308fa3074f53c8c6` belongs only to code `42bc46f81a5f7c3ccc7508866162bdbd7a42d89c`. Later `src-tauri/src/lib.rs` differences in this predecessor are test-only; no fresh packaged GUI acceptance is claimed for this unit.
+- The historical package executable `c8ddeb4039c1721139c990a06c3d188620596cdbb3cdd654308fa3074f53c8c6` belongs only to code `42bc46f81a5f7c3ccc7508866162bdbd7a42d89c`. The loopback static-source guard and canonical-root validation are later production host changes and are not covered by that historical packaged acceptance; no fresh packaged GUI acceptance is claimed for this unit.
 
 ## What changed
 
@@ -19,10 +19,12 @@ Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-t
 
 ## Measurements
 
-- Complete default Rust suites: **9/3/21/7/13/8** (library/main/controls/MCP/review/sidecar). Complete GUI suites: **11/3/25/8/13/9**. All pass after the fixture repairs.
+- At the earlier implementation head, default Rust suites were **9/3/21/7/13/8** and GUI suites **11/3/25/8/13/9** (library/main/controls/MCP/review/sidecar). The later merged counts are **11/3/21/7/13/8** and **13/3/25/8/13/9**, recorded in `../kimi-77/REPORT.md`. All passed after the fixture repairs.
 - Frontend: **436/436** tests across **49 files**, **113/113** plain-JS tests, typecheck and build PASS. `test_typed_runtime.py`: **4/4**; `test_tauri_runtime.py`: **7/7**. The load-related visual timeout passed in the subsequent complete run without changing its timeout or assertions.
 - Fresh real loopback at `2026-11-09T04:29:03.354Z`: 15 initial/12 reopened requests, zero external/raw-TypeScript/runtime errors, exact native edit/save bytes, non-timeout Git inspection, one approved `pwd`, separately cancelled reuse, page self-enable refusal, `exactTranscript: true`, and `sessionIdMatches: true`.
-- Evidence: `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/759da85854b76d8eacdd64719824461ca6a9e7c2/{identity.json,loopback-acceptance.json,loopback-acceptance.png}`. Its status names the then-uncommitted fixture sources; final exact-head evidence and review are still required after those sources are committed.
+- `759da8585` is retained as dirty-tree evidence at `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/759da85854b76d8eacdd64719824461ca6a9e7c2/{identity.json,loopback-acceptance.json,loopback-acceptance.png}`.
+- `7e3afedb7` is clean exact-head host/dist evidence at `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/7e3afedb753deb9ea2128b4ae3d39624c6b0bad2/{identity.json,loopback-acceptance.json,loopback-acceptance.png}`.
+- `af86d7ca0` was a docs-only intermediate head before the mixed-case repair, not the final delivery head. Current final-head acceptance and review are recorded in `../kimi-78/REPORT.md`.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS after formatting.
 
 ## Deferred minors

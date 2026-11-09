@@ -2623,7 +2623,8 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
-    if rel.ends_with(".ts") || rel.ends_with(".tsx") || rel.ends_with(".map") {
+    let extension = rel.to_ascii_lowercase();
+    if extension.ends_with(".ts") || extension.ends_with(".tsx") || extension.ends_with(".map") {
         return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
     }
     let canonical_candidate = match fs::canonicalize(&candidate) {

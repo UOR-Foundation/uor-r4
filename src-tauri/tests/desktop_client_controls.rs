@@ -1574,7 +1574,16 @@ fn every_static_root_refuses_source_typescript_and_source_maps() {
         .0
     };
     assert_eq!(serve(&mut backend, &root, "/assets/index.js"), 200);
-    for path in ["/src/main.ts", "/src/main.tsx", "/assets/index.js.map"] {
+    for path in [
+        "/src/main.ts",
+        "/src/main.tsx",
+        "/assets/index.js.map",
+        "/src/main.TS",
+        "/src/main.Ts",
+        "/src/main.TSX",
+        "/src/main.Tsx",
+        "/assets/index.js.MAP",
+    ] {
         assert_eq!(serve(&mut backend, &root, path), 404, "served {path}");
     }
     let source_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1584,7 +1593,17 @@ fn every_static_root_refuses_source_typescript_and_source_maps() {
     backend
         .native_grant_folder(&source_root)
         .expect("grant default source root read-only");
-    assert_eq!(serve(&mut backend, &source_root, "/src/main.ts"), 404);
+    for path in [
+        "/src/main.ts",
+        "/src/main.TS",
+        "/src/components/StudioApp.TSX",
+    ] {
+        assert_eq!(
+            serve(&mut backend, &source_root, path),
+            404,
+            "served {path}"
+        );
+    }
     let _ = fs::remove_dir_all(&root);
 }
 

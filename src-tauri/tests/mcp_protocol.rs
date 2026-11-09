@@ -194,17 +194,15 @@ fn write_json(stream: &mut TcpStream, status: u16, content_type: &str, body: &[u
         body.to_vec()
     };
     let head = format!("HTTP/1.1 {status} OK\r\nContent-Type: {content_type}\r\nMcp-Session-Id: session-test\r\nAccess-Control-Allow-Origin: http://127.0.0.1:8765\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
-    stream
-        .write_all(head.as_bytes())
-        .expect("write response head");
-    stream.write_all(&body).expect("write response body");
+    let _ = stream.write_all(head.as_bytes());
+    let _ = stream.write_all(&body);
 }
 
 impl Drop for HttpFixture {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+            thread.join().expect("HTTP fixture thread panicked");
         }
     }
 }
@@ -312,6 +310,17 @@ fn remote_auth_timeout_and_size_caps_fail_explicitly() {
         .call_tool("read_file", &json!({}))
         .expect_err("hanging tool call must time out");
     assert!(error.contains("timed out"), "{error}");
+    let requests = slow.requests.lock().expect("read hanging-call requests");
+    let hanging = requests
+        .iter()
+        .find(|request| request.body["method"] == "tools/call")
+        .expect("hanging tools/call did not reach the fixture");
+    assert_eq!(hanging.body["params"]["name"], "read_file");
+    assert_eq!(
+        hanging.headers.get("authorization").map(String::as_str),
+        Some("Bearer secret")
+    );
+    drop(requests);
     drop(slow);
 
     let large = HttpFixture::start(FixtureOptions {

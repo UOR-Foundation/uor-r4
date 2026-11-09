@@ -242,6 +242,9 @@ mod tests {
         let root = std::env::temp_dir().join(format!("uor-studio-root-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("create non-dist root");
+        let file = root.join("not-a-directory");
+        std::fs::write(&file, "not a directory").expect("create regular-file root");
+        assert!(studio_root(&["--studio-root".to_string(), file.display().to_string()]).is_err());
         let args = vec!["--studio-root".to_string(), root.display().to_string()];
         assert_eq!(
             studio_root(&args).expect("non-dist root"),

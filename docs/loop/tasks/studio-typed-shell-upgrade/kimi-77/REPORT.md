@@ -7,7 +7,7 @@ Lab: kimi. Item: studio-typed-shell-upgrade (#3500), predecessor PR #3879. Order
 - The complete default suite at `759da8585` passed library 9, CLI 3 and controls 21, then failed the remote MCP timeout/size test with a short-timeout transport error and a broken-pipe fixture write. Subsequent full runs exposed unexpected 400/401 classifications and descendant PID-file startup races.
 - A focused MCP run initially passed after delaying only `tools/call`; that was not accepted as proof while the full suite exposed incomplete accepted-socket reads. Accepted fixture sockets now explicitly block under their one-second bound, and partial frames are refused before credential evaluation.
 - Two 25 ms descendant fixtures could expire before creating the PID file. The fixtures now synchronize readiness through a pipe and use a one-second startup-plus-timeout bound. The timeout and no-surviving-descendant assertions remain intact.
-- The fresh loopback evidence names the still-uncommitted fixture sources in its source status; it is not relabeled as clean-head evidence. Final repository gates and exact-head review remain pending.
+- The earlier `759da8585` evidence names uncommitted fixture sources and is retained as dirty-tree evidence. Clean exact-head host/dist evidence is `7e3afedb7`; `af86d7ca0` was a docs-only intermediate head before the mixed-case repair, not a final delivery identity. Final gates and review remain pending.
 
 ## What changed
 
@@ -18,7 +18,7 @@ Only `src-tauri/tests/mcp_protocol.rs`, test code in `src-tauri/src/lib.rs`, and
 - Before the current-main merge, default Rust suites were **9/3/21/7/13/8** and GUI suites **11/3/25/8/13/9**. After retaining both distinct closed-pipe tests and correcting the merged `exited` binding, the serial merged-head suites are **11/3/21/7/13/8** default and **13/3/25/8/13/9** GUI (library/main/controls/MCP/review/sidecar), PASS. Concurrent overloaded runs retained timing failures and are not hidden by these later serial passes.
 - The remote timeout test completes ordinary initialize/notification before its original 15 ms hanging tool call; the 1024-byte response cap still fails explicitly. Stdio retains its 25 ms hanging-call assertion and cleanup checks.
 - `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` and `git diff --check`: PASS after formatting.
-- Predecessor typed/plain-JS/runtime and fresh identity-bound loopback results are in `../kimi-75/REPORT.md`.
+- Clean exact-head loopback at `7e3afedb753deb9ea2128b4ae3d39624c6b0bad2` passed with exact transcript/session identity and native workflow evidence. Evidence: `/Users/casey.allard/uor-r4/local/kimi/studio-final-acceptance/7e3afedb753deb9ea2128b4ae3d39624c6b0bad2/{identity.json,loopback-acceptance.json,loopback-acceptance.png}`. `af86d7ca0` differed only by report formatting at that point; it was not the final source head. Earlier typed/plain-JS/runtime results are in `../kimi-75/REPORT.md`.
 
 ## Checks run at the head
 
