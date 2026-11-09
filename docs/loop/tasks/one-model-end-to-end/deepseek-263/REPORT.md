@@ -77,6 +77,11 @@ three-row readout carry. The new tests use deepseek-262's
 - `rustfmt --edition 2021 --check
   docs/labs/one-model-end-to-end/instrument/src/bin/served-reply-panel.rs`:
   passed.
+- `UOR_LAB=deepseek uor-harness loop gates --full`: **11 / 11 green**.
+- `UOR_LAB=deepseek uor-harness check`: **0 errors, 327 warnings**; the
+  warnings are the repository-wide advisory backlog.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: passed with the known
+  claims-scope and filemap advisories.
 
 The tests that need `UOR_PANEL_TOKENIZER` report that they skip when the
 external tokenizer is absent. The ask, ablation, generation and rank tests above
