@@ -28,7 +28,7 @@
   "claim": "read-only held-checkpoint structure, gain and ask-selection audit; not B2, carry, capability or serving evidence",
   "hardware": {
     "cpu": "AMD Ryzen 9 9950X 16-Core Processor",
-    "executable_sha256": "929d6d004160301fcd62f847b60811081d98bc1310691d897bd7944903ecf9f4"
+    "executable_sha256": "1d039786750aa9ae9a8f788d5937e227d3d79cae50bce57a6f74ce8154cbb779"
   },
   "hold": {
     "gain_max": 0.5,

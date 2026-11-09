@@ -43,7 +43,8 @@
     "real_checkpoints_audited": 0
   },
   "artifacts": {
-    "synthetic_report_sha256": "35e268864711564736812e1dd3bb284cb0ffb890b15be15d51e1ada51ee8cf58",
+    "synthetic_report_sha256": "a5f9dacaf19cbe63eafcdf9b64df20638263a38d68d6b3073cacd043ec22211f",
+    "synthetic_report_executable_sha256": "1d039786750aa9ae9a8f788d5937e227d3d79cae50bce57a6f74ce8154cbb779",
     "release_executable_sha256": "224dd54bf8aea4a6e993787a3d1bea4413590a322516560dc91a0120b2447a8b"
   },
   "storage": {
