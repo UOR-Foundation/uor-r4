@@ -1,14 +1,18 @@
 //! Read-only CPU audit of Claude-334's saved carry-hold checkpoint fields.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
+use std::io::Read;
+#[cfg(target_os = "linux")]
 use std::os::fd::AsRawFd;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::OpenOptionsExt;
 use uor_r4_cpu_train::ask_offset_audit::{
     AskHoldSummary, AskOffsetRelationReading, TrainedAskOffsets,
 };
@@ -312,17 +316,29 @@ fn read_checkpoint_file(path: &Path, root: Option<&Path>) -> Result<Vec<u8>> {
             path.display()
         ));
     }
-    let mut file =
-        File::open(&canonical).map_err(|error| format!("{}: {error}", canonical.display()))?;
-    if !file
-        .metadata()
-        .map_err(|error| format!("{}: {error}", canonical.display()))?
-        .is_file()
+    #[cfg(not(target_os = "linux"))]
     {
-        return Err(format!("{} is not a regular file", canonical.display()));
+        return Err(format!(
+            "{}: manifest checkpoint containment needs Linux /proc/self/fd; use single-checkpoint mode",
+            canonical.display()
+        ));
     }
     #[cfg(target_os = "linux")]
     {
+        const O_NONBLOCK: i32 = 0o4000;
+        const O_NOFOLLOW: i32 = 0o400000;
+        let mut file = OpenOptions::new()
+            .read(true)
+            .custom_flags(O_NONBLOCK | O_NOFOLLOW)
+            .open(&canonical)
+            .map_err(|error| format!("{}: {error}", canonical.display()))?;
+        if !file
+            .metadata()
+            .map_err(|error| format!("{}: {error}", canonical.display()))?
+            .is_file()
+        {
+            return Err(format!("{} is not a regular file", canonical.display()));
+        }
         let opened = PathBuf::from(format!("/proc/self/fd/{}", file.as_raw_fd()))
             .canonicalize()
             .map_err(|error| format!("opened {}: {error}", canonical.display()))?;
@@ -332,16 +348,6 @@ fn read_checkpoint_file(path: &Path, root: Option<&Path>) -> Result<Vec<u8>> {
                 canonical.display()
             ));
         }
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        return Err(
-            "manifest checkpoint containment needs Linux /proc/self/fd; use single-checkpoint mode"
-                .to_owned(),
-        );
-    }
-    #[cfg(target_os = "linux")]
-    {
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)
             .map_err(|error| format!("{}: {error}", canonical.display()))?;
@@ -1111,5 +1117,39 @@ mod tests {
         assert!(run_batch(&manifest_path, &dir.0.join("escaped.json"), 1)
             .unwrap_err()
             .contains("resolves outside the manifest directory"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn batch_rejects_non_regular_checkpoint_files() {
+        let dir = TestDir::new("non-regular");
+        let manifest_root = dir.0.join("manifest-root");
+        let arm_dir = manifest_root.join("arm");
+        std::fs::create_dir(&manifest_root).unwrap();
+        std::fs::create_dir(&arm_dir).unwrap();
+        std::fs::create_dir(arm_dir.join("model.safetensors")).unwrap();
+        let manifest_path = manifest_root.join("manifest.json");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": MANIFEST_SCHEMA,
+                "arms": [{
+                    "id": "aqh-s1",
+                    "label": "B2-aqH",
+                    "seed": 1,
+                    "checkpoint": "arm",
+                    "model_sha256": "0".repeat(64),
+                    "hamming_sha256": "1".repeat(64),
+                    "expected_hold_rows": 8
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            run_batch(&manifest_path, &dir.0.join("non-regular.json"), 1)
+                .unwrap_err()
+                .contains("is not a regular file")
+        );
     }
 }

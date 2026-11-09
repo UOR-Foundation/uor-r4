@@ -47,8 +47,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 
 ## Measurements
 
-The synthetic checkpoint has vocabulary 1,100, width 8, two ask heads, ask
-depths 2 and 6, `hold_rows=8`, and ten nonzero gains. The single audit measured:
+The synthetic checkpoint has vocabulary 1,100, width 8, one ask head at each
+of ask depths 2 and 6, `hold_rows=8`, and ten nonzero gains. The single audit
+measured:
 
 - question gain: mean `0`, min `-1`, max `1`;
 - header gain: mean `0.125`, min `-0.25`, max `0.5`;
@@ -62,16 +63,16 @@ source order `aqh-s2`, then `aqh-s1`.
 Evidence:
 
 - [single report](evidence/synthetic-single.json), SHA-256
-  `1a7f8b1c9de422b5208071f3c636a21d70f2843774e35cb6cc91791624bf2752`;
+  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`;
 - [batch report](evidence/synthetic-batch.json), SHA-256
-  `0c734bfc131c04838e93717af5a56006591469bda802b4e1003b2c1b4cac51d2`;
+  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`;
 - retained reports are test-harness output, not release-CLI output. Their
   embedded executable SHA-256 is
-  `4f76ce2a931df0fa1660f1ef4843ecc868dfcf733eebd59ded62688cf5ce3311`.
+  `814dd84c8b04f8fe2d88d79e438b322d03509a205976cf433cac79bf67379624`.
 
-The full CPU library suite passed 480 tests with 5 ignored in 44.86 s. The
+The full CPU library suite passed 480 tests with 5 ignored in 47.22 s. The
 release build completed after the repair; its executable SHA-256 is
-`12d7ab2b98fb14e992088a13646dc664cddfdf8cadb1d350f2deffe9f0eb018c`.
+`22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
 
 Resources are in the
 [D84 ledger](../../../../labs/cpu-training-pilot-carry-hold-grouped-2026-11-09/resource-ledger.json).
@@ -82,7 +83,7 @@ cumulative `114,767.677487699 s`. GPU cost is zero.
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 7 passed.
+- Focused binary tests: 8 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with 10 pre-existing crate warnings

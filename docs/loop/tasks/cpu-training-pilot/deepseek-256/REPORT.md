@@ -11,6 +11,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
   `ENOENT`. The documented `./MANIFEST.json` workaround already worked.
 - The same review found a stale resource-ledger byte subtotal and a notebook row
   still reporting the pre-repair test count.
+- The third review confirmed the basename fix, then found that the file open
+  was blocking before its regular-file check and that the notebook's raw
+  `|w_y|` text split its Markdown row. [deepseek-257](../deepseek-257/ORDER.md)
+  repairs both.
 
 ## What changed
 
@@ -20,32 +24,34 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 - A focused regression compares both path forms with the canonical current
   directory.
 - The resource ledger, notebook row and evidence hashes now describe the
-  seven-test repaired executable.
+  eight-test repaired executable.
 
 ## Measurements
 
-- Focused binary tests: 7 passed.
-- Full CPU library suite: 480 passed, 5 ignored in 44.86 s.
-- Full-suite process: 44.94 s, 2,232% CPU, 710,404 KiB peak RSS.
+- Focused binary tests: 8 passed.
+- Full CPU library suite: 480 passed, 5 ignored in 47.22 s.
+- Full-suite process: 47.30 s, 2,112% CPU, 707,820 KiB peak RSS.
 - Single evidence SHA-256:
-  `1a7f8b1c9de422b5208071f3c636a21d70f2843774e35cb6cc91791624bf2752`.
+  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`.
 - Batch evidence SHA-256:
-  `0c734bfc131c04838e93717af5a56006591469bda802b4e1003b2c1b4cac51d2`.
+  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`.
 - Test executable SHA-256:
-  `4f76ce2a931df0fa1660f1ef4843ecc868dfcf733eebd59ded62688cf5ce3311`.
+  `814dd84c8b04f8fe2d88d79e438b322d03509a205976cf433cac79bf67379624`.
 - Release executable SHA-256:
-  `12d7ab2b98fb14e992088a13646dc664cddfdf8cadb1d350f2deffe9f0eb018c`.
+  `22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
 
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 7 passed.
+- Focused binary tests: 8 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing warnings.
 - Release build: passed.
-- Report policy, local policy, all 11 gates and a third fresh review: pending
-  this record.
+- `loop report --check`, `loop pr-check --local` and all 11 exact-head gates:
+  passed.
+- A third fresh exact-head review requested changes; [deepseek-257](../deepseek-257/ORDER.md)
+  repairs them.
 
 ## Skills used
 
@@ -59,6 +65,5 @@ evidence.
 
 ## Plain summary
 
-The documented `--manifest MANIFEST.json` form now works, all final records use
-the seven-test executable, and the next step is the final exact-head gates and
-review.
+The documented `--manifest MANIFEST.json` form now works. A third review found
+two final robustness and record defects, which deepseek-257 repairs.

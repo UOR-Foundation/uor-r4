@@ -2,7 +2,7 @@
   "schema": "uor-r4.cpu-carry-hold-grouped-resource/1",
   "status": "COMPLETE_RECORD_REAL_NOT_RUN",
   "experiment": "CPU grouped hold-gain and multi-checkpoint audit",
-  "updated_utc": "2026-11-09T06:33:00Z",
+  "updated_utc": "2026-11-09T06:44:00Z",
   "previous_ledger": "cpu-training-pilot-carry-hold-audit-2026-11-09/resource-ledger.json",
   "previous_admitted_cumulative_projection_seconds": 111167.677487699,
   "cost_kind": "local CPU measured floor plus explicit unmeasured-stage projection",
@@ -16,7 +16,7 @@
   "admitted_cumulative_projection_seconds": 114767.677487699,
   "lab_cumulative_projection_seconds": 114767.677487699,
   "projection": {
-    "measured_library_tests_seconds": 44.94,
+    "measured_library_tests_seconds": 47.30,
     "release_build_seconds": 44.22,
     "builds_and_checks_allowance_seconds": 900,
     "review_and_delivery_allowance_seconds": 600,
@@ -24,29 +24,29 @@
     "wall_limit_seconds": 3600
   },
   "measured": {
-    "focused_binary_tests_passed": 7,
+    "focused_binary_tests_passed": 8,
     "library_tests_passed": 480,
     "library_tests_ignored": 5,
-    "library_tests_seconds": 44.86,
-    "library_tests_process_wall_seconds": 44.94,
-    "library_tests_cpu_percent": 2232,
-    "library_tests_peak_rss_kib": 710404,
+    "library_tests_seconds": 47.22,
+    "library_tests_process_wall_seconds": 47.30,
+    "library_tests_cpu_percent": 2112,
+    "library_tests_peak_rss_kib": 707820,
     "repeat_single_report_byte_identical": true,
     "repeat_batch_report_byte_identical": true,
     "real_checkpoints_audited": 0
   },
   "artifacts": {
-    "synthetic_single_report_sha256": "1a7f8b1c9de422b5208071f3c636a21d70f2843774e35cb6cc91791624bf2752",
-    "synthetic_batch_report_sha256": "0c734bfc131c04838e93717af5a56006591469bda802b4e1003b2c1b4cac51d2",
+    "synthetic_single_report_sha256": "2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f",
+    "synthetic_batch_report_sha256": "871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6",
     "synthetic_batch_manifest_sha256": "51051cfd6b2cd5380fdc3854b81be8cbbdfdcbe99796c47bd3823c289f632f3b",
-    "synthetic_report_executable_sha256": "4f76ce2a931df0fa1660f1ef4843ecc868dfcf733eebd59ded62688cf5ce3311",
-    "release_executable_sha256": "12d7ab2b98fb14e992088a13646dc664cddfdf8cadb1d350f2deffe9f0eb018c"
+    "synthetic_report_executable_sha256": "814dd84c8b04f8fe2d88d79e438b322d03509a205976cf433cac79bf67379624",
+    "release_executable_sha256": "22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525"
   },
   "storage": {
-    "task_and_ledger_bytes": 78017,
-    "debug_build_target_bytes": 4869800983,
-    "release_build_target_bytes": 304013442,
-    "free_bytes_at_measurement": 154270642176,
+    "task_and_ledger_bytes": 82835,
+    "debug_build_target_bytes": 4869628151,
+    "release_build_target_bytes": 304013434,
+    "free_bytes_at_measurement": 154267172864,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true

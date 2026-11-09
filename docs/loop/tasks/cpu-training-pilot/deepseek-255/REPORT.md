@@ -39,19 +39,19 @@ The retained synthetic reports are unchanged in their readings; only the test
 executable identity changed:
 
 - single SHA-256:
-  `1a7f8b1c9de422b5208071f3c636a21d70f2843774e35cb6cc91791624bf2752`;
+  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`;
 - batch SHA-256:
-  `0c734bfc131c04838e93717af5a56006591469bda802b4e1003b2c1b4cac51d2`;
+  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`;
 - release executable SHA-256:
-  `12d7ab2b98fb14e992088a13646dc664cddfdf8cadb1d350f2deffe9f0eb018c`.
+  `22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
 
-Focused binary tests passed 7/7. The full CPU library suite passed 480 tests
-with 5 ignored in 44.86 s.
+Focused binary tests passed 8/8. The full CPU library suite passed 480 tests
+with 5 ignored in 47.22 s.
 
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 7 passed.
+- Focused binary tests: 8 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing crate warnings.
