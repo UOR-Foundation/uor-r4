@@ -22386,6 +22386,13 @@ mod tests {
         assert_eq!(value_rank(&values[t], &flipped, t, true)?, 1, "α* is clamped at 0");
         // A zero point ties every scaled value at 0: the tie-break alone ranks it.
         assert_eq!(value_rank(&vec![0.0; w], &values, 7, true)?, 8);
+        // A raw tie: the target's point duplicated at a smaller id ranks first, the target second.
+        let mut dup = values.clone();
+        dup[5] = values[t].clone();
+        for scaled in [false, true] {
+            assert_eq!(value_rank(&values[t], &dup, t, scaled)?, 2, "{scaled}");
+            assert_eq!(brute(&values[t], &dup, t, scaled), 2, "{scaled}");
+        }
         // A `w_y` of mixed signs and uneven lanes: (r1u), (r1h) and (r1hs) still read 1 against
         // `q_v`; a raw-point rank of the stream does not.
         let w_y: Vec<f32> = (0..w).map(|c| if c % 3 == 0 { -1.7 } else { 0.2 + c as f32 * 0.1 }).collect();
@@ -22398,13 +22405,15 @@ mod tests {
         assert_eq!(value_rank(&held, &written, t, true)?, 1, "(r1h)");
         assert_eq!(value_rank(&stream, &written, t, true)?, 1, "(r1hs)");
         assert!(value_rank(&stream, &values, t, false)? > 16, "a raw-point rank of the stream");
-        // A residual that dominates the stream: (r1y) and (r1u) read 1, (r1s) far from it.
+        // A residual that dominates the stream: (r1y) and (r1u) read 1, (r1s) far from it. Query
+        // 0's rows are 0 (`Q`) and 1 (`H4`), query 1's are 2 and 3; query 0's payload is the shrunk
+        // one, so (r1y) reads 1 only scaled.
         let residual: Vec<f32> = (0..w).map(|c| 9.0 * (((c * 7) % 11) as f32 - 5.0)).collect();
         let out: Vec<f32> = residual.iter().zip(&u).map(|(a, b)| a + b).collect();
         let capture = crate::flock_read_hamming::RowCapture {
             rows: vec![0, 1, 2, 3],
             stream: Some(crate::flock_read_hamming::StreamCapture {
-                payload: vec![values[t].clone(), values[t].clone(), vec![0.0; w], vec![0.0; w]],
+                payload: vec![shrunk.clone(), values[t].clone(), vec![0.0; w], vec![0.0; w]],
                 found: vec![true, true, false, true],
                 write: vec![u.clone(), u.clone(), vec![0.0; w], vec![0.0; w]],
                 held: vec![held.clone(), held.clone(), vec![0.0; w], held.clone()],
