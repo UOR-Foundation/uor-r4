@@ -6,17 +6,17 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## What did not work, first
 
-- **The registered read missed every bar (negative, row 4c).** All four cells were served, with no instrument failure.
+- **The registered read missed every bar (negative, row 4c).** All four cells were served and every registered instrument check passed.
   - **The panel's bar:** 0 complete rows and 0 good pairs in all four cells. The bar is 104 and 52 at both seeds.
   - **Recall did not move.** L-aC's first-line asked count is 0 and 2, against L-a's 2 and 0, claude-322's 14 and 2, and its own `−C`'s 0 and 2. The bar is at least 16 above all three, at both seeds.
   - **Stopping did not hold.** L-aC has 2 and 0 EOS stops, L-a 6 and 0, against the floor of 64 and claude-322's 109 and 86. Nearly every reply runs to the 64-token cap.
-  - **Replies narrowed.** Up to 172 of the 256 rows share one text (L-a seed 1). Distinct texts are 38 to 97 of 256.
+  - **Replies are narrower than claude-322's.** Distinct texts are 38 to 97 of 256, against its 94 and 125, and up to 172 of the 256 rows share one text (L-a seed 1).
   - **The carry changes replies, but not toward the value.** Against `−C`, the carried artifact's replies differ on 87 of 256 rows at seed 1 and 44 at seed 2, and the asked count does not rise on either.
-- **Stopping is lost in both arms, including the no-carry guard.** So it is not the carry's cost. Both arms share the ask heads and the pull, and differ from claude-322's no-ask run in those two together, so this run cannot say which one.
+- **Stopping is lost in both arms, including the no-carry guard.** So the loss happens without the carry. That does not clear the carry: at seed 1 L-aC has fewer EOS than its own `−C` at every point (18 against 39, 0 against 2, 2 against 4), and seed 2 reads 0 against 0 at 16,384. L-a differs from claude-322 in the ask heads, the pull and the trainer commit (`721a4784f` here, `ff5156bcc` there), and L-aC adds the carry. No no-ask control ran at the new commit, so this run cannot say which of them caused it.
 - **The trend does not rise.** L-aC's asked count falls at seed 2 (5, 4, 2) and stays 0 at seed 1. EOS is lower at 16,384 than at 8,192 in every cell that had any (L-aC 18 to 2 and 14 to 0, L-a seed 1 14 to 6). Row 4u's rise needs at least 8 above L-a's; it is 0 and −2.
 - **I-xg failed on the first pod (instrument, repaired).** L-aC seed 1's first pod snapshotted claude-322's seed-1 checkpoint and exported `9b01ed62…`, not claude-322's `86e51d5e…`. The job stopped before its full run as the sheet says, and sealed NOT_RUN at `runs/L-aC/s1` (EXIT 6).
   - **Cause:** `fbs-snapshot` builds the trunk tables on the GPU. Where two nearest atoms are almost tied, the GPU and the laptop choose differently: four quantized entries in `layers`, four trunk sections. The GPU snapshot itself is deterministic: two pods gave the same `6a424749…`.
-  - **The repair:** every served export is the laptop snapshot (`cpu-fbs-export` on a base-inventory copy from the new `hamming-base-copy`), with the pod's ask entries spliced in and checked section by section against the pod's own export. I-xg's bar is unchanged and passed on the rerun, `86e51d5e…`, at 14:39:34Z.
+  - **The repair:** every served export is the laptop snapshot (`cpu-fbs-export` on a base-inventory copy from the new `hamming-base-copy`), with the pod's ask entries spliced in and checked section by section against the pod's own export. I-xg's bar is unchanged. It passed with `86e51d5e…` for the registered `runs-3` round at 18:12:56Z.
 - **Three pod launches never reached SSH** (two for L-aC seed 1, one for L-a seed 2), each a different Vast offer on KR host 406325. `uor-pod` deleted each pod at 900 s, so about 45 pod-minutes were lost. The circuit breaker then refused a third launch, and `seed-339.sh` gained `UP_FORCE=1` for `--force-retry`.
 - **CI went red twice on a test this PR does not touch:** `panel_m6_rustc_verifier::failing_assertion_is_reported`, "File exists (os error 17)". It's a capture-file name race in DeepSeek's verifier (#3821), sent to DeepSeek on #2028. Reruns pass.
 - **The fresh review of the repair** found a refused artifact left under the served name, where `−C` would score it, and no check that the splice left the trunk alone. Both are fixed before any read, with tests and a negative gate (test-read 45/45).
@@ -30,17 +30,19 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
   - I had no range check on these tables before the full run; the smokes were too short to reach the end of the range.
 - **The Hugging Face store filled (instrument, 17:13Z).** `uor-store put` refused with "Private storage limit reached", so L-a seed 2's seal was copied to the laptop and put in the store once it had room. Deleting files alone frees nothing. With Casey's approval, 784 old checkpoint files (15.4 GB, list in `local/claude/claude-339/store-clean/delete.txt`) were deleted and the history squashed (1,082 commits to 1). Writes worked again about 18:05Z.
 - **The laptop's Hugging Face credential disappeared mid-unit (not by me).** Store access stopped until Casey logged in again; nothing else was tried.
-- **Rerun launches lost:** one pod never answered SSH (`vast-59924022`, deleted at 900 s). L-a seed 2's first try ended `up exit=1` with its pod stopped (`vast-59928452`, deleted). About $0.10 in all.
+- **Rerun launches lost:** one pod never answered SSH (`vast-59924022`, deleted at 900 s). L-a seed 2's first try ended `up exit=1` with its pod stopped (`vast-59928452`, deleted). Neither has a billing line I could find; the Cost section gives the estimate.
 - **Trend points on the owner's early path are bad (9 Nov, 20:05Z).** L-aC seed 1 at 8,192 and 12,288 steps, carried and exact −C, scored 0 complete rows and 0 asked first lines on `m2-fresh256`. Carried EOS went 18 to 0 and distinct replies 137 to 44 between the two steps. They are not the registered read. Reports and hashes: [early/INDEX.md](early/INDEX.md).
 - **Watchers changed mid-run on the owner's instruction (20:02Z).** "Do not kill a pod until the owner approves." The auto-down was removed: `watch-339-hold.sh` and `pull-seal-339.sh` hold each pod, leased, until an approval file exists. Finished pods bill while they wait.
 - **Teardown rule, owner's words (9 Nov).** "Tear each pod down independently as soon as its own four checks pass": `job=0 seal=0`; all 41 required files; independent store read-back and `SHA256SUMS`; no GPU process. `--score-rows` is a required pod-side input. "Do not infer a final outcome from the 8,192/12,288 trend."
 - **A launch failed I-xg on my launcher's own leftovers (instrument).** On `vast-59926331`, `read-339.sh` refused the first round's I-xg folder, compared nothing and reported FAIL. Each launch now names its own `IXG_OUT`. The job's NOT_RUN seal in `runs-3/L-aC/s1` moved byte-identical to `runs-3-void-ixg-collision/L-aC/s1`; it reads nothing about any arm.
 - **`fetch-339.sh` with a relative path wrote into the main checkout,** because the script changes to the repo root. I moved the folder under `local/claude/claude-339/diag/` and added an absolute-path guard.
+- **The fresh exact-head review found a defect in the ask-range hold (fixed).** `clamp` held an infinite weight at the end of the range, where the rounding used to refuse it by name. The hold now touches finite weights only, and a new test fails on `inf refused` with the fix set aside. The merged code differs from the training pin `721a4784f` on this non-finite path only. Finite trajectories do not change, so the sealed runs stand.
 - **The fresh pre-run review of the rerun passed with minors,** all fixed or measured before launch: the seal pull now starts by itself, the margin's low side is measured (smallest 9.44 at 14,336), the launcher needs its seal root named, a failed copy is set aside. One nit is left: `job-339.sh`'s header comment, so its pinned hash doesn't move.
 
 ## What changed
 
-- `crates/uor-r4-float-train/src/bin/hamming-base-copy.rs` (new).
+- `crates/uor-r4-float-train/src/bin/hamming-base-copy.rs` (new), a laptop tool for this run's export. It is outside the item's `scope:` list, which `pr-check` reports as an advisory.
+- `crates/uor-r4-float-train/src/fbs_export.rs` and `in_space_long.rs`: the ask-range hold and its two tests.
 - The sheet, the ORDER, this REPORT, the notebook row, [early/](early/INDEX.md) and [read/](read/) (text reports and hashes).
 - Laptop scripts in `local/claude/claude-339/` (not committed): `read-339.sh` (laptop snapshot), `seed-339.sh` (ROOT, UP_FORCE), `fetch-339.sh` (one assembled root), and the early and teardown scripts.
 
@@ -101,11 +103,11 @@ The decode rates are laptop rates from runs that were not timed under controlled
 Neither arm crosses the cost ceiling, a mean d below −58,212. The dev curve's hits at 16,384 are 6,266 and 6,797 for L-aC and 6,725 and 6,697 for L-a.
 
 **Recorded:**
-- **Ask entries held at the ends of the range**, of 2,097,152 in each `step-016384`: at −32,768 and at 32,767, L-aC seed 1 17 and 18, seed 2 6 and 3; L-a seed 1 5 and 0, seed 2 4 and 5. Saturation is about 1 in 60,000 entries at most.
+- **Ask entries held at the ends of the range**, of 2,097,152 in each `step-016384`: at −32,768 and at 32,767, L-aC seed 1 17 and 18, seed 2 6 and 3; L-a seed 1 5 and 0, seed 2 4 and 5. By table (first asking table, then second): L-aC seed 1 1, 3 and 16, 15; seed 2 2, 2 and 4, 1; L-a seed 1 3, 0 and 2, 0; seed 2 2, 3 and 2, 2. Saturation is about 1 in 60,000 entries at most.
 - **Carry gains** (4,096 at Q16 in `i32`, so nothing is held): seed 1 from −8.11 to 8.16, 337 negative; seed 2 from −8.10 to 8.14, 460 negative. 22 and 20 sit outside ±8.
-- **Last-step loss:** 0.913, 0.878 (L-aC); 0.882, 0.858 (L-a). **Step time:** 0.529 and 0.523 s (L-aC), 0.498 and 0.490 s (L-a).
+- **Last logged loss:** 0.913, 0.878 (L-aC); 0.882, 0.858 (L-a). **Step time, I-t's 128-step rate:** 0.529 and 0.523 s (L-aC), 0.498 and 0.490 s (L-a). Full-run seconds per step, evaluation included: 0.538, 0.534 (L-aC), 0.507, 0.501 (L-a).
 
-**Instrument checks, all passed:** I-xg on the rerun; I-xa at all four cells (the integer engine scores it, the default refuses by name); I-5 `same` on every split; I-c on both claude-322 artifacts; I-cut at both L-aC seeds (86 sections equal, 32 carry rows against none). The registered `−C` is byte-identical to `fbs-toks --drop-hamming-carry` from `main` at both seeds (`6e85e4e2…`, `391392f5…`), so the two cut paths agree. The pinned scorer and `main`'s produce equal reply ids, stops and completeness on all four cells.
+**Instrument checks, all passed:** I-xg on the rerun; I-xa at all four cells (the integer engine scores it, the default refuses by name); I-5 `same` on every split; I-c on both claude-322 artifacts; I-cut at both L-aC seeds (86 sections equal, 32 carry rows against none). Between the laptop's and the pod's snapshot at step-016384, 1, 1, 1 and 5 trunk sections differ (L-aC seeds 1 and 2, L-a seeds 1 and 2), from the near-tied quantization named under I-xg; the Hamming sections are equal. The registered `−C` is byte-identical to `fbs-toks --drop-hamming-carry` from `main` at both seeds (`6e85e4e2…`, `391392f5…`), so the two cut paths agree. The pinned scorer and `main`'s produce equal reply ids, stops and completeness on all four cells.
 
 **Files.** Registered read in the store at `results/claude/one-model-end-to-end-language-carry-2026-11-09/read/` (artifacts, reports, grades, pairs; `SHA256SUMS.read` is `815552185963051205211802958c36c0da831e3651c4dd6c7145a17d13e9551a`). Seals at `.../runs-3/ARM/sS/`. Step-016384 artifacts:
 
@@ -123,26 +125,28 @@ Neither arm crosses the cost ceiling, a mean d below −58,212. The dev curve's 
 **It shows,** for this configuration (b64L, d3mwcap6, 16,384 steps, two seeds), that the ask heads, the 32-row question carry and the found-copy pull do not put asked values into served replies: at most 2 of 256 first lines. The carry is present and changes up to 87 replies, and its removal moves the asked count by 0.
 
 **It does not show that the carry cannot work.** A negative closes this configuration only. The asked count is at the floor, so "`−C` within 4" is close to the only reading available: two counts near 0 cannot separate. **TRAIN's distances are not counted** (the sheet names this for row 4c): the mix's `mw-balp` part comes from the panel's generator family, and D3's part is not counted, so whether 32 rows reach the question in training is unknown.
-**It does not say why stopping went.** L-a loses it as well as L-aC, and this run has no arm that separates the ask heads from the pull.
+**It does not say why stopping went.** L-a loses it as well as L-aC, and this run has no arm that separates the ask heads, the pull and the trainer commit.
+
+**It does not measure float-to-integer parity on these asking checkpoints.** "All passed" above means the registered checks; claude-336's parity was on a different model.
 
 **The 8,192 and 12,288 points are the trend only.** The outcome comes from step-016384.
 
-## Checks run at the head
+## Checks run
 
-- **On the shipped scripts, 9 Nov ~15:10Z** (job `f553a765…`, chain `2e4a9c66…`, seal `9594f63f…`, the pinned hashes checked on every pod):
+- **On the scripts the registered `runs-3` pods ran, on the laptop at 17:22Z to 17:28Z, after their last edit at 17:19Z and not at this PR's head** (job `4e1272b8…`, chain `5eb46601…`, seal `e1ca7e1b…`, the pinned hashes checked on every pod):
   - job mutations 37 of 37 caught;
   - test-gates 81/81, test-seal 18/18;
   - test-read 45/45 with the trunk check's negative gate.
-- **test-watch is timing-sensitive:** one run caught 9 of 10. The miss was the mutant that drops `end()`'s own `trap '' TERM INT HUP`, under a laptop load average of about 7. Two reruns caught 10 of 10. The test sends its signals 0.4 s and 0.7 s into a 2 s hold, so under load the first can land before the window. The job is unchanged, and this is a test that can pass by luck, named here.
+- **test-watch ran earlier, at about 15:12Z, and is timing-sensitive:** one run caught 9 of 10. The miss was the mutant that drops `end()`'s own `trap '' TERM INT HUP`, under a laptop load average of about 7. Two reruns caught 10 of 10. The test sends its signals 0.4 s and 0.7 s into a 2 s hold, so under load the first can land before the window. The job is unchanged, and this is a test that can pass by luck, named here.
 - **Host test of `hamming-base-copy`:** `cargo test -p uor-r4-float-train --bin hamming-base-copy`, 1 passed. The other code in this PR is the ask-range hold in `fbs_export.rs` and `in_space_long.rs`, with its test, `an_ask_weight_past_the_served_range_is_held_at_its_end`, 1 passed on the host.
 
 ## Cost
 
-First round: four 5090 pods at $0.563/h, about $5.20, plus the first L-aC seed 1 pod and three SSH-failed pods. Rerun, from the pods' final lines: $1.50, $1.52, $1.44 and $1.40, $5.86 in all, plus about $0.10 on the lost launches and the I-xg collision. Each pod went down 75 to 136 s after its chain ended, under the owner's teardown rule. The laptop did the exports, the panels and the grades.
+First round: four 5090 pods at $0.563/h, about $5.20, plus the first L-aC seed 1 pod and three SSH-failed pods. Rerun, from the pods' final lines: $1.50, $1.52, $1.44 and $1.40, $5.86 in all. The two lost launches and the I-xg collision pod have no billing line I could find; at $0.563/h I estimate under $0.50 for the three. The unit's pods total at least about $11. Each pod went down 75 to 136 s after its chain ended, under the owner's teardown rule. The laptop did the exports, the panels and the grades.
 
 ## Next
 
-**Row 4c's next step is a decision review, between a question-row placement on chat windows (the `both` placement that passed at both seeds on the recall task) and TRAIN's distance count.** It belongs to the next unit, read against the whole project. My view going in: count TRAIN's distances first, since it is laptop work and says whether 32 rows reach the question at all. The review should weigh the lost stopping, which the outcome map does not cover. It is the larger gap for a usable reply, it appears without the carry, and no arm here separates the ask heads from the pull.
+**Row 4c's next step is a decision review, between a question-row placement on chat windows (the `both` placement that passed at both seeds on the recall task) and TRAIN's distance count.** It belongs to the next unit, read against the whole project. My view going in: count TRAIN's distances first, since it is laptop work and says whether 32 rows reach the question at all. The review should weigh the lost stopping, which the outcome map does not cover. It is the larger gap for a usable reply, it appears without the carry, and no arm here separates the ask heads, the pull and the trainer commit.
 
 **Small follow-ups:** publish mw-balp's 35 paraphrase files; make `test-watch` marker-driven.
 
@@ -153,7 +157,7 @@ First round: four 5090 pods at $0.563/h, about $5.20, plus the first L-aC seed 1
 ## Still open
 
 - **Row 4c's decision review:** a question-row placement on chat windows, or TRAIN's distance count first. The next unit.
-- **Stopping:** both arms lost it against claude-322. No arm here separates the ask heads from the pull, so the cause is open.
+- **Stopping:** both arms lost it against claude-322. No arm here separates the ask heads, the pull and the trainer commit, so the cause is open. A no-ask control at the new commit would settle the last of these.
 - **TRAIN's distances are not counted.** Whether 32 rows reach the question in training is unknown.
 - **mw-balp's 35 paraphrase files** are not published, and **`test-watch`** still depends on signal timing.
 
@@ -161,8 +165,8 @@ Closes nothing: #3407 stays open.
 
 ## Plain summary
 
-We taught the model two new things in one run: a part that looks back for the answer to a question, and a short-term memory (the carry) that holds the question while the model reads. Four copies trained on rented GPUs for about $6, and each machine was shut down as soon as its results were saved and checked.
+We taught the model two new things in one run: a part that looks back for the answer to a question, and a short-term memory (the carry) that holds the question while the model reads. Four copies trained on rented GPUs for about $6 in the final round (about $11 with the first round, which stopped early), and each machine was shut down as soon as its results were saved and checked.
 
-It did not work at this setting. Out of 256 test conversations, the model named the right value on the first line at most twice, and it never wrote a complete correct reply. Removing the memory changed some replies but not that count. The model also mostly stopped ending its replies, and did so with or without the memory, so the new memory is not what broke that.
+It did not work at this setting. Out of 256 test conversations, the model named the right value on the first line at most twice, and it never wrote a complete correct reply. Removing the memory changed some replies but not that count. The model also mostly stopped ending its replies, with or without the memory, so that happens without it. We can't yet say what caused it.
 
 This rules out this one setting, not the idea. The next step is to decide between placing the memory differently and first counting how far back questions sit in the training data.

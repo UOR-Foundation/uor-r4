@@ -226,6 +226,8 @@ claude-322's, with:
 - chain-339.sh `2e4a9c66afa3f4876ab03719f63a75add3f1769eb6289e0878d172a5d1b88a52`
 - seal-339.sh `9594f63f720dd7c1cedb92df539b8282939719c6f5c1dad886c4e7affca5cb92`
 
+The registered `runs-3` round ran later versions of the three scripts, pinned the same way: job-339.sh `4e1272b8e48f9bc8dafee98ac53888c71d7a5a9a60861b42fbee371bc4e46d36`, chain-339.sh `5eb466019a48f6b4693367cb90ec0599b94b7e52213bba0c9ea6fa54897851a7`, seal-339.sh `e1ca7e1b7806b6fbaf3f2c79b0d90ffceec688a51b4711c7157352b032d378c9`.
+
 **Verdict: PASS for the launch.** The whole chain is present: the pin fbf15e56 is in the repo, the TRAIN mix, panels and claude-322's seal are in the HF store, and claude-322's laptop export matches. A pass unlocks rows 1 to 4u; a fail sends the cell to rows 0a to 0c. The FIT is above; the lease stays inside the caps (4 pods at no more than $0.70/h each against $8/h). L-aC seed 1 goes first; the other three cells start after its I-xg PASS.
 
 ## I-xg repair (row 0c)
