@@ -1,6 +1,6 @@
 # ORDER: isolate MCP timeout fixtures from connection setup, kimi-77
 
-Lab: kimi. Item: studio-typed-shell-upgrade (#3500), predecessor PR #3879. Base: `759da85854b76d8eacdd64719824461ca6a9e7c2`. Scope: `src-tauri/tests/mcp_protocol.rs`, descendant-fixture test code in `src-tauri/src/lib.rs`, and this task folder only.
+Lab: kimi. Item: [studio-typed-shell-upgrade](../../../../roadmap/items/studio-typed-shell-upgrade.md) (#3500), predecessor PR #3879. Base: `759da85854b76d8eacdd64719824461ca6a9e7c2`. Scope: `src-tauri/tests/mcp_protocol.rs`, descendant-fixture test code in `src-tauri/src/lib.rs`, and this task folder only.
 
 ## Evidence and decision review
 
