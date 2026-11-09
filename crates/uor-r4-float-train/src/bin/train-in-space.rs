@@ -74,7 +74,9 @@
 //! claude-330). With `--recall`, `--hamming-attract λ` adds λ times the found-copy pull to the loss
 //! (`HammingReads::ask_pull`), and `--hamming-attract-at question` pulls at each two-class
 //! episode's question row in place of the scored row (needs `--recall-header`); `both` pulls at
-//! the question rows and the scored rows together (claude-335).
+//! the question rows and the scored rows together (claude-335). Without `--recall` (claude-337), a
+//! language run takes `--hamming-attract λ` at its scored rows only: each scored row whose target
+//! stands earlier in its window is pulled, and each checkpoint writes the pull to `pull.jsonl`.
 //! `--hamming-hold H` (needs `--hamming-ask 1`) holds the stream read's ask write for the next H
 //! rows of its window, scaled by a learned gain per token, starting at zero
 //! (`HammingReads::with_hold`, claude-333).
@@ -949,10 +951,11 @@ fn main() -> Result<()> {
             "--recall-query, --recall-header, --recall-eval-windows and --recall-readings apply to --recall only".to_owned(),
         ));
     }
-    // claude-330: the found-copy pull trains in the recall runner only.
-    if recall == 0 && config.hamming_attract != 0.0 {
+    // claude-330: the found-copy pull's question placements need --recall's question rows;
+    // claude-337: a language run pulls at its scored rows.
+    if recall == 0 && (config.hamming_attract_at_question || config.hamming_attract_at_both) {
         return Err(FloatTrainError::Invalid(
-            "--hamming-attract and --hamming-attract-at apply to --recall only".to_owned(),
+            "--hamming-attract-at question and both apply to --recall only; a language run pulls at its scored rows".to_owned(),
         ));
     }
     if recall_header != 0 && !recall_query {
