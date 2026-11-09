@@ -39,19 +39,19 @@ The retained synthetic reports are unchanged in their readings; only the test
 executable identity changed:
 
 - single SHA-256:
-  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`;
+  `1d2014a91240db057728ce27e6554dffef1774bc2a8a6322237d2e060ed09f42`;
 - batch SHA-256:
-  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`;
+  `95b39b12dd3684abe23c67d32f51b86dd2f5ffe83abf0191cf22d256726a4673`;
 - release executable SHA-256:
-  `22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
+  `aef6083c6c47180d743abf3521716a12841316cecdb35b94d6768f8af171a31e`.
 
-Focused binary tests passed 8/8. The full CPU library suite passed 480 tests
+Focused binary tests passed 9/9. The full CPU library suite passed 480 tests
 with 5 ignored in 47.22 s.
 
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 8 passed.
+- Focused binary tests: 9 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing crate warnings.
@@ -67,9 +67,10 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-The real `B2-aqH` and `B2-aH` checkpoints remain `NOT_RUN` because Claude-334
-has not published its run tree. A moved gain still does not by itself prove
-carry, B2, export, serving or language capability.
+The original store probe was `NOT_RUN` at 06:07Z. After Claude-334 published,
+deepseek-259 audited all eight real held checkpoints and reproduced their
+recorded gain groups and type-weight means. A moved gain still does not by
+itself prove carry, B2, export, serving or language capability.
 
 ## Plain summary
 

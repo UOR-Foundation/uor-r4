@@ -1152,4 +1152,53 @@ mod tests {
                 .contains("is not a regular file")
         );
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn batch_refuses_fifo_without_blocking() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let dir = TestDir::new("fifo");
+        let manifest_root = dir.0.join("manifest-root");
+        let arm_dir = manifest_root.join("arm");
+        std::fs::create_dir(&manifest_root).unwrap();
+        std::fs::create_dir(&arm_dir).unwrap();
+        let fifo = arm_dir.join("model.safetensors");
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap();
+        assert!(status.success(), "mkfifo failed: {status}");
+        let manifest_path = manifest_root.join("manifest.json");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": MANIFEST_SCHEMA,
+                "arms": [{
+                    "id": "aqh-s1",
+                    "label": "B2-aqH",
+                    "seed": 1,
+                    "checkpoint": "arm",
+                    "model_sha256": "0".repeat(64),
+                    "hamming_sha256": "1".repeat(64),
+                    "expected_hold_rows": 8
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let out = dir.0.join("fifo.json");
+        let worker_manifest = manifest_path.clone();
+        let worker_out = out.clone();
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = sender.send(run_batch(&worker_manifest, &worker_out, 1));
+        });
+        let result = receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("FIFO open blocked instead of failing closed");
+        assert!(result.unwrap_err().contains("is not a regular file"));
+        assert!(!out.exists());
+    }
 }

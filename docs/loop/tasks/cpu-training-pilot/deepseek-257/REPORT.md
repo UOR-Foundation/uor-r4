@@ -29,22 +29,22 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 
 ## Measurements
 
-- Focused binary tests: 8 passed.
+- Focused binary tests: 9 passed.
 - Full CPU library suite: 480 passed, 5 ignored in 47.22 s.
 - Full-suite process: 47.30 s, 2,112% CPU, 707,820 KiB peak RSS.
 - Single evidence SHA-256:
-  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`.
+  `1d2014a91240db057728ce27e6554dffef1774bc2a8a6322237d2e060ed09f42`.
 - Batch evidence SHA-256:
-  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`.
+  `95b39b12dd3684abe23c67d32f51b86dd2f5ffe83abf0191cf22d256726a4673`.
 - Test executable SHA-256:
-  `814dd84c8b04f8fe2d88d79e438b322d03509a205976cf433cac79bf67379624`.
+  `87d481a87f003b19aa675a04d720ae058ca32bf08650b1b3e9080055d12cb665`.
 - Release executable SHA-256:
-  `22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
+  `aef6083c6c47180d743abf3521716a12841316cecdb35b94d6768f8af171a31e`.
 
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 8 passed.
+- Focused binary tests: 9 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with only pre-existing warnings.
@@ -59,8 +59,10 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-The real held checkpoints remain `NOT_RUN`. This unit hardens the CPU audit
-path and records; it adds no B2, carry, export, serving or capability evidence.
+The original store probe was `NOT_RUN` at 06:07Z. After Claude-334 published,
+deepseek-259 audited all eight real held checkpoints and reproduced every
+recorded group gain and type-weight mean. This unit still adds no B2, carry,
+export, serving or capability evidence.
 
 ## Plain summary
 

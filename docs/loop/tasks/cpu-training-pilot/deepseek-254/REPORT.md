@@ -4,9 +4,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
-- Claude-334 has still not published its run tree. The store listing for
+- At the initial `2026-11-09T06:07Z` probe, the store listing for
   `results/claude/one-model-end-to-end-carry-hold-2026-11-09/runs/` returned
-  HTTP 404, so the real `B2-aqH` and `B2-aH` checkpoints remain `NOT_RUN`.
+  HTTP 404. That evidence remains a time-bounded pre-publication observation.
+  Claude-334 later sealed both seeds, and
+  [deepseek-259](../deepseek-259/ORDER.md) audited the real checkpoints.
 - A Clippy run with `-D warnings` failed before reaching this binary because
   `uor-r4-integer` and `uor-r4-discrete` already carry warnings under the
   current toolchain. The scoped `--no-deps` run passed with only pre-existing
@@ -38,8 +40,8 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   weights, a missing depth-6 weight, every duplicate identity class, canonical
   path aliases, path traversal, an out-of-root child symlink, mixed
   single/batch arguments, wrong schema, wrong hashes, wrong row count, worker
-  bounds, source-order preservation, output replacement and byte-identical
-  repeats.
+  bounds, source-order preservation, output replacement, byte-identical
+  repeats and a bounded FIFO refusal.
 - No Claude-owned float-training file, serving schema, export path, GPU state
   or artifact was changed.
 - Size: `pr-check` reports tests 0 files, code 2 files `+937/-109`, docs 10
@@ -60,19 +62,39 @@ measured:
 The two-arm manifest repeated byte-for-byte at two workers and preserved the
 source order `aqh-s2`, then `aqh-s1`.
 
+The real audit then downloaded both Claude-334 seed tarballs, verified their
+recorded SHA-256 values, extracted them under the isolated worktree and audited
+all eight held checkpoints:
+
+- `B2-aqH` and `B2-aH`, seeds 1 and 2, at steps 4,096 and 16,384;
+- 8 workers in `0.03 s` wall, `520%` CPU and `171,240 KiB` peak RSS;
+- every question, header, value and rest gain and both per-depth type-weight
+  means matched Claude-334's `recall.jsonl` exactly on all eight checkpoints.
+
+The real batch is an independent CPU reading of the recorded diagnostics. It
+does not replace Claude-334's B2 judgment or turn a moved gain into carry.
+
 Evidence:
 
 - [single report](evidence/synthetic-single.json), SHA-256
-  `2e2cf0739b0d10f6993ace9a26ad086386f2a8e655520f7a9ef0e5120f58408f`;
+  `1d2014a91240db057728ce27e6554dffef1774bc2a8a6322237d2e060ed09f42`;
 - [batch report](evidence/synthetic-batch.json), SHA-256
-  `871d41e24e68d88df47b4db16e48ad1138d18d54c72d6a2de73ab63fbd87eac6`;
+  `95b39b12dd3684abe23c67d32f51b86dd2f5ffe83abf0191cf22d256726a4673`;
+- [real manifest](evidence/real-eight-checkpoint-manifest.json), SHA-256
+  `e1287b9b7f31766ab0545654fa6c4c4fb8b303f41ffcceadceb7c5d4e0b78c24`;
+- [real eight-checkpoint report](evidence/real-eight-checkpoint.json), SHA-256
+  `497140c6a6730521b3337c8f155cd31771aade953203eb1ee4eab7d51ee58865`;
+- Claude-334 seed tarballs: seed 1
+  `57cbd25a941f56458436caaa258b0afbe8a79a5520d5f31a371e7b33cf795d93`,
+  seed 2
+  `4d952047d69e4f80bcd1385d95c0189d268c1949d82503941c70e8395d2314fd`;
 - retained reports are test-harness output, not release-CLI output. Their
   embedded executable SHA-256 is
-  `814dd84c8b04f8fe2d88d79e438b322d03509a205976cf433cac79bf67379624`.
+  `87d481a87f003b19aa675a04d720ae058ca32bf08650b1b3e9080055d12cb665`.
 
 The full CPU library suite passed 480 tests with 5 ignored in 47.22 s. The
 release build completed after the repair; its executable SHA-256 is
-`22bd3dd5f30d08384aad882034f773dbc36562200b21a32cbcfeccd12a86c525`.
+`aef6083c6c47180d743abf3521716a12841316cecdb35b94d6768f8af171a31e`.
 
 Resources are in the
 [D84 ledger](../../../../labs/cpu-training-pilot-carry-hold-grouped-2026-11-09/resource-ledger.json).
@@ -83,7 +105,7 @@ cumulative `114,767.677487699 s`. GPU cost is zero.
 ## Checks run at the head
 
 - Scoped `rustfmt --check` and `git diff --check`: passed.
-- Focused binary tests: 8 passed.
+- Focused binary tests: 9 passed.
 - Full `uor-r4-cpu-train` library suite: 480 passed, 5 ignored.
 - `cargo check -p uor-r4-cpu-train --all-targets`: passed.
 - Scoped Clippy with `--no-deps`: passed with 10 pre-existing crate warnings
@@ -99,23 +121,16 @@ software-integrity instructions were followed directly.
 
 ## Still open
 
-- Auditing the real held arms is `NOT_RUN`. Once Claude publishes the checkpoints,
-  place a manifest beside them and run:
-
-  ```sh
-  target/deepseek-carry-hold-release/release/cpu-carry-hold-audit \
-    --manifest MANIFEST.json \
-    --workers 8 \
-    --out NEW-BATCH-REPORT.json
-  ```
-
-- Interpret zero group gain as a hold that did not train. Interpret moved gain
-  with failed carry as a write or trunk-carry problem. Interpret moved gain and
-  passing carry as a deeper attribution question. None is a B2 verdict alone.
+- Every currently sealed B2 held checkpoint has been audited. A later
+  claude-335 checkpoint needs a new manifest with its model and Hamming hashes;
+  use the same isolated command.
+- Interpret moved gain with failed carry as a write or trunk-carry problem.
+  Interpret moved gain and passing carry as a deeper attribution question.
+  None is a B2 verdict from this CPU instrument.
 - Do not add hold export or serving from this instrument.
 
 ## Plain summary
 
-The CPU audit can now read the same hold-gain buckets as Claude's training log
-and check all arm/seed checkpoints in one strict pass. It is ready for the real
-sealed files, but those files do not exist in the store yet.
+The CPU audit reads the same hold-gain buckets as Claude's training log and
+reproduced all eight sealed B2 held checkpoints exactly in one strict pass. It
+supports the diagnostic record; Claude-334 still owns the B2 result.

@@ -15,7 +15,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 ## What changed
 
 - Updated the deepseek-257 report to record the fourth review and this repair.
-- Recomputed the retained-text receipt only after this report was final:
+- Recomputed the retained-text receipt at this unit's final head:
   deepseek-254 through deepseek-258 plus the resource ledger total
   `87536` bytes.
 - Corrected only `storage.task_and_ledger_bytes` and the ledger timestamp in
@@ -26,7 +26,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Parent:
 
 ## Measurements
 
-- Exact task-folder files plus the resource ledger: `87536` bytes.
+- Exact task-folder files plus the resource ledger at the deepseek-258 head:
+  `87536` bytes. Deepseek-259 later adds real-checkpoint evidence and records a
+  new final receipt.
 - Focused binary tests: eight remain defined; this record-only repair does not
   rebuild or execute them.
 - Evidence hashes and release executable identity are unchanged from
@@ -51,8 +53,9 @@ No system-provided Codex skill applied.
 
 ## Still open
 
-The real held checkpoints remain `NOT_RUN`. This receipt repair adds no B2,
-carry, capability, export or serving evidence.
+The real held checkpoints were `NOT_RUN` at the original 06:07Z probe and were
+audited after Claude-334 published by deepseek-259. This receipt repair adds
+no B2, carry, capability, export or serving evidence.
 
 ## Plain summary
 
