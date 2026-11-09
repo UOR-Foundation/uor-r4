@@ -16,7 +16,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - Product, current-state, desktop, parity, README and roadmap records now identify completed static publication while retaining open hosted/native/full-runtime work and dated history. Mobile/accessibility/cutover checks remain open after this static publication.
 - The unrelated `float-kernel-fusion.md` missing `## What is missing`, `infra-desktop-client-tauri.md` unsupported `in_progress`, and stale `issues.json` IDs `float-kernel-fusion` and `infra-desktop-client-tauri` remain disclosed, not edited or presented as passing.
 - Current main's CPU model and notebook changes are preserved byte-for-byte. The merge introduces no application/model/API/engine/worker/tokenizer/publisher change, dependency, `.github/**` edit or second publish.
-- Final size: **13 documentation/task-record files, +162/-22** (0 code, 0 tests, 0 generated application assets). The previous estimate covered the same named status-record files; this REPORT and its generated receipts are the only added rows beyond that evidence.
+- Final size: **13 documentation/task-record files, +163/-23** (0 code, 0 tests, 0 generated application assets). The previous estimate covered the same named status-record files; this REPORT and its generated receipts are the only added rows beyond that evidence.
 
 ## Measurements
 
