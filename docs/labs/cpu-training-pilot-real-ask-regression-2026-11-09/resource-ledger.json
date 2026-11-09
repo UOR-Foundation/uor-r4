@@ -65,12 +65,12 @@
     }
   },
   "storage": {
-    "task_and_ledger_bytes": 42568,
+    "task_and_ledger_bytes": 42981,
     "downloaded_archive_bytes": 178013963,
     "extracted_checkpoint_tree_bytes": 378392745,
     "temporary_input_bytes": 556406708,
     "worktree_build_target_bytes": 5800592549,
-    "free_bytes_at_measurement": 149050830848,
+    "free_bytes_at_measurement": 149049577472,
     "stop_margin_bytes": 134217728,
     "absolute_floor_bytes": 32346472448,
     "floor_passes": true
