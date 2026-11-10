@@ -39,6 +39,7 @@ export interface ComposerSurfaceProps {
     artifacts?: readonly ComposerArtifact[];
     templatePrompt?(kind: string): string;
     onMentionAdd?(attachment: { name: string; content: string; source: string }): boolean | Promise<boolean>;
+    onAttachmentBarrier?(): Promise<void> | null;
     onController?(controller: ComposerInputController | null): void;
 }
 
@@ -59,6 +60,10 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     const mentionAddRef = useRef<(attachment: { name: string; content: string; source: string }) => boolean | Promise<boolean>>(() => false);
     const editorFileRef = useRef<ComposerEditorFile | null>(null);
     const onControllerRef = useRef<((controller: ComposerInputController | null) => void) | undefined>(undefined);
+    const attachmentBarrierRef = useRef<(() => Promise<void> | null) | undefined>(undefined);
+    const pendingMentionsRef = useRef<Set<Promise<void>>>(new Set());
+    const sendingRef = useRef(false);
+    const mountedRef = useRef(true);
     const sendRef = useRef<(prompt: string) => boolean>(() => false);
     const submittedHistoryRef = useRef<string[]>([]);
     const initialDraftRef = useRef(props.initialDraft ?? '');
@@ -75,7 +80,8 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         notifyDraftChange(value);
     }
 
-    function submit() {
+    function sendCurrent() {
+        if (!mountedRef.current) return;
         const textarea = textareaRef.current;
         const prompt = textarea?.value ?? props.value;
         if (!prompt.trim()) return;
@@ -88,6 +94,26 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
             setMenu(null);
         });
         textarea?.focus();
+    }
+
+    function submit() {
+        if (sendingRef.current || !mountedRef.current) return;
+        const textarea = textareaRef.current;
+        const initial = textarea?.value ?? props.value;
+        if (!initial.trim()) return;
+        const pendingMentions = Array.from(pendingMentionsRef.current);
+        const barrier = attachmentBarrierRef.current?.() ?? null;
+        if (!barrier && !pendingMentions.length) {
+            sendCurrent();
+            return;
+        }
+        sendingRef.current = true;
+        void Promise.all([barrier ?? Promise.resolve(), ...pendingMentions]).then(() => {
+            sendingRef.current = false;
+            sendCurrent();
+        }, () => {
+            sendingRef.current = false;
+        });
     }
 
     sendRef.current = props.onSend;
@@ -123,21 +149,23 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
             return;
         }
         const original = textarea.value;
-        const accepted = await mentionAddRef.current({ name: editor.path, content: editor.content, source: 'editor' });
-        if (!accepted) {
-            textareaRef.current?.focus();
-            return;
-        }
-        const current = textareaRef.current;
-        if (!current) return;
-        const unchanged = current.value.slice(0, currentMenu.start) === original.slice(0, currentMenu.start)
-            && current.value.slice(currentMenu.end) === original.slice(currentMenu.end);
-        if (!unchanged) {
-            current.focus();
-            return;
-        }
-        setDraft(`${current.value.slice(0, currentMenu.start)}${mention}${current.value.slice(currentMenu.end)}`);
-        current.focus();
+        const continuation = (async () => {
+            try {
+                const accepted = await mentionAddRef.current({ name: editor.path, content: editor.content, source: 'editor' });
+                if (!accepted) return;
+                const current = textareaRef.current;
+                if (!current || current.value !== original) return;
+                setDraft(`${current.value.slice(0, currentMenu.start)}${mention}${current.value.slice(currentMenu.end)}`);
+            } catch {
+                // Keep the user's current draft when the attach callback rejects.
+            } finally {
+                textareaRef.current?.focus();
+            }
+        })();
+        const tracked = continuation.then(() => undefined, () => undefined);
+        pendingMentionsRef.current.add(tracked);
+        void tracked.finally(() => pendingMentionsRef.current.delete(tracked));
+        await tracked;
     }
 
     function interceptMenuKey(event: KeyboardEvent): boolean {
@@ -186,6 +214,12 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     mentionAddRef.current = (attachment) => props.onMentionAdd?.(attachment) ?? false;
     editorFileRef.current = props.editorFile ?? null;
     onControllerRef.current = props.onController;
+    attachmentBarrierRef.current = props.onAttachmentBarrier;
+
+    useEffect(() => () => {
+        mountedRef.current = false;
+        pendingMentionsRef.current.clear();
+    }, []);
 
     useEffect(() => {
         const textarea = textareaRef.current;

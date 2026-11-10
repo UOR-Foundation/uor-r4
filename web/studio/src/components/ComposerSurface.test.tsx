@@ -561,6 +561,107 @@ describe('serialized attachment operations', () => {
     });
 });
 
+describe('mention send ordering and selective removal', () => {
+    it('waits for an accepted mention queued behind a pending batch before sending the final prompt', async () => {
+        const { uiApi, generation } = mount();
+        uiApi.attachments.push({ name: 'seed-1.md', content: 'x', source: 'file', size: 1 }, { name: 'seed-2.md', content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const pending = deferredDocument('pending.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        typePrompt('@');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        act(() => { option.click(); });
+        pressKey(promptElement(), 'Enter');
+        pending.resolve();
+        await flushAsync();
+        expect(generation.send).toHaveBeenCalledTimes(1);
+        expect(generation.send).toHaveBeenCalledWith('@notes.md');
+        expect(promptElement().value).toBe('');
+        expect(uiApi.attachments.map((attachment) => attachment.name)).toEqual(expect.arrayContaining(['pending.md', 'notes.md']));
+    });
+
+    it('does not insert an accepted mention into a cleared draft', async () => {
+        mount();
+        const pending = deferredDocument('pending.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        typePrompt('@');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        act(() => { option.click(); });
+        act(() => {
+            const textarea = promptElement();
+            textarea.value = '';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        pending.resolve();
+        await flushAsync();
+        expect(promptElement().value).toBe('');
+    });
+
+    it('does not insert an accepted mention into a shortened trigger', async () => {
+        mount();
+        const pending = deferredDocument('pending.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        typePrompt('hello @');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        act(() => { option.click(); });
+        act(() => {
+            const textarea = promptElement();
+            textarea.value = 'hello ';
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        pending.resolve();
+        await flushAsync();
+        expect(promptElement().value).toBe('hello ');
+    });
+
+    it('catches a rejected mention callback without stale insertion', async () => {
+        await mountSurface({
+            editorFile: { path: 'notes.md', content: 'context text' },
+            attachments: [],
+            onMentionAdd: vi.fn(() => Promise.reject(new Error('mention rejected'))),
+        });
+        typePrompt('@');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        act(() => { option.click(); });
+        await flushAsync();
+        expect(promptElement().value).toBe('@');
+    });
+
+    it('removing an unrelated attachment does not cancel a pending multi-file batch', async () => {
+        const { uiApi } = mount();
+        uiApi.attachments.push({ name: 'seed-0.md', content: 'x', source: 'file', size: 1 }, { name: 'seed-1.md', content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const first = deferredDocument('first.md', 1);
+        const second = deferredDocument('second.md', 1);
+        pasteFiles(promptElement(), [first.file, second.file]);
+        await flushAsync();
+        act(() => { button('Remove seed-0.md').click(); });
+        first.resolve();
+        second.resolve();
+        await flushAsync();
+        expect(uiApi.attachments.map((attachment) => attachment.name)).toEqual(expect.arrayContaining(['first.md', 'second.md', 'seed-1.md']));
+        expect(uiApi.attachments.map((attachment) => attachment.name)).not.toContain('seed-0.md');
+        expect(uiApi.api.toast).not.toHaveBeenCalled();
+    });
+
+    it('skips a same-name replacement after its existing attachment is removed and reports it', async () => {
+        const { uiApi } = mount();
+        pasteFiles(promptElement(), [imageFile('same.png', [1])]);
+        await vi.waitFor(() => { expect(host.querySelector('[data-attachment-kind="image"]')).not.toBeNull(); });
+        expect(createObjectURL).toHaveBeenCalledTimes(1);
+        const replacement = deferredImage('same.png', 4);
+        pasteFiles(promptElement(), [replacement.file]);
+        await flushAsync();
+        act(() => { button('Remove same.png').click(); });
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:test/1');
+        replacement.resolve();
+        await flushAsync();
+        expect(host.querySelector('[data-attachment-kind="image"]')).toBeNull();
+        expect(createObjectURL).toHaveBeenCalledTimes(1);
+        expect(uiApi.api.toast).toHaveBeenCalledWith('same.png was removed before it could be attached.', 'error');
+    });
+});
+
 describe('composer menus and host state', () => {
     it('at_menu_lists_editor_file_and_attachments_only', () => {
         const { uiApi } = mount();

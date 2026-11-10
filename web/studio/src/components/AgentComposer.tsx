@@ -63,6 +63,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const attachmentQueueRef = useRef<Promise<void>>(Promise.resolve());
     const attachmentEpochRef = useRef(0);
     const attachmentAbortsRef = useRef<Set<() => void>>(new Set());
+    const attachmentNameVersionsRef = useRef<Map<string, number>>(new Map());
+    const pendingAttachmentCountRef = useRef(0);
 
     function isAttachmentOperationCurrent(epoch: number): boolean {
         return mountedRef.current && epoch === attachmentEpochRef.current;
@@ -70,9 +72,18 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     function invalidateAttachmentOperations(): void {
         attachmentEpochRef.current += 1;
+        attachmentNameVersionsRef.current.clear();
         const aborts = Array.from(attachmentAbortsRef.current);
         attachmentAbortsRef.current.clear();
         for (const abort of aborts) abort();
+    }
+
+    function bumpAttachmentNameVersion(name: string): void {
+        attachmentNameVersionsRef.current.set(name, (attachmentNameVersionsRef.current.get(name) ?? 0) + 1);
+    }
+
+    function attachmentRemovedMessage(name: string): string {
+        return `${name} was removed before it could be attached.`;
     }
 
     function toastIfCurrent(epoch: number, text: string, tone = 'error'): void {
@@ -82,16 +93,23 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     interface AttachmentOperationSignal {
         aborted: Promise<null>;
         isCurrent(): boolean;
+        isNameCurrent(name: string): boolean;
     }
 
     function enqueueAttachmentOperation<T>(task: (epoch: number, signal: AttachmentOperationSignal) => Promise<T>, fallback: T): Promise<T> {
         const epoch = attachmentEpochRef.current;
+        const nameVersions = new Map(attachmentNameVersionsRef.current);
+        pendingAttachmentCountRef.current += 1;
         const run = attachmentQueueRef.current.then(async () => {
             if (!isAttachmentOperationCurrent(epoch)) return fallback;
             let abort: () => void = () => {};
             const aborted = new Promise<null>((resolve) => { abort = () => resolve(null); });
             attachmentAbortsRef.current.add(abort);
-            const signal: AttachmentOperationSignal = { aborted, isCurrent: () => isAttachmentOperationCurrent(epoch) };
+            const signal: AttachmentOperationSignal = {
+                aborted,
+                isCurrent: () => isAttachmentOperationCurrent(epoch),
+                isNameCurrent: (name) => (attachmentNameVersionsRef.current.get(name) ?? 0) === (nameVersions.get(name) ?? 0),
+            };
             try {
                 return await task(epoch, signal);
             } catch (error) {
@@ -101,6 +119,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 attachmentAbortsRef.current.delete(abort);
             }
         });
+        const settle = () => { pendingAttachmentCountRef.current = Math.max(0, pendingAttachmentCountRef.current - 1); };
+        run.then(settle, settle);
         attachmentQueueRef.current = run.then(() => undefined, () => undefined);
         return run;
     }
@@ -188,15 +208,17 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }
 
     function removeStoredOrImage(id: string) {
-        invalidateAttachmentOperations();
         const image = imageDraftsRef.current.find((attachment) => attachment.id === id);
         if (image) {
+            bumpAttachmentNameVersion(image.name);
             revokePreview(image);
             commitImageDrafts(imageDraftsRef.current.filter((attachment) => attachment.id !== id));
             return;
         }
         if (id.startsWith('stored:')) {
-            ui.removeAttachment(id.slice('stored:'.length));
+            const name = id.slice('stored:'.length);
+            bumpAttachmentNameVersion(name);
+            ui.removeAttachment(name);
             refresh();
         }
     }
@@ -214,6 +236,10 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             const plan = planAttachmentBatch([{ name: entry.name, size: attachmentSize(entry), type: entry.kind === 'image' ? 'image/png' : 'text/plain' }], budgetItems());
             for (const error of plan.errors) toastIfCurrent(epoch, error, 'error');
             if (!plan.accepted.length || !signal.isCurrent()) return false;
+            if (!signal.isNameCurrent(entry.name)) {
+                toastIfCurrent(epoch, attachmentRemovedMessage(entry.name), 'error');
+                return false;
+            }
             const previous = imageDraftsRef.current.find((attachment) => attachment.name === entry.name);
             if (previous) {
                 revokePreview(previous);
@@ -232,6 +258,12 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             if (!plan.accepted.length || !signal.isCurrent()) return;
             const planned = new Map<string, { file: File; kind: 'image' | 'document' }>();
             for (const entry of plan.accepted) planned.set(entry.file.name, entry);
+            for (const name of Array.from(planned.keys())) {
+                if (signal.isNameCurrent(name)) continue;
+                planned.delete(name);
+                toastIfCurrent(epoch, attachmentRemovedMessage(name), 'error');
+            }
+            if (!planned.size || !signal.isCurrent()) return;
             const images = new Map<string, File>();
             const documents = new Map<string, File>();
             for (const entry of planned.values()) {
@@ -253,15 +285,25 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                             continue;
                         }
                         if (!signal.isCurrent()) return;
+                        if (!signal.isNameCurrent(name)) {
+                            toastIfCurrent(epoch, attachmentRemovedMessage(name), 'error');
+                            continue;
+                        }
                         const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
                         nextDrafts.push({ id: `image:${name}:${++imageSequence}`, name, kind: 'image', bytes, size: bytes.byteLength, mediaType: file.type || 'application/octet-stream', previewUrl, memoryOnly: true });
                     }
                     if (!signal.isCurrent()) return;
-                    if (nextDrafts.length) {
-                        const names = new Set(nextDrafts.map((attachment) => attachment.name));
+                    const committable = nextDrafts.filter((attachment) => signal.isNameCurrent(attachment.name));
+                    for (const draft of nextDrafts) {
+                        if (committable.includes(draft)) continue;
+                        revokePreview(draft);
+                        toastIfCurrent(epoch, attachmentRemovedMessage(draft.name), 'error');
+                    }
+                    if (committable.length) {
+                        const names = new Set(committable.map((attachment) => attachment.name));
                         for (const previous of imageDraftsRef.current.filter((attachment) => names.has(attachment.name))) revokePreview(previous);
                         for (const name of names) if (ui.getAttachments().some((attachment) => attachment.name === name)) ui.removeAttachment(name);
-                        commitImageDrafts([...imageDraftsRef.current.filter((attachment) => !names.has(attachment.name)), ...nextDrafts]);
+                        commitImageDrafts([...imageDraftsRef.current.filter((attachment) => !names.has(attachment.name)), ...committable]);
                         imagesCommitted = true;
                     }
                 }
@@ -279,9 +321,14 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                         return;
                     }
                     if (!result || !signal.isCurrent()) return;
-                    for (const attachment of result.attachments) ui.addAttachment(attachment);
                     for (const error of result.errors) toastIfCurrent(epoch, error, 'error');
-                    const storedNames = new Set(result.attachments.map((attachment) => attachment.name));
+                    const currentAttachments = result.attachments.filter((attachment) => signal.isNameCurrent(attachment.name));
+                    for (const attachment of result.attachments) {
+                        if (signal.isNameCurrent(attachment.name)) continue;
+                        toastIfCurrent(epoch, attachmentRemovedMessage(attachment.name), 'error');
+                    }
+                    for (const attachment of currentAttachments) ui.addAttachment(attachment);
+                    const storedNames = new Set(currentAttachments.map((attachment) => attachment.name));
                     const replacedImages = imageDraftsRef.current.filter((attachment) => storedNames.has(attachment.name));
                     for (const previous of replacedImages) revokePreview(previous);
                     if (replacedImages.length) commitImageDrafts(imageDraftsRef.current.filter((attachment) => !storedNames.has(attachment.name)));
@@ -346,6 +393,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 artifacts={[]}
                 templatePrompt={(kind) => ui.templatePrompt(kind)}
                 onMentionAdd={(entry) => addBudgetedAttachment(entry)}
+                onAttachmentBarrier={() => pendingAttachmentCountRef.current > 0 ? attachmentQueueRef.current : null}
                 onController={(controller) => { controllerRef.current = controller; }}
             />
         </section>
