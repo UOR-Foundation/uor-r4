@@ -695,6 +695,26 @@ describe('AgentStore reducer', () => {
         expect(tampered.code).toBe('snapshot_corrupt');
         expect(store.snapshot().runs[0].needsResync).toBe(true);
     });
+
+    test('a null-latest task record cannot clear an unresolved latest run', () => {
+        const store = createAgentStore();
+        const record = {
+            taskId: TASK_ID,
+            projectId: PROJECT_ID,
+            title: 'Unloaded task',
+            createdAtMs: 1,
+            archived: false,
+            pinnedLocal: false,
+        };
+        store.upsertTask({ ...record, latestRunId: RUN_ID });
+        expect(store.snapshot().tasks[0]!.unresolvedRunId).toBe(RUN_ID);
+
+        store.upsertTask({ ...record, latestRunId: null });
+        const view = store.snapshot().tasks[0]!;
+        expect(view.latestRunId).toBe(RUN_ID);
+        expect(view.unresolvedRunId).toBe(RUN_ID);
+        expect(view.state).toBe('restoring');
+    });
 });
 
 describe('AgentStore scoped mutation journal', () => {

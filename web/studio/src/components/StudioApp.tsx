@@ -117,6 +117,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             pinned: task.pinnedLocal,
             latestRunId: task.latestRunId,
             unresolvedRunId: task.unresolvedRunId,
+            latestRunLoaded:
+                task.latestRunId === null
+                    ? true
+                    : task.runs.some((run) => run.runId === task.latestRunId),
             state: task.state,
         }));
     }, [agentClient, taskRevision]);

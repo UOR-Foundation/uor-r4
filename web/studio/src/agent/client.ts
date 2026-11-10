@@ -60,6 +60,7 @@ export interface TaskSummary {
         tool_call_id: string;
     } | null;
     unresolvedRunId?: string | null;
+    latestRunLoaded?: boolean;
     state:
         | 'idle'
         | 'queued'
@@ -428,6 +429,12 @@ export class AgentClient {
                 state: unresolved === null ? view.state : task.state,
                 latestRunId: unresolved ?? view.latestRunId,
                 unresolvedRunId: unresolved,
+                latestRunLoaded:
+                    view.latestRunId === null
+                        ? true
+                        : view.runs.some(
+                              (run) => run.runId === view.latestRunId,
+                          ),
                 archived: view.archived,
                 pinned: view.pinnedLocal,
             };

@@ -152,7 +152,13 @@ export interface StudioTestApi {
     awaitAppendHeld(): Promise<void>;
     releaseHeldAppend(): void;
     finishHeldAppend(): Promise<Outcome>;
-    beginImport(text: string): void;
+    beginHeldTaskWrite(taskId: string): Promise<void>;
+    awaitTaskWriteHeld(): Promise<void>;
+    releaseTaskWrite(): void;
+    finishHeldTaskWrite(): Promise<Outcome>;
+    beginImport(text: string, options?: { holdPublish?: boolean }): void;
+    awaitImportPublishGate(): Promise<void>;
+    releaseImportPublishGate(): void;
     whenImport(): Promise<Outcome>;
     advanceImportClock(ms: number): Promise<Outcome>;
     freezeImportClock(ms: number): Promise<Outcome>;
@@ -191,6 +197,11 @@ interface TestState {
     appendGateRelease: (() => void) | null;
     appendGateReached: Promise<void> | null;
     heldAppend: Promise<Outcome> | null;
+    taskWriteGateRelease: (() => void) | null;
+    taskWriteGateReached: Promise<void> | null;
+    heldTaskWrite: Promise<Outcome> | null;
+    importPublishGateRelease: (() => void) | null;
+    importPublishGateReached: Promise<void> | null;
     timers: TestTimer[];
     nextTimerHandle: number;
 }
@@ -228,6 +239,11 @@ function freshState(): TestState {
         appendGateRelease: null,
         appendGateReached: null,
         heldAppend: null,
+        taskWriteGateRelease: null,
+        taskWriteGateReached: null,
+        heldTaskWrite: null,
+        importPublishGateRelease: null,
+        importPublishGateReached: null,
         timers: [],
         nextTimerHandle: 1,
     };
@@ -1405,13 +1421,70 @@ export function installStudioTestApi(): void {
             state.appendGateReached = null;
             return result;
         },
-        beginImport(text: string) {
+        async beginHeldTaskWrite(taskId: string) {
+            await ensureReady();
+            const gate = new Promise<void>((resolve) => {
+                state.taskWriteGateRelease = resolve;
+            });
+            state.taskWriteGateReached = requireTaskStore().setTaskWriteGate(gate);
+            const record = {
+                task_id: taskId,
+                project_id: 'prj_0000000000000001',
+                title: 'Held task write',
+                created_at_ms: state.nowMs,
+                archived: false,
+                pinned_local: false,
+                latest_run_id: null,
+            };
+            state.heldTaskWrite = (async () => {
+                try {
+                    const written = await requireTaskStore().writeTaskRecord(record);
+                    return { ok: true, record: written };
+                } catch (error) {
+                    return failure(error);
+                }
+            })();
+        },
+        async awaitTaskWriteHeld() {
+            if (state.taskWriteGateReached !== null) {
+                await state.taskWriteGateReached;
+            }
+        },
+        releaseTaskWrite() {
+            const release = state.taskWriteGateRelease;
+            state.taskWriteGateRelease = null;
+            release?.();
+        },
+        async finishHeldTaskWrite() {
+            if (state.heldTaskWrite === null) {
+                return {
+                    ok: false,
+                    code: 'invalid_arguments',
+                    message: 'no held task write is running',
+                };
+            }
+            const result = await state.heldTaskWrite;
+            state.heldTaskWrite = null;
+            state.taskWriteGateReached = null;
+            return result;
+        },
+        beginImport(text: string, options: { holdPublish?: boolean } = {}) {
             state.phase = 'loading';
             state.error = null;
             const gate = new Promise<void>((resolve) => {
                 state.importGateRelease = resolve;
             });
             requireTaskStore().setImportGate(gate);
+            if (options.holdPublish === true) {
+                const publishGate = new Promise<void>((resolve) => {
+                    state.importPublishGateRelease = resolve;
+                });
+                state.importPublishGateReached =
+                    requireTaskStore().setImportPublishGate(publishGate);
+            } else {
+                state.importPublishGateRelease = null;
+                state.importPublishGateReached = null;
+            }
             state.importPromise = (async () => {
                 try {
                     const summary = await requireTaskStore().importNdjson(text);
@@ -1425,6 +1498,16 @@ export function installStudioTestApi(): void {
                     return failure(error);
                 }
             })();
+        },
+        async awaitImportPublishGate() {
+            if (state.importPublishGateReached !== null) {
+                await state.importPublishGateReached;
+            }
+        },
+        releaseImportPublishGate() {
+            const release = state.importPublishGateRelease;
+            state.importPublishGateRelease = null;
+            release?.();
         },
         async whenImport() {
             if (state.importGateRelease !== null) {

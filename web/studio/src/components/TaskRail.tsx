@@ -91,7 +91,8 @@ export function TaskRail({
     legacySessionsEmpty = false,
 }: TaskRailProps) {
     const displayTasks = tasks.map((task) =>
-        task.unresolvedRunId
+        task.unresolvedRunId ||
+        (task.latestRunId !== null && task.latestRunLoaded === false)
             ? { ...task, state: 'restoring' as TaskSummary['state'] }
             : task,
     );

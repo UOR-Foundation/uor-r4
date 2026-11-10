@@ -33,7 +33,8 @@ export type TaskState =
     | 'waiting_for_approval'
     | 'waiting_for_background'
     | 'cancelling'
-    | 'archived';
+    | 'archived'
+    | 'restoring';
 
 export type ToolCallStatus = 'requested' | 'started' | 'completed' | 'failed';
 
@@ -1133,12 +1134,13 @@ function reduceKnownEvent(
 function taskStateFor(
     task: InternalTask,
     latestRun: RunView | null,
+    unresolvedRunId: string | null,
 ): TaskState {
     if (task.archived) {
         return 'archived';
     }
     if (latestRun === null) {
-        return 'idle';
+        return unresolvedRunId === null ? 'idle' : 'restoring';
     }
     switch (latestRun.state) {
         case 'queued':
@@ -1706,6 +1708,12 @@ export class AgentStore {
                     ? null
                     : taskRuns.find((run) => run.runId === task.latestRunId) ??
                       null;
+            const unresolvedRunId =
+                task.latestRunId === null
+                    ? task.unresolvedRunId
+                    : latestRun === null
+                      ? task.unresolvedRunId ?? task.latestRunId
+                      : null;
             return {
                 taskId: task.taskId,
                 projectId: task.projectId,
@@ -1715,9 +1723,9 @@ export class AgentStore {
                 createdAtMs: task.createdAtMs,
                 archived: task.archived,
                 pinnedLocal: task.pinnedLocal,
-                state: taskStateFor(task, latestRun),
+                state: taskStateFor(task, latestRun, unresolvedRunId),
                 latestRunId: task.latestRunId,
-                unresolvedRunId: task.unresolvedRunId,
+                unresolvedRunId,
                 runs: taskRuns,
             };
         });
@@ -1786,7 +1794,12 @@ export class AgentStore {
             task.archived = record.archived ?? task.archived;
             task.pinnedLocal = record.pinnedLocal ?? task.pinnedLocal;
             if (record.latestRunId === null) {
-                task.unresolvedRunId = null;
+                if (
+                    task.latestRunId !== null &&
+                    !this.runs.has(runKey(task.taskId, task.latestRunId))
+                ) {
+                    task.unresolvedRunId = task.latestRunId;
+                }
             } else if (record.latestRunId !== undefined) {
                 const exists = this.runs.has(
                     runKey(task.taskId, record.latestRunId),

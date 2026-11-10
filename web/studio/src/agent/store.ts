@@ -645,6 +645,7 @@ export class AgentTaskStore {
     private db: IDBDatabase | null = null;
     private opened = false;
     private importInProgress = false;
+    private importClosing = false;
     private importGate: Promise<void> | null = null;
     private importHeartbeatHandle: unknown = null;
     private importHeartbeatTask: Promise<void> = Promise.resolve();
@@ -653,6 +654,10 @@ export class AgentTaskStore {
     private readonly writeWaiters: Array<() => void> = [];
     private appendGate: Promise<void> | null = null;
     private appendGateReached: (() => void) | null = null;
+    private taskWriteGate: Promise<void> | null = null;
+    private taskWriteGateReached: (() => void) | null = null;
+    private importPublishGate: Promise<void> | null = null;
+    private importPublishGateReached: (() => void) | null = null;
     private closeRequested = false;
     private openPromise: Promise<OpenReport> | null = null;
     private lastReport: OpenReport | null = null;
@@ -704,6 +709,20 @@ export class AgentTaskStore {
         this.appendGate = gate;
         return new Promise((resolve) => {
             this.appendGateReached = resolve;
+        });
+    }
+
+    setTaskWriteGate(gate: Promise<void> | null): Promise<void> {
+        this.taskWriteGate = gate;
+        return new Promise((resolve) => {
+            this.taskWriteGateReached = resolve;
+        });
+    }
+
+    setImportPublishGate(gate: Promise<void> | null): Promise<void> {
+        this.importPublishGate = gate;
+        return new Promise((resolve) => {
+            this.importPublishGateReached = resolve;
         });
     }
 
@@ -775,7 +794,7 @@ export class AgentTaskStore {
     }
 
     async open(): Promise<OpenReport> {
-        if (this.importInProgress) {
+        if (this.importInProgress || this.importClosing) {
             throw new AgentStoreError(
                 'runtime_unavailable',
                 'an import is in progress; open is unavailable',
@@ -799,7 +818,7 @@ export class AgentTaskStore {
     }
 
     close(): void {
-        if (this.importInProgress) {
+        if (this.importInProgress || this.importClosing) {
             this.closeRequested = true;
             return;
         }
@@ -812,7 +831,7 @@ export class AgentTaskStore {
     }
 
     async deleteDatabase(): Promise<void> {
-        if (this.importInProgress) {
+        if (this.importInProgress || this.importClosing) {
             throw new AgentStoreError(
                 'runtime_unavailable',
                 'an import is in progress; deleteDatabase is unavailable',
@@ -849,6 +868,8 @@ export class AgentTaskStore {
         ) {
             invalidArgument('created_at_ms must be a non-negative safe integer');
         }
+        this.beginWrite();
+        try {
         const record: TaskRecord = {
             task_id: taskId,
             project_id: projectId,
@@ -862,11 +883,16 @@ export class AgentTaskStore {
         };
         await this.persistTaskWithRollback(record);
         return record;
+        } finally {
+            this.endWrite();
+        }
     }
 
     async writeTaskRecord(record: TaskRecord): Promise<TaskRecord> {
         this.requireOpen();
         requireStoredTask(record);
+        this.beginWrite();
+        try {
         const marker = this.store.getTaskUnresolvedRunId(record.task_id);
         let latest = record.latest_run_id ?? null;
         if (
@@ -899,6 +925,9 @@ export class AgentTaskStore {
             this.store.setTaskUnresolvedRunId(record.task_id, marker);
         }
         return normalized;
+        } finally {
+            this.endWrite();
+        }
     }
 
     async pinTask(taskId: string, pinned: boolean): Promise<TaskRecord> {
@@ -1463,6 +1492,16 @@ export class AgentTaskStore {
 
     async appendEvent(input: AppendEventStoreInput): Promise<AppendStoreResult> {
         this.requireOpen();
+        this.beginWrite();
+        try {
+        if (this.appendGate !== null) {
+            const gate = this.appendGate;
+            this.appendGate = null;
+            const reached = this.appendGateReached;
+            this.appendGateReached = null;
+            reached?.();
+            await gate;
+        }
         const event = input.event;
         if (input.now_ms !== undefined && !isNonNegativeInteger(input.now_ms)) {
             return {
@@ -1512,29 +1551,31 @@ export class AgentTaskStore {
                 storage: null,
             };
         }
-        if (input.snapshot_anchor !== undefined || input.snapshot === true) {
-            try {
+        try {
+            if (input.snapshot_anchor !== undefined || input.snapshot === true) {
                 await this.verifyExistingSnapshotForRun(event.task_id, event.run_id);
-            } catch (error) {
-                if (error instanceof AgentStoreError) {
-                    return {
-                        status: 'rejected',
-                        code: error.code,
-                        message: errorMessage(error),
-                        event_id: event.event_id,
-                        digest,
-                        storage: error.storage,
-                    };
-                }
+            } else {
+                await this.verifyExistingSnapshotAnchors(event.task_id, event.run_id);
+            }
+        } catch (error) {
+            if (error instanceof AgentStoreError) {
                 return {
                     status: 'rejected',
-                    code: 'snapshot_corrupt',
+                    code: error.code,
                     message: errorMessage(error),
                     event_id: event.event_id,
                     digest,
-                    storage: null,
+                    storage: error.storage,
                 };
             }
+            return {
+                status: 'rejected',
+                code: 'snapshot_corrupt',
+                message: errorMessage(error),
+                event_id: event.event_id,
+                digest,
+                storage: null,
+            };
         }
 
         let journaled;
@@ -1591,6 +1632,9 @@ export class AgentTaskStore {
             digest,
             storage: null,
         };
+        } finally {
+            this.endWrite();
+        }
     }
 
     async exportNdjson(): Promise<string> {
@@ -1773,10 +1817,10 @@ export class AgentTaskStore {
 
     async importNdjson(text: string): Promise<ImportSummary> {
         this.requireOpen();
-        const checkpoint = this.store.checkpoint();
-        this.importInProgress = true;
+        this.importClosing = true;
         this.opened = false;
         this.lastReport = null;
+        let checkpoint = this.store.checkpoint();
         let fenceAcquired = false;
         let cleanupFailed = false;
         let cleanupError: unknown = null;
@@ -1788,6 +1832,8 @@ export class AgentTaskStore {
         let changes: ChangeRecord[] = [];
         try {
         await this.drainWrites();
+        checkpoint = this.store.checkpoint();
+        this.importInProgress = true;
         await this.acquireImportFence(this.clock());
         fenceAcquired = true;
         this.startImportHeartbeat();
@@ -2109,12 +2155,23 @@ export class AgentTaskStore {
         if (fenceAcquired) {
             await this.settleImportHeartbeat();
             this.takeImportHeartbeatError();
-            await this.releaseImportFence();
-            fenceAcquired = false;
         }
         this.store.restore(scratch.checkpoint());
         this.lastReport = scratchResult.report;
+        if (this.importPublishGate !== null) {
+            const gate = this.importPublishGate;
+            this.importPublishGate = null;
+            const reached = this.importPublishGateReached;
+            this.importPublishGateReached = null;
+            reached?.();
+            await gate;
+        }
+        if (fenceAcquired) {
+            await this.releaseImportFence();
+            fenceAcquired = false;
+        }
         this.importInProgress = false;
+        this.importClosing = false;
         this.opened = true;
         if (this.closeRequested) {
             this.closeRequested = false;
@@ -2161,6 +2218,7 @@ export class AgentTaskStore {
             this.db?.close();
             this.db = null;
             this.importInProgress = false;
+            this.importClosing = false;
             this.opened = false;
             this.lastReport = null;
             if (cleanupFailed) {
@@ -2242,7 +2300,7 @@ export class AgentTaskStore {
     }
 
     private requireOpen(): void {
-        if (this.importInProgress) {
+        if (this.importInProgress || this.importClosing) {
             throw new AgentStoreError(
                 'runtime_unavailable',
                 'an import is in progress; the task store is unavailable',
@@ -2904,6 +2962,37 @@ export class AgentTaskStore {
         this.verifySnapshotBundleAgainstChain(bundle, verified);
     }
 
+    // Ordinary appends verify every persisted latest/anchor at its exact event
+    // position without re-reading the whole chain; the append path keeps the
+    // chain verified incrementally.
+    private async verifyExistingSnapshotAnchors(
+        taskId: string,
+        runId: string,
+    ): Promise<void> {
+        const stored = (await this.readOne<StoredSnapshotRecord>(
+            'snapshots',
+            [taskId, runId],
+        )) as StoredSnapshotRecord | undefined;
+        if (stored === undefined) return;
+        const bundle = normalizeSnapshotBundle(stored);
+        this.assertSnapshotBundleSize(bundle);
+        for (const record of snapshotRecordsOf(bundle)) {
+            const event = (await this.readOne<EventRecord>('events', [
+                taskId,
+                runId,
+                record.generation,
+                record.last_sequence,
+            ])) as EventRecord | undefined;
+            if (
+                event === undefined ||
+                event.event_id !== record.last_event_id ||
+                event.digest !== record.head_digest
+            ) {
+                corrupt('snapshot anchor does not match the stored event record');
+            }
+        }
+    }
+
     private async materializeEvent(record: EventRecord): Promise<AgentIncomingEvent> {
         if (record.prev_digest !== null && !DIGEST_PATTERN.test(record.prev_digest)) {
             corrupt('event prev_digest is not a SHA-256 digest');
@@ -2951,16 +3040,6 @@ export class AgentTaskStore {
                 'an import is in progress; append commit is unavailable',
             );
         }
-        this.beginWrite();
-        try {
-            if (this.appendGate !== null) {
-                const gate = this.appendGate;
-                this.appendGate = null;
-                const reached = this.appendGateReached;
-                this.appendGateReached = null;
-                reached?.();
-                await gate;
-            }
         const db = this.requireDb();
         const transaction = db.transaction(
             ['tasks', 'runs', 'events', 'snapshots', 'leases'],
@@ -3156,9 +3235,6 @@ export class AgentTaskStore {
             }
             throw storageError(error);
         }
-        } finally {
-            this.endWrite();
-        }
     }
 
     private buildRunRecordFromState(
@@ -3242,6 +3318,14 @@ export class AgentTaskStore {
         const checkpoint = this.store.captureTask(record.task_id);
         try {
             this.store.upsertTask(taskToAgentRecord(record));
+            if (this.taskWriteGate !== null) {
+                const gate = this.taskWriteGate;
+                this.taskWriteGate = null;
+                const reached = this.taskWriteGateReached;
+                this.taskWriteGateReached = null;
+                reached?.();
+                await gate;
+            }
             await this.putRecord('tasks', jsonClean(record), record.task_id);
         } catch (error) {
             this.store.restoreTask(checkpoint);
@@ -3255,6 +3339,8 @@ export class AgentTaskStore {
     ): Promise<TaskRecord> {
         this.requireOpen();
         if (!TASK_ID_PATTERN.test(taskId)) invalidArgument('task_id is invalid');
+        this.beginWrite();
+        try {
         const stored = (await this.readOne<TaskRecord>('tasks', taskId)) as
             | TaskRecord
             | undefined;
@@ -3286,6 +3372,9 @@ export class AgentTaskStore {
             this.store.setTaskUnresolvedRunId(taskId, marker);
         }
         return record;
+        } finally {
+            this.endWrite();
+        }
     }
 
     private async putRecord(
@@ -3299,8 +3388,6 @@ export class AgentTaskStore {
                 'an import is in progress; task writes are unavailable',
             );
         }
-        this.beginWrite();
-        try {
         const transaction = this.requireDb().transaction([storeName, 'leases'], 'readwrite');
         try {
             await this.checkImportFence(
@@ -3322,9 +3409,6 @@ export class AgentTaskStore {
                 // The transaction may already be finished.
             }
             throw storageError(error);
-        }
-        } finally {
-            this.endWrite();
         }
     }
 

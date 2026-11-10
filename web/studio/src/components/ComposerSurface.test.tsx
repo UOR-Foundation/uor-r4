@@ -895,6 +895,22 @@ class UnloadedSummaryTransport extends FixtureTransport {
     }
 }
 
+class StaleThenNullSummaryTransport extends FixtureTransport {
+    private listCalls = 0;
+
+    constructor(
+        private readonly first: TaskSummary,
+        private readonly later: TaskSummary,
+    ) {
+        super();
+    }
+
+    override async listTasks(): Promise<TaskSummary[]> {
+        this.listCalls += 1;
+        return [this.listCalls === 1 ? this.first : this.later];
+    }
+}
+
 describe('task runtime send identity', () => {
     function fixtureRuntime() {
         const transport = new FixtureTransport();
@@ -1023,6 +1039,44 @@ describe('task runtime send identity', () => {
         await settleAsync();
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(0);
         expect(promptElement().value).toBe('do not start from list');
+    });
+
+    it('keeps a null-latest reload in Restoring and blocks Send for the unloaded run', async () => {
+        const first: TaskSummary = {
+            taskId: 'tsk_7777777777777777',
+            projectId: 'prj_0000000000000001',
+            title: 'Stale then null task',
+            repo: null,
+            branch: null,
+            createdAtMs: 1,
+            archived: false,
+            pinned: false,
+            latestRunId: 'run_7777777777777777',
+            state: 'running',
+        };
+        const later: TaskSummary = {
+            ...first,
+            latestRunId: null,
+            state: 'idle',
+        };
+        const transport = new StaleThenNullSummaryTransport(first, later);
+        const client = new AgentClient({ transport });
+        await client.listTasks({ includeArchived: true });
+        await client.listTasks({ includeArchived: true });
+        client.store.selectTask(later.taskId);
+        await mountStudio(client);
+
+        expect(button('Send').disabled).toBe(true);
+        const row = host.querySelector<HTMLElement>('[data-task-id="tsk_7777777777777777"]');
+        expect(row).not.toBeNull();
+        expect(row!.textContent).toContain('Restoring');
+        expect(row!.textContent).not.toContain('Idle');
+
+        typePrompt('do not start from a null summary');
+        pressKey(promptElement(), 'Enter');
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(0);
+        expect(promptElement().value).toBe('do not start from a null summary');
     });
 
     it('blocks Enter during a cancelling run without starting another run', async () => {

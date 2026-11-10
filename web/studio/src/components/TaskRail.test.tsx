@@ -4,6 +4,7 @@ import { useState } from 'preact/hooks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentClient, type TaskSummary } from '../agent/client.js';
 import { FixtureTransport } from '../agent/fixtureTransport.js';
+import { createAgentStore } from '../state/agent.js';
 import { LifecycleStore } from '../state/lifecycle.js';
 import { StudioApp } from './StudioApp.js';
 import { TaskRail, type TaskRailProps } from './TaskRail.js';
@@ -132,6 +133,56 @@ describe('TaskRail groups', () => {
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });
         expect(host.querySelector('[data-task-id="tsk_00000000000000a1"]')).not.toBeNull();
+    });
+
+    it('keeps Restoring after a null-latest record follows an unresolved latest run', () => {
+        const store = createAgentStore();
+        const record = {
+            taskId: 'tsk_00000000000000a2',
+            projectId: PROJECT_A,
+            title: 'Reloaded task',
+            createdAtMs: NOW,
+            archived: false,
+            pinnedLocal: false,
+        };
+        store.upsertTask({ ...record, latestRunId: 'run_00000000000000a2' });
+        store.upsertTask({ ...record, latestRunId: null });
+        const view = store.snapshot().tasks[0]!;
+        renderRail({
+            tasks: [{
+                taskId: view.taskId,
+                projectId: view.projectId,
+                title: view.title,
+                repo: view.repo,
+                branch: view.branch,
+                createdAtMs: view.createdAtMs,
+                archived: view.archived,
+                pinned: view.pinnedLocal,
+                latestRunId: view.latestRunId,
+                unresolvedRunId: view.unresolvedRunId,
+                state: view.state,
+            }],
+        });
+        const row = host.querySelector<HTMLElement>('[data-task-id="tsk_00000000000000a2"]')!;
+        expect(row.textContent).toContain('Restoring');
+        expect(row.textContent).not.toContain('Idle');
+    });
+
+    it('treats an explicitly unloaded latest run as Restoring without a marker', () => {
+        const summary = {
+            ...task({
+                taskId: 'tsk_00000000000000a3',
+                title: 'Unloaded rail task',
+                createdAtMs: NOW,
+                latestRunId: 'run_00000000000000a3',
+                state: 'idle',
+            }),
+            latestRunLoaded: false,
+        } as TaskSummary;
+        renderRail({ tasks: [summary] });
+        const row = host.querySelector<HTMLElement>('[data-task-id="tsk_00000000000000a3"]')!;
+        expect(row.textContent).toContain('Restoring');
+        expect(row.textContent).not.toContain('Idle');
     });
 
     it('renders_today_last_seven_days_older_groups from task record timestamps', () => {

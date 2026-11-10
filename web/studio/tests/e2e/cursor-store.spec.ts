@@ -1757,6 +1757,167 @@ test.describe('browser agent task store', () => {
         expect(stillMissing.ok).toBe(false);
         expect(stillMissing.code).toBe('snapshot_missing');
     });
+
+    test('pre_apply_held_append_is_drained_before_import_and_survives_the_failed_import', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const heldTask = 'tsk_aaaaaaaaaaaaaaaa';
+        const heldRun = 'run_bbbbbbbbbbbbbbbb';
+        await call(page, 'beginHeldQueuedAppend', heldTask, heldRun);
+        await call(page, 'awaitAppendHeld');
+        await call(page, 'beginImport', exported);
+        const importOutcome = call<Outcome>(page, 'whenImport');
+        const raced = await Promise.race([
+            importOutcome.then((result) => ({ kind: 'import' as const, result })),
+            page.waitForTimeout(5_000).then(() => ({ kind: 'blocked' as const })),
+        ]);
+        // The barrier starts before the digest and in-memory apply, so the import drains this writer.
+        expect(raced.kind).toBe('blocked');
+
+        await call(page, 'releaseHeldAppend');
+        const held = await call<Outcome>(page, 'finishHeldAppend');
+        expect(held.status).toBe('applied');
+        const imported = await importOutcome;
+        expect(imported.ok).toBe(false);
+        expect(imported.code).toBe('duplicate_event');
+
+        const db = await readDb(page);
+        expect(db.eventRecords).toHaveLength(1);
+        expect(db.eventRecords[0]!.event_id).toContain(heldRun);
+        expect(db.taskRecords).toHaveLength(1);
+        expect((db.taskRecords[0] as { task_id: string }).task_id).toBe(heldTask);
+        expect(db.leaseRecords).toHaveLength(0);
+        // The failed import publishes the post-drain checkpoint, not a stale pre-drain copy.
+        expect(await call<CursorView | null>(page, 'memoryCursor')).toMatchObject({
+            taskId: heldTask,
+            runId: heldRun,
+            sequence: 0,
+        });
+    });
+
+    test('pre_write_task_upsert_is_drained_before_import_and_leaves_no_orphan', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const heldTask = 'tsk_eeeeeeeeeeeeeeee';
+        await call(page, 'beginHeldTaskWrite', heldTask);
+        await call(page, 'awaitTaskWriteHeld');
+        await call(page, 'beginImport', exported);
+        const importOutcome = call<Outcome>(page, 'whenImport');
+        const raced = await Promise.race([
+            importOutcome.then((result) => ({ kind: 'import' as const, result })),
+            page.waitForTimeout(5_000).then(() => ({ kind: 'blocked' as const })),
+        ]);
+        // The in-memory upsert is inside the barrier; the import must wait for its durable write.
+        expect(raced.kind).toBe('blocked');
+
+        await call(page, 'releaseTaskWrite');
+        const written = await call<Outcome>(page, 'finishHeldTaskWrite');
+        expect(written.ok, JSON.stringify(written)).toBe(true);
+        const imported = await importOutcome;
+        expect(imported.ok).toBe(false);
+        expect(imported.code).toBe('duplicate_event');
+
+        const db = await readDb(page);
+        expect(db.taskRecords).toHaveLength(1);
+        expect((db.taskRecords[0] as { task_id: string }).task_id).toBe(heldTask);
+        expect(db.eventRecords).toHaveLength(0);
+        expect(db.leaseRecords).toHaveLength(0);
+        const view = await call<TaskViewSummary | null>(page, 'taskView');
+        expect(view?.taskId).toBe(heldTask);
+        expect((await call<RestoreView>(page, 'restoreState')).phase).not.toBe('ready');
+    });
+
+    test('import_publishes_before_releasing_the_fence_so_no_cross_tab_write_slips_in', async ({ page, context }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const pageTwo = await context.newPage();
+        await openStudio(pageTwo);
+        expect((await call<RestoreView>(pageTwo, 'open')).phase).toBe('ready');
+
+        await call(page, 'beginImport', exported, { holdPublish: true });
+        const importOutcome = call<Outcome>(page, 'whenImport');
+        await call(page, 'awaitImportPublishGate');
+
+        // The first tab has published its verified checkpoint and still owns the fence.
+        const slipped = await call<Outcome>(
+            pageTwo,
+            'appendQueuedSafe',
+            'tsk_cccccccccccccccc',
+            'run_dddddddddddddddd',
+        );
+        expect(slipped.ok).toBe(false);
+        expect(slipped.code).toBe('stale_generation');
+
+        await call(page, 'releaseImportPublishGate');
+        const imported = await importOutcome;
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            runId: created.runId,
+            sequence: 2,
+        });
+        const db = await readDb(page);
+        expect(db.taskRecords).toHaveLength(1);
+        expect((db.taskRecords[0] as { task_id: string }).task_id).toBe(created.taskId);
+        expect(db.eventRecords).toHaveLength(3);
+        expect(db.leaseRecords).toHaveLength(0);
+        await pageTwo.close();
+    });
+
+    test('ordinary_append_rejects_a_corrupt_existing_anchor_without_advancing_the_cursor', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'appendResume')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'corrupt_anchor',
+            taskId: created.taskId,
+            runId: created.runId,
+            index: 0,
+        });
+
+        const before = await call<CursorView>(page, 'cursor');
+        const append = await call<Outcome>(
+            page,
+            'appendAssistantSafe',
+            'ordinary event after a corrupt anchor',
+        );
+        expect(append.status).toBe('rejected');
+        expect(append.code).toBe('snapshot_corrupt');
+        expect(await call<CursorView>(page, 'cursor')).toEqual(before);
+        expect((await readDb(page)).eventRecords).toHaveLength(4);
+    });
+
+    test('ordinary_append_rejects_an_oversized_existing_bundle_without_advancing_the_cursor', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'oversize_snapshot',
+            taskId: created.taskId,
+            runId: created.runId,
+            bytes: 9 * 1024 * 1024,
+        });
+
+        const before = await call<CursorView>(page, 'cursor');
+        const append = await call<Outcome>(
+            page,
+            'appendAssistantSafe',
+            'ordinary event after an oversized bundle',
+        );
+        expect(append.status).toBe('rejected');
+        expect(append.code).toBe('limit_exceeded');
+        expect(await call<CursorView>(page, 'cursor')).toEqual(before);
+        expect((await readDb(page)).eventRecords).toHaveLength(3);
+    });
 });
 
 test('no_query_browser_exposes_no_studio_test_api', async ({ page }) => {
