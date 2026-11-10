@@ -1,6 +1,7 @@
 # ORDER: infra-loop-harness, deepseek-114 (stack contract compiler)
 
 Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `8a5bd5278`.
+Setup row: 2 (record maintenance and model-contract tooling).
 
 ## Goal
 

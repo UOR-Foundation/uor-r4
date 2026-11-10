@@ -19,6 +19,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `8a5bd5278`.
   evidence path could escape the repository. This repair records the actual
   review-head size, confines paths by component and canonical containment,
   rejects empty contract collections, and tests both failures.
+- The first attempt to post the approving review was refused before any comment
+  was written: this item's ORDER omitted its required `Setup row:` marker. The
+  ORDER now names row 2, the maintenance row used by this unit.
 
 ## What changed
 
