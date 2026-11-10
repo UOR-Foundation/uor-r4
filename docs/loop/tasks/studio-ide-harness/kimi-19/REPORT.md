@@ -36,7 +36,7 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 ## Skills used
 
 - Isolated worktree, working discipline, solution integrity, writing-plans correction review, subagent-driven task preparation, systematic root-cause investigation, receiving-code-review verification, and protected delivery.
-- Agent-98 independently reviewed acceptance and returned CHANGES; its findings are addressed above. No subagent decided acceptance or scope. Fresh exact-head review is separate.
+- Agent-98 independently reviewed acceptance and returned CHANGES; its findings are addressed above. Its re-review at `b838e6e93` returned **APPROVE**, with a non-blocking pointer correction now applied in the item's How to start. No subagent decided acceptance or scope. Fresh exact-head review of the final commit is separate.
 
 ## Still open
 
