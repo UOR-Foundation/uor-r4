@@ -33,7 +33,8 @@ Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-
 - **Task 2 complete:** `1c4976881` adds the checked-in schema, deterministic generator, generated contract/canonicalizer and focused tests after missing-module RED. Final focused result: **28 tests**; full Studio **483/483 across 54 files**; Rust **23/23**; typecheck/fmt clean. Staged second generation from `web/studio` and `/tmp` leaves an empty unstaged diff. `task-2-report.md`, `task-2-cwd-green.log` and both RED/GREEN logs are retained. Independent spec/quality review is **APPROVED** with minors deferred to final whole-branch triage.
 - **Task 3 complete:** `76d6a4627` added the browser client/reducer after missing-module RED. `77e6ded8a` fixed atomic payload rejection, exact change-scope filtering and metadata authority; `4e3c5d114` corrected an over-strict `changes.snapshot.head_digest` check found in scoped review. Final focused result: **30 tests**; full Studio **56 files / 513 tests** with a retained full-suite log. Independent reviews confirm atomic rejection, resume/digest/sequence handling and store-derived task state with no remaining Critical/Important breakage.
 - Scope PR #3918 merged as `8a5bd52782fbf643644ebce6f7e8119428cb947c`, adding the mandated reducer-test path and contract-crate FILEMAP row. It was merged forward and its worktree/branch removed; the corrected Task 3 suborder is in scope. Fixture output remains synthetic and not model evidence.
-- Task 4 is implementing protected typed selectors, one mode-specific skip link, the legacy palette guard and exact 1023/1024 rail behavior; no result yet.
+- **Task 4 complete:** `285425fb9` added the protected typed baseline after seven real RED cases; `0c0e44062` corrected the dead readiness handshake found in review. Final evidence: **10/10 cursor-baseline checks**, **13/13 existing shell/workflow checks**, **18/18 repeated baseline checks**, **513/513 full Vitest tests**, and clean typecheck. The `uor-studio-v2-ready` listener now resets palette state after late publication; independent review confirms no remaining Critical/Important breakage.
+- Task 5 is implementing UOR tokens and the `.task-workspace` shell, including real CSS, an honest empty state and no green placeholder treatment; no result yet.
 
 ## Checks run at the head
 
@@ -41,7 +42,7 @@ Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-
 - Official apply: `apply.log`; #3917 direct identity: `studio-issue.json`; generated metadata diff: exactly two keys; remote/milestone comparisons: `remote-write-diff.json`, `milestones-before/`, `roadmap-issues-{before,after}.json`.
 - Post-apply `roadmap check` and `roadmap render --check`: PASS (`post-apply-check.log`, `post-apply-render-check.log`).
 - Baseline logs: `npm-ci.log`, `baseline-vitest.log`, `baseline-prepare.log`, `baseline-build.log`, `baseline-playwright.log` under `local/kimi/cursor-issue-sync/`.
-- Task 1 RED/GREEN: `task-1-red.log`, `task-1-green.log`, `task-1-fix1-red.log`, `task-1-fix1-green.log`. Task 2 RED/GREEN: `task-2-red.log`, `task-2-green.log`, `task-2-cwd-green.log`. Task 3 RED/GREEN: `task-3-red.log`, `task-3-green.log`, `task-3-fix1-red.log`, `task-3-fix1-green.log`, `task-3-fix2-red.log`, `task-3-fix2-green.log`, `task-3-full-green.log`. Task 4+ checks remain NOT_RUN. Current-stage local policy/full gates and protected delivery remain pending.
+- Task 1 RED/GREEN: `task-1-red.log`, `task-1-green.log`, `task-1-fix1-red.log`, `task-1-fix1-green.log`. Task 2 RED/GREEN: `task-2-red.log`, `task-2-green.log`, `task-2-cwd-green.log`. Task 3 RED/GREEN: `task-3-red.log`, `task-3-green.log`, `task-3-fix1-red.log`, `task-3-fix1-green.log`, `task-3-fix2-red.log`, `task-3-fix2-green.log`, `task-3-full-green.log`. Task 4 RED/GREEN: `task-4-red.log`, `task-4-green.log`, `task-4-existing-green.log`, `task-4-repeat.log`, `task-4-unit-green.log`, `task-4-typecheck.log`, `task-4-fix1-red.log`, `task-4-fix1-green.log`, `task-4-fix1-typecheck.log`, `task-4-layout-probe.log`. Task 5+ checks remain NOT_RUN. Current-stage local policy/full gates and protected delivery remain pending.
 
 ## Skills used
 
@@ -49,10 +50,10 @@ Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-
 
 ## Still open
 
-- Tasks 4–23 with their required red-first tests, independent task reviews, stage acceptance checks and commits. Tasks 1–3 are complete; Task 4 is in progress.
-- Deferred minors from Tasks 1–3, final whole-branch triage, stage REPORT completion, exact-head approval, required GitHub checks, protected merge and fresh-main verification.
+- Tasks 5–23 with their required red-first tests, independent task reviews, stage acceptance checks and commits. Tasks 1–4 are complete; Task 5 is in progress.
+- Deferred minors from Tasks 1–4, final whole-branch triage, stage REPORT completion, exact-head approval, required GitHub checks, protected merge and fresh-main verification.
 - Hosted services/integrations, real R4 generation, useful-model evaluation, production deployment and full Cursor parity remain NOT_RUN and outside this local plan.
 
 ## Plain summary
 
-The official roadmap path and issue #3917 are complete. Task 1 provides the Rust schema/canonical/cursor/resume contract; Task 2 generates the matching TypeScript contract; Task 3 provides the browser client/reducer with strict ingestion, exact scope selection and store-derived state after two reviewed fix rounds. Task 4 is protecting the existing UI baseline. No hosted service, real R4 generation, useful model behavior or production capability is claimed.
+The official roadmap path and issue #3917 are complete. Task 1 provides the Rust schema/canonical/cursor/resume contract; Task 2 generates the matching TypeScript contract; Task 3 provides the browser client/reducer with strict ingestion, exact scope selection and store-derived state after two reviewed fix rounds; Task 4 protects typed selectors, one skip link, palette/hash behavior, legacy routes and the exact 1023/1024 rail. Task 5 is building the UOR task-workspace shell. No hosted service, real R4 generation, useful model behavior or production capability is claimed.
