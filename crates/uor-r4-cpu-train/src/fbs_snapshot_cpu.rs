@@ -1152,9 +1152,21 @@ fn snapshot_and_artifact_bytes(
     let mut artifact = export_fbs_trunk_uorlut01_with(snapshot, snaps)
         .map_err(|error| invalid(error.to_string()))?;
     if let Some(asks) = asks {
+        let depths = &snapshot
+            .hamming
+            .as_ref()
+            .ok_or_else(|| invalid("ask heads are present without Hamming reads"))?
+            .depths;
+        if asks.len() != depths.len() {
+            return Err(invalid(format!(
+                "{} Hamming ask entries for {} reads",
+                asks.len(),
+                depths.len()
+            )));
+        }
         let images = asks
             .iter()
-            .zip(HAMMING_DEPTHS)
+            .zip(depths.iter().copied())
             .map(|(ask, depth)| {
                 ask.as_ref()
                     .map(|ask| {
@@ -1477,6 +1489,65 @@ mod tests {
             error.contains("carry_rows is present without ask heads"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn hamming_carry_is_readout_only() {
+        let mut tensors = hamming_ask_tensor_map(32, 2, 256, &HAMMING_DEPTHS, false);
+        tensors.push((
+            "carry_rows",
+            Dtype::U32,
+            vec![1],
+            32u32.to_le_bytes().to_vec(),
+        ));
+        tensors.push((
+            "d2.carry",
+            Dtype::F32,
+            vec![256],
+            f32_bytes(vec![0.25; 256]),
+        ));
+        let bytes = tensor_file(tensors);
+        let error = parse_hamming(&bytes, 32, 256, 2, 6).unwrap_err();
+        assert!(error.contains("extra=[\"d2.carry\"]"), "{error}");
+    }
+
+    #[test]
+    fn hamming_carry_rows_and_gains_must_be_present_together() {
+        let mut tensors = hamming_ask_tensor_map(32, 2, 256, &HAMMING_DEPTHS, false);
+        tensors.push((
+            "carry_rows",
+            Dtype::U32,
+            vec![1],
+            32u32.to_le_bytes().to_vec(),
+        ));
+        let bytes = tensor_file(tensors);
+        let error = parse_hamming(&bytes, 32, 256, 2, 6).unwrap_err();
+        assert!(error.contains("without the readout carry gains"), "{error}");
+    }
+
+    #[test]
+    fn hamming_ask_and_carry_shapes_are_checked_against_the_model() {
+        let mut ask = hamming_ask_tensor_map(32, 2, 256, &HAMMING_DEPTHS, true);
+        ask.retain(|(name, ..)| *name != "d2.ask");
+        ask.push((
+            "d2.ask",
+            Dtype::F32,
+            vec![255, 32],
+            f32_bytes(vec![0.125; 255 * 32]),
+        ));
+        let error = parse_hamming(&tensor_file(ask), 32, 256, 2, 6).unwrap_err();
+        assert!(error.contains("d2.ask"), "{error}");
+
+        let mut carry = hamming_ask_tensor_map(32, 2, 256, &HAMMING_DEPTHS, true);
+        carry.retain(|(name, ..)| *name != "d6.carry");
+        carry.push((
+            "d6.carry",
+            Dtype::F32,
+            vec![255],
+            f32_bytes(vec![0.25; 255]),
+        ));
+        let error = parse_hamming(&tensor_file(carry), 32, 256, 2, 6).unwrap_err();
+        assert!(error.contains("d6.carry"), "{error}");
     }
 
     #[test]

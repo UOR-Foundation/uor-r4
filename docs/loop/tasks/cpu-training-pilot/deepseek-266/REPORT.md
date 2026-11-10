@@ -43,13 +43,13 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   is the complete path.
 - Documented the one-command CPU export in `crates/uor-r4-cpu-train/README.md`.
 
-Size: **438 code/build/test lines added and 43 changed**, plus **12
-documentation lines** before this report. The ORDER gave no numeric estimate.
+Size: **497 code/build/test lines added and 43 changed**, plus **20 exporter
+README lines** before this report. The ORDER gave no numeric estimate.
 
 ## Measurements
 
-- Focused Hamming/export tests: **20 passed, 0 failed**.
-- Full `uor-r4-cpu-train` library suite: **490 passed, 0 failed, 5 ignored**.
+- Focused Hamming/export tests: **23 passed, 0 failed**.
+- Full `uor-r4-cpu-train` library suite: **493 passed, 0 failed, 5 ignored**.
 - The synthetic ask/carry checkpoint exports through
   `export_saved_checkpoint`, carries a two-entry `hamming_ask` snapshot array,
   and reads back an artifact with asks at both depths and `carry_rows = 32`.
@@ -64,9 +64,9 @@ evaluated and no capability number changed.
 ## Checks run at the head
 
 - `cargo test --offline -p uor-r4-cpu-train --lib`:
-  **490 passed, 0 failed, 5 ignored**.
+  **493 passed, 0 failed, 5 ignored**.
 - `cargo test --offline -p uor-r4-cpu-train --lib fbs_snapshot_cpu`:
-  **20 passed, 0 failed**.
+  **23 passed, 0 failed**.
 - `cargo build --offline --release -p uor-r4-cpu-train --bin cpu-fbs-export`:
   passed.
 - `cargo clippy --offline -p uor-r4-cpu-train --lib --no-deps -- -D warnings
