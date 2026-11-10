@@ -105,7 +105,7 @@ No model result was measured and no GPU was used.
 - Arm-r `stack-audit` with no artifact: overall **NOT_RUN**; five valid fixtures,
   each `NOT_RUN`.
 
-## Stack contract
+### Stack contract identity
 
 - Contract: `conformance/stack/fbs-arm-r.toml`, schema
   `uor-r4.stack-contract/2`, revision 2.

@@ -15,10 +15,6 @@ Lab: {lab}. Order: [ORDER.md](ORDER.md).
 
 <!-- fill: Give each number with the conditions it was taken under and the exact command that produced it, or say that nothing was measured. -->
 
-## Stack contract
-
-<!-- fill: Name the contract path and revision/semantic hash this report used, or say that no stack contract applied. -->
-
 ## Checks run at the head
 
 <!-- fill: List each check run at the head commit, the command, and its result there. -->
