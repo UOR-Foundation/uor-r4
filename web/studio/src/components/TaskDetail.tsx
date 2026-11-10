@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AgentClient } from '../agent/client.js';
-import type { TaskView, RunView, AgentToolCallView } from '../state/agent.js';
+import { displayRunState, type TaskView, type RunView, type AgentToolCallView } from '../state/agent.js';
 import type { ApprovalHost } from './ApprovalCard.js';
 import { RunStatus, isActiveRunState, isTerminalRunState, runStateLabel } from './RunStatus.js';
 import { TaskError } from './TaskError.js';
@@ -199,14 +199,9 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
     const approvals = useMemo(() => run === null ? [] : approvalEntries(run, hostIdentity), [run, hostIdentity]);
     const plan = useMemo(() => planData(run), [run]);
     const retryable = run !== null && (run.state === 'cancelled' || (run.state === 'failed' && run.error?.retryable === true));
-    // A terminal event is authoritative; otherwise the persisted status
-    // projection (for example cancelling after a host acknowledgement or a
-    // reload) is what the user must see.
-    const status = run === null
-        ? task.state
-        : isTerminalRunState(run.state)
-            ? run.state
-            : run.statusProjection ?? run.state;
+    // Terminal events are authoritative; only a non-terminal cancelling
+    // projection changes the displayed state. The rail uses the same helper.
+    const status = run === null ? task.state : displayRunState(run);
     const active = run !== null && isActiveRunState(status);
     const busy = active && (status === 'running' || status === 'queued');
     const statusDetail = run === null

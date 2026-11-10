@@ -477,4 +477,21 @@ describe('TaskDetail', () => {
         expect(heading.getAttribute('tabindex')).toBe('-1');
         expect(document.activeElement).toBe(heading);
     });
+
+    it('does not treat a terminal run.status projection as an authoritative terminal', async () => {
+        const value = fixture([
+            queued(),
+            started(),
+            event(2, 'run.status', { status: 'finished' }),
+        ]);
+        expect(value.task.runs[0]?.state).toBe('running');
+        expect(value.task.runs[0]?.statusProjection).toBe('finished');
+        await renderDetail(value);
+        expect(host.querySelector('.run-status-label')?.textContent).toBe('Running');
+        expect(host.querySelector('.run-status')?.textContent).not.toContain('Finished');
+        const stop = host.querySelector<HTMLButtonElement>('.run-stop');
+        expect(stop).not.toBeNull();
+        expect(stop!.disabled).toBe(false);
+        expect(buttonNamed('Retry')).toBeNull();
+    });
 });

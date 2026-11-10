@@ -220,6 +220,7 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
         await selectTask(page, seeded.taskId);
+        await expect(page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`)).toHaveText('Cancelling');
         await expect(detail(page).locator('.run-status-label')).toHaveText('Cancelling');
         const stop = detail(page).locator('.run-status .run-stop');
         if (await stop.count() > 0) await expect(stop).toBeDisabled();
@@ -283,7 +284,7 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         await openStudio(page);
         await call<Outcome>(page, 'open');
         const seeded = await call<{ taskId: string }>(page, 'createTaskAndEvents', {
-            mode: 'detail',
+            mode: 'approval',
             title: 'Responsive focus task',
         });
         for (const width of [390, 1024]) {
@@ -298,7 +299,6 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
                 if (root === null) return [{ name: 'missing detail', width: 0, height: 0 }];
                 const result: Array<{ name: string; width: number; height: number }> = [];
                 for (const element of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], summary'))) {
-                    if ((element as HTMLButtonElement).disabled) continue;
                     const style = getComputedStyle(element);
                     const rect = element.getBoundingClientRect();
                     if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) continue;
@@ -313,8 +313,67 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
                 return result;
             });
             expect(undersized, `width ${width}`).toEqual([]);
+            if (await page.locator('#studio-typed-root [data-region="task-rail"]').isHidden()) {
+                await page.locator('#studio-typed-root [data-action="toggle-projects"]').click();
+                await expect(page.locator('#studio-typed-root [data-region="task-rail"]')).toBeVisible();
+            }
+            const localSessions = page.locator('#studio-typed-root details[data-task-group="local-sessions"] summary');
+            await expect(localSessions).toBeVisible();
+            const summaryBox = await localSessions.boundingBox();
+            expect(summaryBox).not.toBeNull();
+            expect(summaryBox!.width + 0.01).toBeGreaterThanOrEqual(24);
+            expect(summaryBox!.height + 0.01).toBeGreaterThanOrEqual(24);
+            if (await page.locator('#studio-typed-root [data-region="task-rail"]').isVisible()) {
+                await page.locator('#studio-typed-root [data-action="toggle-projects"]').click();
+            }
             await detail(page).getByRole('button', { name: 'Back to tasks', exact: true }).click();
             await expect.poll(() => activeClass(page)).toContain('task-select');
         }
+    });
+
+    test('a_terminal_status_projection_does_not_make_an_active_run_terminal', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string }>(page, 'createTaskAndEvents', {
+            mode: 'false-finished',
+            title: 'False finished task',
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        await expect(detail(page).locator('.run-status-label')).toHaveText('Running');
+        await expect(detail(page).locator('.run-status')).not.toContainText('Finished');
+        await expect(detail(page).locator('.run-status .run-stop')).toBeEnabled();
+        await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+        await expect(page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`)).toHaveText('Running');
+    });
+
+    test('distinct_durable_title_and_unrecorded_prompt_are_not_conflated', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const created = await call<{ taskId: string; runId: string }>(page, 'createClientRun', {
+            title: 'Distinct task title',
+            prompt: 'runtime-prompt-value',
+        });
+        const row = page.locator(`#studio-typed-root [data-task-id="${created.taskId}"]`);
+        await expect(row).toBeVisible();
+        await selectTask(page, created.taskId);
+        const header = detail(page).locator('[data-task-detail-header]');
+        await expect(header).toContainText('Title');
+        await expect(header).toContainText('Distinct task title');
+        await expect(header).toContainText('Starting prompt not recorded');
+        await expect(header).not.toContainText('runtime-prompt-value');
+        await expect(header).not.toContainText('Client resume fixture');
+    });
+
+    test('a_ready_legacy_source_enables_send_on_an_empty_runtime_task_list', async ({ page }) => {
+        await openStudio(page);
+        await page.locator('#studio-typed-root').getByRole('button', { name: /Command palette/ }).click();
+        const search = page.locator('#studio-typed-root input[aria-label="Search commands"]');
+        await search.fill('Load bundled demo');
+        await search.press('Enter');
+        await expect(page.locator('#studio-typed-root .session-status')).toContainText('Artifact: ready');
+        await page.locator('#studio-typed-root textarea[aria-label="Prompt"]').fill('legacy ready prompt');
+        await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
     });
 });

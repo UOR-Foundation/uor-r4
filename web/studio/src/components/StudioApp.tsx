@@ -161,7 +161,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         if (focusTaskId === null) return;
         const restore = () => {
             const row = document.querySelector<HTMLButtonElement>(`[data-task-id="${focusTaskId}"] .task-select`);
+            const group = row?.closest('details') ?? null;
+            if (group !== null && !group.open) group.open = true;
             row?.focus();
+            if (document.activeElement !== row) {
+                group?.querySelector<HTMLElement>('summary')?.focus();
+            }
             setFocusTaskId(null);
         };
         const rail = document.querySelector<HTMLElement>('[data-region="task-rail"]');

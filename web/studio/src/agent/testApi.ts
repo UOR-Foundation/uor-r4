@@ -771,7 +771,7 @@ async function appendFixtureEvent(
 }
 
 async function createTaskAndEvents(options: {
-    mode?: 'message' | 'cancelling' | 'finished' | 'approval' | 'failed' | 'detail';
+    mode?: 'message' | 'cancelling' | 'finished' | 'false-finished' | 'approval' | 'failed' | 'detail';
     title?: string;
     text?: string;
     expiresAtMs?: number;
@@ -888,6 +888,16 @@ async function createTaskAndEvents(options: {
         if (failed.ok !== true) {
             throw new Error(`failed fixture failed: ${failed.code ?? ''}`);
         }
+    } else if (mode === 'false-finished') {
+        const status = eventFor(fixture, 2, 1, 'run.status', {
+            status: 'finished',
+        });
+        const statusResult = await taskStore.appendEvent({ event: status });
+        if (statusResult.status !== 'applied') {
+            throw new Error(`false-finished fixture was rejected: ${statusResult.message ?? ''}`);
+        }
+        fixture.eventIds.push(status.event_id);
+        fixture.digests.push(statusResult.digest!);
     } else if (mode === 'detail') {
         const messageId = `msg_${randomHex(8)}`;
         const requestDigest = digestFor('detail-tool');
@@ -1190,13 +1200,15 @@ async function appendAssistantSafe(
     }
 }
 
-async function createClientRun(): Promise<FixtureSummary> {
+async function createClientRun(
+    options: { title?: string; prompt?: string } = {},
+): Promise<FixtureSummary> {
     await ensureReady();
     const client = requireClient();
-    const task = await client.createTask({ title: 'Client resume fixture' });
+    const task = await client.createTask({ title: options.title ?? 'Client resume fixture' });
     const run = await client.startRun({
         taskId: task.taskId,
-        prompt: 'resume fixture',
+        prompt: options.prompt ?? 'resume fixture',
     });
     const deadline = Date.now() + 10_000;
     let cursor = client.store.getRunCursor(task.taskId, run.runId);

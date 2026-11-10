@@ -207,11 +207,13 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
     const taskCount = runtimeTaskCount ?? agentClient?.store.snapshot().tasks.length ?? 0;
     const runtimeTaskPath = agentClient !== null && runtimeTasksReady && taskCount > 0;
+    const emptyReadyRuntimeList = agentClient !== null && runtimeTasksReady && taskCount === 0 && agentTask === null;
+    const legacyAllowed = agentClient === null || emptyReadyRuntimeList;
     const agentMode = runtimeTaskPath;
     const legacyReady = store.canRun();
     const sendDisabled = runtimeTaskPath
         ? Boolean(activeTaskRun) || unresolvedRun
-        : runtimeTasksLoading || !legacyReady;
+        : runtimeTasksLoading || !legacyAllowed || !legacyReady;
 
     function failureMessage(prefix: string, failure: unknown): string {
         return `${prefix}: ${failure instanceof Error ? failure.message : String(failure)}`;
@@ -239,7 +241,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 return false;
             });
         }
-        if (runtimeTasksLoading) return false;
+        if (runtimeTasksLoading || !legacyAllowed) return false;
         if (!generation.send(prompt)) return false;
         refresh();
         return true;

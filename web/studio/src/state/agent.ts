@@ -340,6 +340,16 @@ function isTerminalState(state: RunState): boolean {
     );
 }
 
+// run.status is a projection, never an authoritative terminal. Only a
+// non-terminal cancelling projection changes the display; finished, failed and
+// expired projections are ignored until a real terminal event arrives.
+export function displayRunState(
+    run: Pick<RunView, 'state' | 'statusProjection'>,
+): RunState {
+    if (isTerminalState(run.state)) return run.state;
+    return run.statusProjection === 'cancelling' ? 'cancelling' : run.state;
+}
+
 function cloneJson<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -1196,7 +1206,7 @@ function taskStateFor(
     ) {
         return 'waiting_for_background';
     }
-    switch (latestRun.state) {
+    switch (displayRunState(latestRun)) {
         case 'queued':
             return 'queued';
         case 'running':

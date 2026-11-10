@@ -1122,3 +1122,35 @@ describe('AgentStore task selection', () => {
         expect(store.snapshot().tasks.map((task) => task.taskId)).toEqual([TASK_ID]);
     });
 });
+
+describe('run.status projection authority', () => {
+    test('a terminal projection cannot make a running run terminal', () => {
+        const store = createAgentStore();
+        for (const entry of [
+            queued(0),
+            started(1),
+            makeEvent(2, 'run.status', { status: 'finished' }),
+        ]) {
+            expect(store.apply(entry).status).toBe('applied');
+        }
+        const run = store.snapshot().runs[0]!;
+        expect(run.state).toBe('running');
+        expect(run.statusProjection).toBe('finished');
+        expect(store.snapshot().tasks[0]?.state).toBe('running');
+    });
+
+    test('only the non-terminal cancelling projection changes the task display', () => {
+        const store = createAgentStore();
+        for (const entry of [
+            queued(0),
+            started(1),
+            makeEvent(2, 'run.status', { status: 'cancelling' }),
+        ]) {
+            expect(store.apply(entry).status).toBe('applied');
+        }
+        const run = store.snapshot().runs[0]!;
+        expect(run.state).toBe('running');
+        expect(run.statusProjection).toBe('cancelling');
+        expect(store.snapshot().tasks[0]?.state).toBe('cancelling');
+    });
+});
