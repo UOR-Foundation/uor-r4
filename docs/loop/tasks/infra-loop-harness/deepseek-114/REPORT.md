@@ -14,6 +14,11 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `8a5bd5278`.
   only those two unrelated lints; `repo-model` passed strict Clippy unchanged.
 - The full `uor-harness check` reports hundreds of pre-existing warnings and
   exits successfully. They are not treated as evidence for this unit.
+- The first exact-head review returned CHANGES. It found that the stated size
+  did not match `loop pr-check`, and that an absolute or parent-relative
+  evidence path could escape the repository. This repair records the actual
+  review-head size, confines paths by component and canonical containment,
+  rejects empty contract collections, and tests both failures.
 
 ## What changed
 
@@ -37,24 +42,25 @@ and deterministically regenerates:
 - `docs/model/STACK-CONTRACT.md`;
 - `conformance/generated/stack-contracts.json`.
 
-Size: **code 1,059 lines; tests inside those files 193 lines; documentation 123
-lines; generated and contract data 612 lines**. Estimate was 1,700 lines; the
-actual change is 1,766 lines, a ratio of 1.04.
+At review head `2f9774710`, before this REPORT correction, `loop pr-check`
+reported: **code 5 files `+1,369/-0`; documentation 6 files `+265/-1`; other
+2 files `+359/-0`**. The ORDER did not register a line estimate, so this
+REPORT makes no ratio claim.
 
 ## Measurements
 
 No model result or performance measurement was taken. This is build-time
 tooling and has no GPU cost.
 
-`cargo test --offline -p repo-model -p xtask`: **239 passed**, 0 failed. This
-includes 7 new contract tests and 2 generator tests.
+`cargo test --offline -p repo-model -p xtask`: **241 passed**, 0 failed. This
+includes 8 new contract tests and 2 generator tests.
 
 `cargo xtask stack-contract --check`: **1 contract, generated files current**.
 
 ## Checks run at the head
 
 - `cargo fmt --check --package repo-model --package xtask`: pass.
-- `cargo test --offline -p repo-model -p xtask`: 239 passed, 0 failed.
+- `cargo test --offline -p repo-model -p xtask`: 241 passed, 0 failed.
 - `cargo clippy --offline -p repo-model --all-targets -- -D warnings`: pass.
 - `cargo clippy --offline -p xtask --all-targets -- -A
   clippy::unnecessary_map_or -A clippy::manual_repeat_n -D warnings`: pass; the
