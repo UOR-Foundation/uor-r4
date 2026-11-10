@@ -126,3 +126,20 @@
 .task-legacy-sessions .session-list { border: 0; }
 .task-legacy-sessions .session-list-header { justify-content: flex-end; padding: 0 0 .25rem; }
 .task-legacy-sessions .session-list li { margin-inline: 0; }
+
+.composer-surface { display: grid; gap: .45rem; }
+.composer-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.composer-picker { display: flex; align-items: center; gap: .25rem; color: var(--uor-muted); font-size: .72rem; }
+.composer-picker select { max-inline-size: 12rem; padding-block: .15rem; border-color: transparent; background: transparent; color: var(--uor-text); font-size: .75rem; }
+.composer-model-button { min-block-size: 26px; padding: .15rem .4rem; border-color: transparent; background: transparent; color: var(--uor-muted); font-size: .74rem; }
+.composer-attachments { display: grid; gap: .35rem; }
+.composer-attachment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.composer-attach-button { min-block-size: 26px; padding: .2rem .45rem; font-size: .74rem; }
+.composer-attachment-budget { color: var(--uor-muted); font-size: .7rem; }
+.composer-attachment-list { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; padding: 0; list-style: none; }
+.composer-attachment-chip { display: inline-flex; align-items: center; gap: .3rem; max-inline-size: 100%; padding: .18rem .3rem .18rem .4rem; border: 1px solid var(--uor-border); border-radius: 999px; background: var(--uor-surface); font-size: .72rem; }
+.composer-attachment-preview { inline-size: 22px; block-size: 22px; border-radius: 5px; object-fit: cover; }
+.composer-attachment-name { max-inline-size: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-attachment-kind { color: var(--uor-muted); }
+.composer-attachment-chip button { min-block-size: 20px; padding: .05rem .25rem; border-color: transparent; background: transparent; color: var(--uor-muted); font-size: .68rem; }
+.composer-attachment-note { margin: 0; color: var(--uor-muted); font-size: .72rem; }

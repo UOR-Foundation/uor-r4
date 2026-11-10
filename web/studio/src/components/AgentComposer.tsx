@@ -1,6 +1,5 @@
-import { flushSync } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { createComposerInput, readTextFiles } from '../adapters/composerInput.js';
+import { readTextFiles } from '../adapters/composerInput.js';
 import type { ComposerInputController } from '../adapters/composerInput.js';
 import { GENERATION_FINISHED_EVENT } from '../adapters/generation.js';
 import type { GenerationAdapter } from '../adapters/generation.js';
@@ -8,6 +7,12 @@ import type { Attachment, SessionApi, StudioUiApi, WorkspaceApi } from '../adapt
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
 import { AgentTranscript } from './AgentTranscript.js';
+import { attachmentSize, draftFromStoredAttachment, planAttachmentBatch } from './ComposerAttachments.js';
+import type { AttachmentDraft } from './ComposerAttachments.js';
+import { MAX_DOCUMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from './ComposerAttachments.js';
+import { LOCAL_TEMPLATES } from './ComposerMenu.js';
+import { ComposerSurface } from './ComposerSurface.js';
+import type { PermissionMode } from './PermissionPicker.js';
 import { Icon } from './ui/Icon.js';
 
 interface AgentComposerProps {
@@ -24,77 +29,16 @@ interface AgentComposerProps {
     onPastedChange?(value: string): void;
 }
 
-interface ComposerMenu {
-    kind: 'commands' | 'mentions';
-    query: string;
-    start: number;
-    end: number;
-    activeIndex: number;
-}
-
-type ComposerOption =
-    | { id: string; kind: 'command'; label: string; template: string }
-    | { id: string; kind: 'mention'; label: string; attachment: Attachment; add: boolean };
-
 let insertSequence = 0;
+let imageSequence = 0;
 
 function nextInsertName(): string {
     insertSequence += 1;
     return `agent-message-${Date.now()}-${insertSequence}.md`;
 }
 
-const templates = [
-    ['ux', 'Studio UX improvement brief'],
-    ['api', 'API integration checklist'],
-    ['audit', 'Audit this file'],
-    ['report', 'Write a milestone REPORT'],
-    ['error', 'Explain this error'],
-    ['test', 'Write a verification plan'],
-] as const;
-
-function commandOptions(query: string): ComposerOption[] {
-    const normalized = query.toLowerCase();
-    return templates
-        .filter(([kind, label]) => `${kind} ${label}`.toLowerCase().includes(normalized))
-        .map(([template, label]) => ({ id: `agent-composer-command-${template}`, kind: 'command', label, template }));
-}
-
-function mentionOptions(query: string, activeFile: ReturnType<WorkspaceApi['activeFile']>, attachments: Attachment[]): ComposerOption[] {
-    const normalized = query.toLowerCase();
-    const retained = new Set(attachments.map((attachment) => attachment.name));
-    const candidates: Array<{ attachment: Attachment; add: boolean; context: string }> = [];
-    if (activeFile) {
-        candidates.push({
-            attachment: { name: activeFile.path, content: activeFile.content, source: 'editor' },
-            add: !retained.has(activeFile.path),
-            context: 'Active file',
-        });
-    }
-    for (const attachment of attachments) candidates.push({ attachment, add: false, context: 'Attachment' });
-    const seen = new Set<string>();
-    return candidates.filter(({ attachment }) => {
-        if (seen.has(attachment.name) || !attachment.name.toLowerCase().includes(normalized)) return false;
-        seen.add(attachment.name);
-        return true;
-    }).map(({ attachment, add, context }) => ({
-        id: `agent-composer-mention-${encodeURIComponent(attachment.name)}`,
-        kind: 'mention',
-        label: `${attachment.name} (${context})`,
-        attachment,
-        add,
-    }));
-}
-
-function menuTrigger(textarea: HTMLTextAreaElement): Omit<ComposerMenu, 'activeIndex'> | null {
-    const caret = textarea.selectionStart;
-    const match = /(^|\s)([/@])([^\s]*)$/.exec(textarea.value.slice(0, caret));
-    if (!match) return null;
-    return {
-        kind: match[2] === '/' ? 'commands' : 'mentions',
-        query: match[3],
-        start: caret - match[2].length - match[3].length,
-        end: caret,
-    };
+function revokePreview(draft: AttachmentDraft): void {
+    if (draft.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(draft.previewUrl);
 }
 
 export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange }: AgentComposerProps) {
@@ -103,23 +47,16 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const pasted = controlledPasted ?? pastedState;
     const setPasted = (value: string) => { setPastedState(value); onPastedChange?.(value); };
     const [visibleDraft, setVisibleDraft] = useState(controlledDraft ?? '');
+    const [imageDrafts, setImageDrafts] = useState<AttachmentDraft[]>([]);
+    const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask');
     const initialDraftRef = useRef(controlledDraft ?? '');
     const previousControlledDraft = useRef(controlledDraft);
     const ownControlledDraft = useRef<string | null>(null);
-    const submittedHistoryRef = useRef<string[]>([]);
     const [, setRevision] = useState(0);
     const refresh = () => setRevision((value) => value + 1);
-    const [menu, setMenu] = useState<ComposerMenu | null>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const pickerRef = useRef<HTMLInputElement>(null);
     const controllerRef = useRef<ComposerInputController | null>(null);
-    const menuRef = useRef<ComposerMenu | null>(null);
-    const optionsRef = useRef<ComposerOption[]>([]);
-    const menuKeyHandlerRef = useRef<(event: KeyboardEvent) => boolean>(() => false);
-    const selectOptionRef = useRef<(option: ComposerOption) => void>(() => {});
-    const sendRef = useRef<(prompt: string) => void>(() => {});
-    const draftChangeRef = useRef(notifyDraftChange);
-    const fileHandlerRef = useRef<(files: File[]) => Promise<void>>(async () => {});
+    const imageDraftsRef = useRef<AttachmentDraft[]>([]);
+    const mountedRef = useRef(true);
 
     function notifyDraftChange(value: string) {
         ownControlledDraft.current = value;
@@ -128,7 +65,6 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     function setDraft(value: string) {
         if (controllerRef.current) controllerRef.current.reset(value);
-        else if (textareaRef.current) textareaRef.current.value = value;
         setVisibleDraft(value);
         notifyDraftChange(value);
     }
@@ -143,6 +79,11 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         };
     }, []);
 
+    useEffect(() => () => {
+        mountedRef.current = false;
+        for (const draft of imageDraftsRef.current) revokePreview(draft);
+    }, []);
+
     const selected = state.selectedSource;
     const activeGeneration = state.session.activeGeneration;
     const residentMatches = selected?.kind === 'artifact'
@@ -153,7 +94,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         && state.residentArtifact?.canPredict === true;
     const generating = state.session.phase === 'generating';
     const messages = sessions.getConversationMessages();
-    const attachments = ui.getAttachments();
+    const storedAttachments = ui.getAttachments();
+    const attachments = [...storedAttachments.map((attachment) => draftFromStoredAttachment(attachment)), ...imageDrafts];
     const activeFile = files.activeFile();
     const unavailable = !activeGeneration && residentMatches
         && (state.residentArtifact?.engineSupported === false
@@ -167,119 +109,114 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         : unavailable ? 'Generation unavailable'
         : predictionMode ? 'Local next-token prediction'
         : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
-    const options = menu?.kind === 'commands'
-        ? commandOptions(menu.query)
-        : menu?.kind === 'mentions' ? mentionOptions(menu.query, activeFile, attachments) : [];
-    const menuOpen = Boolean(menu && options.length);
-    const activeIndex = options.length ? Math.min(menu?.activeIndex ?? 0, options.length - 1) : 0;
-    const menuId = menu ? `agent-composer-${menu.kind}` : undefined;
 
-    function send(prompt: string) {
-        if (generation.send(prompt)) {
-            if (controllerRef.current) controllerRef.current.recordSubmitted(prompt);
-            else notifyDraftChange('');
-            if (textareaRef.current) textareaRef.current.value = '';
-            setVisibleDraft('');
-            setMenu(null);
+    imageDraftsRef.current = imageDrafts;
+
+    function send(prompt: string): boolean {
+        if (!generation.send(prompt)) return false;
+        refresh();
+        return true;
+    }
+
+    function budgetItems() {
+        return [
+            ...ui.getAttachments().map((attachment) => ({
+                name: attachment.name,
+                size: attachmentSize(attachment),
+                kind: attachment.kind === 'image' ? 'image' as const : attachment.source === 'file' ? 'document' as const : 'text' as const,
+            })),
+            ...imageDraftsRef.current.map((attachment) => ({ name: attachment.name, size: attachment.bytes.byteLength, kind: 'image' as const })),
+        ];
+    }
+
+    function removeStoredOrImage(id: string) {
+        const image = imageDraftsRef.current.find((attachment) => attachment.id === id);
+        if (image) {
+            revokePreview(image);
+            setImageDrafts((current) => current.filter((attachment) => attachment.id !== id));
+            return;
+        }
+        if (id.startsWith('stored:')) {
+            ui.removeAttachment(id.slice('stored:'.length));
             refresh();
         }
     }
 
-    function updateMenu(textarea: HTMLTextAreaElement) {
-        const trigger = menuTrigger(textarea);
-        setMenu(trigger ? { ...trigger, activeIndex: 0 } : null);
-        if (trigger) textarea.focus();
+    function clearAllAttachments() {
+        for (const attachment of imageDraftsRef.current) revokePreview(attachment);
+        setImageDrafts([]);
+        ui.clearAttachments();
+        refresh();
     }
 
-    function selectOption(option: ComposerOption) {
-        const textarea = textareaRef.current;
-        flushSync(() => {
-            if (option.kind === 'command') {
-                setDraft(ui.templatePrompt(option.template));
-            } else {
-                const currentMenu = menuRef.current;
-                if (!currentMenu || !textarea) return;
-                const mention = `@${option.attachment.name}`;
-                const visiblePrompt = textarea.value;
-                setDraft(`${visiblePrompt.slice(0, currentMenu.start)}${mention}${visiblePrompt.slice(currentMenu.end)}`);
-                if (option.add && !ui.getAttachments().some((attachment) => attachment.name === option.attachment.name)) {
-                    ui.addAttachment(option.attachment);
-                    refresh();
+    function addBudgetedAttachment(entry: Attachment): boolean {
+        const plan = planAttachmentBatch([{ name: entry.name, size: attachmentSize(entry), type: entry.kind === 'image' ? 'image/png' : 'text/plain' }], budgetItems());
+        for (const error of plan.errors) ui.toast(error, 'error');
+        if (!plan.accepted.length) return false;
+        const previous = imageDraftsRef.current.find((attachment) => attachment.name === entry.name);
+        if (previous) {
+            revokePreview(previous);
+            setImageDrafts((current) => current.filter((attachment) => attachment.id !== previous.id));
+        }
+        ui.addAttachment(entry);
+        refresh();
+        return true;
+    }
+
+    async function handleAttachFiles(filesToAttach: File[]) {
+        const plan = planAttachmentBatch(filesToAttach, budgetItems());
+        for (const error of plan.errors) ui.toast(error, 'error');
+        if (!plan.accepted.length) return;
+        const planned = new Map<string, { file: File; kind: 'image' | 'document' }>();
+        for (const entry of plan.accepted) planned.set(entry.file.name, entry);
+        const images = new Map<string, File>();
+        const documents = new Map<string, File>();
+        for (const entry of planned.values()) {
+            if (entry.kind === 'image') images.set(entry.file.name, entry.file);
+            else documents.set(entry.file.name, entry.file);
+        }
+        if (images.size) {
+            const nextDrafts: AttachmentDraft[] = [];
+            for (const [name, file] of images) {
+                try {
+                    const bytes = new Uint8Array(await file.arrayBuffer());
+                    const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
+                    nextDrafts.push({ id: `image:${name}:${++imageSequence}`, name, kind: 'image', bytes, mediaType: file.type || 'application/octet-stream', previewUrl });
+                } catch (error) {
+                    ui.toast(`${name} could not be read: ${String(error)}`, 'error');
                 }
             }
-            setMenu(null);
-        });
-        textarea?.focus();
-    }
-
-    function interceptMenuKey(event: KeyboardEvent): boolean {
-        const currentMenu = menuRef.current;
-        const currentOptions = optionsRef.current;
-        if (!currentMenu || !currentOptions.length || event.isComposing || event.keyCode === 229) return false;
-        if (event.key === 'Escape') {
-            event.preventDefault();
-            flushSync(() => setMenu(null));
-            textareaRef.current?.focus();
-            return true;
+            if (nextDrafts.length && !mountedRef.current) {
+                for (const draft of nextDrafts) revokePreview(draft);
+                return;
+            }
+            if (nextDrafts.length) {
+                const names = new Set(nextDrafts.map((attachment) => attachment.name));
+                for (const previous of imageDraftsRef.current.filter((attachment) => names.has(attachment.name))) revokePreview(previous);
+                for (const name of names) if (ui.getAttachments().some((attachment) => attachment.name === name)) ui.removeAttachment(name);
+                setImageDrafts((current) => [...current.filter((attachment) => !names.has(attachment.name)), ...nextDrafts]);
+            }
         }
-        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
-            event.preventDefault();
-            const currentIndex = Math.min(currentMenu.activeIndex, currentOptions.length - 1);
-            const activeIndex = event.key === 'Home' ? 0
-                : event.key === 'End' ? currentOptions.length - 1
-                : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + currentOptions.length) % currentOptions.length;
-            flushSync(() => setMenu({ ...currentMenu, activeIndex }));
-            return true;
+        if (documents.size) {
+            const existing = ui.getAttachments().filter((attachment) => attachment.kind !== 'image');
+            try {
+                const result = await readTextFiles(Array.from(documents.values()), {
+                    existingAttachments: existing,
+                    maxFileBytes: MAX_DOCUMENT_BYTES,
+                    maxTotalBytes: MAX_TOTAL_ATTACHMENT_BYTES,
+                }) as { attachments: Attachment[]; errors: string[] };
+                for (const attachment of result.attachments) ui.addAttachment(attachment);
+                for (const error of result.errors) ui.toast(error, 'error');
+                const storedNames = new Set(result.attachments.map((attachment) => attachment.name));
+                const replacedImages = imageDraftsRef.current.filter((attachment) => storedNames.has(attachment.name));
+                for (const previous of replacedImages) revokePreview(previous);
+                if (replacedImages.length) setImageDrafts((current) => current.filter((attachment) => !storedNames.has(attachment.name)));
+            } catch (error) {
+                ui.toast(`Attachments could not be read: ${String(error)}`, 'error');
+            }
         }
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            selectOptionRef.current(currentOptions[Math.min(currentMenu.activeIndex, currentOptions.length - 1)]);
-            return true;
-        }
-        return false;
+        refresh();
     }
-
-    function handleFiles(selectedFiles: File[]) {
-        const existingAttachments = ui.getAttachments().filter((attachment) => attachment.kind !== 'image');
-        return readTextFiles(selectedFiles, { existingAttachments }).then((result: { attachments: Attachment[]; errors: string[] }) => {
-            for (const attachment of result.attachments) ui.addAttachment(attachment);
-            for (const error of result.errors) ui.toast(error, 'error');
-            if (result.attachments.length) refresh();
-        }).catch((error: unknown) => {
-            ui.toast(`Attachments could not be read: ${String(error)}`, 'error');
-        });
-    }
-
-    menuRef.current = menu;
-    optionsRef.current = options;
-    menuKeyHandlerRef.current = interceptMenuKey;
-    selectOptionRef.current = selectOption;
-    sendRef.current = send;
-    draftChangeRef.current = notifyDraftChange;
-    fileHandlerRef.current = handleFiles;
-
-    useEffect(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        const controller = createComposerInput({
-            textarea,
-            picker: pickerRef.current,
-            initialDraft: initialDraftRef.current,
-            getHistory: () => submittedHistoryRef.current,
-            onHistoryChange: (history) => { submittedHistoryRef.current = history; },
-            onSend: () => {
-                if (textareaRef.current) sendRef.current(textareaRef.current.value);
-            },
-            onFiles: (selectedFiles) => { void fileHandlerRef.current(selectedFiles); },
-            onDraftChange: (value) => draftChangeRef.current(value),
-            interceptKeyDown: (event) => menuKeyHandlerRef.current(event),
-        });
-        controllerRef.current = controller;
-        return () => {
-            controllerRef.current = null;
-            controller.destroy();
-        };
-    }, []);
 
     useEffect(() => {
         if (controlledDraft === undefined || controlledDraft === previousControlledDraft.current) return;
@@ -290,8 +227,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         }
         setVisibleDraft(controlledDraft);
         if (controllerRef.current) controllerRef.current.reset(controlledDraft);
-        else if (textareaRef.current) textareaRef.current.value = controlledDraft;
     }, [controlledDraft]);
+
+    const modelLabel = selected ? selected.id : 'Choose model';
 
     return (
         <section aria-label="Agent composer" class="agent-workspace">
@@ -300,17 +238,39 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
             <AgentTranscript messages={messages} canRun={store.canRun()} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
             <details class="context-drawer" aria-label="Context attachments"><summary><span><Icon name="attach" />Context</span><span class="attachment-count">{attachments.length}</span></summary><div class="context-content">
-                <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) { ui.addAttachment({ name: file.path, content: file.content, source: 'editor' }); refresh(); } }}>Attach current file</button><input ref={pickerRef} type="file" multiple aria-label="Attach text files" /><button type="button" disabled={!attachments.length} onClick={() => { ui.clearAttachments(); refresh(); }}>Clear attachments</button></div>
+                <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) addBudgetedAttachment({ name: file.path, content: file.content, source: 'editor' }); }}>Attach current file</button><button type="button" disabled={!attachments.length} onClick={clearAllAttachments}>Clear attachments</button></div>
                 <label>Pasted context<textarea aria-label="Pasted context" value={pasted} onInput={(event) => setPasted(event.currentTarget.value)} /></label>
-                <button type="button" disabled={!pasted.trim()} onClick={() => { ui.addAttachment({ name: 'pasted-context.txt', content: pasted, source: 'paste' }); setPasted(''); refresh(); }}>Attach pasted text</button>
-                <ul class="attachment-list">{attachments.map((attachment) => <li><span>{attachment.name}</span><button type="button" onClick={() => { ui.removeAttachment(attachment.name); refresh(); }}>{`Remove ${attachment.name}`}</button></li>)}</ul>
+                <button type="button" disabled={!pasted.trim()} onClick={() => { if (addBudgetedAttachment({ name: 'pasted-context.txt', content: pasted, source: 'paste' })) setPasted(''); }}>Attach pasted text</button>
+                <p class="composer-attachment-note">Images stay in this browser tab and are not sent for visual understanding.</p>
             </div></details>
-            <details class="build-tasks" aria-label="Build task templates"><summary><span><Icon name="command" />Build tasks</span><span class="attachment-count">{templates.length}</span></summary><div class="build-task-grid">{templates.map(([kind, label]) => <button type="button" data-template={kind} onClick={() => { setDraft(ui.templatePrompt(kind)); setMenu(null); }}>{label}</button>)}</div></details>
-            <div class="agent-composer">
-                {menuOpen && menu && <div id={menuId} class="composer-menu" role="listbox" aria-label={menu.kind === 'commands' ? 'Build task commands' : 'Attachment mentions'}>{options.map((option, index) => <div id={option.id} role="option" aria-selected={index === activeIndex ? 'true' : 'false'} data-template={option.kind === 'command' ? option.template : undefined} data-attachment={option.kind === 'mention' ? option.attachment.name : undefined} onMouseDown={(event) => event.preventDefault()} onClick={() => selectOption(option)}>{option.label}</div>)}</div>}
-                <div class="composer-input-row"><label class="composer-prompt-field"><span class="visually-hidden">Prompt</span><textarea ref={textareaRef} aria-label="Prompt" placeholder="Ask R4 Harness, or type / for tasks" aria-expanded={menuOpen ? 'true' : 'false'} aria-controls={menuOpen ? menuId : undefined} aria-activedescendant={menuOpen ? options[activeIndex].id : undefined} defaultValue={initialDraftRef.current} onInput={(event) => { flushSync(() => setVisibleDraft(event.currentTarget.value)); updateMenu(event.currentTarget); }} /></label><button type="button" class="send-button" disabled={!visibleDraft.trim() || !store.canRun()} onClick={() => send(textareaRef.current?.value ?? visibleDraft)}><Icon name="send" /><span>{predictionMode ? 'Predict next tokens' : 'Send'}</span></button></div>
-                <div class="composer-footer"><span>Enter to send · Shift+Enter for a line · / tasks · @ context</span><button type="button" disabled={!generating || activeGeneration?.canStop === false} onClick={() => { generation.stop(); refresh(); }}>Stop</button></div>
-            </div>
+            <details class="build-tasks" aria-label="Build task templates"><summary><span><Icon name="command" />Build tasks</span><span class="attachment-count">{LOCAL_TEMPLATES.length}</span></summary><div class="build-task-grid">{LOCAL_TEMPLATES.map(([kind, label]) => <button type="button" data-template={kind} onClick={() => { setDraft(ui.templatePrompt(kind)); }}>{label}</button>)}</div></details>
+            <ComposerSurface
+                value={visibleDraft}
+                onChange={(value) => setVisibleDraft(value)}
+                onDraftChange={(value) => notifyDraftChange(value)}
+                attachments={attachments}
+                onAttach={handleAttachFiles}
+                onRemove={removeStoredOrImage}
+                onSend={send}
+                onStop={() => { generation.stop(); refresh(); }}
+                mode={permissionMode}
+                onMode={setPermissionMode}
+                model={modelLabel}
+                onModel={() => ui.setView('model')}
+                environment="Local browser"
+                onEnvironment={() => {}}
+                disabled={!store.canRun()}
+                runtimeAvailable={false}
+                initialDraft={initialDraftRef.current}
+                sendLabel={predictionMode ? 'Predict next tokens' : 'Send'}
+                generating={generating}
+                canStop={activeGeneration?.canStop !== false}
+                editorFile={activeFile}
+                artifacts={[]}
+                templatePrompt={(kind) => ui.templatePrompt(kind)}
+                onMentionAdd={(entry) => { addBudgetedAttachment(entry); }}
+                onController={(controller) => { controllerRef.current = controller; }}
+            />
         </section>
     );
 }

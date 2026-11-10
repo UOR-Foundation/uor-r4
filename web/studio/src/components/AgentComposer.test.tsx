@@ -609,18 +609,18 @@ describe('composer interactions', () => {
         });
     });
 
-    it('does not count retained images against the picked text-file budget', async () => {
+    it('counts retained images in the shared attachment budget', async () => {
         const { uiApi } = mount();
-        uiApi.attachments.push({ name: 'photo.png', kind: 'image', content: '', size: 4_194_305 });
+        uiApi.attachments.push({ name: 'photo.png', kind: 'image', content: '', size: 26_214_393 });
         const picker = host.querySelector<HTMLInputElement>('input[type="file"]')!;
         const file = new File(['contents'], 'note.txt', { type: 'text/plain' });
         Object.defineProperty(picker, 'files', { value: [file], configurable: true });
         await act(async () => {
             picker.dispatchEvent(new Event('change', { bubbles: true }));
             await vi.waitFor(() => {
-                expect(uiApi.api.addAttachment).toHaveBeenCalledWith({ name: 'note.txt', kind: 'text', content: 'contents', source: 'file', size: 8 });
+                expect(uiApi.api.toast).toHaveBeenCalledWith('note.txt exceeds the 26214400-byte total attachment limit (26214401 bytes).', 'error');
             });
         });
-        expect(uiApi.api.toast).not.toHaveBeenCalled();
+        expect(uiApi.api.addAttachment).not.toHaveBeenCalled();
     });
 });

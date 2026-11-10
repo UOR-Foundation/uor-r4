@@ -35,3 +35,9 @@
     .task-workspace .task-rail { padding: .45rem; }
     .task-workspace .task-row { padding: .35rem; }
 }
+
+@media (max-width: 800px) {
+    .composer-picker-row { gap: .3rem; }
+    .composer-model-button { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .composer-attachment-name { max-inline-size: 9rem; }
+}
