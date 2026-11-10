@@ -23,6 +23,7 @@ commands, readings and boundary probes together. The unit stands.
 - `crates/repo-model/src/lib.rs`
 - `crates/repo-model/src/stack.rs`
 - `docs/model/STACK-CONTRACT.md`
+- `docs/roadmap/items/infra-loop-harness.md`
 - `docs/start/FILEMAP.md`
 - `docs/loop/tasks/infra-loop-harness/deepseek-114/**`
 - `xtask/src/main.rs`

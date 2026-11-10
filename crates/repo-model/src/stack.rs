@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -394,6 +394,9 @@ impl StackContract {
         }
         check_text("model.objective", &self.model.objective)?;
         check_text("artifact.family", &self.artifact.family)?;
+        if self.artifact.sections.is_empty() {
+            return Err(bad(format!("{}: artifact has no section", self.id)));
+        }
 
         let sections = unique_ids("artifact section", &self.artifact.sections, |s| &s.id)?;
         for section in &self.artifact.sections {
@@ -401,6 +404,9 @@ impl StackContract {
             check_text("artifact section description", &section.description)?;
         }
 
+        if self.inputs.is_empty() {
+            return Err(bad(format!("{}: contract has no input", self.id)));
+        }
         unique_ids("input", &self.inputs, |i| &i.id)?;
         for input in &self.inputs {
             check_slug("input", &input.id)?;
@@ -408,6 +414,9 @@ impl StackContract {
             check_sha256("input.sha256", &input.sha256)?;
         }
 
+        if self.mechanisms.is_empty() {
+            return Err(bad(format!("{}: contract has no mechanism", self.id)));
+        }
         unique_ids("mechanism", &self.mechanisms, |m| &m.id)?;
         for mechanism in &self.mechanisms {
             check_slug("mechanism", &mechanism.id)?;
@@ -440,6 +449,9 @@ impl StackContract {
             }
         }
 
+        if self.commands.is_empty() {
+            return Err(bad(format!("{}: contract has no command", self.id)));
+        }
         unique_ids("command", &self.commands, |c| &c.id)?;
         for command in &self.commands {
             check_slug("command", &command.id)?;
@@ -452,6 +464,9 @@ impl StackContract {
             }
         }
 
+        if self.readings.is_empty() {
+            return Err(bad(format!("{}: contract has no reading", self.id)));
+        }
         let mechanism_ids: BTreeSet<&str> = self.mechanisms.iter().map(|m| m.id.as_str()).collect();
         unique_ids("reading", &self.readings, |r| &r.id)?;
         for reading in &self.readings {
@@ -467,6 +482,9 @@ impl StackContract {
             }
         }
 
+        if self.probes.is_empty() {
+            return Err(bad(format!("{}: contract has no probe", self.id)));
+        }
         unique_ids("probe", &self.probes, |p| &p.id)?;
         for probe in &self.probes {
             check_slug("probe", &probe.id)?;
@@ -483,6 +501,9 @@ impl StackContract {
             }
         }
 
+        if self.non_claims.is_empty() {
+            return Err(bad(format!("{}: contract has no non-claim", self.id)));
+        }
         unique_ids("non-claim", &self.non_claims, |n| &n.id)?;
         for non_claim in &self.non_claims {
             check_slug("non-claim", &non_claim.id)?;
@@ -591,9 +612,35 @@ fn check_commit(name: &str, value: &str) -> Result<(), ModelError> {
 fn check_repo_path(root: &Path, name: &str, value: &str) -> Result<(), ModelError> {
     check_text(name, value)?;
     let path = value.split('#').next().unwrap_or(value);
-    if !root.join(path).exists() {
+    let relative = Path::new(path);
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
         return Err(ModelError::Inconsistent(format!(
-            "{name} {value:?} does not resolve under {}",
+            "{name} {value:?} must be a relative path inside {}",
+            root.display()
+        )));
+    }
+    let canonical_root = root.canonicalize().map_err(|error| {
+        ModelError::Inconsistent(format!(
+            "{name} cannot canonicalize repository root {}: {error}",
+            root.display()
+        ))
+    })?;
+    let candidate = root.join(relative).canonicalize().map_err(|error| {
+        ModelError::Inconsistent(format!(
+            "{name} {value:?} does not resolve under {}: {error}",
+            root.display()
+        ))
+    })?;
+    if !candidate.starts_with(&canonical_root) {
+        return Err(ModelError::Inconsistent(format!(
+            "{name} {value:?} resolves outside {}",
             root.display()
         )));
     }
@@ -702,6 +749,36 @@ statement = "This contract is not a proof of language capability."
         contract.mechanisms[0].evidence = vec!["no/such/file".to_owned()];
         let error = contract.check(&root()).unwrap_err().to_string();
         assert!(error.contains("does not resolve"), "{error}");
+    }
+
+    #[test]
+    fn absolute_and_parent_paths_cannot_escape_the_repository() {
+        let mut absolute = parsed();
+        absolute.mechanisms[0].evidence = vec!["/etc/passwd".to_owned()];
+        let error = absolute.check(&root()).unwrap_err().to_string();
+        assert!(error.contains("relative path inside"), "{error}");
+
+        let mut parent = parsed();
+        parent.mechanisms[0].evidence = vec!["../outside".to_owned()];
+        let error = parent.check(&root()).unwrap_err().to_string();
+        assert!(error.contains("relative path inside"), "{error}");
+    }
+
+    #[test]
+    fn required_contract_collections_cannot_be_empty() {
+        for clear in [
+            |c: &mut StackContract| c.artifact.sections.clear(),
+            |c: &mut StackContract| c.inputs.clear(),
+            |c: &mut StackContract| c.mechanisms.clear(),
+            |c: &mut StackContract| c.commands.clear(),
+            |c: &mut StackContract| c.readings.clear(),
+            |c: &mut StackContract| c.probes.clear(),
+            |c: &mut StackContract| c.non_claims.clear(),
+        ] {
+            let mut contract = parsed();
+            clear(&mut contract);
+            assert!(contract.check(&root()).is_err());
+        }
     }
 
     #[test]
