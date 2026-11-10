@@ -741,7 +741,7 @@ impl IntegerStackModel {
         // session, which forms its keys and applies its moves (units 2-3 of
         // `turn-memory-integer`). Dropping it would serve a trunk the float model depends on.
         let memory = match memory_image(&artifact)? {
-            Some(image) => Some(Box::new(ServedTurnMemory::new(image))),
+            Some(image) => Some(Box::new(ServedTurnMemory::new(image, artifact.memory_chain.as_ref()))),
             None => None,
         };
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
