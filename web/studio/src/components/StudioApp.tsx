@@ -218,6 +218,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         setFocusTaskId(null);
         setTaskRevision((value) => value + 1);
     };
+    const clearRuntimeForLegacy = () => {
+        agentClient?.store.clearSelection();
+        setDetailOpen(false);
+        setFocusTaskId(null);
+        setTaskRevision((value) => value + 1);
+    };
     const closeDetail = () => {
         const taskId = agentClient?.store.snapshot().selectedTaskId ?? null;
         agentClient?.store.clearSelection();
@@ -232,7 +238,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         { id: 'terminal', group: 'Navigation', label: 'Go to Terminal', description: 'Guarded native commands', run: () => setActiveSection('terminal') },
         { id: 'models', group: 'Navigation', label: 'Go to Models', description: 'Artifacts and providers', run: () => setActiveSection('models') },
         { id: 'guide', group: 'Navigation', label: 'Go to Guide', description: 'Workflows and limits', run: () => setActiveSection('guide') },
-        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', disabled: state.session.phase === 'generating', run: () => { if (agent.create()) { succeed('session:new'); setSessionRevision((value) => value + 1); } else report('Could not create a session.', 'session:new'); } },
+        { id: 'new-session', group: 'Sessions', label: 'New session', description: 'Start a clean thread', disabled: state.session.phase === 'generating', run: () => { clearRuntimeForLegacy(); if (agent.create()) { succeed('session:new'); setSessionRevision((value) => value + 1); } else report('Could not create a session.', 'session:new'); } },
         { id: 'open-folder', group: 'Workspace', label: 'Open folder', description: 'Use the existing folder picker', run: () => { void operations.run('workspace:open-folder', files.openFolder(), succeed, report); } },
         { id: 'save', group: 'Workspace', label: 'Save file', description: 'Save through the existing file API', shortcut: 'Ctrl+S', disabled: !store.canSave(), run: () => { void saveActiveFile(store, files, reportFile); } },
         { id: 'save-as', group: 'Workspace', label: 'Save as', description: 'Download a copy', disabled: !store.canSave(), run: () => { saveActiveFileCopy(store, files, reportFile, succeed); } },
@@ -268,7 +274,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             loading={taskList.phase === 'loading'}
             error={taskList.phase === 'error' ? taskList.message : null}
             showEmpty={!taskReadyZero}
-            legacySessions={<SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} />}
+            legacySessions={<SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} onBeforeActivate={() => clearRuntimeForLegacy()} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} />}
             legacySessionsEmpty={state.session.items.length === 0}
             collapseLocalSessions={tasks.length > 0}
         />}

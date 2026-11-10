@@ -875,6 +875,7 @@ describe('StudioApp runtime task detail', () => {
         const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
         const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
         act(() => { prompt.value = 'back then send'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(button('Send').disabled, 'runtime tasks without a selection disable Send').toBe(true);
         await act(async () => { button('Send').click(); await Promise.resolve(); });
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
         expect(prompt.value).toBe('back then send');
@@ -1035,5 +1036,138 @@ describe('StudioApp runtime task detail', () => {
         await act(async () => { button('Back to tasks').click(); await Promise.resolve(); });
         await vi.waitFor(() => expect(group.open).toBe(true));
         await vi.waitFor(() => expect((document.activeElement as HTMLElement | null)?.className ?? '').toContain('task-select'));
+    });
+
+    it('clears the runtime detail when a Local session is selected', async () => {
+        const { client, transport } = runtimeClientFixture();
+        const sessionsApi = makeSessions();
+        sessionsApi.newSession();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessionsApi} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+        expect(host.querySelector('[data-task-detail-header]')).not.toBeNull();
+        const localGroup = host.querySelector<HTMLDetailsElement>('details[data-task-group="local-sessions"]')!;
+        localGroup.open = true;
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        await act(async () => { host.querySelector<HTMLButtonElement>('[data-task-group="local-sessions"] [data-action="resume-session"]')!.click(); await Promise.resolve(); });
+        expect(client.store.snapshot().selectedTaskId).toBeNull();
+        expect(client.store.snapshot().selectedTask).toBeNull();
+        expect(host.querySelector('[data-task-detail-header]')).toBeNull();
+        expect(host.querySelector('h1')?.textContent).toBe('Agent');
+        expect(host.textContent).toContain('No messages yet');
+        expect(sessionsApi.selectSession).toHaveBeenCalledWith('session-new-1');
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+    });
+
+    it('clears the runtime detail for a Local new session, rename and delete', async () => {
+        const { client } = runtimeClientFixture();
+        const sessionsApi = makeSessions();
+        sessionsApi.newSession();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessionsApi} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        const openRuntime = async () => {
+            await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+            expect(host.querySelector('[data-task-detail-header]')).not.toBeNull();
+            const group = host.querySelector<HTMLDetailsElement>('details[data-task-group="local-sessions"]')!;
+            group.open = true;
+        };
+
+        await openRuntime();
+        await act(async () => { host.querySelector<HTMLButtonElement>('[data-task-group="local-sessions"] [data-action="new-session"]')!.click(); await Promise.resolve(); });
+        expect(client.store.snapshot().selectedTaskId).toBeNull();
+        expect(host.querySelector('[data-task-detail-header]')).toBeNull();
+        expect(sessionsApi.newSession).toHaveBeenCalled();
+
+        await openRuntime();
+        await act(async () => {
+            host.querySelector<HTMLButtonElement>('[data-task-group="local-sessions"] summary[aria-label^="Actions for"]')!.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            const rename = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-task-group="local-sessions"] button'))
+                .find((node) => node.textContent?.startsWith('Rename '))!;
+            rename.click();
+            await Promise.resolve();
+        });
+        const title = host.querySelector<HTMLInputElement>('dialog input[aria-label="Session title"]')!;
+        act(() => { title.value = 'Renamed local'; title.dispatchEvent(new Event('input', { bubbles: true })); });
+        await act(async () => {
+            host.querySelector<HTMLButtonElement>('dialog button[type="submit"]')!.click();
+            await Promise.resolve();
+        });
+        expect(client.store.snapshot().selectedTaskId).toBeNull();
+        expect(host.querySelector('[data-task-detail-header]')).toBeNull();
+        expect(sessionsApi.renameSession).toHaveBeenCalled();
+
+        await openRuntime();
+        await act(async () => {
+            host.querySelector<HTMLButtonElement>('[data-task-group="local-sessions"] summary[aria-label^="Actions for"]')!.click();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            const remove = Array.from(host.querySelectorAll<HTMLButtonElement>('[data-task-group="local-sessions"] button'))
+                .find((node) => node.textContent?.startsWith('Delete '))!;
+            remove.click();
+            await Promise.resolve();
+        });
+        await act(async () => { button('Confirm delete').click(); await Promise.resolve(); });
+        expect(client.store.snapshot().selectedTaskId).toBeNull();
+        expect(host.querySelector('[data-task-detail-header]')).toBeNull();
+        expect(sessionsApi.deleteSession).toHaveBeenCalled();
+    });
+
+    it('disables Send when runtime tasks exist but no runtime task is selected', async () => {
+        const { client, transport } = runtimeClientFixture();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${RUNTIME_TASK}"]`)).not.toBeNull());
+        await vi.waitFor(() => expect(host.querySelector('.task-loading')).toBeNull());
+        const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => { prompt.value = 'no selected runtime task'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(button('Send').disabled).toBe(true);
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        await act(async () => { button('Send').click(); await Promise.resolve(); });
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+        expect(prompt.value).toBe('no selected runtime task');
+    });
+
+    it('focuses the group summary when the selected row is hidden', async () => {
+        const store = createAgentStore();
+        store.upsertTask({
+            taskId: RUNTIME_TASK,
+            projectId: RUNTIME_PROJECT,
+            title: 'Hidden older task',
+            createdAtMs: Date.now() - 30 * 24 * 60 * 60 * 1000,
+            latestRunId: RUNTIME_RUN,
+        });
+        store.apply(runtimeEvent(0, 'run.queued', { queued_at_ms: 1_794_283_200_000 }));
+        store.apply(runtimeEvent(1, 'run.started', {
+            started_at_ms: 1_794_283_200_001,
+            model: { id: 'synthetic-replay', kind: 'synthetic-replay' },
+            mode: 'agent',
+            environment: { kind: 'browser-runtime' },
+            retry_of_run_id: null,
+        }));
+        const client = new AgentClient({ store, transport: new FixtureTransport() });
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        const initialGroup = host.querySelector<HTMLDetailsElement>('details[data-task-group="older"]')!;
+        initialGroup.open = true;
+        await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+        const group = host.querySelector<HTMLDetailsElement>('details[data-task-group="older"]')!;
+        const row = host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!;
+        group.open = false;
+        row.disabled = true;
+        await act(async () => { button('Back to tasks').click(); await Promise.resolve(); });
+        await vi.waitFor(() => expect(group.open).toBe(true));
+        await vi.waitFor(() => expect(document.activeElement).toBe(group.querySelector('summary')));
     });
 });

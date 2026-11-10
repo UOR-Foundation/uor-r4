@@ -157,7 +157,7 @@
 .task-detail-back { justify-self: start; padding: .2rem .45rem; border: 1px solid var(--uor-border); border-radius: var(--uor-radius-sm); background: transparent; color: var(--uor-text); }
 .task-detail-status { margin: 0; color: var(--uor-muted); font-size: .78rem; }
 .task-detail-title { margin: 0; font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
-.task-detail-title:focus-visible { outline: 2px solid var(--uor-focus); outline-offset: 2px; }
+.task-detail-title:focus { outline: 2px solid var(--uor-focus); outline-offset: 2px; }
 .task-detail-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .35rem .8rem; margin: 0; }
 .task-detail-facts div { min-inline-size: 0; }
 .task-detail-facts dt { color: var(--uor-muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }

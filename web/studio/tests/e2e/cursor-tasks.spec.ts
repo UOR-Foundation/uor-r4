@@ -246,9 +246,10 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
 
         const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
         await prompt.fill('back then send');
+        await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
         const before = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
             .record as LiveRunSnapshot;
-        await page.getByRole('button', { name: 'Send', exact: true }).click();
+        await prompt.press('Enter');
         await page.waitForTimeout(200);
         const after = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
             .record as LiveRunSnapshot;
@@ -294,6 +295,12 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
             await openRailIfClosed(page);
             await selectTask(page, seeded.taskId);
             await expect.poll(() => activeClass(page)).toContain('task-detail-title');
+            const outline = await page.locator('#studio-typed-root .task-detail-title').evaluate((element) => {
+                const style = getComputedStyle(element);
+                return { style: style.outlineStyle, width: style.outlineWidth };
+            });
+            expect(outline.style).not.toBe('none');
+            expect(outline.width).toBe('2px');
             const undersized = await page.evaluate(() => {
                 const root = document.querySelector<HTMLElement>('#studio-typed-root main[data-region="task-detail"]');
                 if (root === null) return [{ name: 'missing detail', width: 0, height: 0 }];
@@ -375,5 +382,49 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         await expect(page.locator('#studio-typed-root .session-status')).toContainText('Artifact: ready');
         await page.locator('#studio-typed-root textarea[aria-label="Prompt"]').fill('legacy ready prompt');
         await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+    });
+
+    test('local_session_select_and_new_clear_the_runtime_detail', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string; runId: string }>(page, 'createTaskAndEvents', {
+            mode: 'detail',
+            title: 'Local switch task',
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        await expect(detail(page).locator('[data-task-detail-header]')).toBeVisible();
+
+        const localGroup = page.locator('#studio-typed-root details[data-task-group="local-sessions"]');
+        const openLocalGroup = async () => {
+            if (!(await localGroup.evaluate((element) => (element as HTMLDetailsElement).open))) {
+                await localGroup.locator('summary').click();
+            }
+        };
+        await openLocalGroup();
+        await localGroup.locator('[data-action="new-session"]').click();
+        await expect(detail(page).locator('[data-task-detail-header]')).toHaveCount(0);
+        await expect(page.locator('#studio-typed-root h1')).toHaveText('Agent');
+        await expect(page.locator('#studio-typed-root')).toContainText('No messages yet');
+        const selectedAfterNew = await page.evaluate(() => (window as unknown as {
+            __studioTest: { clientForTest(): { store: { snapshot(): { selectedTaskId: string | null } } } };
+        }).__studioTest.clientForTest().store.snapshot().selectedTaskId);
+        expect(selectedAfterNew).toBeNull();
+
+        await selectTask(page, seeded.taskId);
+        await expect(detail(page).locator('[data-task-detail-header]')).toBeVisible();
+        await openLocalGroup();
+        await localGroup.locator('[data-action="resume-session"]').first().click();
+        await expect(detail(page).locator('[data-task-detail-header]')).toHaveCount(0);
+        await expect(page.locator('#studio-typed-root h1')).toHaveText('Agent');
+        await expect(page.locator('#studio-typed-root')).toContainText('No messages yet');
+        const selectedAfterSelect = await page.evaluate(() => (window as unknown as {
+            __studioTest: { clientForTest(): { store: { snapshot(): { selectedTaskId: string | null } } } };
+        }).__studioTest.clientForTest().store.snapshot().selectedTaskId);
+        expect(selectedAfterSelect).toBeNull();
+        const after = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
+            .record as LiveRunSnapshot;
+        expect(after.runId).toBe(seeded.runId);
     });
 });

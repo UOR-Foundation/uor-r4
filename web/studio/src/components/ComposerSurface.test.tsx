@@ -1149,9 +1149,10 @@ describe('task runtime send identity', () => {
         const before = transport.calls.length;
 
         typePrompt('keep this draft');
+        expect(button('Send').disabled, 'runtime tasks without a selected task disable Send').toBe(true);
         act(() => { button('Send').click(); });
         await settleAsync();
-        expect(uiApi.toast).toHaveBeenCalledWith('Select a task before sending.', 'error');
+        expect(uiApi.toast).not.toHaveBeenCalledWith('Select a task before sending.', 'error');
         expect(transport.calls.slice(before).some((call) => call.method === 'startRun')).toBe(false);
         expect(promptElement().value).toBe('keep this draft');
     });

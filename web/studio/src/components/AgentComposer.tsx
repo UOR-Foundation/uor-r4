@@ -212,7 +212,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const agentMode = runtimeTaskPath;
     const legacyReady = store.canRun();
     const sendDisabled = runtimeTaskPath
-        ? Boolean(activeTaskRun) || unresolvedRun
+        ? agentTask === null || Boolean(activeTaskRun) || unresolvedRun
         : runtimeTasksLoading || !legacyAllowed || !legacyReady;
 
     function failureMessage(prefix: string, failure: unknown): string {
