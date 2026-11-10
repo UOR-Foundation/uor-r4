@@ -74,3 +74,12 @@ Casey, in this lab's chat, after T0 was run and reported: "T0 is not a track tha
 7. The REPORT shows, word for word, the same conversations through today's artifact and through each arm's, with the panel counts and the row of the sheet's table that was read, negatives first.
 8. The reply-line sheet carries a FIT from a fresh non-author review and this lab's pre-run review before any pod is created.
 9. The retrained arm is trained, sealed in the store and read back, or recorded NOT_RUN with the reason, and the REPORT shows the same conversations through arm m and through it.
+
+**The mixed-key arm and the memory key (owner, 10 Nov: "proceed", then "Yes, run it").** After arm r's three seeds, general questions were still wrong on the laptop: 2 of 10 on the fixed script. Two causes were read off the tokens: the one-token copy key fires on common tokens, and the turn memory's key ends before the word a general question turns on. Casey approved one arm for the first ("Yes, run it": arm rk, `--hamming-copy-keys 1,2`). Its sheet names the second as the next unit in every row, so the three-key reply table (arm rt, `--turn-memory-tail 9`) runs on this lab's own pre-run review (§5.1), logged in its sheet for Casey, who can reverse it.
+
+**Files in scope, added for the two arms:** `docs/harness/prep/one-model-end-to-end-mixed-keys-2026-11-10.md` and `docs/harness/prep/one-model-end-to-end-memory-chain-2026-11-10.md`; in `crates/uor-r4-float-train/src/`: `flock_read_memory.rs`, `in_space_long.rs` and `bin/train-in-space.rs` (the leave rule asked per head; the option `--turn-memory-tail`, off by default; the laptop counts `--reply-bound-train`, `--reply-bound-dev` and `--reply-chain-tail`); in `crates/uor-r4-integer/src/`: `bin/fbs-export.rs`, `bin/uor-chat.rs`, `stack/format.rs`, `stack/memory.rs`, `stack/mod.rs`, `stack/session.rs` and `stack/tests.rs` (the `memory_chain` record under `uor-r4.lut-stack/9`, absent on every artifact made before it).
+
+**Done when, added:**
+10. Each of the two sheets carries a FIT from a fresh non-author review and this lab's pre-run review before any pod is created.
+11. Each arm is trained, sealed in the store and read back, or recorded NOT_RUN with the reason; the REPORT names the row read and, for a recall loss, which reading fell and where in the reply.
+12. The three-key table has a fresh review of each side (trainer and serving) before its run, and an artifact made before it exports and serves as before, byte for byte.
