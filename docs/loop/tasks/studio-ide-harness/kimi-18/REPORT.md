@@ -1,0 +1,74 @@
+# REPORT: deliver the Cursor-hosted Studio research and design revision, kimi-18
+
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569). Order: [ORDER.md](ORDER.md). Base: `452615bc52a0186c1c01007986ff5c1a767eb068`; the ORDER's stated base `6fcf57f7822286e5b6bd7bcfe42d668116b23afa` is an ancestor. Research/design commit: `bda6f6e145cd4120edc5d72a1f47b032d8de2eb1`, tree `75da22481bcd7b131b914b47bfb820f51ec60023`. The 12 committed research/design/linkage files are present at that head, including the corrected research report and all notes. This REPORT-only follow-up is the only remaining file.
+
+## What did not work
+
+- The first design put the task runtime, event log and durable task store in the Tauri host. The first independent builder check returned **REVISE**: that architecture contradicts the owner's model-in-browser requirement, makes the companion mandatory for the core loop, and cannot satisfy a static browser task/review path.
+- The first design used `uor-r4-object-store` as the whole-run log and leaned on `Store::save` atomic rename. That is not a browser store, does not fit 10,000 keyed events, and duplicates storage authority rather than using IndexedDB.
+- The first contract was underspecified: it kept `task.created` despite run-scoped events, kept `run.retried` instead of `retry_of_run_id`, omitted the required `run.queued` sequence-0 fixture, left terminal events versus `run.status` projections ambiguous, and did not define force-send fallback, stop-ack timeout/failure, or `runtime_unavailable`.
+- Canonical JSON was named but not defined. Event IDs/digests were not proven cross-runtime identical, and insertion order was not tested.
+- The first plan assumed protected UI selectors could be renamed to fit the redesign. The protected baseline set (`nav[aria-label="Studio"]`, `textarea[aria-label="Prompt"]`, visible `Send`, `.agent-*`, `.workspace-grid`, `.pane-dock`, `.session-list`, data controls/actions, one skip link) and the exact 1024 behavior were at risk, and `.studio-shell` collided with the existing class.
+- The first plan used a second/remote Tauri server and SSE/EventSource language. The builder requires the existing loopback listener, `fetch` + `ReadableStream` NDJSON, token header, and no EventSource/TLS/second listener.
+- Tauri test commands were wrong (`cargo test -p uor-r4-desktop-client` from the root; `src-tauri` is a separate workspace). The plan did not include the required `--manifest-path ... --features gui --test ...` form.
+- The review/editor stage had no real data sources. It assumed a nonexistent artifact URL and no `AgentClient.tree`/changes snapshot/`agent_read_artifact`, and would have accepted disabled panels as evidence.
+- The IME section claimed a red test where `createComposerInput` already handles composition. Restart proof used an in-memory fixture, which is not reload evidence.
+- The agent-secret rule was too broad: it claimed no provider secrets exist at base, ignoring the documented `uor.studio.modelSources.v1` user-configured provider-key store.
+- **The second independent builder check also returned REVISE** with bounded findings C1–C8/I1–I8: the legacy guard was created too late, the schema file was missing from Task 2, `agent_subscribe` had no command, `changes.snapshot`/the `changes` store were missing, the test-only API had no gate, pin/archive methods were absent, the 1023 drawer behavior was wrong, `AgentStore.apply` was ambiguous, `retry_of_run_id` was optional, tool arguments were not restricted, `HostToolResult.artifact` was missing, "one state owner" was imprecise, fallback ordering was undefined, data calls had two paths, and appendix test names were unaligned.
+- **Owner acceptance conflict.** The roadmap item's old `Done when` still requires "the same Rust runtime in Tauri/local and hosted-service modes". This revision does not edit that acceptance text. Before Task 1 the owner must either create a **new Cursor-hosted Studio item** with browser-owned-runtime acceptance (recommended) or explicitly supersede the old `Done when` in an approval ORDER. The lead cannot settle this by documentation. Until then no implementation is authorized and #3569 cannot be closed by this plan.
+- Neither builder check approved the work. No application/model/API/Tauri test, browser/model/service run or deployment was performed; no product is implemented.
+
+## What changed
+
+- **Delivered head.** The research report, six notes, source audit, design, plan and linkage records are committed at `bda6f6e145cd4120edc5d72a1f47b032d8de2eb1` / tree `75da22481bcd7b131b914b47bfb820f51ec60023` (12 files). This REPORT-only commit records the delivered state.
+- **Architecture A is explicit.** The task runtime, reducer, cursor, queue/steer/force/stop, approvals, event log and durable task persistence live in the page/Web Worker. IndexedDB (`uor-r4.studio.agent/1`) is the task/event store; the Rust side is schema/canonical reference only. The companion is optional and tool-only; it never owns the task loop or task store. The model port is a TypeScript worker-side `ModelPort`.
+- **C1 applied.** Task 4 creates and installs `legacyShortcutGuard` as a protected-baseline guard before the typed workflow wait/render; at mount it closes/cancels any existing legacy palette, clears `#command-palette`/`#palette`, and blocks a delayed `setTimeout(150)` legacy open. Task 8 only extends it.
+- **C2 applied.** `crates/uor-r4-studio-agent/contract.schema.json` is a checked-in Task 2 file and commit input. The generator resolves the repo root and schema/generated paths from `import.meta.url`; the Task 2 test imports `readFile`/`createHash` and verifies the actual schema digest.
+- **C3 applied.** Task 17 now produces `agent_subscribe` with `Channel<HostToolResult>` and tests `tauri_subscribe_channel_emits_host_results`; Task 12's Channel test has a real command.
+- **C4 applied.** IndexedDB has a `changes` store and the browser runtime emits `changes.snapshot { scope, files, head_digest }` when a write tool completes. `agent_git_diff` is branch-only; `changes_snapshot_last_turn_scope` reads the browser store and no host last-turn diff is fabricated.
+- **C5 applied.** `window.__studioTest` exists only when `VITE_STUDIO_TEST=1` and `?studioTest=1`; the Playwright webServer builds with `VITE_STUDIO_TEST=1`; Task 23 asserts a default build does not expose it.
+- **C6 applied.** `pinTask(taskId, pinned)` and `archiveTask(taskId, archived)` are on `AgentClient`/`AgentTaskStore`; Task 6 tests pin calls and archive reversibility.
+- **C7 applied.** The narrow rail hides only when the drawer is closed; `[data-action="toggle-projects"]` is the reopen control; at 1023 the test closes and reopens; exactly 1024 stays uncollapsed. The AppShell threshold is unchanged.
+- **I1–I2 applied.** `AgentStore.apply(event)` is synchronous and pure; async canonicalization/store append is a separate awaited path. `retry_of_run_id` is `string | null` consistently in schema, spec, tests and `RunRecord`.
+- **I3–I4 applied.** Tool arguments use the canonical subset; float/non-ASCII keys are rejected with `invalid_arguments` and tested. `HostToolResult` carries optional `artifact { artifact_id, digest, media_type, size_bytes }`; `agent_read_artifact` returns bounded digest-verified bytes for file reads/editor.
+- **I5–I6 applied.** "One state owner" is now "one **task-state** owner"; `LifecycleStore` is documented as the legacy shell/session/model store. Steer/force fallback order is `message.steered`/`forced` → `message.queued` → `run.finished` → new run with a new generation; no event is appended after the old run's terminal event.
+- **I7 applied.** All `AgentClient` data calls go through `HostClient.execute`/`agent_host_invoke`; no direct invoke. The loopback browser uses the same token/Origin-protected POST path; a loopback data test is added.
+- **I8 applied.** Matrix appendix rows now use `auth.rs`, `tenant.rs`, `secrets.rs`, `background.rs`, `notifications.rs`, `github.rs` or "future proposed"; Task 23 reconciles every planned-evidence name against executed tests or `NOT_RUN`/`UNVERIFIED`.
+- **Minor fixes applied.** Future-ORDER generated path is `web/studio/src/agent/generated/**`; matrix row 11 uses `agent_authority.rs`/existing `interactive_terminal.rs`; Task 2 includes the `readFile` import.
+- **Order and scope re-cut.** 23 executable tasks in 6 stages: contract/protected baseline; shell/composer; browser runtime/persistence; companion data APIs/transport; review/editor; final local acceptance. Service/integrations and real-R4 qualification are checkbox-free gated appendices; effort is 40–62 focused sittings.
+- **Linkage updated.** `docs/products/harness-parity.md` and `docs/roadmap/items/studio-ide-harness.md` now describe the browser-owned runtime, optional companion, 23 tasks/6 stages, and the owner acceptance-item choice. No capability status, `Done when`, bar or owner metadata was edited.
+
+## Measurements
+
+- Research inputs: corrected report 411 lines; six notes 2,752 lines; source audit 64 lines; total 3,227 lines. The report and notes are committed at the delivery head.
+- Design 844 lines; plan 1,043 lines; 6 executable stages; 23 executable tasks; 30-row coverage matrix with `U/H/E/L/N/V` evidence classes; appendices contain **0** checkbox steps.
+- Effort estimate: 40–62 focused sittings across executable stages, excluding the service appendix and model compute. This is not a calendar estimate or a completion guarantee.
+- Existing 455/455 Vitest, 47/47 Playwright, 15/15 runtime contracts, 11/11 gates and 7/7 WASM counts are historical evidence from the kimi-17 fresh-main record; they are not reruns of this docs-only unit. No paid compute, GPU, model, browser or service run was performed.
+
+## Checks run at the head
+
+- All **11** `uor-harness loop gates --full` commands passed at `bda6f6e145cd4120edc5d72a1f47b032d8de2eb1`; log: `local/kimi/cursor-hosted-research/implementation-gates.log`.
+- The 12 committed research/design/linkage files are present at that head. The final report/local-policy/full-gate results will be retained under `local/kimi/cursor-hosted-research/final/` with `identity.txt` and clean status.
+- Docs checks: 20 repository-relative links, 0 missing; `git diff --check` clean; no trailing whitespace; fences balanced (design 20, plan 44); 23 sequential tasks; 6 stages; appendices contain 0 `- [ ]` steps.
+- Not run: no application/model/API/Tauri test, browser/model/service run or deployment was performed. Fresh exact-head review, required GitHub checks and protected merge remain open.
+
+## Skills used
+
+- `superpowers:writing-plans` for the revised plan header, task structure, red-first/regression distinction, self-review and execution handoff.
+- `superpowers:brainstorming/builder-check-prompt.md` read only to shape the revisions; neither independent builder check was performed by this session.
+- Repository research synthesis: CHARTER/AGENTS, the corrected Cursor report, six notes, source audit, current Studio/API/Tauri/object-store sources, and the kimi-17/kimi-18 records. No new external research was done.
+
+## Still open
+
+- **Owner acceptance choice.** Before Task 1 the owner must either create a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended), leaving #3569's Rust-runtime `Done when` untouched, or explicitly supersede that `Done when` in the approval ORDER. No implementation is authorized and #3569 cannot be closed by this plan until this is recorded.
+- **Owner-only approval** of the revised design in a new ORDER; implementation is `BLOCKED` until then. The lead cannot substitute a delegated approval for this gate.
+- The second independent builder check returned REVISE; the corrections are applied but neither builder approved the revision. Fresh exact-head delivery review, required GitHub checks and protected merge remain open.
+- Optional read-only authenticated Cursor walkthrough (V1–V10) to resolve G1–G10; not required now and no credentials were used.
+- A generation-capable R4 artifact and Claude's merged streaming/tool contract; real `R4ModelPort`/useful-agent evaluation remains `NOT_RUN`. Prediction-only top-8 measurement is separate.
+- A separate owner-approved service item and security review for identity, secrets, background, webhooks, notifications and integrations; no service code is authorized here.
+
+## Plain summary
+
+The Cursor-hosted Studio research and design are delivered for owner review at `bda6f6e14` / tree `75da2248`. The recommended architecture is browser-first loop A: the page owns the task loop, reducer, cursor and IndexedDB task/changes log; the Tauri companion is optional and tool-only; a hosted service is a separate future owner item. Both builder checks returned REVISE (first architecture/feasibility, then bounded C1–C8/I1–I8); the corrections are applied but neither builder approved the work.
+
+This is a docs-only unit. No product, application/model/API/Tauri test, browser/model/service run or deployment was performed. All 11 full gates passed at the delivery head. The blocking owner choice is the acceptance item: recommended new Cursor-hosted Studio item, otherwise explicit owner supersession of #3569's old `Done when`; owner-only design approval is also required. Fresh exact-head review, required GitHub checks and protected merge remain open.
