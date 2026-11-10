@@ -122,3 +122,15 @@ One pod at no more than $1.60/h (the memory-line run's pods cost $0.56 to $1.60/
 - One pod is launched and watched until it reaches SSH and starts its job. The watcher is started before anything ships (L-004). It renews the lease and never cancels a healthy run; time, spend and stall are notices only.
 - The job seals `run/` on every exit, a signal included. Scoring passes are capped at 40 minutes each and never fail the job.
 - The pod goes down when its own four checks pass: the chain ended with its seal, the required files are in the seal's list, the store's sums read from the laptop equal the pod's, and no GPU process is left. A failed job's pod goes down once its logs are sealed.
+
+## Addendum, 10 Nov: seeds 1 and 3
+
+Written after seed 2's result and before either seed runs.
+
+Seed 2 is row 1: E on the line panel 0.759 over 399 matched pairs (303 exact), D 0.759, G 0.697, L 4 of 4, and the rule's six GPU tests ran. As this sheet states, a row-1 result is rerun at seeds 1 and 3.
+
+- **What runs:** arm r at seeds 1 and 3, one pod each, with the same pin (`fd71a027`), kit, inputs, bars and rows as seed 2. Nothing in the trainer, the data or the reader changes.
+- **How the three seeds are read:** each seed is classified by the rows above. The result is *replicated* if seeds 1 and 3 are both row 1, *mixed* if one is, and *not replicated* if neither is.
+- **Laptop reading:** the same three scripts, word for word, with the chat binary built at `bd2532281`, as for seed 2. A reading with the later sieve (`b94edae8d`) is shown beside it and is not the registered one.
+- **Not a bar here:** seed 2's negative on the hand-written 14-turn script (three general turns where the copy read intrudes, one wrong acknowledgment) is read on each seed's conversations and reported; it does not move a seed's row.
+- **Cost:** two of the four pods, at most $1.60/h each and $3.20/h of the $8/h cap; about 55 minutes and under $1 each at seed 2's price ($0.78 in all).
