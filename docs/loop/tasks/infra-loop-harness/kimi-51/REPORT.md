@@ -37,7 +37,7 @@ Lab: kimi. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harne
 ## Still open
 
 - Local policy/full gates, fresh exact-head approval, required GitHub checks, actual protected merge and fresh-main verification.
-- After merge: official sync dry run, apply, write-side verification, bind the new issue in #3915, then Task 1. Verify only M7 #2035 changes among milestone checklists, exactly one new `issues.json` key, and no unrelated create/update/close.
+- After merge: official sync apply, write-side verification, bind the new issue in #3915, then Task 1. Verify only M7 #2035 changes among milestone checklists; two new `issues.json` keys — `studio-cursor-hosted` (new issue) and `m7-lexlean-studio-tools → #3704` (marker-discovered; #3704 is closed while the item is `ready`, so sync warns and does not reopen it); no unrelated create/update/close; the final render links both rows. The read-only dry run at this repair head planned exactly 1 create, 0 updates, 0 closes and 1 M7 checklist change, and wrote nothing (`local/kimi/roadmap-sync-repair/sync-dry-run.log`). Agent-101's one REPORT correction is applied; scoped re-review is required.
 - No useful-model, production, hosted-service or full-parity claim is made.
 
 ## Plain summary
