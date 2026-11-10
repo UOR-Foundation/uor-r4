@@ -29,7 +29,9 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - Base identity: #3569, the two malformed roadmap items and `issues.json` match `origin/main`; no diff.
 - `cargo run -q -p xtask -- roadmap check` and `roadmap render`: **FAIL**, exactly the four pre-existing errors above; no output generated. Global check/render/sync is BLOCKED/NOT_RUN, not PASS.
 - `uor-harness check`: exit **0**; log begins `414 rules, 382 failed (0 error, 381 warn)` and includes existing multi-lab/status/prep warnings plus this then-unclaimed branch. This command does not replace the roadmap validator or loop gates. Log: `local/kimi/cursor-implementation/item-check.log`.
-- `loop report --check` passed for the initial report; the first `loop pr-check --local` failed only the new-item-at-merge-base ORDER rule and reported the expected new-item scope and existing FILEMAP advisories. Corrected-head policy/full-gate/GitHub results are recorded only after execution.
+- The first `loop pr-check --local` failed the new-item-at-merge-base ORDER rule. At corrected `b838e6e93f2faaef89bfe4414a010a7e42d42e4e` / tree `afd3ebfed0b16e4b5f68a1bd91009819a2492712`, `loop report --check` and `loop pr-check --local` **PASS**, retaining only the explicitly accepted new-item scope advisory, historical commit-order advisories and existing FILEMAP advisories. Log: `local/kimi/cursor-implementation/item-policy.log`.
+- At `b838e6e93`, all **11/11 full gates are GREEN**, exit 0 (`local/kimi/cursor-implementation/item-final-gates.log`). Required GitHub checks are green at that head; historical acknowledgement-only names are not presented as test evidence.
+- This REPORT-only correction is followed by final `report --check`, `pr-check --local` and full-gate runs. Their actual results and final HEAD/tree are bound in the PR body and `local/kimi/cursor-implementation/final-*` evidence rather than asserted before execution.
 
 ## Skills used
 
