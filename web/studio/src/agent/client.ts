@@ -13,6 +13,8 @@ import {
     type AgentStore,
     type AgentTaskRecord,
 } from '../state/agent.js';
+import { AgentStoreError } from './storeTypes.js';
+import type { AgentTaskStore } from './store.js';
 
 export type { AgentIncomingEvent } from '../state/agent.js';
 
@@ -21,12 +23,19 @@ const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 export class AgentClientError extends Error {
     readonly code: AgentErrorCode;
     readonly retryable: boolean;
+    readonly storage: 'indexeddb' | null;
 
-    constructor(code: AgentErrorCode, message: string, retryable = false) {
+    constructor(
+        code: AgentErrorCode,
+        message: string,
+        retryable = false,
+        storage: 'indexeddb' | null = null,
+    ) {
         super(`${code}: ${message}`);
         this.name = 'AgentClientError';
         this.code = code;
         this.retryable = retryable;
+        this.storage = storage;
     }
 }
 
@@ -320,35 +329,75 @@ class BufferedAgentEventStream implements AgentEventStream {
 export interface AgentClientOptions {
     transport?: AgentTransport | null;
     store?: AgentStore;
+    taskStore?: AgentTaskStore | null;
 }
 
 export class AgentClient {
     readonly store: AgentStore;
 
     private readonly transport: AgentTransport | null;
+    private readonly taskStore: AgentTaskStore | null;
     private readonly streams = new Set<BufferedAgentEventStream>();
     private readonly localFiles = new Map<string, LocalAgentFile>();
     private readonly localArtifactIds = new Map<string, string>();
     private readonly unsubscribeTransport: (() => void) | null;
+    private durableQueue: Promise<void> = Promise.resolve();
+    private persistenceError: AgentClientError | null = null;
 
     constructor(options: AgentClientOptions = {}) {
         this.transport = options.transport ?? null;
         this.store = options.store ?? createAgentStore();
+        this.taskStore = options.taskStore ?? null;
         this.unsubscribeTransport =
             this.transport === null
                 ? null
                 : this.transport.subscribe((event, digest) => {
-                      const result = this.store.apply(event, digest);
-                      if (result.status === 'applied') {
-                          this.publish(event);
+                      if (this.taskStore === null) {
+                          const result = this.store.apply(event, digest);
+                          if (result.status === 'applied') {
+                              this.publish(event);
+                          }
+                          return;
                       }
+                      this.durableQueue = this.durableQueue.then(async () => {
+                          try {
+                              const result = await this.taskStore!.appendEvent({
+                                  event,
+                                  digest,
+                                  writer_id: this.taskStore!.defaultWriterId,
+                              });
+                              if (result.status === 'applied') {
+                                  this.publish(event);
+                              }
+                          } catch (error) {
+                              this.persistenceError = this.toClientError(error);
+                          }
+                      });
                   });
     }
 
+    get lastPersistenceError(): AgentClientError | null {
+        return this.persistenceError;
+    }
+
+    // Replays the durable log into the same AgentStore the UI reads. Callers
+    // must await this before any persistence-backed operation.
+    async open(): Promise<void> {
+        if (this.taskStore === null) return;
+        try {
+            await this.taskStore.open();
+        } catch (error) {
+            throw this.toClientError(error);
+        }
+    }
+
     async listTasks(input: ListTasksInput = {}): Promise<TaskSummary[]> {
+        const durable = this.requireReady();
         const tasks = await this.requireTransport().listTasks(input);
         for (const task of tasks) {
-            this.store.upsertTask(this.toTaskRecord(task));
+            const record = this.toTaskRecord(task);
+            this.store.upsertTask(record);
+            if (durable !== null) await this.persistTask(record);
         }
         const snapshot = this.store.snapshot();
         return tasks.map((task) => {
@@ -369,50 +418,66 @@ export class AgentClient {
     }
 
     async createTask(input: CreateTaskInput): Promise<TaskSummary> {
+        const durable = this.requireReady();
         const task = await this.requireTransport().createTask(input);
-        this.store.upsertTask(this.toTaskRecord(task));
+        const record = this.toTaskRecord(task);
+        this.store.upsertTask(record);
+        if (durable !== null) await this.persistTask(record);
         return task;
     }
 
     async startRun(input: StartRunInput): Promise<RunSummary> {
+        this.requireReady();
         return this.requireTransport().startRun(input);
     }
 
     async queueMessage(input: QueueMessageInput): Promise<MessageReceipt> {
+        this.requireReady();
         return this.requireTransport().queueMessage(input);
     }
 
     async steer(input: SteerMessageInput): Promise<MessageReceipt> {
+        this.requireReady();
         return this.requireTransport().steer(input);
     }
 
     async forceSend(input: ForceSendInput): Promise<MessageReceipt> {
+        this.requireReady();
         return this.requireTransport().forceSend(input);
     }
 
     async pinTask(input: PinTaskInput): Promise<TaskSummary> {
+        const durable = this.requireReady();
         const task = await this.requireTransport().pinTask(input);
-        this.store.upsertTask(this.toTaskRecord(task));
+        const record = this.toTaskRecord(task);
+        this.store.upsertTask(record);
+        if (durable !== null) await this.persistTask(record);
         return task;
     }
 
     async archiveTask(input: ArchiveTaskInput): Promise<TaskSummary> {
+        const durable = this.requireReady();
         const task = await this.requireTransport().archiveTask(input);
-        this.store.upsertTask(this.toTaskRecord(task));
+        const record = this.toTaskRecord(task);
+        this.store.upsertTask(record);
+        if (durable !== null) await this.persistTask(record);
         return task;
     }
 
     async stop(input: StopInput): Promise<StopReceipt> {
+        this.requireReady();
         return this.requireTransport().stop(input);
     }
 
     async retry(input: RetryRunInput): Promise<RunSummary> {
+        this.requireReady();
         return this.requireTransport().retry(input);
     }
 
     async resolveApproval(
         input: ResolveApprovalInput,
     ): Promise<ApprovalReceipt> {
+        this.requireReady();
         if (input.decision !== 'approved' && input.decision !== 'denied') {
             throw new AgentClientError(
                 'invalid_arguments',
@@ -429,6 +494,7 @@ export class AgentClient {
     }
 
     async resumeTask(input: ResumeTaskInput): Promise<TaskSnapshot> {
+        this.requireReady();
         const transport = this.requireTransport();
         const result = await transport.resumeTask(input);
         const verification = this.store.verifySnapshot(result.snapshot);
@@ -438,20 +504,18 @@ export class AgentClient {
                 verification.message ?? 'snapshot verification failed',
             );
         }
-        const appended = await this.store.appendEvent(result.event);
+        const appended = await this.appendThroughStore(result.event);
         if (appended.status === 'rejected') {
             throw new AgentClientError(
                 appended.code ?? 'internal',
                 appended.message ?? 'resume event rejected',
             );
         }
-        if (appended.status === 'applied') {
-            this.publish(result.event);
-        }
         return result.snapshot;
     }
 
     subscribe(input: SubscribeInput = {}): AgentEventStream {
+        this.requireReady();
         this.requireTransport();
         let stream: BufferedAgentEventStream;
         stream = new BufferedAgentEventStream(input, () => {
@@ -462,12 +526,9 @@ export class AgentClient {
     }
 
     async ingestWireEvent(text: string): Promise<AgentAppendResult> {
+        this.requireReady();
         const event = parseAgentEventWire(text);
-        const result = await this.store.appendEvent(event);
-        if (result.status === 'applied') {
-            this.publish(event);
-        }
-        return result;
+        return this.appendThroughStore(event);
     }
 
     registerLocalFile(file: LocalAgentFile): void {
@@ -585,6 +646,89 @@ export class AgentClient {
             stream.close();
         }
         this.unsubscribeTransport?.();
+        this.taskStore?.close();
+    }
+
+    private requireReady(): AgentTaskStore | null {
+        if (this.taskStore === null) return null;
+        if (!this.taskStore.isOpen) {
+            throw new AgentClientError(
+                'runtime_unavailable',
+                'durable task store is not open; await AgentClient.open() first',
+            );
+        }
+        return this.taskStore;
+    }
+
+    private async persistTask(record: AgentTaskRecord): Promise<void> {
+        if (this.taskStore === null) return;
+        try {
+            await this.taskStore.writeTaskRecord({
+                task_id: record.taskId,
+                project_id: record.projectId,
+                title: record.title,
+                ...(record.repo === null || record.repo === undefined
+                    ? {}
+                    : { repo: record.repo }),
+                ...(record.branch === null || record.branch === undefined
+                    ? {}
+                    : { branch: record.branch }),
+                created_at_ms: record.createdAtMs,
+                archived: record.archived ?? false,
+                pinned_local: record.pinnedLocal ?? false,
+                latest_run_id: record.latestRunId ?? null,
+            });
+        } catch (error) {
+            throw this.toClientError(error);
+        }
+    }
+
+    private async appendThroughStore(
+        event: AgentIncomingEvent,
+        digest?: string,
+    ): Promise<AgentAppendResult> {
+        if (this.taskStore !== null) {
+            const result = await this.taskStore.appendEvent({
+                event,
+                digest,
+                writer_id: this.taskStore.defaultWriterId,
+            });
+            if (result.status === 'applied') {
+                this.publish(event);
+            }
+            return {
+                status: result.status,
+                code: result.code,
+                message: result.message,
+                requiresResync: result.status === 'rejected',
+                eventId: result.event_id,
+                digest: result.digest,
+            };
+        }
+        const result = await this.store.appendEvent(event);
+        if (result.status === 'applied') {
+            this.publish(event);
+        }
+        return result;
+    }
+
+    private toClientError(error: unknown): AgentClientError {
+        if (error instanceof AgentClientError) return error;
+        if (error instanceof AgentStoreError) {
+            const prefix = `${error.code}: `;
+            return new AgentClientError(
+                error.code,
+                error.message.startsWith(prefix)
+                    ? error.message.slice(prefix.length)
+                    : error.message,
+                false,
+                error.storage,
+            );
+        }
+        return new AgentClientError(
+            'internal',
+            error instanceof Error ? error.message : String(error),
+        );
     }
 
     private requireTransport(): AgentTransport {

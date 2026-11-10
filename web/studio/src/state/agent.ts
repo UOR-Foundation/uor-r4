@@ -314,6 +314,72 @@ function cloneJson<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
+export interface AgentStoreCheckpoint {
+    readonly opaque: unknown;
+}
+
+interface AgentStoreInternalState {
+    tasks: Map<string, InternalTask>;
+    runs: Map<string, InternalRun>;
+    runOwners: Map<string, string>;
+    taskOrder: string[];
+    runOrder: string[];
+    selectedTaskId: string | null;
+}
+
+function cloneInternalRun(run: InternalRun): InternalRun {
+    const messages = run.messages.map((message) => ({ ...message }));
+    const toolCalls = run.toolCalls.map((toolCall) => ({ ...toolCall }));
+    const approvals = run.approvals.map((approval) => ({ ...approval }));
+    const changesSnapshots = run.changesSnapshots.map((snapshot) => ({
+        ...snapshot,
+        files: cloneJson(snapshot.files),
+    }));
+    const unknownEvents = run.unknownEvents.map((event) => ({
+        ...event,
+        data: cloneJson(event.data),
+    }));
+    const events = run.events.map((event) => ({
+        ...event,
+        data: cloneJson(event.data),
+    }));
+    return {
+        taskId: run.taskId,
+        projectId: run.projectId,
+        runId: run.runId,
+        generation: run.generation,
+        state: run.state,
+        statusProjection: run.statusProjection,
+        retryOfRunId: run.retryOfRunId,
+        startedAtMs: run.startedAtMs,
+        endedAtMs: run.endedAtMs,
+        lastSequence: run.lastSequence,
+        lastEventId: run.lastEventId,
+        lastDigest: run.lastDigest,
+        needsResync: run.needsResync,
+        resyncCode: run.resyncCode,
+        error: run.error === null ? null : { ...run.error },
+        messages,
+        messagesById: new Map(messages.map((message) => [message.messageId, message])),
+        deltasById: new Map(run.deltasById),
+        toolCalls,
+        toolsById: new Map(toolCalls.map((toolCall) => [toolCall.toolCallId, toolCall])),
+        approvals,
+        approvalsById: new Map(approvals.map((approval) => [approval.approvalId, approval])),
+        changesSnapshots,
+        unknownEvents,
+        events,
+        generationTransitions: run.generationTransitions.map(
+            (transition) => ({ ...transition }),
+        ),
+        seen: new Map(
+            [...run.seen].map(([eventId, seen]) => [eventId, { ...seen }]),
+        ),
+        verifiedSnapshot:
+            run.verifiedSnapshot === null ? null : { ...run.verifiedSnapshot },
+    };
+}
+
 function applied(): AgentApplyResult {
     return {
         status: 'applied',
@@ -950,6 +1016,59 @@ export class AgentStore {
     private readonly taskOrder: string[] = [];
     private readonly runOrder: string[] = [];
     private selectedTaskId: string | null = null;
+
+    // Durable persistence owns a two-phase commit around apply(): it captures
+    // this exact checkpoint, applies synchronously, and restores the whole
+    // reducer state if the IndexedDB transaction aborts. The checkpoint is an
+    // opaque state copy, not a second task projection.
+    checkpoint(): AgentStoreCheckpoint {
+        const state: AgentStoreInternalState = {
+            tasks: new Map(
+                [...this.tasks].map(([taskId, task]) => [taskId, { ...task }]),
+            ),
+            runs: new Map(
+                [...this.runs].map(([key, run]) => [key, cloneInternalRun(run)]),
+            ),
+            runOwners: new Map(this.runOwners),
+            taskOrder: [...this.taskOrder],
+            runOrder: [...this.runOrder],
+            selectedTaskId: this.selectedTaskId,
+        };
+        return { opaque: state };
+    }
+
+    reset(): void {
+        this.tasks.clear();
+        this.runs.clear();
+        this.runOwners.clear();
+        this.taskOrder.splice(0, this.taskOrder.length);
+        this.runOrder.splice(0, this.runOrder.length);
+        this.selectedTaskId = null;
+    }
+
+    getRun(taskId: string, runId: string): RunView | null {
+        const run = this.runs.get(runKey(taskId, runId));
+        return run === undefined ? null : copyRun(run);
+    }
+
+    restore(checkpoint: AgentStoreCheckpoint): void {
+        const state = checkpoint.opaque as AgentStoreInternalState;
+        this.tasks.clear();
+        for (const [taskId, task] of state.tasks) {
+            this.tasks.set(taskId, task);
+        }
+        this.runs.clear();
+        for (const [key, run] of state.runs) {
+            this.runs.set(key, run);
+        }
+        this.runOwners.clear();
+        for (const [runId, taskId] of state.runOwners) {
+            this.runOwners.set(runId, taskId);
+        }
+        this.taskOrder.splice(0, this.taskOrder.length, ...state.taskOrder);
+        this.runOrder.splice(0, this.runOrder.length, ...state.runOrder);
+        this.selectedTaskId = state.selectedTaskId;
+    }
 
     // Synchronous reducer: validation, duplicate identity, ordering and
     // reduction only. Digest computation and persistence live in appendEvent

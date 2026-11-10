@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'preact';
 import { LifecycleStore } from './state/lifecycle.js';
-import { mountTypedStudio, typedPreviewRequested } from './bootstrap.js';
+import {
+    mountTypedStudio,
+    studioTestApiEnabled,
+    typedPreviewRequested,
+} from './bootstrap.js';
 import { StudioApp } from './components/StudioApp.js';
 import { activateStudioMigration, studioMigrationStatus } from './persistence/migration.js';
 
@@ -48,6 +52,36 @@ describe('typed Studio bootstrap', () => {
         expect(typedPreviewRequested('?legacy=1')).toBe(false);
         expect(typedPreviewRequested('?other=1')).toBe(true);
         expect(typedPreviewRequested('')).toBe(true);
+    });
+
+    it('requires both the build flag and the studioTest query', () => {
+        expect(studioTestApiEnabled('1', '?studioTest=1')).toBe(true);
+        expect(studioTestApiEnabled('1', '?typed=1')).toBe(false);
+        expect(studioTestApiEnabled(undefined, '?studioTest=1')).toBe(false);
+        expect(studioTestApiEnabled('0', '?studioTest=1')).toBe(false);
+        expect(studioTestApiEnabled('1', '?studioTest=0')).toBe(false);
+    });
+
+    it('installs the test API only when both gates are present', async () => {
+        vi.stubEnv('VITE_STUDIO_TEST', '1');
+        window.history.replaceState({}, '', '/?typed=1&studioTest=1');
+        try {
+            const root = document.createElement('div');
+            const mounted = await mountTypedStudio(root);
+            expect(window.__studioTest).toBeDefined();
+            mounted.dispose();
+            delete window.__studioTest;
+
+            window.history.replaceState({}, '', '/?typed=1');
+            const noQueryRoot = document.createElement('div');
+            const noQuery = await mountTypedStudio(noQueryRoot);
+            expect(window.__studioTest).toBeUndefined();
+            noQuery.dispose();
+        } finally {
+            delete window.__studioTest;
+            vi.unstubAllEnvs();
+            window.history.replaceState({}, '', '/');
+        }
     });
 
     it('passes the real StudioApp with lifecycle, model worker, and workflow APIs to Preact', async () => {

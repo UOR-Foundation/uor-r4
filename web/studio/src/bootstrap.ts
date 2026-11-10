@@ -25,6 +25,16 @@ export function typedPreviewRequested(search: string): boolean {
     return params.get('legacy') !== '1' && params.get('typed') !== '0';
 }
 
+export function studioTestApiEnabled(
+    buildFlag: string | undefined,
+    search: string,
+): boolean {
+    return (
+        buildFlag === '1' &&
+        new URLSearchParams(search).get('studioTest') === '1'
+    );
+}
+
 async function waitForWorkflowApis(timeoutMs: number): Promise<LegacyWorkflowApis> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -75,6 +85,10 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         sessions: apis.sessions,
         ui: apis.ui,
     }), root);
+    if (studioTestApiEnabled(import.meta.env.VITE_STUDIO_TEST, window.location.search)) {
+        const { installStudioTestApi } = await import('./agent/testApi.js');
+        installStudioTestApi();
+    }
     const previousSkipHref = retargetSkipLink('#harness-main');
     root.dataset.active = 'true';
     return {
