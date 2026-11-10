@@ -797,13 +797,13 @@ No credentials, account, task or repository are used now. If a later owner-appro
 
 | Stage | Scope | Effort | Security/review gate |
 |---|---|---|---|
-| 0 | Contract, canonical JSON, generated TS, protected baseline | 5–9 sittings | Contract review |
+| 0 | Contract, canonical JSON, generated TS, protected baseline | 6–10 sittings | Contract review |
 | 1 | Shell, task rail, composer media, a11y/IME regression | 6–11 | Accessibility/IME review |
 | 2 | Browser runtime, IndexedDB, two workers, task UI | 13–18 | Runtime/security review |
 | 3 | Companion data APIs, tool intents, loopback stream | 8–12 | **Separate host-authority review** |
 | 4 | File tree/editor, diff/comments, PR/artifacts | 5–7 | Path/grant review |
 | 5 | Final local acceptance | 3–5 | Final exact-head review |
-| **Total** | **23 tasks** | **40–62 sittings** | Excludes service appendix and model compute |
+| **Total** | **23 tasks** | **41–63 sittings** | Excludes service appendix and model compute |
 
 **Risks.** Contract/canonical drift between Rust and TS; IndexedDB corruption or cross-tab races; capability theater in static web; host authority leakage; cross-task races; IME regression; legacy shortcut/hash collision; dependency creep; real API absence. Mitigations are the named tests and gates in the plan.
 
@@ -814,7 +814,7 @@ No credentials, account, task or repository are used now. If a later owner-appro
 ## 17. Execution handoff
 
 1. **Owner review of this revised design.** Record owner approval in a new ORDER. No code before that. The lead cannot substitute a delegated approval for this gate.
-2. **Fresh exact-head delivery review.** Two independent builder checks returned **REVISE**; neither approved the work. The current delivery review returned **CHANGES** for research-record consistency, and those corrections are being applied. Do not dispatch an unnamed third builder check. After the corrections, the remaining review gate is a **fresh exact-head delivery review**, followed by owner acceptance/design approval. No approval is implied by this revision.
+2. **Fresh exact-head delivery review.** Two independent builder checks returned **REVISE**; neither approved the work. Delivery reviewer `agent-94` returned **CHANGES** on the prior report head for research-record consistency, and `agent-95` returned **CHANGES** for staged-table/audit/record arithmetic. Those corrections are **applied in this PR; fresh delivery review pending**. Do not dispatch an unnamed third builder check. The remaining review gate is a **fresh exact-head delivery review**, followed by owner acceptance/design approval. No approval is implied by this revision.
 3. **Choose execution.** Subagent-driven (recommended: fresh implementer + fresh reviewer per task; interface-heavy work benefits from independent checks) or native (one session, one whole-branch review at the end).
 4. **Execute the plan.** Each executable stage has checkbox tasks and a stage acceptance. The appendices have no checkboxes and are not executable tasks.
 5. **Deliver.** Exact-head review, protected merge, fresh-main verification, delete branch/worktree. Service and real-R4 work remain gated.
@@ -841,4 +841,4 @@ These are **lead rulings**, not user decisions. They resolve the builder's unans
 14. **Fetch streaming** is the loopback transport; no EventSource. Sequence 0 `run.queued` fixtures are mandatory.
 15. **UOR-only bindings** (palette, local pins, local comments) are UOR choices, not Cursor facts.
 
-**Remaining owner-only decisions for owner approval:** two independent builder checks returned **REVISE**, and the current fresh delivery review returned **CHANGES**; neither approved this revision. The remaining gates are this fresh delivery review and owner acceptance/design approval. The owner must decide whether to accept this architecture revision; whether the browser-owned IndexedDB store is the right long-term durability boundary; whether the optional companion should be packaged at all in the first implementation unit; and the owner acceptance item. The recommended default is a **new Cursor-hosted Studio item** with browser-owned-runtime acceptance, leaving #3569's Rust-runtime `Done when` untouched; the alternative is an explicit owner ORDER superseding that `Done when`. This revision does not edit the old acceptance text, and no implementation is authorized until the owner records one of those choices.
+**Remaining owner-only decisions for owner approval:** two independent builder checks returned **REVISE**; delivery reviewers `agent-94` and `agent-95` returned **CHANGES** on research-record, staged-table/audit and record-arithmetic issues. None approved this revision. The remaining gates are a new fresh exact-head delivery review and owner acceptance/design approval; no third builder check is pending. The owner must decide whether to accept this architecture revision; whether the browser-owned IndexedDB store is the right long-term durability boundary; whether the optional companion should be packaged at all in the first implementation unit; and the owner acceptance item. The recommended default is a **new Cursor-hosted Studio item** with browser-owned-runtime acceptance, leaving #3569's Rust-runtime `Done when` untouched; the alternative is an explicit owner ORDER superseding that `Done when`. This revision does not edit the old acceptance text, and no implementation is authorized until the owner records one of those choices.

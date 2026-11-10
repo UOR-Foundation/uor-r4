@@ -52,7 +52,7 @@
 - **Shortcut baseline:** Cursor help says "same default shortcuts as VS Code," but Cursor overrides `Cmd+K`, `Cmd+E`, `Cmd+.`, `Cmd+/`, `Cmd+Shift+J` and uses `Cmd+R` then `Cmd+S` for the shortcut editor.
 - **Pricing:** current X Subscription, legacy Cursor Pro/Pro+/Ultra and Teams Standard/Premium appear on different pages; the names collide.
 - **Plan claims:** Plus is described both as "only Cursor models" and as including Grok 4.7/4.6/4.5 plus Composer 2.5. Use the enumerated list, not the slogan.
-- **UOR-R4 status:** root `AGENTS.md` says 0/8; D83 and `project-track.md` say M1 closed at 1/8. Use the dated decision record.
+- **UOR-R4 status:** the owner's preserved older checkout may say 0/8; the current worktree/main `AGENTS.md` records 1 of 8. D83 and `project-track.md` record M1 closed at 1/8. Use the current worktree/main and the dated decision record.
 
 ## What this audit changes in the synthesis
 
