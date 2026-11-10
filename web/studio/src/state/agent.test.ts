@@ -793,6 +793,19 @@ describe('AgentStore scoped mutation journal', () => {
                 }),
             },
             {
+                name: 'existing assistant.message update',
+                setup: [makeEvent(2, 'assistant.message', { message_id: 'msg_1', text: 'first' })],
+                event: makeEvent(3, 'assistant.message', { message_id: 'msg_1', text: 'second' }),
+            },
+            {
+                name: 'error',
+                event: makeEvent(2, 'error', {
+                    code: 'fixture',
+                    message: 'fixture error',
+                    retryable: false,
+                }),
+            },
+            {
                 name: 'run.finished',
                 event: makeEvent(2, 'run.finished', {
                     status: 'finished',
@@ -843,6 +856,16 @@ describe('AgentStore scoped mutation journal', () => {
         expect(store.snapshot().runs).toHaveLength(1);
         expect(store.snapshot().tasks[0]?.latestRunId).toBe(RUN_ID);
         expect(JSON.parse(JSON.stringify(store.snapshot()))).toEqual(before);
+    });
+
+    test('rollback removes a brand-new task and run', () => {
+        const store = createAgentStore();
+        const journaled = store.applyJournaled(queued(0), digestFor(0));
+        expect(journaled.result.status).toBe('applied');
+        expect(store.snapshot().tasks).toHaveLength(1);
+        journaled.rollback();
+        expect(store.snapshot().tasks).toHaveLength(0);
+        expect(store.snapshot().runs).toHaveLength(0);
     });
 
     test('rollback restores the verified snapshot needed by run.resumed', () => {

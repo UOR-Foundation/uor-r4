@@ -33,6 +33,7 @@ interface AgentComposerProps {
     agentClient?: AgentClient | null;
     agentTask?: TaskView | null;
     activeRun?: RunView | null;
+    unresolvedRun?: boolean;
 }
 
 let insertSequence = 0;
@@ -50,7 +51,7 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
@@ -198,7 +199,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
     const agentMode = agentClient !== null;
-    const sendDisabled = agentMode ? Boolean(activeTaskRun) : !store.canRun();
+    const sendDisabled = agentMode
+        ? Boolean(activeTaskRun) || unresolvedRun
+        : !store.canRun();
 
     function failureMessage(prefix: string, failure: unknown): string {
         return `${prefix}: ${failure instanceof Error ? failure.message : String(failure)}`;
@@ -208,6 +211,10 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         if (agentClient) {
             if (!agentTask) {
                 ui.toast('Select a task before sending.', 'error');
+                return false;
+            }
+            if (unresolvedRun) {
+                ui.toast('This task\'s current run is still loading. Wait for it to resume before starting another.', 'error');
                 return false;
             }
             if (activeTaskRun) {

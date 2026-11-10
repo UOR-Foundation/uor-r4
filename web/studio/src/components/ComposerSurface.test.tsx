@@ -967,6 +967,28 @@ describe('task runtime send identity', () => {
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
     });
 
+    it('blocks Send and Enter when the selected task latest run is not loaded', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Unloaded task' });
+        client.store.upsertTask({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            title: task.title,
+            createdAtMs: task.createdAtMs,
+            latestRunId: 'run_1111111111111111',
+        });
+        client.store.selectTask(task.taskId);
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        await mountStudio(client);
+
+        expect(button('Send').disabled).toBe(true);
+        typePrompt('do not start');
+        pressKey(promptElement(), 'Enter');
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+        expect(promptElement().value).toBe('do not start');
+    });
+
     it('blocks Enter during a cancelling run without starting another run', async () => {
         const { transport, client } = fixtureRuntime();
         const task = await client.createTask({ title: 'Cancelling task' });

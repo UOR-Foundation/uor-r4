@@ -75,7 +75,9 @@ class MemoryTaskStore {
                 'indexeddb',
             );
         }
-        this.tasks.push(record);
+        const normalized = { ...record };
+        if (normalized.hold === null) delete normalized.hold;
+        this.tasks.push(normalized);
         this.target.upsertTask({
             taskId: record.task_id,
             projectId: record.project_id,
@@ -118,8 +120,12 @@ class EmittingTransport extends FixtureTransport {
 }
 
 class HoldTransport extends FixtureTransport {
-    readonly hold = {
-        reason: 'waiting_for_background' as const,
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null = {
+        reason: 'waiting_for_background',
         run_id: 'run_7f3a2c1b9d4e6a80',
         tool_call_id: 'tool_fixture',
     };
@@ -321,10 +327,33 @@ describe('AgentClient durable task-store wiring', () => {
             expect(next.done).toBe(false);
             expect(next.value?.type).toBe('run.queued');
             expect(client.store.snapshot().runs).toHaveLength(1);
+            expect(client.lastPersistenceError).toBeNull();
         } finally {
             stream.close();
             client.dispose();
         }
+    });
+
+    test('direct resume rejection preserves storage', async () => {
+        const transport = new FixtureTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const task = await client.createTask({ title: 'resume storage' });
+        const run = await client.startRun({ taskId: task.taskId, prompt: 'initial' });
+        for (let attempt = 0; attempt < 20; attempt += 1) {
+            const cursor = client.store.getRunCursor(task.taskId, run.runId);
+            if (cursor !== null && cursor.lastSequence >= 1) break;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        stub.rejectNextAppend = true;
+        await expect(
+            client.resumeTask({ taskId: task.taskId, runId: run.runId }),
+        ).rejects.toMatchObject({
+            code: 'limit_exceeded',
+            storage: 'indexeddb',
+        });
     });
 
     test('optional hold metadata survives a durable summary write', async () => {
@@ -339,5 +368,41 @@ describe('AgentClient durable task-store wiring', () => {
             .filter((record) => record.task_id === task.taskId)
             .at(-1);
         expect(stored?.hold).toEqual(transport.hold);
+
+        transport.hold = null;
+        await client.listTasks();
+        const cleared = stub.tasks
+            .filter((record) => record.task_id === task.taskId)
+            .at(-1);
+        expect(cleared?.hold).toBeUndefined();
+    });
+
+    test('direct ingest rejection preserves storage and a healthy event clears the error', async () => {
+        const transport = new EmittingTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const event = createRunQueuedEvent({
+            projectId: 'prj_4b1d9e0c7a2f6e51',
+            taskId: 'tsk_9a3c5e7b1d2f4a60',
+            runId: 'run_7f3a2c1b9d4e6a80',
+            generation: 1,
+            recordedAtMs: 1_794_283_200_000,
+        });
+        const wire = canonicalJson(event);
+
+        stub.rejectNextAppend = true;
+        const rejected = await client.ingestWireEvent(wire);
+        expect(rejected.status).toBe('rejected');
+        expect(rejected.storage).toBe('indexeddb');
+        expect(client.lastPersistenceError).toMatchObject({
+            code: 'limit_exceeded',
+            storage: 'indexeddb',
+        });
+
+        const applied = await client.ingestWireEvent(wire);
+        expect(applied.status).toBe('applied');
+        expect(client.lastPersistenceError).toBeNull();
     });
 });

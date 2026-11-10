@@ -118,7 +118,11 @@ type Mutation =
     | { op: 'delete_task'; taskId: string }
     | { op: 'delete_run_events'; taskId: string; runId: string }
     | { op: 'mutate_run_identity'; taskId: string; runId: string; field: 'task_id' | 'run_id'; value: string }
-    | { op: 'put_lease'; taskId: string; writerId: string; nowMs: number };
+    | { op: 'put_lease'; taskId: string; writerId: string; nowMs: number }
+    | { op: 'set_task_latest'; taskId: string; latestRunId: string | null }
+    | { op: 'corrupt_anchor'; taskId: string; runId: string; index: number }
+    | { op: 'corrupt_change_files'; taskId: string; runId: string; headDigest: string; files: Array<Record<string, unknown>> }
+    | { op: 'oversize_snapshot'; taskId: string; runId: string; bytes: number };
 
 async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
     await page.evaluate(async ({ dbName, mutation }) => {
@@ -139,12 +143,13 @@ async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
             open.onerror = () => reject(open.error);
         });
         try {
-            const tx = db.transaction(['events', 'runs', 'snapshots', 'tasks', 'leases'], 'readwrite');
+            const tx = db.transaction(['events', 'runs', 'snapshots', 'tasks', 'leases', 'changes'], 'readwrite');
             const events = tx.objectStore('events');
             const runs = tx.objectStore('runs');
             const snapshots = tx.objectStore('snapshots');
             const tasks = tx.objectStore('tasks');
             const leases = tx.objectStore('leases');
+            const changes = tx.objectStore('changes');
             if (mutation.op === 'corrupt_snapshot') {
                 const key = [mutation.taskId, mutation.runId];
                 const record = await request(snapshots.get(key));
@@ -189,7 +194,7 @@ async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
                 if (!record) throw new Error('run record is missing');
                 record[mutation.field] = mutation.value;
                 await request(runs.put(record, key));
-            } else {
+            } else if (mutation.op === 'put_lease') {
                 await request(
                     leases.put(
                         {
@@ -201,6 +206,34 @@ async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
                         mutation.taskId,
                     ),
                 );
+            } else if (mutation.op === 'set_task_latest') {
+                const record = await request(tasks.get(mutation.taskId));
+                if (!record) throw new Error('task record is missing');
+                record.latest_run_id = mutation.latestRunId;
+                await request(tasks.put(record, mutation.taskId));
+            } else if (mutation.op === 'corrupt_anchor') {
+                const key = [mutation.taskId, mutation.runId];
+                const record = await request(snapshots.get(key));
+                if (!record || !Array.isArray(record.anchors) || !record.anchors[mutation.index]) {
+                    throw new Error('snapshot anchor is missing');
+                }
+                record.anchors[mutation.index].head_digest = `sha256:${'0'.repeat(64)}`;
+                await request(snapshots.put(record, key));
+            } else if (mutation.op === 'corrupt_change_files') {
+                const key = [mutation.taskId, mutation.runId, mutation.headDigest];
+                const record = await request(changes.get(key));
+                if (!record) throw new Error('change record is missing');
+                record.files = mutation.files;
+                await request(changes.put(record, key));
+            } else {
+                const key = [mutation.taskId, mutation.runId];
+                const record = await request(snapshots.get(key));
+                if (!record) throw new Error('snapshot record is missing');
+                const target = Array.isArray(record.anchors) && record.latest
+                    ? record.latest
+                    : record;
+                target.last_event_id = 'x'.repeat(mutation.bytes);
+                await request(snapshots.put(record, key));
             }
             await done(tx);
         } finally {
@@ -434,6 +467,29 @@ test.describe('browser agent task store', () => {
         expect(restored.error?.code).toBe('snapshot_corrupt');
         expect(await call<CursorView | null>(page, 'cursor')).toBeNull();
         expect((await readDb(page)).eventRecords).toHaveLength(3);
+    });
+
+    test('failed_reopen_preserves_the_last_verified_memory_cursor', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const before = await call<CursorView>(page, 'cursor');
+        await mutateDb(page, {
+            op: 'truncate_event',
+            taskId: created.taskId,
+            runId: created.runId,
+            generation: 1,
+            sequence: 1,
+        });
+        const reopened = await call<RestoreView>(page, 'reopen');
+        expect(reopened.phase).toBe('error');
+        expect(reopened.error?.code).toBe('snapshot_corrupt');
+        expect(await call<CursorView | null>(page, 'memoryCursor')).toMatchObject({
+            taskId: before.taskId,
+            runId: before.runId,
+            sequence: before.sequence,
+            eventId: before.eventId,
+        });
+        const task = await call<TaskViewSummary>(page, 'taskView');
+        expect(task.runs).toHaveLength(1);
     });
 
     test('indexeddb_missing_chain_event_is_refused', async ({ page }) => {
@@ -767,6 +823,26 @@ test.describe('browser agent task store', () => {
         expect(positions).toContain('3:3');
     });
 
+    test('export_import_round_trips_multiple_resume_anchors', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createClientRun');
+        expect((await call<Outcome>(page, 'resumeViaClient')).ok).toBe(true);
+        await call(page, 'writeSnapshot');
+        expect((await call<Outcome>(page, 'resumeViaClient')).ok).toBe(true);
+        await call(page, 'writeSnapshot');
+        const exported = await call<string>(page, 'exportNdjson');
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const imported = await call<Outcome>(page, 'importNdjson', exported);
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            generation: 3,
+            sequence: 3,
+        });
+        expect((await readDb(page)).eventRecords).toHaveLength(4);
+    });
+
     test('import_rejects_resume_without_its_anchor_before_writing', async ({ page }) => {
         await call<FixtureSummary>(page, 'createTaskAndEvents');
         await call(page, 'writeSnapshot');
@@ -874,6 +950,7 @@ test.describe('browser agent task store', () => {
         expect(restored.phase).toBe('incomplete');
         const task = await call<TaskViewSummary>(page, 'taskView');
         expect(task.latestRunId).toBeNull();
+        expect(task.unresolvedRunId).toBe(created.runId);
         expect(task.runs).toHaveLength(0);
     });
 
@@ -931,6 +1008,196 @@ test.describe('browser agent task store', () => {
         } | null>(page, 'scaleMetrics');
         expect(metrics).not.toBeNull();
         console.log('scale_metrics', JSON.stringify(metrics));
+    });
+
+    test('stale_stored_latest_cannot_override_the_replayed_active_run', async ({ page }) => {
+        const first = await call<FixtureSummary>(page, 'createTaskAndEvents', {
+            mode: 'finished',
+        });
+        const second = await call<FixtureSummary>(page, 'createSecondRun');
+        expect(second.generation).toBe(2);
+        await mutateDb(page, {
+            op: 'set_task_latest',
+            taskId: first.taskId,
+            latestRunId: first.runId,
+        });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('error');
+        expect(restored.error?.code).toBe('snapshot_corrupt');
+        expect(restored.canStartRun).toBe(false);
+        expect(restored.sendEnabled).toBe(false);
+    });
+
+    test('null_stored_latest_with_a_replayed_run_is_refused', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await mutateDb(page, {
+            op: 'set_task_latest',
+            taskId: created.taskId,
+            latestRunId: null,
+        });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('error');
+        expect(restored.error?.code).toBe('snapshot_corrupt');
+        expect(restored.canStartRun).toBe(false);
+        expect(restored.sendEnabled).toBe(false);
+    });
+
+    test('listTasks_keeps_unloaded_active_runs_as_incomplete', async ({ page }) => {
+        for (const mode of ['running', 'cancelling'] as const) {
+            const listed = await call<Outcome>(page, 'listUnloadedActiveTask', mode);
+            expect(listed.ok, JSON.stringify(listed)).toBe(true);
+            const summary = listed.record as {
+                taskId: string;
+                latestRunId: string;
+            };
+            const view = await call<TaskViewSummary>(page, 'taskView');
+            expect(view.taskId).toBe(summary.taskId);
+            expect(view.latestRunId).toBe(summary.latestRunId);
+            expect(view.runs).toHaveLength(0);
+            const state = await call<RestoreView>(page, 'restoreState');
+            expect(state.canStartRun).toBe(false);
+            expect(state.sendEnabled).toBe(false);
+        }
+    });
+
+    test('import_gates_concurrent_append_and_publishes_only_complete_state', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await call(page, 'targetFixture', created.taskId, created.runId, 1);
+        await call(page, 'beginImport', exported);
+        const during = await call<Outcome>(page, 'appendAssistantSafe', 'during import');
+        expect(during.ok).toBe(false);
+        expect(during.code).toBe('runtime_unavailable');
+        const imported = await call<Outcome>(page, 'whenImport');
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            sequence: 2,
+        });
+    });
+
+    test('import_publish_failure_leaves_no_ready_or_partial_state', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await call(page, 'armFailImportPublish');
+        await call(page, 'beginImport', exported);
+        const failed = await call<Outcome>(page, 'whenImport');
+        expect(failed.ok).toBe(false);
+        const state = await call<RestoreView>(page, 'restoreState');
+        expect(state.phase).not.toBe('ready');
+        expect(state.canStartRun).toBe(false);
+        expect(state.sendEnabled).toBe(false);
+        const reopened = await call<RestoreView>(page, 'open');
+        expect(reopened.phase).toBe('ready');
+        expect(await call<CursorView | null>(page, 'cursor')).toBeNull();
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+        expect(created.taskId).toBeTruthy();
+    });
+
+    test('corrupt_non_latest_anchor_is_refused_by_read_lease_and_write', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'appendResume')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'corrupt_anchor',
+            taskId: created.taskId,
+            runId: created.runId,
+            index: 0,
+        });
+
+        const read = await call<Outcome>(page, 'readSnapshot');
+        expect(read.ok).toBe(false);
+        expect(read.code).toBe('snapshot_corrupt');
+        const lease = await call<Outcome>(page, 'acquireLease', 'writer-a', 1_000_000);
+        expect(lease.ok).toBe(false);
+        expect(lease.code).toBe('snapshot_corrupt');
+        const write = await call<Outcome>(page, 'writeSnapshot');
+        expect(write.ok).toBe(false);
+        expect(write.code).toBe('snapshot_corrupt');
+    });
+
+    test('oversized_snapshot_bundle_is_refused_by_read_lease_write_and_append', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'oversize_snapshot',
+            taskId: created.taskId,
+            runId: created.runId,
+            bytes: 9 * 1024 * 1024,
+        });
+
+        const read = await call<Outcome>(page, 'readSnapshot');
+        expect(read.ok).toBe(false);
+        expect(read.code).toBe('limit_exceeded');
+        const lease = await call<Outcome>(page, 'acquireLease', 'writer-a', 1_000_000);
+        expect(lease.ok).toBe(false);
+        expect(lease.code).toBe('limit_exceeded');
+        const write = await call<Outcome>(page, 'writeSnapshot');
+        expect(write.ok).toBe(false);
+        expect(write.code).toBe('limit_exceeded');
+        const append = await call<Outcome>(page, 'appendResume');
+        expect(append.status).toBe('rejected');
+        expect(append.code).toBe('limit_exceeded');
+    });
+
+    test('import_and_read_rebind_change_files_to_the_snapshot_event', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'appendChanges')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'recordChanges')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'corrupt_change_files',
+            taskId: created.taskId,
+            runId: created.runId,
+            headDigest: 'turn:3:fixture',
+            files: [{ path: 'src/fabricated.ts', status: 'added' }],
+        });
+        const read = await call<Outcome>(page, 'readChanges');
+        expect(read.ok).toBe(false);
+        expect(read.code).toBe('snapshot_corrupt');
+
+        const exported = await call<string>(page, 'exportNdjson');
+        const tampered = exported
+            .trim()
+            .split('\n')
+            .map((line) => {
+                if (!line.includes('"kind":"changes"')) return line;
+                const parsed = JSON.parse(line) as {
+                    record: { files: Array<Record<string, unknown>> };
+                };
+                parsed.record.files = [{ path: 'src/fabricated.ts', status: 'added' }];
+                return JSON.stringify(parsed);
+            })
+            .join('\n') + '\n';
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const imported = await call<Outcome>(page, 'importNdjson', tampered);
+        expect(imported.ok).toBe(false);
+        expect(imported.code).toBe('snapshot_corrupt');
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+    });
+
+    test('queued_only_run_persists_the_queued_event_time', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createQueuedOnlyTask');
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('ready');
+        const db = await readDb(page);
+        const run = db.runRecords.find(
+            (record) => record.run_id === created.runId,
+        ) as Record<string, unknown>;
+        expect(run.started_at_ms).toBe(1_794_283_200_000);
     });
 
     test('actual_transaction_abort_preserves_memory_and_durable_cursor', async ({ page }) => {

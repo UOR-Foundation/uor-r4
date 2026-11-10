@@ -100,7 +100,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         const task = snapshot.selectedTask;
         if (task === null) return null;
         const activeRun = task.latestRunId === null ? null : task.runs.find((run) => run.runId === task.latestRunId) ?? null;
-        return { task, activeRun };
+        const unresolvedRun = task.unresolvedRunId !== null || (task.latestRunId !== null && activeRun === null);
+        return { task, activeRun, unresolvedRun };
     }, [agentClient, taskRevision]);
     const selectedTaskId = selectedRuntime?.task.taskId ?? null;
     const tasks = useMemo<TaskSummary[]>(() => {
@@ -183,7 +184,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
         if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} />;
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'terminal') return <TerminalPanel actions={desktopActions} files={files} idPrefix={idPrefix} />;

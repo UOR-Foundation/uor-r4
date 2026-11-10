@@ -20,6 +20,14 @@ export type { AgentIncomingEvent } from '../state/agent.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
+const ACTIVE_TASK_STATES: ReadonlySet<string> = new Set([
+    'queued',
+    'running',
+    'waiting_for_approval',
+    'waiting_for_background',
+    'cancelling',
+]);
+
 export class AgentClientError extends Error {
     readonly code: AgentErrorCode;
     readonly retryable: boolean;
@@ -58,7 +66,7 @@ export interface TaskSummary {
         reason: 'waiting_for_background';
         run_id: string;
         tool_call_id: string;
-    };
+    } | null;
     state:
         | 'idle'
         | 'queued'
@@ -372,6 +380,7 @@ export class AgentClient {
                                   writer_id: this.taskStore!.defaultWriterId,
                               });
                               if (result.status === 'applied') {
+                                  this.persistenceError = null;
                                   this.publish(event);
                               } else if (result.status === 'rejected') {
                                   this.persistenceError = new AgentClientError(
@@ -407,7 +416,7 @@ export class AgentClient {
         const durable = this.requireReady();
         const tasks = await this.requireTransport().listTasks(input);
         for (const task of tasks) {
-            const record = this.toTaskRecord(task);
+            const record = this.persistedTaskRecord(task);
             if (durable !== null) await this.persistTask(record);
             else this.store.upsertTask(record);
         }
@@ -419,10 +428,11 @@ export class AgentClient {
             if (view === undefined) {
                 return task;
             }
+            const unresolved = view.unresolvedRunId;
             return {
                 ...task,
-                state: view.state,
-                latestRunId: view.latestRunId,
+                state: unresolved === null ? view.state : task.state,
+                latestRunId: unresolved ?? view.latestRunId,
                 archived: view.archived,
                 pinned: view.pinnedLocal,
             };
@@ -432,7 +442,7 @@ export class AgentClient {
     async createTask(input: CreateTaskInput): Promise<TaskSummary> {
         const durable = this.requireReady();
         const task = await this.requireTransport().createTask(input);
-        const record = this.toTaskRecord(task);
+        const record = this.persistedTaskRecord(task);
         if (durable !== null) await this.persistTask(record);
         else this.store.upsertTask(record);
         return task;
@@ -440,28 +450,32 @@ export class AgentClient {
 
     async startRun(input: StartRunInput): Promise<RunSummary> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().startRun(input);
     }
 
     async queueMessage(input: QueueMessageInput): Promise<MessageReceipt> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().queueMessage(input);
     }
 
     async steer(input: SteerMessageInput): Promise<MessageReceipt> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().steer(input);
     }
 
     async forceSend(input: ForceSendInput): Promise<MessageReceipt> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().forceSend(input);
     }
 
     async pinTask(input: PinTaskInput): Promise<TaskSummary> {
         const durable = this.requireReady();
         const task = await this.requireTransport().pinTask(input);
-        const record = this.toTaskRecord(task);
+        const record = this.persistedTaskRecord(task);
         if (durable !== null) await this.persistTask(record);
         else this.store.upsertTask(record);
         return task;
@@ -470,7 +484,7 @@ export class AgentClient {
     async archiveTask(input: ArchiveTaskInput): Promise<TaskSummary> {
         const durable = this.requireReady();
         const task = await this.requireTransport().archiveTask(input);
-        const record = this.toTaskRecord(task);
+        const record = this.persistedTaskRecord(task);
         if (durable !== null) await this.persistTask(record);
         else this.store.upsertTask(record);
         return task;
@@ -478,6 +492,7 @@ export class AgentClient {
 
     async stop(input: StopInput): Promise<StopReceipt> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().stop(input);
     }
 
@@ -523,6 +538,8 @@ export class AgentClient {
             throw new AgentClientError(
                 appended.code ?? 'internal',
                 appended.message ?? 'resume event rejected',
+                false,
+                appended.storage ?? null,
             );
         }
         return result.snapshot;
@@ -663,6 +680,18 @@ export class AgentClient {
         this.taskStore?.close();
     }
 
+    private requireResolvedTask(taskId: string): void {
+        const task = this.store.snapshot().tasks.find(
+            (candidate) => candidate.taskId === taskId,
+        );
+        if (task?.unresolvedRunId !== null && task?.unresolvedRunId !== undefined) {
+            throw new AgentClientError(
+                'out_of_order',
+                'the task latest run is still loading; replays must complete before starting or steering',
+            );
+        }
+    }
+
     private requireReady(): AgentTaskStore | null {
         if (this.taskStore === null) return null;
         if (!this.taskStore.isOpen) {
@@ -723,7 +752,15 @@ export class AgentClient {
                       }),
             });
             if (result.status === 'applied') {
+                this.persistenceError = null;
                 this.publish(event);
+            } else if (result.status === 'rejected') {
+                this.persistenceError = new AgentClientError(
+                    result.code ?? 'internal',
+                    result.message ?? 'durable append was rejected',
+                    true,
+                    result.storage,
+                );
             }
             return {
                 status: result.status,
@@ -732,11 +769,18 @@ export class AgentClient {
                 requiresResync: result.status === 'rejected',
                 eventId: result.event_id,
                 digest: result.digest,
+                storage: result.storage,
             };
         }
         const result = await this.store.appendEvent(event);
         if (result.status === 'applied') {
+            this.persistenceError = null;
             this.publish(event);
+        } else if (result.status === 'rejected') {
+            this.persistenceError = new AgentClientError(
+                result.code ?? 'internal',
+                result.message ?? 'agent append was rejected',
+            );
         }
         return result;
     }
@@ -774,6 +818,26 @@ export class AgentClient {
         for (const stream of this.streams) {
             stream.push(event);
         }
+    }
+
+    private persistedTaskRecord(task: TaskSummary): AgentTaskRecord {
+        const record = this.toTaskRecord(task);
+        if (
+            task.latestRunId !== null &&
+            !ACTIVE_TASK_STATES.has(task.state)
+        ) {
+            const existing = this.store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === task.taskId);
+            if (
+                existing !== undefined &&
+                existing.runs.length > 0 &&
+                existing.latestRunId !== null
+            ) {
+                record.latestRunId = existing.latestRunId;
+            }
+        }
+        return record;
     }
 
     private toTaskRecord(task: TaskSummary): AgentTaskRecord {

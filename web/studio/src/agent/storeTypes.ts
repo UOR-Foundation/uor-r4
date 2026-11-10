@@ -41,7 +41,7 @@ export interface TaskRecord {
         reason: 'waiting_for_background';
         run_id: string;
         tool_call_id: string;
-    };
+    } | null;
 }
 
 export interface RunRecord {

@@ -1,4 +1,4 @@
-import { AgentClient } from './client.js';
+import { AgentClient, type TaskSummary } from './client.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { AgentTaskStore } from './store.js';
 import { AgentStoreError } from './storeTypes.js';
@@ -21,6 +21,7 @@ const TERMINAL_STATES = new Set(['finished', 'failed', 'cancelled', 'expired']);
 interface StoreFaults {
     abort_next_append: boolean;
     abort_next_task_write: boolean;
+    fail_import_publish: boolean;
 }
 
 interface FixtureSummary {
@@ -76,6 +77,7 @@ interface TaskViewSummary {
     archived: boolean;
     state: string;
     latestRunId: string | null;
+    unresolvedRunId: string | null;
     runs: Array<{ runId: string; lastSequence: number; state: string }>;
 }
 
@@ -92,6 +94,8 @@ interface Outcome {
 export interface StudioTestApi {
     reset(): Promise<void>;
     open(): Promise<RestoreView>;
+    reopen(): Promise<RestoreView>;
+    memoryCursor(): CursorView | null;
     beginOpen(): Promise<void>;
     whenOpen(): Promise<RestoreView>;
     restoreState(): RestoreView;
@@ -100,6 +104,9 @@ export interface StudioTestApi {
     }): Promise<FixtureSummary>;
     createSecondRun(): Promise<FixtureSummary>;
     createClientRun(): Promise<FixtureSummary>;
+    createQueuedOnlyTask(): Promise<FixtureSummary>;
+    targetFixture(taskId: string, runId: string, generation?: number): void;
+    listUnloadedActiveTask(mode: 'running' | 'cancelling'): Promise<Outcome>;
     createTaskAt(createdAtMs: number): Promise<Outcome>;
     resumeViaClient(): Promise<Outcome>;
     recordChangesWithFiles(files: Array<Record<string, unknown>>): Promise<Outcome>;
@@ -131,6 +138,13 @@ export interface StudioTestApi {
     lease(): Promise<Outcome>;
     armAbortNextAppend(): void;
     armAbortNextTaskWrite(): void;
+    armFailImportPublish(): void;
+    beginImport(text: string): void;
+    whenImport(): Promise<Outcome>;
+    appendAssistantSafe(
+        text: string,
+        options?: { writerId?: string; nowMs?: number },
+    ): Promise<Outcome>;
     appendAssistant(
         text: string,
         options?: { writerId?: string; nowMs?: number },
@@ -157,6 +171,8 @@ interface TestState {
         durationMs: number;
         heapUsed: number | null;
     } | null;
+    importPromise: Promise<Outcome> | null;
+    importGateRelease: (() => void) | null;
 }
 
 let state: TestState = freshState();
@@ -173,8 +189,14 @@ function freshState(): TestState {
         fixture: null,
         openPromise: null,
         openGate: null,
-        faults: { abort_next_append: false, abort_next_task_write: false },
+        faults: {
+            abort_next_append: false,
+            abort_next_task_write: false,
+            fail_import_publish: false,
+        },
         scale: null,
+        importPromise: null,
+        importGateRelease: null,
     };
 }
 
@@ -184,6 +206,16 @@ function randomHex(bytes: number): string {
     return [...values]
         .map((value) => value.toString(16).padStart(2, '0'))
         .join('');
+}
+
+class SummaryTransport extends FixtureTransport {
+    constructor(private readonly taskSummary: TaskSummary) {
+        super();
+    }
+
+    override async listTasks(): Promise<TaskSummary[]> {
+        return [this.taskSummary];
+    }
 }
 
 function ensureClient(): AgentClient {
@@ -303,8 +335,13 @@ function restoreState(): RestoreView {
             : null;
     const incompleteForTask =
         task !== null && state.incomplete.some((entry) => entry.taskId === task.taskId);
+    const unresolvedRun =
+        task !== null && task.unresolvedRunId !== null;
     const canStartRun =
-        state.phase === 'ready' && !incompleteForTask && activeRun === null;
+        state.phase === 'ready' &&
+        !incompleteForTask &&
+        activeRun === null &&
+        !unresolvedRun;
     return {
         phase: state.phase,
         sendEnabled: canStartRun,
@@ -562,6 +599,100 @@ async function ensureReady(): Promise<void> {
     }
 }
 
+async function createQueuedOnlyTask(): Promise<FixtureSummary> {
+    await ensureReady();
+    const taskStore = requireTaskStore();
+    const task = await taskStore.createTask({ title: 'Queued only task' });
+    const runId = `run_${randomHex(8)}`;
+    const fixture: FixtureSummary = {
+        taskId: task.task_id,
+        projectId: task.project_id,
+        runId,
+        generation: 1,
+        eventIds: [],
+        digests: [],
+    };
+    const queued = createRunQueuedEvent({
+        projectId: fixture.projectId,
+        taskId: fixture.taskId,
+        runId,
+        generation: 1,
+        recordedAtMs: state.nowMs,
+        queuedAtMs: state.nowMs,
+    });
+    const result = await taskStore.appendEvent({ event: queued });
+    if (result.status !== 'applied') {
+        throw new Error(`queued-only fixture was rejected: ${result.message ?? ''}`);
+    }
+    fixture.eventIds.push(queued.event_id);
+    fixture.digests.push(result.digest!);
+    state.fixture = fixture;
+    requireClient().store.selectTask(fixture.taskId);
+    return fixture;
+}
+
+async function listUnloadedActiveTask(
+    mode: 'running' | 'cancelling',
+): Promise<Outcome> {
+    await ensureReady();
+    const taskId = `tsk_${randomHex(8)}`;
+    const runId = `run_${randomHex(8)}`;
+    const summary: TaskSummary = {
+        taskId,
+        projectId: 'prj_0000000000000001',
+        title: `Unloaded ${mode} task`,
+        repo: null,
+        branch: null,
+        createdAtMs: state.nowMs,
+        archived: false,
+        pinned: false,
+        latestRunId: runId,
+        state: mode,
+    };
+    const client = new AgentClient({
+        transport: new SummaryTransport(summary),
+        store: requireClient().store,
+        taskStore: requireTaskStore(),
+    });
+    await client.listTasks({ includeArchived: true });
+    requireClient().store.selectTask(taskId);
+    return { ok: true, record: summary };
+}
+
+async function appendAssistantSafe(
+    text: string,
+    options: { writerId?: string; nowMs?: number } = {},
+): Promise<Outcome> {
+    try {
+        const fixture = currentFixture();
+        const task = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === fixture.taskId);
+        const run =
+            task?.runs.find((candidate) => candidate.runId === fixture.runId) ??
+            null;
+        const event = eventFor(
+            fixture,
+            run === null ? 3 : run.lastSequence + 1,
+            run?.generation ?? fixture.generation,
+            'assistant.message',
+            { message_id: `msg_${randomHex(8)}`, text },
+        );
+        const result = await requireTaskStore().appendEvent({
+            event,
+            writer_id: options.writerId,
+            now_ms: options.nowMs,
+        });
+        if (result.status === 'applied') {
+            fixture.eventIds.push(event.event_id);
+            if (result.digest !== null) fixture.digests.push(result.digest);
+        }
+        return appendOutcome(result);
+    } catch (error) {
+        return failure(error);
+    }
+}
+
 async function createClientRun(): Promise<FixtureSummary> {
     await ensureReady();
     const client = requireClient();
@@ -714,10 +845,7 @@ async function seedSmallEvents(total: number): Promise<{
     return result;
 }
 
-function cursorView(): CursorView | null {
-    if (state.phase === 'loading' || state.phase === 'error' || state.phase === 'idle') {
-        return null;
-    }
+function memoryCursorView(): CursorView | null {
     const task = currentTask();
     const run = currentRun(task);
     if (task === null || run === null || run.lastEventId === null || run.lastDigest === null) {
@@ -740,6 +868,13 @@ function cursorView(): CursorView | null {
     };
 }
 
+function cursorView(): CursorView | null {
+    if (state.phase === 'loading' || state.phase === 'error' || state.phase === 'idle') {
+        return null;
+    }
+    return memoryCursorView();
+}
+
 function taskView(): TaskViewSummary | null {
     const task = currentTask();
     if (task === null) return null;
@@ -750,6 +885,7 @@ function taskView(): TaskViewSummary | null {
         archived: task.archived,
         state: task.state,
         latestRunId: task.latestRunId,
+        unresolvedRunId: task.unresolvedRunId,
         runs: task.runs.map((run) => ({
             runId: run.runId,
             lastSequence: run.lastSequence,
@@ -805,6 +941,15 @@ export function installStudioTestApi(): void {
             state = freshState();
         },
         open,
+        async reopen() {
+            if (state.taskStore === null) {
+                return open();
+            }
+            state.taskStore.close();
+            state.phase = 'idle';
+            return open();
+        },
+        memoryCursor: memoryCursorView,
         async beginOpen() {
             ensureClient();
             state.phase = 'loading';
@@ -834,6 +979,19 @@ export function installStudioTestApi(): void {
         createTaskAndEvents,
         createSecondRun,
         createClientRun,
+        createQueuedOnlyTask,
+        targetFixture(taskId: string, runId: string, generation = 1) {
+            state.fixture = {
+                taskId,
+                projectId: 'prj_0000000000000001',
+                runId,
+                generation,
+                eventIds: [],
+                digests: [],
+            };
+            requireClient().store.selectTask(taskId);
+        },
+        listUnloadedActiveTask,
         createTaskAt,
         resumeViaClient,
         recordChangesWithFiles,
@@ -1032,6 +1190,42 @@ export function installStudioTestApi(): void {
         armAbortNextTaskWrite() {
             state.faults.abort_next_task_write = true;
         },
+        armFailImportPublish() {
+            state.faults.fail_import_publish = true;
+        },
+        beginImport(text: string) {
+            const gate = new Promise<void>((resolve) => {
+                state.importGateRelease = resolve;
+            });
+            requireTaskStore().setImportGate(gate);
+            state.importPromise = (async () => {
+                try {
+                    const summary = await requireTaskStore().importNdjson(text);
+                    importFixtureFromStore();
+                    state.phase = 'ready';
+                    state.error = null;
+                    return { ok: true, record: summary };
+                } catch (error) {
+                    state.phase = 'error';
+                    state.error = { code: errorCode(error), message: errorMessage(error) };
+                    return failure(error);
+                }
+            })();
+        },
+        async whenImport() {
+            if (state.importGateRelease !== null) {
+                const release = state.importGateRelease;
+                state.importGateRelease = null;
+                release();
+            }
+            if (state.importPromise === null) {
+                return { ok: false, code: 'invalid_arguments', message: 'no import is running' };
+            }
+            const result = await state.importPromise;
+            state.importPromise = null;
+            return result;
+        },
+        appendAssistantSafe,
         async appendAssistant(
             text: string,
             options: { writerId?: string; nowMs?: number } = {},

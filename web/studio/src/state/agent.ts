@@ -142,6 +142,7 @@ export interface TaskView {
     pinnedLocal: boolean;
     state: TaskState;
     latestRunId: string | null;
+    unresolvedRunId: string | null;
     runs: RunView[];
 }
 
@@ -162,6 +163,7 @@ export interface AgentApplyResult {
 export interface AgentAppendResult extends AgentApplyResult {
     eventId: string;
     digest: string | null;
+    storage?: 'indexeddb' | null;
 }
 
 export interface AgentTaskRecord {
@@ -178,7 +180,7 @@ export interface AgentTaskRecord {
         reason: 'waiting_for_background';
         run_id: string;
         tool_call_id: string;
-    };
+    } | null;
 }
 
 export interface AgentSnapshotVerification {
@@ -256,6 +258,7 @@ interface InternalTask {
     archived: boolean;
     pinnedLocal: boolean;
     latestRunId: string | null;
+    unresolvedRunId: string | null;
     maxGeneration: number;
 }
 
@@ -397,6 +400,7 @@ function captureTaskState(
         archived: task.archived,
         pinnedLocal: task.pinnedLocal,
         latestRunId: task.latestRunId,
+        unresolvedRunId: task.unresolvedRunId,
         maxGeneration: task.maxGeneration,
     };
     journal.push(() => {
@@ -406,6 +410,7 @@ function captureTaskState(
         task.archived = state.archived;
         task.pinnedLocal = state.pinnedLocal;
         task.latestRunId = state.latestRunId;
+        task.unresolvedRunId = state.unresolvedRunId;
         task.maxGeneration = state.maxGeneration;
     });
 }
@@ -1276,6 +1281,7 @@ export class AgentStore {
         state: RunState;
         retryOfRunId: string | null;
         startedAtMs: number | null;
+        firstRecordedAtMs: number | null;
         endedAtMs: number | null;
         lastSequence: number;
         lastEventId: string | null;
@@ -1289,6 +1295,7 @@ export class AgentStore {
                   state: run.state,
                   retryOfRunId: run.retryOfRunId,
                   startedAtMs: run.startedAtMs,
+                  firstRecordedAtMs: run.events[0]?.recordedAtMs ?? null,
                   endedAtMs: run.endedAtMs,
                   lastSequence: run.lastSequence,
                   lastEventId: run.lastEventId,
@@ -1304,9 +1311,9 @@ export class AgentStore {
         return this.tasks.has(taskId);
     }
 
-    setTaskLatestRunId(taskId: string, runId: string | null): void {
+    setTaskUnresolvedRunId(taskId: string, runId: string | null): void {
         const task = this.tasks.get(taskId);
-        if (task !== undefined) task.latestRunId = runId;
+        if (task !== undefined) task.unresolvedRunId = runId;
     }
 
     restore(checkpoint: AgentStoreCheckpoint): void {
@@ -1556,6 +1563,7 @@ export class AgentStore {
                 archived: false,
                 pinnedLocal: false,
                 latestRunId: null,
+                unresolvedRunId: null,
                 maxGeneration: 0,
             };
             this.tasks.set(taskId, task);
@@ -1578,6 +1586,7 @@ export class AgentStore {
         this.runOwners.set(runId, taskId);
         task.maxGeneration = typed.generation;
         task.latestRunId = runId;
+        task.unresolvedRunId = null;
         this.recordApplied(created, typed, canonical, digest, journal);
         reduceKnownEvent(created, typed, journal);
         return applied();
@@ -1704,6 +1713,7 @@ export class AgentStore {
                 pinnedLocal: task.pinnedLocal,
                 state: taskStateFor(task, latestRun),
                 latestRunId: task.latestRunId,
+                unresolvedRunId: task.unresolvedRunId,
                 runs: taskRuns,
             };
         });
@@ -1751,6 +1761,10 @@ export class AgentStore {
                 archived: record.archived ?? false,
                 pinnedLocal: record.pinnedLocal ?? false,
                 latestRunId: record.latestRunId ?? null,
+                unresolvedRunId:
+                    record.latestRunId === null || record.latestRunId === undefined
+                        ? null
+                        : record.latestRunId,
                 maxGeneration: 0,
             };
             this.tasks.set(record.taskId, task);
@@ -1767,11 +1781,16 @@ export class AgentStore {
             task.branch = record.branch ?? null;
             task.archived = record.archived ?? task.archived;
             task.pinnedLocal = record.pinnedLocal ?? task.pinnedLocal;
-            if (
-                record.latestRunId !== undefined &&
-                !this.hasRunsForTask(task.taskId)
-            ) {
-                task.latestRunId = record.latestRunId;
+            if (record.latestRunId === null) {
+                task.unresolvedRunId = null;
+            } else if (record.latestRunId !== undefined) {
+                const exists = this.runs.has(
+                    runKey(task.taskId, record.latestRunId),
+                );
+                task.unresolvedRunId = exists ? null : record.latestRunId;
+                if (!this.hasRunsForTask(task.taskId)) {
+                    task.latestRunId = record.latestRunId;
+                }
             }
         }
         const snapshot = this.snapshot();
@@ -1935,6 +1954,7 @@ export class AgentStore {
                 task.maxGeneration,
                 event.generation,
             );
+            task.unresolvedRunId = null;
         }
         run.state = 'running';
         run.verifiedSnapshot = null;
