@@ -500,13 +500,8 @@ export function validateAgentEvent(value: unknown): AgentValidationResult {
         ) {
             return invalid('changes.snapshot files must be an array of objects');
         }
-        if (
-            typeof data.head_digest !== 'string' ||
-            !DIGEST_PATTERN.test(data.head_digest)
-        ) {
-            return invalid(
-                'changes.snapshot head_digest must be sha256:<64 lowercase hex>',
-            );
+        if (!isNonEmptyString(data.head_digest)) {
+            return invalid('changes.snapshot head_digest must be a non-empty string');
         }
         const captured = requireSafeField(data, 'captured_at_ms');
         if (captured) return captured;

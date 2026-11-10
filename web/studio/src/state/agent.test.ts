@@ -286,6 +286,71 @@ describe('AgentStore reducer', () => {
         expect(run.changesSnapshots).toHaveLength(1);
     });
 
+    test('changes_snapshot_accepts_non_sha_non_empty_head_digest_and_rejects_empty_atomically', () => {
+        const store = createAgentStore();
+        store.apply(queued(0));
+        store.apply(started(1));
+        const gitCommit = '0123456789abcdef0123456789abcdef01234567';
+
+        const accepted = store.apply(
+            makeEvent(2, 'changes.snapshot', {
+                scope: 'last_turn',
+                files: [{ path: 'src/a.ts' }],
+                head_digest: gitCommit,
+                captured_at_ms: 2,
+            }),
+        );
+        expect(accepted.status).toBe('applied');
+
+        let run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(2);
+        expect(run.changesSnapshots[0]?.headDigest).toBe(gitCommit);
+        expect(run.needsResync).toBe(false);
+
+        const following = store.apply(
+            makeEvent(3, 'assistant.message', {
+                message_id: 'msg_1f2e3d4c5b6a7988',
+                text: 'after changes',
+            }),
+        );
+        expect(following.status).toBe('applied');
+
+        run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(3);
+        expect(run.messages).toHaveLength(1);
+        expect(run.needsResync).toBe(false);
+
+        const empty = store.apply(
+            makeEvent(4, 'changes.snapshot', {
+                scope: 'last_turn',
+                files: [],
+                head_digest: '',
+                captured_at_ms: 4,
+            }),
+        );
+        expect(empty.status).toBe('rejected');
+        expect(empty.code).toBe('invalid_event');
+
+        run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(3);
+        expect(run.events).toHaveLength(4);
+        expect(run.changesSnapshots).toHaveLength(1);
+        expect(run.needsResync).toBe(false);
+
+        const afterRejection = store.apply(
+            makeEvent(4, 'assistant.message', {
+                message_id: 'msg_2a3b4c5d6e7f8091',
+                text: 'after rejection',
+            }),
+        );
+        expect(afterRejection.status).toBe('applied');
+
+        run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(4);
+        expect(run.messages).toHaveLength(2);
+        expect(run.messages[1]?.text).toBe('after rejection');
+    });
+
     test('required_tool_payloads_are_rejected_atomically', () => {
         const store = createAgentStore();
         store.apply(queued(0));
