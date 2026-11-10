@@ -6,14 +6,14 @@
 //!
 //! ```text
 //! recall-pairs tokenizer=TOKENIZER.json line=SAMPLES.json noline=SAMPLES.json \
-//!   [control=SAMPLES.json] [eos=1] [none=" none."]
+//!   [control=SAMPLES.json] [eos=1] [none=" none.|OTHER"]
 //! ```
 //!
 //! A recall reply is a line-panel sample whose prompt ends in the assistant
 //! marker with a memory line directly before it, where the line names a value
-//! and not `none` (`none=` gives the text of a line that names nothing, as it
-//! follows `Memory:`; a panel whose lines are replies passes its abstaining
-//! reply). Its partner is the no-line sample with the same reference
+//! and not `none` (`none=` gives the texts of lines that name nothing, each as it
+//! follows `Memory:`, separated by `|`; a panel whose lines are replies passes its abstaining
+//! replies). Its partner is the no-line sample with the same reference
 //! and the same prompt once every memory line is taken out. A recall reply
 //! whose partner sits in another window is counted and left out.
 //!
@@ -46,8 +46,8 @@ struct Markers {
     line: Vec<u32>,
     /// `\nAssistant:` as ids; starts with the same turn separator.
     assistant: Vec<u32>,
-    /// The value ids of a line that names nothing (` none.`).
-    none: Vec<u32>,
+    /// The value ids of each line that names nothing (` none.` unless `none=` gives others).
+    none: Vec<Vec<u32>>,
     eos: u32,
 }
 
@@ -57,13 +57,21 @@ impl Markers {
     }
 
     fn check(&self) -> Result<(), String> {
-        if self.line.len() < 2 || self.assistant.len() < 2 || self.none.is_empty() {
+        if self.line.len() < 2
+            || self.assistant.len() < 2
+            || self.none.is_empty()
+            || self.none.iter().any(Vec::is_empty)
+        {
             return Err("a marker is empty".to_string());
         }
         if self.line[0] != self.assistant[0] {
             return Err("the line and assistant markers do not share a turn separator".to_string());
         }
-        if self.none.contains(&self.separator()) {
+        if self
+            .none
+            .iter()
+            .any(|none| none.contains(&self.separator()))
+        {
             return Err("the none value holds the turn separator".to_string());
         }
         Ok(())
@@ -212,7 +220,7 @@ fn count(
             continue;
         };
         counts.closing_lines += 1;
-        if value == markers.none.as_slice() {
+        if markers.none.iter().any(|none| value == none.as_slice()) {
             counts.none_lines += 1;
             continue;
         }
@@ -268,14 +276,17 @@ fn read_samples(path: &str) -> Result<Vec<Sample>, String> {
 fn markers_from(
     tokenizer: &ByteBpeTokenizer,
     eos: u32,
-    none_text: &str,
+    none_texts: &[&str],
 ) -> Result<Markers, String> {
     let head = tokenizer.encode(" Memory:");
-    let with_none = tokenizer.encode(&format!(" Memory:{none_text}"));
-    let none = with_none
-        .strip_prefix(head.as_slice())
-        .ok_or("the none line does not start with the memory marker's ids")?
-        .to_vec();
+    let mut none = Vec::new();
+    for text in none_texts {
+        let with_none = tokenizer.encode(&format!(" Memory:{text}"));
+        let ids = with_none
+            .strip_prefix(head.as_slice())
+            .ok_or("a none line does not start with the memory marker's ids")?;
+        none.push(ids.to_vec());
+    }
     let markers = Markers {
         line: [tokenizer.encode("\nSystem:"), head].concat(),
         assistant: tokenizer.encode("\nAssistant:"),
@@ -315,8 +326,10 @@ fn run(arguments: &[String]) -> Result<String, String> {
     let bytes = fs::read(tokenizer_path).map_err(|error| format!("{tokenizer_path}: {error}"))?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
         .ok_or_else(|| format!("{tokenizer_path}: not a readable tokenizer.json"))?;
-    let none_text = named.get("none").copied().unwrap_or(" none.");
-    let markers = markers_from(&tokenizer, eos, none_text)?;
+    let none_texts: Vec<&str> = named
+        .get("none")
+        .map_or_else(|| vec![" none."], |texts| texts.split('|').collect());
+    let markers = markers_from(&tokenizer, eos, &none_texts)?;
 
     let line = read_samples(need("line")?)?;
     let noline = read_samples(need("noline")?)?;
@@ -375,7 +388,7 @@ mod tests {
         Markers {
             line: vec![9, 5, 6],
             assistant: vec![9, 7],
-            none: vec![8, 3],
+            none: vec![vec![8, 3]],
             eos: 1,
         }
     }
@@ -423,6 +436,34 @@ mod tests {
             vec![0, 26, 9, 7, 61, 1, 9, 27, 9, 7]
         );
         assert_eq!(strip_lines(&[0, 25, 9, 7], &m), vec![0, 25, 9, 7]);
+    }
+
+    #[test]
+    fn every_none_text_marks_a_line_that_names_nothing() {
+        let mut m = markers();
+        m.none.push(vec![41, 42, 3]);
+        m.check().expect("two none texts");
+        let line = [
+            sample(&[0, 22, 9, 5, 6, 8, 3, 9, 7], &[40, 1], &[40, 1]),
+            sample(
+                &[0, 23, 9, 5, 6, 41, 42, 3, 9, 7],
+                &[41, 42, 3, 1],
+                &[41, 42, 3, 1],
+            ),
+            sample(&[0, 24, 9, 5, 6, 30, 3, 9, 7], &[30, 1], &[30, 1]),
+        ];
+        let counts = count(&line, &[], None, &m);
+        assert_eq!(
+            (
+                counts.closing_lines,
+                counts.none_lines,
+                counts.recall_replies
+            ),
+            (3, 2, 1)
+        );
+        assert_eq!(counts.recall_line_exact, 1);
+        m.none.push(Vec::new());
+        assert!(m.check().is_err(), "an empty none text is refused");
     }
 
     #[test]
