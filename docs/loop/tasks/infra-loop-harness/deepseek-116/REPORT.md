@@ -13,8 +13,9 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `ce3c3e57b`.
   but the report records neither an `.uorlut` hash nor a byte size. Its contract
   records `integer-export = not-run`; no hash was invented.
 - **The first `rustfmt` pass followed out-of-line modules and touched unrelated
-  integer-stack files.** Those accidental formatting edits were removed. Only
-  the three files with intentional integer changes retain diffs.
+  integer-stack files.** Those accidental formatting edits were removed. The
+  five files with intentional integer changes retain diffs: `uor-chat.rs`,
+  `fbs-export.rs`, `stack/format.rs`, `stack/mod.rs` and `stack/tests.rs`.
 - **Generated schema `/1` expectations failed after the renderer moved to
   `/2`.** The exact schema assertion was updated and now also checks the
   semantic hash and evidence-status table.
@@ -22,6 +23,13 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `ce3c3e57b`.
   use the package binary form
   `cargo run --offline -q -p xtask -- ...`; the checked-in documentation keeps
   the repository's established shorthand.
+- **The first exact-head review returned CHANGES.** It found three substantive
+  gaps: an omitted 192-token run context was not defaulted; a present corrupt
+  artifact exited 0 as `UNAVAILABLE`; and probe fixtures could pass without a
+  semantic assertion. The audit now applies the trainer default, treats a
+  present invalid artifact or present product-path failure as `MISMATCH`, and
+  validates/executes recognized assertions, declared-case coverage, copy
+  determinism/value carry and exact short-cycle stops.
 
 ## What changed
 
@@ -76,8 +84,8 @@ accept a stack-contract path, and new reports have a stack-contract section.
 
 No model result was measured and no GPU was used.
 
-- `cargo test --offline -p repo-model -p xtask`: **248 passed**, 0 failed
-  (21 repo-model, 227 xtask).
+- `cargo test --offline -p repo-model -p xtask`: **249 passed**, 0 failed
+  (21 repo-model, 228 xtask).
 - `cargo test --offline -p uor-r4-harness --lib`: **677 passed**, 1 ignored
   because it needs `gh` and network.
 - `cargo test --offline -p uor-r4-integer --features serving-wasm --bin uor-chat`:
@@ -95,7 +103,7 @@ No model result was measured and no GPU was used.
 - Contract: `conformance/stack/fbs-arm-r.toml`, schema
   `uor-r4.stack-contract/2`, revision 2.
 - Semantic hash at the checked-in source:
-  `9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027`.
+  `ff21c29111a7acb0f2b6b12f84aaa4a3000bcff79c16f4c12baa2f8764f796da`.
 - Candidate: `conformance/stack/fbs-arm-rt.toml`.
 - Measured-negative history: `conformance/stack/fbs-arm-rk.toml`.
 - T0 history: `conformance/stack/fbs-b64l-baseline.toml`.
@@ -109,7 +117,7 @@ No model result was measured and no GPU was used.
 - `cargo clippy -p uor-r4-integer --bin uor-chat --bin fbs-export -D warnings`:
   **not clean**. It reports 61 pre-existing crate-library findings outside this
   unit; none is in the two changed binaries.
-- `cargo test -p repo-model -p xtask`: 248 passed.
+- `cargo test -p repo-model -p xtask`: 249 passed.
 - `cargo test -p uor-r4-harness --lib`: 677 passed, 1 ignored.
 - `cargo test -p uor-r4-integer --features serving-wasm --lib`: 517 passed,
   1 ignored.

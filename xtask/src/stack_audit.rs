@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use repo_model::stack::{Probe, StackContract};
+use repo_model::stack::{self, Probe, StackContract};
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -15,6 +15,18 @@ type Fail = Box<dyn Error>;
 type Result<T> = std::result::Result<T, Fail>;
 
 const SCHEMA: &str = "uor-r4.stack-audit/1";
+const EXPECTATION_KEYS: &[&str] = &[
+    "status",
+    "stderr_contains",
+    "turns",
+    "turn_count",
+    "all_reply_ids_nonempty",
+    "stops",
+    "memory",
+    "distinct_replies_min",
+    "reply_text_contains",
+    "same_as",
+];
 
 /// Run `cargo xtask stack-audit` from already parsed command-line arguments.
 pub fn run(root: &Path, args: &[String]) -> Result<()> {
@@ -50,9 +62,13 @@ pub fn run(root: &Path, args: &[String]) -> Result<()> {
             "pass --chat-bin and --tokenizer to load the artifact through the actual integer product path",
         );
     }
+    let fixture_dir = options
+        .probes
+        .clone()
+        .unwrap_or_else(|| root.join(stack::DIRECTORY).join("fixtures"));
     audit_probes(
         &mut report,
-        options.probes.as_deref().unwrap_or(root),
+        &fixture_dir,
         &contract,
         options.chat_bin.as_deref(),
         options.artifact.as_deref(),
@@ -288,7 +304,7 @@ fn audit_config(report: &mut Report, path: &Path, contract: &StackContract) {
         "width",
         path,
     );
-    compare_optional_usize(
+    compare_usize_default(
         report,
         "run-config-context",
         contract
@@ -297,6 +313,7 @@ fn audit_config(report: &mut Report, path: &Path, contract: &StackContract) {
             .unwrap_or(contract.model.context),
         &config,
         "context",
+        192,
         path,
     );
     let hamming = config
@@ -396,6 +413,43 @@ fn compare_optional_usize(
             Value::Null,
             source.display().to_string(),
             format!("run config does not record `{key}`"),
+        ),
+    }
+}
+
+fn compare_usize_default(
+    report: &mut Report,
+    id: &str,
+    expected: usize,
+    object: &Value,
+    key: &str,
+    default: u64,
+    source: &Path,
+) {
+    let (actual, detail) = object
+        .get(key)
+        .map(|value| (value.as_u64(), format!("run config `{key}`")))
+        .unwrap_or_else(|| {
+            (
+                Some(default),
+                format!("run config omits `{key}`; trainer default {default}"),
+            )
+        });
+    match actual {
+        Some(actual) => report.compare(
+            id,
+            Value::from(expected),
+            Value::from(actual),
+            source,
+            &format!("{detail} agrees with the contract"),
+        ),
+        None => report.record(
+            id,
+            AuditStatus::Mismatch,
+            Value::from(expected),
+            Value::Null,
+            source.display().to_string(),
+            format!("run config `{key}` is not an unsigned integer"),
         ),
     }
 }
@@ -517,11 +571,19 @@ fn audit_artifact(
         Err(error) => {
             report.record(
                 "artifact-parse",
-                AuditStatus::Unavailable,
+                if path.exists() {
+                    AuditStatus::Mismatch
+                } else {
+                    AuditStatus::Unavailable
+                },
                 Value::Bool(true),
                 Value::String(error.to_string()),
                 path.display().to_string(),
-                "artifact is absent or its header cannot be read",
+                if path.exists() {
+                    "a present artifact does not parse and validate"
+                } else {
+                    "artifact is absent"
+                },
             );
             return;
         }
@@ -823,11 +885,15 @@ fn audit_chat(
         }
         Ok(output) => report.record(
             "chat-integer-session",
-            AuditStatus::Unavailable,
+            if chat.is_file() && artifact.is_file() && tokenizer.is_file() {
+                AuditStatus::Mismatch
+            } else {
+                AuditStatus::Unavailable
+            },
             Value::String("exit 0".to_owned()),
             Value::String(String::from_utf8_lossy(&output.stderr).into_owned()),
             chat.display().to_string(),
-            "the chat path could not load this artifact and tokenizer",
+            "the present product path, artifact and tokenizer did not load together",
         ),
         Err(error) => report.record(
             "chat-integer-session",
@@ -853,7 +919,11 @@ fn audit_probes(
         let Some(fixture) = &probe.fixture else {
             continue;
         };
-        let path = directory.join(fixture);
+        let path = directory.join(
+            Path::new(fixture)
+                .file_name()
+                .unwrap_or_else(|| std::ffi::OsStr::new(fixture)),
+        );
         match verify_fixture(&path, probe) {
             Ok(fixture) => {
                 if let (Some(chat), Some(artifact), Some(tokenizer)) = (chat, artifact, tokenizer) {
@@ -944,6 +1014,7 @@ fn run_fixture(
     artifact: &Path,
     tokenizer: &Path,
 ) -> Result<()> {
+    let mut seen = std::collections::BTreeMap::<String, Value>::new();
     for case in fixture.cases() {
         let case_id = case["id"].as_str().expect("validated case id");
         let id = format!("probe:{}:{case_id}", probe.id);
@@ -1049,7 +1120,22 @@ fn run_fixture(
                         continue;
                     }
                 };
-                let failures = check_expectation(&record, expectation);
+                let mut failures = check_expectation(&record, expectation);
+                if let Some(prior) = expectation.get("same_as").and_then(Value::as_str) {
+                    match seen.get(prior) {
+                        Some(earlier) => {
+                            let projection = transcript_projection(&record);
+                            if &projection != earlier {
+                                failures
+                                    .push(format!("transcript differs from prior case {prior}"));
+                            }
+                        }
+                        None => failures.push(format!(
+                            "same_as names {prior}, which has no earlier result"
+                        )),
+                    }
+                }
+                seen.insert(case_id.to_owned(), transcript_projection(&record));
                 report.record(
                     id,
                     if output.status.success() && failures.is_empty() {
@@ -1082,6 +1168,16 @@ fn run_fixture(
 
 fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
     let mut failures = Vec::new();
+    if let Some(expect) = expectation.as_object() {
+        for key in expect.keys() {
+            if !EXPECTATION_KEYS.contains(&key.as_str()) {
+                failures.push(format!("unknown expectation {key}"));
+            }
+        }
+    } else {
+        failures.push("expectation is not an object".to_owned());
+        return failures;
+    }
     let turns = record
         .get("transcript")
         .and_then(Value::as_array)
@@ -1143,6 +1239,30 @@ fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
             }
         }
     }
+    if let Some(patterns) = expectation
+        .get("reply_text_contains")
+        .and_then(Value::as_array)
+    {
+        if patterns.len() != turns.len() {
+            failures.push(format!(
+                "reply_text_contains has {} rows for {} turns",
+                patterns.len(),
+                turns.len()
+            ));
+        } else {
+            for (index, (turn, pattern)) in turns.iter().zip(patterns).enumerate() {
+                let pattern = pattern.as_str().unwrap_or("");
+                if !pattern.is_empty()
+                    && !turn
+                        .get("reply_text")
+                        .and_then(Value::as_str)
+                        .is_some_and(|reply| reply.contains(pattern))
+                {
+                    failures.push(format!("turn {index} reply does not contain {pattern:?}"));
+                }
+            }
+        }
+    }
     if let Some(minimum) = expectation
         .get("distinct_replies_min")
         .and_then(Value::as_u64)
@@ -1159,6 +1279,28 @@ fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
         }
     }
     failures
+}
+
+fn transcript_projection(record: &Value) -> Value {
+    Value::Array(
+        record
+            .get("transcript")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|turn| {
+                serde_json::json!({
+                    "user": turn.get("user").cloned().unwrap_or(Value::Null),
+                    "memory": turn.get("memory").cloned().unwrap_or(Value::Null),
+                    "memory_text": turn.get("memory_text").cloned().unwrap_or(Value::Null),
+                    "reply_text": turn.get("reply_text").cloned().unwrap_or(Value::Null),
+                    "reply_ids": turn.get("reply_ids").cloned().unwrap_or(Value::Null),
+                    "stop": turn.get("stop").cloned().unwrap_or(Value::Null),
+                    "history_tokens": turn.get("history_tokens").cloned().unwrap_or(Value::Null),
+                })
+            })
+            .collect(),
+    )
 }
 
 fn read_json(path: &Path) -> Result<Value> {
@@ -1256,14 +1398,66 @@ mod tests {
         assert!(failures
             .iter()
             .any(|failure| failure.contains("distinct replies")));
+
+        let unknown = check_expectation(&record, &serde_json::json!({"magic": true}));
+        assert!(unknown.iter().any(|failure| failure.contains("unknown")));
     }
 
     #[test]
-    fn a_truncated_artifact_header_is_unavailable_not_match() {
+    fn a_present_truncated_artifact_is_a_mismatch() {
         let path =
             std::env::temp_dir().join(format!("uor-stack-audit-bad-{}.uorlut", std::process::id()));
         fs::write(&path, b"UORLUT01").expect("bad artifact fixture");
         assert!(parse_artifact(&path).is_err());
+        let contract: StackContract =
+            toml::from_str(include_str!("../../conformance/stack/fbs-arm-r.toml"))
+                .expect("contract parses");
+        let options = Options {
+            contract: PathBuf::new(),
+            artifact: None,
+            tokenizer: None,
+            config: None,
+            checkpoint: None,
+            chat_bin: None,
+            probes: None,
+            out: None,
+        };
+        let mut report = Report::new(&options, &contract);
+        audit_artifact(&mut report, &path, Path::new("contract.toml"), &contract);
+        report.finish();
+        assert_eq!(report.overall, "MISMATCH");
         fs::remove_file(path).expect("bad artifact cleanup");
+    }
+
+    #[test]
+    fn an_omitted_run_context_uses_the_trainers_192_default() {
+        let contract: StackContract =
+            toml::from_str(include_str!("../../conformance/stack/fbs-arm-r.toml"))
+                .expect("contract parses");
+        let path = std::env::temp_dir().join(format!(
+            "uor-stack-audit-config-{}.json",
+            std::process::id()
+        ));
+        fs::write(&path, br#"{"objective":"cell","width":256}"#).expect("config fixture");
+        let options = Options {
+            contract: PathBuf::new(),
+            artifact: None,
+            tokenizer: None,
+            config: None,
+            checkpoint: None,
+            chat_bin: None,
+            probes: None,
+            out: None,
+        };
+        let mut report = Report::new(&options, &contract);
+        audit_config(&mut report, &path, &contract);
+        let context = report
+            .checks
+            .iter()
+            .find(|check| check.id == "run-config-context")
+            .expect("context check");
+        assert_eq!(context.status, AuditStatus::Match);
+        assert_eq!(context.actual, Value::from(192));
+        fs::remove_file(path).expect("config cleanup");
     }
 }

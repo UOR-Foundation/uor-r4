@@ -10,7 +10,7 @@
         "schema": "uor-r4.chat-script/1",
         "turns": [
           {
-            "user": "Hello",
+            "user": "What is the opposite of hot?",
             "memory_auto": false
           }
         ]
@@ -23,8 +23,6 @@
         "turns": 1,
         "all_reply_ids_nonempty": true,
         "stops": [
-          "eos",
-          "max_new_tokens",
           "short_cycle"
         ],
         "memory": [
@@ -39,7 +37,7 @@
         "schema": "uor-r4.chat-script/1",
         "turns": [
           {
-            "user": "Say something.",
+            "user": "Give me the opposite of fast.",
             "memory_auto": false
           }
         ]
@@ -52,8 +50,6 @@
         "turns": 1,
         "all_reply_ids_nonempty": true,
         "stops": [
-          "eos",
-          "max_new_tokens",
           "short_cycle"
         ],
         "memory": [

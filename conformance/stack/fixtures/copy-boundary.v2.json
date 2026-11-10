@@ -33,6 +33,10 @@
         "memory": [
           "none",
           "sieve"
+        ],
+        "reply_text_contains": [
+          "",
+          "47"
         ]
       }
     },
@@ -56,6 +60,7 @@
         "24"
       ],
       "expect": {
+        "same_as": "source-present",
         "turns": 2,
         "all_reply_ids_nonempty": true,
         "stops": [
@@ -66,6 +71,10 @@
         "memory": [
           "none",
           "sieve"
+        ],
+        "reply_text_contains": [
+          "",
+          "47"
         ]
       }
     }

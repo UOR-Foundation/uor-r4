@@ -642,7 +642,7 @@
             "class": "boundary",
             "expectation": "A source is available to a later question and a fresh rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
+            "fixture_sha256": "b418f3b7fe72b457eab34ecdb703279125747f81a39eeca3e315af9aae84b479",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -675,7 +675,7 @@
             "class": "boundary",
             "expectation": "Every served reply reports a terminal EOS, cap or short-cycle stop.",
             "fixture": "conformance/stack/fixtures/cycle-boundary.v2.json",
-            "fixture_sha256": "6954ced6f1bf494076290c63599a4d084bfee13b4c4ccad1bafe80d103c5797a",
+            "fixture_sha256": "fecbc0dd034dbcc660ed2005249c5efe8f70f72aec31c26132d7b0cae33d4997",
             "id": "cycle-period-boundary",
             "layers": [
               "chat"
@@ -752,9 +752,9 @@
         "summary": "The replicated three-seed configuration: float training of the SpiralCore/FBS trunk, latest-exact Hamming copy reads, a reply-worded turn memory, and the uor-r4.lut-stack/7 integer artifact served by the product chat path.",
         "title": "FBS arm r: latest-exact copy with reply-worded memory"
       },
-      "semantic_blake3": "9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027",
+      "semantic_blake3": "ff21c29111a7acb0f2b6b12f84aaa4a3000bcff79c16f4c12baa2f8764f796da",
       "source": "conformance/stack/fbs-arm-r.toml",
-      "source_blake3": "2637710c2a8f807f00105a50e6afdf0c9d926bd2fddd742010e7d93151e5d43f"
+      "source_blake3": "8188da7fa8552c5426445eb451b08f87c1e970c6eb6f08d4ce0359cb1289c411"
     },
     {
       "contract": {
@@ -1302,7 +1302,7 @@
             "class": "boundary",
             "expectation": "A source is available and rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
+            "fixture_sha256": "b418f3b7fe72b457eab34ecdb703279125747f81a39eeca3e315af9aae84b479",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -1363,9 +1363,9 @@
         "summary": "Arm r at seed 2 with copy head 0 on one-token keys and copy head 1 on two-token keys. It closed this configuration as a measured negative while leaving two-token keys themselves unretired.",
         "title": "FBS arm rk: mixed one- and two-token copy keys"
       },
-      "semantic_blake3": "3d83487a1cab94c111dc6fa9566e4835df95a734aee072bb6c6ddfba969f3582",
+      "semantic_blake3": "6a3823fd6cba399be2686fd6b88ad71b3081d52b6c4e40a949207419db2e951d",
       "source": "conformance/stack/fbs-arm-rk.toml",
-      "source_blake3": "7bac224adab52019031edd34a6a7b4c6a9817ba2b7b932d9f77cf04bd03aca23"
+      "source_blake3": "5d348f8c1b21e14f32bc831bd87d1f4f20373cf04037479dede7e75ff1b7bad6"
     },
     {
       "contract": {
@@ -1993,7 +1993,7 @@
             "class": "boundary",
             "expectation": "A source is available and rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
+            "fixture_sha256": "b418f3b7fe72b457eab34ecdb703279125747f81a39eeca3e315af9aae84b479",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -2078,9 +2078,9 @@
         "summary": "Arm r's replicated configuration plus a turn-memory tail of nine: the uor-r4.lut-stack/9 reply table asks ends, tail and head. It reads row 1 at three seeds but makes copied values wrong more often than arm r.",
         "title": "FBS arm rt: three-key turn memory"
       },
-      "semantic_blake3": "237b0cee3f5406b8e7d8c5809babde29542361ac06bd53522decb895bd777757",
+      "semantic_blake3": "84fe99e77673ff487602a20da2c270f856cfb549d58986b8a265a4730cb4a931",
       "source": "conformance/stack/fbs-arm-rt.toml",
-      "source_blake3": "705fe60097a3b9296eae79e628091c8664c51181119e42004b1e1dbe792281e9"
+      "source_blake3": "fc21e7b6714ce21b83b9dc41e512bc64dc6892941b5fb85ae391f549e03f67ec"
     },
     {
       "contract": {
@@ -2519,7 +2519,7 @@
             "class": "boundary",
             "expectation": "The kept set and tie order are stable.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
+            "fixture_sha256": "b418f3b7fe72b457eab34ecdb703279125747f81a39eeca3e315af9aae84b479",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -2578,9 +2578,9 @@
         "summary": "The T0 memorize configuration: the float-trained FBS trunk with four Hamming read heads, trained as served on the pinned tokenizer and scored by whole-table nearest. The sealed checkpoints were not exported.",
         "title": "FBS b64L complete-reply baseline"
       },
-      "semantic_blake3": "7ed8f25c76ebd9201f232c8db09433e81fd912ab0e0094667ba4f409e5657cb7",
+      "semantic_blake3": "8c226476f656e7f0711a482bea07bed1278f7813f72284d22a71145051f195b9",
       "source": "conformance/stack/fbs-b64l-baseline.toml",
-      "source_blake3": "853e90e5915c5ecd4d34b86333490fc49a112b0367ae1f6edaf743979c88119c"
+      "source_blake3": "9a0ca1e160b901df40ff33bcd66aebb3c05134387663638029792e36d02e79b9"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

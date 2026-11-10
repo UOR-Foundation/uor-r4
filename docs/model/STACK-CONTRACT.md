@@ -18,8 +18,8 @@ A stack contract makes one model composition explicit across source, configurati
 
 The replicated three-seed configuration: float training of the SpiralCore/FBS trunk, latest-exact Hamming copy reads, a reply-worded turn memory, and the uor-r4.lut-stack/7 integer artifact served by the product chat path.
 
-- Source: `conformance/stack/fbs-arm-r.toml` (BLAKE3 `2637710c2a8f807f00105a50e6afdf0c9d926bd2fddd742010e7d93151e5d43f`)
-- Semantic hash: `9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027`
+- Source: `conformance/stack/fbs-arm-r.toml` (BLAKE3 `8188da7fa8552c5426445eb451b08f87c1e970c6eb6f08d4ce0359cb1289c411`)
+- Semantic hash: `ff21c29111a7acb0f2b6b12f84aaa4a3000bcff79c16f4c12baa2f8764f796da`
 - Lane: `fbs`
 - State: `current`
 - Revision: 2
@@ -126,8 +126,8 @@ Schema: `uor-r4.lut-stack/7`
 
 Arm r at seed 2 with copy head 0 on one-token keys and copy head 1 on two-token keys. It closed this configuration as a measured negative while leaving two-token keys themselves unretired.
 
-- Source: `conformance/stack/fbs-arm-rk.toml` (BLAKE3 `7bac224adab52019031edd34a6a7b4c6a9817ba2b7b932d9f77cf04bd03aca23`)
-- Semantic hash: `3d83487a1cab94c111dc6fa9566e4835df95a734aee072bb6c6ddfba969f3582`
+- Source: `conformance/stack/fbs-arm-rk.toml` (BLAKE3 `5d348f8c1b21e14f32bc831bd87d1f4f20373cf04037479dede7e75ff1b7bad6`)
+- Semantic hash: `6a3823fd6cba399be2686fd6b88ad71b3081d52b6c4e40a949207419db2e951d`
 - Lane: `fbs`
 - State: `historical`
 - Revision: 1
@@ -224,8 +224,8 @@ Schema: `uor-r4.lut-stack/7`
 
 Arm r's replicated configuration plus a turn-memory tail of nine: the uor-r4.lut-stack/9 reply table asks ends, tail and head. It reads row 1 at three seeds but makes copied values wrong more often than arm r.
 
-- Source: `conformance/stack/fbs-arm-rt.toml` (BLAKE3 `705fe60097a3b9296eae79e628091c8664c51181119e42004b1e1dbe792281e9`)
-- Semantic hash: `237b0cee3f5406b8e7d8c5809babde29542361ac06bd53522decb895bd777757`
+- Source: `conformance/stack/fbs-arm-rt.toml` (BLAKE3 `fc21e7b6714ce21b83b9dc41e512bc64dc6892941b5fb85ae391f549e03f67ec`)
+- Semantic hash: `84fe99e77673ff487602a20da2c270f856cfb549d58986b8a265a4730cb4a931`
 - Lane: `fbs`
 - State: `candidate`
 - Revision: 1
@@ -328,8 +328,8 @@ Schema: `uor-r4.lut-stack/9`
 
 The T0 memorize configuration: the float-trained FBS trunk with four Hamming read heads, trained as served on the pinned tokenizer and scored by whole-table nearest. The sealed checkpoints were not exported.
 
-- Source: `conformance/stack/fbs-b64l-baseline.toml` (BLAKE3 `853e90e5915c5ecd4d34b86333490fc49a112b0367ae1f6edaf743979c88119c`)
-- Semantic hash: `7ed8f25c76ebd9201f232c8db09433e81fd912ab0e0094667ba4f409e5657cb7`
+- Source: `conformance/stack/fbs-b64l-baseline.toml` (BLAKE3 `9a0ca1e160b901df40ff33bcd66aebb3c05134387663638029792e36d02e79b9`)
+- Semantic hash: `8c226476f656e7f0711a482bea07bed1278f7813f72284d22a71145051f195b9`
 - Lane: `fbs`
 - State: `historical`
 - Revision: 2

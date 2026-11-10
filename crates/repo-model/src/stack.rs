@@ -1287,6 +1287,110 @@ fn check_fixture(path: &Path, probe: &Probe) -> Result<(), ModelError> {
                 path.display()
             )));
         }
+        let script = case["script"].as_object().ok_or_else(|| {
+            ModelError::Inconsistent(format!(
+                "{}: fixture case {id} script is not an object",
+                path.display()
+            ))
+        })?;
+        if script.get("schema").and_then(Value::as_str) != Some("uor-r4.chat-script/1")
+            || !script
+                .get("turns")
+                .and_then(Value::as_array)
+                .is_some_and(|turns| (1..=256).contains(&turns.len()))
+        {
+            return Err(ModelError::Inconsistent(format!(
+                "{}: fixture case {id} script is not a 1..=256 turn chat script",
+                path.display()
+            )));
+        }
+        let expect = case["expect"].as_object().ok_or_else(|| {
+            ModelError::Inconsistent(format!(
+                "{}: fixture case {id} expect is not an object",
+                path.display()
+            ))
+        })?;
+        const EXPECT_KEYS: &[&str] = &[
+            "status",
+            "stderr_contains",
+            "turns",
+            "turn_count",
+            "all_reply_ids_nonempty",
+            "stops",
+            "memory",
+            "distinct_replies_min",
+            "reply_text_contains",
+            "same_as",
+        ];
+        if let Some(unknown) = expect
+            .keys()
+            .find(|key| !EXPECT_KEYS.contains(&key.as_str()))
+        {
+            return Err(ModelError::Inconsistent(format!(
+                "{}: fixture case {id} has unknown expectation {unknown}",
+                path.display()
+            )));
+        }
+        if expect.is_empty() {
+            return Err(ModelError::Inconsistent(format!(
+                "{}: fixture case {id} has no semantic expectation",
+                path.display()
+            )));
+        }
+        let semantic = [
+            "turns",
+            "turn_count",
+            "all_reply_ids_nonempty",
+            "stops",
+            "memory",
+            "distinct_replies_min",
+            "reply_text_contains",
+            "same_as",
+        ]
+        .iter()
+        .any(|key| expect.contains_key(*key))
+            || (expect.get("status").and_then(Value::as_str) == Some("error")
+                && expect.contains_key("stderr_contains"));
+        if !semantic {
+            return Err(ModelError::Inconsistent(format!(
+                "{}: fixture case {id} has no recognized semantic assertion",
+                path.display()
+            )));
+        }
+        if expect
+            .get("status")
+            .and_then(Value::as_str)
+            .is_some_and(|status| !matches!(status, "record" | "error"))
+        {
+            return Err(ModelError::Inconsistent(format!(
+                "{}: fixture case {id} status is not record or error",
+                path.display()
+            )));
+        }
+        if let Some(same_as) = expect.get("same_as").and_then(Value::as_str) {
+            check_slug("fixture same_as", same_as)?;
+            if same_as == id
+                || !cases
+                    .iter()
+                    .any(|other| other["id"].as_str() == Some(same_as))
+            {
+                return Err(ModelError::Inconsistent(format!(
+                    "{}: fixture case {id} same_as must name another fixture case",
+                    path.display()
+                )));
+            }
+        }
+        if let Some(patterns) = expect.get("reply_text_contains").and_then(Value::as_array) {
+            if !patterns
+                .iter()
+                .any(|pattern| pattern.as_str().is_some_and(|p| !p.is_empty()))
+            {
+                return Err(ModelError::Inconsistent(format!(
+                    "{}: fixture case {id} reply_text_contains has no text",
+                    path.display()
+                )));
+            }
+        }
         if let Some(repeat) = case.get("repeat_user") {
             if repeat.get("text").and_then(Value::as_str).is_none()
                 || repeat
@@ -1301,7 +1405,29 @@ fn check_fixture(path: &Path, probe: &Probe) -> Result<(), ModelError> {
             }
         }
     }
+    let declared: BTreeSet<String> = probe
+        .cases
+        .iter()
+        .map(|case| normalize_case_name(case))
+        .collect();
+    let found: BTreeSet<String> = ids.iter().map(|id| normalize_case_name(id)).collect();
+    if declared != found {
+        return Err(ModelError::Inconsistent(format!(
+            "{}: fixture cases {:?} do not match contract cases {:?}",
+            path.display(),
+            found,
+            declared
+        )));
+    }
     Ok(())
+}
+
+fn normalize_case_name(value: &str) -> String {
+    value
+        .bytes()
+        .filter(|byte| byte.is_ascii_alphanumeric())
+        .map(|byte| byte.to_ascii_lowercase() as char)
+        .collect()
 }
 
 fn file_sha256(path: &Path) -> Result<String, ModelError> {
@@ -1564,7 +1690,7 @@ statement = "This contract is not a proof of language capability."
         fs::write(
             &path,
             format!(
-                r#"{{"schema":"{FIXTURE_SCHEMA}","probe":"cycle-period-boundary","cases":[{{"id":"period-1","script":{{}},"expect":{{}}}}]}}"#
+                r#"{{"schema":"{FIXTURE_SCHEMA}","probe":"cycle-period-boundary","cases":[{{"id":"period-1","script":{{"schema":"uor-r4.chat-script/1","turns":[{{"user":"Hello"}}]}},"expect":{{"turns":1}}}}]}}"#
             ),
         )
         .expect("fixture write");
@@ -1573,7 +1699,7 @@ statement = "This contract is not a proof of language capability."
         fs::write(
             &path,
             format!(
-                r#"{{"schema":"{FIXTURE_SCHEMA}","probe":"other","cases":[{{"id":"period-1","script":{{}},"expect":{{}}}}]}}"#
+                r#"{{"schema":"{FIXTURE_SCHEMA}","probe":"other","cases":[{{"id":"period-1","script":{{"schema":"uor-r4.chat-script/1","turns":[{{"user":"Hello"}}]}},"expect":{{"turns":1}}}}]}}"#
             ),
         )
         .expect("fixture write");
