@@ -29,8 +29,8 @@ Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-
 
 - **Task 1 complete:** `82acb49de` added the schema/event/canonical contract after unresolved-interface RED; `5afd33535` repaired cursor continuity after a second RED. Final focused suite: **13 contract + 9 canonical tests**, exit 0. Implementer also reports full crate tests, fmt, clippy, diff checks and deterministic schema export at 10,671 bytes / SHA-256 `20079c51893c30faa9789158ca3aa3d3c7ac486bbb3c3555ce51316bda8b7ebf`.
 - Independent Task 1 review found sequence-gap and resume-N+1 defects plus a weak replay test. Scoped re-review confirms all three **ADDRESSED** with no new Critical/Important breakage. Exact-next cursor checks and `check_resume` now enforce scope, generation, sequence, previous generation, digest and timestamp. `task-1-report.md`, RED/GREEN logs and both review packages are retained in the SDD workspace.
-- Deferred minors remain explicit for final whole-branch review: object-only unknown data v1, payload approval/error-code taxonomy, and non-event object-schema completeness. Task 2 must match exact schema file bytes/trailing newline, lowercase control escapes and `Object.is(-0)`, and generate/template AgentError/AgentCursor/ApprovalRequest consistently rather than claiming they are in schema.
-- Task 2 is now implementing deterministic TypeScript generation with cross-runtime canonical/digest assertions; it has no completion result yet.
+- Deferred minors remain explicit for final whole-branch review: object-only unknown data v1, payload approval/error-code taxonomy, and non-event object-schema completeness. Task 2 matches exact schema file bytes/trailing newline, lowercase control escapes and `Object.is(-0)`, and generates/templates AgentError/AgentCursor/ApprovalRequest consistently rather than claiming they are in schema.
+- **Task 2 implemented, review pending:** `1c4976881` adds the checked-in schema, deterministic generator, generated contract/canonicalizer and focused tests after missing-module RED. Final focused result: **28 tests**; full Studio **483/483 across 54 files**; Rust **23/23**; typecheck/fmt clean. A staged second generation from `web/studio` and `/tmp` leaves an empty unstaged diff. `task-2-report.md` and both logs are retained. The independent reviewer is evaluating semantic parity, the 20-line test-only Node type shim, JavaScript number normalization and the three templated types; approval is not implied.
 
 ## Checks run at the head
 
@@ -38,7 +38,7 @@ Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-
 - Official apply: `apply.log`; #3917 direct identity: `studio-issue.json`; generated metadata diff: exactly two keys; remote/milestone comparisons: `remote-write-diff.json`, `milestones-before/`, `roadmap-issues-{before,after}.json`.
 - Post-apply `roadmap check` and `roadmap render --check`: PASS (`post-apply-check.log`, `post-apply-render-check.log`).
 - Baseline logs: `npm-ci.log`, `baseline-vitest.log`, `baseline-prepare.log`, `baseline-build.log`, `baseline-playwright.log` under `local/kimi/cursor-issue-sync/`.
-- Task 1 RED/GREEN: `task-1-red.log`, `task-1-green.log`, `task-1-fix1-red.log`, `task-1-fix1-green.log`. Task 2+ RED/GREEN tests remain NOT_RUN. Current-head local policy/full gates and protected delivery remain pending until the stage completes.
+- Task 1 RED/GREEN: `task-1-red.log`, `task-1-green.log`, `task-1-fix1-red.log`, `task-1-fix1-green.log`. Task 2 RED/GREEN: `task-2-red.log`, `task-2-green.log`. Task 3+ RED/GREEN tests remain NOT_RUN. Current-head local policy/full gates and protected delivery remain pending until the stage completes.
 
 ## Skills used
 
