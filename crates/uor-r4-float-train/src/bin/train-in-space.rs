@@ -307,7 +307,7 @@ use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
     cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, integer_grade, panel_prompts, fbs_arm_named, grade,
     gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound,
-    reply_bound_dirs, root_separation,
+    reply_bound_dirs, reply_chain_dirs, root_separation,
     run_long, run_recall, score_rows, scopes_ok, set_decode_cache, take_decode_forwards,
     DecodeRule, LongConfig, PastWindowRule, PointObjective, ReadScope, RecallForm, TrainSplit, TrainTargets, DEFAULT_REGISTER_PICKS,
     MEMORY_DROPOUT_MAX,
@@ -355,6 +355,7 @@ fn main() -> Result<()> {
     let mut bound = false;
     let mut reply = false;
     let mut reply_dirs: (Option<PathBuf>, Option<PathBuf>) = (None, None);
+    let mut reply_chain_tail: usize = 0;
     let mut census_on = false;
     let mut fresh_v2 = None;
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
@@ -489,6 +490,7 @@ fn main() -> Result<()> {
             "--reply-bound" => reply = switch(&value)?,
             "--reply-bound-train" => reply_dirs.0 = Some(PathBuf::from(&value)),
             "--reply-bound-dev" => reply_dirs.1 = Some(PathBuf::from(&value)),
+            "--reply-chain-tail" => reply_chain_tail = number(&value)?,
             "--census" => census_on = switch(&value)?,
             "--score-rows" => score = Some(PathBuf::from(&value)),
             "--overturn" => overturn_on = switch(&value)?,
@@ -1262,6 +1264,17 @@ fn main() -> Result<()> {
     if reply {
         let rows = match &reply_dirs {
             (Some(train), Some(dev)) => {
+                // claude-345: the trainer's own table, without a tail and with this one.
+                if reply_chain_tail > 0 {
+                    let keys = config
+                        .hamming_copy_keys
+                        .clone()
+                        .unwrap_or_else(|| vec![config.hamming_copy_key]);
+                    for row in reply_chain_dirs(train, dev, &[0, reply_chain_tail], &keys)? {
+                        println!("{}", serde_json::to_string(&row)?);
+                    }
+                    return Ok(());
+                }
                 let (train_sha, dev_sha, rows) = reply_bound_dirs(train, dev)?;
                 println!(
                     "{}",

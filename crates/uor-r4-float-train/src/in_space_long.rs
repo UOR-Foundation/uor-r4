@@ -6044,6 +6044,88 @@ pub fn reply_bound_dirs(train: &Path, dev: &Path) -> Result<(String, String, Vec
     Ok((train_sha, dev_sha, reply_bound_of(&train, &dev)))
 }
 
+/// What the trainer's reply table names on other rows (claude-345): the table of `tail` built
+/// from one folder's rows past their openings as [`chain_reply_table`] builds it, the keys the
+/// copy read owns left out, then asked about another folder's rows as the read asks. A `copied`
+/// row is one the copy read's latest exact match names; a table that names it writes over the
+/// copy. The `rest` are the rows only the table can name.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ReplyChainCount {
+    pub tail: usize,
+    pub copy_keys: Vec<usize>,
+    pub train_rows: usize,
+    pub keys_at_share: usize,
+    pub keys_left_to_copy: usize,
+    pub keys_yielded: usize,
+    pub keys: usize,
+    pub train_named_right: usize,
+    pub dev_rows: usize,
+    pub dev_copied: usize,
+    pub dev_copied_named: usize,
+    pub dev_copied_named_right: usize,
+    pub dev_rest: usize,
+    pub dev_rest_named: usize,
+    pub dev_rest_right: usize,
+}
+
+/// [`ReplyChainCount`] for each of `tails` (0 is the table without a tail), the table from
+/// `train` and the rows asked from `dev`, the copy read's heads keyed by `copy_keys`. Needs no
+/// GPU: it counts what a run's table would hold before the run.
+pub fn reply_chain_dirs(
+    train: &Path,
+    dev: &Path,
+    tails: &[usize],
+    copy_keys: &[usize],
+) -> Result<Vec<ReplyChainCount>> {
+    let load = |dir: &Path| -> Result<(Vec<ReplyRow>, Vec<bool>)> {
+        let (tokens, mask, _) = load_unpinned_uort(dir)?;
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+        let rows: Vec<ReplyRow> =
+            reply_rows(&windows, &mask).into_iter().filter(|row| !row.opening).collect();
+        let copied = rows
+            .iter()
+            .map(|row| {
+                let ids = &windows[row.window].input_ids;
+                copy_names_by(copy_keys, ids, row.offset, row.target)
+            })
+            .collect();
+        Ok((rows, copied))
+    };
+    let ((train, train_copied), (dev, dev_copied)) = (load(train)?, load(dev)?);
+    let count = |&tail: &usize| {
+        let built = chain_reply_table(&train, tail, REPLY_MEMORY_SHARE, Some(&train_copied));
+        let forms = reply_key_forms(tail);
+        let mut count = ReplyChainCount {
+            tail,
+            copy_keys: copy_keys.to_vec(),
+            train_rows: train.len(),
+            keys_at_share: built.built,
+            keys_left_to_copy: built.left,
+            keys_yielded: built.yielded,
+            keys: built.table.len(),
+            train_named_right: built.named,
+            dev_rows: dev.len(),
+            ..ReplyChainCount::default()
+        };
+        for (row, &copied) in dev.iter().zip(&dev_copied) {
+            let stored = forms.iter().find_map(|form| built.table.get(&form.of(row)));
+            let (named, right) = (usize::from(stored.is_some()), usize::from(stored == Some(&row.target)));
+            if copied {
+                count.dev_copied += 1;
+                count.dev_copied_named += named;
+                count.dev_copied_named_right += right;
+            } else {
+                count.dev_rest += 1;
+                count.dev_rest_named += named;
+                count.dev_rest_right += right;
+            }
+        }
+        count
+    };
+    Ok(tails.iter().map(count).collect())
+}
+
 /// Every key [`reply_bound`] reports, over `train`'s table and `dev`'s rows.
 fn reply_bound_of(train: &[ReplyRow], dev: &[ReplyRow]) -> Vec<ReplyBound> {
     let keys = std::iter::once(ReplyKey::None)
