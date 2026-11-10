@@ -109,6 +109,31 @@ test('project_home_shows_project_environment_and_empty_tasks_without_runtime_cla
     await expect(root).not.toContainText('runtime is not initialized');
 });
 
+test('task_rail_exposes_search_local_pins_and_an_honest_empty_state', async ({ page }) => {
+    await openTypedAt(page, 1440);
+    const root = page.locator('#studio-typed-root');
+    const rail = root.locator('[data-region="task-rail"]');
+    const tasks = rail.locator('nav[aria-label="Tasks"]');
+
+    await expect(tasks).toBeVisible();
+    await expect(tasks.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
+    await expect(tasks.locator('input[aria-label="Search tasks"]')).toBeVisible();
+    await expect(tasks).toContainText('Pins stay on this device.');
+    await expect(tasks).toContainText('No tasks yet');
+    await expect(tasks.locator('[data-task-id]')).toHaveCount(0);
+    await expect(tasks.locator('details[data-task-group="archived"]')).toHaveCount(0);
+    await expect(root.locator('nav[aria-label="Tasks"]')).toHaveCount(1);
+    await expect(root.locator('nav[aria-label="Studio"]')).toBeVisible();
+    await expect(root).not.toContainText('runtime_unavailable');
+    await expect(root).not.toContainText('runtime is not initialized');
+    await expect(root).not.toContainText('This Week');
+    await expect(root).not.toContainText('This Month');
+
+    await tasks.locator('input[aria-label="Search tasks"]').fill('no such task');
+    await expect(tasks.locator('[data-task-id]')).toHaveCount(0);
+    await expect(tasks).toContainText('No tasks yet');
+});
+
 test('work_surface_region_appears_for_the_split_pane', async ({ page }) => {
     await openTypedAt(page, 1440);
     const root = page.locator('#studio-typed-root');

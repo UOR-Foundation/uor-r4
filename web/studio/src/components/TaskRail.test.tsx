@@ -1,0 +1,326 @@
+import { render } from 'preact';
+import { act } from 'preact/test-utils';
+import { useState } from 'preact/hooks';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AgentClient, type TaskSummary } from '../agent/client.js';
+import { FixtureTransport } from '../agent/fixtureTransport.js';
+import { LifecycleStore } from '../state/lifecycle.js';
+import { StudioApp } from './StudioApp.js';
+import { TaskRail, type TaskRailProps } from './TaskRail.js';
+import { makeFiles, makeModelAdapter, makeSessions, makeSources, makeUi } from './studioTestFixtures.js';
+
+vi.mock('@xterm/xterm', () => ({
+    Terminal: class {
+        options = {};
+        open = vi.fn();
+        write = vi.fn();
+        onData = vi.fn();
+        onResize = vi.fn();
+        loadAddon = vi.fn();
+        focus = vi.fn();
+        dispose = vi.fn();
+        resize = vi.fn();
+    },
+}));
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit = vi.fn(); } }));
+
+const PROJECT_A = 'prj_0000000000000001';
+const PROJECT_B = 'prj_0000000000000002';
+const NOW = new Date(2026, 10, 10, 12, 0, 0).getTime();
+
+function startOfLocalDay(value: number): number {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+}
+
+function atLocalDay(offsetDays: number, hour = 12): number {
+    const date = new Date(NOW);
+    date.setHours(hour, 0, 0, 0);
+    date.setDate(date.getDate() + offsetDays);
+    return date.getTime();
+}
+
+function task(overrides: Partial<TaskSummary> & Pick<TaskSummary, 'taskId' | 'title' | 'createdAtMs'>): TaskSummary {
+    return {
+        projectId: PROJECT_A,
+        repo: 'uor-r4',
+        branch: 'main',
+        archived: false,
+        pinned: false,
+        latestRunId: null,
+        state: 'idle',
+        ...overrides,
+    };
+}
+
+let host: HTMLDivElement;
+beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    localStorage.clear();
+});
+afterEach(() => {
+    render(null, host);
+    host.remove();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
+
+function RailHarness(props: TaskRailProps) {
+    const [query, setQuery] = useState(props.query);
+    return <TaskRail
+        {...props}
+        query={query}
+        onQuery={(value) => { setQuery(value); props.onQuery(value); }}
+    />;
+}
+
+function renderRail(overrides: Partial<TaskRailProps> = {}): TaskRailProps {
+    const props: TaskRailProps = {
+        tasks: [],
+        query: '',
+        onQuery: vi.fn(),
+        onSelect: vi.fn(),
+        onPin: vi.fn(),
+        onArchive: vi.fn(),
+        selectedTaskId: null,
+        nowMs: NOW,
+        ...overrides,
+    };
+    act(() => { render(<RailHarness {...props} />, host); });
+    return props;
+}
+
+function rows(group?: string): HTMLElement[] {
+    const scope = group === undefined ? host : host.querySelector<HTMLElement>(`[data-task-group="${group}"]`)!;
+    return Array.from(scope.querySelectorAll<HTMLElement>('[data-task-id]'));
+}
+
+function rowIds(group?: string): string[] {
+    return rows(group).map((row) => row.getAttribute('data-task-id')!);
+}
+
+function setSearch(value: string): void {
+    const input = host.querySelector<HTMLInputElement>('input[aria-label="Search tasks"]')!;
+    act(() => {
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
+
+describe('TaskRail groups', () => {
+    it('renders_today_last_seven_days_older_groups from task record timestamps', () => {
+        const todayStart = startOfLocalDay(NOW);
+        const sevenDaysStart = atLocalDay(-7, 0);
+        const tasks = [
+            task({ taskId: 'tsk_0000000000000001', title: 'Today edge', createdAtMs: todayStart }),
+            task({ taskId: 'tsk_0000000000000002', title: 'Yesterday edge', createdAtMs: todayStart - 1 }),
+            task({ taskId: 'tsk_0000000000000003', title: 'Seven days edge', createdAtMs: sevenDaysStart }),
+            task({ taskId: 'tsk_0000000000000004', title: 'Older edge', createdAtMs: sevenDaysStart - 1 }),
+        ];
+        renderRail({ tasks });
+
+        expect(host.querySelector('nav[aria-label="Tasks"]')).not.toBeNull();
+        expect(rowIds('today')).toEqual(['tsk_0000000000000001']);
+        expect(rowIds('last-7-days')).toEqual(['tsk_0000000000000002', 'tsk_0000000000000003']);
+        const older = host.querySelector<HTMLDetailsElement>('details[data-task-group="older"]')!;
+        expect(older).not.toBeNull();
+        expect(older.open).toBe(false);
+        expect(older.querySelector('summary')?.textContent).toContain('Older');
+        expect(older.querySelector('summary')?.textContent).toContain('1');
+        act(() => { older.open = true; });
+        expect(rowIds('older')).toEqual(['tsk_0000000000000004']);
+
+        const labels = Array.from(host.querySelectorAll('[data-group-label]')).map((node) => node.textContent);
+        expect(labels).toEqual(['Today', 'Last 7 days', 'Older']);
+        expect(host.textContent).not.toContain('This Week');
+        expect(host.textContent).not.toContain('This Month');
+    });
+
+    it('groups pinned tasks in their real day group and sorts them first', () => {
+        const tasks = [
+            task({ taskId: 'tsk_0000000000000010', title: 'Unpinned today', createdAtMs: NOW - 1_000 }),
+            task({ taskId: 'tsk_0000000000000011', title: 'Pinned today', createdAtMs: NOW - 2_000, pinned: true }),
+        ];
+        renderRail({ tasks });
+        expect(rowIds('today')).toEqual(['tsk_0000000000000011', 'tsk_0000000000000010']);
+        expect(host.querySelector('li[data-task-id="tsk_0000000000000011"]')?.textContent).toContain('This device');
+    });
+
+    it('derives the visible task state from the loaded run projection', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Running task', repo: 'uor-r4' });
+        await client.startRun({ taskId: created.taskId, prompt: 'Run it' });
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)?.textContent).toContain('Running');
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.state).toBe('running');
+        expect(host.querySelector('section[aria-label="Project home"]')).toBeNull();
+        expect(host.textContent).not.toContain('No tasks yet');
+    });
+
+    it('selects a task through AgentStore and marks the current row', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Selectable task', repo: 'uor-r4' });
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+
+        const open = host.querySelector<HTMLButtonElement>('nav[aria-label="Tasks"] button[aria-label="Open Selectable task"]')!;
+        act(() => { open.click(); });
+        await vi.waitFor(() => expect(client.store.snapshot().selectedTaskId).toBe(created.taskId));
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)?.getAttribute('aria-current')).toBe('true'));
+    });
+});
+
+describe('TaskRail search', () => {
+    it('search_filters_tasks_by_title_and_project', () => {
+        const tasks = [
+            task({ taskId: 'tsk_0000000000000020', title: 'Fix parser', createdAtMs: NOW - 1_000, projectId: PROJECT_A, repo: 'uor-r4' }),
+            task({ taskId: 'tsk_0000000000000021', title: 'Draft notes', createdAtMs: NOW - 2_000, projectId: PROJECT_B, repo: 'spiralcore' }),
+            task({ taskId: 'tsk_0000000000000022', title: 'Parser docs', createdAtMs: NOW - 3_000, projectId: PROJECT_B, repo: 'spiralcore' }),
+        ];
+        const props = renderRail({ tasks });
+
+        setSearch('spiralcore');
+        expect(props.onQuery).toHaveBeenLastCalledWith('spiralcore');
+        expect(rowIds()).toEqual(['tsk_0000000000000021', 'tsk_0000000000000022']);
+
+        setSearch('fix parser');
+        expect(rowIds()).toEqual(['tsk_0000000000000020']);
+
+        setSearch(PROJECT_A);
+        expect(rowIds()).toEqual(['tsk_0000000000000020']);
+
+        setSearch('no such task');
+        expect(rowIds()).toEqual([]);
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('No tasks match');
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('no such task');
+    });
+
+    it('search input has an accessible label and reports the real result count', () => {
+        const tasks = [
+            task({ taskId: 'tsk_0000000000000030', title: 'Alpha', createdAtMs: NOW - 1_000 }),
+            task({ taskId: 'tsk_0000000000000031', title: 'Beta', createdAtMs: NOW - 2_000 }),
+        ];
+        renderRail({ tasks });
+        const input = host.querySelector<HTMLInputElement>('label span')!;
+        expect(host.querySelector('input[aria-label="Search tasks"]')).not.toBeNull();
+        expect(input.textContent).toBe('Search tasks');
+        setSearch('alpha');
+        expect(host.textContent).toContain('1 of 2 tasks');
+    });
+});
+
+describe('TaskRail pins', () => {
+    it('pins_are_local_device_only_without_service', () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const tasks = [task({ taskId: 'tsk_0000000000000040', title: 'Local pin', createdAtMs: NOW - 1_000, pinned: true })];
+        renderRail({ tasks });
+
+        const pin = host.querySelector<HTMLButtonElement>('button[aria-label="Unpin Local pin on this device"]');
+        expect(pin).not.toBeNull();
+        expect(pin?.getAttribute('aria-pressed')).toBe('true');
+        expect(pin?.textContent).toBe('This device');
+        expect(host.textContent).toContain('Pins stay on this device.');
+        expect(host.textContent).not.toMatch(/sync|account|service|hosted/i);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(localStorage.length).toBe(0);
+    });
+
+    it('pin_task_calls_agent_client and updates the store projection', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Pinned task', repo: 'uor-r4' });
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+
+        const pin = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks"] button[aria-label="Pin Pinned task on this device"]`)!;
+        act(() => { pin.click(); });
+        await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'pinTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, pinned: true }))).toBe(true));
+        await vi.waitFor(() => expect(host.textContent).toContain('This device'));
+
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.pinnedLocal).toBe(true);
+        expect(transport.calls.filter((call) => call.method === 'pinTask')).toHaveLength(1);
+    });
+});
+
+describe('TaskRail archive', () => {
+    it('archive_task_calls_agent_client_and_reopens to restore', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Archived task', repo: 'uor-r4' });
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+
+        const archive = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks"] button[aria-label="Archive Archived task"]`)!;
+        act(() => { archive.click(); });
+        await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'archiveTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, archived: true }))).toBe(true));
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).toBeNull());
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.archived).toBe(true);
+
+        const archived = host.querySelector<HTMLDetailsElement>('nav[aria-label="Tasks"] details[data-task-group="archived"]')!;
+        expect(archived).not.toBeNull();
+        expect(archived.querySelector('summary')?.textContent).toContain('Archived');
+        expect(archived.querySelector('summary')?.textContent).toContain('1');
+        expect(archived.querySelector(`[data-task-id="${created.taskId}"]`)).not.toBeNull();
+        expect(archived.open).toBe(false);
+        act(() => { archived.open = true; });
+
+        const restore = archived.querySelector<HTMLButtonElement>('button[aria-label="Restore Archived task"]')!;
+        expect(restore).not.toBeNull();
+        act(() => { restore.click(); });
+        await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'archiveTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, archived: false }))).toBe(true));
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        expect(host.querySelector('nav[aria-label="Tasks"] details[data-task-group="archived"]')).toBeNull();
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.archived).toBe(false);
+    });
+});
+
+describe('TaskRail empty and failure states', () => {
+    it('empty_state_explains_runtime_unavailable only when initialization failed', async () => {
+        renderRail();
+        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).toContain('No tasks yet');
+        expect(host.textContent).not.toMatch(/runtime_unavailable|runtime is not initialized/i);
+
+        render(null, host);
+        renderRail({ runtimeUnavailable: true });
+        const alert = host.querySelector('[role="alert"]');
+        expect(alert?.textContent).toContain('task runtime is not initialized');
+        expect(host.textContent).not.toContain('No tasks yet');
+
+        render(null, host);
+        renderRail({ error: 'host_unavailable: the host companion is not connected' });
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain('host_unavailable');
+        expect(host.textContent).not.toContain('No tasks yet');
+
+        render(null, host);
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={new AgentClient()} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector('nav[aria-label="Tasks"] [role="alert"]')?.textContent).toContain('task runtime is not initialized'));
+        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).not.toContain('No tasks yet');
+    });
+
+    it('shows no fabricated task rows or counts for an empty list', () => {
+        renderRail();
+        expect(host.querySelectorAll('[data-task-id]')).toHaveLength(0);
+        expect(host.querySelector('details[data-task-group="archived"]')).toBeNull();
+        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).not.toMatch(/\b[1-9]\d* tasks?\b/);
+    });
+});

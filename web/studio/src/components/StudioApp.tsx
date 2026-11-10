@@ -6,6 +6,7 @@ import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
 import { createOperationGate } from '../adapters/operations.js';
 import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
+import { AgentClientError, type AgentClient, type TaskSummary } from '../agent/client.js';
 import { classifyEndpoint } from '../state/lifecycle.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
@@ -15,8 +16,10 @@ import { CommandPalette } from './CommandPalette.js';
 import { Guide } from './Guide.js';
 import { Inspector } from './Inspector.js';
 import { ModelPicker } from './ModelPicker.js';
+import { ProjectSidebar, TaskRailCountContext } from './ProjectSidebar.js';
 import { SessionList } from './SessionList.js';
 import { Settings } from './Settings.js';
+import { TaskRail } from './TaskRail.js';
 import { WorkspaceEditor } from './WorkspaceEditor.js';
 import { createDesktopActions } from '../adapters/desktopActions.js';
 import type { DesktopActions } from '../adapters/desktopActions.js';
@@ -25,7 +28,12 @@ import { McpConnections } from './McpConnections.js';
 import type { McpConnect } from '../adapters/mcpConnections.js';
 import type { PaletteCommand, ShellStatus, StudioSection } from './types.js';
 
-interface StudioAppProps { store: LifecycleStore; adapter: ModelSourceAdapter; sources: ModelSourcesApi; files: WorkspaceApi; sessions: SessionApi; ui: StudioUiApi; download?(name: string, content: string): void; desktop?: DesktopActions; mcpConnect?: McpConnect }
+interface StudioAppProps { store: LifecycleStore; adapter: ModelSourceAdapter; sources: ModelSourcesApi; files: WorkspaceApi; sessions: SessionApi; ui: StudioUiApi; download?(name: string, content: string): void; desktop?: DesktopActions; mcpConnect?: McpConnect; agentClient?: AgentClient | null }
+
+interface TaskListState {
+    phase: 'loading' | 'ready' | 'runtime_unavailable' | 'error';
+    message: string | null;
+}
 
 function browserDownload(name: string, content: string) {
     const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
@@ -33,7 +41,7 @@ function browserDownload(name: string, content: string) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function StudioApp({ store, adapter, sources, files, sessions, ui, download = browserDownload, desktop, mcpConnect }: StudioAppProps) {
+export function StudioApp({ store, adapter, sources, files, sessions, ui, download = browserDownload, desktop, mcpConnect, agentClient = null }: StudioAppProps) {
     const state = useLifecycle(store);
     const [activeSection, setActiveSection] = useState<StudioSection>('agent');
     const [secondarySection, setSecondarySection] = useState<StudioSection | null>(null);
@@ -44,10 +52,47 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [sessionRevision, setSessionRevision] = useState(0);
     const [agentDraft, setAgentDraft] = useState('');
     const [agentPasted, setAgentPasted] = useState('');
+    const [taskQuery, setTaskQuery] = useState('');
+    const [taskRevision, setTaskRevision] = useState(0);
+    const [taskList, setTaskList] = useState<TaskListState>(() => ({ phase: agentClient === null ? 'ready' : 'loading', message: null }));
     const [editorSettings, setEditorSettings] = useState(() => ui.getSettings());
     const agent = useMemo(() => createAgentSessionController(store, sessions), [store, sessions]);
     const desktopActions = useMemo(() => desktop ?? createDesktopActions(), [desktop]);
     useEffect(() => () => agent.dispose(), [agent]);
+    useEffect(() => {
+        if (agentClient === null) {
+            setTaskList({ phase: 'ready', message: null });
+            return;
+        }
+        let active = true;
+        setTaskList((current) => ({ ...current, phase: 'loading', message: null }));
+        void agentClient.listTasks({ includeArchived: true }).then(() => {
+            if (!active) return;
+            setTaskList({ phase: 'ready', message: null });
+            setTaskRevision((value) => value + 1);
+        }).catch((failure: unknown) => {
+            if (!active) return;
+            if (failure instanceof AgentClientError && failure.code === 'runtime_unavailable') setTaskList({ phase: 'runtime_unavailable', message: null });
+            else setTaskList({ phase: 'error', message: failure instanceof Error ? failure.message : String(failure) });
+        });
+        return () => { active = false; };
+    }, [agentClient]);
+    const selectedTaskId = useMemo<string | null>(() => agentClient?.store.snapshot().selectedTaskId ?? null, [agentClient, taskRevision]);
+    const tasks = useMemo<TaskSummary[]>(() => {
+        if (agentClient === null) return [];
+        return agentClient.store.snapshot().tasks.map((task) => ({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            title: task.title,
+            repo: task.repo,
+            branch: task.branch,
+            createdAtMs: task.createdAtMs,
+            archived: task.archived,
+            pinned: task.pinnedLocal,
+            latestRunId: task.latestRunId,
+            state: task.state,
+        }));
+    }, [agentClient, taskRevision]);
     useEffect(() => {
         const viewChanged = (event: Event) => {
             const view = (event as CustomEvent<{ view?: string }>).detail?.view;
@@ -77,6 +122,23 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const reportFile = (message: string, operation = 'file:other') => setError({ message, surface: 'file', operation });
     const succeed = (operation: string) => setError((current) => current?.operation === operation ? null : current);
     const operations = useMemo(() => createOperationGate(), []);
+    const reportTaskFailure = (failure: unknown) => {
+        if (failure instanceof AgentClientError && failure.code === 'runtime_unavailable') setTaskList((current) => ({ ...current, phase: 'runtime_unavailable', message: null }));
+        else setTaskList((current) => ({ ...current, phase: 'error', message: failure instanceof Error ? failure.message : String(failure) }));
+    };
+    const pinTask = (taskId: string, pinned: boolean) => {
+        if (agentClient === null) return;
+        void agentClient.pinTask({ taskId, pinned }).then(() => setTaskRevision((value) => value + 1)).catch(reportTaskFailure);
+    };
+    const archiveTask = (taskId: string, archived: boolean) => {
+        if (agentClient === null) return;
+        void agentClient.archiveTask({ taskId, archived }).then(() => setTaskRevision((value) => value + 1)).catch(reportTaskFailure);
+    };
+    const selectTask = (taskId: string) => {
+        if (agentClient === null) return;
+        agentClient.store.selectTask(taskId);
+        setTaskRevision((value) => value + 1);
+    };
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
@@ -103,15 +165,26 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         if (section === 'browser') return <section class="browser-placeholder" aria-label="Browser preview"><span class="browser-placeholder-icon" aria-hidden="true">↗</span><h1>Browser</h1><p>Browser preview requires a harness service</p><p>This static preview does not launch a browser, import cookies, or give the model access to your existing tabs. Connect the local or hosted harness service to enable an isolated preview.</p></section>;
         return <Guide />;
     };
-    return <div data-reduce-motion={editorSettings.reduceMotion ? '1' : '0'}><AppShell
+    return <div data-reduce-motion={editorSettings.reduceMotion ? '1' : '0'}><TaskRailCountContext.Provider value={taskList.phase === 'ready' ? tasks.length : null}><AppShell
         activeSection={activeSection} onSection={setActiveSection} status={status}
         onPalette={() => setPaletteOpen(true)} onSettings={() => setSettingsOpen(true)} onInspector={() => setInspectorOpen((value) => !value)} inspectorOpen={inspectorOpen}
         onModels={() => setActiveSection('models')} onOpenFolder={async () => { await files.openFolder(); succeed('workspace:open-folder'); return files.treeSummary().rootName || files.workspaceName() || 'selected-folder'; }}
         onSplit={() => setSecondarySection(activeSection === 'agent' ? 'workspace' : 'agent')} onCloseSplit={() => setSecondarySection(null)} secondarySection={secondarySection} secondaryChildren={secondarySection ? renderSection(secondarySection, true) : null}
-        sessions={<SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} />}
+        sessions={<><TaskRail
+            tasks={tasks}
+            query={taskQuery}
+            onQuery={setTaskQuery}
+            onSelect={selectTask}
+            onPin={pinTask}
+            onArchive={archiveTask}
+            selectedTaskId={selectedTaskId}
+            runtimeUnavailable={taskList.phase === 'runtime_unavailable'}
+            loading={taskList.phase === 'loading'}
+            error={taskList.phase === 'error' ? taskList.message : null}
+        />{agentClient === null && <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} />}</>}
         alert={error && <p role="alert" class="workbench-alert">{error.message}</p>} primary={renderSection(activeSection)}>
         <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
         {settingsOpen && <Settings ui={ui} generating={state.session.phase === 'generating'} onClose={() => setSettingsOpen(false)} onError={report} onSettingsChange={setEditorSettings} onSuccess={(kind) => succeed(`settings:${kind}`)} onChange={(kind) => { if (kind === 'editor') store.dispatch({ type: 'file/closed' }); else { agent.refresh(); setSessionRevision((value) => value + 1); } }} />}
-    </AppShell></div>;
+    </AppShell></TaskRailCountContext.Provider></div>;
 }
