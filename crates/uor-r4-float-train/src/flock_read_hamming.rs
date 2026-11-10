@@ -3829,6 +3829,50 @@ mod tests {
         }
     }
 
+    /// claude-345: the latest-exact rule under copy key 2 needs both tokens. The window holds
+    /// `C X Q`, then `B X P`, and asks at `C X`: the latest position after an `X` is `P`'s, which
+    /// the one-token key reads; copy key 2 reads `Q`, the position after the latest `C X`. Asked
+    /// at `D X`, a pair the window never held, copy key 2 reads nothing.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_latest_rule_under_copy_key_two_needs_both_tokens() {
+        let device = Device::new_cuda(0).unwrap();
+        let (b, x, p, c, q, d) = (2u32, 3, 4, 5, 6, 8);
+        let table = table(16, 256, &device);
+        let points = table.to_vec2::<f32>().unwrap();
+        let added = |copy_keys: &[usize], last: u32| -> Vec<f32> {
+            let ids = [1u32, c, x, q, b, x, p, 7, last, x];
+            let x0 = residual(1, ids.len(), 256, &device);
+            let reads = HammingReads::new(4, 256, &device)
+                .unwrap()
+                .with_copy_keys(copy_keys)
+                .unwrap()
+                .with_copy_latest();
+            let read = &reads.reads[0];
+            let copy_only: Vec<f32> = (0..512).map(|i| f32::from(u8::from(i < 256))).collect();
+            read.weight
+                .set(&Tensor::from_vec(copy_only, (2, 256), &device).unwrap())
+                .unwrap();
+            let rows = read
+                .apply(&x0, &ids, &table)
+                .unwrap()
+                .sub(&x0)
+                .unwrap()
+                .reshape((ids.len(), 256))
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap();
+            rows[ids.len() - 1].clone()
+        };
+        let (one, two, absent) = (added(&[1, 1], c), added(&[2, 2], c), added(&[2, 2], d));
+        let (p, q) = (&points[p as usize], &points[q as usize]);
+        for col in 0..256 {
+            assert!((one[col] - p[col]).abs() < 1e-6, "copy key 1, {col}: the latest X");
+            assert!((two[col] - q[col]).abs() < 1e-6, "copy key 2, {col}: the latest C X");
+            assert!(absent[col].abs() < 1e-6, "copy key 2, {col}: no D X before");
+        }
+    }
+
     /// claude-261: two facts after the same last token, as conv-a's " is" (claude-259's trace).
     /// The window holds `B X P`, then `C X Q`, and asks at `C X`. Under one-bit margins only an
     /// exact match counts: the one-token key ties both positions after an `X` and reads the mean
