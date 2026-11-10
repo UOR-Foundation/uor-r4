@@ -344,6 +344,7 @@ export class AgentClient {
     private readonly runtime: AgentRuntime | null;
     private readonly hostClient: HostClient;
     private readonly explicitHostClient: boolean;
+    private readonly ownsHostClient: boolean;
     private readonly streams = new Set<BufferedAgentEventStream>();
     private readonly localFiles = new Map<string, LocalAgentFile>();
     private readonly localArtifactIds = new Map<string, string>();
@@ -382,6 +383,7 @@ export class AgentClient {
             this.transport = this.runtime as unknown as AgentTransport;
             this.taskStore = null;
             this.explicitHostClient = false;
+            this.ownsHostClient = false;
             this.hostClient =
                 options.hostClient ??
                 this.runtime.hostClient ??
@@ -399,6 +401,7 @@ export class AgentClient {
         this.taskStore = options.taskStore ?? null;
         this.explicitHostClient =
             options.hostClient !== undefined && options.hostClient !== null;
+        this.ownsHostClient = options.hostClient == null;
         this.hostClient =
             options.hostClient ??
             (this.transport === null
@@ -759,6 +762,9 @@ export class AgentClient {
                 this.persistenceError = toClientError(error);
             }
             return;
+        }
+        if (this.ownsHostClient) {
+            this.hostClient.close();
         }
         this.taskStore?.close();
     }

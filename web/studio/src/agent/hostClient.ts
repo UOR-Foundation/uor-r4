@@ -287,6 +287,13 @@ export async function validateHostToolIntent(
             );
         }
     } else if (
+        input.task_id === DATA_TASK_ID ||
+        input.run_id === DATA_RUN_ID
+    ) {
+        return invalidArguments(
+            'zero task and run placeholders are data-only',
+        );
+    } else if (
         !Number.isSafeInteger(input.generation) ||
         input.generation < 1
     ) {
@@ -390,25 +397,22 @@ export async function validateHostToolResult(
             );
         }
     } else {
-        if (value.task_id !== undefined && value.task_id !== intent.task_id) {
+        if (value.task_id !== intent.task_id) {
             throw new AgentClientError(
                 'cross_task_event',
-                'host data result may not claim a real task',
+                'host data result requires the explicit zero task identity',
             );
         }
-        if (value.run_id !== undefined && value.run_id !== intent.run_id) {
+        if (value.run_id !== intent.run_id) {
             throw new AgentClientError(
                 'out_of_order',
-                'host data result may not claim a real run',
+                'host data result requires the explicit zero run identity',
             );
         }
-        if (
-            value.generation !== undefined &&
-            value.generation !== intent.generation
-        ) {
+        if (value.generation !== intent.generation) {
             throw new AgentClientError(
                 'stale_generation',
-                'host data result may not claim a real generation',
+                'host data result requires generation 1',
             );
         }
     }
@@ -599,6 +603,7 @@ export class HostClient {
     private readonly timers: HostClientTimers;
     private readonly pendingTimeoutMs: number;
     private subscription: HostSubscription | null = null;
+    private subscriptionGeneration = 0;
     private closed = false;
     private intentCounter = 0;
 
@@ -726,23 +731,41 @@ export class HostClient {
             return entry.promise;
         }
         if (entry.settled) return entry.promise;
+        let invocation: Promise<HostInvokeResponse>;
         try {
-            const response = await this.transport.invoke(intent, dataContext);
-            const direct = asHostToolResult(response);
-            if (direct !== null) {
-                await this.settleFromResult(entry, direct);
-            } else if (!isInvokeAccepted(response)) {
-                this.rejectPending(
-                    entry,
-                    new AgentClientError(
-                        'invalid_event',
-                        'host invoke returned an invalid response',
-                    ),
-                );
-            }
+            invocation = this.transport.invoke(intent, dataContext);
         } catch (error) {
             this.rejectPending(entry, toClientError(error));
+            return entry.promise;
         }
+        void invocation.then(
+            (response) => {
+                if (entry.settled) return;
+                const direct = asHostToolResult(response);
+                if (direct !== null) {
+                    void this.settleFromResult(entry, direct);
+                } else if (!isInvokeAccepted(response)) {
+                    this.rejectPending(
+                        entry,
+                        new AgentClientError(
+                            'invalid_event',
+                            'host invoke returned an invalid response',
+                        ),
+                    );
+                } else if (this.transport.supportsStream === false) {
+                    this.rejectPending(
+                        entry,
+                        new AgentClientError(
+                            'host_unavailable',
+                            'the host transport cannot deliver a streamed result',
+                        ),
+                    );
+                }
+            },
+            (error: unknown) => {
+                this.rejectPending(entry, toClientError(error));
+            },
+        );
         return entry.promise;
     }
 
@@ -754,6 +777,12 @@ export class HostClient {
             throw new AgentClientError(
                 'transport_closed',
                 'host client is closed',
+            );
+        }
+        if (this.transport.supportsStream === false) {
+            throw new AgentClientError(
+                'host_unavailable',
+                'the host transport has no result stream',
             );
         }
         this.ensureSubscription();
@@ -781,6 +810,7 @@ export class HostClient {
     close(): void {
         if (this.closed) return;
         this.closed = true;
+        this.subscriptionGeneration += 1;
         this.subscription?.close();
         this.subscription = null;
         this.failAll(
@@ -884,22 +914,45 @@ export class HostClient {
     private ensureSubscription(): void {
         if (this.subscription !== null || this.closed) return;
         if (this.transport.supportsStream === false) return;
-        this.subscription = this.transport.subscribe(
+        const generation = ++this.subscriptionGeneration;
+        const subscription = this.transport.subscribe(
             (result) => {
+                if (generation !== this.subscriptionGeneration) return;
                 void this.onStreamResult(result);
             },
             {
-                onResync: () =>
-                    this.failAll(
+                onResync: () => {
+                    if (generation !== this.subscriptionGeneration) return;
+                    this.failStream(
                         new AgentClientError(
                             'cursor_expired',
                             'host result stream requires a snapshot resync',
                         ),
                         'resync',
-                    ),
-                onError: (error) => this.failAll(error),
+                    );
+                },
+                onError: (error) => {
+                    if (generation !== this.subscriptionGeneration) return;
+                    this.failStream(error);
+                },
             },
         );
+        if (generation !== this.subscriptionGeneration || this.closed) {
+            subscription.close();
+            return;
+        }
+        this.subscription = subscription;
+    }
+
+    private failStream(
+        error: AgentClientError,
+        reason?: 'resync',
+    ): void {
+        this.subscriptionGeneration += 1;
+        const subscription = this.subscription;
+        this.subscription = null;
+        subscription?.close();
+        this.failAll(error, reason);
     }
 
     private async onStreamResult(result: HostToolResult): Promise<void> {

@@ -4,9 +4,11 @@ import { canonicalJson } from './generated/agentCanonical.js';
 import {
     AgentClient,
     AgentClientError,
+    type ArtifactContent,
     type ChangesSnapshot,
     type ChangesSnapshotInput,
     type HostCapabilities,
+    type ReadArtifactInput,
     type TreeEntry,
 } from './client.js';
 import {
@@ -14,6 +16,7 @@ import {
     HOST_RESULT_SCHEMA,
     HostClient,
     sha256Canonical,
+    type HostSubscribeOptions,
     type HostSubscription,
     type HostToolIntent,
     type HostToolResult,
@@ -856,9 +859,10 @@ class FakeAgentTransport extends FixtureTransport {
 
 class RecordingAgentTransport extends FixtureTransport {
     readonly changesInputs: ChangesSnapshotInput[] = [];
+    readonly artifactInputs: ReadArtifactInput[] = [];
 
     override async hostCapabilities(): Promise<HostCapabilities> {
-        return { ...ALL_FALSE, changes: true };
+        return { ...ALL_FALSE, changes: true, readArtifact: true };
     }
 
     override async changesSnapshot(
@@ -871,6 +875,70 @@ class RecordingAgentTransport extends FixtureTransport {
             headDigest: `sha256:${'c'.repeat(64)}`,
             capturedAtMs: 1,
         };
+    }
+
+    override async readArtifact(
+        input: ReadArtifactInput,
+    ): Promise<ArtifactContent> {
+        this.artifactInputs.push({ ...input });
+        const bytes = new TextEncoder().encode('hello');
+        return {
+            path: 'a.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest: await sha256Raw(bytes),
+            bytes,
+        };
+    }
+}
+
+class PendingTreeTransport extends FixtureTransport {
+    treeStarted = false;
+
+    override async hostCapabilities(): Promise<HostCapabilities> {
+        return { ...ALL_FALSE, tree: true };
+    }
+
+    override tree(): Promise<TreeEntry[]> {
+        this.treeStarted = true;
+        return new Promise<TreeEntry[]>(() => undefined);
+    }
+}
+
+class ManualStreamTransport implements HostTransport {
+    readonly kind = 'bridge' as const;
+    readonly supportsStream = true;
+    readonly subscriptions: Array<{
+        listener: (result: HostToolResult) => void;
+        options: HostSubscribeOptions;
+    }> = [];
+
+    async capabilities(): Promise<HostTransportCapabilities> {
+        return {
+            kind: 'bridge',
+            hostAvailable: true,
+            streaming: 'channel',
+            ...ALL_FALSE,
+        };
+    }
+
+    async invoke(): Promise<{ accepted: true }> {
+        return { accepted: true };
+    }
+
+    subscribe(
+        listener: (result: HostToolResult) => void,
+        options: HostSubscribeOptions = {},
+    ): HostSubscription {
+        this.subscriptions.push({ listener, options });
+        return { close: () => undefined, cursor: () => null };
+    }
+
+    async approve(input: {
+        approvalId: string;
+        decision: 'approved' | 'denied';
+    }) {
+        return { approvalId: input.approvalId, decision: input.decision };
     }
 }
 
@@ -1645,5 +1713,430 @@ describe('HostClient fix-1 pending failure', () => {
         await expect(
             new HostClient({ transport }).execute(await validIntent()),
         ).rejects.toMatchObject({ code: 'host_unavailable' });
+    });
+});
+
+async function disposition(promise: Promise<unknown>): Promise<string> {
+    let outcome = 'pending';
+    void promise.then(
+        () => {
+            outcome = 'resolved';
+        },
+        (error: unknown) => {
+            outcome = `rejected:${
+                error instanceof AgentClientError ? error.code : 'unknown'
+            }`;
+        },
+    );
+    await flush();
+    return outcome;
+}
+
+describe('HostClient fix-2 ownership and recovery', () => {
+    test('runtime_dispose_closes_owned_host_client_and_rejects_pending_poll', async () => {
+        const scheduler = new ManualScheduler();
+        let polls = 0;
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                if (command === 'agent_host_invoke') return { accepted: true };
+                if (command === 'agent_host_poll') {
+                    polls += 1;
+                    return { cursor: 'c1', results: [] };
+                }
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('the offline shim has no Channel');
+            },
+        };
+        const host = new HostClient({
+            transport: new TauriHostTransport({
+                bridge,
+                scheduler,
+                pollIntervalMs: 10,
+            }),
+            timers: scheduler,
+        });
+        const runtime = new AgentRuntime({
+            store: createAgentStore(),
+            hostClient: host,
+            modelPort: new ReplayModelPort(),
+        });
+        await runtime.open();
+        const pending = host.execute(await validIntent());
+        void pending.catch(() => undefined);
+        await until(() => polls >= 1, 'runtime poll started', 500);
+        await runtime.dispose();
+        await expect(disposition(pending)).resolves.toBe(
+            'rejected:transport_closed',
+        );
+        const pollsAtDispose = polls;
+        scheduler.runNext();
+        await flush();
+        expect(polls).toBe(pollsAtDispose);
+    });
+
+    test('runtime_and_client_dispose_close_runtime_host_client_once', async () => {
+        const host = new HostClient({
+            transport: new FakeHostTransport(),
+        });
+        const close = vi.spyOn(host, 'close');
+        const runtime = new AgentRuntime({
+            store: createAgentStore(),
+            hostClient: host,
+            modelPort: new ReplayModelPort(),
+        });
+        const client = new AgentClient({ runtime });
+        await runtime.open();
+        await client.dispose();
+        expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    test('client_dispose_closes_client_created_host_client', async () => {
+        const transport = new PendingTreeTransport();
+        const client = new AgentClient({ transport });
+        const pending = client.tree({ source: 'host' });
+        void pending.catch(() => undefined);
+        await until(() => transport.treeStarted, 'pending tree request', 500);
+        await client.dispose();
+        await expect(disposition(pending)).resolves.toBe(
+            'rejected:transport_closed',
+        );
+    });
+
+    test('client_dispose_does_not_close_external_host_client', async () => {
+        const external = new HostClient({
+            transport: new FakeHostTransport(),
+        });
+        const client = new AgentClient({ hostClient: external });
+        await client.dispose();
+        await expect(
+            external.execute(await validIntent()),
+        ).resolves.toMatchObject({ status: 'ok' });
+    });
+
+    test('poll_error_resubscribes_for_the_next_execute', async () => {
+        const scheduler = new ManualScheduler();
+        const firstIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000011',
+        });
+        const secondIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000012',
+        });
+        const secondResult = await validResult(secondIntent);
+        let polls = 0;
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                if (command === 'agent_host_invoke') return { accepted: true };
+                if (command === 'agent_host_poll') {
+                    polls += 1;
+                    if (polls === 1) throw new Error('poll failed');
+                    return { cursor: 'c1', results: [secondResult] };
+                }
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('the offline shim has no Channel');
+            },
+        };
+        const client = new HostClient({
+            transport: new TauriHostTransport({
+                bridge,
+                scheduler,
+                pollIntervalMs: 10,
+            }),
+            timers: scheduler,
+        });
+        await expect(client.execute(firstIntent)).rejects.toMatchObject({
+            code: 'internal',
+        });
+        const second = client.execute(secondIntent);
+        void second.catch(() => undefined);
+        await flush();
+        expect(polls).toBe(2);
+        await expect(second).resolves.toMatchObject({
+            intent_id: secondIntent.intent_id,
+        });
+        client.close();
+    });
+
+    test('loopback_cursor_expired_resubscribes_for_the_next_execute', async () => {
+        const scheduler = new ManualScheduler();
+        const firstIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000021',
+        });
+        const secondIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000022',
+        });
+        const secondResult = await validResult(secondIntent);
+        let gets = 0;
+        const fetchImpl = (async (
+            input: RequestInfo | URL,
+            init: RequestInit = {},
+        ): Promise<Response> => {
+            if (String(input).includes('/v1/studio/host/intents')) {
+                return new Response(JSON.stringify({ accepted: true }), {
+                    status: 202,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            gets += 1;
+            if (gets === 1) {
+                return new Response(
+                    JSON.stringify({ code: 'cursor_expired' }),
+                    {
+                        status: 410,
+                        headers: { 'content-type': 'application/json' },
+                    },
+                );
+            }
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(
+                        new TextEncoder().encode(
+                            `${JSON.stringify(secondResult)}\n`,
+                        ),
+                    );
+                    controller.close();
+                },
+            });
+            return new Response(stream, {
+                status: 200,
+                headers: { 'content-type': 'application/x-ndjson' },
+            });
+        }) as typeof fetch;
+        const client = new HostClient({
+            transport: new LoopbackHostTransport({
+                token: 'launch-token',
+                baseUrl: 'http://127.0.0.1:4173',
+                fetch: fetchImpl,
+            }),
+            timers: scheduler,
+        });
+        await expect(client.execute(firstIntent)).rejects.toMatchObject({
+            code: 'cursor_expired',
+        });
+        const second = client.execute(secondIntent);
+        void second.catch(() => undefined);
+        await flush();
+        expect(gets).toBe(2);
+        await expect(second).resolves.toMatchObject({
+            intent_id: secondIntent.intent_id,
+        });
+        client.close();
+    });
+
+    test('stale_stream_generation_cannot_settle_a_new_execute', async () => {
+        const transport = new ManualStreamTransport();
+        const client = new HostClient({
+            transport,
+            timers: new ManualScheduler(),
+        });
+        const firstIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000031',
+        });
+        const secondIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000032',
+        });
+        const first = client.execute(firstIntent);
+        void first.catch(() => undefined);
+        await flush();
+        expect(transport.subscriptions).toHaveLength(1);
+        transport.subscriptions[0]!.options.onError?.(
+            new AgentClientError('internal', 'stream failed'),
+        );
+        await expect(first).rejects.toMatchObject({ code: 'internal' });
+
+        const second = client.execute(secondIntent);
+        void second.catch(() => undefined);
+        await flush();
+        expect(transport.subscriptions).toHaveLength(2);
+        let settled = false;
+        void second.then(
+            () => {
+                settled = true;
+            },
+            () => {
+                settled = true;
+            },
+        );
+        transport.subscriptions[0]!.listener(
+            await validResult(secondIntent),
+        );
+        await flush();
+        expect(settled).toBe(false);
+        transport.subscriptions[1]!.listener(
+            await validResult(secondIntent),
+        );
+        await expect(second).resolves.toMatchObject({
+            intent_id: secondIntent.intent_id,
+        });
+        client.close();
+    });
+
+    test('tauri_transport_close_suppresses_later_channel_delivery', async () => {
+        let handler: ((message: unknown) => void) | null = null;
+        const bridge: TauriHostBridge = {
+            hasChannel: true,
+            async invoke(command) {
+                if (command === 'agent_subscribe') return null;
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(onMessage): TauriChannelHandle {
+                handler = onMessage;
+                return { onmessage: onMessage };
+            },
+        };
+        const transport = new TauriHostTransport({ bridge });
+        const received: HostToolResult[] = [];
+        transport.subscribe((result) => received.push(result));
+        await flush();
+        expect(handler).not.toBeNull();
+        transport.close();
+        const emit = handler as unknown as (message: unknown) => void;
+        emit(await validResult(await validIntent()));
+        expect(received).toHaveLength(0);
+    });
+
+    test('non_streaming_subscribe_is_host_unavailable', () => {
+        const client = new HostClient({
+            transport: new AgentTransportHostTransport(
+                new FixtureTransport(),
+            ),
+        });
+        expect(() => client.subscribe(() => undefined)).toThrowError(
+            AgentClientError,
+        );
+        try {
+            client.subscribe(() => undefined);
+        } catch (error) {
+            expect(error).toMatchObject({ code: 'host_unavailable' });
+        }
+    });
+
+    test('data_scope_artifact_read_preserves_context_task_id', async () => {
+        const recording = new RecordingAgentTransport();
+        const client = new AgentClient({
+            hostClient: new HostClient({
+                transport: new AgentTransportHostTransport(recording),
+            }),
+        });
+        const content = await client.readArtifact({
+            path: 'a.txt',
+            taskId: TASK_ID,
+        });
+        expect(new TextDecoder().decode(content.bytes)).toBe('hello');
+        expect(recording.artifactInputs[0]?.taskId).toBe(TASK_ID);
+    });
+
+    test('task_scope_artifact_read_uses_the_intent_task_id', async () => {
+        const recording = new RecordingAgentTransport();
+        const adapter = new AgentTransportHostTransport(recording);
+        const result = await adapter.invoke(
+            await validIntent({
+                tool: 'artifact.read',
+                arguments: { path: 'a.txt' },
+                request_scope: 'task',
+            }),
+        );
+        expect(result.status).toBe('ok');
+        expect(recording.artifactInputs[0]?.taskId).toBe(TASK_ID);
+    });
+
+    test('task_scope_rejects_zero_task_and_run_placeholders', async () => {
+        const client = new HostClient({
+            transport: new FakeHostTransport(),
+        });
+        await expect(
+            client.execute(
+                await validIntent({
+                    task_id: 'tsk_0000000000000000',
+                    run_id: 'run_0000000000000000',
+                    generation: 1,
+                    request_scope: 'task',
+                }),
+            ),
+        ).rejects.toMatchObject({ code: 'invalid_arguments' });
+    });
+
+    test('data_result_requires_explicit_zero_identity', async () => {
+        const transport = new FakeHostTransport();
+        transport.capabilityValues = { ...ALL_FALSE, tree: true };
+        transport.resultFactory = async (intent) => {
+            const value = await validResult(intent, {
+                output: { entries: [] },
+            });
+            const record = value as unknown as Record<string, unknown>;
+            delete record.task_id;
+            delete record.run_id;
+            delete record.generation;
+            return value;
+        };
+        const client = new AgentClient({
+            hostClient: new HostClient({ transport }),
+        });
+        await expect(
+            client.tree({ source: 'host' }),
+        ).rejects.toMatchObject({ code: 'cross_task_event' });
+    });
+
+    test('loopback_rejects_non_string_base_and_path_bearing_base', () => {
+        expect(
+            () =>
+                new LoopbackHostTransport({
+                    token: 'launch-token',
+                    baseUrl: 42 as never,
+                }),
+        ).toThrowError(AgentClientError);
+        expect(
+            () =>
+                new LoopbackHostTransport({
+                    token: 'launch-token',
+                    pageOrigin: {} as never,
+                }),
+        ).toThrowError(AgentClientError);
+        expect(
+            () =>
+                new LoopbackHostTransport({
+                    token: 'launch-token',
+                    baseUrl: 'http://localhost:4173/path',
+                }),
+        ).toThrowError(AgentClientError);
+    });
+
+    test('host_client_execute_through_the_poll_path', async () => {
+        const scheduler = new ManualScheduler();
+        const intent = await validIntent();
+        const result = await validResult(intent);
+        let polls = 0;
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                if (command === 'agent_host_invoke') return { accepted: true };
+                if (command === 'agent_host_poll') {
+                    polls += 1;
+                    return { cursor: 'c1', results: [result] };
+                }
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('the offline shim has no Channel');
+            },
+        };
+        const client = new HostClient({
+            transport: new TauriHostTransport({
+                bridge,
+                scheduler,
+                pollIntervalMs: 10,
+            }),
+            timers: scheduler,
+        });
+        await expect(client.execute(intent)).resolves.toMatchObject({
+            intent_id: intent.intent_id,
+        });
+        expect(polls).toBe(1);
+        client.close();
     });
 });

@@ -513,6 +513,7 @@ export class AgentRuntime {
         await Promise.allSettled([...this.chains.values()]);
         for (const stream of [...this.eventStreams]) stream.close();
         this.listeners.clear();
+        this.hostClientInstance?.close();
         this.taskStore?.close();
         this.opened = false;
     }

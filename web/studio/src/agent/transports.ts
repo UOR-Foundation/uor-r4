@@ -329,6 +329,7 @@ export class TauriHostTransport implements HostTransport {
             this.pollStates.delete(state);
         }
         for (const state of [...this.channelStates]) {
+            state.closed = true;
             this.releaseChannel(state);
         }
     }
@@ -426,6 +427,7 @@ export class TauriHostTransport implements HostTransport {
     }
 
     private releaseChannel(state: TauriChannelState): void {
+        state.closed = true;
         this.channelStates.delete(state);
         const bridge = this.bridge;
         try {
@@ -478,6 +480,24 @@ export class LoopbackHostTransport implements HostTransport {
             throw new AgentClientError(
                 'invalid_arguments',
                 'loopback transport requires a per-launch token',
+            );
+        }
+        if (
+            options.baseUrl !== undefined &&
+            typeof options.baseUrl !== 'string'
+        ) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'loopback base URL must be a string',
+            );
+        }
+        if (
+            options.pageOrigin !== undefined &&
+            typeof options.pageOrigin !== 'string'
+        ) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'loopback page origin must be a string',
             );
         }
         const supplied = options.baseUrl;
@@ -809,10 +829,12 @@ export class AgentTransportHostTransport implements HostTransport {
             });
         }
         if (intent.tool === 'artifact.read') {
+            const taskId =
+                intent.request_scope === 'data'
+                    ? context?.taskId
+                    : intent.task_id;
             const content = await this.transport.readArtifact({
-                ...(context?.taskId === undefined
-                    ? {}
-                    : { taskId: context.taskId }),
+                ...(taskId === undefined ? {} : { taskId }),
                 ...(typeof args.path === 'string' ? { path: args.path } : {}),
                 ...(typeof args.artifact_id === 'string'
                     ? { artifactId: args.artifact_id }
