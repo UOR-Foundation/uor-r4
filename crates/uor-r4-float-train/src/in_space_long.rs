@@ -5866,9 +5866,11 @@ fn reply_bound_backoff_rows(
         .collect()
 }
 
-/// The tail lengths `--reply-bound` tries for [`ReplyKey::TailPosition`]: the float memory's
+/// The tail lengths `--reply-bound` tries for [`ReplyKey::TailPosition`]. The role line and the
+/// question mark before it take 7 tokens, so 8 holds the question's last token and 9 its last
+/// two. The float memory's
 /// longest key is 16 ids.
-const REPLY_BOUND_TAILS: [usize; 3] = [8, 12, 16];
+const REPLY_BOUND_TAILS: [usize; 6] = [7, 8, 9, 10, 12, 16];
 /// The tail lengths `--reply-bound` tries after the first 8 tokens ([`ReplyKey::HeadTail`]): 8
 /// fills the float memory's 16-id key; 14 holds 8 tokens before the 6-token role line.
 const REPLY_BOUND_ENDS: [usize; 3] = [8, 12, 14];
@@ -5924,7 +5926,7 @@ fn reply_bound_of(train: &[ReplyRow], dev: &[ReplyRow]) -> Vec<ReplyBound> {
         out.extend(reply_bound_backoff_rows(&[first, general], train, dev, &REPLY_BOUND_SHARES));
     }
     // Both ends of the question, then its end, then its start: a sum needs both operands.
-    let chain = [ReplyKey::HeadTail(8), ReplyKey::TailPosition(8), general];
+    let chain = [ReplyKey::HeadTail(8), ReplyKey::TailPosition(9), general];
     out.extend(reply_bound_backoff_rows(&chain, train, dev, &REPLY_BOUND_SHARES));
     out
 }
