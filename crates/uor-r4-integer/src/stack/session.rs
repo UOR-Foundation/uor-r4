@@ -1138,6 +1138,16 @@ impl IntegerStackModel {
         }
     }
 
+    /// The rule this session's copy heads are served under (claude-345): the artifact's own,
+    /// `LatestExact` when its record sets `copy_latest`, unless [`Self::set_copy_rule`] changed
+    /// it. `None` without a Hamming read.
+    pub fn copy_rule(&self) -> Option<CopyRule> {
+        self.fbs
+            .as_ref()
+            .and_then(|fbs| fbs.hamming.as_ref())
+            .map(|hamming| hamming.copy_rule())
+    }
+
     /// Serve without the artifact's turn memory (claude-345: one artifact read with and without
     /// it, on the laptop, as the float scorer's no-memory pass). Returns whether there was one to
     /// drop. Without it the session no longer serves what the artifact was exported as.

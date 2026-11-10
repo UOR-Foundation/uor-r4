@@ -409,6 +409,10 @@ pub struct FbsHammingSnapshot {
     /// `HammingReads::with_copy_keys` trains; absent when every head uses `copy_key`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy_keys: Option<Vec<usize>>,
+    /// Whether the copy heads read their latest exact match (claude-345), as the float read's
+    /// `HammingReads::with_copy_latest` trains; absent under the mean of the nearest kept.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy_latest: bool,
 }
 
 /// The one-token copy key, a Hamming record's default (claude-261).

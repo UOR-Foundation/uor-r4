@@ -90,6 +90,25 @@ pub fn build_reply_table(rows: &[(Vec<u32>, u32)], min_share: f64) -> HashMap<Ve
         .collect()
 }
 
+/// The keys the copy read owns (claude-345): of `rows`, each a table key and whether the copy
+/// read's latest exact match already names that row's target, the keys where it does on more
+/// than half of the key's rows. A table that leaves these keys out stores what the context cannot
+/// supply. The count is over all of a key's rows, so a key's other rows never take the key over
+/// once the copied ones are set aside.
+pub fn copy_owned_keys(rows: &[(Vec<u32>, bool)]) -> std::collections::HashSet<Vec<u32>> {
+    let mut counts: HashMap<&[u32], (usize, usize)> = HashMap::new();
+    for (key, copied) in rows {
+        let (named, total) = counts.entry(key.as_slice()).or_default();
+        *named += usize::from(*copied);
+        *total += 1;
+    }
+    counts
+        .into_iter()
+        .filter(|(_, (named, total))| 2 * named > *total)
+        .map(|(key, _)| key.to_vec())
+        .collect()
+}
+
 /// Whether `key` is one a reply table can hold and save: 1 to [`MAX_REPLY_KEY`] ids, the last a
 /// token id rather than the pad, so a padded saved key reads back exactly.
 fn reply_key_ok(key: &[u32]) -> bool {
@@ -1057,5 +1076,31 @@ mod tests {
             .unwrap()
             .is_none());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod copy_owned_tests {
+    use super::copy_owned_keys;
+
+    /// claude-345: a key is the copy read's when it names the target on more than half of the
+    /// key's rows; an even split or a minority leaves the key with the table.
+    #[test]
+    fn the_copy_read_owns_a_key_it_names_on_most_rows() {
+        let row = |key: u32, copied: bool| (vec![key, 7], copied);
+        let rows = vec![
+            row(1, true),
+            row(1, true),
+            row(1, false),
+            row(2, true),
+            row(2, false),
+            row(3, false),
+            row(4, true),
+        ];
+        let owned = copy_owned_keys(&rows);
+        assert!(owned.contains(&vec![1, 7]) && owned.contains(&vec![4, 7]));
+        assert!(!owned.contains(&vec![2, 7]) && !owned.contains(&vec![3, 7]));
+        assert_eq!(owned.len(), 2);
+        assert!(copy_owned_keys(&[]).is_empty());
     }
 }

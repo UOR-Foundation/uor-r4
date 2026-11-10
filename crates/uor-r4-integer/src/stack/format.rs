@@ -190,6 +190,13 @@ pub struct StackHamming {
     /// field refuses a mixed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy_keys: Option<Vec<usize>>,
+    /// The copy heads' rule (claude-345): true when each reads its latest exact match, at full
+    /// weight, in place of the mean of its nearest `kept` (`CopyRule::LatestExact`), as the float
+    /// read's `HammingReads::with_copy_latest` trains. Left out of the header under the mean,
+    /// so such an artifact is byte for byte as before, and an engine without the field refuses
+    /// one that sets it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy_latest: bool,
     /// Which reads' type heads ask (claude-330, served by claude-336): one flag per read, in depth
     /// order, not all off. A read that asks has a `hamming.d{depth}.ask` section (i16, `vocab *
     /// width`, Q12). Left out of the header when no read asks, so such an artifact is byte for
@@ -216,6 +223,7 @@ impl StackHamming {
             weight_exp: HAMMING_WEIGHT_EXP,
             copy_key: 1,
             copy_keys: None,
+            copy_latest: false,
             asks: None,
             carry_rows: None,
         }
@@ -1835,6 +1843,7 @@ fn export_fbs_trunk(
             let mut record = StackHamming::new(h.heads, h.depths.clone());
             record.copy_key = h.copy_key;
             record.copy_keys = h.copy_keys.clone();
+            record.copy_latest = h.copy_latest;
             record.check(&shape)?;
             if h.reads.len() != h.depths.len() {
                 return Err(StackError::TableLength {

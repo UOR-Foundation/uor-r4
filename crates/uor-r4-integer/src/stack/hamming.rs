@@ -247,7 +247,8 @@ impl CopyHeads {
                     (record.head_copy_key(h) == 2).then(|| (1u64 << (width / record.heads / 2)) - 1)
                 })
                 .collect(),
-            rule: CopyRule::Mean,
+            // The artifact's own rule (claude-345): latest-exact when its record says so.
+            rule: if record.copy_latest { CopyRule::LatestExact } else { CopyRule::Mean },
         }
     }
 
@@ -913,6 +914,12 @@ pub(super) fn check_payload_cache(typed: usize, context: usize, width: usize) ->
 }
 
 impl ServedHamming {
+    /// The rule the copy heads are served under: the artifact's own unless
+    /// [`Self::set_copy_rule`] changed it (claude-345).
+    pub(crate) fn copy_rule(&self) -> CopyRule {
+        self.reads.first().map_or(CopyRule::Mean, |read| read.copy.rule())
+    }
+
     /// Serve every read's copy heads under `rule` ([`CopyHeads::set_rule`], claude-345).
     pub(crate) fn set_copy_rule(&mut self, rule: CopyRule) {
         for read in &mut self.reads {

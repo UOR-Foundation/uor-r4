@@ -153,6 +153,11 @@ pub struct LongConfig {
     /// (`HammingReads::with_copy_keys`, claude-268). Left out of `config.json` when none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_copy_keys: Option<Vec<usize>>,
+    /// The Hamming read's copy heads read their latest exact match in place of the mean of their
+    /// nearest sixteen (`HammingReads::with_copy_latest`, claude-345): the rule the integer
+    /// session serves as `CopyRule::LatestExact`. Left out of `config.json` when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hamming_copy_latest: bool,
     /// The Hamming read's type heads as ask heads (`HammingReads::with_ask`, claude-330): each
     /// asks with its token's point plus a learned question row, against the copy key. Off by
     /// default, and left out of `config.json` when off.
@@ -216,6 +221,13 @@ pub struct LongConfig {
     /// out when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub turn_memory_reply: bool,
+    /// The turn memory leaves to the copy read every key the copy read owns (claude-345): a key
+    /// of either table where the Hamming read's latest exact match ([`copy_names`]) already names
+    /// the target on more than half of the key's TRAIN rows is stored in neither table, so the
+    /// memory holds what the context cannot supply. Needs `turn_memory` and `hamming_copy_latest`.
+    /// Left out when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub turn_memory_leave_copied: bool,
     /// Memory dropout (one-model-end-to-end protocol I-B, claude-207), in thousandths: each
     /// training window is dropped with this chance ([`memory_dropped`]), and in a dropped window
     /// the turn memory names no row, so the trunk also learns those windows without it. Training
@@ -1137,6 +1149,9 @@ fn start_hamming(
         if config.hamming_copy_key != 1 || config.hamming_copy_keys.is_some() {
             return Err(invalid("--hamming-copy-key and --hamming-copy-keys key the Hamming read's copy heads; turn the read on with --hamming-read"));
         }
+        if config.hamming_copy_latest {
+            return Err(invalid("--hamming-copy-latest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
+        }
         return Ok(None);
     }
     if let Some(keys) = &config.hamming_copy_keys {
@@ -1154,6 +1169,9 @@ fn start_hamming(
             .with_copy_key(config.hamming_copy_key)?;
     if let Some(keys) = &config.hamming_copy_keys {
         reads = reads.with_copy_keys(keys)?;
+    }
+    if config.hamming_copy_latest {
+        reads = reads.with_copy_latest();
     }
     if config.type_spin {
         reads = reads.with_type_spin()?;
@@ -1275,6 +1293,9 @@ fn start_memory(
         if config.turn_memory_reply {
             return Err(invalid("--turn-memory-reply needs --turn-memory K"));
         }
+        if config.turn_memory_leave_copied {
+            return Err(invalid("--turn-memory-leave-copied needs --turn-memory K"));
+        }
         if config.turn_memory_dropout > 0 {
             return Err(invalid("--turn-memory-dropout needs --turn-memory K"));
         }
@@ -1289,13 +1310,37 @@ fn start_memory(
         None => load_train_split(data_root)?,
         Some(split) => load_named_split(split)?,
     };
+    if config.turn_memory_leave_copied && !config.hamming_copy_latest {
+        return Err(invalid(
+            "--turn-memory-leave-copied leaves keys to the copy read's latest exact match: it needs --hamming-copy-latest 1",
+        ));
+    }
     let (windows, _) = hs::build_document_windows(&tokens, &mask, config.context, hs::SHEET_BOS_ID)?;
     let train = openings(&windows, &mask);
-    let table = if config.turn_memory_empty {
+    let mut table = if config.turn_memory_empty {
         std::collections::HashMap::new()
     } else {
         crate::flock_read_memory::build_table(&train, config.turn_memory)
     };
+    // claude-345: the opening keys the copy read owns are left to it.
+    if config.turn_memory_leave_copied {
+        let rows: Vec<(Vec<u32>, bool)> = opening_rows(&windows, &mask)
+            .into_iter()
+            .filter(|row| !row.prompt.is_empty())
+            .map(|row| {
+                let copied = copy_names(&windows[row.window].input_ids, row.offset, row.target);
+                let key = row.prompt[..config.turn_memory.min(row.prompt.len())].to_vec();
+                (key, copied)
+            })
+            .collect();
+        let owned = crate::flock_read_memory::copy_owned_keys(&rows);
+        let before = table.len();
+        table.retain(|key, _| !owned.contains(key));
+        println!(
+            "[memory] opening keys left to the copy read {} of {before}",
+            before - table.len()
+        );
+    }
     println!(
         "[memory] key {} ids; TRAIN openings {}; table keys {}{}",
         config.turn_memory,
@@ -1312,16 +1357,34 @@ fn start_memory(
     // The reply table (claude-193): TRAIN's rows past their openings, at the probe's key and share.
     let mut replies = Vec::new();
     if config.turn_memory_reply {
-        let rows: Vec<(Vec<u32>, u32)> = reply_rows(&windows, &mask)
+        let later: Vec<ReplyRow> = reply_rows(&windows, &mask)
             .into_iter()
             .filter(|row| !row.opening)
-            .map(|row| (reply_key(&row), row.target))
             .collect();
-        let table = if config.turn_memory_empty {
+        let rows: Vec<(Vec<u32>, u32)> =
+            later.iter().map(|row| (reply_key(row), row.target)).collect();
+        let mut table = if config.turn_memory_empty {
             std::collections::HashMap::new()
         } else {
             crate::flock_read_memory::build_reply_table(&rows, REPLY_MEMORY_SHARE)
         };
+        // claude-345: likewise the reply keys the copy read owns.
+        if config.turn_memory_leave_copied {
+            let copied: Vec<(Vec<u32>, bool)> = later
+                .iter()
+                .map(|row| {
+                    let ids = &windows[row.window].input_ids;
+                    (reply_key(row), copy_names(ids, row.offset, row.target))
+                })
+                .collect();
+            let owned = crate::flock_read_memory::copy_owned_keys(&copied);
+            let before = table.len();
+            table.retain(|key, _| !owned.contains(key));
+            println!(
+                "[memory] reply keys left to the copy read {} of {before}",
+                before - table.len()
+            );
+        }
         println!(
             "[memory] reply table: TRAIN rows past their openings {}; keys at share {REPLY_MEMORY_SHARE} {}",
             rows.len(),
@@ -5453,6 +5516,18 @@ struct ReplyRow {
     target: u32,
     opening: bool,
     copy: bool,
+}
+
+/// Whether the copy read's latest exact match names `target` for the row predicted from window
+/// position `offset` of `ids` (claude-345): the latest position `s` in `1..offset` whose previous
+/// token is the row's own input token holds `target`. This is the choice the Hamming read's copy
+/// heads make under `HammingReads::with_copy_latest` and the integer session under
+/// `CopyRule::LatestExact`, read off the tokens.
+fn copy_names(ids: &[u32], offset: usize, target: u32) -> bool {
+    (1..offset)
+        .rev()
+        .find(|&s| ids[s - 1] == ids[offset])
+        .is_some_and(|s| ids[s] == target)
 }
 
 /// The reply table's key for `row` (claude-193): the probe's `turn-8 + position + reply-last-1`,
@@ -16015,6 +16090,7 @@ mod tests {
             type_spin: false,
             hamming_copy_key: 1,
             hamming_copy_keys: None,
+            hamming_copy_latest: false,
             hamming_ask: false,
             hamming_attract: 0.0,
             hamming_attract_at_question: false,
@@ -16032,6 +16108,7 @@ mod tests {
             turn_memory: 0,
             turn_memory_empty: false,
             turn_memory_reply: false,
+            turn_memory_leave_copied: false,
             turn_memory_dropout: 0,
             fbs_arm: FbsArm::OneAtomActive,
             reply_read_train: None,
@@ -23060,5 +23137,27 @@ mod tests {
             }
         }
         crate::flock_read_hamming::set_hamming_reads(None);
+    }
+}
+
+#[cfg(test)]
+mod copy_names_tests {
+    use super::copy_names;
+
+    /// claude-345: the latest earlier position after the row's own token decides, as the copy
+    /// read's latest exact match does; the row's own position and position 0 are no candidates.
+    #[test]
+    fn the_latest_earlier_copy_of_the_rows_token_names_its_follower() {
+        // ids: 5 7 5 9 5; the row at offset 4 holds token 5, last seen at 2, followed by 9.
+        let ids = [5u32, 7, 5, 9, 5];
+        assert!(copy_names(&ids, 4, 9));
+        assert!(!copy_names(&ids, 4, 7), "the earlier follower is not the latest");
+        // At offset 2 the only earlier copy of 5 is at 0, followed by 7.
+        assert!(copy_names(&ids, 2, 7));
+        // No earlier copy of the row's token: 7 at offset 1, 9 at offset 3.
+        assert!(!copy_names(&ids, 1, 5) && !copy_names(&ids, 3, 5));
+        // A token repeated in place is not its own earlier copy: 5 5 at offsets 1 and 2.
+        assert!(!copy_names(&[3, 5, 5], 2, 5));
+        assert!(!copy_names(&[5], 0, 5));
     }
 }

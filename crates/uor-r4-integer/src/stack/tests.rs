@@ -4177,6 +4177,33 @@ fn snapshots_without_hamming_reads_are_unchanged() {
 /// claude-261: the copy key in the snapshot and the artifact. At 1 the record serializes exactly
 /// as before the field, and neither the snapshot nor the artifact's header holds it; at 2 both
 /// hold it, and the parsed record and the session carry it; any other key is refused at export.
+/// claude-345: the copy rule is in the header only when it is the latest exact match, so an
+/// artifact under the mean is byte for byte as before, and the session serves the recorded rule.
+#[test]
+fn the_copy_rule_is_recorded_only_when_latest() {
+    use super::synthetic::synthetic_hamming;
+    use super::CopyRule;
+    let mut snap = synthetic_fbs_trunk(20261110);
+    let read = synthetic_hamming(snap.width, snap.layers.len(), 4, 345);
+    let json = serde_json::to_value(&read).expect("json");
+    assert!(json.get("copy_latest").is_none(), "a snapshot under the mean holds no rule");
+    for (copy_latest, rule) in [(false, CopyRule::Mean), (true, CopyRule::LatestExact)] {
+        snap.hamming = Some(crate::fbs_snapshot::FbsHammingSnapshot { copy_latest, ..read.clone() });
+        let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+        let image = super::read_hamming_uorlut01(&bytes).expect("parse").expect("the reads");
+        assert_eq!(image.record.copy_latest, copy_latest);
+        let _ = with_header(&bytes, |h| {
+            let field = h["hamming"].get("copy_latest").cloned();
+            assert_eq!(field, copy_latest.then(|| serde_json::json!(true)));
+        });
+        let mut model = IntegerStackModel::parse(&bytes).expect("the session serves it");
+        assert_eq!(model.copy_rule(), Some(rule));
+        // The serving switch still overrides the artifact's own rule.
+        assert!(model.set_copy_rule(CopyRule::LatestNearest));
+        assert_eq!(model.copy_rule(), Some(CopyRule::LatestNearest));
+    }
+}
+
 #[test]
 fn the_copy_key_is_recorded_only_when_two() {
     use super::synthetic::synthetic_hamming;
