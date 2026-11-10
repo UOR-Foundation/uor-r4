@@ -246,6 +246,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         if (!currentMenu || !currentOptions.length || event.isComposing || event.keyCode === 229) return false;
         if (event.key === 'Escape') {
             event.preventDefault();
+            event.stopPropagation();
             flushSync(() => setMenu(null));
             textareaRef.current?.focus();
             return true;

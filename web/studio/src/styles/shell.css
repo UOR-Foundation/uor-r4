@@ -8,6 +8,9 @@
 .task-workspace .session-toolbar { background: var(--uor-surface); border-block-end-color: var(--uor-border); }
 .task-workspace .harness-body { display: grid; grid-template-columns: minmax(0, 1fr); min-inline-size: 0; }
 .task-workspace .harness-body[data-rail-open="true"] { grid-template-columns: auto minmax(0, 1fr); }
+.task-workspace .harness-body > main { grid-column: 1 / -1; grid-row: 1; }
+.task-workspace .harness-body[data-rail-open="true"] > main { grid-column: 2; }
+.task-workspace .harness-body > [data-region="task-rail"] { grid-column: 1; grid-row: 1; }
 .task-workspace [data-region="task-rail"] { display: flex; min-inline-size: 0; }
 .task-workspace [data-region="task-rail"][hidden] { display: none; }
 .task-workspace [data-region="task-detail"] { display: block; min-inline-size: 0; }

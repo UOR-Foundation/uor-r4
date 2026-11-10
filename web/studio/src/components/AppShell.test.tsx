@@ -70,6 +70,39 @@ describe('AppShell', () => {
         expect(host.querySelectorAll('h1')).toHaveLength(1);
     });
 
+    it('places main before the task rail in document order', () => {
+        act(() => { render(<AppShell activeSection="agent" onSection={vi.fn()} status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }} primary={<h1>Agent</h1>}><p>Overlays</p></AppShell>, host); });
+        const body = host.querySelector<HTMLElement>('.harness-body')!;
+        const main = body.querySelector<HTMLElement>('main[data-region="task-detail"]')!;
+        const rail = body.querySelector<HTMLElement>('[data-region="task-rail"]')!;
+        expect(Array.from(body.children).indexOf(main)).toBeLessThan(Array.from(body.children).indexOf(rail));
+    });
+
+    it('keeps the rail open for scoped Escape and still closes it from plain page focus', () => {
+        act(() => { render(<AppShell activeSection="agent" onSection={vi.fn()} status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }} primary={<h1>Agent</h1>}><p>Overlays</p></AppShell>, host); });
+        const rail = host.querySelector<HTMLElement>('[data-region="task-rail"]')!;
+        expect(rail.hidden).toBe(false);
+        const composer = document.createElement('div');
+        composer.className = 'agent-composer';
+        const textarea = document.createElement('textarea');
+        composer.appendChild(textarea);
+        host.appendChild(composer);
+        act(() => { textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+        expect(rail.hidden).toBe(false);
+        const dialog = document.createElement('dialog');
+        dialog.setAttribute('open', '');
+        host.appendChild(dialog);
+        act(() => { dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+        expect(rail.hidden).toBe(false);
+        dialog.remove();
+        const prevented = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        prevented.preventDefault();
+        act(() => { document.dispatchEvent(prevented); });
+        expect(rail.hidden).toBe(false);
+        act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+        expect(rail.hidden).toBe(true);
+    });
+
     it('does not render a green placeholder treatment for the task workspace', () => {
         act(() => { render(<AppShell activeSection="agent" onSection={vi.fn()} status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }}><p>Content</p></AppShell>, host); });
         const shell = host.querySelector<HTMLElement>('.harness-shell')!;

@@ -99,6 +99,32 @@ function expectRailWellFormed(rows: HeadingRow[]) {
     }
 }
 
+interface FlatHeadingRow extends HeadingRow { tag: string; role: string | null; ariaLevel: string | null }
+
+async function flatVisibleHeadings(page: Page): Promise<FlatHeadingRow[]> {
+    return page.evaluate(() => {
+        const root = document.querySelector<HTMLElement>('#studio-typed-root');
+        if (!root) return [];
+        return Array.from(root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6, [role="heading"]'))
+            .filter((element) => {
+                const style = getComputedStyle(element);
+                const rect = element.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            })
+            .map((element) => {
+                const native = /^H([1-6])$/.exec(element.tagName);
+                const ariaLevel = element.getAttribute('aria-level');
+                return {
+                    level: native ? Number(native[1]) : Number(ariaLevel ?? 0),
+                    text: element.textContent?.trim() ?? '',
+                    tag: element.tagName,
+                    role: element.getAttribute('role'),
+                    ariaLevel,
+                };
+            });
+    });
+}
+
 async function selectFixtureProvider(page: Page) {
     const root = page.locator('#studio-typed-root');
     await root.locator('nav[aria-label="Studio"]').getByRole('button', { name: 'Models', exact: true }).click();
@@ -166,6 +192,21 @@ test('split_panes_each_have_one_distinguished_h1', async ({ page }) => {
     await expect(root.locator('[data-region="work-surface"]')).toBeVisible();
 });
 
+test('flat_visible_heading_order_starts_with_the_main_h1', async ({ page }) => {
+    await openTypedAt(page, 1440);
+    const root = page.locator('#studio-typed-root');
+    await expect(root.locator('[data-region="task-rail"]')).toBeVisible();
+    const rows = await flatVisibleHeadings(page);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows[0]?.text).toBe('Agent');
+    expect(rows[0]?.level).toBe(1);
+    for (let index = 1; index < rows.length; index += 1) {
+        expect(rows[index].level - rows[index - 1].level, `flat heading order ${JSON.stringify(rows)}`).toBeLessThanOrEqual(1);
+    }
+    const roleHeadings = rows.filter((row) => row.role === 'heading');
+    expect(roleHeadings.every((row) => Number.isInteger(row.level) && row.level >= 1 && row.level <= 6)).toBe(true);
+});
+
 test('no_aria_hidden_content_is_focusable', async ({ page }) => {
     await openTypedAt(page, 1440);
     const violations = await page.evaluate(() => {
@@ -218,6 +259,11 @@ test('errors_use_alert_and_session_status_is_polite', async ({ page }) => {
 
 test('menus_expose_expanded_listbox_and_option_semantics', async ({ page }) => {
     await openTypedAt(page, 1440);
+    const root = page.locator('#studio-typed-root');
+    const rail = root.locator('[data-region="task-rail"]');
+    const toggle = root.locator('[data-action="toggle-projects"]');
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const prompt = promptLocator(page);
     await prompt.fill('/');
     const commands = page.locator('#studio-typed-root [role="listbox"][aria-label="Build task commands"]');
@@ -231,6 +277,8 @@ test('menus_expose_expanded_listbox_and_option_semantics', async ({ page }) => {
     await expect(commands).toHaveCount(0);
     await expect(prompt).toHaveAttribute('aria-expanded', 'false');
     await expect(prompt).toBeFocused();
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     await page.locator('#studio-typed-root .composer-attachments input[type="file"]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('note') });
     await expect(page.locator('#studio-typed-root .composer-attachment-chip')).toBeVisible();
@@ -243,11 +291,17 @@ test('menus_expose_expanded_listbox_and_option_semantics', async ({ page }) => {
     await expect(mentions).toHaveCount(0);
     await expect(prompt).toBeFocused();
     await expect(prompt).toHaveValue('hello @');
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 });
 
-test('dialogs_and_task_menu_return_focus_to_their_invokers', async ({ page }) => {
+test('dialogs_return_focus_to_their_invokers_without_closing_the_rail', async ({ page }) => {
     await openTypedAt(page, 1440);
     const root = page.locator('#studio-typed-root');
+    const rail = root.locator('[data-region="task-rail"]');
+    const toggle = root.locator('[data-action="toggle-projects"]');
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const paletteButton = root.locator('.toolbar-command');
     await paletteButton.click();
     const palette = page.getByRole('dialog', { name: 'Command palette' });
@@ -256,6 +310,8 @@ test('dialogs_and_task_menu_return_focus_to_their_invokers', async ({ page }) =>
     await page.keyboard.press('Escape');
     await expect(palette).toBeHidden();
     await expect(paletteButton).toBeFocused();
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     const settingsButton = root.locator('.session-toolbar-actions button[aria-label="Settings"]');
     await settingsButton.click();
@@ -265,6 +321,8 @@ test('dialogs_and_task_menu_return_focus_to_their_invokers', async ({ page }) =>
     await page.keyboard.press('Escape');
     await expect(settings).toBeHidden();
     await expect(settingsButton).toBeFocused();
+    await expect(rail).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('tab_order_moves_from_the_prompt_to_send_and_back', async ({ page }) => {
@@ -418,6 +476,70 @@ test('mobile_form_text_is_at_least_16px', async ({ page }) => {
     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 });
 
+test('mobile_editor_gutter_and_textarea_share_line_metrics', async ({ page }) => {
+    await openTypedAt(page, 390, 844);
+    const root = page.locator('#studio-typed-root');
+    await root.locator('[data-pane-target="editor"]').click();
+    await root.getByRole('button', { name: 'Open demo', exact: true }).first().click();
+    const file = root.locator('.code-input textarea[aria-label="File contents"]');
+    await expect(file).toBeEnabled();
+    interface EditorMetrics {
+        gutterFont: number;
+        editorFont: number;
+        gutterLineHeight: number;
+        editorLineHeight: number;
+        firstLineHeight: number;
+        lastLineHeight: number;
+        firstLineTop: number;
+        lastLineBottom: number;
+        editorContentTop: number;
+        lineCount: number;
+    }
+    const metrics = async (): Promise<EditorMetrics | null> => page.evaluate(() => {
+        const gutter = document.querySelector<HTMLElement>('#studio-typed-root .code-gutter');
+        const editor = document.querySelector<HTMLTextAreaElement>('#studio-typed-root .code-input textarea');
+        if (!gutter || !editor) return null;
+        const gs = getComputedStyle(gutter);
+        const es = getComputedStyle(editor);
+        const lines = Array.from(gutter.querySelectorAll<HTMLElement>('div'));
+        const first = lines[0]?.getBoundingClientRect();
+        const last = lines[lines.length - 1]?.getBoundingClientRect();
+        const contentTop = (element: Element, style: CSSStyleDeclaration) => element.getBoundingClientRect().top + Number.parseFloat(style.borderTopWidth) + Number.parseFloat(style.paddingTop);
+        return {
+            gutterFont: Number.parseFloat(gs.fontSize),
+            editorFont: Number.parseFloat(es.fontSize),
+            gutterLineHeight: Number.parseFloat(gs.lineHeight),
+            editorLineHeight: Number.parseFloat(es.lineHeight),
+            firstLineHeight: first?.height ?? 0,
+            lastLineHeight: last?.height ?? 0,
+            firstLineTop: first?.top ?? 0,
+            lastLineBottom: last?.bottom ?? 0,
+            editorContentTop: contentTop(editor, es),
+            lineCount: lines.length,
+        };
+    });
+    const assertAligned = (value: EditorMetrics | null, font: number) => {
+        expect(value).not.toBeNull();
+        const measured = value!;
+        expect(measured.gutterFont).toBe(font);
+        expect(measured.editorFont).toBe(font);
+        expect(measured.gutterLineHeight).toBe(measured.editorLineHeight);
+        expect(Math.abs(measured.firstLineHeight - measured.editorLineHeight)).toBeLessThanOrEqual(0.02);
+        expect(Math.abs(measured.lastLineHeight - measured.editorLineHeight)).toBeLessThanOrEqual(0.02);
+        expect(Math.abs(measured.firstLineTop - measured.editorContentTop)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(measured.lastLineBottom - (measured.editorContentTop + measured.lineCount * measured.editorLineHeight))).toBeLessThanOrEqual(1);
+    };
+    assertAligned(await metrics(), 16);
+
+    await root.locator('.session-toolbar-actions button[aria-label="Settings"]').click();
+    const editorFontSize = page.getByRole('dialog', { name: 'Studio settings', exact: true }).getByLabel('Editor font size');
+    await editorFontSize.fill('20');
+    await editorFontSize.press('Tab');
+    await page.keyboard.press('Escape');
+    await expect(file).toHaveCSS('font-size', '20px');
+    assertAligned(await metrics(), 20);
+});
+
 test('390_900_1024_1440_have_no_horizontal_overflow', async ({ page }) => {
     const overflow = () => page.evaluate(() => ({
         document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -557,8 +679,13 @@ test('narrow_split_secondary_replaces_detail_and_returns', async ({ page }) => {
 
 test('reduced_motion_removes_nonessential_animation', async ({ page }) => {
     await openTypedAt(page, 1440);
+    await page.addStyleTag({ content: '.task-workspace .agent-composer { transition: border-color 120ms linear; }' });
+    const activeBefore = await page.locator('#studio-typed-root .agent-composer').evaluate((element) => getComputedStyle(element).transitionDuration);
+    expect(Number.parseFloat(activeBefore)).toBeGreaterThan(0);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+    const activeAfter = await page.locator('#studio-typed-root .agent-composer').evaluate((element) => getComputedStyle(element).transitionDuration);
+    expect(Number.parseFloat(activeAfter)).toBeLessThanOrEqual(0.0001);
     const durations = await page.evaluate(() => {
         const root = document.querySelector('#studio-typed-root');
         if (!root) return [];

@@ -39,7 +39,10 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
     const [choosingFolder, setChoosingFolder] = useState(false);
     useEffect(() => {
         const close = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape') return;
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            if (document.querySelector('dialog[open]')) return;
+            const target = event.target;
+            if (target instanceof Element && target.closest('.agent-composer')) return;
             setDrawerOpen(false);
             setTaskRailOpen(false);
         };
@@ -61,10 +64,10 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
     return <div class="harness-shell studio-shell task-workspace">
         <SessionToolbar status={status} projectName={projectName} environment={environment} railOpen={taskRailOpen} onToggleProjects={toggleTaskRail} onNewProject={openProject} onModels={onModels || (() => onSection('models'))} onPalette={onPalette} onSettings={onSettings} onInspector={onInspector} inspectorOpen={inspectorOpen} />
         <div class="harness-body" data-rail-open={taskRailOpen ? 'true' : 'false'}>
+            <main id="harness-main" data-region="task-detail" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren ? <div class="task-work-surface" data-region="work-surface">{secondaryChildren}</div> : secondaryChildren}>{primary ?? children}</PaneDock></main>
             <div data-region="task-rail" hidden={!taskRailOpen}>
                 <ProjectSidebar activeSection={activeSection} onSection={onSection} onNewProject={openProject} projectName={projectName} environment={environment} railOpen={taskRailOpen} sessions={sessions} />
             </div>
-            <main id="harness-main" data-region="task-detail" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren ? <div class="task-work-surface" data-region="work-surface">{secondaryChildren}</div> : secondaryChildren}>{primary ?? children}</PaneDock></main>
         </div>
         {children !== primary && children}
         {projectOpen && <Modal title="New project" onClose={() => setProjectOpen(false)}><form class="project-form" onSubmit={(event) => { event.preventDefault(); if (!projectDraft.trim() || !projectFolder) return; setProjectName(projectDraft.trim()); setProjectOpen(false); onSection('workspace'); }}>

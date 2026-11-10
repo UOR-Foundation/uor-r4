@@ -42,6 +42,11 @@
     .composer-attachment-name { max-inline-size: 9rem; }
 }
 
+@media (max-width: 1023px) {
+    .task-workspace .harness-body > main,
+    .task-workspace .harness-body[data-rail-open="true"] > main { grid-column: 1; }
+}
+
 .task-workspace summary { min-block-size: 24px; }
 .task-workspace input[type="file"] { min-block-size: 24px; }
 .task-workspace :is([role="option"], [role="menuitem"], [role="tab"]) { min-block-size: 24px; }
@@ -58,7 +63,8 @@
 
 @media (max-width: 800px) {
     .task-workspace :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]), select, textarea) { font-size: 16px; }
-    .task-workspace .code-input textarea { font-size: max(16px, var(--editor-font-size, 13px)) !important; }
+    .task-workspace .code-gutter { font-size: max(16px, var(--editor-font-size, 13px)); line-height: 1.65; }
+    .task-workspace .code-input textarea { font-size: max(16px, var(--editor-font-size, 13px)) !important; line-height: 1.65; }
 }
 
 @media (pointer: coarse) {
