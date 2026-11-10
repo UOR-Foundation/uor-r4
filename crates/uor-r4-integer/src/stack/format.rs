@@ -1062,11 +1062,10 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        let bound = header.source.get("stack_contract").is_some()
-            || header.source.get("tokenizer_sha256").is_some();
-        // A bound export is `/10` regardless of its optional records. Unbound
-        // historical stacks retain their `/6`–`/9` schema.
-        let expected = if bound {
+        // `/10` requires the complete binding. Historical stacks retain their
+        // `/6`–`/9` schema even if they carry optional provenance from before
+        // binding became an admission rule.
+        let expected = if header.schema == STACK_FBS_BOUND_SCHEMA {
             check_artifact_binding(&header.source)?;
             STACK_FBS_BOUND_SCHEMA
         } else {

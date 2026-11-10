@@ -974,6 +974,15 @@ impl IntegerStackModel {
                 }
             }
         }
+        let tokenizer_sha256 = if artifact.schema == super::STACK_FBS_BOUND_SCHEMA {
+            artifact
+                .source
+                .get("tokenizer_sha256")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        } else {
+            None
+        };
         Ok(Self {
             head_dim: shape.head_dim(),
             lorentz: shape.lorentz(),
@@ -983,11 +992,7 @@ impl IntegerStackModel {
             shape,
             numerics,
             sha256: artifact.sha256,
-            tokenizer_sha256: artifact
-                .source
-                .get("tokenizer_sha256")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
+            tokenizer_sha256,
             embed,
             head,
             pointer,

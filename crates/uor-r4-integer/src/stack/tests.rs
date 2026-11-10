@@ -4263,6 +4263,15 @@ fn contract_provenance_binds_identity_and_preserves_feature_bytes() {
 #[test]
 fn a_bound_point_key_stays_on_uor_r4_lut_stack_10() {
     let bytes = point_key_test_stack(false);
+    let legacy_with_note = with_header(&bytes, |header| {
+        header["source"]["tokenizer_sha256"] = json!("b".repeat(64));
+    });
+    assert_eq!(
+        IntegerStackModel::parse(&legacy_with_note)
+            .expect("legacy provenance remains readable")
+            .tokenizer_sha256(),
+        None
+    );
     let bound = with_header(&bytes, |header| {
         header["schema"] = json!(super::STACK_FBS_BOUND_SCHEMA);
         header["source"]["stack_contract"] = json!({

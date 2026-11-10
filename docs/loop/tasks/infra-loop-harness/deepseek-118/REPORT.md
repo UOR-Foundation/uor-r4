@@ -16,6 +16,10 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `73f707d29`.
 - Whole-workspace `cargo fmt --check` also reports pre-existing drift outside
   this diff. `git diff --check` passes, and the changed Rust hunks were kept in
   rustfmt style.
+- The first implementation inferred binding from metadata presence. That would
+  make an older `/6`–`/9` artifact carrying optional pre-policy provenance
+  unreadable. The review changed enforcement to the `/10` schema itself and
+  added a regression test proving legacy provenance remains informational.
 
 ## What changed
 
@@ -23,7 +27,8 @@ New product exports now default to schema `uor-r4.lut-stack/10`. The header
 binds the contract source path, source SHA-256, parsed-contract semantic
 BLAKE3 and tokenizer SHA-256. Parsing rejects a `/10` artifact with any missing
 or malformed binding. `uor-chat` hashes the supplied tokenizer and refuses a
-mismatch before generation or server startup.
+mismatch before generation or server startup. Historical schemas retain their
+feature-derived parsing and treat old optional provenance as informational.
 
 Historical `/6` through `/9` artifacts remain readable and byte-reproducible.
 The canonical exporter requires the explicit `--legacy-artifact` switch for
