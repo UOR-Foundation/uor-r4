@@ -57,11 +57,13 @@ const TASK_ID_PATTERN = /^tsk_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
+const IMPORT_FENCE_KEY = '__import__';
 
 interface StoreFaults {
     abort_next_append: boolean;
     abort_next_task_write: boolean;
     fail_import_publish: boolean;
+    fail_import_cleanup: boolean;
 }
 
 export interface AgentTaskStoreOptions {
@@ -556,7 +558,10 @@ function requireStoredChange(value: unknown): asserts value is ChangeRecord {
 
 function requireStoredLease(value: unknown): asserts value is LeaseRecord {
     if (!isObject(value)) corrupt('lease record is not an object');
-    if (typeof value.task_id !== 'string' || !TASK_ID_PATTERN.test(value.task_id)) {
+    if (
+        typeof value.task_id !== 'string' ||
+        (value.task_id !== IMPORT_FENCE_KEY && !TASK_ID_PATTERN.test(value.task_id))
+    ) {
         corrupt('lease task_id is invalid');
     }
     if (!isNonEmptyString(value.writer_id)) {
@@ -630,6 +635,11 @@ export class AgentTaskStore {
     private opened = false;
     private importInProgress = false;
     private importGate: Promise<void> | null = null;
+    private activeWrites = 0;
+    private readonly writeWaiters: Array<() => void> = [];
+    private appendGate: Promise<void> | null = null;
+    private appendGateReached: (() => void) | null = null;
+    private closeRequested = false;
     private openPromise: Promise<OpenReport> | null = null;
     private lastReport: OpenReport | null = null;
 
@@ -648,6 +658,7 @@ export class AgentTaskStore {
             abort_next_append: false,
             abort_next_task_write: false,
             fail_import_publish: false,
+            fail_import_cleanup: false,
         };
     }
 
@@ -659,8 +670,35 @@ export class AgentTaskStore {
         return this.writerId;
     }
 
+    private get importFenceWriter(): string {
+        return `import:${this.writerId}`;
+    }
+
     setImportGate(gate: Promise<void> | null): void {
         this.importGate = gate;
+    }
+
+    setAppendGate(gate: Promise<void> | null): Promise<void> {
+        this.appendGate = gate;
+        return new Promise((resolve) => {
+            this.appendGateReached = resolve;
+        });
+    }
+
+    private beginWrite(): void {
+        this.activeWrites += 1;
+    }
+
+    private endWrite(): void {
+        this.activeWrites -= 1;
+        if (this.activeWrites === 0) {
+            for (const resolve of this.writeWaiters.splice(0)) resolve();
+        }
+    }
+
+    private drainWrites(): Promise<void> {
+        if (this.activeWrites === 0) return Promise.resolve();
+        return new Promise((resolve) => this.writeWaiters.push(resolve));
     }
 
     async open(): Promise<OpenReport> {
@@ -689,10 +727,8 @@ export class AgentTaskStore {
 
     close(): void {
         if (this.importInProgress) {
-            throw new AgentStoreError(
-                'runtime_unavailable',
-                'an import is in progress; close is unavailable',
-            );
+            this.closeRequested = true;
+            return;
         }
         this.db?.close();
         this.db = null;
@@ -757,7 +793,15 @@ export class AgentTaskStore {
     async writeTaskRecord(record: TaskRecord): Promise<TaskRecord> {
         this.requireOpen();
         requireStoredTask(record);
-        const latest = record.latest_run_id ?? null;
+        const marker = this.store.getTaskUnresolvedRunId(record.task_id);
+        let latest = record.latest_run_id ?? null;
+        if (
+            marker !== null &&
+            (latest === null ||
+                this.store.getRunCursor(record.task_id, latest) === null)
+        ) {
+            latest = marker;
+        }
         const stored = (await this.readOne<TaskRecord>(
             'tasks',
             record.task_id,
@@ -774,6 +818,12 @@ export class AgentTaskStore {
             ...(hold === null || hold === undefined ? {} : { hold }),
         };
         await this.persistTaskWithRollback(normalized);
+        if (
+            marker !== null &&
+            this.store.getRunCursor(record.task_id, marker) === null
+        ) {
+            this.store.setTaskUnresolvedRunId(record.task_id, marker);
+        }
         return normalized;
     }
 
@@ -846,6 +896,14 @@ export class AgentTaskStore {
 
     async writeSnapshot(taskId: string, runId: string): Promise<SnapshotRecord> {
         this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an import is in progress; snapshot writes are unavailable',
+            );
+        }
+        this.beginWrite();
+        try {
         const view = this.store.getRun(taskId, runId);
         if (view === null || view.lastEventId === null || view.lastDigest === null) {
             throw new AgentStoreError(
@@ -880,8 +938,12 @@ export class AgentTaskStore {
                 ),
         );
         const db = this.requireDb();
-        const transaction = db.transaction(['snapshots', 'runs'], 'readwrite');
+        const transaction = db.transaction(['snapshots', 'runs', 'leases'], 'readwrite');
         try {
+            await this.checkImportFence(
+                transaction.objectStore('leases'),
+                this.clock(),
+            );
             const storedRun = (await requestResult(
                 transaction.objectStore('runs').get([taskId, runId]),
             )) as RunRecord | undefined;
@@ -940,6 +1002,9 @@ export class AgentTaskStore {
             );
         }
         return snapshot;
+        } finally {
+            this.endWrite();
+        }
     }
 
     async readSnapshot(taskId: string, runId: string): Promise<ReadResult<SnapshotRecord>> {
@@ -987,6 +1052,14 @@ export class AgentTaskStore {
 
     async recordChanges(input: ChangeInput): Promise<ChangeRecord> {
         this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an import is in progress; change writes are unavailable',
+            );
+        }
+        this.beginWrite();
+        try {
         if (!TASK_ID_PATTERN.test(input.task_id)) invalidArgument('task_id is invalid');
         if (!RUN_ID_PATTERN.test(input.run_id)) invalidArgument('run_id is invalid');
         if (!isNonEmptyString(input.head_digest)) invalidArgument('head_digest must be non-empty');
@@ -1037,8 +1110,12 @@ export class AgentTaskStore {
             head_digest: bound.headDigest,
             captured_at_ms: bound.capturedAtMs,
         };
-        const transaction = this.requireDb().transaction('changes', 'readwrite');
+        const transaction = this.requireDb().transaction(['changes', 'leases'], 'readwrite');
         try {
+            await this.checkImportFence(
+                transaction.objectStore('leases'),
+                this.clock(),
+            );
             await requestResult(
                 transaction
                     .objectStore('changes')
@@ -1053,6 +1130,9 @@ export class AgentTaskStore {
             throw storageError(error);
         }
         return record;
+        } finally {
+            this.endWrite();
+        }
     }
 
     async readChanges(taskId: string, runId?: string): Promise<ChangeRecord[]> {
@@ -1119,7 +1199,13 @@ export class AgentTaskStore {
         nowMs = this.clock(),
     ): Promise<LeaseRecord> {
         this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError('runtime_unavailable', 'an import is in progress');
+        }
+        this.beginWrite();
+        try {
         this.requireWriter(writerId);
+        if (taskId === IMPORT_FENCE_KEY) invalidArgument('task_id is reserved');
         if (!TASK_ID_PATTERN.test(taskId)) invalidArgument('task_id is invalid');
         const task = this.store.snapshot().tasks.find(
             (candidate) => candidate.taskId === taskId,
@@ -1156,6 +1242,7 @@ export class AgentTaskStore {
         const transaction = this.requireDb().transaction('leases', 'readwrite');
         try {
             const stores = transaction.objectStore('leases');
+            await this.checkImportFence(stores, nowMs);
             const existing = (await requestResult(stores.get(taskId))) as LeaseRecord | undefined;
             if (existing !== undefined) {
                 requireStoredLease(existing);
@@ -1195,6 +1282,9 @@ export class AgentTaskStore {
             }
             throw storageError(error);
         }
+        } finally {
+            this.endWrite();
+        }
     }
 
     async heartbeatLease(
@@ -1203,11 +1293,18 @@ export class AgentTaskStore {
         nowMs = this.clock(),
     ): Promise<LeaseRecord> {
         this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError('runtime_unavailable', 'an import is in progress');
+        }
+        this.beginWrite();
+        try {
         this.requireWriter(writerId);
+        if (taskId === IMPORT_FENCE_KEY) invalidArgument('task_id is reserved');
         if (!isNonNegativeInteger(nowMs)) invalidArgument('now_ms is invalid');
         const transaction = this.requireDb().transaction('leases', 'readwrite');
         try {
             const stores = transaction.objectStore('leases');
+            await this.checkImportFence(stores, nowMs);
             const existing = (await requestResult(stores.get(taskId))) as LeaseRecord | undefined;
             if (existing === undefined || existing.writer_id !== writerId) {
                 throw new AgentStoreError(
@@ -1231,14 +1328,24 @@ export class AgentTaskStore {
             }
             throw storageError(error);
         }
+        } finally {
+            this.endWrite();
+        }
     }
 
     async releaseLease(taskId: string, writerId: string): Promise<{ released: boolean }> {
         this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError('runtime_unavailable', 'an import is in progress');
+        }
+        this.beginWrite();
+        try {
         this.requireWriter(writerId);
+        if (taskId === IMPORT_FENCE_KEY) invalidArgument('task_id is reserved');
         const transaction = this.requireDb().transaction('leases', 'readwrite');
         try {
             const stores = transaction.objectStore('leases');
+            await this.checkImportFence(stores, this.clock());
             const existing = (await requestResult(stores.get(taskId))) as LeaseRecord | undefined;
             if (existing === undefined) {
                 await transactionDone(transaction);
@@ -1261,6 +1368,9 @@ export class AgentTaskStore {
                 // The transaction may already be finished.
             }
             throw storageError(error);
+        }
+        } finally {
+            this.endWrite();
         }
     }
 
@@ -1432,6 +1542,7 @@ export class AgentTaskStore {
             ) {
                 corrupt('snapshot record key does not match its task/run identity');
             }
+            this.assertSnapshotBundleSize(bundle);
             for (const manifest of snapshotRecordsOf(bundle)) {
                 if (!snapshots.some((existing) => sameSnapshot(existing, manifest))) {
                     snapshots.push(manifest);
@@ -1465,6 +1576,10 @@ export class AgentTaskStore {
                 left.generation - right.generation ||
                 left.run_id.localeCompare(right.run_id),
         );
+        const verifiedByRun = new Map<
+            string,
+            { events: AgentIncomingEvent[]; digests: string[] }
+        >();
         for (const run of sortedRuns) {
             const pairs = eventGroups.get(runKey(run.task_id, run.run_id)) ?? [];
             if (pairs.length === 0) {
@@ -1472,6 +1587,39 @@ export class AgentTaskStore {
             }
             const verified = await this.verifyEventChain(run.task_id, run.run_id, pairs);
             this.assertRunRecordMatches(run, verified);
+            verifiedByRun.set(runKey(run.task_id, run.run_id), verified);
+        }
+        for (const change of changes) {
+            const verified = verifiedByRun.get(
+                runKey(change.task_id, change.run_id),
+            );
+            if (verified === undefined) {
+                corrupt('change record belongs to a missing run record');
+            }
+            const event = verified.events.find((candidate) => {
+                const data = candidate.data as Record<string, unknown>;
+                return (
+                    candidate.type === 'changes.snapshot' &&
+                    data.scope === 'last_turn' &&
+                    data.head_digest === change.head_digest
+                );
+            });
+            if (event === undefined) {
+                corrupt('change record has no matching changes.snapshot event');
+            }
+            let changeFiles: string;
+            let eventFiles: string;
+            try {
+                changeFiles = canonicalJson(change.files);
+                eventFiles = canonicalJson(
+                    (event.data as Record<string, unknown>).files,
+                );
+            } catch {
+                corrupt('change files are not canonical JSON');
+            }
+            if (changeFiles !== eventFiles) {
+                corrupt('change files do not match the applied snapshot event');
+            }
         }
         const runMap = new Map(
             sortedRuns.map((run) => [runKey(run.task_id, run.run_id), run]),
@@ -1555,11 +1703,9 @@ export class AgentTaskStore {
         this.importInProgress = true;
         this.opened = false;
         this.lastReport = null;
-        if (this.importGate !== null) {
-            const gate = this.importGate;
-            this.importGate = null;
-            await gate;
-        }
+        let fenceAcquired = false;
+        let cleanupFailed = false;
+        let cleanupError: unknown = null;
         let written = false;
         let tasks: TaskRecord[] = [];
         let runs: RunRecord[] = [];
@@ -1567,6 +1713,14 @@ export class AgentTaskStore {
         let snapshots = new Map<string, SnapshotBundleRecord>();
         let changes: ChangeRecord[] = [];
         try {
+        await this.drainWrites();
+        await this.acquireImportFence(this.clock());
+        fenceAcquired = true;
+        if (this.importGate !== null) {
+            const gate = this.importGate;
+            this.importGate = null;
+            await gate;
+        }
         if (typeof text !== 'string' || byteLength(text) > MAX_EXPORT_BYTES) {
             throw new AgentStoreError('limit_exceeded', 'import exceeds max_export_bytes');
         }
@@ -1769,16 +1923,49 @@ export class AgentTaskStore {
         const transaction = db.transaction([...AGENT_DB_STORES], 'readwrite');
         try {
             for (const name of AGENT_DB_STORES) {
-                const count = await requestResult(
-                    transaction.objectStore(name).count(),
-                );
-                if (count > 0) {
+                const store = transaction.objectStore(name);
+                const count = await requestResult(store.count());
+                if (count === 0) continue;
+                if (name !== 'leases') {
                     throw new AgentStoreError(
                         'duplicate_event',
                         'import requires all nine agent stores to be empty',
                     );
                 }
+                const keys = await requestResult(store.getAllKeys());
+                if (
+                    keys.length !== 1 ||
+                    keys[0] !== IMPORT_FENCE_KEY
+                ) {
+                    throw new AgentStoreError(
+                        'duplicate_event',
+                        'import requires all nine agent stores to be empty',
+                    );
+                }
+                const fence = (await requestResult(
+                    store.get(IMPORT_FENCE_KEY),
+                )) as LeaseRecord | undefined;
+                if (
+                    fence === undefined ||
+                    fence.writer_id !== this.importFenceWriter
+                ) {
+                    throw new AgentStoreError(
+                        'stale_generation',
+                        'import fence ownership changed before commit',
+                    );
+                }
             }
+            await requestResult(
+                transaction.objectStore('leases').put(
+                    jsonClean({
+                        task_id: IMPORT_FENCE_KEY,
+                        writer_id: this.importFenceWriter,
+                        started_at_ms: this.clock(),
+                        heartbeat_at_ms: this.clock(),
+                    } satisfies LeaseRecord),
+                    IMPORT_FENCE_KEY,
+                ),
+            );
             for (const task of tasks) {
                 await requestResult(
                     transaction.objectStore('tasks').put(jsonClean(task), task.task_id),
@@ -1834,10 +2021,21 @@ export class AgentTaskStore {
                 'indexeddb',
             );
         }
+        if (fenceAcquired) {
+            await this.releaseImportFence();
+            fenceAcquired = false;
+        }
         this.store.restore(scratch.checkpoint());
         this.lastReport = scratchResult.report;
         this.importInProgress = false;
         this.opened = true;
+        if (this.closeRequested) {
+            this.closeRequested = false;
+            this.db?.close();
+            this.db = null;
+            this.opened = false;
+            this.lastReport = null;
+        }
         return {
             tasks: tasks.length,
             runs: runs.length,
@@ -1856,15 +2054,29 @@ export class AgentTaskStore {
                         snapshots,
                         changes,
                     );
-                } catch {
-                    // Imported bytes remain non-authoritative evidence.
+                } catch (cleanupFailure) {
+                    cleanupFailed = true;
+                    cleanupError = cleanupFailure;
                 }
             }
+            if (fenceAcquired && !cleanupFailed) {
+                try {
+                    await this.releaseImportFence();
+                } catch (releaseFailure) {
+                    cleanupFailed = true;
+                    cleanupError = releaseFailure;
+                }
+                fenceAcquired = false;
+            }
+            this.closeRequested = false;
             this.db?.close();
             this.db = null;
             this.importInProgress = false;
             this.opened = false;
             this.lastReport = null;
+            if (cleanupFailed) {
+                throw storageError(cleanupError);
+            }
             throw storageError(error);
         }
     }
@@ -1877,10 +2089,7 @@ export class AgentTaskStore {
         changes: ChangeRecord[],
     ): Promise<void> {
         const db = this.requireDb();
-        const transaction = db.transaction(
-            ['tasks', 'runs', 'events', 'snapshots', 'changes'],
-            'readwrite',
-        );
+        const transaction = db.transaction([...AGENT_DB_STORES], 'readwrite');
         try {
             for (const task of tasks) {
                 await requestResult(
@@ -1919,6 +2128,18 @@ export class AgentTaskStore {
                         change.head_digest,
                     ]),
                 );
+            }
+            for (const name of [
+                'artifacts',
+                'approvals',
+                'comments',
+                'leases',
+            ] as AgentDbStoreName[]) {
+                await requestResult(transaction.objectStore(name).clear());
+            }
+            if (this.faults.fail_import_cleanup) {
+                this.faults.fail_import_cleanup = false;
+                transaction.abort();
             }
             await transactionDone(transaction);
         } catch (error) {
@@ -1962,9 +2183,109 @@ export class AgentTaskStore {
         }
     }
 
+    private async checkImportFence(
+        leases: IDBObjectStore,
+        now: number,
+    ): Promise<void> {
+        const fence = (await requestResult(
+            leases.get(IMPORT_FENCE_KEY),
+        )) as LeaseRecord | undefined;
+        if (fence === undefined) return;
+        requireStoredLease(fence);
+        if (
+            fence.writer_id !== this.importFenceWriter &&
+            now - fence.heartbeat_at_ms <= LEASE_STALE_MS
+        ) {
+            throw new AgentStoreError(
+                'stale_generation',
+                'an import fence is held by another writer',
+            );
+        }
+    }
+
+    private async acquireImportFence(now: number): Promise<void> {
+        const db = this.requireDb();
+        const transaction = db.transaction('leases', 'readwrite');
+        try {
+            const leases = transaction.objectStore('leases');
+            const existing = (await requestResult(
+                leases.get(IMPORT_FENCE_KEY),
+            )) as LeaseRecord | undefined;
+            if (existing !== undefined) {
+                requireStoredLease(existing);
+                if (
+                    existing.writer_id !== this.importFenceWriter &&
+                    now - existing.heartbeat_at_ms <= LEASE_STALE_MS
+                ) {
+                    throw new AgentStoreError(
+                        'stale_generation',
+                        'an import fence is held by another writer',
+                    );
+                }
+            }
+            const record: LeaseRecord = {
+                task_id: IMPORT_FENCE_KEY,
+                writer_id: this.importFenceWriter,
+                started_at_ms:
+                    existing !== undefined &&
+                    existing.writer_id === this.importFenceWriter
+                        ? existing.started_at_ms
+                        : now,
+                heartbeat_at_ms: now,
+            };
+            await requestResult(leases.put(jsonClean(record), IMPORT_FENCE_KEY));
+            await transactionDone(transaction);
+        } catch (error) {
+            try {
+                transaction.abort();
+            } catch {
+                // The transaction may already be finished.
+            }
+            throw storageError(error);
+        }
+    }
+
+    private async releaseImportFence(): Promise<void> {
+        if (this.db === null) return;
+        const transaction = this.db.transaction('leases', 'readwrite');
+        try {
+            const leases = transaction.objectStore('leases');
+            const existing = (await requestResult(
+                leases.get(IMPORT_FENCE_KEY),
+            )) as LeaseRecord | undefined;
+            if (
+                existing !== undefined &&
+                existing.writer_id === this.importFenceWriter
+            ) {
+                await requestResult(leases.delete(IMPORT_FENCE_KEY));
+            }
+            await transactionDone(transaction);
+        } catch (error) {
+            try {
+                transaction.abort();
+            } catch {
+                // The transaction may already be finished.
+            }
+            throw storageError(error);
+        }
+    }
+
     private async restore(): Promise<OpenReport> {
         const db = await openAgentDatabase(this.factory);
         this.db = db;
+        const fence = await this.readOne<LeaseRecord>(
+            'leases',
+            IMPORT_FENCE_KEY,
+            db,
+        );
+        if (fence !== undefined) {
+            db.close();
+            this.db = null;
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an unfinished import fence blocks this database; reset before opening',
+            );
+        }
         db.onversionchange = () => {
             db.close();
             if (this.db === db) {
@@ -2237,6 +2558,7 @@ export class AgentTaskStore {
         bundle: SnapshotBundleRecord | null,
     ): Promise<void> {
         const verified = await this.verifyEventChain(run.task_id, run.run_id, pairs);
+        if (bundle !== null) this.assertSnapshotBundleSize(bundle);
         const anchors = bundle === null ? [] : snapshotRecordsOf(bundle);
         const matched = new Set<SnapshotRecord>();
         const verifyAnchor = (anchor: SnapshotRecord): void => {
@@ -2491,6 +2813,22 @@ export class AgentTaskStore {
         input: AppendEventStoreInput,
         now: number,
     ): Promise<void> {
+        if (this.importInProgress) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an import is in progress; append commit is unavailable',
+            );
+        }
+        this.beginWrite();
+        try {
+            if (this.appendGate !== null) {
+                const gate = this.appendGate;
+                this.appendGate = null;
+                const reached = this.appendGateReached;
+                this.appendGateReached = null;
+                reached?.();
+                await gate;
+            }
         const db = this.requireDb();
         const transaction = db.transaction(
             ['tasks', 'runs', 'events', 'snapshots', 'leases'],
@@ -2502,6 +2840,7 @@ export class AgentTaskStore {
             const events = transaction.objectStore('events');
             const snapshots = transaction.objectStore('snapshots');
             const leases = transaction.objectStore('leases');
+            await this.checkImportFence(leases, now);
 
             const lease = (await requestResult(leases.get(event.task_id))) as
                 | LeaseRecord
@@ -2685,6 +3024,9 @@ export class AgentTaskStore {
             }
             throw storageError(error);
         }
+        } finally {
+            this.endWrite();
+        }
     }
 
     private buildRunRecordFromState(
@@ -2795,6 +3137,7 @@ export class AgentTaskStore {
             ...jsonClean(stored),
             latest_run_id: this.store.getTaskLatestRunId(taskId),
         };
+        const marker = this.store.getTaskUnresolvedRunId(taskId);
         mutate(record);
         const checkpoint = this.store.captureTask(taskId);
         try {
@@ -2804,6 +3147,12 @@ export class AgentTaskStore {
             this.store.restoreTask(checkpoint);
             throw storageError(error);
         }
+        if (
+            marker !== null &&
+            this.store.getRunCursor(taskId, marker) === null
+        ) {
+            this.store.setTaskUnresolvedRunId(taskId, marker);
+        }
         return record;
     }
 
@@ -2812,8 +3161,20 @@ export class AgentTaskStore {
         value: unknown,
         key: IDBValidKey,
     ): Promise<void> {
-        const transaction = this.requireDb().transaction(storeName, 'readwrite');
+        if (this.importInProgress) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an import is in progress; task writes are unavailable',
+            );
+        }
+        this.beginWrite();
         try {
+        const transaction = this.requireDb().transaction([storeName, 'leases'], 'readwrite');
+        try {
+            await this.checkImportFence(
+                transaction.objectStore('leases'),
+                this.clock(),
+            );
             await requestResult(
                 transaction.objectStore(storeName).put(jsonClean(value), key),
             );
@@ -2829,6 +3190,9 @@ export class AgentTaskStore {
                 // The transaction may already be finished.
             }
             throw storageError(error);
+        }
+        } finally {
+            this.endWrite();
         }
     }
 

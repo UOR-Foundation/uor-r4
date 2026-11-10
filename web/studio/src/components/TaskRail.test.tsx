@@ -110,6 +110,30 @@ function setSearch(value: string): void {
 }
 
 describe('TaskRail groups', () => {
+    it('labels an unresolved latest run as Restoring and searches by that label', () => {
+        renderRail({
+            tasks: [
+                task({
+                    taskId: 'tsk_00000000000000a1',
+                    title: 'Resume task',
+                    createdAtMs: NOW,
+                    latestRunId: 'run_00000000000000a1',
+                    unresolvedRunId: 'run_00000000000000a1',
+                    state: 'idle',
+                }),
+            ],
+        });
+        const row = host.querySelector<HTMLElement>('[data-task-id="tsk_00000000000000a1"]')!;
+        expect(row.textContent).toContain('Restoring');
+        expect(row.textContent).not.toContain('Idle');
+        const input = host.querySelector<HTMLInputElement>('input[aria-label="Search tasks"]')!;
+        act(() => {
+            input.value = 'restoring';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        expect(host.querySelector('[data-task-id="tsk_00000000000000a1"]')).not.toBeNull();
+    });
+
     it('renders_today_last_seven_days_older_groups from task record timestamps', () => {
         const todayStart = startOfLocalDay(NOW);
         const sevenDaysStart = atLocalDay(-7, 0);

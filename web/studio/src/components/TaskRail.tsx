@@ -90,10 +90,15 @@ export function TaskRail({
     legacySessions,
     legacySessionsEmpty = false,
 }: TaskRailProps) {
-    const visible = filterTasks(tasks, query);
+    const displayTasks = tasks.map((task) =>
+        task.unresolvedRunId
+            ? { ...task, state: 'restoring' as TaskSummary['state'] }
+            : task,
+    );
+    const visible = filterTasks(displayTasks, query);
     const buckets = groupTasks(visible, nowMs);
     const activeCount = buckets.today.length + buckets.lastSevenDays.length + buckets.older.length;
-    const total = tasks.length;
+    const total = displayTasks.length;
     const empty = total === 0;
     const noMatches = !empty && visible.length === 0;
 

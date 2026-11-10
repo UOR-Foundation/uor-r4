@@ -334,6 +334,27 @@ describe('AgentClient durable task-store wiring', () => {
         }
     });
 
+    test('retry is refused for a task with an unloaded latest run', async () => {
+        const transport = new FixtureTransport();
+        const store = createAgentStore();
+        const { durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const task = await client.createTask({ title: 'retry unresolved' });
+        client.store.upsertTask({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            title: task.title,
+            createdAtMs: task.createdAtMs,
+            latestRunId: 'run_1111111111111111',
+        });
+        const before = transport.calls.filter((call) => call.method === 'retry').length;
+        await expect(
+            client.retry({ taskId: task.taskId, runId: 'run_1111111111111111' }),
+        ).rejects.toMatchObject({ code: 'out_of_order' });
+        expect(transport.calls.filter((call) => call.method === 'retry')).toHaveLength(before);
+    });
+
     test('direct resume rejection preserves storage', async () => {
         const transport = new FixtureTransport();
         const store = createAgentStore();

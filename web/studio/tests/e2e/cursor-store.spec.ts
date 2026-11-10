@@ -41,6 +41,7 @@ interface DbSnapshot {
     snapshotRecords: Array<Record<string, unknown>>;
     changeKeys: unknown[];
     changeRecords: Array<Record<string, unknown>>;
+    taskRecords: Array<Record<string, unknown>>;
     leaseRecords: Array<Record<string, unknown>>;
     byEventId: Record<string, unknown> | null;
     eventIndexNames: string[];
@@ -66,11 +67,12 @@ async function readDb(page: Page): Promise<DbSnapshot> {
             open.onerror = () => reject(open.error);
         });
         try {
-            const tx = db.transaction(['events', 'runs', 'snapshots', 'changes', 'leases'], 'readonly');
+            const tx = db.transaction(['events', 'runs', 'snapshots', 'changes', 'tasks', 'leases'], 'readonly');
             const events = tx.objectStore('events');
             const runs = tx.objectStore('runs');
             const snapshots = tx.objectStore('snapshots');
             const changes = tx.objectStore('changes');
+            const tasks = tx.objectStore('tasks');
             const leases = tx.objectStore('leases');
             const eventKeys = await request(events.getAllKeys());
             const eventRecords = await request(events.getAll());
@@ -83,6 +85,7 @@ async function readDb(page: Page): Promise<DbSnapshot> {
             const snapshotRecords = await request(snapshots.getAll());
             const changeKeys = await request(changes.getAllKeys());
             const changeRecords = await request(changes.getAll());
+            const taskRecords = await request(tasks.getAll());
             const leaseRecords = await request(leases.getAll());
             const byEventIndex = events.index('by_event_id');
             await done(tx);
@@ -97,6 +100,7 @@ async function readDb(page: Page): Promise<DbSnapshot> {
                 snapshotRecords,
                 changeKeys,
                 changeRecords,
+                taskRecords,
                 leaseRecords,
                 byEventId,
                 eventIndexNames: [...events.indexNames],
@@ -1084,6 +1088,209 @@ test.describe('browser agent task store', () => {
         });
     });
 
+    test('pre_gate_held_append_cannot_commit_after_import_or_be_deleted', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const heldTask = 'tsk_aaaaaaaaaaaaaaaa';
+        const heldRun = 'run_bbbbbbbbbbbbbbbb';
+        await call(page, 'beginHeldQueuedAppend', heldTask, heldRun);
+        await call(page, 'awaitAppendHeld');
+        await call(page, 'beginImport', exported);
+        expect((await call<RestoreView>(page, 'restoreState')).phase).toBe('loading');
+        await call(page, 'releaseHeldAppend');
+        const held = await call<Outcome>(page, 'finishHeldAppend');
+        expect(held.status).toBe('applied');
+        const imported = await call<Outcome>(page, 'whenImport');
+        expect(imported.ok).toBe(false);
+        expect(imported.code).toBe('duplicate_event');
+
+        const db = await readDb(page);
+        expect(db.eventRecords).toHaveLength(1);
+        expect(db.runRecords.some((run) => run.run_id === heldRun)).toBe(true);
+        expect(db.eventRecords[0]!.event_id).toContain(heldRun);
+    });
+
+    test('cross_tab_import_fence_blocks_a_foreign_append', async ({ page, context }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const pageTwo = await context.newPage();
+        await openStudio(pageTwo);
+        expect((await call<RestoreView>(pageTwo, 'open')).phase).toBe('ready');
+
+        await call(page, 'beginImport', exported);
+        expect((await call<RestoreView>(page, 'restoreState')).phase).toBe('loading');
+        const blocked = await call<Outcome>(
+            pageTwo,
+            'appendQueuedSafe',
+            'tsk_cccccccccccccccc',
+            'run_dddddddddddddddd',
+        );
+        expect(blocked.ok).toBe(false);
+        expect(blocked.code).toBe('stale_generation');
+        expect((await call<CursorView | null>(pageTwo, 'cursor'))).toBeNull();
+
+        const imported = await call<Outcome>(page, 'whenImport');
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        await pageTwo.close();
+    });
+
+    test('client_active_stale_and_null_summaries_reopen_from_event_derived_latest', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const stale = await call<Outcome>(
+            page,
+            'listActiveSummary',
+            created.taskId,
+            'run_eeeeeeeeeeeeeeee',
+            'running',
+        );
+        expect(stale.ok, JSON.stringify(stale)).toBe(true);
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            runId: created.runId,
+            sequence: 2,
+        });
+
+        const nullLatest = await call<Outcome>(
+            page,
+            'listActiveSummary',
+            created.taskId,
+            null,
+            'running',
+        );
+        expect(nullLatest.ok, JSON.stringify(nullLatest)).toBe(true);
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            runId: created.runId,
+            sequence: 2,
+        });
+    });
+
+    test('pin_archive_preserve_unresolved_latest_and_block_send', async ({ page }) => {
+        const listed = await call<Outcome>(page, 'listUnloadedActiveTask', 'running');
+        expect(listed.ok).toBe(true);
+        const summary = listed.record as { taskId: string; latestRunId: string };
+
+        expect((await call<Outcome>(page, 'pin', true)).ok).toBe(true);
+        let view = await call<TaskViewSummary>(page, 'taskView');
+        expect(view.unresolvedRunId).toBe(summary.latestRunId);
+        expect((await call<RestoreView>(page, 'restoreState')).canStartRun).toBe(false);
+        expect((await call<Outcome>(page, 'archive', true)).ok).toBe(true);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('incomplete');
+        expect(restored.canStartRun).toBe(false);
+        view = await call<TaskViewSummary>(page, 'taskView');
+        expect(view.unresolvedRunId).toBe(summary.latestRunId);
+        expect(view.runs).toHaveLength(0);
+    });
+
+    test('oversized_bundle_blocks_reopen', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'oversize_snapshot',
+            taskId: created.taskId,
+            runId: created.runId,
+            bytes: 9 * 1024 * 1024,
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('error');
+        expect(restored.error?.code).toBe('limit_exceeded');
+        expect(restored.canStartRun).toBe(false);
+    });
+
+    test('corrupt_anchor_blocks_append_commit_and_export', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'appendResume')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'corrupt_anchor',
+            taskId: created.taskId,
+            runId: created.runId,
+            index: 0,
+        });
+        const append = await call<Outcome>(page, 'appendResume');
+        expect(append.status).toBe('rejected');
+        expect(append.code).toBe('snapshot_corrupt');
+        await expect(call<string>(page, 'exportNdjson')).rejects.toThrow();
+    });
+
+    test('export_rejects_oversized_bundle_and_fabricated_change_files', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'oversize_snapshot',
+            taskId: created.taskId,
+            runId: created.runId,
+            bytes: 9 * 1024 * 1024,
+        });
+        await expect(call<string>(page, 'exportNdjson')).rejects.toThrow();
+
+        await call(page, 'reset');
+        const second = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'appendChanges')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'recordChanges')).ok).toBe(true);
+        await mutateDb(page, {
+            op: 'corrupt_change_files',
+            taskId: second.taskId,
+            runId: second.runId,
+            headDigest: 'turn:3:fixture',
+            files: [{ path: 'src/fabricated.ts', status: 'added' }],
+        });
+        await expect(call<string>(page, 'exportNdjson')).rejects.toThrow();
+    });
+
+    test('dispose_during_import_does_not_throw_or_leave_an_unhandled_rejection', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await call(page, 'beginImport', exported);
+        await call(page, 'disposeDuringImport');
+        await call(page, 'whenImport');
+        expect(created.taskId).toBeTruthy();
+    });
+
+    test('import_cleanup_failure_is_surfaced_and_blocks_ready', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await call(page, 'armFailImportPublish');
+        await call(page, 'armFailImportCleanup');
+        await call(page, 'beginImport', exported);
+        const failed = await call<Outcome>(page, 'whenImport');
+        expect(failed.ok).toBe(false);
+        expect(failed.code).toBe('limit_exceeded');
+        expect(failed.storage).toBe('indexeddb');
+        expect((await call<RestoreView>(page, 'restoreState')).phase).toBe('error');
+        const importedEvidence = await readDb(page);
+        expect(importedEvidence.eventRecords.length).toBeGreaterThan(0);
+        expect(importedEvidence.taskRecords).toHaveLength(1);
+        expect(importedEvidence.leaseRecords).toHaveLength(1);
+
+        const reopened = await call<RestoreView>(page, 'open');
+        expect(reopened.phase).toBe('error');
+        expect(reopened.error?.code).toBe('runtime_unavailable');
+        expect(created.taskId).toBeTruthy();
+    });
+
     test('import_publish_failure_leaves_no_ready_or_partial_state', async ({ page }) => {
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         const exported = await call<string>(page, 'exportNdjson');
@@ -1155,6 +1362,7 @@ test.describe('browser agent task store', () => {
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         expect((await call<Outcome>(page, 'appendChanges')).status).toBe('applied');
         expect((await call<Outcome>(page, 'recordChanges')).ok).toBe(true);
+        const exported = await call<string>(page, 'exportNdjson');
         await mutateDb(page, {
             op: 'corrupt_change_files',
             taskId: created.taskId,
@@ -1166,7 +1374,6 @@ test.describe('browser agent task store', () => {
         expect(read.ok).toBe(false);
         expect(read.code).toBe('snapshot_corrupt');
 
-        const exported = await call<string>(page, 'exportNdjson');
         const tampered = exported
             .trim()
             .split('\n')

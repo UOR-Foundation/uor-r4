@@ -116,6 +116,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             archived: task.archived,
             pinned: task.pinnedLocal,
             latestRunId: task.latestRunId,
+            unresolvedRunId: task.unresolvedRunId,
             state: task.state,
         }));
     }, [agentClient, taskRevision]);

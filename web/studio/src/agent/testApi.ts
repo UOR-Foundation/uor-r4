@@ -22,6 +22,7 @@ interface StoreFaults {
     abort_next_append: boolean;
     abort_next_task_write: boolean;
     fail_import_publish: boolean;
+    fail_import_cleanup: boolean;
 }
 
 interface FixtureSummary {
@@ -107,6 +108,12 @@ export interface StudioTestApi {
     createQueuedOnlyTask(): Promise<FixtureSummary>;
     targetFixture(taskId: string, runId: string, generation?: number): void;
     listUnloadedActiveTask(mode: 'running' | 'cancelling'): Promise<Outcome>;
+    listActiveSummary(
+        taskId: string,
+        latestRunId: string | null,
+        mode: 'running' | 'cancelling',
+    ): Promise<Outcome>;
+    appendQueuedSafe(taskId: string, runId: string): Promise<Outcome>;
     createTaskAt(createdAtMs: number): Promise<Outcome>;
     resumeViaClient(): Promise<Outcome>;
     recordChangesWithFiles(files: Array<Record<string, unknown>>): Promise<Outcome>;
@@ -139,6 +146,12 @@ export interface StudioTestApi {
     armAbortNextAppend(): void;
     armAbortNextTaskWrite(): void;
     armFailImportPublish(): void;
+    armFailImportCleanup(): void;
+    disposeDuringImport(): void;
+    beginHeldQueuedAppend(taskId: string, runId: string): Promise<void>;
+    awaitAppendHeld(): Promise<void>;
+    releaseHeldAppend(): void;
+    finishHeldAppend(): Promise<Outcome>;
     beginImport(text: string): void;
     whenImport(): Promise<Outcome>;
     appendAssistantSafe(
@@ -173,6 +186,9 @@ interface TestState {
     } | null;
     importPromise: Promise<Outcome> | null;
     importGateRelease: (() => void) | null;
+    appendGateRelease: (() => void) | null;
+    appendGateReached: Promise<void> | null;
+    heldAppend: Promise<Outcome> | null;
 }
 
 let state: TestState = freshState();
@@ -193,10 +209,14 @@ function freshState(): TestState {
             abort_next_append: false,
             abort_next_task_write: false,
             fail_import_publish: false,
+            fail_import_cleanup: false,
         },
         scale: null,
         importPromise: null,
         importGateRelease: null,
+        appendGateRelease: null,
+        appendGateReached: null,
+        heldAppend: null,
     };
 }
 
@@ -301,7 +321,14 @@ function errorMessage(error: unknown): string {
 }
 
 function failure(error: unknown): Outcome {
-    return { ok: false, code: errorCode(error), message: errorMessage(error) };
+    return {
+        ok: false,
+        code: errorCode(error),
+        message: errorMessage(error),
+        ...(error instanceof AgentStoreError && error.storage !== null
+            ? { storage: error.storage }
+            : {}),
+    };
 }
 
 function appendOutcome(result: {
@@ -335,8 +362,15 @@ function restoreState(): RestoreView {
             : null;
     const incompleteForTask =
         task !== null && state.incomplete.some((entry) => entry.taskId === task.taskId);
+    const latestLoaded =
+        task !== null &&
+        task.latestRunId !== null &&
+        run !== null &&
+        run.runId === task.latestRunId;
     const unresolvedRun =
-        task !== null && task.unresolvedRunId !== null;
+        task !== null &&
+        (task.unresolvedRunId !== null ||
+            (task.latestRunId !== null && !latestLoaded));
     const canStartRun =
         state.phase === 'ready' &&
         !incompleteForTask &&
@@ -656,7 +690,78 @@ async function listUnloadedActiveTask(
     });
     await client.listTasks({ includeArchived: true });
     requireClient().store.selectTask(taskId);
+    state.fixture = {
+        taskId,
+        projectId: summary.projectId,
+        runId,
+        generation: 1,
+        eventIds: [],
+        digests: [],
+    };
     return { ok: true, record: summary };
+}
+
+async function listActiveSummary(
+    taskId: string,
+    latestRunId: string | null,
+    mode: 'running' | 'cancelling',
+): Promise<Outcome> {
+    await ensureReady();
+    const task = requireClient()
+        .store.snapshot()
+        .tasks.find((candidate) => candidate.taskId === taskId);
+    if (task === undefined) {
+        return { ok: false, code: 'task_not_found', message: 'task is not loaded' };
+    }
+    const summary: TaskSummary = {
+        taskId: task.taskId,
+        projectId: task.projectId,
+        title: task.title,
+        repo: task.repo,
+        branch: task.branch,
+        createdAtMs: task.createdAtMs,
+        archived: task.archived,
+        pinned: task.pinnedLocal,
+        latestRunId,
+        unresolvedRunId: null,
+        state: mode,
+    };
+    const client = new AgentClient({
+        transport: new SummaryTransport(summary),
+        store: requireClient().store,
+        taskStore: requireTaskStore(),
+    });
+    try {
+        await client.listTasks({ includeArchived: true });
+        return { ok: true, record: summary };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function appendQueuedSafe(taskId: string, runId: string): Promise<Outcome> {
+    try {
+        const fixture: FixtureSummary = {
+            taskId,
+            projectId: 'prj_0000000000000001',
+            runId,
+            generation: 1,
+            eventIds: [],
+            digests: [],
+        };
+        const event = createRunQueuedEvent({
+            projectId: fixture.projectId,
+            taskId,
+            runId,
+            generation: 1,
+            recordedAtMs: state.nowMs,
+            queuedAtMs: state.nowMs,
+        });
+        const result = await requireTaskStore().appendEvent({ event });
+        return appendOutcome(result);
+    } catch (error) {
+        return failure(error);
+    }
 }
 
 async function appendAssistantSafe(
@@ -992,6 +1097,8 @@ export function installStudioTestApi(): void {
             requireClient().store.selectTask(taskId);
         },
         listUnloadedActiveTask,
+        listActiveSummary,
+        appendQueuedSafe,
         createTaskAt,
         resumeViaClient,
         recordChangesWithFiles,
@@ -1193,7 +1300,76 @@ export function installStudioTestApi(): void {
         armFailImportPublish() {
             state.faults.fail_import_publish = true;
         },
+        armFailImportCleanup() {
+            state.faults.fail_import_cleanup = true;
+        },
+        disposeDuringImport() {
+            state.client?.dispose();
+        },
+        async beginHeldQueuedAppend(taskId: string, runId: string) {
+            await ensureReady();
+            const gate = new Promise<void>((resolve) => {
+                state.appendGateRelease = resolve;
+            });
+            state.appendGateReached = requireTaskStore().setAppendGate(gate);
+            const fixture: FixtureSummary = {
+                taskId,
+                projectId: 'prj_0000000000000001',
+                runId,
+                generation: 1,
+                eventIds: [],
+                digests: [],
+            };
+            state.fixture = fixture;
+            const queued = createRunQueuedEvent({
+                projectId: fixture.projectId,
+                taskId,
+                runId,
+                generation: 1,
+                recordedAtMs: state.nowMs,
+                queuedAtMs: state.nowMs,
+            });
+            state.heldAppend = (async () => {
+                try {
+                    const result = await requireTaskStore().appendEvent({
+                        event: queued,
+                    });
+                    if (result.status === 'applied') {
+                        fixture.eventIds.push(queued.event_id);
+                        if (result.digest !== null) fixture.digests.push(result.digest);
+                    }
+                    return appendOutcome(result);
+                } catch (error) {
+                    return failure(error);
+                }
+            })();
+        },
+        async awaitAppendHeld() {
+            if (state.appendGateReached !== null) {
+                await state.appendGateReached;
+            }
+        },
+        releaseHeldAppend() {
+            const release = state.appendGateRelease;
+            state.appendGateRelease = null;
+            release?.();
+        },
+        async finishHeldAppend() {
+            if (state.heldAppend === null) {
+                return {
+                    ok: false,
+                    code: 'invalid_arguments',
+                    message: 'no held append is running',
+                };
+            }
+            const result = await state.heldAppend;
+            state.heldAppend = null;
+            state.appendGateReached = null;
+            return result;
+        },
         beginImport(text: string) {
+            state.phase = 'loading';
+            state.error = null;
             const gate = new Promise<void>((resolve) => {
                 state.importGateRelease = resolve;
             });

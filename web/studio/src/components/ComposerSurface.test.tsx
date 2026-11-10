@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
 import type { GenerationAdapter } from '../adapters/generation.js';
 import type { Attachment, SessionApi, StudioSettings, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
-import { AgentClient } from '../agent/client.js';
+import { AgentClient, type TaskSummary } from '../agent/client.js';
 import { FixtureTransport } from '../agent/fixtureTransport.js';
 import type { RunView, TaskView } from '../state/agent.js';
 import { AgentComposer } from './AgentComposer.js';
@@ -885,6 +885,16 @@ describe('asynchronous send receipts and draft preservation', () => {
     });
 });
 
+class UnloadedSummaryTransport extends FixtureTransport {
+    constructor(private readonly summaryTask: TaskSummary) {
+        super();
+    }
+
+    override async listTasks(): Promise<TaskSummary[]> {
+        return [this.summaryTask];
+    }
+}
+
 describe('task runtime send identity', () => {
     function fixtureRuntime() {
         const transport = new FixtureTransport();
@@ -987,6 +997,32 @@ describe('task runtime send identity', () => {
         await settleAsync();
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
         expect(promptElement().value).toBe('do not start');
+    });
+
+    it('blocks the real Send and Enter paths after listTasks reports an unloaded run', async () => {
+        const summary: TaskSummary = {
+            taskId: 'tsk_9999999999999999',
+            projectId: 'prj_0000000000000001',
+            title: 'Unloaded list task',
+            repo: null,
+            branch: null,
+            createdAtMs: 1,
+            archived: false,
+            pinned: false,
+            latestRunId: 'run_9999999999999999',
+            state: 'running',
+        };
+        const transport = new UnloadedSummaryTransport(summary);
+        const client = new AgentClient({ transport });
+        await client.listTasks({ includeArchived: true });
+        await mountStudio(client);
+
+        expect(button('Send').disabled).toBe(true);
+        typePrompt('do not start from list');
+        pressKey(promptElement(), 'Enter');
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(0);
+        expect(promptElement().value).toBe('do not start from list');
     });
 
     it('blocks Enter during a cancelling run without starting another run', async () => {

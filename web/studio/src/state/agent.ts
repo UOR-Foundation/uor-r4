@@ -1311,6 +1311,10 @@ export class AgentStore {
         return this.tasks.has(taskId);
     }
 
+    getTaskUnresolvedRunId(taskId: string): string | null {
+        return this.tasks.get(taskId)?.unresolvedRunId ?? null;
+    }
+
     setTaskUnresolvedRunId(taskId: string, runId: string | null): void {
         const task = this.tasks.get(taskId);
         if (task !== undefined) task.unresolvedRunId = runId;

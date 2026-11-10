@@ -20,14 +20,6 @@ export type { AgentIncomingEvent } from '../state/agent.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
-const ACTIVE_TASK_STATES: ReadonlySet<string> = new Set([
-    'queued',
-    'running',
-    'waiting_for_approval',
-    'waiting_for_background',
-    'cancelling',
-]);
-
 export class AgentClientError extends Error {
     readonly code: AgentErrorCode;
     readonly retryable: boolean;
@@ -67,6 +59,7 @@ export interface TaskSummary {
         run_id: string;
         tool_call_id: string;
     } | null;
+    unresolvedRunId?: string | null;
     state:
         | 'idle'
         | 'queued'
@@ -74,7 +67,8 @@ export interface TaskSummary {
         | 'waiting_for_approval'
         | 'waiting_for_background'
         | 'cancelling'
-        | 'archived';
+        | 'archived'
+        | 'restoring';
 }
 
 export interface CreateTaskInput {
@@ -433,6 +427,7 @@ export class AgentClient {
                 ...task,
                 state: unresolved === null ? view.state : task.state,
                 latestRunId: unresolved ?? view.latestRunId,
+                unresolvedRunId: unresolved,
                 archived: view.archived,
                 pinned: view.pinnedLocal,
             };
@@ -498,6 +493,7 @@ export class AgentClient {
 
     async retry(input: RetryRunInput): Promise<RunSummary> {
         this.requireReady();
+        this.requireResolvedTask(input.taskId);
         return this.requireTransport().retry(input);
     }
 
@@ -822,20 +818,15 @@ export class AgentClient {
 
     private persistedTaskRecord(task: TaskSummary): AgentTaskRecord {
         const record = this.toTaskRecord(task);
+        const existing = this.store
+            .snapshot()
+            .tasks.find((candidate) => candidate.taskId === task.taskId);
         if (
-            task.latestRunId !== null &&
-            !ACTIVE_TASK_STATES.has(task.state)
+            existing !== undefined &&
+            existing.runs.length > 0 &&
+            existing.latestRunId !== null
         ) {
-            const existing = this.store
-                .snapshot()
-                .tasks.find((candidate) => candidate.taskId === task.taskId);
-            if (
-                existing !== undefined &&
-                existing.runs.length > 0 &&
-                existing.latestRunId !== null
-            ) {
-                record.latestRunId = existing.latestRunId;
-            }
+            record.latestRunId = existing.latestRunId;
         }
         return record;
     }
