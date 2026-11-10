@@ -100,6 +100,29 @@ test('typed_mount_closes_existing_legacy_palette', async ({ page }) => {
     await expect(page.locator('#commandPalette')).toBeHidden();
 });
 
+test('late_legacy_ui_publication_resets_palette_state', async ({ page }) => {
+    await openTyped(page);
+    const state = await page.evaluate(async () => {
+        const ui = (window as unknown as {
+            __studioUi: { openPalette(): void; closePalette(restoreFocus?: boolean): void };
+        }).__studioUi;
+        const palette = document.getElementById('commandPalette') as HTMLElement;
+        ui.openPalette();
+        const visibleBeforeDispatch = !palette.hidden;
+        window.dispatchEvent(new CustomEvent('uor-studio-v2-ready'));
+        const closedByReadiness = palette.hidden;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        ui.openPalette();
+        const paletteOpenWasReset = !palette.hidden;
+        ui.closePalette(false);
+        return { visibleBeforeDispatch, closedByReadiness, paletteOpenWasReset };
+    });
+    expect(state.visibleBeforeDispatch).toBe(true);
+    expect(state.closedByReadiness).toBe(true);
+    expect(state.paletteOpenWasReset).toBe(true);
+    await expect(page.locator('#commandPalette')).toBeHidden();
+});
+
 test('typed_mount_clears_palette_hashes', async ({ page }) => {
     for (const hash of ['#command-palette', '#palette']) {
         await page.goto(`/?typed=1${hash}`);

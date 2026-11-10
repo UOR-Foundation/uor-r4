@@ -51,18 +51,18 @@ export function installLegacyShortcutGuard(root: HTMLElement): LegacyShortcutGua
         closeLegacyPalette(view);
     };
     const closeOnPaletteHash = () => { if (clearPaletteHash(view)) closeLegacyPalette(view); };
-    const closeOnLegacyReady = () => closeLegacyPalette(view);
+    const closeOnLegacyPublished = () => closeLegacyPalette(view);
 
     view.addEventListener('keydown', blockPaletteShortcut, true);
     view.addEventListener('hashchange', closeOnPaletteHash);
-    doc.addEventListener('uor-studio-ready', closeOnLegacyReady);
+    view.addEventListener('uor-studio-v2-ready', closeOnLegacyPublished);
 
     return {
         dispose() {
             observer?.disconnect();
             view.removeEventListener('keydown', blockPaletteShortcut, true);
             view.removeEventListener('hashchange', closeOnPaletteHash);
-            doc.removeEventListener('uor-studio-ready', closeOnLegacyReady);
+            view.removeEventListener('uor-studio-v2-ready', closeOnLegacyPublished);
         },
     };
 }
