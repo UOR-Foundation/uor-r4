@@ -144,6 +144,11 @@ export interface TaskView {
     state: TaskState;
     latestRunId: string | null;
     unresolvedRunId: string | null;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
     runs: RunView[];
 }
 
@@ -261,6 +266,11 @@ interface InternalTask {
     latestRunId: string | null;
     unresolvedRunId: string | null;
     maxGeneration: number;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
 }
 
 function runKey(taskId: string, runId: string): string {
@@ -403,6 +413,7 @@ function captureTaskState(
         latestRunId: task.latestRunId,
         unresolvedRunId: task.unresolvedRunId,
         maxGeneration: task.maxGeneration,
+        hold: task.hold === null ? null : { ...task.hold },
     };
     journal.push(() => {
         task.title = state.title;
@@ -413,6 +424,7 @@ function captureTaskState(
         task.latestRunId = state.latestRunId;
         task.unresolvedRunId = state.unresolvedRunId;
         task.maxGeneration = state.maxGeneration;
+        task.hold = state.hold;
     });
 }
 
@@ -1140,7 +1152,15 @@ function taskStateFor(
         return 'archived';
     }
     if (latestRun === null) {
-        return unresolvedRunId === null ? 'idle' : 'restoring';
+        if (unresolvedRunId !== null) return 'restoring';
+        return task.hold === null ? 'idle' : 'waiting_for_background';
+    }
+    if (
+        task.hold !== null &&
+        task.hold.run_id === latestRun.runId &&
+        isTerminalState(latestRun.state)
+    ) {
+        return 'waiting_for_background';
     }
     switch (latestRun.state) {
         case 'queued':
@@ -1571,6 +1591,7 @@ export class AgentStore {
                 latestRunId: null,
                 unresolvedRunId: null,
                 maxGeneration: 0,
+                hold: null,
             };
             this.tasks.set(taskId, task);
             this.taskOrder.push(taskId);
@@ -1726,6 +1747,7 @@ export class AgentStore {
                 state: taskStateFor(task, latestRun, unresolvedRunId),
                 latestRunId: task.latestRunId,
                 unresolvedRunId,
+                hold: task.hold === null ? null : { ...task.hold },
                 runs: taskRuns,
             };
         });
@@ -1778,6 +1800,7 @@ export class AgentStore {
                         ? null
                         : record.latestRunId,
                 maxGeneration: 0,
+                hold: record.hold ?? null,
             };
             this.tasks.set(record.taskId, task);
             this.taskOrder.push(record.taskId);
@@ -1793,6 +1816,9 @@ export class AgentStore {
             task.branch = record.branch ?? null;
             task.archived = record.archived ?? task.archived;
             task.pinnedLocal = record.pinnedLocal ?? task.pinnedLocal;
+            if (record.hold !== undefined) {
+                task.hold = record.hold;
+            }
             if (record.latestRunId === null) {
                 if (
                     task.latestRunId !== null &&

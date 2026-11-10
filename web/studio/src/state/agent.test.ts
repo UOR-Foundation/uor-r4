@@ -181,6 +181,80 @@ describe('AgentStore reducer', () => {
         expect(store.snapshot().tasks[0].state).toBe('idle');
     });
 
+    test('waiting_for_background_hold_survives_the_terminal_run_and_clears', () => {
+        const store = createAgentStore();
+        store.apply(queued(0));
+        store.apply(started(1));
+        store.apply(
+            makeEvent(2, 'run.failed', {
+                code: 'stop_unacknowledged',
+                message: 'acknowledgement timed out',
+                retryable: false,
+                in_flight_tool_id: 'tool_hold',
+                stop_outcome: 'ack_timeout',
+            }),
+        );
+        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+
+        const baseRecord = {
+            taskId: TASK_ID,
+            projectId: PROJECT_ID,
+            title: 'Held task',
+            createdAtMs: 1,
+            archived: false,
+            pinnedLocal: false,
+            latestRunId: RUN_ID,
+        };
+        store.upsertTask({
+            ...baseRecord,
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: RUN_ID,
+                tool_call_id: 'tool_hold',
+            },
+        });
+        const held = store.snapshot().tasks[0]!;
+        expect(held.state).toBe('waiting_for_background');
+        expect(held.hold).toEqual({
+            reason: 'waiting_for_background',
+            run_id: RUN_ID,
+            tool_call_id: 'tool_hold',
+        });
+        expect(store.snapshot().runs[0]!.state).toBe('failed');
+
+        store.upsertTask({ ...baseRecord, hold: null });
+        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+        expect(store.snapshot().tasks[0]!.hold).toBeNull();
+    });
+
+    test('hold_for_a_previous_run_does_not_override_the_latest_run', () => {
+        const store = createAgentStore();
+        store.apply(queued(0));
+        store.apply(started(1));
+        store.apply(
+            makeEvent(2, 'run.finished', {
+                status: 'finished',
+                finished_at_ms: 2,
+                duration_ms: 1,
+            }),
+        );
+        store.upsertTask({
+            taskId: TASK_ID,
+            projectId: PROJECT_ID,
+            title: 'Old hold',
+            createdAtMs: 1,
+            archived: false,
+            pinnedLocal: false,
+            latestRunId: RUN_ID,
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: 'run_1111111111111111',
+                tool_call_id: 'tool_old',
+            },
+        });
+        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+    });
+
     test('reducer_ignores_duplicate_event', async () => {
         const store = createAgentStore();
         store.apply(queued(0));

@@ -15,6 +15,7 @@ import {
 } from '../state/agent.js';
 import { AgentStoreError } from './storeTypes.js';
 import type { AgentTaskStore } from './store.js';
+import type { AgentRuntime } from './runtime.js';
 
 export type { AgentIncomingEvent } from '../state/agent.js';
 
@@ -336,6 +337,7 @@ class BufferedAgentEventStream implements AgentEventStream {
 
 export interface AgentClientOptions {
     transport?: AgentTransport | null;
+    runtime?: AgentRuntime | null;
     store?: AgentStore;
     taskStore?: AgentTaskStore | null;
 }
@@ -345,6 +347,7 @@ export class AgentClient {
 
     private readonly transport: AgentTransport | null;
     private readonly taskStore: AgentTaskStore | null;
+    private readonly runtime: AgentRuntime | null;
     private readonly streams = new Set<BufferedAgentEventStream>();
     private readonly localFiles = new Map<string, LocalAgentFile>();
     private readonly localArtifactIds = new Map<string, string>();
@@ -353,6 +356,36 @@ export class AgentClient {
     private persistenceError: AgentClientError | null = null;
 
     constructor(options: AgentClientOptions = {}) {
+        if (options.runtime != null && options.transport != null) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'inject AgentRuntime or AgentTransport, not both send paths',
+            );
+        }
+        if (
+            options.runtime != null &&
+            (options.store !== undefined || options.taskStore !== undefined)
+        ) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'an AgentRuntime owns its store and task adapter; do not inject a second authority',
+            );
+        }
+        this.runtime = options.runtime ?? null;
+        if (this.runtime !== null) {
+            this.store = this.runtime.store;
+            this.transport = this.runtime as unknown as AgentTransport;
+            this.taskStore = null;
+            this.unsubscribeTransport = this.runtime.subscribe(
+                (event, digest) => {
+                    const result = this.store.apply(event, digest);
+                    if (result.status === 'applied') {
+                        this.publish(event);
+                    }
+                },
+            );
+            return;
+        }
         this.transport = options.transport ?? null;
         this.store = options.store ?? createAgentStore();
         this.taskStore = options.taskStore ?? null;
@@ -393,12 +426,20 @@ export class AgentClient {
     }
 
     get lastPersistenceError(): AgentClientError | null {
-        return this.persistenceError;
+        return this.persistenceError ?? this.runtime?.lastPersistenceError ?? null;
     }
 
     // Replays the durable log into the same AgentStore the UI reads. Callers
     // must await this before any persistence-backed operation.
     async open(): Promise<void> {
+        if (this.runtime !== null) {
+            try {
+                await this.runtime.open();
+            } catch (error) {
+                throw this.toClientError(error);
+            }
+            return;
+        }
         if (this.taskStore === null) return;
         try {
             await this.taskStore.open();
@@ -525,6 +566,10 @@ export class AgentClient {
 
     async resumeTask(input: ResumeTaskInput): Promise<TaskSnapshot> {
         this.requireReady();
+        if (this.runtime !== null) {
+            const result = await this.runtime.resumeTask(input);
+            return result.snapshot;
+        }
         const transport = this.requireTransport();
         const result = await transport.resumeTask(input);
         const verification = this.store.verifySnapshot(result.snapshot);
@@ -561,6 +606,9 @@ export class AgentClient {
 
     async ingestWireEvent(text: string): Promise<AgentAppendResult> {
         this.requireReady();
+        if (this.runtime !== null) {
+            return this.runtime.ingestWireEvent(text);
+        }
         const event = parseAgentEventWire(text);
         return this.appendThroughStore(event);
     }
@@ -680,6 +728,10 @@ export class AgentClient {
             stream.close();
         }
         this.unsubscribeTransport?.();
+        if (this.runtime !== null) {
+            void this.runtime.dispose();
+            return;
+        }
         this.taskStore?.close();
     }
 
@@ -696,6 +748,15 @@ export class AgentClient {
     }
 
     private requireReady(): AgentTaskStore | null {
+        if (this.runtime !== null) {
+            if (!this.runtime.isOpen) {
+                throw new AgentClientError(
+                    'runtime_unavailable',
+                    'browser runtime is not open; await AgentClient.open() first',
+                );
+            }
+            return null;
+        }
         if (this.taskStore === null) return null;
         if (!this.taskStore.isOpen) {
             throw new AgentClientError(

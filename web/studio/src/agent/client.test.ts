@@ -5,6 +5,7 @@ import {
     type ListTasksInput,
     type TaskSummary,
 } from './client.js';
+import type { AgentRuntime } from './runtime.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { createRunQueuedEvent } from './fixtures.js';
 import { canonicalJson, digestEvent } from './generated/agentCanonical.js';
@@ -139,6 +140,47 @@ class HoldTransport extends FixtureTransport {
                     hold: this.hold,
                 }) as unknown as TaskSummary,
         );
+    }
+}
+
+class StubRuntime {
+    readonly store = createAgentStore();
+    isOpen = false;
+    opened = 0;
+    disposed = 0;
+    readonly startRunInputs: Array<{ taskId: string; prompt: string }> = [];
+
+    async open(): Promise<void> {
+        this.isOpen = true;
+        this.opened += 1;
+    }
+
+    async startRun(input: {
+        taskId: string;
+        prompt: string;
+    }): Promise<{
+        taskId: string;
+        runId: string;
+        generation: number;
+        state: 'running';
+        retryOfRunId: null;
+    }> {
+        this.startRunInputs.push(input);
+        return {
+            taskId: input.taskId,
+            runId: 'run_0000000000000001',
+            generation: 1,
+            state: 'running',
+            retryOfRunId: null,
+        };
+    }
+
+    subscribe(): () => void {
+        return () => {};
+    }
+
+    dispose(): void {
+        this.disposed += 1;
     }
 }
 
@@ -396,6 +438,44 @@ describe('AgentClient durable task-store wiring', () => {
             .filter((record) => record.task_id === task.taskId)
             .at(-1);
         expect(cleared?.hold).toBeUndefined();
+    });
+
+    test('rejects ambiguous runtime and transport injection', () => {
+        const runtime = new StubRuntime();
+        expect(
+            () =>
+                new AgentClient({
+                    runtime: runtime as unknown as AgentRuntime,
+                    transport: new FixtureTransport(),
+                }),
+        ).toThrowError(/invalid_arguments/);
+        expect(
+            () =>
+                new AgentClient({
+                    runtime: runtime as unknown as AgentRuntime,
+                    store: createAgentStore(),
+                }),
+        ).toThrowError(/invalid_arguments/);
+    });
+
+    test('delegates open, start, and dispose to the injected runtime', async () => {
+        const runtime = new StubRuntime();
+        const client = new AgentClient({
+            runtime: runtime as unknown as AgentRuntime,
+        });
+        expect(client.store).toBe(runtime.store);
+        await client.open();
+        expect(runtime.opened).toBe(1);
+        const summary = await client.startRun({
+            taskId: 'tsk_0000000000000001',
+            prompt: 'runtime delegated',
+        });
+        expect(runtime.startRunInputs).toEqual([
+            { taskId: 'tsk_0000000000000001', prompt: 'runtime delegated' },
+        ]);
+        expect(summary.runId).toBe('run_0000000000000001');
+        client.dispose();
+        expect(runtime.disposed).toBe(1);
     });
 
     test('direct ingest rejection preserves storage and a healthy event clears the error', async () => {

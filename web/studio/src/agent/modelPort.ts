@@ -1,0 +1,94 @@
+export type ModelFinishReason = 'stop' | 'length' | 'tool' | 'cancelled' | 'error';
+
+export interface ModelHistoryMessage {
+    role: 'user' | 'assistant';
+    text: string;
+}
+
+export interface ModelRequest {
+    taskId: string;
+    runId: string;
+    generation: number;
+    mode: 'plan' | 'agent';
+    prompt: string;
+    history: readonly ModelHistoryMessage[];
+}
+
+export type ModelStreamEvent =
+    | { type: 'text-delta'; text: string }
+    | {
+          type: 'tool-call';
+          toolCallId: string;
+          tool: string;
+          arguments: unknown;
+      }
+    | {
+          type: 'usage';
+          inputTokens: number;
+          outputTokens: number;
+          modelCalls: number;
+      }
+    | { type: 'finished'; reason: ModelFinishReason }
+    | {
+          type: 'failed';
+          code: string;
+          message: string;
+          retryable: boolean;
+      };
+
+export interface ModelPort {
+    readonly id: string;
+    readonly kind: string;
+    readonly synthetic: boolean;
+    open(request: ModelRequest): AsyncIterable<ModelStreamEvent>;
+}
+
+export const REPLAY_MODEL_ID = 'synthetic-replay';
+export const REPLAY_MODEL_KIND = 'synthetic-replay';
+export const REPLAY_MODEL_LABEL =
+    'Synthetic deterministic replay fixture; not an R4 model or a task brain.';
+
+export interface ReplayModelPortOptions {
+    chunks?: readonly string[];
+    usage?: {
+        inputTokens: number;
+        outputTokens: number;
+        modelCalls: number;
+    };
+}
+
+// Labelled synthetic port. It deterministically produces text, usage and a
+// finished event. It does not call R4, a provider or a host process.
+export class ReplayModelPort implements ModelPort {
+    readonly id = REPLAY_MODEL_ID;
+    readonly kind = REPLAY_MODEL_KIND;
+    readonly synthetic = true;
+    readonly label = REPLAY_MODEL_LABEL;
+
+    private readonly chunks: readonly string[];
+    private readonly usage: {
+        inputTokens: number;
+        outputTokens: number;
+        modelCalls: number;
+    } | null;
+
+    constructor(options: ReplayModelPortOptions = {}) {
+        this.chunks = options.chunks ?? ['Synthetic replay acknowledges: '];
+        this.usage = options.usage ?? null;
+    }
+
+    async *open(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+        const text = `${this.chunks.join('')}${request.prompt}`;
+        yield { type: 'text-delta', text };
+        const usage =
+            this.usage === null
+                ? {
+                      inputTokens: request.prompt.length,
+                      outputTokens: text.length,
+                      modelCalls: 1,
+                  }
+                : this.usage;
+        yield { type: 'usage', ...usage };
+        yield { type: 'finished', reason: 'stop' };
+    }
+}
