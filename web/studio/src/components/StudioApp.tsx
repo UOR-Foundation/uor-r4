@@ -170,7 +170,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         onPalette={() => setPaletteOpen(true)} onSettings={() => setSettingsOpen(true)} onInspector={() => setInspectorOpen((value) => !value)} inspectorOpen={inspectorOpen}
         onModels={() => setActiveSection('models')} onOpenFolder={async () => { await files.openFolder(); succeed('workspace:open-folder'); return files.treeSummary().rootName || files.workspaceName() || 'selected-folder'; }}
         onSplit={() => setSecondarySection(activeSection === 'agent' ? 'workspace' : 'agent')} onCloseSplit={() => setSecondarySection(null)} secondarySection={secondarySection} secondaryChildren={secondarySection ? renderSection(secondarySection, true) : null}
-        sessions={<><TaskRail
+        sessions={<TaskRail
             tasks={tasks}
             query={taskQuery}
             onQuery={setTaskQuery}
@@ -181,7 +181,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             runtimeUnavailable={taskList.phase === 'runtime_unavailable'}
             loading={taskList.phase === 'loading'}
             error={taskList.phase === 'error' ? taskList.message : null}
-        />{agentClient === null && <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} />}</>}
+            legacySessions={agentClient === null ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} /> : undefined}
+        />}
         alert={error && <p role="alert" class="workbench-alert">{error.message}</p>} primary={renderSection(activeSection)}>
         <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}

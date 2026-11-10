@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import type { TaskSummary } from '../agent/client.js';
 import { TaskGroup } from './TaskGroup.js';
 import { TaskSearch } from './TaskSearch.js';
@@ -14,6 +15,7 @@ export interface TaskRailProps {
     runtimeUnavailable?: boolean;
     loading?: boolean;
     error?: string | null;
+    legacySessions?: ComponentChildren;
 }
 
 export interface TaskBuckets {
@@ -80,6 +82,7 @@ export function TaskRail({
     runtimeUnavailable = false,
     loading = false,
     error = null,
+    legacySessions,
 }: TaskRailProps) {
     const visible = filterTasks(tasks, query);
     const buckets = groupTasks(visible, nowMs);
@@ -105,5 +108,6 @@ export function TaskRail({
             {buckets.older.length > 0 && <TaskGroup kind="older" label="Older" tasks={buckets.older} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
         </div>}
         {buckets.archived.length > 0 && <TaskGroup kind="archived" label="Archived" tasks={buckets.archived} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
+        {legacySessions != null && <div class="task-legacy-sessions">{legacySessions}</div>}
     </nav>;
 }

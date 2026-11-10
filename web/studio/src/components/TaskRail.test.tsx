@@ -292,6 +292,35 @@ describe('TaskRail archive', () => {
     });
 });
 
+describe('TaskRail legacy session presentation', () => {
+    it('nests the legacy session list inside the single task nav when no client is mounted', () => {
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        const navs = host.querySelectorAll('nav[aria-label="Tasks"]');
+        expect(navs).toHaveLength(1);
+        expect(navs[0].querySelector('.session-list')).not.toBeNull();
+        expect(host.querySelectorAll('.session-list')).toHaveLength(1);
+        expect(host.querySelector('.session-list')?.closest('nav[aria-label="Tasks"]')).toBe(navs[0]);
+        expect(navs[0].querySelector('.session-list [data-action="new-session"]')).not.toBeNull();
+    });
+
+    it('omits the legacy session list when an AgentClient is mounted', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Task with client', repo: 'uor-r4' });
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        const navs = host.querySelectorAll('nav[aria-label="Tasks"]');
+        expect(navs).toHaveLength(1);
+        expect(navs[0].querySelector('.session-list')).toBeNull();
+        expect(host.querySelector('.session-list')).toBeNull();
+    });
+});
+
 describe('TaskRail empty and failure states', () => {
     it('empty_state_explains_runtime_unavailable only when initialization failed', async () => {
         renderRail();
