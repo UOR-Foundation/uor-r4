@@ -2,7 +2,9 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-345. First test of the aligned design ([DESIGN.md](../../loop/tasks/one-model-end-to-end/claude-345/DESIGN.md), section 8).
 
-TEST FITNESS: FIT WITH CHANGES, all seven applied (10 Nov, a fresh-context reviewer that had not seen the plan; it checked the sampling and reference rules against `in_space_long.rs`). The changes: a reply-level fit reading R2r, so row 2 cannot be reached by token-level misses; the rows checked in a fixed order with row 1 narrowed; the rows-file count in row 0; the trained windows named and counted; row 3 reworded to this recipe at this budget; R1 worded as the last complete reply of each window; the step-0 control claim dropped. The sheet's commit is recorded before any pod ships. After the FIT one instrument check was added, I-s, a smoke that can only end in row 0; no reading, bar or row changed.
+TEST FITNESS: FIT WITH CHANGES, all seven applied (10 Nov, a fresh-context reviewer that had not seen the plan; it checked the sampling and reference rules against `in_space_long.rs`). The changes: a reply-level fit reading R2r, so row 2 cannot be reached by token-level misses; the rows checked in a fixed order with row 1 narrowed; the rows-file count in row 0; the trained windows named and counted; row 3 reworded to this recipe at this budget; R1 worded as the last complete reply of each window; the step-0 control claim dropped. The sheet's commit is recorded before any pod ships. After the FIT one instrument check was added, I-s, a smoke that can only end in row 0; no reading or bar changed.
+
+PRE-RUN REVIEW: PASS WITH CHANGES (10 Nov, a second fresh-context reviewer; it read the sheet, the pod kit and the trainer's argument parser, and ran the store and syntax gates). Four minor findings. Applied: each row now reads each bar at its lower seed, so a split between the seeds is row 3 and cannot fall to row 0; the launcher says so loudly when a pod may be up with no watcher; a sealed failure is held one hour, not six. Accepted as it is: a watcher whose pod has gone keeps logging "no answer" on the laptop until the session ends it (no pod, no cost). The reviewer took the project chain from this sheet's "Why" and did not re-read `PLAN.md`.
 
 **Why.**
 - No recorded run has asked whether the assembled model can fit a small set of dialogues and say it back in free-running decode. Every reply reading so far comes from models trained on millions of tokens and scored on prompts they had not seen, where a failure to fit and a failure to generalise look the same.
@@ -49,7 +51,7 @@ At each seed, on `models/step-004096`, from `train-in-space --score-rows` with `
 
 ## Bars
 
-Fixed before any run, and not moved after a reading. The lower seed decides each bar.
+Fixed before any run, and not moved after a reading. The lower seed decides each bar: below, R1, R2 and R2r each mean the smaller of that reading's two seed values, so the three may come from different seeds.
 
 - **90%:** R1 at or above 0.90.
 - **95%:** R2 at or above 0.95.
@@ -58,14 +60,14 @@ Fixed before any run, and not moved after a reading. The lower seed decides each
 
 ## What each outcome unlocks
 
-The rows are checked in the order 0, 3, 2, 1, and the first that matches owns the cell.
+The rows are checked in the order 0, 3, 2, 1, and the first that matches owns the cell. With each bar read at its lower seed, rows 3, 2 and 1 cover every reading between them.
 
-| Row | Reading | Classified as | Next |
+| Row | Reading (each bar at its lower seed) | Classified as | Next |
 |---|---|---|---|
-| 0 | a job step fails; an input's hash is not the sheet's; the trainer's usable-window count is not 1,133; a run does not end with `step-004096`; scoring's last-opening pass fails; `rows-t0-memory.json` does not hold 40,419 rows; fewer than 800 complete samples; or a reading that matches none of rows 3, 2 and 1 | NOT_RUN, instrument | repair, then one rerun under root `runs-2` |
-| 3 | R2 < 0.95 at a seed; or R1 < 0.90 and R2r < 0.90 at the same seed | this recipe at 4,096 steps does not fit the set under teacher forcing | the address memory's first test is this same set at the same steps and seeds, with the same bars. If R1 ≥ 0.90 at both seeds, the report says the last replies were said back and the miss is in the others |
-| 2 | R1 < 0.90 at a seed, and R2r ≥ 0.90 at both | the replies are fit under teacher forcing and the free-running decode loses them: a decode-path defect | the report gives the first step at which the decode leaves the forced path; the next unit repairs that step |
-| 1 | R1 ≥ 0.90 and R2 ≥ 0.95 at both seeds | the assembled model fits and says back the set | the design's capacity claim is not shown by fitting; the address memory and the state-keyed read are judged on held-out prompts only |
+| 0 | at either seed: a job step fails; an input's hash is not the sheet's; the trainer's usable-window count is not 1,133; the run does not end with `step-004096`; scoring's last-opening pass fails; `rows-t0-memory.json` does not hold 40,419 rows; or fewer than 800 complete samples | NOT_RUN, instrument | repair, then one rerun under root `runs-2` |
+| 3 | R2 < 0.95; or R1 < 0.90 and R2r < 0.90 | this recipe at 4,096 steps does not fit the set under teacher forcing | the address memory's first test is this same set at the same steps and seeds, with the same bars. If R1 ≥ 0.90, the report says the last replies were said back and the miss is in the others |
+| 2 | R1 < 0.90 and R2r ≥ 0.90 (with R2 ≥ 0.95) | the replies are fit under teacher forcing and the free-running decode loses them: a decode-path defect | the report gives the first step at which the decode leaves the forced path; the next unit repairs that step |
+| 1 | R1 ≥ 0.90 and R2 ≥ 0.95 | the assembled model fits and says back the set | the design's capacity claim is not shown by fitting; the address memory and the state-keyed read are judged on held-out prompts only |
 
 A row-1 pass does not show the model can converse. A row-3 reading closes this configuration only: this recipe, at this size and step count, on this set (CHARTER §4.1).
 
