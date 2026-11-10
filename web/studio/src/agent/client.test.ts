@@ -179,7 +179,8 @@ class StubRuntime {
         return () => {};
     }
 
-    dispose(): void {
+    async dispose(): Promise<void> {
+        await Promise.resolve();
         this.disposed += 1;
     }
 }
@@ -474,7 +475,9 @@ describe('AgentClient durable task-store wiring', () => {
             { taskId: 'tsk_0000000000000001', prompt: 'runtime delegated' },
         ]);
         expect(summary.runId).toBe('run_0000000000000001');
-        client.dispose();
+        const disposal = client.dispose();
+        expect(disposal).toBeInstanceOf(Promise);
+        await disposal;
         expect(runtime.disposed).toBe(1);
     });
 

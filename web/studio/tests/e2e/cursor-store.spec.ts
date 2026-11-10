@@ -308,6 +308,11 @@ interface TaskViewSummary {
     archived: boolean;
     state: string;
     latestRunId: string | null;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
     runs: Array<{ runId: string; lastSequence: number; state: string }>;
 }
 
@@ -1673,6 +1678,63 @@ test.describe('browser agent task store', () => {
             sequence: 2,
             runState: 'running',
             statusProjection: 'cancelling',
+        });
+    });
+
+    test('background_hold_survives_reload_refuses_new_run_and_resolves', async ({ page }) => {
+        const seeded = await call<
+            Outcome & {
+                record?: {
+                    taskId: string;
+                    runId: string;
+                    toolCallId: string;
+                };
+            }
+        >(page, 'seedBackgroundHoldForTest');
+        expect(seeded.ok, JSON.stringify(seeded)).toBe(true);
+        const hold = seeded.record!;
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('ready');
+        expect(restored.activeRun).toBeNull();
+        expect(restored.canStartRun).toBe(false);
+        expect(restored.sendEnabled).toBe(false);
+
+        const heldTask = await call<TaskViewSummary>(page, 'taskView');
+        expect(heldTask.state).toBe('waiting_for_background');
+        expect(heldTask.hold).toEqual({
+            reason: 'waiting_for_background',
+            run_id: hold.runId,
+            tool_call_id: hold.toolCallId,
+        });
+        const before = await call<CursorView>(page, 'cursor');
+
+        const refused = await call<Outcome>(page, 'startRunOnHeldTaskForTest', hold.taskId);
+        expect(refused.ok, JSON.stringify(refused)).toBe(false);
+        expect(refused.code).toBe('out_of_order');
+
+        const resolved = await call<Outcome>(
+            page,
+            'resolveBackgroundHoldForTest',
+            hold.taskId,
+            hold.runId,
+            hold.toolCallId,
+        );
+        expect(resolved.ok, JSON.stringify(resolved)).toBe(true);
+        const cleared = await call<TaskViewSummary>(page, 'taskView');
+        expect(cleared.state).toBe('idle');
+        expect(cleared.hold).toBeNull();
+        const after = await call<CursorView>(page, 'cursor');
+        expect(after).toMatchObject({
+            taskId: before!.taskId,
+            runId: before!.runId,
+            generation: before!.generation,
+            sequence: before!.sequence,
+            eventId: before!.eventId,
+            digest: before!.digest,
+            runState: 'failed',
         });
     });
 

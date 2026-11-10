@@ -376,14 +376,12 @@ export class AgentClient {
             this.store = this.runtime.store;
             this.transport = this.runtime as unknown as AgentTransport;
             this.taskStore = null;
-            this.unsubscribeTransport = this.runtime.subscribe(
-                (event, digest) => {
-                    const result = this.store.apply(event, digest);
-                    if (result.status === 'applied') {
-                        this.publish(event);
-                    }
-                },
-            );
+            this.unsubscribeTransport = this.runtime.subscribe((event) => {
+                // The runtime publishes only events it has already applied
+                // through the shared AgentStore. Re-applying here returns
+                // duplicate/ignored and would suppress every client stream.
+                this.publish(event);
+            });
             return;
         }
         this.transport = options.transport ?? null;
@@ -723,13 +721,17 @@ export class AgentClient {
         return this.requireTransport().hostCapabilities();
     }
 
-    dispose(): void {
+    async dispose(): Promise<void> {
         for (const stream of [...this.streams]) {
             stream.close();
         }
         this.unsubscribeTransport?.();
         if (this.runtime !== null) {
-            void this.runtime.dispose();
+            try {
+                await this.runtime.dispose();
+            } catch (error) {
+                this.persistenceError = this.toClientError(error);
+            }
             return;
         }
         this.taskStore?.close();

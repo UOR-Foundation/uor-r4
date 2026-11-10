@@ -48,6 +48,8 @@ export const REPLAY_MODEL_KIND = 'synthetic-replay';
 export const REPLAY_MODEL_LABEL =
     'Synthetic deterministic replay fixture; not an R4 model or a task brain.';
 
+export type ReplayModelTurn = readonly ModelStreamEvent[];
+
 export interface ReplayModelPortOptions {
     chunks?: readonly string[];
     usage?: {
@@ -55,10 +57,12 @@ export interface ReplayModelPortOptions {
         outputTokens: number;
         modelCalls: number;
     };
+    script?: readonly ReplayModelTurn[];
 }
 
-// Labelled synthetic port. It deterministically produces text, usage and a
-// finished event. It does not call R4, a provider or a host process.
+// Labelled synthetic port. It deterministically produces text, tool, usage,
+// finished and failed events. It does not call R4, a provider or a host
+// process.
 export class ReplayModelPort implements ModelPort {
     readonly id = REPLAY_MODEL_ID;
     readonly kind = REPLAY_MODEL_KIND;
@@ -71,13 +75,27 @@ export class ReplayModelPort implements ModelPort {
         outputTokens: number;
         modelCalls: number;
     } | null;
+    private readonly turns: readonly ReplayModelTurn[] | null;
+    private turnIndex = 0;
 
     constructor(options: ReplayModelPortOptions = {}) {
         this.chunks = options.chunks ?? ['Synthetic replay acknowledges: '];
         this.usage = options.usage ?? null;
+        this.turns =
+            options.script === undefined
+                ? null
+                : options.script.length === 0
+                  ? [[]]
+                  : options.script;
     }
 
     async *open(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+        if (this.turns !== null) {
+            const index = Math.min(this.turnIndex, this.turns.length - 1);
+            this.turnIndex += 1;
+            for (const event of this.turns[index] ?? []) yield event;
+            return;
+        }
         const text = `${this.chunks.join('')}${request.prompt}`;
         yield { type: 'text-delta', text };
         const usage =

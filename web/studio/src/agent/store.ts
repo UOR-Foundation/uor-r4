@@ -596,6 +596,7 @@ function taskToAgentRecord(record: TaskRecord): AgentTaskRecord {
         archived: record.archived,
         pinnedLocal: record.pinned_local,
         latestRunId: record.latest_run_id ?? null,
+        ...(record.hold === undefined ? {} : { hold: record.hold }),
     };
 }
 

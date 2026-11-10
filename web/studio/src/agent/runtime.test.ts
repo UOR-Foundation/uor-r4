@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
+import { AgentClient } from './client.js';
+import { canonicalJson } from './generated/agentCanonical.js';
 import type { AgentTaskStore } from './store.js';
 import { AgentStoreError } from './storeTypes.js';
 import type { ChangeInput, ChangeRecord, TaskRecord } from './storeTypes.js';
@@ -10,7 +12,13 @@ import {
     type RunView,
     type TaskView,
 } from '../state/agent.js';
-import type { AgentEvent, RunState } from './generated/agentContract.js';
+import {
+    AGENT_EVENT_SCHEMA,
+    type AgentErrorCode,
+    type AgentEvent,
+    type RunState,
+} from './generated/agentContract.js';
+import { ReplayModelPort } from './modelPort.js';
 import type { ModelPort, ModelRequest, ModelStreamEvent } from './modelPort.js';
 import {
     AgentRuntime,
@@ -106,6 +114,7 @@ class DeferredModelStream implements AsyncIterable<ModelStreamEvent> {
     }> = [];
     private closed = false;
     private failure: unknown = null;
+    rejectReturn = false;
 
     push(event: ModelStreamEvent): void {
         if (this.closed) return;
@@ -150,6 +159,9 @@ class DeferredModelStream implements AsyncIterable<ModelStreamEvent> {
 
     return(): Promise<IteratorResult<ModelStreamEvent>> {
         this.end();
+        if (this.rejectReturn) {
+            return Promise.reject(new Error('injected iterator return failure'));
+        }
         return Promise.resolve({ value: undefined as never, done: true });
     }
 
@@ -184,6 +196,10 @@ class FakeTaskStore {
     readonly acquires: Array<{ taskId: string; writerId: string; now: number }> = [];
     readonly heartbeats: Array<{ taskId: string; writerId: string; now: number }> = [];
     readonly releases: Array<{ taskId: string; writerId: string }> = [];
+    failNextAppend = false;
+    failNextList = false;
+    failNextRelease = false;
+    heartbeatGate: Promise<void> | null = null;
     private readonly records = new Map<string, TaskRecord>();
     private readonly leases = new Map<string, { task_id: string; writer_id: string; started_at_ms: number; heartbeat_at_ms: number }>();
 
@@ -286,6 +302,14 @@ class FakeTaskStore {
     }
 
     async listTasks(options: { includeArchived?: boolean; query?: string } = {}): Promise<TaskRecord[]> {
+        if (this.failNextList) {
+            this.failNextList = false;
+            throw new AgentStoreError(
+                'limit_exceeded',
+                'injected task list failure',
+                'indexeddb',
+            );
+        }
         const query = options.query?.trim().toLowerCase() ?? '';
         return [...this.records.values()]
             .filter((record) => options.includeArchived === true || !record.archived)
@@ -302,18 +326,29 @@ class FakeTaskStore {
         snapshot_anchor?: unknown;
     }): Promise<{
         status: 'applied' | 'ignored' | 'rejected';
-        code: null;
-        message: null;
+        code: AgentErrorCode | null;
+        message: string | null;
         event_id: string;
         digest: string | null;
-        storage: null;
+        storage: 'indexeddb' | null;
     }> {
+        if (this.failNextAppend) {
+            this.failNextAppend = false;
+            return {
+                status: 'rejected',
+                code: 'limit_exceeded',
+                message: 'injected durable append failure',
+                event_id: input.event.event_id,
+                digest: null,
+                storage: 'indexeddb',
+            };
+        }
         this.events.push(input.event);
         const result = await this.store.appendEvent(input.event);
         return {
             status: result.status,
-            code: null,
-            message: null,
+            code: result.status === 'rejected' ? result.code : null,
+            message: result.status === 'rejected' ? result.message : null,
             event_id: result.eventId,
             digest: result.digest,
             storage: null,
@@ -384,6 +419,7 @@ class FakeTaskStore {
         nowMs = this.clock.now(),
     ): Promise<{ task_id: string; writer_id: string; started_at_ms: number; heartbeat_at_ms: number }> {
         this.heartbeats.push({ taskId, writerId, now: nowMs });
+        if (this.heartbeatGate !== null) await this.heartbeatGate;
         const existing = this.leases.get(taskId);
         if (existing === undefined || existing.writer_id !== writerId) {
             throw new AgentStoreError('stale_generation', 'lease is missing');
@@ -397,6 +433,14 @@ class FakeTaskStore {
         writerId: string,
     ): Promise<{ released: boolean }> {
         this.releases.push({ taskId, writerId });
+        if (this.failNextRelease) {
+            this.failNextRelease = false;
+            throw new AgentStoreError(
+                'limit_exceeded',
+                'injected release failure',
+                'indexeddb',
+            );
+        }
         const existing = this.leases.get(taskId);
         if (existing === undefined) return { released: false };
         if (existing.writer_id !== writerId) {
@@ -425,7 +469,6 @@ function deterministicIds(): NonNullable<AgentRuntimeOptions['ids']> {
         taskId: () => `tsk_${next().toString(16).padStart(16, '0')}`,
         runId: () => `run_${next().toString(16).padStart(16, '0')}`,
         messageId: () => `msg_${next().toString(16).padStart(16, '0')}`,
-        toolCallId: () => `tool_${next().toString(16).padStart(16, '0')}`,
         approvalId: () => `appr_${next().toString(16).padStart(16, '0')}`,
     };
 }
@@ -496,6 +539,15 @@ async function until(
         await flush(1);
     }
     throw new Error(`timed out waiting for ${label}`);
+}
+
+async function nextEvent(
+    iterator: AsyncIterator<AgentIncomingEvent>,
+): Promise<IteratorResult<AgentIncomingEvent> | null> {
+    return Promise.race([
+        iterator.next(),
+        flush(30).then(() => null),
+    ]);
 }
 
 async function startOne(
@@ -705,6 +757,7 @@ describe('AgentRuntime run sequencing', () => {
                 taskId: task.taskId,
                 prompt: 'first prompt',
             });
+            expect(model.streams).toHaveLength(0);
             expect(taskStore.events.slice(0, 2).map((event) => event.type)).toEqual([
                 'run.queued',
                 'run.started',
@@ -1680,5 +1733,677 @@ describe('AgentRuntime retry and leases', () => {
         expect(eventTypes(runView(store, task.taskId, run.runId))).not.toContain(
             'tool.completed',
         );
+    });
+});
+
+describe('AgentRuntime fix round 1', () => {
+    test('agent_client_subscribes_to_real_runtime_events_exactly_once', async () => {
+        const { runtime, store, model } = makeRuntime();
+        const client = new AgentClient({ runtime });
+        await client.open();
+        const stream = client.subscribe();
+        try {
+            const task = await client.createTask({ title: 'client runtime' });
+            const run = await client.startRun({
+                taskId: task.taskId,
+                prompt: 'client prompt',
+            });
+            const iterator = stream[Symbol.asyncIterator]();
+            const first = await nextEvent(iterator);
+            const second = await nextEvent(iterator);
+            expect(first?.value).toMatchObject({ type: 'run.queued' });
+            expect(second?.value).toMatchObject({ type: 'run.started' });
+
+            await until(
+                () =>
+                    store.getRunCursor(task.taskId, run.runId)!.lastSequence >= 2,
+                'turn started before ingest',
+            );
+            const cursor = store.getRunCursor(task.taskId, run.runId);
+            expect(cursor).not.toBeNull();
+            const event = {
+                schema: AGENT_EVENT_SCHEMA,
+                event_id: `evt_${run.runId}_${cursor!.generation}_${(
+                    cursor!.lastSequence + 1
+                )
+                    .toString()
+                    .padStart(12, '0')}`,
+                project_id: store.snapshot().tasks.find(
+                    (candidate) => candidate.taskId === task.taskId,
+                )!.projectId,
+                task_id: task.taskId,
+                run_id: run.runId,
+                generation: cursor!.generation,
+                sequence: cursor!.lastSequence + 1,
+                recorded_at_ms: cursor!.lastSequence + 2,
+                type: 'assistant.delta',
+                data: {
+                    message_id: 'msg_ingested',
+                    text_delta: 'ingested',
+                },
+            } as unknown as AgentIncomingEvent;
+            const turnStarted = await nextEvent(iterator);
+            expect(turnStarted?.value).toMatchObject({ type: 'turn.started' });
+            const appended = await client.ingestWireEvent(canonicalJson(event));
+            expect(appended.status).toBe('applied');
+            const third = await nextEvent(iterator);
+            expect(third?.value).toMatchObject({
+                type: 'assistant.delta',
+                data: { message_id: 'msg_ingested', text_delta: 'ingested' },
+            });
+            model.streams.forEach((stream) => stream.end());
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await client.dispose();
+        }
+    });
+
+    test('approval_double_resolution_is_rejected_before_a_second_decision_event', async () => {
+        let dispatched = 0;
+        const executor: RuntimeToolExecutor = async () => {
+            dispatched += 1;
+            return { status: 'ok', output: {} };
+        };
+        const { runtime, store, model } = makeRuntime(
+            { requiresApproval: () => true },
+            executor,
+        );
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_double',
+                tool: 'write_file',
+                arguments: { path: 'a.ts' },
+            });
+            await until(
+                () => runView(store, task.taskId, run.runId).approvals.length === 1,
+                'approval required',
+            );
+            const approval = runView(store, task.taskId, run.runId).approvals[0]!;
+            const results = await Promise.allSettled([
+                runtime.resolveApproval({
+                    approvalId: approval.approvalId,
+                    decision: 'approved',
+                }),
+                runtime.resolveApproval({
+                    approvalId: approval.approvalId,
+                    decision: 'denied',
+                }),
+            ]);
+            expect(
+                results.filter((result) => result.status === 'fulfilled'),
+            ).toHaveLength(1);
+            expect(
+                results.filter((result) => result.status === 'rejected'),
+            ).toHaveLength(1);
+            const view = runView(store, task.taskId, run.runId);
+            expect(
+                view.events.filter(
+                    (event) => event.type === 'tool.approval_resolved',
+                ),
+            ).toHaveLength(1);
+            expect(dispatched).toBeLessThanOrEqual(1);
+            await until(() => model.requests.length >= 2, 'post-approval turn');
+            model.streams[1]!.end();
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'finished',
+                'finished after double resolution',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('stop_timeout_write_failure_settles_receipt_without_terminal_fabrication', async () => {
+        const executor: RuntimeToolExecutor = () => new Promise<RuntimeToolResult>(() => {});
+        const { runtime, store, taskStore, model, clock } = makeRuntime({}, executor);
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_timeout_fault',
+                tool: 'write_file',
+                arguments: { path: 'a.ts' },
+            });
+            await until(() => eventTypes(runView(store, task.taskId, run.runId)).includes('tool.started'), 'tool started');
+            taskStore.failNextList = true;
+            const stopPromise = runtime.stop({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).statusProjection ===
+                    'cancelling',
+                'cancelling projection',
+            );
+            clock.advance(30_000);
+            const receipt = await Promise.race([
+                stopPromise,
+                flush(300).then(() => null),
+            ]);
+            expect(receipt).not.toBeNull();
+            expect(receipt!.acknowledged).toBe(false);
+            expect(runtime.lastPersistenceError?.code).toBe('limit_exceeded');
+            expect(clock.timeoutCount()).toBe(0);
+            expect(taskStore.releases).toHaveLength(1);
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.state).toBe('running');
+            expect(eventTypes(view)).not.toContain('run.failed');
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('stop_refusal_write_failure_settles_receipt_without_unhandled_rejection', async () => {
+        const executor: RuntimeToolExecutor = () => new Promise<RuntimeToolResult>(() => {});
+        let releaseRefusal: (() => void) | null = null;
+        const refusalGate = new Promise<void>((resolve) => {
+            releaseRefusal = resolve;
+        });
+        const { runtime, store, taskStore, model } = makeRuntime(
+            {
+                requestStopAck: async () => {
+                    await refusalGate;
+                    return 'refused' as const;
+                },
+            },
+            executor,
+        );
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_refusal_fault',
+                tool: 'write_file',
+                arguments: { path: 'a.ts' },
+            });
+            await until(() => eventTypes(runView(store, task.taskId, run.runId)).includes('tool.started'), 'tool started');
+            const stopPromise = runtime.stop({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).statusProjection ===
+                    'cancelling',
+                'cancelling projection',
+            );
+            taskStore.failNextAppend = true;
+            releaseRefusal!();
+            const receipt = await Promise.race([
+                stopPromise,
+                flush(300).then(() => null),
+            ]);
+            expect(receipt).not.toBeNull();
+            expect(receipt!.acknowledged).toBe(false);
+            expect(runtime.lastPersistenceError?.code).toBe('limit_exceeded');
+            expect(taskStore.releases).toHaveLength(1);
+            expect(runView(store, task.taskId, run.runId).state).toBe('running');
+            expect(eventTypes(runView(store, task.taskId, run.runId))).not.toContain('run.failed');
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('boundary_fallback_write_failure_settles_pending_and_timer', async () => {
+        const { runtime, store, taskStore, model, clock } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(runtime, model);
+            await runtime.steer({ taskId: task.taskId, text: 'fallback fault' });
+            taskStore.failNextAppend = true;
+            clock.advance(30_000);
+            await flush(300);
+            expect(runtime.lastPersistenceError?.code).toBe('limit_exceeded');
+            expect(clock.timeoutCount()).toBe(0);
+            expect(eventTypes(runView(store, task.taskId, run.runId))).not.toContain(
+                'message.steered',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('stop_settles_when_model_iterator_return_rejects', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.rejectReturn = true;
+            const receipt = await runtime.stop({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            expect(receipt.acknowledged).toBe(true);
+            expect(runView(store, task.taskId, run.runId).state).toBe('cancelled');
+            expect(runtime.lastPersistenceError?.code).toBe('internal');
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('dispose_settles_when_model_iterator_return_rejects', async () => {
+        const { runtime, model } = makeRuntime();
+        await runtime.open();
+        const { stream } = await startOne(runtime, model);
+        stream.rejectReturn = true;
+        await expect(runtime.dispose()).resolves.toBeUndefined();
+    });
+
+    test('retry_without_original_prompt_is_refused_honestly', async () => {
+        const { runtime, store, taskStore, model, clock } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.push({
+                type: 'failed',
+                code: 'model_unavailable',
+                message: 'synthetic failure',
+                retryable: true,
+            });
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'failed',
+                'failed run',
+            );
+            const modelB = new ControlledModel();
+            const runtimeB = new AgentRuntime({
+                store,
+                taskStore: taskStore as unknown as AgentTaskStore,
+                modelPort: modelB,
+                toolExecutor: async () => ({ status: 'ok', output: {} }),
+                now: clock.now,
+                timers: clock,
+                writerId: 'writer-runtime-b',
+                ids: deterministicIds(),
+                leaseHeartbeatMs: LEASE_HEARTBEAT_MS,
+            });
+            await runtimeB.open();
+            try {
+                await expect(
+                    runtimeB.retry({ taskId: task.taskId, runId: run.runId }),
+                ).rejects.toMatchObject({ code: 'invalid_arguments' });
+            } finally {
+                modelB.streams.forEach((stream) => stream.end());
+                await runtimeB.dispose();
+            }
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('force_appends_to_the_most_recent_user_turn_at_a_tool_boundary', async () => {
+        let releaseTool: ((result: RuntimeToolResult) => void) | null = null;
+        const executor: RuntimeToolExecutor = () =>
+            new Promise<RuntimeToolResult>((resolve) => {
+                releaseTool = resolve;
+            });
+        const { runtime, store, model } = makeRuntime({}, executor);
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model, 'base prompt');
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_force',
+                tool: 'read_file',
+                arguments: {},
+            });
+            await until(() => releaseTool !== null, 'tool execution');
+            await runtime.forceSend({ taskId: task.taskId, text: 'force text' });
+            releaseTool!({ status: 'ok', output: {} });
+            await until(() => model.requests.length >= 2, 'post-force model turn');
+            expect(model.requests[1]!.prompt).toBe('base prompt\nforce text');
+            expect(model.requests[1]!.history).toHaveLength(1);
+            expect(model.requests[1]!.history[0]).toMatchObject({
+                role: 'user',
+                text: 'base prompt\nforce text',
+            });
+            model.streams[1]!.end();
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'finished',
+                'finished after force',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('cancelling_rejects_new_messages_and_fails_accepted_pending_messages', async () => {
+        let releaseTool: ((result: RuntimeToolResult) => void) | null = null;
+        const executor: RuntimeToolExecutor = () =>
+            new Promise<RuntimeToolResult>((resolve) => {
+                releaseTool = resolve;
+            });
+        const { runtime, store, model } = makeRuntime({}, executor);
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_pending',
+                tool: 'read_file',
+                arguments: {},
+            });
+            await until(() => releaseTool !== null, 'tool execution');
+            const queued = await runtime.queueMessage({
+                taskId: task.taskId,
+                text: 'queued before stop',
+            });
+            const steered = await runtime.steer({
+                taskId: task.taskId,
+                text: 'steered before stop',
+            });
+            const stopPromise = runtime.stop({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).statusProjection ===
+                    'cancelling',
+                'cancelling projection',
+            );
+            await expect(
+                runtime.queueMessage({ taskId: task.taskId, text: 'late queue' }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+            await expect(
+                runtime.steer({ taskId: task.taskId, text: 'late steer' }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+            await expect(
+                runtime.forceSend({ taskId: task.taskId, text: 'late force' }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+            releaseTool!({ status: 'ok', output: {} });
+            const receipt = await stopPromise;
+            expect(receipt.acknowledged).toBe(true);
+            const view = runView(store, task.taskId, run.runId);
+            const errors = view.events.filter((event) => event.type === 'error');
+            expect(
+                errors.some((event) => String(event.data.message).includes(queued.messageId)),
+            ).toBe(true);
+            expect(
+                errors.some((event) => String(event.data.message).includes(steered.messageId)),
+            ).toBe(true);
+            expect(view.state).toBe('cancelled');
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('constructor_rejects_a_task_store_with_a_different_agent_store', () => {
+        const { taskStore, clock } = makeRuntime();
+        const otherStore = createAgentStore();
+        expect(
+            () =>
+                new AgentRuntime({
+                    store: otherStore,
+                    taskStore: taskStore as unknown as AgentTaskStore,
+                    modelPort: new ControlledModel(),
+                    now: clock.now,
+                    timers: clock,
+                    ids: deterministicIds(),
+                }),
+        ).toThrowError(/invalid_arguments/);
+    });
+
+    test('heartbeat_keeps_one_request_in_flight_without_chain_growth', async () => {
+        const { runtime, taskStore, clock, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { stream } = await startOne(runtime, model);
+            let releaseHeartbeat: (() => void) | null = null;
+            taskStore.heartbeatGate = new Promise<void>((resolve) => {
+                releaseHeartbeat = resolve;
+            });
+            clock.advance(LEASE_HEARTBEAT_MS);
+            await flush();
+            expect(taskStore.heartbeats).toHaveLength(1);
+            clock.advance(LEASE_HEARTBEAT_MS);
+            await flush();
+            expect(taskStore.heartbeats).toHaveLength(1);
+            releaseHeartbeat!();
+            await flush(100);
+            expect(taskStore.heartbeats).toHaveLength(1);
+            stream.end();
+            await until(
+                () => taskStore.releases.length === 1,
+                'lease release',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('resume_appends_exact_g_plus_1_n_plus_1_previous_generation_and_digest', async () => {
+        const { runtime, store, model } = makeRuntime({
+            taskStore: null as unknown as AgentTaskStore,
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            const cursor = store.getRunCursor(task.taskId, run.runId)!;
+            const resumed = await runtime.resumeTask({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            expect(resumed.snapshot).toMatchObject({
+                taskId: task.taskId,
+                runId: run.runId,
+                generation: cursor.generation,
+                lastSequence: cursor.lastSequence,
+                lastEventId: cursor.lastEventId,
+                headDigest: cursor.lastDigest,
+            });
+            expect(resumed.event.generation).toBe(cursor.generation + 1);
+            expect(resumed.event.sequence).toBe(cursor.lastSequence + 1);
+            expect(resumed.event.data).toMatchObject({
+                previous_generation: cursor.generation,
+                snapshot_digest: cursor.lastDigest,
+            });
+            stream.end();
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'finished',
+                'finished after resume',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+});
+
+describe('ReplayModelPort deterministic scripts', () => {
+    test('replay_script_yields_tool_usage_finished_and_failed_events', async () => {
+        const port = new ReplayModelPort({
+            script: [
+                [
+                    {
+                        type: 'tool-call',
+                        toolCallId: 'tool_script',
+                        tool: 'write_file',
+                        arguments: { path: 'a.ts' },
+                    },
+                    {
+                        type: 'usage',
+                        inputTokens: 2,
+                        outputTokens: 3,
+                        modelCalls: 1,
+                    },
+                    { type: 'finished', reason: 'tool' },
+                ],
+                [
+                    { type: 'text-delta', text: 'scripted text' },
+                    { type: 'failed', code: 'model_unavailable', message: 'fail', retryable: true },
+                ],
+            ],
+        });
+        const request: ModelRequest = {
+            taskId: 'tsk_0000000000000001',
+            runId: 'run_0000000000000001',
+            generation: 1,
+            mode: 'agent',
+            prompt: 'script',
+            history: [{ role: 'user', text: 'script' }],
+        };
+        const first: ModelStreamEvent[] = [];
+        for await (const event of port.open(request)) first.push(event);
+        const second: ModelStreamEvent[] = [];
+        for await (const event of port.open(request)) second.push(event);
+        expect(first.map((event) => event.type)).toEqual([
+            'tool-call',
+            'usage',
+            'finished',
+        ]);
+        expect(second.map((event) => event.type)).toEqual([
+            'text-delta',
+            'failed',
+        ]);
+    });
+
+    test('replay_port_drives_approval_write_changes_and_finish_through_runtime', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        const files = [{ path: 'src/scripted.ts', change: 'added' }];
+        const headDigest = `sha256:${'c'.repeat(64)}`;
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: taskStore as unknown as AgentTaskStore,
+            modelPort: new ReplayModelPort({
+                script: [
+                    [
+                        {
+                            type: 'tool-call',
+                            toolCallId: 'tool_scripted_write',
+                            tool: 'write_file',
+                            arguments: { path: 'src/scripted.ts' },
+                        },
+                        {
+                            type: 'usage',
+                            inputTokens: 4,
+                            outputTokens: 2,
+                            modelCalls: 1,
+                        },
+                        { type: 'finished', reason: 'tool' },
+                    ],
+                    [
+                        { type: 'text-delta', text: 'scripted completion' },
+                        {
+                            type: 'usage',
+                            inputTokens: 4,
+                            outputTokens: 2,
+                            modelCalls: 1,
+                        },
+                        { type: 'finished', reason: 'stop' },
+                    ],
+                ],
+            }),
+            toolExecutor: async () => ({
+                status: 'ok',
+                output: { written: 1 },
+                files,
+                head_digest: headDigest,
+            }),
+            requiresApproval: () => true,
+            now: clock.now,
+            timers: clock,
+            writerId: 'writer-replay-port',
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            const task = await runtime.createTask({ title: 'replay script' });
+            const run = await runtime.startRun({
+                taskId: task.taskId,
+                prompt: 'scripted prompt',
+            });
+            await until(
+                () => runView(store, task.taskId, run.runId).approvals.length === 1,
+                'scripted approval',
+            );
+            const approval = runView(store, task.taskId, run.runId).approvals[0]!;
+            await runtime.resolveApproval({
+                approvalId: approval.approvalId,
+                decision: 'approved',
+            });
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'finished',
+                'scripted finish',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.error).toBeNull();
+            expect(view.changesSnapshots[0]).toMatchObject({
+                scope: 'last_turn',
+                files,
+                headDigest,
+            });
+            expect(taskStore.changes[0]).toMatchObject({
+                files,
+                head_digest: headDigest,
+            });
+            expect(eventTypes(view)).toContain('tool.completed');
+            expect(eventTypes(view)).toContain('assistant.message');
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('replay_port_drives_a_retryable_failure_through_runtime', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: taskStore as unknown as AgentTaskStore,
+            modelPort: new ReplayModelPort({
+                script: [
+                    [
+                        {
+                            type: 'failed',
+                            code: 'model_unavailable',
+                            message: 'synthetic replay failure',
+                            retryable: true,
+                        },
+                    ],
+                ],
+            }),
+            now: clock.now,
+            timers: clock,
+            writerId: 'writer-replay-failure',
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            const task = await runtime.createTask({ title: 'replay failure' });
+            const run = await runtime.startRun({
+                taskId: task.taskId,
+                prompt: 'fail',
+            });
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'failed',
+                'replay failure',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.error).toEqual({
+                code: 'model_unavailable',
+                message: 'synthetic replay failure',
+                retryable: true,
+            });
+            expect(eventTypes(view)).toContain('run.failed');
+        } finally {
+            await runtime.dispose();
+        }
     });
 });

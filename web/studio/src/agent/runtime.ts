@@ -58,7 +58,6 @@ import {
 
 const PROJECT_ID_PATTERN = /^prj_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
-const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const TERMINAL_RUN_STATES: ReadonlySet<RunState> = new Set([
     'finished',
     'failed',
@@ -69,6 +68,7 @@ const DEFAULT_PROJECT_ID = 'prj_0000000000000001';
 const DEFAULT_STOP_ACK_TIMEOUT_MS = 30_000;
 const DEFAULT_BOUNDARY_WAIT_MS = 30_000;
 const DEFAULT_MAX_QUEUED_MESSAGES = 100;
+const MAX_PROMPT_HISTORY = 128;
 
 export { LEASE_STALE_MS };
 
@@ -90,7 +90,6 @@ export interface RuntimeIdFactory {
     taskId(): string;
     runId(): string;
     messageId(): string;
-    toolCallId(): string;
     approvalId(): string;
 }
 
@@ -230,16 +229,13 @@ interface RunControl {
     modelIterator: AsyncIterator<ModelStreamEvent> | null;
     turnIndex: number;
     extraUserTexts: string[];
+    forceTexts: string[];
     leaseHeld: boolean;
 }
 
 interface RuntimeListener {
     listener: (event: AgentIncomingEvent, digest?: string) => void;
     filter: SubscribeInput;
-}
-
-interface TimerHandle {
-    timer: unknown;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -285,7 +281,6 @@ function defaultIds(): RuntimeIdFactory {
         taskId: () => `tsk_${randomHex(8)}`,
         runId: () => `run_${randomHex(8)}`,
         messageId: () => `msg_${randomHex(8)}`,
-        toolCallId: () => `tool_${randomHex(8)}`,
         approvalId: () => `appr_${randomHex(8)}`,
     };
 }
@@ -326,9 +321,7 @@ async function sha256Canonical(value: unknown): Promise<string> {
     return `sha256:${hex}`;
 }
 
-function canonicalArguments(
-    value: unknown,
-): { arguments: Record<string, unknown>; digest: string } {
+function canonicalArguments(value: unknown): Record<string, unknown> {
     if (!isPlainObject(value)) {
         throw new AgentClientError(
             'invalid_arguments',
@@ -343,10 +336,7 @@ function canonicalArguments(
             `tool arguments are not canonical: ${errorMessage(error)}`,
         );
     }
-    return {
-        arguments: cloneJson(value),
-        digest: '',
-    };
+    return cloneJson(value);
 }
 
 class RuntimeEventStream implements AgentEventStream {
@@ -446,6 +436,7 @@ export class AgentRuntime {
     private readonly heldLeases = new Set<string>();
     private heartbeatHandle: unknown = null;
     private heartbeatTask: Promise<void> = Promise.resolve();
+    private heartbeatInFlight = false;
     private opened = false;
     private disposed = false;
     private persistenceError: AgentClientError | null = null;
@@ -453,6 +444,15 @@ export class AgentRuntime {
     constructor(options: AgentRuntimeOptions = {}) {
         this.store = options.store ?? createAgentStore();
         this.taskStore = options.taskStore ?? null;
+        if (
+            this.taskStore !== null &&
+            this.taskStore.store !== this.store
+        ) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'the task store must own the same AgentStore as the runtime',
+            );
+        }
         this.modelPort = options.modelPort ?? new ReplayModelPort();
         this.toolExecutor =
             options.toolExecutor ??
@@ -494,7 +494,7 @@ export class AgentRuntime {
         this.opened = true;
         if (this.taskStore !== null && this.heartbeatHandle === null) {
             this.heartbeatHandle = this.timers.setInterval(() => {
-                void this.heartbeat();
+                this.tickHeartbeat();
             }, this.leaseHeartbeatMs);
         }
     }
@@ -515,7 +515,16 @@ export class AgentRuntime {
             control.pendingApproval = null;
             control.stopDeferred?.resolve(false);
             control.stopDeferred = null;
-            await control.modelIterator?.return?.();
+            try {
+                await control.modelIterator?.return?.();
+            } catch (error) {
+                if (this.persistenceError === null) {
+                    this.persistenceError = new AgentClientError(
+                        errorCode(error),
+                        errorMessage(error),
+                    );
+                }
+            }
             this.active.delete(control.taskId);
             await this.releaseLease(control.taskId);
         }
@@ -525,13 +534,6 @@ export class AgentRuntime {
         this.listeners.clear();
         this.taskStore?.close();
         this.opened = false;
-    }
-
-    async settle(): Promise<void> {
-        for (let round = 0; round < 8; round += 1) {
-            await Promise.allSettled([...this.chains.values()]);
-            await Promise.resolve();
-        }
     }
 
     async listTasks(input: ListTasksInput = {}): Promise<TaskSummary[]> {
@@ -620,6 +622,12 @@ export class AgentRuntime {
             this.requireTask(input.taskId);
             const current = this.active.get(input.taskId);
             if (current !== undefined && !current.terminal) {
+                if (current.cancelRequested) {
+                    throw new AgentClientError(
+                        'out_of_order',
+                        'the run is cancelling; new messages are refused',
+                    );
+                }
                 this.ensureQueueCapacity(current);
                 await this.append(current, 'message.queued', {
                     message_id: messageId,
@@ -736,7 +744,6 @@ export class AgentRuntime {
                 status: 'cancelling',
             });
             current.cancelRequested = true;
-            this.clearPendingBoundary(current);
             current.pendingApproval?.resolve('cancelled');
             current.pendingApproval = null;
 
@@ -752,7 +759,13 @@ export class AgentRuntime {
             const stopDeferred = deferred<boolean>();
             current.stopDeferred = stopDeferred;
             current.stopTimer = this.timers.setTimeout(() => {
-                void this.stopTimeout(current.taskId, current.runId);
+                void this.stopTimeout(current.taskId, current.runId).catch(
+                    (error) => this.recoverStopFailure(
+                        current.taskId,
+                        current.runId,
+                        error,
+                    ),
+                );
             }, this.stopAckTimeoutMs);
             if (this.requestStopAck !== null) {
                 const toolCallId = current.inFlight.toolCallId;
@@ -770,6 +783,12 @@ export class AgentRuntime {
                                 void this.stopRefused(
                                     current.taskId,
                                     current.runId,
+                                ).catch((error) =>
+                                    this.recoverStopFailure(
+                                        current.taskId,
+                                        current.runId,
+                                        error,
+                                    ),
                                 );
                             }
                         },
@@ -777,6 +796,12 @@ export class AgentRuntime {
                             void this.stopRefused(
                                 current.taskId,
                                 current.runId,
+                            ).catch((error) =>
+                                this.recoverStopFailure(
+                                    current.taskId,
+                                    current.runId,
+                                    error,
+                                ),
                             );
                         },
                     );
@@ -818,9 +843,13 @@ export class AgentRuntime {
                     'background hold must be resolved before retry',
                 );
             }
-            const prompt =
-                this.promptByRun.get(input.runId) ??
-                `Retry run ${input.runId}`;
+            const prompt = this.promptByRun.get(input.runId);
+            if (prompt === undefined) {
+                throw new AgentClientError(
+                    'invalid_arguments',
+                    'the original run prompt is unavailable; durable prompt reconstruction is not implemented',
+                );
+            }
             return this.startRunInternal(
                 { taskId: input.taskId, prompt },
                 input.runId,
@@ -838,25 +867,26 @@ export class AgentRuntime {
                 'approval decision must be approved | denied',
             );
         }
-        const record = this.findApproval(input.approvalId);
-        if (record === null) {
+        const initial = this.findApproval(input.approvalId);
+        if (initial === null) {
             throw new AgentClientError(
                 'approval_forbidden',
                 'approval is not pending',
             );
         }
-        await this.withTask(record.taskId, () =>
-            this.resolveApprovalRecord(
+        await this.withTask(initial.taskId, async () => {
+            const record = this.findApproval(input.approvalId);
+            await this.resolveApprovalRecord(
                 record,
                 input.decision,
-                record.requestDigest,
+                record?.requestDigest ?? '',
                 {
-                    taskId: record.taskId,
-                    runId: record.runId,
-                    generation: record.generation,
+                    taskId: record?.taskId ?? '',
+                    runId: record?.runId ?? '',
+                    generation: record?.generation ?? 0,
                 },
-            ),
-        );
+            );
+        });
         return {
             approvalId: input.approvalId,
             decision: input.decision,
@@ -867,15 +897,16 @@ export class AgentRuntime {
         input: HostApprovalResolution,
     ): Promise<ApprovalReceipt> {
         this.assertOpen();
-        const record = this.findApproval(input.approvalId);
-        if (record === null) {
+        const initial = this.findApproval(input.approvalId);
+        if (initial === null) {
             throw new AgentClientError(
                 'approval_forbidden',
                 'approval is not pending',
             );
         }
-        await this.withTask(record.taskId, () =>
-            this.resolveApprovalRecord(
+        await this.withTask(initial.taskId, async () => {
+            const record = this.findApproval(input.approvalId);
+            await this.resolveApprovalRecord(
                 record,
                 input.decision,
                 input.requestDigest,
@@ -884,8 +915,8 @@ export class AgentRuntime {
                     runId: input.runId,
                     generation: input.generation,
                 },
-            ),
-        );
+            );
+        });
         return {
             approvalId: input.approvalId,
             decision: input.decision,
@@ -1184,6 +1215,7 @@ export class AgentRuntime {
             modelIterator: null,
             turnIndex: 0,
             extraUserTexts: [],
+            forceTexts: [],
             leaseHeld: this.taskStore !== null,
         };
         this.active.set(input.taskId, control);
@@ -1215,7 +1247,7 @@ export class AgentRuntime {
             await this.releaseLease(input.taskId);
             throw error;
         }
-        this.promptByRun.set(runId, input.prompt);
+        this.rememberPrompt(runId, input.prompt);
         const modelTask = this.runModel(control).finally(() => {
             this.modelTasks.delete(modelTask);
         });
@@ -1245,6 +1277,12 @@ export class AgentRuntime {
                     'steer and force require an active run',
                 );
             }
+            if (current.cancelRequested) {
+                throw new AgentClientError(
+                    'out_of_order',
+                    'the run is cancelling; new messages are refused',
+                );
+            }
             this.ensureQueueCapacity(current);
             const pending: PendingBoundaryMessage = {
                 messageId,
@@ -1253,7 +1291,14 @@ export class AgentRuntime {
                 timer: null,
             };
             pending.timer = this.timers.setTimeout(() => {
-                void this.boundaryFallback(current.taskId, messageId);
+                void this.boundaryFallback(current.taskId, messageId).catch(
+                    (error) =>
+                        this.recoverPendingFailure(
+                            current.taskId,
+                            messageId,
+                            error,
+                        ),
+                );
             }, this.boundaryWaitMs);
             current.pendingBoundary.push(pending);
             return {
@@ -1278,6 +1323,14 @@ export class AgentRuntime {
             if (index < 0) return;
             const [pending] = current.pendingBoundary.splice(index, 1);
             this.timers.clearTimeout(pending!.timer);
+            if (current.cancelRequested) {
+                await this.appendUndeliveredMessage(
+                    current,
+                    pending!.messageId,
+                    'cancelled',
+                );
+                return;
+            }
             await this.emitBoundaryFallback(current, pending!);
         });
     }
@@ -1322,7 +1375,11 @@ export class AgentRuntime {
                     boundary: 'next_tool',
                 },
             );
-            current.extraUserTexts.push(message.text);
+            if (message.delivery === 'force') {
+                current.forceTexts.push(message.text);
+            } else {
+                current.extraUserTexts.push(message.text);
+            }
         }
     }
 
@@ -1350,8 +1407,11 @@ export class AgentRuntime {
                     turn_id: turnId,
                     index,
                 });
+                const userTurn = [current.prompt, ...current.forceTexts].join(
+                    '\n',
+                );
                 const history = [
-                    { role: 'user' as const, text: current.prompt },
+                    { role: 'user' as const, text: userTurn },
                     ...current.extraUserTexts.splice(0).map((text) => ({
                         role: 'user' as const,
                         text,
@@ -1362,10 +1422,7 @@ export class AgentRuntime {
                     runId: current.runId,
                     generation: current.generation,
                     mode: current.mode,
-                    prompt:
-                        history.length === 0
-                            ? current.prompt
-                            : history[history.length - 1]!.text,
+                    prompt: userTurn,
                     history,
                 };
                 const iterator =
@@ -1522,7 +1579,7 @@ export class AgentRuntime {
         if (current.terminal || current.cancelRequested) return;
         let args: Record<string, unknown>;
         try {
-            args = canonicalArguments(toolCall.arguments).arguments;
+            args = canonicalArguments(toolCall.arguments);
         } catch (error) {
             await this.withTask(current.taskId, () =>
                 this.finalizeFailed(current, {
@@ -1848,7 +1905,7 @@ export class AgentRuntime {
         toolCallId?: string,
     ): Promise<void> {
         if (current.terminal) return;
-        this.clearPendingBoundary(current);
+        await this.failUndeliveredMessages(current, 'cancelled');
         if (current.stopTimer !== null) {
             this.timers.clearTimeout(current.stopTimer);
             current.stopTimer = null;
@@ -1877,7 +1934,7 @@ export class AgentRuntime {
         },
     ): Promise<void> {
         if (current.terminal) return;
-        this.clearPendingBoundary(current);
+        await this.failUndeliveredMessages(current, 'failed');
         if (current.stopTimer !== null) {
             this.timers.clearTimeout(current.stopTimer);
             current.stopTimer = null;
@@ -1887,6 +1944,138 @@ export class AgentRuntime {
             startQueued: false,
             stopAcknowledged: false,
         });
+    }
+
+    private async failUndeliveredMessages(
+        current: RunControl,
+        reason: string,
+    ): Promise<void> {
+        const pending = current.pendingBoundary.splice(0);
+        for (const message of pending) {
+            this.timers.clearTimeout(message.timer);
+            await this.appendUndeliveredMessage(current, message.messageId, reason);
+        }
+        const queued = this.taskQueues.get(current.taskId) ?? [];
+        this.taskQueues.delete(current.taskId);
+        for (const message of queued) {
+            await this.appendUndeliveredMessage(current, message.messageId, reason);
+        }
+    }
+
+    private async appendUndeliveredMessage(
+        current: RunControl,
+        messageId: string,
+        reason: string,
+    ): Promise<void> {
+        if (current.terminal) return;
+        try {
+            await this.append(current, 'error', {
+                code: 'message_not_delivered',
+                message: `message ${messageId} was not delivered (${reason})`,
+                retryable: false,
+            });
+        } catch (error) {
+            this.persistenceError = new AgentClientError(
+                errorCode(error),
+                errorMessage(error),
+                false,
+                error instanceof AgentStoreError ? error.storage : null,
+            );
+        }
+    }
+
+    private async recoverStopFailure(
+        taskId: string,
+        runId: string,
+        error: unknown,
+    ): Promise<void> {
+        this.persistenceError = new AgentClientError(
+            errorCode(error),
+            errorMessage(error),
+            false,
+            error instanceof AgentStoreError ? error.storage : null,
+        );
+        try {
+            await this.withTask(taskId, async () => {
+                const current = this.active.get(taskId);
+                if (
+                    current === undefined ||
+                    current.runId !== runId ||
+                    current.terminal
+                ) {
+                    return;
+                }
+                await this.settleControlWithoutEvent(current, false);
+            });
+        } catch (recoveryError) {
+            this.persistenceError = new AgentClientError(
+                errorCode(recoveryError),
+                errorMessage(recoveryError),
+                false,
+                recoveryError instanceof AgentStoreError
+                    ? recoveryError.storage
+                    : null,
+            );
+        }
+    }
+
+    private async recoverPendingFailure(
+        taskId: string,
+        messageId: string,
+        error: unknown,
+    ): Promise<void> {
+        this.persistenceError = new AgentClientError(
+            errorCode(error),
+            errorMessage(error),
+            false,
+            error instanceof AgentStoreError ? error.storage : null,
+        );
+        try {
+            await this.withTask(taskId, async () => {
+                const current = this.active.get(taskId);
+                if (current === undefined || current.terminal) return;
+                const index = current.pendingBoundary.findIndex(
+                    (pending) => pending.messageId === messageId,
+                );
+                if (index < 0) return;
+                const [pending] = current.pendingBoundary.splice(index, 1);
+                this.timers.clearTimeout(pending!.timer);
+            });
+        } catch {
+            // The receipt for this message was already returned; the pending
+            // delivery is removed and the persistence error is retained.
+        }
+    }
+
+    private async settleControlWithoutEvent(
+        current: RunControl,
+        stopAcknowledged: boolean,
+    ): Promise<void> {
+        if (current.terminal) return;
+        current.terminal = true;
+        current.cancelRequested = true;
+        this.clearTimers(current);
+        current.pendingApproval?.resolve('cancelled');
+        current.pendingApproval = null;
+        const iterator = current.modelIterator;
+        current.modelIterator = null;
+        try {
+            await iterator?.return?.();
+        } catch (error) {
+            if (this.persistenceError === null) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                );
+            }
+        }
+        if (this.active.get(current.taskId) === current) {
+            this.active.delete(current.taskId);
+        }
+        current.stopDeferred?.resolve(stopAcknowledged);
+        current.stopDeferred = null;
+        this.taskQueues.delete(current.taskId);
+        await this.releaseLease(current.taskId);
     }
 
     private async afterTerminal(
@@ -1900,7 +2089,16 @@ export class AgentRuntime {
         current.pendingApproval = null;
         const iterator = current.modelIterator;
         current.modelIterator = null;
-        await iterator?.return?.();
+        try {
+            await iterator?.return?.();
+        } catch (error) {
+            if (this.persistenceError === null) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                );
+            }
+        }
         if (this.active.get(current.taskId) === current) {
             this.active.delete(current.taskId);
         }
@@ -2092,12 +2290,22 @@ export class AgentRuntime {
             current === undefined ||
             current.terminal ||
             current.runId !== record.runId ||
-            current.generation !== record.generation ||
-            current.pendingApproval?.record.approvalId !== record.approvalId
+            current.generation !== record.generation
         ) {
             throw new AgentClientError(
                 'approval_forbidden',
                 'approval does not belong to the active run',
+            );
+        }
+        const pending = current.pendingApproval;
+        if (
+            pending === null ||
+            pending.record.approvalId !== record.approvalId ||
+            current.approvals.get(record.approvalId) !== record
+        ) {
+            throw new AgentClientError(
+                'approval_forbidden',
+                'approval is no longer pending',
             );
         }
         if (
@@ -2136,6 +2344,9 @@ export class AgentRuntime {
             );
         }
         if (this.now() > record.expiresAtMs) {
+            current.pendingApproval = null;
+            current.approvals.delete(record.approvalId);
+            pending.resolve('cancelled');
             await this.append(current, 'tool.approval_resolved', {
                 approval_id: record.approvalId,
                 decision: 'expired',
@@ -2156,8 +2367,9 @@ export class AgentRuntime {
             decision,
             resolver: 'host',
         });
+        current.pendingApproval = null;
         current.approvals.delete(record.approvalId);
-        current.pendingApproval?.resolve(decision);
+        pending.resolve(decision);
     }
 
     private findApproval(approvalId: string): ApprovalRecord | null {
@@ -2218,29 +2430,41 @@ export class AgentRuntime {
         });
     }
 
+    private tickHeartbeat(): void {
+        if (this.taskStore === null || this.heartbeatInFlight) return;
+        this.heartbeatInFlight = true;
+        this.heartbeatTask = this.heartbeat()
+            .catch((error) => {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                );
+            })
+            .finally(() => {
+                this.heartbeatInFlight = false;
+            });
+    }
+
     private async heartbeat(): Promise<void> {
         if (this.taskStore === null) return;
-        this.heartbeatTask = this.heartbeatTask.then(async () => {
-            for (const taskId of [...this.heldLeases]) {
-                try {
-                    await this.taskStore!.heartbeatLease(
-                        taskId,
-                        this.writerId,
-                        this.now(),
-                    );
-                } catch (error) {
-                    this.persistenceError = new AgentClientError(
-                        errorCode(error),
-                        errorMessage(error),
-                        false,
-                        error instanceof AgentStoreError
-                            ? error.storage
-                            : null,
-                    );
-                }
+        for (const taskId of [...this.heldLeases]) {
+            try {
+                await this.taskStore.heartbeatLease(
+                    taskId,
+                    this.writerId,
+                    this.now(),
+                );
+            } catch (error) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                    false,
+                    error instanceof AgentStoreError
+                        ? error.storage
+                        : null,
+                );
             }
-        });
-        await this.heartbeatTask;
+        }
     }
 
     private async releaseLease(taskId: string): Promise<void> {
@@ -2335,6 +2559,15 @@ export class AgentRuntime {
                 task.runs.some((run) => run.runId === task.latestRunId),
             state: task.state,
         };
+    }
+
+    private rememberPrompt(runId: string, prompt: string): void {
+        this.promptByRun.set(runId, prompt);
+        while (this.promptByRun.size > MAX_PROMPT_HISTORY) {
+            const oldest = this.promptByRun.keys().next().value;
+            if (oldest === undefined || oldest === runId) break;
+            this.promptByRun.delete(oldest);
+        }
     }
 
     private requireText(text: string, label: string): void {

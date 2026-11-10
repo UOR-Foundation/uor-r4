@@ -1,6 +1,8 @@
-import { AgentClient, type TaskSummary } from './client.js';
+import { AgentClient, AgentClientError, type TaskSummary } from './client.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { AgentTaskStore } from './store.js';
+import { AgentRuntime } from './runtime.js';
+import { ReplayModelPort } from './modelPort.js';
 import { AgentStoreError } from './storeTypes.js';
 import { AGENT_EVENT_SCHEMA } from './generated/agentContract.js';
 import {
@@ -79,6 +81,11 @@ interface TaskViewSummary {
     state: string;
     latestRunId: string | null;
     unresolvedRunId: string | null;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
     runs: Array<{ runId: string; lastSequence: number; state: string }>;
 }
 
@@ -139,6 +146,13 @@ export interface StudioTestApi {
     readChanges(): Promise<Outcome>;
     pin(pinned: boolean): Promise<Outcome>;
     archive(archived: boolean): Promise<Outcome>;
+    seedBackgroundHoldForTest(): Promise<Outcome>;
+    startRunOnHeldTaskForTest(taskId: string): Promise<Outcome>;
+    resolveBackgroundHoldForTest(
+        taskId: string,
+        runId: string,
+        toolCallId: string,
+    ): Promise<Outcome>;
     acquireLease(writerId: string, nowMs?: number): Promise<Outcome>;
     heartbeatLease(writerId: string, nowMs?: number): Promise<Outcome>;
     releaseLease(writerId: string): Promise<Outcome>;
@@ -361,7 +375,10 @@ function currentFixture(): FixtureSummary {
 }
 
 function errorCode(error: unknown): string {
-    return error instanceof AgentStoreError ? error.code : 'internal';
+    if (error instanceof AgentStoreError || error instanceof AgentClientError) {
+        return error.code;
+    }
+    return 'internal';
 }
 
 function errorMessage(error: unknown): string {
@@ -427,6 +444,7 @@ function restoreState(): RestoreView {
             (task.latestRunId !== null && !latestLoaded));
     const canStartRun =
         state.phase === 'ready' &&
+        task?.state !== 'waiting_for_background' &&
         !incompleteForTask &&
         activeRun === null &&
         !unresolvedRun;
@@ -1034,6 +1052,105 @@ function cursorView(): CursorView | null {
     return memoryCursorView();
 }
 
+const HOLD_TOOL_ID = 'tool_hold_probe';
+
+function runtimeForTest(): AgentRuntime {
+    const client = requireClient();
+    return new AgentRuntime({
+        store: client.store,
+        taskStore: requireTaskStore(),
+        modelPort: new ReplayModelPort(),
+        now: () => state.nowMs,
+        timers: {
+            setInterval: testSetInterval,
+            clearInterval: testClearInterval,
+            setTimeout: (handler, timeout) =>
+                globalThis.setTimeout(handler, timeout),
+            clearTimeout: (handle) =>
+                globalThis.clearTimeout(handle as never),
+        },
+        writerId: `runtime-test-${randomHex(8)}`,
+    });
+}
+
+async function seedBackgroundHoldForTest(): Promise<Outcome> {
+    try {
+        const fixture = await createTaskAndEvents({ mode: 'cancelling' });
+        const failed = await appendFixtureEvent(fixture, 'run.failed', {
+            code: 'stop_unacknowledged',
+            message: 'probe stop was not acknowledged',
+            retryable: false,
+            stop_outcome: 'ack_timeout',
+            in_flight_tool_id: HOLD_TOOL_ID,
+        });
+        if (failed.ok !== true) return failed;
+        const records = await requireTaskStore().listTasks({
+            includeArchived: true,
+        });
+        const record = records.find(
+            (candidate) => candidate.task_id === fixture.taskId,
+        );
+        if (record === undefined) {
+            throw new Error('hold probe task record is missing');
+        }
+        await requireTaskStore().writeTaskRecord({
+            ...record,
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: fixture.runId,
+                tool_call_id: HOLD_TOOL_ID,
+            },
+        });
+        return {
+            ok: true,
+            record: {
+                taskId: fixture.taskId,
+                runId: fixture.runId,
+                toolCallId: HOLD_TOOL_ID,
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function startRunOnHeldTaskForTest(taskId: string): Promise<Outcome> {
+    const runtime = runtimeForTest();
+    try {
+        await runtime.open();
+        const run = await runtime.startRun({
+            taskId,
+            prompt: 'must not start on a hold',
+        });
+        return { ok: true, record: run };
+    } catch (error) {
+        return failure(error);
+    } finally {
+        await runtime.dispose();
+    }
+}
+
+async function resolveBackgroundHoldForTest(
+    taskId: string,
+    runId: string,
+    toolCallId: string,
+): Promise<Outcome> {
+    const runtime = runtimeForTest();
+    try {
+        await runtime.open();
+        const receipt = await runtime.resolveBackground({
+            taskId,
+            runId,
+            toolCallId,
+        });
+        return { ok: true, record: receipt };
+    } catch (error) {
+        return failure(error);
+    } finally {
+        await runtime.dispose();
+    }
+}
+
 function taskView(): TaskViewSummary | null {
     const task = currentTask();
     if (task === null) return null;
@@ -1045,6 +1162,7 @@ function taskView(): TaskViewSummary | null {
         state: task.state,
         latestRunId: task.latestRunId,
         unresolvedRunId: task.unresolvedRunId,
+        hold: task.hold,
         runs: task.runs.map((run) => ({
             runId: run.runId,
             lastSequence: run.lastSequence,
@@ -1292,6 +1410,9 @@ export function installStudioTestApi(): void {
         },
         pin: (pinned: boolean) => updateFlag('pin', pinned),
         archive: (archived: boolean) => updateFlag('archive', archived),
+        seedBackgroundHoldForTest,
+        startRunOnHeldTaskForTest,
+        resolveBackgroundHoldForTest,
         async acquireLease(writerId: string, nowMs?: number) {
             try {
                 const fixture = currentFixture();
