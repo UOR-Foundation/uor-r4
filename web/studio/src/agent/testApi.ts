@@ -1,4 +1,5 @@
 import { AgentClient } from './client.js';
+import { FixtureTransport } from './fixtureTransport.js';
 import { AgentTaskStore } from './store.js';
 import { AgentStoreError } from './storeTypes.js';
 import { AGENT_EVENT_SCHEMA } from './generated/agentContract.js';
@@ -19,6 +20,7 @@ const TERMINAL_STATES = new Set(['finished', 'failed', 'cancelled', 'expired']);
 
 interface StoreFaults {
     abort_next_append: boolean;
+    abort_next_task_write: boolean;
 }
 
 interface FixtureSummary {
@@ -97,6 +99,22 @@ export interface StudioTestApi {
         mode?: 'message' | 'cancelling' | 'finished';
     }): Promise<FixtureSummary>;
     createSecondRun(): Promise<FixtureSummary>;
+    createClientRun(): Promise<FixtureSummary>;
+    createTaskAt(createdAtMs: number): Promise<Outcome>;
+    resumeViaClient(): Promise<Outcome>;
+    recordChangesWithFiles(files: Array<Record<string, unknown>>): Promise<Outcome>;
+    seedSmallEvents(total: number): Promise<{
+        events: number;
+        sequence: number;
+        durationMs: number;
+        heapUsed: number | null;
+    }>;
+    scaleMetrics(): {
+        events: number;
+        sequence: number;
+        durationMs: number;
+        heapUsed: number | null;
+    } | null;
     cursor(): CursorView | null;
     taskView(): TaskViewSummary | null;
     writeSnapshot(): Promise<Outcome>;
@@ -112,6 +130,7 @@ export interface StudioTestApi {
     releaseLease(writerId: string): Promise<Outcome>;
     lease(): Promise<Outcome>;
     armAbortNextAppend(): void;
+    armAbortNextTaskWrite(): void;
     appendAssistant(
         text: string,
         options?: { writerId?: string; nowMs?: number },
@@ -132,6 +151,12 @@ interface TestState {
     openPromise: Promise<void> | null;
     openGate: (() => void) | null;
     faults: StoreFaults;
+    scale: {
+        events: number;
+        sequence: number;
+        durationMs: number;
+        heapUsed: number | null;
+    } | null;
 }
 
 let state: TestState = freshState();
@@ -148,7 +173,8 @@ function freshState(): TestState {
         fixture: null,
         openPromise: null,
         openGate: null,
-        faults: { abort_next_append: false },
+        faults: { abort_next_append: false, abort_next_task_write: false },
+        scale: null,
     };
 }
 
@@ -168,7 +194,11 @@ function ensureClient(): AgentClient {
         now: () => state.nowMs,
         faults: state.faults,
     });
-    const client = new AgentClient({ store, taskStore });
+    const client = new AgentClient({
+        transport: new FixtureTransport(),
+        store,
+        taskStore,
+    });
     state.store = store;
     state.taskStore = taskStore;
     state.client = client;
@@ -307,7 +337,10 @@ async function performOpen(): Promise<void> {
 }
 
 async function open(): Promise<RestoreView> {
-    if (state.phase === 'ready' || state.phase === 'incomplete') {
+    if (
+        (state.phase === 'ready' || state.phase === 'incomplete') &&
+        state.taskStore?.isOpen === true
+    ) {
         return restoreState();
     }
     if (state.openGate !== null) {
@@ -521,6 +554,166 @@ async function createSecondRun(): Promise<FixtureSummary> {
     return fixture;
 }
 
+async function ensureReady(): Promise<void> {
+    if (state.phase === 'ready') return;
+    const opened = await open();
+    if (opened.phase !== 'ready') {
+        throw new Error(`studio test store is ${opened.phase}: ${opened.error?.message ?? ''}`);
+    }
+}
+
+async function createClientRun(): Promise<FixtureSummary> {
+    await ensureReady();
+    const client = requireClient();
+    const task = await client.createTask({ title: 'Client resume fixture' });
+    const run = await client.startRun({
+        taskId: task.taskId,
+        prompt: 'resume fixture',
+    });
+    const deadline = Date.now() + 10_000;
+    let cursor = client.store.getRunCursor(task.taskId, run.runId);
+    while (
+        (cursor === null || cursor.lastSequence < 1) &&
+        Date.now() < deadline
+    ) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        cursor = client.store.getRunCursor(task.taskId, run.runId);
+    }
+    if (cursor === null || cursor.lastSequence < 1 || cursor.lastDigest === null) {
+        throw new Error('client fixture run did not reach run.started');
+    }
+    const fixture: FixtureSummary = {
+        taskId: task.taskId,
+        projectId: task.projectId,
+        runId: run.runId,
+        generation: cursor.generation,
+        eventIds: [
+            fixtureEventId(run.runId, cursor.generation, 0),
+            fixtureEventId(run.runId, cursor.generation, 1),
+        ],
+        digests: [cursor.lastDigest],
+    };
+    state.fixture = fixture;
+    client.store.selectTask(task.taskId);
+    return fixture;
+}
+
+async function createTaskAt(createdAtMs: number): Promise<Outcome> {
+    try {
+        await ensureReady();
+        const record = await requireTaskStore().createTask({
+            title: 'timestamp task',
+            created_at_ms: createdAtMs,
+        });
+        return { ok: true, record };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function resumeViaClient(): Promise<Outcome> {
+    try {
+        const fixture = currentFixture();
+        const snapshot = await requireClient().resumeTask({
+            taskId: fixture.taskId,
+            runId: fixture.runId,
+        });
+        return { ok: true, record: snapshot };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function recordChangesWithFiles(
+    files: Array<Record<string, unknown>>,
+): Promise<Outcome> {
+    try {
+        const fixture = currentFixture();
+        const view = requireTaskStore().store.getRun(
+            fixture.taskId,
+            fixture.runId,
+        );
+        const latest = view?.changesSnapshots[view.changesSnapshots.length - 1];
+        if (latest === undefined) {
+            return {
+                ok: false,
+                code: 'invalid_arguments',
+                message: 'no changes.snapshot is present',
+            };
+        }
+        const record = await requireTaskStore().recordChanges({
+            task_id: fixture.taskId,
+            run_id: fixture.runId,
+            head_digest: latest.headDigest,
+            files,
+            captured_at_ms: latest.capturedAtMs,
+        });
+        return { ok: true, record };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function seedSmallEvents(total: number): Promise<{
+    events: number;
+    sequence: number;
+    durationMs: number;
+    heapUsed: number | null;
+}> {
+    await ensureReady();
+    if (state.fixture === null) await createTaskAndEvents();
+    if (!Number.isSafeInteger(total) || total < 3) {
+        throw new Error('scale target must be at least 3 events');
+    }
+    const fixture = currentFixture();
+    const taskStore = requireTaskStore();
+    const client = requireClient();
+    const startedAt = performance.now();
+    let cursor = client.store.getRunCursor(fixture.taskId, fixture.runId);
+    if (cursor === null) throw new Error('scale run is missing');
+    while (cursor.lastSequence < total - 1) {
+        const sequence = cursor.lastSequence + 1;
+        if (sequence >= 10_000) {
+            throw new Error('scale target exceeds max_events_per_run');
+        }
+        const event = eventFor(
+            fixture,
+            sequence,
+            cursor.generation,
+            'assistant.message',
+            {
+                message_id: `msg_${sequence.toString().padStart(8, '0')}`,
+                text: 'x',
+            },
+        );
+        const result = await taskStore.appendEvent({ event });
+        if (result.status !== 'applied') {
+            throw new Error(
+                `scale append ${sequence} was rejected: ${result.code ?? ''} ${result.message ?? ''}`,
+            );
+        }
+        fixture.eventIds.push(event.event_id);
+        if (result.digest !== null) fixture.digests.push(result.digest);
+        const next = client.store.getRunCursor(fixture.taskId, fixture.runId);
+        if (next === null || next.lastSequence !== sequence) {
+            throw new Error('scale cursor did not advance');
+        }
+        cursor = next;
+    }
+    const durationMs = performance.now() - startedAt;
+    const heapUsed =
+        (performance as unknown as { memory?: { usedJSHeapSize: number } })
+            .memory?.usedJSHeapSize ?? null;
+    const result = {
+        events: cursor.lastSequence + 1,
+        sequence: cursor.lastSequence,
+        durationMs,
+        heapUsed,
+    };
+    state.scale = result;
+    return result;
+}
+
 function cursorView(): CursorView | null {
     if (state.phase === 'loading' || state.phase === 'error' || state.phase === 'idle') {
         return null;
@@ -640,6 +833,14 @@ export function installStudioTestApi(): void {
         restoreState,
         createTaskAndEvents,
         createSecondRun,
+        createClientRun,
+        createTaskAt,
+        resumeViaClient,
+        recordChangesWithFiles,
+        seedSmallEvents,
+        scaleMetrics() {
+            return state.scale;
+        },
         cursor: cursorView,
         taskView,
         async writeSnapshot() {
@@ -698,7 +899,32 @@ export function installStudioTestApi(): void {
                     snapshot_digest: run.lastDigest,
                 },
             );
-            const result = await requireTaskStore().appendEvent({ event });
+            const verification = requireClient().store.verifySnapshot({
+                taskId: fixture.taskId,
+                runId: fixture.runId,
+                generation: run.generation,
+                lastSequence: run.lastSequence,
+                lastEventId: run.lastEventId!,
+                headDigest: run.lastDigest,
+            });
+            if (!verification.ok) {
+                return {
+                    ok: false,
+                    code: verification.code ?? 'snapshot_corrupt',
+                    message: verification.message ?? 'snapshot verification failed',
+                };
+            }
+            const result = await requireTaskStore().appendEvent({
+                event,
+                snapshot_anchor: {
+                    task_id: fixture.taskId,
+                    run_id: fixture.runId,
+                    generation: run.generation,
+                    last_sequence: run.lastSequence,
+                    last_event_id: run.lastEventId!,
+                    head_digest: run.lastDigest,
+                },
+            });
             if (result.status === 'applied') {
                 fixture.eventIds.push(event.event_id);
                 if (result.digest !== null) fixture.digests.push(result.digest);
@@ -802,6 +1028,9 @@ export function installStudioTestApi(): void {
         },
         armAbortNextAppend() {
             state.faults.abort_next_append = true;
+        },
+        armAbortNextTaskWrite() {
+            state.faults.abort_next_task_write = true;
         },
         async appendAssistant(
             text: string,

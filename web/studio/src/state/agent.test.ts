@@ -696,3 +696,167 @@ describe('AgentStore reducer', () => {
         expect(store.snapshot().runs[0].needsResync).toBe(true);
     });
 });
+
+describe('AgentStore scoped mutation journal', () => {
+    const digestFor = (sequence: number): string =>
+        `sha256:${sequence.toString(16).padStart(64, '0')}`;
+
+    function applyEvents(store: ReturnType<typeof createAgentStore>, events: AgentIncomingEvent[]) {
+        for (const event of events) {
+            const result = store.apply(event, digestFor(event.sequence));
+            expect(result.status, `${event.type} baseline`).toBe('applied');
+        }
+    }
+
+    function baseStore(): ReturnType<typeof createAgentStore> {
+        const store = createAgentStore();
+        applyEvents(store, [queued(0), started(1)]);
+        return store;
+    }
+
+    function expectRollback(
+        store: ReturnType<typeof createAgentStore>,
+        event: AgentIncomingEvent,
+    ): void {
+        const before = JSON.parse(JSON.stringify(store.snapshot()));
+        const journaled = store.applyJournaled(event, digestFor(event.sequence));
+        expect(journaled.result.status, `${event.type} apply`).toBe('applied');
+        journaled.rollback();
+        expect(JSON.parse(JSON.stringify(store.snapshot())), `${event.type} rollback`).toEqual(before);
+    }
+
+    const toolRequested = (sequence: number): AgentIncomingEvent =>
+        makeEvent(sequence, 'tool.requested', {
+            tool_call_id: 'tool_1',
+            tool: 'read',
+            arguments_digest: `sha256:${'a'.repeat(64)}`,
+            arguments_preview: '{}',
+        });
+    const toolStarted = (sequence: number): AgentIncomingEvent =>
+        makeEvent(sequence, 'tool.started', { tool_call_id: 'tool_1' });
+    const approvalRequired = (sequence: number): AgentIncomingEvent =>
+        makeEvent(sequence, 'tool.approval_required', {
+            approval_id: 'apr_1',
+            tool_call_id: 'tool_1',
+            tool: 'write',
+            scope: 'file:src/a.ts',
+            request_digest: `sha256:${'b'.repeat(64)}`,
+            expires_at_ms: 1_794_283_300_000,
+        });
+    const approvalResolved = (sequence: number): AgentIncomingEvent =>
+        makeEvent(sequence, 'tool.approval_resolved', {
+            approval_id: 'apr_1',
+            decision: 'approved',
+            resolver: 'host',
+        });
+
+    test('rollback restores each event family exactly', () => {
+        const cases: Array<{
+            name: string;
+            setup?: AgentIncomingEvent[];
+            event: AgentIncomingEvent;
+        }> = [
+            { name: 'run.status', event: makeEvent(2, 'run.status', { status: 'cancelling' }) },
+            { name: 'assistant.message', event: makeEvent(2, 'assistant.message', { message_id: 'msg_1', text: 'hello' }) },
+            { name: 'assistant.delta', event: makeEvent(2, 'assistant.delta', { message_id: 'msg_1', text_delta: 'hi' }) },
+            { name: 'tool.requested', event: toolRequested(2) },
+            { name: 'tool.started', setup: [toolRequested(2)], event: toolStarted(3) },
+            {
+                name: 'tool.completed',
+                setup: [toolRequested(2), toolStarted(3)],
+                event: makeEvent(4, 'tool.completed', {
+                    tool_call_id: 'tool_1',
+                    status: 'ok',
+                    output_digest: `sha256:${'c'.repeat(64)}`,
+                    output_preview: 'ok',
+                    truncated: false,
+                }),
+            },
+            {
+                name: 'tool.failed',
+                setup: [toolRequested(2), toolStarted(3)],
+                event: makeEvent(4, 'tool.failed', { tool_call_id: 'tool_1', code: 'denied', message: 'no' }),
+            },
+            { name: 'approval_required', setup: [toolRequested(2)], event: approvalRequired(3) },
+            {
+                name: 'approval_resolved',
+                setup: [toolRequested(2), approvalRequired(3)],
+                event: approvalResolved(4),
+            },
+            {
+                name: 'changes.snapshot',
+                event: makeEvent(2, 'changes.snapshot', {
+                    scope: 'last_turn',
+                    files: [{ path: 'src/a.ts' }],
+                    head_digest: 'turn:1',
+                    captured_at_ms: 1_794_283_200_002,
+                }),
+            },
+            {
+                name: 'run.finished',
+                event: makeEvent(2, 'run.finished', {
+                    status: 'finished',
+                    finished_at_ms: 1_794_283_200_002,
+                    duration_ms: 1,
+                }),
+            },
+            {
+                name: 'run.failed',
+                event: makeEvent(2, 'run.failed', {
+                    code: 'fixture',
+                    message: 'failed',
+                    retryable: true,
+                }),
+            },
+            {
+                name: 'run.cancelled',
+                event: makeEvent(2, 'run.cancelled', {
+                    safe_boundary: true,
+                    finished_at_ms: 1_794_283_200_002,
+                }),
+            },
+            {
+                name: 'run.expired',
+                event: makeEvent(2, 'run.expired', {
+                    expired_at_ms: 1_794_283_200_002,
+                    reason: 'retention',
+                }),
+            },
+        ];
+        for (const entry of cases) {
+            const store = baseStore();
+            if (entry.setup !== undefined) applyEvents(store, entry.setup);
+            expectRollback(store, entry.event);
+        }
+    });
+
+    test('rollback removes a new run and restores task metadata', () => {
+        const store = baseStore();
+        const before = JSON.parse(JSON.stringify(store.snapshot()));
+        const next = makeEvent(0, 'run.queued', { queued_at_ms: 1_794_283_200_010 }, {
+            generation: 2,
+            runId: 'run_1111111111111111',
+        });
+        const journaled = store.applyJournaled(next, digestFor(0));
+        expect(journaled.result.status).toBe('applied');
+        journaled.rollback();
+        expect(store.snapshot().runs).toHaveLength(1);
+        expect(store.snapshot().tasks[0]?.latestRunId).toBe(RUN_ID);
+        expect(JSON.parse(JSON.stringify(store.snapshot()))).toEqual(before);
+    });
+
+    test('rollback restores the verified snapshot needed by run.resumed', () => {
+        const store = baseStore();
+        const run = store.snapshot().runs[0];
+        const verification = verificationFor(run);
+        expect(store.verifySnapshot(verification).ok).toBe(true);
+        const before = JSON.parse(JSON.stringify(store.snapshot()));
+        const resumeEvent = resumed(2, run.generation, verification.headDigest);
+        const journaled = store.applyJournaled(resumeEvent, digestFor(2));
+        expect(journaled.result.status).toBe('applied');
+        journaled.rollback();
+        expect(JSON.parse(JSON.stringify(store.snapshot()))).toEqual(before);
+        expect(store.apply(resumeEvent, digestFor(2)).status).toBe('applied');
+        expect(store.snapshot().runs[0]?.generation).toBe(2);
+    });
+});

@@ -14,6 +14,7 @@ import {
 } from './generated/agentCanonical.js';
 import {
     AgentStore,
+    createAgentStore,
     validateAgentEvent,
     type AgentIncomingEvent,
     type AgentTaskRecord,
@@ -28,6 +29,7 @@ import {
     LEASE_STALE_MS,
     MAX_EXPORT_BYTES,
     MAX_SNAPSHOT_BYTES,
+    SNAPSHOT_BUNDLE_SCHEMA,
     SNAPSHOT_SCHEMA,
     type AgentDbStoreName,
     type AppendEventStoreInput,
@@ -44,7 +46,9 @@ import {
     type ReadRunResult,
     type RestoreIncomplete,
     type RunRecord,
+    type SnapshotBundleRecord,
     type SnapshotRecord,
+    type StoredSnapshotRecord,
     type TaskRecord,
 } from './storeTypes.js';
 
@@ -56,6 +60,7 @@ const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
 
 interface StoreFaults {
     abort_next_append: boolean;
+    abort_next_task_write: boolean;
 }
 
 export interface AgentTaskStoreOptions {
@@ -69,6 +74,20 @@ export interface AgentTaskStoreOptions {
 interface EventPair {
     record: EventRecord;
     key: IDBValidKey;
+}
+
+interface ReplayInput {
+    tasks: TaskRecord[];
+    runs: RunRecord[];
+    snapshots: Map<string, SnapshotBundleRecord>;
+    events: Map<string, EventPair[]>;
+    orphanRuns: Array<{ taskId: string; runId: string }>;
+    strict: boolean;
+}
+
+interface ReplayResult {
+    report: OpenReport;
+    replayed: RunRecord[];
 }
 
 function byteLength(text: string): number {
@@ -383,6 +402,127 @@ function requireStoredSnapshot(value: unknown): asserts value is SnapshotRecord 
     }
 }
 
+function sameSnapshot(left: SnapshotRecord, right: SnapshotRecord): boolean {
+    return (
+        left.task_id === right.task_id &&
+        left.run_id === right.run_id &&
+        left.generation === right.generation &&
+        left.last_sequence === right.last_sequence &&
+        left.last_event_id === right.last_event_id &&
+        left.head_digest === right.head_digest
+    );
+}
+
+function snapshotOrder(left: SnapshotRecord, right: SnapshotRecord): number {
+    return (
+        left.generation - right.generation ||
+        left.last_sequence - right.last_sequence ||
+        left.created_at_ms - right.created_at_ms
+    );
+}
+
+function normalizeSnapshotBundle(value: unknown): SnapshotBundleRecord {
+    if (!isObject(value)) {
+        corrupt('snapshot record is not an object');
+    }
+    if (value.schema === SNAPSHOT_SCHEMA) {
+        requireStoredSnapshot(value);
+        return {
+            schema: SNAPSHOT_BUNDLE_SCHEMA,
+            task_id: value.task_id,
+            run_id: value.run_id,
+            latest: value,
+            anchors: [],
+        };
+    }
+    if (value.schema !== SNAPSHOT_BUNDLE_SCHEMA) {
+        corrupt('snapshot record schema is not supported');
+    }
+    if (typeof value.task_id !== 'string' || !TASK_ID_PATTERN.test(value.task_id)) {
+        corrupt('snapshot bundle task_id is invalid');
+    }
+    if (typeof value.run_id !== 'string' || !RUN_ID_PATTERN.test(value.run_id)) {
+        corrupt('snapshot bundle run_id is invalid');
+    }
+    requireStoredSnapshot(value.latest);
+    if (!Array.isArray(value.anchors)) {
+        corrupt('snapshot bundle anchors are invalid');
+    }
+    const anchors = value.anchors.map((anchor) => {
+        requireStoredSnapshot(anchor);
+        return anchor;
+    });
+    for (const record of [value.latest, ...anchors]) {
+        if (record.task_id !== value.task_id || record.run_id !== value.run_id) {
+            corrupt('snapshot bundle record identity does not match its key');
+        }
+    }
+    return {
+        schema: SNAPSHOT_BUNDLE_SCHEMA,
+        task_id: value.task_id,
+        run_id: value.run_id,
+        latest: value.latest,
+        anchors,
+    };
+}
+
+function snapshotRecordsOf(bundle: SnapshotBundleRecord): SnapshotRecord[] {
+    const records: SnapshotRecord[] = [bundle.latest];
+    for (const anchor of bundle.anchors) {
+        if (!records.some((record) => sameSnapshot(record, anchor))) {
+            records.push(anchor);
+        }
+    }
+    return records;
+}
+
+function bundleFromRecords(
+    taskId: string,
+    runId: string,
+    records: SnapshotRecord[],
+): SnapshotBundleRecord {
+    const unique: SnapshotRecord[] = [];
+    for (const record of records) {
+        if (record.task_id !== taskId || record.run_id !== runId) {
+            corrupt('snapshot record identity does not match its stored run');
+        }
+        if (!unique.some((candidate) => sameSnapshot(candidate, record))) {
+            unique.push(record);
+        }
+    }
+    unique.sort(snapshotOrder);
+    if (unique.length === 0) {
+        corrupt('snapshot bundle has no records');
+    }
+    const latest = unique[unique.length - 1]!;
+    return {
+        schema: SNAPSHOT_BUNDLE_SCHEMA,
+        task_id: taskId,
+        run_id: runId,
+        latest,
+        anchors: unique.filter((record) => !sameSnapshot(record, latest)),
+    };
+}
+
+function mergeSnapshotAnchor(
+    existing: StoredSnapshotRecord | undefined,
+    anchor: SnapshotRecord,
+): SnapshotBundleRecord {
+    const bundle =
+        existing === undefined ? null : normalizeSnapshotBundle(existing);
+    if (
+        bundle !== null &&
+        (bundle.task_id !== anchor.task_id || bundle.run_id !== anchor.run_id)
+    ) {
+        corrupt('snapshot anchor identity does not match the stored run');
+    }
+    const records = bundle === null ? [] : snapshotRecordsOf(bundle);
+    if (!records.some((record) => sameSnapshot(record, anchor))) {
+        records.push(anchor);
+    }
+    return bundleFromRecords(anchor.task_id, anchor.run_id, records);
+}
+
 function requireStoredChange(value: unknown): asserts value is ChangeRecord {
     if (!isObject(value)) corrupt('change record is not an object');
     if (typeof value.task_id !== 'string' || !TASK_ID_PATTERN.test(value.task_id)) {
@@ -432,30 +572,6 @@ function taskToAgentRecord(record: TaskRecord): AgentTaskRecord {
         archived: record.archived,
         pinnedLocal: record.pinned_local,
         latestRunId: record.latest_run_id ?? null,
-    };
-}
-
-function viewToTaskRecord(view: {
-    taskId: string;
-    projectId: string;
-    title: string;
-    repo: string | null;
-    branch: string | null;
-    createdAtMs: number;
-    archived: boolean;
-    pinnedLocal: boolean;
-    latestRunId: string | null;
-}): TaskRecord {
-    return {
-        task_id: view.taskId,
-        project_id: view.projectId,
-        title: view.title,
-        ...(view.repo === null ? {} : { repo: view.repo }),
-        ...(view.branch === null ? {} : { branch: view.branch }),
-        created_at_ms: view.createdAtMs,
-        archived: view.archived,
-        pinned_local: view.pinnedLocal,
-        latest_run_id: view.latestRunId,
     };
 }
 
@@ -513,7 +629,10 @@ export class AgentTaskStore {
         }
         this.clock = options.now ?? (() => Date.now());
         this.writerId = options.writerId ?? `writer-${randomHex(8)}`;
-        this.faults = options.faults ?? { abort_next_append: false };
+        this.faults = options.faults ?? {
+            abort_next_append: false,
+            abort_next_task_write: false,
+        };
     }
 
     get isOpen(): boolean {
@@ -567,7 +686,7 @@ export class AgentTaskStore {
         if (!TASK_ID_PATTERN.test(taskId)) {
             invalidArgument('task_id must match tsk_<16 lowercase hex>');
         }
-        if (this.store.snapshot().tasks.some((task) => task.taskId === taskId)) {
+        if (this.store.hasTask(taskId)) {
             invalidArgument('task_id already exists');
         }
         if (input.repo !== undefined && input.repo !== null && typeof input.repo !== 'string') {
@@ -575,6 +694,12 @@ export class AgentTaskStore {
         }
         if (input.branch !== undefined && input.branch !== null && typeof input.branch !== 'string') {
             invalidArgument('branch must be a string');
+        }
+        if (
+            input.created_at_ms !== undefined &&
+            !isNonNegativeInteger(input.created_at_ms)
+        ) {
+            invalidArgument('created_at_ms must be a non-negative safe integer');
         }
         const record: TaskRecord = {
             task_id: taskId,
@@ -596,10 +721,17 @@ export class AgentTaskStore {
         requireStoredTask(record);
         const latest = record.latest_run_id ?? null;
         const hasRun =
-            latest !== null && this.store.getRun(record.task_id, latest) !== null;
+            latest !== null &&
+            this.store.getRunCursor(record.task_id, latest) !== null;
+        const stored = (await this.readOne<TaskRecord>(
+            'tasks',
+            record.task_id,
+        )) as TaskRecord | undefined;
+        const hold = record.hold ?? stored?.hold;
         const normalized: TaskRecord = {
             ...jsonClean(record),
             latest_run_id: hasRun ? latest : null,
+            ...(hold === undefined ? {} : { hold }),
         };
         await this.persistTaskWithRollback(normalized);
         return normalized;
@@ -632,7 +764,8 @@ export class AgentTaskStore {
             .map((record) => {
                 const latest = record.latest_run_id ?? null;
                 const exists =
-                    latest !== null && this.store.getRun(record.task_id, latest) !== null;
+                    latest !== null &&
+                    this.store.getRunCursor(record.task_id, latest) !== null;
                 return {
                     ...record,
                     latest_run_id: exists ? latest : null,
@@ -704,9 +837,17 @@ export class AgentTaskStore {
             );
         }
         const snapshot = this.buildSnapshot(view);
-        if (byteLength(canonicalJson(jsonClean(snapshot))) > MAX_SNAPSHOT_BYTES) {
-            throw new AgentStoreError('limit_exceeded', 'snapshot exceeds max_snapshot_bytes');
-        }
+        const pairs = await this.readEventPairs(taskId, runId);
+        const verified = await this.verifyEventChain(taskId, runId, pairs);
+        const resumeDigests = new Set(
+            verified.events
+                .filter((event) => event.type === 'run.resumed')
+                .map(
+                    (event) =>
+                        (event.data as Record<string, unknown>)
+                            .snapshot_digest as string,
+                ),
+        );
         const db = this.requireDb();
         const transaction = db.transaction(['snapshots', 'runs'], 'readwrite');
         try {
@@ -724,10 +865,31 @@ export class AgentTaskStore {
                     'durable run record moved before the snapshot was written',
                 );
             }
+            const existingSnapshot = (await requestResult(
+                transaction.objectStore('snapshots').get([taskId, runId]),
+            )) as StoredSnapshotRecord | undefined;
+            const existingBundle =
+                existingSnapshot === undefined
+                    ? null
+                    : normalizeSnapshotBundle(existingSnapshot);
+            const retained =
+                existingBundle === null
+                    ? []
+                    : snapshotRecordsOf(existingBundle).filter((record) =>
+                          resumeDigests.has(record.head_digest),
+                      );
+            retained.push(snapshot);
+            const bundle = bundleFromRecords(taskId, runId, retained);
+            if (byteLength(canonicalJson(jsonClean(bundle))) > MAX_SNAPSHOT_BYTES) {
+                throw new AgentStoreError(
+                    'limit_exceeded',
+                    'snapshot exceeds max_snapshot_bytes',
+                );
+            }
             await requestResult(
                 transaction
                     .objectStore('snapshots')
-                    .put(jsonClean(snapshot), [taskId, runId]),
+                    .put(jsonClean(bundle), [taskId, runId]),
             );
             await requestResult(
                 transaction.objectStore('runs').put(jsonClean(storedRun), [taskId, runId]),
@@ -753,14 +915,20 @@ export class AgentTaskStore {
 
     async readSnapshot(taskId: string, runId: string): Promise<ReadResult<SnapshotRecord>> {
         this.requireOpen();
-        const stored = (await this.readOne<SnapshotRecord>('snapshots', [taskId, runId])) as
-            | SnapshotRecord
-            | undefined;
-        if (stored === undefined) {
+        const storedValue = (await this.readOne<StoredSnapshotRecord>(
+            'snapshots',
+            [taskId, runId],
+        )) as StoredSnapshotRecord | undefined;
+        if (storedValue === undefined) {
             return { ok: false, code: 'snapshot_missing', message: 'snapshot record is missing' };
         }
+        let stored: SnapshotRecord;
         try {
-            requireStoredSnapshot(stored);
+            const bundle = normalizeSnapshotBundle(storedValue);
+            if (bundle.task_id !== taskId || bundle.run_id !== runId) {
+                corrupt('snapshot record identity does not match its key');
+            }
+            stored = bundle.latest;
         } catch (error) {
             return { ok: false, code: 'snapshot_corrupt', message: errorMessage(error) };
         }
@@ -815,23 +983,36 @@ export class AgentTaskStore {
         if (view === null) {
             throw new AgentStoreError('run_not_found', 'run is not present in AgentStore');
         }
-        const bound = view.changesSnapshots.some(
+        const bound = view.changesSnapshots.find(
             (snapshot) =>
                 snapshot.scope === 'last_turn' &&
                 snapshot.headDigest === input.head_digest,
         );
-        if (!bound) {
+        if (bound === undefined) {
             invalidArgument(
                 'head_digest is not bound to an applied changes.snapshot event',
+            );
+        }
+        let inputFiles: string;
+        let boundFiles: string;
+        try {
+            inputFiles = canonicalJson(input.files);
+            boundFiles = canonicalJson(bound.files);
+        } catch {
+            invalidArgument('change files are not canonical JSON objects');
+        }
+        if (inputFiles !== boundFiles) {
+            invalidArgument(
+                'change files do not match the applied changes.snapshot event',
             );
         }
         const record: ChangeRecord = {
             task_id: input.task_id,
             run_id: input.run_id,
             scope: 'last_turn',
-            files: jsonClean(input.files),
-            head_digest: input.head_digest,
-            captured_at_ms: input.captured_at_ms,
+            files: jsonClean(bound.files),
+            head_digest: bound.headDigest,
+            captured_at_ms: bound.capturedAtMs,
         };
         const transaction = this.requireDb().transaction('changes', 'readwrite');
         try {
@@ -1026,12 +1207,25 @@ export class AgentTaskStore {
             | undefined;
         if (record === undefined) return null;
         requireStoredLease(record);
+        if (record.task_id !== taskId) {
+            corrupt('lease record task_id does not match its key');
+        }
         return record;
     }
 
     async appendEvent(input: AppendEventStoreInput): Promise<AppendStoreResult> {
         this.requireOpen();
         const event = input.event;
+        if (input.now_ms !== undefined && !isNonNegativeInteger(input.now_ms)) {
+            return {
+                status: 'rejected',
+                code: 'invalid_arguments',
+                message: 'now_ms must be a non-negative safe integer',
+                event_id: event.event_id,
+                digest: null,
+                storage: null,
+            };
+        }
         const now = input.now_ms ?? this.clock();
         let canonical: string;
         let digest: string;
@@ -1071,12 +1265,10 @@ export class AgentTaskStore {
             };
         }
 
-        const checkpoint = this.store.checkpoint();
-        let result;
+        let journaled;
         try {
-            result = this.store.apply(event, digest);
+            journaled = this.store.applyJournaled(event, digest);
         } catch (error) {
-            this.store.restore(checkpoint);
             return {
                 status: 'rejected',
                 code: 'internal',
@@ -1086,6 +1278,7 @@ export class AgentTaskStore {
                 storage: null,
             };
         }
+        const result = journaled.result;
         if (result.status !== 'applied') {
             return {
                 ...result,
@@ -1098,7 +1291,7 @@ export class AgentTaskStore {
         try {
             await this.commitEvent(event, canonical, digest, input, now);
         } catch (error) {
-            this.store.restore(checkpoint);
+            journaled.rollback();
             if (error instanceof AgentStoreError && error.storage === null) {
                 return {
                     status: 'rejected',
@@ -1138,10 +1331,25 @@ export class AgentTaskStore {
             requireStoredRun(record);
             return record;
         });
-        const snapshots = (await this.readAll<SnapshotRecord>('snapshots')).map((record) => {
-            requireStoredSnapshot(record);
-            return record;
-        });
+        const snapshots: SnapshotRecord[] = [];
+        for (const { key, record } of await this.readAllPairs<StoredSnapshotRecord>(
+            'snapshots',
+        )) {
+            const bundle = normalizeSnapshotBundle(record);
+            if (
+                !Array.isArray(key) ||
+                key.length !== 2 ||
+                key[0] !== bundle.task_id ||
+                key[1] !== bundle.run_id
+            ) {
+                corrupt('snapshot record key does not match its task/run identity');
+            }
+            for (const manifest of snapshotRecordsOf(bundle)) {
+                if (!snapshots.some((existing) => sameSnapshot(existing, manifest))) {
+                    snapshots.push(manifest);
+                }
+            }
+        }
         const changes = (await this.readAll<ChangeRecord>('changes')).map((record) => {
             requireStoredChange(record);
             return record;
@@ -1291,12 +1499,12 @@ export class AgentTaskStore {
         }
         const tasks: TaskRecord[] = [];
         const runs: RunRecord[] = [];
-        const snapshots: SnapshotRecord[] = [];
+        const snapshotRecords: SnapshotRecord[] = [];
         const changes: ChangeRecord[] = [];
         const events: EventPair[] = [];
         const seenEventKeys = new Set<string>();
         const seenRunKeys = new Set<string>();
-        const seenSnapshotKeys = new Set<string>();
+        const seenSnapshotIdentities = new Set<string>();
         const seenChangeKeys = new Set<string>();
         for (let index = 1; index < lines.length; index += 1) {
             const line = lines[index]!;
@@ -1314,10 +1522,12 @@ export class AgentTaskStore {
             } else if (line.kind === 'snapshot') {
                 const record = line.record;
                 requireStoredSnapshot(record);
-                const key = runKey(record.task_id, record.run_id);
-                if (seenSnapshotKeys.has(key)) corrupt('import repeats a snapshot record');
-                seenSnapshotKeys.add(key);
-                snapshots.push(record);
+                const identity = `${record.task_id}\u0000${record.run_id}\u0000${record.generation}\u0000${record.last_sequence}\u0000${record.last_event_id}\u0000${record.head_digest}`;
+                if (seenSnapshotIdentities.has(identity)) {
+                    corrupt('import repeats a snapshot identity');
+                }
+                seenSnapshotIdentities.add(identity);
+                snapshotRecords.push(record);
             } else if (line.kind === 'changes') {
                 const record = line.record;
                 requireStoredChange(record);
@@ -1362,15 +1572,18 @@ export class AgentTaskStore {
         const runMap = new Map(
             runs.map((run) => [runKey(run.task_id, run.run_id), run]),
         );
-        for (const event of events) {
-            const [taskId, runId] = event.key as [string, string, number, number];
-            if (!runMap.has(runKey(taskId, runId))) {
-                corrupt('import event belongs to a missing run record');
+        for (const run of runs) {
+            if (!taskIds.has(run.task_id)) {
+                corrupt('import run record has no task record');
             }
         }
         const eventGroups = new Map<string, EventPair[]>();
         for (const event of events) {
-            const key = this.pairRunKey(event);
+            const [taskId, runId] = event.key as [string, string, number, number];
+            const key = runKey(taskId, runId);
+            if (!runMap.has(key)) {
+                corrupt('import event belongs to a missing run record');
+            }
             const group = eventGroups.get(key);
             if (group === undefined) {
                 eventGroups.set(key, [event]);
@@ -1378,26 +1591,43 @@ export class AgentTaskStore {
                 group.push(event);
             }
         }
-        const verifiedByRun = new Map<
-            string,
-            { events: AgentIncomingEvent[]; digests: string[] }
-        >();
-        for (const [key, run] of runMap) {
-            const pairs = eventGroups.get(key) ?? [];
-            if (pairs.length === 0) {
-                corrupt('import run record has no event records');
-            }
-            const verified = await this.verifyEventChain(run.task_id, run.run_id, pairs);
-            this.assertRunRecordMatches(run, verified);
-            verifiedByRun.set(key, verified);
-        }
-        for (const change of changes) {
-            const key = runKey(change.task_id, change.run_id);
+        const snapshotGroups = new Map<string, SnapshotRecord[]>();
+        for (const snapshot of snapshotRecords) {
+            const key = runKey(snapshot.task_id, snapshot.run_id);
             if (!runMap.has(key)) {
+                corrupt('import snapshot belongs to a missing run record');
+            }
+            const group = snapshotGroups.get(key);
+            if (group === undefined) {
+                snapshotGroups.set(key, [snapshot]);
+            } else {
+                group.push(snapshot);
+            }
+        }
+        const snapshots = new Map<string, SnapshotBundleRecord>();
+        for (const [key, records] of snapshotGroups) {
+            const run = runMap.get(key)!;
+            snapshots.set(
+                key,
+                bundleFromRecords(run.task_id, run.run_id, records),
+            );
+        }
+        const input: ReplayInput = {
+            tasks,
+            runs,
+            snapshots,
+            events: eventGroups,
+            orphanRuns: [],
+            strict: true,
+        };
+        const scratch = createAgentStore();
+        await this.replayInto(scratch, input);
+        for (const change of changes) {
+            const view = scratch.getRun(change.task_id, change.run_id);
+            if (view === null) {
                 corrupt('import change record belongs to a missing run record');
             }
-            const verified = verifiedByRun.get(key);
-            const bound = verified?.events.some((event) => {
+            const bound = view.events.some((event) => {
                 const data = event.data as Record<string, unknown>;
                 return (
                     event.type === 'changes.snapshot' &&
@@ -1405,49 +1635,18 @@ export class AgentTaskStore {
                     data.head_digest === change.head_digest
                 );
             });
-            if (bound !== true) {
+            if (!bound) {
                 corrupt('import change record has no matching changes.snapshot event');
-            }
-        }
-        for (const snapshot of snapshots) {
-            const pairs = eventGroups.get(runKey(snapshot.task_id, snapshot.run_id)) ?? [];
-            if (pairs.length === 0) {
-                corrupt('import snapshot has no run event chain');
-            }
-            const verified = await this.verifyEventChain(
-                snapshot.task_id,
-                snapshot.run_id,
-                pairs,
-            );
-            const index = verified.events.findIndex(
-                (event) =>
-                    event.generation === snapshot.generation &&
-                    event.sequence === snapshot.last_sequence,
-            );
-            if (
-                index < 0 ||
-                verified.events[index]!.event_id !== snapshot.last_event_id ||
-                verified.digests[index] !== snapshot.head_digest
-            ) {
-                corrupt('import snapshot position does not match the event chain');
-            }
-        }
-        for (const task of tasks) {
-            const latest = task.latest_run_id ?? null;
-            if (latest !== null && !runMap.has(runKey(task.task_id, latest))) {
-                corrupt('import task latest_run_id has no run record');
             }
         }
 
         const counts = await Promise.all(
-            (['tasks', 'runs', 'events', 'snapshots', 'changes'] as AgentDbStoreName[]).map(
-                (name) => this.countStore(name),
-            ),
+            AGENT_DB_STORES.map((name) => this.countStore(name)),
         );
         if (counts.some((count) => count > 0)) {
             throw new AgentStoreError(
                 'duplicate_event',
-                'import requires an empty agent store',
+                'import requires all nine agent stores to be empty',
             );
         }
 
@@ -1480,11 +1679,12 @@ export class AgentTaskStore {
                         .put(jsonClean(event.record), event.key),
                 );
             }
-            for (const snapshot of snapshots) {
+            for (const [key, bundle] of snapshots) {
+                const run = runMap.get(key)!;
                 await requestResult(
                     transaction
                         .objectStore('snapshots')
-                        .put(jsonClean(snapshot), [snapshot.task_id, snapshot.run_id]),
+                        .put(jsonClean(bundle), [run.task_id, run.run_id]),
                 );
             }
             for (const change of changes) {
@@ -1506,13 +1706,20 @@ export class AgentTaskStore {
             throw storageError(error);
         }
 
-        this.close();
-        await this.open();
+        const checkpoint = this.store.checkpoint();
+        this.store.reset();
+        try {
+            const replayed = await this.replayInto(this.store, input);
+            this.lastReport = replayed.report;
+        } catch (error) {
+            this.store.restore(checkpoint);
+            throw storageError(error);
+        }
         return {
             tasks: tasks.length,
             runs: runs.length,
             events: events.length,
-            snapshots: snapshots.length,
+            snapshots: snapshotRecords.length,
             changes: changes.length,
         };
     }
@@ -1540,28 +1747,66 @@ export class AgentTaskStore {
     private async restore(): Promise<OpenReport> {
         const db = await openAgentDatabase(this.factory);
         this.db = db;
+        db.onversionchange = () => {
+            db.close();
+            if (this.db === db) {
+                this.db = null;
+                this.opened = false;
+                this.openPromise = null;
+                this.lastReport = null;
+            }
+        };
         const checkpoint = this.store.checkpoint();
         this.store.reset();
         try {
-            const taskRecords = (await this.readAll<TaskRecord>('tasks', db)).map((record) => {
-                requireStoredTask(record);
-                return record;
-            });
-            const runRecords = (await this.readAll<RunRecord>('runs', db)).map((record) => {
-                requireStoredRun(record);
-                return record;
-            });
-            const snapshotRecords = (await this.readAll<SnapshotRecord>('snapshots', db)).map(
-                (record) => {
-                    requireStoredSnapshot(record);
-                    return record;
-                },
+            const taskPairs = await this.readAllPairs<TaskRecord>('tasks', db);
+            const runPairs = await this.readAllPairs<RunRecord>('runs', db);
+            const snapshotPairs = await this.readAllPairs<StoredSnapshotRecord>(
+                'snapshots',
+                db,
             );
-            const eventKeys = await this.readAllKeys('events', db);
+            const taskRecords = taskPairs.map(({ key, record }) => {
+                requireStoredTask(record);
+                if (key !== record.task_id) {
+                    corrupt('task record key does not match its task_id');
+                }
+                return record;
+            });
+            const runRecords = runPairs.map(({ key, record }) => {
+                requireStoredRun(record);
+                if (
+                    !Array.isArray(key) ||
+                    key.length !== 2 ||
+                    key[0] !== record.task_id ||
+                    key[1] !== record.run_id
+                ) {
+                    corrupt('run record key does not match its task/run identity');
+                }
+                return record;
+            });
             const runKeys = new Set(
                 runRecords.map((run) => runKey(run.task_id, run.run_id)),
             );
-            const orphanRuns = new Map<string, { taskId: string; runId: string }>();
+            const snapshots = new Map<string, SnapshotBundleRecord>();
+            for (const { key, record } of snapshotPairs) {
+                const bundle = normalizeSnapshotBundle(record);
+                if (
+                    !Array.isArray(key) ||
+                    key.length !== 2 ||
+                    key[0] !== bundle.task_id ||
+                    key[1] !== bundle.run_id
+                ) {
+                    corrupt('snapshot record key does not match its task/run identity');
+                }
+                const composite = runKey(bundle.task_id, bundle.run_id);
+                if (!runKeys.has(composite)) {
+                    corrupt('snapshot record exists without a run record');
+                }
+                snapshots.set(composite, bundle);
+            }
+            const eventKeys = await this.readAllKeys('events', db);
+            const orphanRuns: Array<{ taskId: string; runId: string }> = [];
+            const seenOrphans = new Set<string>();
             for (const key of eventKeys) {
                 if (!Array.isArray(key) || key.length !== 4) {
                     corrupt('event store key is not [task_id, run_id, generation, sequence]');
@@ -1575,120 +1820,27 @@ export class AgentTaskStore {
                     corrupt('event store key fields are invalid');
                 }
                 const composite = runKey(key[0], key[1]);
-                if (!runKeys.has(composite)) {
-                    orphanRuns.set(composite, { taskId: key[0], runId: key[1] });
+                if (!runKeys.has(composite) && !seenOrphans.has(composite)) {
+                    seenOrphans.add(composite);
+                    orphanRuns.push({ taskId: key[0], runId: key[1] });
                 }
             }
-            const runsByTask = new Map<string, RunRecord[]>();
+            const events = new Map<string, EventPair[]>();
             for (const run of runRecords) {
-                const existing = runsByTask.get(run.task_id);
-                if (existing === undefined) {
-                    runsByTask.set(run.task_id, [run]);
-                } else {
-                    existing.push(run);
-                }
-            }
-            const snapshotsByRun = new Map<string, SnapshotRecord>();
-            for (const snapshot of snapshotRecords) {
-                const composite = runKey(snapshot.task_id, snapshot.run_id);
-                if (!runKeys.has(composite)) {
-                    corrupt('snapshot record exists without a run record');
-                }
-                snapshotsByRun.set(composite, snapshot);
-            }
-            taskRecords.sort((left, right) =>
-                left.created_at_ms === right.created_at_ms
-                    ? left.task_id.localeCompare(right.task_id)
-                    : left.created_at_ms - right.created_at_ms,
-            );
-            for (const task of taskRecords) {
-                this.store.upsertTask({
-                    ...taskToAgentRecord(task),
-                    archived: false,
-                    pinnedLocal: false,
-                    latestRunId: null,
-                });
-            }
-            const incomplete: RestoreIncomplete[] = [];
-            const addIncomplete = (entry: RestoreIncomplete) => {
-                if (
-                    !incomplete.some(
-                        (existing) =>
-                            existing.task_id === entry.task_id &&
-                            existing.run_id === entry.run_id &&
-                            existing.code === entry.code,
-                    )
-                ) {
-                    incomplete.push(entry);
-                }
-            };
-            for (const orphan of orphanRuns.values()) {
-                addIncomplete({
-                    task_id: orphan.taskId,
-                    run_id: orphan.runId,
-                    code: 'snapshot_missing',
-                    message: 'event records exist without a run record',
-                });
-            }
-            const replayedRuns: RunRecord[] = [];
-            for (const task of taskRecords) {
-                const taskRuns = (runsByTask.get(task.task_id) ?? []).sort(
-                    (left, right) =>
-                        left.generation - right.generation ||
-                        left.started_at_ms - right.started_at_ms ||
-                        left.run_id.localeCompare(right.run_id),
+                events.set(
+                    runKey(run.task_id, run.run_id),
+                    await this.readEventPairs(run.task_id, run.run_id, db),
                 );
-                for (const run of taskRuns) {
-                    const composite = runKey(run.task_id, run.run_id);
-                    const pairs = await this.readEventPairs(run.task_id, run.run_id, db);
-                    if (pairs.length === 0) {
-                        addIncomplete({
-                            task_id: run.task_id,
-                            run_id: run.run_id,
-                            code: 'snapshot_missing',
-                            message: 'run record has no canonical event records',
-                        });
-                        continue;
-                    }
-                    await this.verifyAndReplay(
-                        run,
-                        pairs,
-                        snapshotsByRun.get(composite) ?? null,
-                    );
-                    replayedRuns.push(run);
-                }
-                const latest = task.latest_run_id ?? null;
-                const latestExists =
-                    latest !== null && taskRuns.some((run) => run.run_id === latest);
-                if (latest !== null && !latestExists) {
-                    addIncomplete({
-                        task_id: task.task_id,
-                        run_id: latest,
-                        code: 'snapshot_missing',
-                        message: 'latest_run_id has no run record',
-                    });
-                }
-                this.store.upsertTask({
-                    ...taskToAgentRecord(task),
-                    archived: task.archived,
-                    pinnedLocal: task.pinned_local,
-                    latestRunId: latestExists ? latest : null,
-                });
             }
-            const snapshot = this.store.snapshot();
-            return {
-                tasks: taskRecords.map((task) => {
-                    const view = snapshot.tasks.find(
-                        (candidate) => candidate.taskId === task.task_id,
-                    );
-                    return {
-                        ...task,
-                        latest_run_id: view?.latestRunId ?? null,
-                    };
-                }),
-                runs: replayedRuns,
-                incomplete,
-            };
+            const result = await this.replayInto(this.store, {
+                tasks: taskRecords,
+                runs: runRecords,
+                snapshots,
+                events,
+                orphanRuns,
+                strict: false,
+            });
+            return result.report;
         } catch (error) {
             this.store.restore(checkpoint);
             db.close();
@@ -1697,53 +1849,224 @@ export class AgentTaskStore {
         }
     }
 
+    private async replayInto(
+        target: AgentStore,
+        input: ReplayInput,
+    ): Promise<ReplayResult> {
+        const taskIds = new Set<string>();
+        for (const task of input.tasks) {
+            if (taskIds.has(task.task_id)) {
+                corrupt('duplicate task record in replay input');
+            }
+            taskIds.add(task.task_id);
+        }
+        const runKeys = new Set<string>();
+        for (const run of input.runs) {
+            const composite = runKey(run.task_id, run.run_id);
+            if (runKeys.has(composite)) {
+                corrupt('duplicate run record in replay input');
+            }
+            runKeys.add(composite);
+            if (!taskIds.has(run.task_id)) {
+                corrupt('run record has no task record');
+            }
+        }
+        for (const key of input.events.keys()) {
+            if (!runKeys.has(key)) {
+                if (input.strict) {
+                    corrupt('event records exist without a run record');
+                }
+            }
+        }
+        const incomplete: RestoreIncomplete[] = [];
+        const addIncomplete = (entry: RestoreIncomplete) => {
+            if (
+                !incomplete.some(
+                    (existing) =>
+                        existing.task_id === entry.task_id &&
+                        existing.run_id === entry.run_id &&
+                        existing.code === entry.code,
+                )
+            ) {
+                incomplete.push(entry);
+            }
+        };
+        for (const orphan of input.orphanRuns) {
+            if (input.strict) {
+                corrupt('event records exist without a run record');
+            }
+            addIncomplete({
+                task_id: orphan.taskId,
+                run_id: orphan.runId,
+                code: 'snapshot_missing',
+                message: 'event records exist without a run record',
+            });
+        }
+        const tasks = [...input.tasks].sort((left, right) =>
+            left.created_at_ms === right.created_at_ms
+                ? left.task_id.localeCompare(right.task_id)
+                : left.created_at_ms - right.created_at_ms,
+        );
+        for (const task of tasks) {
+            target.upsertTask({
+                ...taskToAgentRecord(task),
+                archived: false,
+                pinnedLocal: false,
+                latestRunId: null,
+            });
+        }
+        const runsByTask = new Map<string, RunRecord[]>();
+        for (const run of input.runs) {
+            const existing = runsByTask.get(run.task_id);
+            if (existing === undefined) {
+                runsByTask.set(run.task_id, [run]);
+            } else {
+                existing.push(run);
+            }
+        }
+        const replayed: RunRecord[] = [];
+        const replayedKeys = new Set<string>();
+        for (const task of tasks) {
+            const taskRuns = (runsByTask.get(task.task_id) ?? []).sort(
+                (left, right) =>
+                    left.generation - right.generation ||
+                    left.started_at_ms - right.started_at_ms ||
+                    left.run_id.localeCompare(right.run_id),
+            );
+            for (const run of taskRuns) {
+                const composite = runKey(run.task_id, run.run_id);
+                const pairs = input.events.get(composite) ?? [];
+                if (pairs.length === 0) {
+                    if (input.strict) {
+                        corrupt('run record has no canonical event records');
+                    }
+                    addIncomplete({
+                        task_id: run.task_id,
+                        run_id: run.run_id,
+                        code: 'snapshot_missing',
+                        message: 'run record has no canonical event records',
+                    });
+                    continue;
+                }
+                await this.verifyAndReplay(
+                    target,
+                    run,
+                    pairs,
+                    input.snapshots.get(composite) ?? null,
+                );
+                replayed.push(run);
+                replayedKeys.add(composite);
+            }
+            const latest = task.latest_run_id ?? null;
+            const latestExists =
+                latest !== null &&
+                replayedKeys.has(runKey(task.task_id, latest));
+            if (latest !== null && !latestExists) {
+                if (input.strict) {
+                    corrupt('latest_run_id has no replayed run');
+                }
+                addIncomplete({
+                    task_id: task.task_id,
+                    run_id: latest,
+                    code: 'snapshot_missing',
+                    message: 'latest_run_id has no replayed run',
+                });
+            }
+            target.upsertTask({
+                ...taskToAgentRecord(task),
+                archived: task.archived,
+                pinnedLocal: task.pinned_local,
+                latestRunId: latestExists ? latest : null,
+            });
+            target.setTaskLatestRunId(
+                task.task_id,
+                latestExists ? latest : null,
+            );
+        }
+        const snapshot = target.snapshot();
+        return {
+            report: {
+                tasks: tasks.map((task) => {
+                    const view = snapshot.tasks.find(
+                        (candidate) => candidate.taskId === task.task_id,
+                    );
+                    return {
+                        ...task,
+                        latest_run_id: view?.latestRunId ?? null,
+                    };
+                }),
+                runs: replayed,
+                incomplete,
+            },
+            replayed,
+        };
+    }
+
     private async verifyAndReplay(
+        target: AgentStore,
         run: RunRecord,
         pairs: EventPair[],
-        snapshot: SnapshotRecord | null,
+        bundle: SnapshotBundleRecord | null,
     ): Promise<void> {
         const verified = await this.verifyEventChain(run.task_id, run.run_id, pairs);
-        let snapshotVerified = false;
+        const anchors = bundle === null ? [] : snapshotRecordsOf(bundle);
+        const matched = new Set<SnapshotRecord>();
+        const verifyAnchor = (anchor: SnapshotRecord): void => {
+            const check = target.verifySnapshot(snapshotVerification(anchor));
+            if (!check.ok) {
+                throw new AgentStoreError(
+                    check.code ?? 'snapshot_corrupt',
+                    check.message ?? 'snapshot verification failed',
+                );
+            }
+            matched.add(anchor);
+        };
         for (let index = 0; index < verified.events.length; index += 1) {
             const event = verified.events[index]!;
             const digest = verified.digests[index]!;
             if (event.type === 'run.resumed') {
-                if (snapshot === null) {
+                const current = target.getRun(run.task_id, run.run_id);
+                if (current === null) {
+                    corrupt('replayed run is missing before run.resumed');
+                }
+                const data = event.data as Record<string, unknown>;
+                const anchor = anchors.find(
+                    (candidate) =>
+                        candidate.generation === current.generation &&
+                        candidate.last_sequence === current.lastSequence &&
+                        candidate.last_event_id === current.lastEventId &&
+                        candidate.head_digest === data.snapshot_digest,
+                );
+                if (anchor === undefined) {
                     throw new AgentStoreError(
                         'snapshot_missing',
-                        'run.resumed requires a persisted verified snapshot',
+                        'run.resumed requires its persisted pre-resume snapshot anchor',
                     );
                 }
-                const check = this.store.verifySnapshot(snapshotVerification(snapshot));
-                if (!check.ok) {
-                    throw new AgentStoreError(
-                        check.code ?? 'snapshot_corrupt',
-                        check.message ?? 'run.resumed snapshot verification failed',
-                    );
-                }
+                verifyAnchor(anchor);
             }
-            const applied = this.store.apply(event, digest);
+            const applied = target.apply(event, digest);
             if (applied.status !== 'applied') {
                 throw new AgentStoreError(
                     'snapshot_corrupt',
                     `replay rejected ${event.event_id}: ${applied.code ?? 'unknown'} ${applied.message ?? ''}`,
                 );
             }
-            if (snapshot !== null && snapshotMatchesEvent(snapshot, event, digest)) {
-                const check = this.store.verifySnapshot(snapshotVerification(snapshot));
-                if (!check.ok) {
-                    throw new AgentStoreError(
-                        check.code ?? 'snapshot_corrupt',
-                        check.message ?? 'snapshot verification failed',
-                    );
+            for (const anchor of anchors) {
+                if (snapshotMatchesEvent(anchor, event, digest)) {
+                    verifyAnchor(anchor);
                 }
-                snapshotVerified = true;
             }
         }
-        if (snapshot !== null && !snapshotVerified) {
-            corrupt('snapshot position is not part of the replayed event chain');
+        if (bundle !== null && !matched.has(bundle.latest)) {
+            corrupt('latest snapshot position is not part of the replayed chain');
         }
-        const view = this.store.getRun(run.task_id, run.run_id);
+        for (const anchor of anchors) {
+            if (!matched.has(anchor)) {
+                corrupt('snapshot anchor position is not part of the replayed chain');
+            }
+        }
+        const view = target.getRun(run.task_id, run.run_id);
         if (view === null) {
             corrupt('replayed run is missing from AgentStore');
         }
@@ -1947,15 +2270,62 @@ export class AgentTaskStore {
                     'durable run record is missing for a non-initial event',
                 );
             }
-            const view = this.store.getRun(event.task_id, event.run_id);
+            let anchorRecord: SnapshotRecord | undefined;
+            if (input.snapshot_anchor !== undefined) {
+                if (event.type !== 'run.resumed') {
+                    throw new AgentStoreError(
+                        'invalid_arguments',
+                        'snapshot_anchor is only valid with run.resumed',
+                    );
+                }
+                if (storedRun === undefined) {
+                    throw new AgentStoreError(
+                        'snapshot_missing',
+                        'run.resumed has no durable pre-resume run record',
+                    );
+                }
+                const anchor = input.snapshot_anchor;
+                if (
+                    anchor.task_id !== event.task_id ||
+                    anchor.run_id !== event.run_id ||
+                    anchor.generation !== storedRun.generation ||
+                    anchor.last_sequence !== storedRun.last_sequence ||
+                    anchor.last_event_id !== storedRun.last_event_id ||
+                    anchor.head_digest !== storedRun.last_digest
+                ) {
+                    throw new AgentStoreError(
+                        'snapshot_corrupt',
+                        'pre-resume anchor does not match the durable run cursor',
+                    );
+                }
+                anchorRecord = {
+                    schema: SNAPSHOT_SCHEMA,
+                    task_id: anchor.task_id,
+                    run_id: anchor.run_id,
+                    generation: anchor.generation,
+                    last_event_id: anchor.last_event_id,
+                    last_sequence: anchor.last_sequence,
+                    head_digest: anchor.head_digest,
+                    created_at_ms: anchor.created_at_ms ?? now,
+                };
+                requireStoredSnapshot(anchorRecord);
+            } else if (event.type === 'run.resumed') {
+                throw new AgentStoreError(
+                    'snapshot_missing',
+                    'run.resumed requires a pre-resume snapshot anchor',
+                );
+            }
+            const view = this.store.getRunRecordState(event.task_id, event.run_id);
             if (view === null) {
                 throw new AgentStoreError('internal', 'applied run is missing from AgentStore');
             }
-            const taskView = this.store
-                .snapshot()
-                .tasks.find((candidate) => candidate.taskId === event.task_id);
-            const latestRunId = taskView?.latestRunId ?? event.run_id;
-            const runRecord = this.buildRunRecord(view);
+            const latestRunId =
+                this.store.getTaskLatestRunId(event.task_id) ?? event.run_id;
+            const runRecord = this.buildRunRecordFromState(
+                event.task_id,
+                event.run_id,
+                view,
+            );
             await requestResult(
                 events.put(
                     jsonClean({
@@ -2001,11 +2371,31 @@ export class AgentTaskStore {
                     ),
                 );
             }
-            if (input.snapshot === true) {
-                const snapshotRecord = this.buildSnapshot(view);
-                await requestResult(
-                    snapshots.put(jsonClean(snapshotRecord), [event.task_id, event.run_id]),
-                );
+            if (anchorRecord !== undefined || input.snapshot === true) {
+                const existingSnapshot = (await requestResult(
+                    snapshots.get([event.task_id, event.run_id]),
+                )) as StoredSnapshotRecord | undefined;
+                let bundle =
+                    existingSnapshot === undefined
+                        ? undefined
+                        : normalizeSnapshotBundle(existingSnapshot);
+                if (anchorRecord !== undefined) {
+                    bundle = mergeSnapshotAnchor(bundle, anchorRecord);
+                }
+                if (input.snapshot === true) {
+                    bundle = mergeSnapshotAnchor(
+                        bundle,
+                        this.buildSnapshotFromState(event.task_id, event.run_id, view),
+                    );
+                }
+                if (bundle !== undefined) {
+                    await requestResult(
+                        snapshots.put(jsonClean(bundle), [
+                            event.task_id,
+                            event.run_id,
+                        ]),
+                    );
+                }
             }
             if (this.faults.abort_next_append) {
                 this.faults.abort_next_append = false;
@@ -2022,18 +2412,59 @@ export class AgentTaskStore {
         }
     }
 
-    private buildRunRecord(view: RunView): RunRecord {
+    private buildRunRecordFromState(
+        taskId: string,
+        runId: string,
+        view: {
+            generation: number;
+            state: RunRecord['state'];
+            retryOfRunId: string | null;
+            startedAtMs: number | null;
+            endedAtMs: number | null;
+            lastSequence: number;
+            lastEventId: string | null;
+            lastDigest: string | null;
+        },
+    ): RunRecord {
         return {
-            task_id: view.taskId,
-            run_id: view.runId,
+            task_id: taskId,
+            run_id: runId,
             generation: view.generation,
             state: view.state,
             retry_of_run_id: view.retryOfRunId,
-            started_at_ms: view.startedAtMs ?? view.events[0]?.recordedAtMs ?? 0,
+            started_at_ms: view.startedAtMs ?? 0,
             ...(view.endedAtMs === null ? {} : { ended_at_ms: view.endedAtMs }),
             last_sequence: view.lastSequence,
             last_event_id: view.lastEventId,
             last_digest: view.lastDigest,
+        };
+    }
+
+    private buildSnapshotFromState(
+        taskId: string,
+        runId: string,
+        view: {
+            generation: number;
+            lastEventId: string | null;
+            lastSequence: number;
+            lastDigest: string | null;
+        },
+    ): SnapshotRecord {
+        if (view.lastEventId === null || view.lastDigest === null) {
+            throw new AgentStoreError(
+                'snapshot_missing',
+                'run has no verified event to snapshot',
+            );
+        }
+        return {
+            schema: SNAPSHOT_SCHEMA,
+            task_id: taskId,
+            run_id: runId,
+            generation: view.generation,
+            last_event_id: view.lastEventId,
+            last_sequence: view.lastSequence,
+            head_digest: view.lastDigest,
+            created_at_ms: this.clock(),
         };
     }
 
@@ -2057,12 +2488,12 @@ export class AgentTaskStore {
     }
 
     private async persistTaskWithRollback(record: TaskRecord): Promise<void> {
-        const checkpoint = this.store.checkpoint();
+        const checkpoint = this.store.captureTask(record.task_id);
         try {
             this.store.upsertTask(taskToAgentRecord(record));
             await this.putRecord('tasks', jsonClean(record), record.task_id);
         } catch (error) {
-            this.store.restore(checkpoint);
+            this.store.restoreTask(checkpoint);
             throw storageError(error);
         }
     }
@@ -2080,21 +2511,20 @@ export class AgentTaskStore {
             throw new AgentStoreError('task_not_found', 'task record is missing');
         }
         requireStoredTask(stored);
-        const view = this.store.snapshot().tasks.find((task) => task.taskId === taskId);
-        if (view === undefined) {
+        if (!this.store.hasTask(taskId)) {
             throw new AgentStoreError('task_not_found', 'task is not present in AgentStore');
         }
         const record: TaskRecord = {
             ...jsonClean(stored),
-            latest_run_id: view.latestRunId,
+            latest_run_id: this.store.getTaskLatestRunId(taskId),
         };
         mutate(record);
-        const checkpoint = this.store.checkpoint();
+        const checkpoint = this.store.captureTask(taskId);
         try {
             this.store.upsertTask(taskToAgentRecord(record));
             await this.putRecord('tasks', jsonClean(record), taskId);
         } catch (error) {
-            this.store.restore(checkpoint);
+            this.store.restoreTask(checkpoint);
             throw storageError(error);
         }
         return record;
@@ -2110,6 +2540,10 @@ export class AgentTaskStore {
             await requestResult(
                 transaction.objectStore(storeName).put(jsonClean(value), key),
             );
+            if (this.faults.abort_next_task_write) {
+                this.faults.abort_next_task_write = false;
+                transaction.abort();
+            }
             await transactionDone(transaction);
         } catch (error) {
             try {
@@ -2148,6 +2582,28 @@ export class AgentTaskStore {
         return records;
     }
 
+    private async readAllPairs<T>(
+        storeName: AgentDbStoreName,
+        db?: IDBDatabase,
+    ): Promise<Array<{ key: IDBValidKey; record: T }>> {
+        const database = db ?? this.requireDb();
+        const transaction = database.transaction(storeName, 'readonly');
+        const records = (await requestResult(
+            transaction.objectStore(storeName).getAll(),
+        )) as T[];
+        const keys = await requestResult(
+            transaction.objectStore(storeName).getAllKeys(),
+        );
+        await transactionDone(transaction);
+        if (records.length !== keys.length) {
+            corrupt('record values and keys have different lengths');
+        }
+        return records.map((record, index) => ({
+            key: keys[index]!,
+            record,
+        }));
+    }
+
     private async readAllKeys(
         storeName: AgentDbStoreName,
         db?: IDBDatabase,
@@ -2177,6 +2633,9 @@ export class AgentTaskStore {
             | undefined;
         if (record === undefined) return null;
         requireStoredRun(record);
+        if (record.task_id !== taskId || record.run_id !== runId) {
+            corrupt('run record fields do not match their IndexedDB key');
+        }
         return record;
     }
 

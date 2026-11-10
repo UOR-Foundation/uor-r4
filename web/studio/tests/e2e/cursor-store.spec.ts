@@ -41,8 +41,10 @@ interface DbSnapshot {
     snapshotRecords: Array<Record<string, unknown>>;
     changeKeys: unknown[];
     changeRecords: Array<Record<string, unknown>>;
+    leaseRecords: Array<Record<string, unknown>>;
     byEventId: Record<string, unknown> | null;
     eventIndexNames: string[];
+    eventIndexUnique: boolean;
 }
 
 async function readDb(page: Page): Promise<DbSnapshot> {
@@ -64,11 +66,12 @@ async function readDb(page: Page): Promise<DbSnapshot> {
             open.onerror = () => reject(open.error);
         });
         try {
-            const tx = db.transaction(['events', 'runs', 'snapshots', 'changes'], 'readonly');
+            const tx = db.transaction(['events', 'runs', 'snapshots', 'changes', 'leases'], 'readonly');
             const events = tx.objectStore('events');
             const runs = tx.objectStore('runs');
             const snapshots = tx.objectStore('snapshots');
             const changes = tx.objectStore('changes');
+            const leases = tx.objectStore('leases');
             const eventKeys = await request(events.getAllKeys());
             const eventRecords = await request(events.getAll());
             const byEventId = eventRecords.length > 0
@@ -80,6 +83,8 @@ async function readDb(page: Page): Promise<DbSnapshot> {
             const snapshotRecords = await request(snapshots.getAll());
             const changeKeys = await request(changes.getAllKeys());
             const changeRecords = await request(changes.getAll());
+            const leaseRecords = await request(leases.getAll());
+            const byEventIndex = events.index('by_event_id');
             await done(tx);
             return {
                 version: db.version,
@@ -92,8 +97,10 @@ async function readDb(page: Page): Promise<DbSnapshot> {
                 snapshotRecords,
                 changeKeys,
                 changeRecords,
+                leaseRecords,
                 byEventId,
                 eventIndexNames: [...events.indexNames],
+                eventIndexUnique: byEventIndex.unique,
             };
         } finally {
             db.close();
@@ -107,7 +114,11 @@ type Mutation =
     | { op: 'alter_event'; taskId: string; runId: string; generation: number; sequence: number; from: string; to: string }
     | { op: 'delete_event'; taskId: string; runId: string; generation: number; sequence: number }
     | { op: 'delete_run'; taskId: string; runId: string }
-    | { op: 'delete_snapshot'; taskId: string; runId: string };
+    | { op: 'delete_snapshot'; taskId: string; runId: string }
+    | { op: 'delete_task'; taskId: string }
+    | { op: 'delete_run_events'; taskId: string; runId: string }
+    | { op: 'mutate_run_identity'; taskId: string; runId: string; field: 'task_id' | 'run_id'; value: string }
+    | { op: 'put_lease'; taskId: string; writerId: string; nowMs: number };
 
 async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
     await page.evaluate(async ({ dbName, mutation }) => {
@@ -128,15 +139,20 @@ async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
             open.onerror = () => reject(open.error);
         });
         try {
-            const tx = db.transaction(['events', 'runs', 'snapshots'], 'readwrite');
+            const tx = db.transaction(['events', 'runs', 'snapshots', 'tasks', 'leases'], 'readwrite');
             const events = tx.objectStore('events');
             const runs = tx.objectStore('runs');
             const snapshots = tx.objectStore('snapshots');
+            const tasks = tx.objectStore('tasks');
+            const leases = tx.objectStore('leases');
             if (mutation.op === 'corrupt_snapshot') {
                 const key = [mutation.taskId, mutation.runId];
                 const record = await request(snapshots.get(key));
                 if (!record) throw new Error('snapshot record is missing');
-                record.head_digest = `sha256:${'0'.repeat(64)}`;
+                const target = Array.isArray(record.anchors) && record.latest
+                    ? record.latest
+                    : record;
+                target.head_digest = `sha256:${'0'.repeat(64)}`;
                 await request(snapshots.put(record, key));
             } else if (mutation.op === 'truncate_event') {
                 const key = [mutation.taskId, mutation.runId, mutation.generation, mutation.sequence];
@@ -156,14 +172,57 @@ async function mutateDb(page: Page, mutation: Mutation): Promise<void> {
             } else if (mutation.op === 'delete_run') {
                 await request(runs.delete([mutation.taskId, mutation.runId]));
                 await request(snapshots.delete([mutation.taskId, mutation.runId]));
-            } else {
+            } else if (mutation.op === 'delete_snapshot') {
                 await request(snapshots.delete([mutation.taskId, mutation.runId]));
+            } else if (mutation.op === 'delete_task') {
+                await request(tasks.delete(mutation.taskId));
+            } else if (mutation.op === 'delete_run_events') {
+                const range = IDBKeyRange.bound(
+                    [mutation.taskId, mutation.runId, 0, 0],
+                    [mutation.taskId, mutation.runId, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+                );
+                const keys = await request(events.getAllKeys(range));
+                for (const key of keys) await request(events.delete(key));
+            } else if (mutation.op === 'mutate_run_identity') {
+                const key = [mutation.taskId, mutation.runId];
+                const record = await request(runs.get(key));
+                if (!record) throw new Error('run record is missing');
+                record[mutation.field] = mutation.value;
+                await request(runs.put(record, key));
+            } else {
+                await request(
+                    leases.put(
+                        {
+                            task_id: mutation.taskId,
+                            writer_id: mutation.writerId,
+                            started_at_ms: mutation.nowMs,
+                            heartbeat_at_ms: mutation.nowMs,
+                        },
+                        mutation.taskId,
+                    ),
+                );
             }
             await done(tx);
         } finally {
             db.close();
         }
     }, { dbName: DB_NAME, mutation });
+}
+
+async function upgradeDatabaseVersion(page: Page): Promise<void> {
+    await page.evaluate(async (dbName: string) => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const open = indexedDB.open(dbName, 2);
+            open.onupgradeneeded = () => {
+                if (!open.result.objectStoreNames.contains('v2_probe')) {
+                    open.result.createObjectStore('v2_probe');
+                }
+            };
+            open.onsuccess = () => resolve(open.result);
+            open.onerror = () => reject(open.error);
+        });
+        db.close();
+    }, DB_NAME);
 }
 
 interface FixtureSummary {
@@ -281,6 +340,7 @@ test.describe('browser agent task store', () => {
         ]);
         expect(db.eventKeys.every((key) => Array.isArray(key) && key.length === 4)).toBe(true);
         expect(db.eventIndexNames).toContain('by_event_id');
+        expect(db.eventIndexUnique).toBe(true);
         expect(db.byEventId).toMatchObject({ event_id: created.eventIds[0] });
         expect(db.eventRecords.map((record) => record.event_id)).toEqual(created.eventIds);
         expect(db.eventRecords.map((record) => record.digest)).toEqual(created.digests);
@@ -297,7 +357,11 @@ test.describe('browser agent task store', () => {
             last_digest: created.digests[2],
         });
         expect(db.snapshotKeys).toEqual([[created.taskId, created.runId]]);
-        expect(db.snapshotRecords[0]).toMatchObject({
+        const storedSnapshot = db.snapshotRecords[0] as Record<string, unknown>;
+        const latestSnapshot =
+            (storedSnapshot.latest as Record<string, unknown> | undefined) ??
+            storedSnapshot;
+        expect(latestSnapshot).toMatchObject({
             task_id: created.taskId,
             run_id: created.runId,
             generation: 1,
@@ -311,6 +375,9 @@ test.describe('browser agent task store', () => {
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         await call(page, 'writeSnapshot');
         await mutateDb(page, { op: 'corrupt_snapshot', taskId: created.taskId, runId: created.runId });
+        const direct = await call<Outcome>(page, 'readSnapshot');
+        expect(direct.ok).toBe(false);
+        expect(direct.code).toBe('snapshot_corrupt');
 
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
@@ -437,6 +504,23 @@ test.describe('browser agent task store', () => {
         expect((await call<Outcome>(page, 'lease')).record).toBeNull();
     });
 
+    test('lease_is_live_at_exactly_30000ms_and_stale_at_30001ms', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'acquireLease', 'writer-a', 1_000_000)).ok).toBe(true);
+
+        const exactlyThirty = await call<Outcome>(page, 'acquireLease', 'writer-b', 1_030_000);
+        expect(exactlyThirty.ok).toBe(false);
+        expect(exactlyThirty.code).toBe('stale_generation');
+
+        const thirtyOne = await call<Outcome>(page, 'acquireLease', 'writer-b', 1_030_001);
+        expect(thirtyOne.ok).toBe(true);
+        expect(thirtyOne.record).toMatchObject({
+            writer_id: 'writer-b',
+            started_at_ms: 1_030_001,
+            heartbeat_at_ms: 1_030_001,
+        });
+    });
+
     test('indexeddb_changes_store_records_snapshot', async ({ page }) => {
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         const appended = await call<Outcome>(page, 'appendChanges');
@@ -465,6 +549,15 @@ test.describe('browser agent task store', () => {
         const fabricated = await call<Outcome>(page, 'recordChanges', 'turn:fake');
         expect(fabricated.ok).toBe(false);
         expect(fabricated.code).toBe('invalid_arguments');
+        expect((await readDb(page)).changeRecords).toHaveLength(1);
+
+        const fabricatedFiles = await call<Outcome>(
+            page,
+            'recordChangesWithFiles',
+            [{ path: 'src/fabricated.ts', status: 'added' }],
+        );
+        expect(fabricatedFiles.ok).toBe(false);
+        expect(fabricatedFiles.code).toBe('invalid_arguments');
         expect((await readDb(page)).changeRecords).toHaveLength(1);
     });
 
@@ -577,6 +670,269 @@ test.describe('browser agent task store', () => {
         expect(db.snapshotRecords).toHaveLength(0);
     });
 
+    test('client_resume_commits_pre_resume_snapshot_and_reloads', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createClientRun');
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(1);
+
+        const resumed = await call<Outcome>(page, 'resumeViaClient');
+        expect(resumed.ok, JSON.stringify(resumed)).toBe(true);
+        expect(resumed.record).toMatchObject({
+            taskId: created.taskId,
+            runId: created.runId,
+            generation: 1,
+            lastSequence: 1,
+        });
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            generation: 2,
+            sequence: 2,
+            eventId: `evt_${created.runId}_2_000000000002`,
+        });
+        const db = await readDb(page);
+        expect(db.eventRecords).toHaveLength(3);
+        expect(db.snapshotRecords).toHaveLength(1);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('ready');
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            runId: created.runId,
+            generation: 2,
+            sequence: 2,
+        });
+    });
+
+    test('later_snapshot_preserves_prior_resume_anchors', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'appendResume')).status).toBe('applied');
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('ready');
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            generation: 2,
+            sequence: 3,
+        });
+
+        const db = await readDb(page);
+        expect(db.snapshotRecords).toHaveLength(1);
+        const stored = db.snapshotRecords[0] as Record<string, unknown>;
+        const records = Array.isArray(stored.anchors)
+            ? [stored.latest as Record<string, unknown>, ...(stored.anchors as Array<Record<string, unknown>>)]
+            : [stored];
+        const positions = records.map(
+            (record) => `${record.generation}:${record.last_sequence}`,
+        );
+        expect(positions).toContain('1:2');
+        expect(positions).toContain('2:3');
+    });
+
+    test('multiple_client_resumes_keep_every_pre_resume_anchor', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createClientRun');
+        expect((await call<Outcome>(page, 'resumeViaClient')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'resumeViaClient')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'writeSnapshot')).ok).toBe(true);
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            generation: 3,
+            sequence: 3,
+        });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('ready');
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({
+            taskId: created.taskId,
+            generation: 3,
+            sequence: 3,
+        });
+
+        const db = await readDb(page);
+        const stored = db.snapshotRecords[0] as Record<string, unknown>;
+        const records = Array.isArray(stored.anchors)
+            ? [stored.latest as Record<string, unknown>, ...(stored.anchors as Array<Record<string, unknown>>)]
+            : [stored];
+        const positions = records.map(
+            (record) => `${record.generation}:${record.last_sequence}`,
+        );
+        expect(positions).toContain('1:1');
+        expect(positions).toContain('2:2');
+        expect(positions).toContain('3:3');
+    });
+
+    test('import_rejects_resume_without_its_anchor_before_writing', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await call(page, 'writeSnapshot');
+        expect((await call<Outcome>(page, 'appendResume')).status).toBe('applied');
+        const exported = await call<string>(page, 'exportNdjson');
+        const withoutAnchors =
+            exported
+                .trim()
+                .split('\n')
+                .filter((line) => !line.includes('"kind":"snapshot"'))
+                .join('\n') + '\n';
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const rejected = await call<Outcome>(page, 'importNdjson', withoutAnchors);
+        expect(rejected.ok).toBe(false);
+        expect(['snapshot_missing', 'snapshot_corrupt']).toContain(rejected.code);
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+    });
+
+    test('import_rejects_generation_two_without_generation_one', async ({ page }) => {
+        const first = await call<FixtureSummary>(page, 'createTaskAndEvents', {
+            mode: 'finished',
+        });
+        const second = await call<FixtureSummary>(page, 'createSecondRun');
+        expect(second.generation).toBe(2);
+        const exported = await call<string>(page, 'exportNdjson');
+        const withoutFirstRun =
+            exported
+                .trim()
+                .split('\n')
+                .filter((line) => !line.includes(first.runId))
+                .join('\n') + '\n';
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const rejected = await call<Outcome>(page, 'importNdjson', withoutFirstRun);
+        expect(rejected.ok).toBe(false);
+        expect(['snapshot_corrupt', 'stale_generation']).toContain(rejected.code);
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+    });
+
+    test('import_rejects_run_without_a_task_record', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        const withoutTask =
+            exported
+                .trim()
+                .split('\n')
+                .filter((line) => !line.includes('"kind":"task"'))
+                .join('\n') + '\n';
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const rejected = await call<Outcome>(page, 'importNdjson', withoutTask);
+        expect(rejected.ok).toBe(false);
+        expect(rejected.code).toBe('snapshot_corrupt');
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+    });
+
+    test('import_requires_all_nine_stores_empty_including_leases', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await mutateDb(page, {
+            op: 'put_lease',
+            taskId: created.taskId,
+            writerId: 'stale-writer',
+            nowMs: 1_000_000,
+        });
+        expect((await readDb(page)).leaseRecords).toHaveLength(1);
+
+        const rejected = await call<Outcome>(page, 'importNdjson', exported);
+        expect(rejected.ok).toBe(false);
+        expect(rejected.code).toBe('duplicate_event');
+        expect((await readDb(page)).eventRecords).toHaveLength(0);
+        expect((await readDb(page)).leaseRecords).toHaveLength(1);
+    });
+
+    test('orphan_run_without_a_task_is_refused', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await mutateDb(page, { op: 'delete_task', taskId: created.taskId });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('error');
+        expect(restored.error?.code).toBe('snapshot_corrupt');
+        expect((await readDb(page)).eventRecords).toHaveLength(3);
+    });
+
+    test('no_event_run_does_not_report_a_latest_run', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await mutateDb(page, {
+            op: 'delete_run_events',
+            taskId: created.taskId,
+            runId: created.runId,
+        });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('incomplete');
+        const task = await call<TaskViewSummary>(page, 'taskView');
+        expect(task.latestRunId).toBeNull();
+        expect(task.runs).toHaveLength(0);
+    });
+
+    test('mismatched_run_record_key_is_refused', async ({ page }) => {
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await mutateDb(page, {
+            op: 'mutate_run_identity',
+            taskId: created.taskId,
+            runId: created.runId,
+            field: 'run_id',
+            value: `run_${'a'.repeat(16)}`,
+        });
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        const restored = await call<RestoreView>(page, 'open');
+        expect(restored.phase).toBe('error');
+        expect(restored.error?.code).toBe('snapshot_corrupt');
+    });
+
+    test('10000_small_events_hit_the_cap_with_scoped_rollback', async ({ page }) => {
+        test.setTimeout(300_000);
+        const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const seeded = await call<{
+            events: number;
+            sequence: number;
+            durationMs: number;
+            heapUsed: number | null;
+        }>(page, 'seedSmallEvents', 9_999);
+        expect(seeded.events).toBe(9_999);
+        expect(seeded.sequence).toBe(9_998);
+        expect(created.taskId).toBeTruthy();
+
+        await call(page, 'armAbortNextAppend');
+        const aborted = await call<Outcome>(page, 'appendAssistant', 'rollback at cap');
+        expect(aborted.status).toBe('rejected');
+        expect(aborted.code).toBe('limit_exceeded');
+        expect(aborted.storage).toBe('indexeddb');
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(9_998);
+
+        const recovered = await call<Outcome>(page, 'appendAssistant', 'cap event');
+        expect(recovered.status).toBe('applied');
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(9_999);
+
+        const over = await call<Outcome>(page, 'appendAssistant', 'over cap');
+        expect(over.status).toBe('rejected');
+        expect(over.code).toBe('limit_exceeded');
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(9_999);
+
+        const metrics = await call<{
+            events: number;
+            sequence: number;
+            durationMs: number;
+            heapUsed: number | null;
+        } | null>(page, 'scaleMetrics');
+        expect(metrics).not.toBeNull();
+        console.log('scale_metrics', JSON.stringify(metrics));
+    });
+
     test('actual_transaction_abort_preserves_memory_and_durable_cursor', async ({ page }) => {
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         await call(page, 'armAbortNextAppend');
@@ -606,6 +962,56 @@ test.describe('browser agent task store', () => {
         db = await readDb(page);
         expect(db.eventRecords).toHaveLength(4);
         expect(db.runRecords[0]!.last_sequence).toBe(3);
+    });
+
+    test('invalid_now_ms_is_invalid_arguments_not_a_storage_limit', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const result = await call<Outcome>(page, 'appendAssistant', 'bad timestamp', {
+            nowMs: -1,
+        });
+        expect(result.status).toBe('rejected');
+        expect(result.code).toBe('invalid_arguments');
+        expect(result.storage).toBeNull();
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(2);
+        expect((await readDb(page)).eventRecords).toHaveLength(3);
+    });
+
+    test('invalid_created_at_ms_is_invalid_arguments', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const result = await call<Outcome>(page, 'createTaskAt', -1);
+        expect(result.ok).toBe(false);
+        expect(result.code).toBe('invalid_arguments');
+        expect((await call<TaskViewSummary>(page, 'taskView')).title).toBe('Fixture task');
+    });
+
+    test('task_write_abort_rolls_back_metadata_in_memory', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        await call(page, 'armAbortNextTaskWrite');
+        const failedPin = await call<Outcome>(page, 'pin', true);
+        expect(failedPin.ok).toBe(false);
+        expect(failedPin.code).toBe('limit_exceeded');
+        expect((await call<TaskViewSummary>(page, 'taskView')).pinned).toBe(false);
+        expect((await call<Outcome>(page, 'pin', true)).ok).toBe(true);
+        expect((await call<TaskViewSummary>(page, 'taskView')).pinned).toBe(true);
+
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await call(page, 'armAbortNextTaskWrite');
+        const failedCreate = await call<Outcome>(page, 'createTaskAt', 1_794_283_200_000);
+        expect(failedCreate.ok).toBe(false);
+        expect(failedCreate.code).toBe('limit_exceeded');
+        expect(await call<TaskViewSummary | null>(page, 'taskView')).toBeNull();
+        expect((await call<Outcome>(page, 'createTaskAt', 1_794_283_200_000)).ok).toBe(true);
+    });
+
+    test('versionchange_resets_the_cached_open_state', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        expect((await call<RestoreView>(page, 'restoreState')).phase).toBe('ready');
+
+        await upgradeDatabaseVersion(page);
+        const reopened = await call<RestoreView>(page, 'open');
+        expect(reopened.phase).toBe('error');
+        expect(reopened.error?.code).toBe('runtime_unavailable');
     });
 
     test('two_page_lease_fencing_stops_a_stale_writer', async ({ page, context }) => {

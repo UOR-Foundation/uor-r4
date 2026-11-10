@@ -174,6 +174,11 @@ export interface AgentTaskRecord {
     archived?: boolean;
     pinnedLocal?: boolean;
     latestRunId?: string | null;
+    hold?: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    };
 }
 
 export interface AgentSnapshotVerification {
@@ -316,6 +321,152 @@ function cloneJson<T>(value: T): T {
 
 export interface AgentStoreCheckpoint {
     readonly opaque: unknown;
+}
+
+export interface AgentJournaledApply {
+    result: AgentApplyResult;
+    rollback(): void;
+}
+
+export interface AgentTaskCheckpoint {
+    readonly opaque: unknown;
+}
+
+class AgentMutationJournal {
+    private readonly undos: Array<() => void> = [];
+
+    push(undo: () => void): void {
+        this.undos.push(undo);
+    }
+
+    rollback(): void {
+        while (this.undos.length > 0) {
+            this.undos.pop()!();
+        }
+    }
+}
+
+function captureRunState(
+    journal: AgentMutationJournal | null,
+    run: InternalRun,
+): void {
+    if (journal === null) return;
+    const state = {
+        generation: run.generation,
+        state: run.state,
+        statusProjection: run.statusProjection,
+        retryOfRunId: run.retryOfRunId,
+        startedAtMs: run.startedAtMs,
+        endedAtMs: run.endedAtMs,
+        lastSequence: run.lastSequence,
+        lastEventId: run.lastEventId,
+        lastDigest: run.lastDigest,
+        needsResync: run.needsResync,
+        resyncCode: run.resyncCode,
+        error: run.error === null ? null : { ...run.error },
+        verifiedSnapshot:
+            run.verifiedSnapshot === null ? null : { ...run.verifiedSnapshot },
+    };
+    journal.push(() => {
+        run.generation = state.generation;
+        run.state = state.state;
+        run.statusProjection = state.statusProjection;
+        run.retryOfRunId = state.retryOfRunId;
+        run.startedAtMs = state.startedAtMs;
+        run.endedAtMs = state.endedAtMs;
+        run.lastSequence = state.lastSequence;
+        run.lastEventId = state.lastEventId;
+        run.lastDigest = state.lastDigest;
+        run.needsResync = state.needsResync;
+        run.resyncCode = state.resyncCode;
+        run.error = state.error === null ? null : { ...state.error };
+        run.verifiedSnapshot =
+            state.verifiedSnapshot === null ? null : { ...state.verifiedSnapshot };
+    });
+}
+
+function captureTaskState(
+    journal: AgentMutationJournal | null,
+    task: InternalTask,
+): void {
+    if (journal === null) return;
+    const state = {
+        title: task.title,
+        repo: task.repo,
+        branch: task.branch,
+        archived: task.archived,
+        pinnedLocal: task.pinnedLocal,
+        latestRunId: task.latestRunId,
+        maxGeneration: task.maxGeneration,
+    };
+    journal.push(() => {
+        task.title = state.title;
+        task.repo = state.repo;
+        task.branch = state.branch;
+        task.archived = state.archived;
+        task.pinnedLocal = state.pinnedLocal;
+        task.latestRunId = state.latestRunId;
+        task.maxGeneration = state.maxGeneration;
+    });
+}
+
+function captureNewRun(
+    journal: AgentMutationJournal | null,
+    runs: Map<string, InternalRun>,
+    runOrder: string[],
+    runOwners: Map<string, string>,
+    key: string,
+    runId: string,
+): void {
+    if (journal === null) return;
+    const orderLength = runOrder.length;
+    journal.push(() => {
+        runs.delete(key);
+        runOwners.delete(runId);
+        runOrder.length = orderLength;
+    });
+}
+
+function captureArrayLength(
+    journal: AgentMutationJournal | null,
+    array: unknown[],
+): void {
+    if (journal === null) return;
+    const length = array.length;
+    journal.push(() => {
+        array.length = length;
+    });
+}
+
+function captureMapValue<K, V>(
+    journal: AgentMutationJournal | null,
+    map: Map<K, V>,
+    key: K,
+): void {
+    if (journal === null) return;
+    const had = map.has(key);
+    const value = map.get(key);
+    journal.push(() => {
+        if (had) {
+            map.set(key, value as V);
+        } else {
+            map.delete(key);
+        }
+    });
+}
+
+function captureFields<T extends object>(
+    journal: AgentMutationJournal | null,
+    target: T,
+    fields: Array<keyof T>,
+): void {
+    if (journal === null) return;
+    const values = fields.map((field) => target[field]);
+    journal.push(() => {
+        fields.forEach((field, index) => {
+            target[field] = values[index]!;
+        });
+    });
 }
 
 interface AgentStoreInternalState {
@@ -772,9 +923,11 @@ function upsertMessage(
     text: string,
     sequence: number,
     finalized: boolean,
+    journal: AgentMutationJournal | null,
 ): void {
     const existing = run.messagesById.get(messageId);
     if (existing !== undefined) {
+        captureFields(journal, existing, ['text', 'sequence', 'finalized']);
         existing.text = text;
         existing.sequence = sequence;
         existing.finalized = finalized;
@@ -786,6 +939,8 @@ function upsertMessage(
         sequence,
         finalized,
     };
+    captureArrayLength(journal, run.messages);
+    captureMapValue(journal, run.messagesById, messageId);
     run.messagesById.set(messageId, message);
     run.messages.push(message);
 }
@@ -793,9 +948,21 @@ function upsertMessage(
 function upsertToolCall(
     run: InternalRun,
     toolCallId: string,
+    journal: AgentMutationJournal | null,
 ): AgentToolCallView {
     const existing = run.toolsById.get(toolCallId);
     if (existing !== undefined) {
+        captureFields(journal, existing, [
+            'tool',
+            'status',
+            'argumentsDigest',
+            'argumentsPreview',
+            'outputDigest',
+            'outputPreview',
+            'resultStatus',
+            'code',
+            'message',
+        ]);
         return existing;
     }
     const toolCall: AgentToolCallView = {
@@ -810,12 +977,18 @@ function upsertToolCall(
         code: null,
         message: null,
     };
+    captureArrayLength(journal, run.toolCalls);
+    captureMapValue(journal, run.toolsById, toolCallId);
     run.toolsById.set(toolCallId, toolCall);
     run.toolCalls.push(toolCall);
     return toolCall;
 }
 
-function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
+function reduceKnownEvent(
+    run: InternalRun,
+    event: AgentIncomingEvent,
+    journal: AgentMutationJournal | null,
+): void {
     const data = event.data as Record<string, unknown>;
     switch (event.type) {
         case 'run.queued':
@@ -860,8 +1033,9 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
         case 'assistant.message': {
             const messageId = data.message_id as string;
             const text = data.text as string;
+            captureMapValue(journal, run.deltasById, messageId);
             run.deltasById.set(messageId, text);
-            upsertMessage(run, messageId, text, event.sequence, true);
+            upsertMessage(run, messageId, text, event.sequence, true, journal);
             break;
         }
         case 'assistant.delta': {
@@ -869,12 +1043,13 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
             const delta = `${run.deltasById.get(messageId) ?? ''}${
                 data.text_delta as string
             }`;
+            captureMapValue(journal, run.deltasById, messageId);
             run.deltasById.set(messageId, delta);
-            upsertMessage(run, messageId, delta, event.sequence, false);
+            upsertMessage(run, messageId, delta, event.sequence, false, journal);
             break;
         }
         case 'tool.requested': {
-            const toolCall = upsertToolCall(run, data.tool_call_id as string);
+            const toolCall = upsertToolCall(run, data.tool_call_id as string, journal);
             toolCall.tool = data.tool as string;
             toolCall.status = 'requested';
             toolCall.argumentsDigest = data.arguments_digest as string;
@@ -882,12 +1057,12 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
             break;
         }
         case 'tool.started': {
-            const toolCall = upsertToolCall(run, data.tool_call_id as string);
+            const toolCall = upsertToolCall(run, data.tool_call_id as string, journal);
             toolCall.status = 'started';
             break;
         }
         case 'tool.completed': {
-            const toolCall = upsertToolCall(run, data.tool_call_id as string);
+            const toolCall = upsertToolCall(run, data.tool_call_id as string, journal);
             toolCall.status = 'completed';
             toolCall.outputDigest = data.output_digest as string;
             toolCall.outputPreview = data.output_preview as string;
@@ -895,7 +1070,7 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
             break;
         }
         case 'tool.failed': {
-            const toolCall = upsertToolCall(run, data.tool_call_id as string);
+            const toolCall = upsertToolCall(run, data.tool_call_id as string, journal);
             toolCall.status = 'failed';
             toolCall.code = data.code as string;
             toolCall.message = data.message as string;
@@ -913,6 +1088,8 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
                     expiresAtMs: data.expires_at_ms as number,
                     decision: null,
                 };
+                captureArrayLength(journal, run.approvals);
+                captureMapValue(journal, run.approvalsById, approvalId);
                 run.approvalsById.set(approvalId, approval);
                 run.approvals.push(approval);
             }
@@ -922,6 +1099,7 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
         case 'tool.approval_resolved': {
             const approval = run.approvalsById.get(data.approval_id as string);
             if (approval !== undefined) {
+                captureFields(journal, approval, ['decision']);
                 approval.decision = data.decision as
                     | 'approved'
                     | 'denied'
@@ -933,6 +1111,7 @@ function reduceKnownEvent(run: InternalRun, event: AgentIncomingEvent): void {
             break;
         }
         case 'changes.snapshot':
+            captureArrayLength(journal, run.changesSnapshots);
             run.changesSnapshots.push({
                 scope: data.scope as 'last_turn' | 'branch',
                 files: cloneJson(data.files as Array<Record<string, unknown>>),
@@ -1037,6 +1216,30 @@ export class AgentStore {
         return { opaque: state };
     }
 
+    captureTask(taskId: string): AgentTaskCheckpoint {
+        const task = this.tasks.get(taskId);
+        return {
+            opaque: {
+                taskId,
+                task: task === undefined ? null : { ...task },
+            },
+        };
+    }
+
+    restoreTask(checkpoint: AgentTaskCheckpoint): void {
+        const state = checkpoint.opaque as {
+            taskId: string;
+            task: InternalTask | null;
+        };
+        if (state.task === null) {
+            this.tasks.delete(state.taskId);
+            const index = this.taskOrder.indexOf(state.taskId);
+            if (index >= 0) this.taskOrder.splice(index, 1);
+            return;
+        }
+        this.tasks.set(state.taskId, state.task);
+    }
+
     reset(): void {
         this.tasks.clear();
         this.runs.clear();
@@ -1049,6 +1252,61 @@ export class AgentStore {
     getRun(taskId: string, runId: string): RunView | null {
         const run = this.runs.get(runKey(taskId, runId));
         return run === undefined ? null : copyRun(run);
+    }
+
+    getRunCursor(taskId: string, runId: string): {
+        generation: number;
+        lastSequence: number;
+        lastEventId: string | null;
+        lastDigest: string | null;
+    } | null {
+        const run = this.runs.get(runKey(taskId, runId));
+        return run === undefined
+            ? null
+            : {
+                  generation: run.generation,
+                  lastSequence: run.lastSequence,
+                  lastEventId: run.lastEventId,
+                  lastDigest: run.lastDigest,
+              };
+    }
+
+    getRunRecordState(taskId: string, runId: string): {
+        generation: number;
+        state: RunState;
+        retryOfRunId: string | null;
+        startedAtMs: number | null;
+        endedAtMs: number | null;
+        lastSequence: number;
+        lastEventId: string | null;
+        lastDigest: string | null;
+    } | null {
+        const run = this.runs.get(runKey(taskId, runId));
+        return run === undefined
+            ? null
+            : {
+                  generation: run.generation,
+                  state: run.state,
+                  retryOfRunId: run.retryOfRunId,
+                  startedAtMs: run.startedAtMs,
+                  endedAtMs: run.endedAtMs,
+                  lastSequence: run.lastSequence,
+                  lastEventId: run.lastEventId,
+                  lastDigest: run.lastDigest,
+              };
+    }
+
+    getTaskLatestRunId(taskId: string): string | null {
+        return this.tasks.get(taskId)?.latestRunId ?? null;
+    }
+
+    hasTask(taskId: string): boolean {
+        return this.tasks.has(taskId);
+    }
+
+    setTaskLatestRunId(taskId: string, runId: string | null): void {
+        const task = this.tasks.get(taskId);
+        if (task !== undefined) task.latestRunId = runId;
     }
 
     restore(checkpoint: AgentStoreCheckpoint): void {
@@ -1074,6 +1332,31 @@ export class AgentStore {
     // reduction only. Digest computation and persistence live in appendEvent
     // and are awaited by the caller.
     apply(event: AgentIncomingEvent, digest?: string): AgentApplyResult {
+        return this.applyInternal(event, digest, null);
+    }
+
+    // Durable append uses this scoped journal instead of a whole-store
+    // checkpoint. The journal records only the task, run, cursor, message,
+    // tool, approval and change mutations this event actually touches.
+    applyJournaled(
+        event: AgentIncomingEvent,
+        digest?: string,
+    ): AgentJournaledApply {
+        const journal = new AgentMutationJournal();
+        try {
+            const result = this.applyInternal(event, digest, journal);
+            return { result, rollback: () => journal.rollback() };
+        } catch (error) {
+            journal.rollback();
+            throw error;
+        }
+    }
+
+    private applyInternal(
+        event: AgentIncomingEvent,
+        digest: string | undefined,
+        journal: AgentMutationJournal | null,
+    ): AgentApplyResult {
         const validation = validateAgentEvent(event);
         if (!validation.ok) {
             return rejected(validation.code, validation.message, false);
@@ -1134,6 +1417,7 @@ export class AgentStore {
         const key = runKey(taskId, runId);
         const run = this.runs.get(key);
         if (run !== undefined) {
+            captureRunState(journal, run);
             const seen = run.seen.get(typed.event_id);
             if (seen !== undefined) {
                 const sameDigest =
@@ -1180,7 +1464,7 @@ export class AgentStore {
                 );
             }
             if (typed.generation > run.generation) {
-                return this.applyResume(run, typed, canonical, digest);
+                return this.applyResume(run, typed, canonical, digest, journal);
             }
             if (typed.type === 'run.resumed') {
                 run.needsResync = true;
@@ -1224,8 +1508,8 @@ export class AgentStore {
                 );
             }
 
-            this.recordApplied(run, typed, canonical, digest);
-            reduceKnownEvent(run, typed);
+            this.recordApplied(run, typed, canonical, digest, journal);
+            reduceKnownEvent(run, typed, journal);
             return applied();
         }
 
@@ -1255,6 +1539,13 @@ export class AgentStore {
             return rejected('task_archived', 'task is archived', false);
         }
         if (task === undefined) {
+            if (journal !== null) {
+                const orderLength = this.taskOrder.length;
+                journal.push(() => {
+                    this.tasks.delete(taskId);
+                    this.taskOrder.length = orderLength;
+                });
+            }
             task = {
                 taskId,
                 projectId: typed.project_id,
@@ -1269,16 +1560,26 @@ export class AgentStore {
             };
             this.tasks.set(taskId, task);
             this.taskOrder.push(taskId);
+        } else {
+            captureTaskState(journal, task);
         }
 
         const created = createRun(task, typed);
+        captureNewRun(
+            journal,
+            this.runs,
+            this.runOrder,
+            this.runOwners,
+            key,
+            runId,
+        );
         this.runs.set(key, created);
         this.runOrder.push(key);
         this.runOwners.set(runId, taskId);
         task.maxGeneration = typed.generation;
         task.latestRunId = runId;
-        this.recordApplied(created, typed, canonical, digest);
-        reduceKnownEvent(created, typed);
+        this.recordApplied(created, typed, canonical, digest, journal);
+        reduceKnownEvent(created, typed, journal);
         return applied();
     }
 
@@ -1525,7 +1826,12 @@ export class AgentStore {
         event: AgentIncomingEvent,
         canonical: string,
         digest: string | undefined,
+        journal: AgentMutationJournal | null,
     ): void {
+        captureRunState(journal, run);
+        captureMapValue(journal, run.seen, event.event_id);
+        captureArrayLength(journal, run.events);
+        captureArrayLength(journal, run.unknownEvents);
         run.lastSequence = event.sequence;
         run.lastEventId = event.event_id;
         run.lastDigest = digest ?? null;
@@ -1558,6 +1864,7 @@ export class AgentStore {
         event: AgentIncomingEvent,
         canonical: string,
         digest: string | undefined,
+        journal: AgentMutationJournal | null,
     ): AgentApplyResult {
         if (event.type !== 'run.resumed') {
             run.needsResync = true;
@@ -1623,6 +1930,7 @@ export class AgentStore {
         run.generation = event.generation;
         const task = this.tasks.get(run.taskId);
         if (task !== undefined) {
+            captureTaskState(journal, task);
             task.maxGeneration = Math.max(
                 task.maxGeneration,
                 event.generation,
@@ -1632,6 +1940,7 @@ export class AgentStore {
         run.verifiedSnapshot = null;
         run.needsResync = false;
         run.resyncCode = null;
+        captureArrayLength(journal, run.generationTransitions);
         run.generationTransitions.push({
             from: previousGeneration,
             to: event.generation,
@@ -1639,7 +1948,7 @@ export class AgentStore {
             previousGeneration: data.previous_generation,
             snapshotDigest: data.snapshot_digest,
         });
-        this.recordApplied(run, event, canonical, digest);
+        this.recordApplied(run, event, canonical, digest, journal);
         return applied();
     }
 }

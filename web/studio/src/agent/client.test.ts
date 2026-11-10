@@ -1,17 +1,26 @@
 import { describe, expect, test } from 'vitest';
 
-import { AgentClient } from './client.js';
+import {
+    AgentClient,
+    type ListTasksInput,
+    type TaskSummary,
+} from './client.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { createRunQueuedEvent } from './fixtures.js';
 import { canonicalJson, digestEvent } from './generated/agentCanonical.js';
 import type { AgentEvent } from './generated/agentContract.js';
-import { createAgentStore, type AgentStore } from '../state/agent.js';
+import {
+    createAgentStore,
+    type AgentIncomingEvent,
+    type AgentStore,
+} from '../state/agent.js';
 import type { AgentTaskStore } from './store.js';
 import type {
     AppendEventStoreInput,
     AppendStoreResult,
     TaskRecord,
 } from './storeTypes.js';
+import { AgentStoreError } from './storeTypes.js';
 
 class MemoryTaskStore {
     isOpen = false;
@@ -19,6 +28,8 @@ class MemoryTaskStore {
     readonly writer = 'writer-client-test';
     readonly appended: AppendEventStoreInput[] = [];
     readonly tasks: TaskRecord[] = [];
+    failWrites = false;
+    rejectNextAppend = false;
 
     constructor(private readonly target: AgentStore) {}
 
@@ -33,6 +44,17 @@ class MemoryTaskStore {
 
     async appendEvent(input: AppendEventStoreInput): Promise<AppendStoreResult> {
         this.appended.push(input);
+        if (this.rejectNextAppend) {
+            this.rejectNextAppend = false;
+            return {
+                status: 'rejected',
+                code: 'limit_exceeded',
+                message: 'injected task-store write failure',
+                event_id: input.event.event_id,
+                digest: null,
+                storage: 'indexeddb',
+            };
+        }
         const digest = await digestEvent(input.event as AgentEvent);
         const applied = this.target.apply(input.event, digest);
         return {
@@ -46,7 +68,25 @@ class MemoryTaskStore {
     }
 
     async writeTaskRecord(record: TaskRecord): Promise<TaskRecord> {
+        if (this.failWrites) {
+            throw new AgentStoreError(
+                'limit_exceeded',
+                'injected task write failure',
+                'indexeddb',
+            );
+        }
         this.tasks.push(record);
+        this.target.upsertTask({
+            taskId: record.task_id,
+            projectId: record.project_id,
+            title: record.title,
+            repo: record.repo ?? null,
+            branch: record.branch ?? null,
+            createdAtMs: record.created_at_ms,
+            archived: record.archived,
+            pinnedLocal: record.pinned_local,
+            latestRunId: record.latest_run_id ?? null,
+        });
         return record;
     }
 
@@ -62,6 +102,38 @@ function taskStoreFor(store: AgentStore): {
 } {
     const stub = new MemoryTaskStore(store);
     return { stub, durable: stub as unknown as AgentTaskStore };
+}
+
+class EmittingTransport extends FixtureTransport {
+    emitForTest(event: AgentIncomingEvent, digest: string): void {
+        const listeners = (
+            this as unknown as {
+                listeners: Set<{
+                    listener: (event: AgentIncomingEvent, digest?: string) => void;
+                }>;
+            }
+        ).listeners;
+        for (const entry of listeners) entry.listener(event, digest);
+    }
+}
+
+class HoldTransport extends FixtureTransport {
+    readonly hold = {
+        reason: 'waiting_for_background' as const,
+        run_id: 'run_7f3a2c1b9d4e6a80',
+        tool_call_id: 'tool_fixture',
+    };
+
+    override async listTasks(input: ListTasksInput = {}): Promise<TaskSummary[]> {
+        const tasks = await super.listTasks(input);
+        return tasks.map(
+            (task) =>
+                ({
+                    ...task,
+                    hold: this.hold,
+                }) as unknown as TaskSummary,
+        );
+    }
 }
 
 describe('AgentClient durable task-store wiring', () => {
@@ -146,5 +218,126 @@ describe('AgentClient durable task-store wiring', () => {
             client.dispose();
         }
         expect(stub.closed).toBe(true);
+    });
+
+    test('failed task metadata writes leave no non-durable state', async () => {
+        const transport = new FixtureTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+
+        stub.failWrites = true;
+        await expect(client.createTask({ title: 'failed create' })).rejects.toMatchObject({
+            code: 'limit_exceeded',
+            storage: 'indexeddb',
+        });
+        expect(client.store.snapshot().tasks).toHaveLength(0);
+
+        stub.failWrites = false;
+        const task = await client.createTask({ title: 'healthy create' });
+        expect(client.store.snapshot().tasks).toHaveLength(1);
+
+        stub.failWrites = true;
+        await expect(
+            client.pinTask({ taskId: task.taskId, pinned: true }),
+        ).rejects.toMatchObject({ code: 'limit_exceeded' });
+        expect(
+            client.store.snapshot().tasks.find((entry) => entry.taskId === task.taskId)
+                ?.pinnedLocal,
+        ).toBe(false);
+
+        stub.failWrites = false;
+        await client.pinTask({ taskId: task.taskId, pinned: true });
+        expect(
+            client.store.snapshot().tasks.find((entry) => entry.taskId === task.taskId)
+                ?.pinnedLocal,
+        ).toBe(true);
+
+        stub.failWrites = true;
+        await expect(
+            client.archiveTask({ taskId: task.taskId, archived: true }),
+        ).rejects.toMatchObject({ code: 'limit_exceeded' });
+        expect(
+            client.store.snapshot().tasks.find((entry) => entry.taskId === task.taskId)
+                ?.archived,
+        ).toBe(false);
+
+        stub.failWrites = false;
+        await client.archiveTask({ taskId: task.taskId, archived: true });
+        expect(
+            client.store.snapshot().tasks.find((entry) => entry.taskId === task.taskId)
+                ?.archived,
+        ).toBe(true);
+    });
+
+    test('listTasks does not expose a summary whose durable write failed', async () => {
+        const transport = new FixtureTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const extra = await transport.createTask({ title: 'undurable summary' });
+
+        stub.failWrites = true;
+        await expect(client.listTasks()).rejects.toMatchObject({
+            code: 'limit_exceeded',
+            storage: 'indexeddb',
+        });
+        expect(
+            client.store.snapshot().tasks.find((task) => task.taskId === extra.taskId),
+        ).toBeUndefined();
+    });
+
+    test('subscription rejection is surfaced and a healthy retry publishes', async () => {
+        const transport = new EmittingTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const stream = client.subscribe();
+        try {
+            const event = createRunQueuedEvent({
+                projectId: 'prj_4b1d9e0c7a2f6e51',
+                taskId: 'tsk_9a3c5e7b1d2f4a60',
+                runId: 'run_7f3a2c1b9d4e6a80',
+                generation: 1,
+                recordedAtMs: 1_794_283_200_000,
+            });
+            const digest = await digestEvent(event as AgentEvent);
+            stub.rejectNextAppend = true;
+            transport.emitForTest(event, digest);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(client.lastPersistenceError).toMatchObject({
+                code: 'limit_exceeded',
+                storage: 'indexeddb',
+            });
+            expect(client.store.snapshot().runs).toHaveLength(0);
+
+            transport.emitForTest(event, digest);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const iterator = stream[Symbol.asyncIterator]();
+            const next = await iterator.next();
+            expect(next.done).toBe(false);
+            expect(next.value?.type).toBe('run.queued');
+            expect(client.store.snapshot().runs).toHaveLength(1);
+        } finally {
+            stream.close();
+            client.dispose();
+        }
+    });
+
+    test('optional hold metadata survives a durable summary write', async () => {
+        const transport = new HoldTransport();
+        const store = createAgentStore();
+        const { stub, durable } = taskStoreFor(store);
+        const client = new AgentClient({ transport, store, taskStore: durable });
+        await client.open();
+        const task = await client.createTask({ title: 'held task' });
+        await client.listTasks();
+        const stored = stub.tasks
+            .filter((record) => record.task_id === task.taskId)
+            .at(-1);
+        expect(stored?.hold).toEqual(transport.hold);
     });
 });

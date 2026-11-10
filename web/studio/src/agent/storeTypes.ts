@@ -7,6 +7,7 @@ import type { AgentIncomingEvent } from '../state/agent.js';
 export const AGENT_DB_NAME = 'uor-r4.studio.agent';
 export const AGENT_DB_VERSION = 1;
 export const SNAPSHOT_SCHEMA = 'uor-r4.studio.agent-snapshot/1';
+export const SNAPSHOT_BUNDLE_SCHEMA = 'uor-r4.studio.agent-snapshot-bundle/1';
 export const EXPORT_SCHEMA = 'uor-r4.studio.agent-export/1';
 export const LEASE_STALE_MS = 30_000;
 export const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
@@ -84,6 +85,26 @@ export interface ChangeRecord {
     captured_at_ms: number;
 }
 
+export interface SnapshotBundleRecord {
+    schema: typeof SNAPSHOT_BUNDLE_SCHEMA;
+    task_id: string;
+    run_id: string;
+    latest: SnapshotRecord;
+    anchors: SnapshotRecord[];
+}
+
+export type StoredSnapshotRecord = SnapshotRecord | SnapshotBundleRecord;
+
+export interface SnapshotAnchorInput {
+    task_id: string;
+    run_id: string;
+    generation: number;
+    last_sequence: number;
+    last_event_id: string;
+    head_digest: string;
+    created_at_ms?: number;
+}
+
 export interface LeaseRecord {
     task_id: string;
     writer_id: string;
@@ -110,6 +131,7 @@ export interface AppendEventStoreInput {
     writer_id?: string;
     now_ms?: number;
     snapshot?: boolean;
+    snapshot_anchor?: SnapshotAnchorInput;
 }
 
 export interface AppendStoreResult {

@@ -54,6 +54,11 @@ export interface TaskSummary {
     archived: boolean;
     pinned: boolean;
     latestRunId: string | null;
+    hold?: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    };
     state:
         | 'idle'
         | 'queued'
@@ -368,6 +373,13 @@ export class AgentClient {
                               });
                               if (result.status === 'applied') {
                                   this.publish(event);
+                              } else if (result.status === 'rejected') {
+                                  this.persistenceError = new AgentClientError(
+                                      result.code ?? 'internal',
+                                      result.message ?? 'durable append was rejected',
+                                      true,
+                                      result.storage,
+                                  );
                               }
                           } catch (error) {
                               this.persistenceError = this.toClientError(error);
@@ -396,8 +408,8 @@ export class AgentClient {
         const tasks = await this.requireTransport().listTasks(input);
         for (const task of tasks) {
             const record = this.toTaskRecord(task);
-            this.store.upsertTask(record);
             if (durable !== null) await this.persistTask(record);
+            else this.store.upsertTask(record);
         }
         const snapshot = this.store.snapshot();
         return tasks.map((task) => {
@@ -421,8 +433,8 @@ export class AgentClient {
         const durable = this.requireReady();
         const task = await this.requireTransport().createTask(input);
         const record = this.toTaskRecord(task);
-        this.store.upsertTask(record);
         if (durable !== null) await this.persistTask(record);
+        else this.store.upsertTask(record);
         return task;
     }
 
@@ -450,8 +462,8 @@ export class AgentClient {
         const durable = this.requireReady();
         const task = await this.requireTransport().pinTask(input);
         const record = this.toTaskRecord(task);
-        this.store.upsertTask(record);
         if (durable !== null) await this.persistTask(record);
+        else this.store.upsertTask(record);
         return task;
     }
 
@@ -459,8 +471,8 @@ export class AgentClient {
         const durable = this.requireReady();
         const task = await this.requireTransport().archiveTask(input);
         const record = this.toTaskRecord(task);
-        this.store.upsertTask(record);
         if (durable !== null) await this.persistTask(record);
+        else this.store.upsertTask(record);
         return task;
     }
 
@@ -504,7 +516,9 @@ export class AgentClient {
                 verification.message ?? 'snapshot verification failed',
             );
         }
-        const appended = await this.appendThroughStore(result.event);
+        const appended = await this.appendThroughStore(result.event, undefined, {
+            snapshotAnchor: result.snapshot,
+        });
         if (appended.status === 'rejected') {
             throw new AgentClientError(
                 appended.code ?? 'internal',
@@ -677,6 +691,7 @@ export class AgentClient {
                 archived: record.archived ?? false,
                 pinned_local: record.pinnedLocal ?? false,
                 latest_run_id: record.latestRunId ?? null,
+                ...(record.hold === undefined ? {} : { hold: record.hold }),
             });
         } catch (error) {
             throw this.toClientError(error);
@@ -686,12 +701,26 @@ export class AgentClient {
     private async appendThroughStore(
         event: AgentIncomingEvent,
         digest?: string,
+        options: { snapshotAnchor?: TaskSnapshot } = {},
     ): Promise<AgentAppendResult> {
         if (this.taskStore !== null) {
+            const anchor = options.snapshotAnchor;
             const result = await this.taskStore.appendEvent({
                 event,
                 digest,
                 writer_id: this.taskStore.defaultWriterId,
+                ...(anchor === undefined
+                    ? {}
+                    : {
+                          snapshot_anchor: {
+                              task_id: anchor.taskId,
+                              run_id: anchor.runId,
+                              generation: anchor.generation,
+                              last_sequence: anchor.lastSequence,
+                              last_event_id: anchor.lastEventId,
+                              head_digest: anchor.headDigest,
+                          },
+                      }),
             });
             if (result.status === 'applied') {
                 this.publish(event);
@@ -758,6 +787,7 @@ export class AgentClient {
             archived: task.archived,
             pinnedLocal: task.pinned,
             latestRunId: task.latestRunId,
+            ...(task.hold === undefined ? {} : { hold: task.hold }),
         };
     }
 
