@@ -21,6 +21,12 @@ At the base, provenance is optional source metadata, artifacts do not change
 schema when it is present, and `uor-chat` does not compare the embedded
 tokenizer hash. The unit stands.
 
+## Legacy migration
+
+Artifacts made under `/6` through `/9` remain readable and exactly
+reproducible. Their contracts must declare `legacy-grandfathered` and name this
+decision. New exports default to `/10` and require all three bindings.
+
 ## Files in scope
 
 - `conformance/stack/**`

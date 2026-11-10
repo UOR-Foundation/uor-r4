@@ -540,6 +540,8 @@ pub struct IntegerStackModel {
     snapped: bool,
     transport_snap: Option<StackTransportSnap>,
     sha256: String,
+    /// Tokenizer identity carried by a bound `/10` artifact.
+    tokenizer_sha256: Option<String>,
     embed: PackedMatrix,
     head: PackedMatrix,
     pointer: Option<Box<Pointer>>,
@@ -981,6 +983,11 @@ impl IntegerStackModel {
             shape,
             numerics,
             sha256: artifact.sha256,
+            tokenizer_sha256: artifact
+                .source
+                .get("tokenizer_sha256")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
             embed,
             head,
             pointer,
@@ -1020,6 +1027,25 @@ impl IntegerStackModel {
 
     pub fn shape(&self) -> &StackShape {
         &self.shape
+    }
+
+    /// The tokenizer identity embedded by a bound `/10` artifact.
+    pub fn tokenizer_sha256(&self) -> Option<&str> {
+        self.tokenizer_sha256.as_deref()
+    }
+
+    /// Refuse a tokenizer whose SHA-256 differs from the artifact's binding.
+    /// Legacy artifacts carry no binding and are accepted unchanged.
+    pub fn require_tokenizer_sha256(&self, actual: &str) -> Result<(), StackError> {
+        if let Some(expected) = self.tokenizer_sha256() {
+            if expected != actual {
+                return Err(StackError::TokenizerBinding {
+                    expected: expected.to_owned(),
+                    actual: actual.to_owned(),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// The integer conventions declared by the artifact.
