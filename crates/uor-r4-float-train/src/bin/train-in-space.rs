@@ -446,6 +446,7 @@ fn main() -> Result<()> {
         turn_memory_empty: false,
         turn_memory_reply: false,
         turn_memory_leave_copied: false,
+        turn_memory_tail: 0,
         turn_memory_dropout: 0,
         fbs_arm: uor_r4_float_train::spiralcore_fbs_arms::FbsArm::OneAtomActive,
         reply_read_train: None,
@@ -618,6 +619,7 @@ fn main() -> Result<()> {
             "--turn-memory-empty" => config.turn_memory_empty = switch(&value)?,
             "--turn-memory-reply" => config.turn_memory_reply = switch(&value)?,
             "--turn-memory-leave-copied" => config.turn_memory_leave_copied = switch(&value)?,
+            "--turn-memory-tail" => config.turn_memory_tail = number(&value)?,
             "--turn-memory-dropout" => {
                 config.turn_memory_dropout = u32::try_from(number(&value)?)
                     .ok()
