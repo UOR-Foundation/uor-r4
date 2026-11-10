@@ -83,3 +83,15 @@ Casey, in this lab's chat, after T0 was run and reported: "T0 is not a track tha
 10. Each of the two sheets carries a FIT from a fresh non-author review and this lab's pre-run review before any pod is created.
 11. Each arm is trained, sealed in the store and read back, or recorded NOT_RUN with the reason; the REPORT names the row read and, for a recall loss, which reading fell and where in the reply.
 12. The three-key table has a fresh review of each side (trainer and serving) before its run, and an artifact made before it exports and serves as before, byte for byte.
+
+## Hold: publish arm r first (10 Nov 2026, about 20:07Z)
+
+Received in this lab's chat as pasted text, while seeds 1 and 3 of arm rt were being read: "Finish and publish the current arm-r replication before opening any new arm. Hold, but do not cancel, the approval for mixed-key and memory-chain work until the three-seed result is published."
+
+**What was true when it arrived.** Arm r's three seeds had run and been read (their runs ended at 16:14Z, 17:07Z and 17:15Z), and the result was not yet committed to PR #3911. Arm rk (mixed keys) had run under "proceed" and arm rt (memory chain) at seed 2 under "Yes, run it". Seeds 1 and 3 of arm rt had been launched at 19:22Z and 19:27Z on this lab's pre-run review, as the memory-chain sheet's row 1 names, and their runs ended at 20:05Z and 20:01Z. `uor-pod status` at 20:08Z showed no pod running, so no lease was renewed and no seed was restarted.
+
+**The work from here.** Publish arm r's three-seed result in the REPORT and the notebook: the classification by the reply-line addendum, the readings it names, the pin, config, input, checkpoint and artifact hashes, and the three seeds' transcripts word for word. Arm rt's three seeds are recorded as run. No arm is opened: no mixed keys, address memory, state-keyed read, sieve change or other mechanism. The unit stops at the report, and the next change is proposed there from the evidence.
+
+**Done when, added:**
+13. The REPORT classes arm r's three seeds by the addendum and freezes the configuration by hash, with the three seeds' transcripts.
+14. No pod is running and no new arm is opened by this unit.
