@@ -5,6 +5,8 @@
 - Pin: `312880e2bd81da2f0d0f7148c7251c4f9a7cb30e` on `claude/talk`.
 - Earlier sheet, whose data, panels, reader and checks this one reuses: `docs/harness/prep/one-model-end-to-end-reply-line-2026-11-10.md`.
 
+TEST FITNESS: FIT (10 Nov 2026, a fresh-context non-author reviewer, before any pod; the record is in the FIT section below).
+
 ## Question
 
 Arm r (seed 2) answers recall questions from the memory line: 303 of 399 matched pairs exact on the panel, and on the laptop it says the line word for word. Its replies to general questions are wrong. Does putting one of the two copy heads on a two-token key reduce the wrong copies in general replies, without losing the recall?
@@ -17,11 +19,19 @@ Arm r (seed 2) answers recall questions from the memory line: 303 of 399 matched
 - **Arm r's weights served with keys 1,2** (snapshot re-exported with `copy_keys: [1, 2]`, nothing retrained): one of eight wrong general replies changed to the model's own word ("The opposite of big is bigger."); two of four recall replies in the hand-line script lost their first token. These weights were never trained with the key, so this is a reason to train, not a result.
 - **What a copy key cannot fix.** The turn memory's key is the turn's first 8 tokens. `User:` takes three and a digit two, so the key ends before the second operand of a sum and before the word of "What is the opposite of tall?". The answer token of those replies is not a copy and the memory cannot see what it depends on. That is the next unit's change, not this arm's.
 
-## The arm
+## Base artifact: the arm
 
 Arm r's recipe at seed 2 with one option added: `--hamming-copy-keys 1,2`. Copy head 0 keeps the one-token key, copy head 1 takes the two tokens before a position. Both read under the latest-exact rule (`--hamming-copy-latest 1`).
 
 With the option, `--turn-memory-leave-copied 1` leaves a key to the copy read only where both heads' latest exact matches name the target (commit `312880e2b`); with one-token keys it is arm r's rule unchanged. TRAIN, panels, steps (16,384), batch, width, context and seed are arm r's. No new data.
+
+## Steps
+
+As for arm r: the GPU tests of the rule, a 64-step smoke on the same inputs, then 16,384 training steps from a fresh start.
+
+## Data split
+
+The reply-line sheet's, unchanged: its TRAIN with the line as the reply, its panel with the line and the panel without, by the hashes in that sheet's table. No new data.
 
 ## Readings
 
@@ -34,7 +44,7 @@ All on the same two panels with the reader `recall-pairs`, and on the laptop wit
 - **C3**: `local/talk/conv-3.txt` with the sieve, seven questions. Arm r: 5 of 7.
 - **C4**: `local/talk/conv-4.txt` with the sieve: general questions right of 10, recall right of 4, facts acknowledged of 4. A general reply is right only when, letter case aside, it is one of TRAIN's own replies to that question with the right answer and nothing after it: `The opposite of hot is cold.`, `2 plus 3 is 5.`, `A lemon is yellow.` or `It's yellow.`, `The opposite of big is small.`, `A spider has eight legs.` or `It has eight legs.`, `The opposite of fast is slow.`, `4 plus 4 is 8.`, `Milk is white.` or `It's white.`, `The opposite of hard is soft.`, `No.` By this rule arm r's seed 2 has 2 of 10 and its seed 1 has 3 of 10. Every reply is shown word for word in the REPORT beside arm r's.
 
-## Rows, fixed before the run
+## Bars: the rows, fixed before the run
 
 Recall is **kept** when E ≥ 0.60, V ≥ 0.60, L ≥ 3 and C4's recall ≥ 3 of 4.
 
@@ -76,3 +86,5 @@ One pod at no more than $1.60/h, about 60 minutes with the test build, under $2;
 4. The job accepts seeds 1 to 3. Left: this sheet runs seed 2, and row 1 names seeds 1 and 3 as its follow-up.
 
 Taken on trust, not checked by the run itself: I-c's field-by-field comparison and the laptop readings are done by hand after the run; the pod coming down is the watcher's work.
+
+**Shape, added 10 Nov after the run was read.** The harness's sheet rule (`prep.sheet_shape`) failed on this sheet in CI on PR #3911: it wants headings named for the bar, the base artifact, the data split and the steps, and a verdict line. The headings "Base artifact: the arm", "Steps", "Data split" and "Bars: the rows, fixed before the run" and the `TEST FITNESS` line were added for it. They restate what the sheet already said. No row, bar, reading or check is changed; the sheet as it stood at launch is in this file's history on the branch.

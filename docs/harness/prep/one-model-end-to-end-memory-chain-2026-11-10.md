@@ -5,6 +5,8 @@
 - Pin: `05e50006b9b1dcd1799166df478e08139c0a9e48` on `claude/talk`.
 - Earlier sheets, whose data, panels, reader and checks this one reuses: `docs/harness/prep/one-model-end-to-end-reply-line-2026-11-10.md` and `docs/harness/prep/one-model-end-to-end-mixed-keys-2026-11-10.md`.
 
+TEST FITNESS: FIT (10 Nov 2026, a fresh-context non-author reviewer, before any pod; the record is in the FIT section below).
+
 ## Question
 
 Arm r answers recall questions from the memory line and gets general questions wrong: on the fixed script, recall 4 of 4 and general questions 2 of 10. Its turn memory keys a reply on the turn's first 8 tokens, which end before the word a general question turns on. Does a reply table that also keys on the end of the turn make general replies right, without losing the recall?
@@ -27,7 +29,7 @@ Arm r answers recall questions from the memory line and gets general questions w
 
   The first column equals the pod's own log for arm r (140,003 keys). Rows not named right fall from 4,354 to 2,823. The rows where the table would write over a copy stay flat.
 
-## The arm
+## Base artifact: the arm
 
 Arm r's recipe at seed 2 with one option added: `--turn-memory-tail 9`. Copy keys stay `[1]`.
 
@@ -41,6 +43,14 @@ A key the copy read owns is left out as in arm r. A wider key that a row would r
 
 TRAIN, panels, steps (16,384), batch, width, context and seed are arm r's. No new data.
 
+## Steps
+
+As for arm r: the GPU tests of the rule, a 64-step smoke on the same inputs, then 16,384 training steps from a fresh start. Here the smoke also exports its own checkpoint (I-r).
+
+## Data split
+
+The reply-line sheet's, unchanged: its TRAIN with the line as the reply, its panel with the line and the panel without, by the hashes in that sheet's table. No new data.
+
 ## Readings
 
 As the mixed-key sheet defines them, on the same two panels with the reader `recall-pairs`: **E, D, G, V, N**, the **kinds** (sums, colors, opposites, legs; arm r 0 of 13, 0 of 8, 3 of 8, 6 of 16), **L** (`conv-2`), **C3** (`conv-3`), **C4** (`conv-4`, with the same rule for a right general reply). Arm r, seed 2: E 0.759, D 0.759, G 0.697, V 0.767, N 188 of 579 (0.325), L 4 of 4, C3 5 of 7, C4 general 2 of 10 and recall 4 of 4.
@@ -52,7 +62,7 @@ Two additions:
 
 Every reply of L, C3 and C4 is shown word for word in the REPORT beside arm r's.
 
-## Rows, fixed before the run
+## Bars: the rows, fixed before the run
 
 Recall is **kept** when E ≥ 0.60, V ≥ 0.60, L ≥ 3 and C4's recall ≥ 3 of 4.
 
@@ -103,3 +113,7 @@ Taken on trust by the reviewer: the test count (read from source, not run on a G
 **Two fresh code reviews of the three-key table** (trainer side and serving side, 10 Nov, each given the spec and the diff only): both approve with low items. Fixed at the pin: `grade` asked a chained key of a first-8 table; a literal-key test on a 19-id turn, with two negative gates that fail as they should; the tail's range is refused early; a chain stack keeps its schema under a point key; the exporter refuses a tail that is not a whole number. Not fixed: no test for a chain across a second turn in one session, and none for a chain stack with a point key.
 
 **Pre-run review**, 10 Nov 2026, [claude] top session (§5.1, §5.10). The chain: arm r is the base on three seeds; the mixed-key arm closed one configuration and left the memory key as the diagnosed cause; the laptop count says the three-key table names 1,531 more panel rows right and writes over no more copies. Tools and inputs: the pin is on `origin/claude/talk`; TRAIN and both panels are in the store and listed today; the run root does not exist yet; the trainer suite (352) and the serving stack suite (220) pass at the pin; I-b is done. What each row unlocks is in the table above. The FIT is recorded. Lease: one pod is up across all labs at $0.56/h, so this one makes two pods and at most $2.16/h, inside 4 pods and $8/h. The run goes ahead; Casey can reverse it.
+
+**Shape, added 10 Nov after launch and before any reading.** The harness's sheet rule (`prep.sheet_shape`) failed on this sheet in CI on PR #3911: it wants headings named for the bar, the base artifact, the data split and the steps, and a verdict line. The headings "Base artifact: the arm", "Steps", "Data split" and "Bars: the rows, fixed before the run" and the `TEST FITNESS` line were added for it. They restate what the sheet already said. No row, bar, reading or check is changed; the sheet as launched is at commit `4ce202fd2` in the file's history.
+
+**Launch, 10 Nov.** try-1 (`vast-60106351`, South Korea, $0.60/h) answered on its SSH port and refused the key for the tool's whole 900 s wait: the launcher was given the wait and network settings under the wrong variable names, so the tool used its defaults. try-2 (`vast-60107071`, Alberta, $1.04/h) was started with the right names while try-1 waited, reached SSH in 34 s and started the job at 18:33:45Z. Written before any result: try-2 is the run of record unless try-1 starts its job.
