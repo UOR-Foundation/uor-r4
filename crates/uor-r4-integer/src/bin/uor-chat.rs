@@ -20,8 +20,8 @@ use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::openai::OpenAiServing;
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
-    is_dialogue_query, recall_from_dialogue, ContentReadout, IntegerStackModel, PromptReplyReadout,
-    SieveRecall, StackChat, StackChatError, StackError, StackReply,
+    is_dialogue_query, recall_from_dialogue, ContentReadout, CopyRule, IntegerStackModel,
+    PromptReplyReadout, SieveRecall, StackChat, StackChatError, StackError, StackReply,
 };
 
 /// How the stack path picks each token: `IntegerStackSession::serve_step`.
@@ -55,6 +55,10 @@ struct CliArgs {
     /// Literal-role dialogue version for the stack artifact (default 2).
     protocol: u8,
     threads: usize,
+    /// The rule the stack's copy heads read under (`--copy-rule`, default the artifact's mean).
+    copy_rule: CopyRule,
+    /// Serve the stack without its turn memory (`--no-turn-memory`).
+    no_turn_memory: bool,
     /// One-shot turn: answer this message, print the record and exit.
     say: Option<String>,
     /// One-shot raw token-ID prompt (`--prompt-ids 0,7,19,31`) for `--stack` parity verification.
@@ -197,6 +201,8 @@ impl Default for CliArgs {
             prompt_reply_path: None,
             protocol: 2,
             threads: 1,
+            copy_rule: CopyRule::Mean,
+            no_turn_memory: false,
             say: None,
             prompt_ids: None,
             save_session: None,
@@ -426,6 +432,21 @@ fn parse_cli_args() -> CliArgs {
                     None => {
                         eprintln!(
                             "{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--protocol'"
+                        );
+                        process::exit(1);
+                    }
+                }
+            }
+            "--no-turn-memory" => {
+                args.no_turn_memory = true;
+            }
+            "--copy-rule" => {
+                idx += 1;
+                match raw.get(idx).map(String::as_str).and_then(CopyRule::parse) {
+                    Some(rule) => args.copy_rule = rule,
+                    None => {
+                        eprintln!(
+                            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--copy-rule' takes mean, latest-exact or latest-nearest"
                         );
                         process::exit(1);
                     }
@@ -1682,6 +1703,27 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     model.set_threads(cli.threads)?;
     #[cfg(target_arch = "wasm32")]
     let _ = cli.threads;
+    if cli.no_turn_memory {
+        if !model.drop_turn_memory() {
+            return Err(StackCliError::Usage(
+                "--no-turn-memory needs a stack artifact with a turn memory".into(),
+            ));
+        }
+        println!(
+            "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Serving without the artifact's turn memory, not as it was exported and scored."
+        );
+    }
+    if cli.copy_rule != CopyRule::Mean {
+        if !model.set_copy_rule(cli.copy_rule) {
+            return Err(StackCliError::Usage(
+                "--copy-rule needs a stack artifact with Hamming reads".into(),
+            ));
+        }
+        println!(
+            "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Copy heads read under '{}', not the mean this artifact was exported and scored under.",
+            cli.copy_rule.name()
+        );
+    }
     let content_readout_identity = if let Some(path) = cli.content_readout_path.as_deref() {
         let path_string = path
             .to_str()

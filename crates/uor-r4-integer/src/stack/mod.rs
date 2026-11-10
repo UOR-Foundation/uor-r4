@@ -109,7 +109,7 @@ pub use format::{
 };
 pub use hamming::{
     copy_weight_q31, AskImage, ASK_CARRY_GAIN_EXP, ASK_CARRY_MAX, hamming_trace_window, read_hamming_uorlut01, served_copy_codes_uorlut01,
-    CopyHeads, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, ServedCopyCodes,
+    CopyHeads, CopyRule, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, ServedCopyCodes,
     TypeHeads, COPY_MEAN_EXP,
 };
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};

@@ -154,6 +154,42 @@ pub fn served_copy_codes_uorlut01(bytes: &[u8]) -> Result<Option<ServedCopyCodes
 /// The exponent of a copy mean: a Q12 table point times a Q31 weight.
 pub const COPY_MEAN_EXP: i32 = -43;
 
+/// Which earlier positions a copy head reads (claude-345). The artifact's own rule is
+/// [`CopyRule::Mean`], the rule the float read trains with; the others are served only when a
+/// caller sets them ([`CopyHeads::set_rule`]), to read one artifact under another rule.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CopyRule {
+    /// The mean over the `kept` nearest positions inside the margin, ties to the earlier position.
+    #[default]
+    Mean,
+    /// The latest position whose key equals the query exactly; a head with none reads nothing.
+    LatestExact,
+    /// The latest of the positions at the smallest distance, when that distance is inside the
+    /// margin: hard top-1 (the 26 Sep retrieval head), with ties to the later position.
+    LatestNearest,
+}
+
+impl CopyRule {
+    /// The rule `name` names (`mean`, `latest-exact`, `latest-nearest`), or `None`.
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "mean" => Some(Self::Mean),
+            "latest-exact" => Some(Self::LatestExact),
+            "latest-nearest" => Some(Self::LatestNearest),
+            _ => None,
+        }
+    }
+
+    /// The name [`Self::parse`] reads back.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Mean => "mean",
+            Self::LatestExact => "latest-exact",
+            Self::LatestNearest => "latest-nearest",
+        }
+    }
+}
+
 /// The weight of a candidate at `distance` bits under a head's margin `margin_q16` (bits at
 /// Q16), at Q31: `max(0, m − d) / max(m, 1)`, as the float read's
 /// `margin.broadcast_sub(bits).relu().broadcast_div(margin.maximum(1.0))` (claude-189).
@@ -191,6 +227,8 @@ pub struct CopyHeads {
     /// Per copy head: under copy key 2, the first half's bits, the low `head_width / 2`; `None`
     /// under copy key 1 (claude-268: each head by its own key).
     pair: Vec<Option<u64>>,
+    /// Which positions [`Self::mean`] reads; [`CopyRule::Mean`] unless a caller sets another.
+    rule: CopyRule,
 }
 
 impl CopyHeads {
@@ -209,6 +247,49 @@ impl CopyHeads {
                     (record.head_copy_key(h) == 2).then(|| (1u64 << (width / record.heads / 2)) - 1)
                 })
                 .collect(),
+            rule: CopyRule::Mean,
+        }
+    }
+
+    /// Read under `rule` from here on ([`Self::mean`]); the forced replay and the trace keep the
+    /// artifact's own rule.
+    pub fn set_rule(&mut self, rule: CopyRule) {
+        self.rule = rule;
+    }
+
+    /// The rule [`Self::mean`] reads under.
+    pub fn rule(&self) -> CopyRule {
+        self.rule
+    }
+
+    /// Copy head `h`'s one position at the last row `t` of `tokens` under a latest rule: over
+    /// every `1 ≤ s < t` (not only the `kept` nearest, whose ties go to the earlier position), the
+    /// latest `s` at distance 0 when `exact`, else the latest `s` at the smallest distance. Empty
+    /// when there is no such position.
+    fn latest(&self, h: usize, tokens: &[u32], exact: bool) -> Vec<(usize, u32)> {
+        let Some(t) = tokens.len().checked_sub(1) else {
+            return Vec::new();
+        };
+        let query = self.query_at(tokens, t, h);
+        let mut best: Option<(usize, u32)> = None;
+        for s in 1..t {
+            let d = popcount_swar(query ^ self.key_at(tokens, s, h));
+            if exact && d != 0 {
+                continue;
+            }
+            if best.is_none_or(|(_, least)| d <= least) {
+                best = Some((s, d));
+            }
+        }
+        best.into_iter().collect()
+    }
+
+    /// The positions [`Self::mean`] reads for head `h`, by the head's [`CopyRule`].
+    fn choose_ruled(&self, h: usize, tokens: &[u32]) -> Vec<(usize, u32)> {
+        match self.rule {
+            CopyRule::Mean => self.choose(h, tokens),
+            CopyRule::LatestExact => self.latest(h, tokens, true),
+            CopyRule::LatestNearest => self.latest(h, tokens, false),
         }
     }
 
@@ -270,7 +351,7 @@ impl CopyHeads {
     /// that found a candidate, so a head that found nothing does not dilute one that did. Both
     /// quotients truncate toward zero.
     pub fn mean(&self, tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
-        self.mean_by(tokens, table, |h| self.choose(h, tokens))
+        self.mean_by(tokens, table, |h| self.choose_ruled(h, tokens))
     }
 
     /// [`Self::mean`] over the kept positions `choose` gives each head.
@@ -372,6 +453,94 @@ mod candidate_range_tests {
         // 3 is the immediate predecessor, 0 has no predecessor, and 4 is the current row.
         let kept = nearest(0, 4, 16, |_| 0);
         assert_eq!(kept, vec![(1, 0), (2, 0), (3, 0)]);
+    }
+}
+
+#[cfg(test)]
+mod copy_rule_tests {
+    use super::{CopyHeads, CopyRule};
+
+    /// One copy head on copy key 1 over a vocabulary of 4, with 4-bit codes and a 4-bit margin,
+    /// and the table whose row `v` is `[10 * v + 1; 4]`.
+    fn heads(kept: usize, rule: CopyRule) -> (CopyHeads, Vec<i16>) {
+        let heads = CopyHeads {
+            copy: 1,
+            kept,
+            width: 4,
+            codes: vec![0b0000, 0b1111, 0b0011, 0b0001],
+            margins: vec![4 << 16],
+            pair: vec![None],
+            rule,
+        };
+        (heads, (0..4i16).flat_map(|v| [10 * v + 1; 4]).collect())
+    }
+
+    /// Row `v` of the table at full weight, and at `weight_q31`.
+    fn row(v: i128, weight_q31: i128) -> Option<Vec<i128>> {
+        Some(vec![(10 * v + 1) * weight_q31; 4])
+    }
+
+    const FULL: i128 = 1 << 31;
+
+    #[test]
+    fn the_names_round_trip() {
+        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest] {
+            assert_eq!(CopyRule::parse(rule.name()), Some(rule));
+        }
+        assert_eq!(CopyRule::parse("latest"), None);
+        assert_eq!(CopyRule::default(), CopyRule::Mean);
+    }
+
+    /// Token 1 was followed by 2 and later by 3. The mean blends both with the near matches; the
+    /// latest rules bring back 3, what followed the last copy.
+    #[test]
+    fn two_exact_matches_blend_under_the_mean_and_the_latest_rules_take_the_last() {
+        let tokens = [1, 2, 0, 1, 3, 0, 1];
+        let (mean, table) = heads(16, CopyRule::Mean);
+        // Exact at s = 1 (row 2) and s = 4 (row 3); 2 bits off at s = 2 and 3 bits off at s = 5
+        // (row 0 at a half and a quarter); 4 bits off at s = 3, outside the margin.
+        assert_eq!(mean.mean(&tokens, &table), Some(vec![211 * (1 << 27); 4]));
+        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest] {
+            let (latest, table) = heads(16, rule);
+            assert_eq!(latest.mean(&tokens, &table), row(3, FULL), "{}", rule.name());
+        }
+    }
+
+    /// With no exact match the exact rule reads nothing, and the nearest rule takes the later of
+    /// the two positions at the smallest distance, at that distance's weight.
+    #[test]
+    fn without_an_exact_match_only_the_nearest_rule_reads() {
+        let tokens = [2, 0, 2, 3, 1];
+        let (mean, table) = heads(16, CopyRule::Mean);
+        assert_eq!(mean.mean(&tokens, &table), Some(vec![16 * (1 << 30); 4]));
+        let (exact, _) = heads(16, CopyRule::LatestExact);
+        assert_eq!(exact.mean(&tokens, &table), None);
+        let (nearest, _) = heads(16, CopyRule::LatestNearest);
+        assert_eq!(nearest.mean(&tokens, &table), row(3, 1 << 30));
+    }
+
+    /// With more exact matches than the read keeps, the kept ones are the earliest, so the mean
+    /// never sees the last; the latest rules scan every earlier position.
+    #[test]
+    fn the_latest_match_is_found_past_the_kept_count() {
+        let tokens = [1, 0, 1, 2, 1, 3, 1];
+        let (mean, table) = heads(2, CopyRule::Mean);
+        assert_eq!(mean.choose(0, &tokens), vec![(1, 0), (3, 0)]);
+        assert_eq!(mean.mean(&tokens, &table), row(1, FULL));
+        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest] {
+            let (latest, table) = heads(2, rule);
+            assert_eq!(latest.mean(&tokens, &table), row(3, FULL), "{}", rule.name());
+        }
+    }
+
+    #[test]
+    fn a_row_with_no_earlier_position_reads_nothing() {
+        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest] {
+            let (latest, table) = heads(16, rule);
+            assert_eq!(latest.mean(&[1], &table), None);
+            assert_eq!(latest.mean(&[1, 1], &table), None);
+            assert_eq!(latest.mean(&[], &table), None);
+        }
     }
 }
 
@@ -744,6 +913,13 @@ pub(super) fn check_payload_cache(typed: usize, context: usize, width: usize) ->
 }
 
 impl ServedHamming {
+    /// Serve every read's copy heads under `rule` ([`CopyHeads::set_rule`], claude-345).
+    pub(crate) fn set_copy_rule(&mut self, rule: CopyRule) {
+        for read in &mut self.reads {
+            read.copy.set_rule(rule);
+        }
+    }
+
     /// The reads of `image` over the Q12 `table` of `vocab` rows of `width`, in a trunk of `layers`
     /// layers and `context` positions. A read's type heads are built only when one of its type
     /// weights is not zero; at `w_y = 0` they add nothing, as in the float read.
