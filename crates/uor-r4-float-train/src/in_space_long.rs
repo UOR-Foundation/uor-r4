@@ -1313,6 +1313,12 @@ fn start_memory(
             "--turn-memory-tail keys the reply table: it needs --turn-memory-reply 1",
         ));
     }
+    if config.turn_memory_tail > crate::flock_read_memory::MAX_REPLY_KEY - 5 {
+        return Err(invalid(format!(
+            "--turn-memory-tail holds 1 to {} ids of the turn",
+            crate::flock_read_memory::MAX_REPLY_KEY - 5
+        )));
+    }
     if config.turn_memory_reply && config.turn_memory != TURN_KEY {
         return Err(invalid(format!(
             "--turn-memory-reply keys on the turn's first {TURN_KEY} ids, as the probe did: it needs --turn-memory {TURN_KEY}"
@@ -11393,9 +11399,10 @@ pub fn grade(
             .and_then(|at| greedy_reply_key(&ids[..=row.offset], at, &row.reply));
         hit_keys[0] += 1;
         hit_keys[1] += usize::from(decoded.as_ref() == Some(&key));
+        // `reply` holds the first-8 form alone, whatever tail this thread's memory keys on.
         hit_keys[2] += usize::from(
             reply
-                .get(&key)
+                .get(&ReplyKey::TurnPosition(1).of(row))
                 .is_some_and(|s| table_keeps(s, REPLY_MEMORY_SHARE)),
         );
     }
@@ -18116,6 +18123,37 @@ mod tests {
             assert_eq!(key.iter().filter(|&&id| id == CHAIN).count(), 2);
         }
         set_reply_tail(0);
+    }
+
+    /// claude-345: on a turn longer than both cuts the decoder's key is still the row's key, and
+    /// its ids are the three forms as the serving engine forms them: the turn's first 8 ids with
+    /// the last 8 of the rest, its last `tail` ids behind a pad, and its first 8 alone.
+    #[test]
+    fn the_greedy_reply_key_reads_the_end_of_a_long_turn() {
+        use crate::flock_read_memory::{set_reply_tail, CHAIN};
+        const PAD: u32 = u32::MAX;
+        // BOS, a prompt of 19 ids (10..=28), a reply (11 12 30).
+        let mut tokens = vec![0u32];
+        tokens.extend(10..=28);
+        tokens.extend([11, 12, 30]);
+        let mut mask = vec![0u8; 20];
+        mask.extend([1, 1, 1]);
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 32, 0).unwrap();
+        set_reply_tail(2);
+        let rows = reply_rows(&windows, &mask);
+        let row = rows.iter().find(|r| r.reply == [11]).unwrap();
+        let ids = &windows[row.window].input_ids;
+        let opening = row.offset - row.reply.len();
+        let key = greedy_reply_key(&ids[..=row.offset], opening, &row.reply).unwrap();
+        let of_row = reply_key(row);
+        set_reply_tail(0);
+        let stem = [PAD, 1, PAD, 11];
+        let head: Vec<u32> = (10..=17).chain(stem).collect();
+        let tail: Vec<u32> = [PAD, 27, 28].into_iter().chain(stem).collect();
+        let ends: Vec<u32> = (10..=17).chain(21..=28).chain(stem).collect();
+        let expected = [ends, tail, head].join(&CHAIN);
+        assert_eq!(key, expected);
+        assert_eq!(of_row, expected);
     }
 
     #[test]

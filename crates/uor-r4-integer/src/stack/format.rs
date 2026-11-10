@@ -2102,7 +2102,10 @@ pub fn add_point_key_uorlut01(artifact: &[u8], image: &super::PointKeyImage) -> 
         .as_array_mut()
         .ok_or(StackError::MissingData)?
         .extend(b.tables);
-    header["schema"] = json!(STACK_FBS_POINT_SCHEMA);
+    // A memory chain's schema (claude-345) covers a stack with or without a point key: it stays.
+    if header.get("memory_chain").is_none_or(serde_json::Value::is_null) {
+        header["schema"] = json!(STACK_FBS_POINT_SCHEMA);
+    }
     header["point"] = json!(image.record());
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());

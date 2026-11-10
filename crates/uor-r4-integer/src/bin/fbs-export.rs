@@ -265,8 +265,12 @@ fn run() -> Result<(), String> {
         let tail = serde_json::from_str::<serde_json::Value>(&text)
             .map_err(|e| format!("{config}: {e}"))?
             .get("turn_memory_tail")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0);
+            .map_or(Ok(0), |value| {
+                // A tail that is not a whole number is refused: read as 0 it would export no chain.
+                value
+                    .as_u64()
+                    .ok_or_else(|| format!("{config}: turn_memory_tail {value} is not a whole number"))
+            })?;
         chain_tail = usize::try_from(tail).map_err(|_| format!("{config}: turn_memory_tail {tail} is too large"))?;
     }
     // A run trained with a memory chain (claude-345) writes its record with the export, so the
